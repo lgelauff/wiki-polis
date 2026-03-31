@@ -2,7 +2,7 @@
 name = "wiki-polis"
 version = "0.1.0"
 description = "Wikimedia community consultation tool — MediaWiki OAuth wrapper for Polis"
-requires-python = "==3.11.*"
+requires-python = ">=3.11"
 
 dependencies = [
     # Web framework
@@ -30,6 +30,9 @@ dependencies = [
 dev = [
     "pytest>=9.0",
 ]
+
+[tool.setuptools]
+packages = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
