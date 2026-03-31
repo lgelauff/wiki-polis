@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+  <div class="intro-text">
+    <h2>{{ event_name }}</h2>
+    <p>This tool lets Wikimedia community members submit and vote on proposals,
+       helping build consensus through structured deliberation.</p>
+    <p>Log in with your Wikimedia account to participate.</p>
+    <a href="{{ url_for('login') }}" class="login-btn">Login with Wikimedia</a>
+    {% if debug %}
+    <p style="margin-top: 1.5rem; font-size: 13px; color: var(--muted);">
+      Dev mode &mdash;
+      <a href="{{ url_for('dev_login', username=first_admin) if first_admin else url_for('dev_login') }}">
+        log in as {{ first_admin or 'dev user' }}
+      </a>
+      {% if not first_admin %}(set ADMIN_USERS in .env to auto-fill){% endif %}
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

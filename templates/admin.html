@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+
+  <h2>Conversations</h2>
+
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>URL</th>
+        <th>Polis ID</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in conversations %}
+      <tr>
+        <td>{{ c.title }}</td>
+        <td><a href="{{ url_for('conversation', slug=c.slug) }}">/c/{{ c.slug }}</a></td>
+        <td><code>{{ c.polis_id }}</code></td>
+        <td>{{ 'active' if c.active else 'inactive' }}</td>
+        <td>{{ c.created_at.strftime('%Y-%m-%d') }}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin_conversation_toggle', conv_id=c.id) }}" style="display:inline">
+            <button type="submit">{{ 'Deactivate' if c.active else 'Activate' }}</button>
+          </form>
+          &nbsp;
+          <a href="#edit-{{ c.id }}">[edit]</a>
+          &nbsp;
+          <a href="https://pol.is/m/{{ c.polis_id }}" target="_blank">[moderate on Polis]</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">No conversations yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Edit forms -->
+  {% for c in conversations %}
+  <div class="edit-form" id="edit-{{ c.id }}">
+    <h3>Edit: {{ c.title }}</h3>
+    <form method="post" action="{{ url_for('admin_conversation_edit', conv_id=c.id) }}">
+      <label>Polis ID <input type="text" name="polis_id" value="{{ c.polis_id }}" required></label>
+      <label>Title <input type="text" name="title" value="{{ c.title }}" required></label>
+      <label>Intro text (HTML)
+        <textarea name="intro_text" rows="4">{{ c.intro_text or '' }}</textarea>
+      </label>
+      <label>Outro text (HTML)
+        <textarea name="outro_text" rows="4">{{ c.outro_text or '' }}</textarea>
+      </label>
+      <button type="submit">Save</button>
+    </form>
+  </div>
+  {% endfor %}
+
+  <h2>New conversation</h2>
+  <div class="edit-form">
+    <form method="post" action="{{ url_for('admin_conversation_new') }}">
+      <label>Slug <input type="text" name="slug" placeholder="e.g. community-consultation-2026" required>
+        <small style="font-weight:normal; color: var(--muted)"> — used in the URL: /c/your-slug (immutable after creation)</small>
+      </label>
+      <label>Polis ID <input type="text" name="polis_id" placeholder="e.g. 9r7fkvxyjb" required></label>
+      <label>Title <input type="text" name="title" placeholder="Consultation title" required></label>
+      <label>Intro text (HTML)
+        <textarea name="intro_text" rows="4" placeholder="<p>Welcome...</p>"></textarea>
+      </label>
+      <label>Outro text (HTML)
+        <textarea name="outro_text" rows="4" placeholder="<p>Thank you...</p>"></textarea>
+      </label>
+      <button type="submit">Create</button>
+    </form>
+  </div>
+
+  <h2>Participants</h2>
+
+  <form method="get" action="{{ url_for('admin') }}" class="search-form">
+    <input type="text" name="q" value="{{ search }}" placeholder="Filter by username…">
+    <button type="submit">Search</button>
+    {% if search %}<a href="{{ url_for('admin') }}">Clear</a>{% endif %}
+  </form>
+
+  <p>{{ pagination.total }} participant(s){% if search %} matching "{{ search }}"{% endif %}.</p>
+
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>MW User ID</th>
+        <th>XID</th>
+        <th>Joined</th>
+        <th>Admin</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in pagination.items %}
+      <tr>
+        <td>{{ p.mw_username }}</td>
+        <td>{{ p.mw_user_id }}</td>
+        <td><code>{{ p.xid[:12] }}…</code></td>
+        <td>{{ p.created_at.strftime('%Y-%m-%d') }}</td>
+        <td>
+          {% if p.is_admin %}✓{% endif %}
+          <form method="post" action="{{ url_for('admin_toggle_admin', participant_id=p.id) }}" style="display:inline">
+            <button type="submit">{{ 'Revoke' if p.is_admin else 'Grant' }}</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">No participants found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if pagination.pages > 1 %}
+  <div class="pagination">
+    {% if pagination.has_prev %}
+      <a href="{{ url_for('admin', page=pagination.prev_num, q=search) }}">← Previous</a>
+    {% endif %}
+    <span>Page {{ pagination.page }} of {{ pagination.pages }}</span>
+    {% if pagination.has_next %}
+      <a href="{{ url_for('admin', page=pagination.next_num, q=search) }}">Next →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+</div>
+
+{% endblock %}

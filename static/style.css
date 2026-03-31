@@ -1,0 +1,376 @@
+/* wiki-polis — Polis-inspired styling */
+
+:root {
+  --blue:      #3498db;
+  --blue-dark: #2176ae;
+  --text:      rgba(0, 0, 0, 0.7);
+  --muted:     rgba(0, 0, 0, 0.45);
+  --bg:        #f7f7f7;
+  --white:     #ffffff;
+  --border:    #e0e0e0;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.6;
+}
+
+/* ── Header ── */
+
+header {
+  background: var(--blue);
+  color: white;
+  padding: 0 1.5rem;
+  height: 52px;
+  display: flex;
+  align-items: center;
+}
+
+.header-inner {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-title {
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: 0.01em;
+}
+
+.header-user {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.header-user a {
+  color: white;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ── Main container ── */
+
+.container {
+  max-width: 720px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+
+/* ── Intro / outro text ── */
+
+.intro-text,
+.outro-text {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.intro-text p,
+.outro-text p {
+  margin-bottom: 0.6rem;
+}
+
+.intro-text p:last-child,
+.outro-text p:last-child {
+  margin-bottom: 0;
+}
+
+.outro-text {
+  margin-top: 1.25rem;
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ── Polis embed wrapper ── */
+
+.polis-wrapper {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* ── Admin table ── */
+
+h2 {
+  margin-bottom: 1rem;
+  font-size: 18px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin-bottom: 1.5rem;
+}
+
+.admin-table th,
+.admin-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-table th {
+  background: var(--bg);
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.admin-note a {
+  color: var(--blue);
+}
+
+code {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Welcome page ── */
+
+.login-btn {
+  display: inline-block;
+  margin-top: 1rem;
+  background: var(--blue);
+  color: white;
+  text-decoration: none;
+  padding: 0.6rem 1.5rem;
+  border-radius: 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.login-btn:hover {
+  background: var(--blue-dark);
+}
+
+/* ── Landing page ── */
+
+.landing-section {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.landing-section h2 {
+  margin-bottom: 0.75rem;
+}
+
+.conversation-list {
+  list-style: none;
+  padding: 0;
+}
+
+.conversation-list li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+}
+
+.conversation-list li:last-child {
+  border-bottom: none;
+}
+
+.conversation-list a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.conversation-list a:hover {
+  text-decoration: underline;
+}
+
+.badge-inactive {
+  display: inline-block;
+  margin-left: 0.5rem;
+  background: var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+/* ── Accept / participation form ── */
+
+.accept-section {
+  margin: 1.25rem 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.accept-section h3 {
+  font-size: 15px;
+  margin-bottom: 0.5rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.6rem 0;
+  font-size: 14px;
+  font-weight: normal;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.participate-btn {
+  margin-top: 1.25rem;
+  background: var(--blue);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.6rem 1.5rem;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.participate-btn:hover {
+  background: var(--blue-dark);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.error {
+  color: #e74c3c;
+  font-size: 13px;
+  margin-top: 0.5rem;
+}
+
+/* ── Admin search + pagination ── */
+
+.search-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.search-form input[type="text"] {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 14px;
+  width: 220px;
+}
+
+.search-form button {
+  background: var(--blue);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 0.75rem;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.search-form a {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.pagination {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 0.75rem;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.pagination a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+/* ── Admin forms ── */
+
+.edit-form {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.edit-form h3 {
+  margin-bottom: 1rem;
+  font-size: 15px;
+}
+
+.edit-form label {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.edit-form input[type="text"],
+.edit-form textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.edit-form textarea {
+  font-family: monospace;
+  resize: vertical;
+}
+
+.edit-form button,
+.admin-table button {
+  background: var(--blue);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 1rem;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.edit-form button:hover,
+.admin-table button:hover {
+  background: var(--blue-dark);
+}

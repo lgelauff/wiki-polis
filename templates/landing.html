@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+
+  {% if open_conversations %}
+  <div class="landing-section">
+    <h2>Open consultations</h2>
+    <p>You have not yet participated in the following consultations:</p>
+    <ul class="conversation-list">
+      {% for c in open_conversations %}
+      <li>
+        <a href="{{ url_for('accept', slug=c.slug) }}">{{ c.title }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if accepted %}
+  <div class="landing-section">
+    <h2>Your consultations</h2>
+    <ul class="conversation-list">
+      {% for c in accepted %}
+      <li>
+        <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
+        {% if not c.active %}<span class="badge-inactive">closed</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if not open_conversations and not accepted %}
+  <div class="intro-text">
+    <p>No consultations available at the moment. Please check back later.</p>
+  </div>
+  {% endif %}
+
+</div>
+
+{% endblock %}
