@@ -171,6 +171,7 @@ def login_required(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         if 'username' not in session:
+            session['next'] = request.url
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return wrapper
@@ -379,11 +380,12 @@ def _register_routes(app: Flask) -> None:
             participant.mw_username = username
         db.session.commit()
 
+        next_url = session.pop('next', None)
         session.clear()
         session['username'] = username
         session['xid']      = xid
 
-        return redirect(url_for('index'))
+        return redirect(next_url or url_for('index'))
 
     @app.get('/logout')
     @login_required
