@@ -9,10 +9,10 @@ Hosted on [Toolforge](https://wikitech.wikimedia.org/wiki/Portal:Toolforge) at `
 ## How it works
 
 1. Users log in with their Wikimedia account (MediaWiki OAuth 2.0)
-2. They are shown active consultations they haven't joined yet
+2. They are shown active consultations they haven't joined yet (public ones always; invite-only ones if they're on the invite list)
 3. On joining, they set notification preferences (email / talk page)
 4. The Polis embed handles proposal submission, voting, and consensus math
-5. Admins manage conversations and participants via `/admin`
+5. Admins manage conversations, access policies, and participants via `/admin`
 
 ---
 
@@ -21,7 +21,7 @@ Hosted on [Toolforge](https://wikitech.wikimedia.org/wiki/Portal:Toolforge) at `
 ### Prerequisites
 
 - [UV](https://docs.astral.sh/uv/) for Python dependency management
-- Python 3.11
+- Python 3.11 or later
 
 ### Setup
 
@@ -99,9 +99,9 @@ EVENT_NAME = "Community Consultation"  # Shown in the header
 
 Admin usernames are never hardcoded. Set them via secret/env:
 - **Locally:** `ADMIN_USERS=Username1,Username2` in `.env`
-- **Toolforge:** `toolforge secrets create wiki-polis-admin-users --from-literal=value=Username1,Username2`
+- **Toolforge:** `toolforge envvars create ADMIN_USERS "Username1,Username2"`
 
-Conversations (Polis ID, title, intro/outro text) are managed via the admin UI — no code changes needed.
+Conversations (Polis ID, title, access policy, intro/outro text) are managed via the admin UI — no code changes needed.
 
 ---
 
@@ -134,8 +134,6 @@ source $HOME/.local/bin/env
 
 ```bash
 git clone https://github.com/lgelauff/wiki-polis ~/wiki-polis
-cd ~/wiki-polis
-uv sync
 ```
 
 ### 5. Create the database
@@ -223,15 +221,19 @@ The deploy script runs `git pull`, reinstalls dependencies, and restarts the web
 ```
 wiki-polis/
   app.py          — Flask app, OAuth flow, routes, config block at top
-  db.py           — SQLAlchemy models (Participant, Conversation, Participation)
+  db.py           — SQLAlchemy models (Participant, Conversation, Participation, ConversationInvite)
   wsgi.py         — WSGI entry point
+  uwsgi.ini       — uWSGI config (buffer size for long OAuth codes)
+  deploy.sh       — Toolforge deploy script (git pull + pip install + restart)
   pyproject.toml  — Dependencies (managed with UV)
   templates/
-    base.html     — Header with event name, username, logout, admin links
-    landing.html  — Lists open and accepted consultations
-    accept.html   — Acceptance screen with notification preferences
-    index.html    — Polis embed with intro/outro text
-    admin.html    — Conversation management and participant list
+    base.html          — Header with event name, username, logout, admin links
+    welcome.html       — Logged-out landing page, lists public consultations
+    landing.html       — Logged-in landing page, lists open and joined consultations
+    accept.html        — Acceptance screen with notification preferences
+    index.html         — Polis embed with intro/outro text
+    admin.html         — Conversation management and participant list
+    admin_invites.html — Invite list management for invite-only conversations
   static/
     style.css     — Polis-inspired styling
 ```
