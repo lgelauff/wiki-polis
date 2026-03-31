@@ -534,15 +534,22 @@ def _register_routes(app: Flask) -> None:
     @admin_required
     def admin_invite_add(conv_id):
         conversation = Conversation.query.get_or_404(conv_id)
-        username = request.form.get('mw_username', '').strip()
-        if not username:
+        usernames = [
+            line.strip()
+            for line in request.form.get('mw_usernames', '').splitlines()
+            if line.strip()
+        ]
+        if not usernames:
             abort(400)
-        existing = ConversationInvite.query.filter_by(
-            conversation_id=conv_id, mw_username=username).first()
-        if not existing:
-            db.session.add(ConversationInvite(
-                conversation_id=conv_id, mw_username=username))
-            db.session.commit()
+        existing = {
+            inv.mw_username
+            for inv in ConversationInvite.query.filter_by(conversation_id=conv_id).all()
+        }
+        for username in usernames:
+            if username not in existing:
+                db.session.add(ConversationInvite(
+                    conversation_id=conv_id, mw_username=username))
+        db.session.commit()
         return redirect(url_for('admin_conversation_invites', conv_id=conv_id))
 
     @app.post('/admin/conversations/<int:conv_id>/invites/<int:invite_id>/remove')

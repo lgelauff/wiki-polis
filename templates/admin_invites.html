@@ -33,10 +33,10 @@
   </table>
 
   <div class="edit-form" style="margin-top: 1.5rem;">
-    <h3>Add invite</h3>
+    <h3>Add invites</h3>
     <form method="post" action="{{ url_for('admin_invite_add', conv_id=conversation.id) }}">
-      <label>Wikimedia username
-        <input type="text" name="mw_username" placeholder="ExampleUser" required>
+      <label>Wikimedia usernames (one per line)
+        <textarea name="mw_usernames" rows="6" placeholder="ExampleUser&#10;AnotherUser" required></textarea>
       </label>
       <button type="submit">Add</button>
     </form>
