@@ -36,7 +36,8 @@ from flask import (Flask, abort, redirect, render_template, request,
 from flask_migrate import Migrate
 from flask_session import Session
 
-from db import Conversation, Participant, Participation, db
+from db import (ACCESS_POLICIES, Conversation, ConversationInvite,
+                Participant, Participation, db)
 
 load_dotenv()
 
@@ -81,11 +82,13 @@ def _valid_slug(slug: str) -> bool:
 
 def _parse_conversation_form() -> dict:
     """Extract and sanitise shared conversation form fields from request.form."""
+    raw_policy = request.form.get('access_policy', 'public').strip()
     return {
-        'polis_id':   request.form.get('polis_id', '').strip(),
-        'title':      request.form.get('title', '').strip(),
-        'intro_text': _sanitise_text(request.form.get('intro_text', '')),
-        'outro_text': _sanitise_text(request.form.get('outro_text', '')),
+        'polis_id':     request.form.get('polis_id', '').strip(),
+        'title':        request.form.get('title', '').strip(),
+        'intro_text':   _sanitise_text(request.form.get('intro_text', '')),
+        'outro_text':   _sanitise_text(request.form.get('outro_text', '')),
+        'access_policy': raw_policy if raw_policy in ACCESS_POLICIES else 'public',
     }
 
 
@@ -194,6 +197,27 @@ def admin_required(f):
     return wrapper
 
 
+def _check_conversation_access(conversation, participant) -> None:
+    """Abort 403 if the current user may not access this conversation."""
+    if conversation.access_policy != 'invite_only':
+        return
+    # Already accepted → always allow, even if later removed from invite list
+    if participant:
+        existing = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conversation.id,
+        ).first()
+        if existing:
+            return
+    username = session.get('username')
+    invited = ConversationInvite.query.filter_by(
+        conversation_id=conversation.id,
+        mw_username=username,
+    ).first()
+    if not invited:
+        abort(403)
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 def _register_routes(app: Flask) -> None:
@@ -219,10 +243,17 @@ def _register_routes(app: Flask) -> None:
     @app.get('/')
     def index():
         if 'username' not in session:
+            public_convos = (Conversation.query
+                             .filter_by(active=True, access_policy='public')
+                             .order_by(Conversation.created_at.desc())
+                             .all())
             first_admin = ADMIN_USERS[0] if ADMIN_USERS else ''
-            return render_template('welcome.html', debug=app.debug, first_admin=first_admin)
+            return render_template('welcome.html', debug=app.debug,
+                                   first_admin=first_admin,
+                                   public_conversations=public_convos)
 
         participant = _current_participant()
+        username    = session['username']
 
         accepted = []
         if participant:
@@ -232,10 +263,22 @@ def _register_routes(app: Flask) -> None:
                         .order_by(Conversation.created_at.desc())
                         .all())
 
-        accepted_ids = {c.id for c in accepted}
+        accepted_ids    = {c.id for c in accepted}
+        invited_conv_ids = [
+            inv.conversation_id
+            for inv in ConversationInvite.query.filter_by(mw_username=username).all()
+        ]
+
         open_conversations = (Conversation.query
                               .filter_by(active=True)
                               .filter(~Conversation.id.in_(accepted_ids))
+                              .filter(db.or_(
+                                  Conversation.access_policy == 'public',
+                                  db.and_(
+                                      Conversation.access_policy == 'invite_only',
+                                      Conversation.id.in_(invited_conv_ids or [0]),
+                                  ),
+                              ))
                               .order_by(Conversation.created_at.desc())
                               .all())
 
@@ -248,6 +291,7 @@ def _register_routes(app: Flask) -> None:
     def conversation(slug):
         conversation = Conversation.query.filter_by(slug=slug).first_or_404()
         participant  = _current_participant()
+        _check_conversation_access(conversation, participant)
 
         participation = None
         if participant:
@@ -265,6 +309,7 @@ def _register_routes(app: Flask) -> None:
     @login_required
     def accept(slug):
         conversation = Conversation.query.filter_by(slug=slug).first_or_404()
+        _check_conversation_access(conversation, _current_participant())
         emailable    = _is_emailable(session['username'])
         return render_template('accept.html', conversation=conversation, emailable=emailable)
 
@@ -275,6 +320,7 @@ def _register_routes(app: Flask) -> None:
         participant  = _current_participant()
         if participant is None:
             abort(404)
+        _check_conversation_access(conversation, participant)
 
         notify_email     = bool(request.form.get('notify_email'))
         notify_talk_page = bool(request.form.get('notify_talk_page'))
@@ -441,10 +487,11 @@ def _register_routes(app: Flask) -> None:
             abort(400)
 
         # Slug is immutable after creation to avoid breaking existing links
-        conversation.polis_id   = fields['polis_id']
-        conversation.title      = fields['title']
-        conversation.intro_text = fields['intro_text']
-        conversation.outro_text = fields['outro_text']
+        conversation.polis_id     = fields['polis_id']
+        conversation.title        = fields['title']
+        conversation.intro_text   = fields['intro_text']
+        conversation.outro_text   = fields['outro_text']
+        conversation.access_policy = fields['access_policy']
         db.session.commit()
         return redirect(url_for('admin'))
 
@@ -468,6 +515,45 @@ def _register_routes(app: Flask) -> None:
         conversation.active = not conversation.active
         db.session.commit()
         return redirect(url_for('admin'))
+
+    @app.get('/admin/conversations/<int:conv_id>/invites')
+    @login_required
+    @admin_required
+    def admin_conversation_invites(conv_id):
+        conversation = Conversation.query.get_or_404(conv_id)
+        invites = (ConversationInvite.query
+                   .filter_by(conversation_id=conv_id)
+                   .order_by(ConversationInvite.mw_username)
+                   .all())
+        return render_template('admin_invites.html',
+                               conversation=conversation,
+                               invites=invites)
+
+    @app.post('/admin/conversations/<int:conv_id>/invites/add')
+    @login_required
+    @admin_required
+    def admin_invite_add(conv_id):
+        conversation = Conversation.query.get_or_404(conv_id)
+        username = request.form.get('mw_username', '').strip()
+        if not username:
+            abort(400)
+        existing = ConversationInvite.query.filter_by(
+            conversation_id=conv_id, mw_username=username).first()
+        if not existing:
+            db.session.add(ConversationInvite(
+                conversation_id=conv_id, mw_username=username))
+            db.session.commit()
+        return redirect(url_for('admin_conversation_invites', conv_id=conv_id))
+
+    @app.post('/admin/conversations/<int:conv_id>/invites/<int:invite_id>/remove')
+    @login_required
+    @admin_required
+    def admin_invite_remove(conv_id, invite_id):
+        invite = ConversationInvite.query.filter_by(
+            id=invite_id, conversation_id=conv_id).first_or_404()
+        db.session.delete(invite)
+        db.session.commit()
+        return redirect(url_for('admin_conversation_invites', conv_id=conv_id))
 
 
 app = create_app()

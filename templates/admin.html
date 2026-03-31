@@ -12,6 +12,7 @@
         <th>URL</th>
         <th>Polis ID</th>
         <th>Status</th>
+        <th>Policy</th>
         <th>Created</th>
         <th>Actions</th>
       </tr>
@@ -23,6 +24,7 @@
         <td><a href="{{ url_for('conversation', slug=c.slug) }}">/c/{{ c.slug }}</a></td>
         <td><code>{{ c.polis_id }}</code></td>
         <td>{{ 'active' if c.active else 'inactive' }}</td>
+        <td>{{ c.access_policy }}</td>
         <td>{{ c.created_at.strftime('%Y-%m-%d') }}</td>
         <td>
           <form method="post" action="{{ url_for('admin_conversation_toggle', conv_id=c.id) }}" style="display:inline">
@@ -32,10 +34,14 @@
           <a href="#edit-{{ c.id }}">[edit]</a>
           &nbsp;
           <a href="https://pol.is/m/{{ c.polis_id }}" target="_blank">[moderate on Polis]</a>
+          {% if c.access_policy == 'invite_only' %}
+          &nbsp;
+          <a href="{{ url_for('admin_conversation_invites', conv_id=c.id) }}">[invites]</a>
+          {% endif %}
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="6">No conversations yet.</td></tr>
+      <tr><td colspan="7">No conversations yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -52,6 +58,13 @@
       </label>
       <label>Outro text (HTML)
         <textarea name="outro_text" rows="4">{{ c.outro_text or '' }}</textarea>
+      </label>
+      <label>Access policy
+        <select name="access_policy">
+          <option value="public"      {% if c.access_policy == 'public' %}selected{% endif %}>Public — shown on landing page</option>
+          <option value="link_based"  {% if c.access_policy == 'link_based' %}selected{% endif %}>Link-based — direct URL only</option>
+          <option value="invite_only" {% if c.access_policy == 'invite_only' %}selected{% endif %}>Invite-only — invited users only</option>
+        </select>
       </label>
       <button type="submit">Save</button>
     </form>
@@ -71,6 +84,13 @@
       </label>
       <label>Outro text (HTML)
         <textarea name="outro_text" rows="4" placeholder="<p>Thank you...</p>"></textarea>
+      </label>
+      <label>Access policy
+        <select name="access_policy">
+          <option value="public">Public — shown on landing page</option>
+          <option value="link_based">Link-based — direct URL only</option>
+          <option value="invite_only">Invite-only — invited users only</option>
+        </select>
       </label>
       <button type="submit">Create</button>
     </form>

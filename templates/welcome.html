@@ -7,6 +7,16 @@
     <p>This tool lets Wikimedia community members submit and vote on proposals,
        helping build consensus through structured deliberation.</p>
     <p>Log in with your Wikimedia account to participate.</p>
+    {% if public_conversations %}
+    <div class="landing-section" style="margin: 1.5rem 0; text-align: left;">
+      <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">Open consultations</h3>
+      <ul class="conversation-list">
+        {% for c in public_conversations %}
+        <li>{{ c.title }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
     <a href="{{ url_for('login') }}" class="login-btn">Login with Wikimedia</a>
     {% if debug %}
     <p style="margin-top: 1.5rem; font-size: 13px; color: var(--muted);">

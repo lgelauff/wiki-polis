@@ -8,6 +8,8 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
+ACCESS_POLICIES = ('public', 'link_based', 'invite_only')
+
 
 class Participant(db.Model):
     __tablename__ = 'participants'
@@ -31,10 +33,13 @@ class Conversation(db.Model):
     title       = db.Column(db.String(255), nullable=False)
     intro_text  = db.Column(db.Text, nullable=True)          # sanitised HTML, safe to render
     outro_text  = db.Column(db.Text, nullable=True)          # sanitised HTML, safe to render
-    active      = db.Column(db.Boolean, default=True, nullable=False)
-    created_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    active        = db.Column(db.Boolean, default=True, nullable=False)
+    access_policy = db.Column(db.String(20), nullable=False, default='public', server_default='public')
+    created_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     participations = db.relationship('Participation', back_populates='conversation')
+    invites        = db.relationship('ConversationInvite', back_populates='conversation',
+                                     cascade='all, delete-orphan')
 
 
 class Participation(db.Model):
@@ -51,3 +56,15 @@ class Participation(db.Model):
 
     participant  = db.relationship('Participant', back_populates='participations')
     conversation = db.relationship('Conversation', back_populates='participations')
+
+
+class ConversationInvite(db.Model):
+    __tablename__  = 'conversation_invites'
+    __table_args__ = (db.UniqueConstraint('conversation_id', 'mw_username'),)
+
+    id              = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id'), nullable=False)
+    mw_username     = db.Column(db.String(255), nullable=False)
+    created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    conversation = db.relationship('Conversation', back_populates='invites')
