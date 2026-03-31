@@ -107,6 +107,8 @@ Conversations (Polis ID, title, intro/outro text) are managed via the admin UI �
 
 ## Deployment (Toolforge)
 
+This is a one-time setup. For routine updates after the initial deploy, see [Updating](#updating).
+
 ### 1. Register the tool
 
 Register at https://toolsadmin.wikimedia.org with tool name `wiki-polis`.
@@ -117,24 +119,94 @@ Register at https://meta.wikimedia.org/wiki/Special:OAuthConsumerRegistration wi
 - Callback URL: `https://wiki-polis.toolforge.org/oauth-callback`
 - Grants: identify only
 
-### 3. Set secrets
-
-From the Toolforge shell:
+### 3. SSH into Toolforge and install uv
 
 ```bash
-toolforge secrets create wiki-polis-oauth-client-id --from-literal=value=YOUR_CLIENT_ID
-toolforge secrets create wiki-polis-oauth-client-secret --from-literal=value=YOUR_CLIENT_SECRET
-toolforge secrets create wiki-polis-oauth-redirect-uri --from-literal=value=https://wiki-polis.toolforge.org/oauth-callback
-toolforge secrets create wiki-polis-secret-key --from-literal=value=YOUR_RANDOM_SECRET_KEY
-toolforge secrets create wiki-polis-admin-users --from-literal=value=Username1,Username2
-toolforge secrets create wiki-polis-database-url --from-literal=value=mysql+pymysql://...
+ssh login.toolforge.org
+become wiki-polis
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
 ```
 
-### 4. Deploy
+> Add `source $HOME/.local/bin/env` to your `~/.bashrc` so uv is available in future sessions.
+
+### 4. Clone the repository
 
 ```bash
+git clone https://github.com/lgelauff/wiki-polis ~/wiki-polis
+cd ~/wiki-polis
+uv sync
+```
+
+### 5. Create the database
+
+Read your replica credentials:
+
+```bash
+cat ~/replica.my.cnf
+```
+
+Copy the `user` and `password` values locally — you will need them for the database URL secret.
+
+Connect to ToolsDB and create the database:
+
+```bash
+mariadb --defaults-file=$HOME/replica.my.cnf -h tools.db.svc.wikimedia.cloud
+```
+
+```sql
+CREATE DATABASE `s57499__wiki-polis`
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+EXIT;
+```
+
+> The database name **must** start with your tools prefix (e.g. `s57499__`). Check your prefix in `~/replica.my.cnf`.
+
+### 6. Set secrets
+
+```bash
+toolforge envvars create OAUTH_CLIENT_ID --value YOUR_CLIENT_ID
+toolforge envvars create OAUTH_CLIENT_SECRET --value YOUR_CLIENT_SECRET
+toolforge envvars create OAUTH_REDIRECT_URI --value https://wiki-polis.toolforge.org/oauth-callback
+toolforge envvars create SECRET_KEY --value YOUR_RANDOM_SECRET_KEY
+toolforge envvars create ADMIN_USERS --value Username1,Username2
+toolforge envvars create DATABASE_URL --value mysql+pymysql://s57499:PASSWORD@tools.db.svc.wikimedia.cloud/s57499__wiki-polis
+```
+
+> `toolforge envvars list` masks values after creation — keep a local record of your secrets.
+
+### 7. Set up the web service directory
+
+Toolforge's Python web service expects the app at `~/www/python/src/app.py`.
+
+```bash
+mkdir -p ~/www/python
+ln -s ~/wiki-polis ~/www/python/src
+uv venv --python /usr/bin/python3 ~/www/python/venv
+```
+
+> The venv **must** use the system Python (`/usr/bin/python3`), not a project-local one, because Kubernetes nodes run the system version.
+
+### 8. Start the web service
+
+Run from your **home directory** — webservice restart fails silently when run from inside the repo:
+
+```bash
+cd ~
 toolforge webservice --backend=kubernetes python3.11 start
 ```
+
+### Updating
+
+After pulling changes, run `deploy.sh` from the home directory:
+
+```bash
+cd ~
+bash ~/wiki-polis/deploy.sh
+```
+
+The deploy script runs `uv sync` and restarts the web service. It does **not** run `git pull` — pull manually before deploying.
 
 ---
 
