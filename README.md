@@ -166,47 +166,55 @@ EXIT;
 ### 6. Set secrets
 
 ```bash
-toolforge envvars create OAUTH_CLIENT_ID --value YOUR_CLIENT_ID
-toolforge envvars create OAUTH_CLIENT_SECRET --value YOUR_CLIENT_SECRET
-toolforge envvars create OAUTH_REDIRECT_URI --value https://wiki-polis.toolforge.org/oauth-callback
-toolforge envvars create SECRET_KEY --value YOUR_RANDOM_SECRET_KEY
-toolforge envvars create ADMIN_USERS --value Username1,Username2
-toolforge envvars create DATABASE_URL --value mysql+pymysql://s57499:PASSWORD@tools.db.svc.wikimedia.cloud/s57499__wiki-polis
+toolforge envvars create OAUTH_CLIENT_ID "YOUR_CLIENT_ID"
+toolforge envvars create OAUTH_CLIENT_SECRET "YOUR_CLIENT_SECRET"
+toolforge envvars create OAUTH_REDIRECT_URI "https://wiki-polis.toolforge.org/oauth-callback"
+toolforge envvars create SECRET_KEY "YOUR_RANDOM_SECRET_KEY"
+toolforge envvars create ADMIN_USERS "Username1,Username2"
+toolforge envvars create DATABASE_URL "mysql+pymysql://USER:PASSWORD@tools.db.svc.wikimedia.cloud/s57499__wiki-polis"
 ```
 
 > `toolforge envvars list` masks values after creation — keep a local record of your secrets.
 
 ### 7. Set up the web service directory
 
-Toolforge's Python web service expects the app at `~/www/python/src/app.py`.
+Toolforge expects `~/www/python/` to be a **real directory** (not a symlink). Create it and symlink the repo as `src`:
 
 ```bash
 mkdir -p ~/www/python
 ln -s ~/wiki-polis ~/www/python/src
-uv venv --python /usr/bin/python3 ~/www/python/venv
 ```
 
-> The venv **must** use the system Python (`/usr/bin/python3`), not a project-local one, because Kubernetes nodes run the system version.
+Then open a webservice shell to create the venv — **the venv must be created inside the webservice container**, not on the bastion, or it will not work:
+
+```bash
+toolforge webservice python3.13 shell
+```
+
+Inside the shell:
+
+```bash
+python3 -m venv ~/www/python/venv
+~/www/python/venv/bin/pip install -e ~/wiki-polis
+exit
+```
 
 ### 8. Start the web service
 
-Run from your **home directory** — webservice restart fails silently when run from inside the repo:
+Run from your **home directory** — webservice commands fail silently when run from inside the repo:
 
 ```bash
 cd ~
-toolforge webservice --backend=kubernetes python3.11 start
+toolforge webservice --backend=kubernetes python3.13 start
 ```
 
 ### Updating
 
-After pulling changes, run `deploy.sh` from the home directory:
-
 ```bash
-cd ~
 bash ~/wiki-polis/deploy.sh
 ```
 
-The deploy script runs `uv sync` and restarts the web service. It does **not** run `git pull` — pull manually before deploying.
+The deploy script runs `git pull`, reinstalls dependencies, and restarts the web service.
 
 ---
 
