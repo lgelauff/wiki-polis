@@ -9,7 +9,7 @@
 <body>
   <header>
     <div class="header-inner">
-      <span class="header-title">{{ event_name }}</span>
+      <a href="{{ url_for('index') }}" class="header-title">{{ event_name }}</a>
       {% if username %}
         <span class="header-user">
           {{ username }}
