@@ -1,22 +1,60 @@
 # wiki-polis
 
-A lightweight Wikimedia community consultation tool. Wraps a [Polis](https://pol.is) conversation behind MediaWiki OAuth, with a custom landing page, acceptance flow, and notification preferences.
+A deliberation tool for the Wikimedia community. Participants vote on atomic statements, opinion clusters emerge, and a curated argument layer can be added on top.
 
 Hosted on [Toolforge](https://wikitech.wikimedia.org/wiki/Portal:Toolforge) at `https://wiki-polis.toolforge.org`.
 
 ---
 
-## How it works
+## Architecture
 
-1. Users log in with their Wikimedia account (MediaWiki OAuth 2.0)
-2. They are shown active consultations they haven't joined yet (public ones always; invite-only ones if they're on the invite list)
-3. On joining, they set notification preferences (email / talk page)
-4. The Polis embed handles proposal submission, voting, and consensus math
-5. Admins manage conversations, access policies, and participants via `/admin`
+```
+  Browser ──▶ Flask app (Toolforge)
+               - Wikimedia OAuth (single login)
+               - Conversation management, access policies, roles
+               - Admin panel
+               - Proxies voting calls to VPS
+               - MariaDB (ToolsDB) — identity layer
+                     │
+                     ▼ internal proxy (xid only)
+              Polis + Particiapi (VPS, Docker Compose)
+               - Voting, statement routing, clustering
+               - PostgreSQL — deliberation layer (pseudonymised)
+```
+
+The Flask app on Toolforge handles all authentication. The VPS runs stock Polis + Particiapi with authentication disabled — it is not publicly exposed. Flask proxies all voting calls to it, passing only the user's xid (SHA-256 of their Wikimedia user ID).
+
+See `v2/architecture.md` for the full design.
 
 ---
 
-## Local development
+## How it works
+
+1. Users log in with their Wikimedia account (Wikimedia OAuth 2.0)
+2. The home page shows conversations they have joined, can join, or moderate
+3. Joining a conversation requires an explicit accept step (intro text + pseudonym selection)
+4. The voting loop presents one statement at a time — agree, disagree, or pass — with an optional inline prompt to propose a better alternative
+5. Admins control four independent phase toggles per conversation: submission open, personal results, argument mapping, and full public results
+6. The argument mapping tab shows featured statements with short pro/con arguments, visible once the admin enables it
+
+---
+
+## v2 status
+
+v2 is currently in development. The planning documents are in `v2/`:
+
+| File | Purpose |
+|---|---|
+| `v2/functional_design.md` | Full product specification — what the platform does |
+| `v2/architecture.md` | Technical architecture and data model |
+| `v2/design_principles.md` | Stable design rules |
+| `v2/next_steps.md` | Implementation roadmap |
+
+The current live deployment runs on the v1 codebase (see below).
+
+---
+
+## Local development (v1, currently deployed)
 
 ### Prerequisites
 
@@ -65,43 +103,11 @@ With `FLASK_DEBUG=1`, a dev login bypass is available that skips OAuth entirely:
 http://127.0.0.1:5000/dev-login?username=YourWikimediaName
 ```
 
-This creates a participant record and sets your session directly. Use your real Wikimedia username to test admin access (must match `ADMIN_USERS` in `app.py`).
+This creates a participant record and sets your session directly. Use your real Wikimedia username to test admin access (must match `ADMIN_USERS`).
 
 ### Database
 
-By default, a local SQLite database (`instance/dev.db`) is used. No setup needed — it's created automatically on first run.
-
-To inspect it:
-
-```bash
-uv run python -c "from app import app; from db import db; app.app_context().push(); from db import *"
-```
-
-Or use any SQLite browser pointed at `instance/dev.db`.
-
-### Setting up a test conversation
-
-1. Log in via dev-login
-2. Visit `http://127.0.0.1:5000/admin`
-3. Create a conversation with a Polis conversation ID (e.g. from [pol.is](https://pol.is))
-4. Visit `http://127.0.0.1:5000` to see it on the landing page
-
----
-
-## Configuration
-
-Edit the config block at the top of `app.py`:
-
-```python
-TOOL_NAME  = "wiki-polis"              # Toolforge tool name
-EVENT_NAME = "Community Consultation"  # Shown in the header
-```
-
-Admin usernames are never hardcoded. Set them via secret/env:
-- **Locally:** `ADMIN_USERS=Username1,Username2` in `.env`
-- **Toolforge:** `toolforge envvars create ADMIN_USERS "Username1,Username2"`
-
-Conversations (Polis ID, title, access policy, intro/outro text) are managed via the admin UI — no code changes needed.
+By default, a local SQLite database (`instance/dev.db`) is used. No setup needed — it is created automatically on first run.
 
 ---
 
@@ -144,8 +150,6 @@ Read your replica credentials:
 cat ~/replica.my.cnf
 ```
 
-Copy the `user` and `password` values locally — you will need them for the database URL secret.
-
 Connect to ToolsDB and create the database:
 
 ```bash
@@ -169,21 +173,17 @@ toolforge envvars create OAUTH_CLIENT_SECRET "YOUR_CLIENT_SECRET"
 toolforge envvars create OAUTH_REDIRECT_URI "https://wiki-polis.toolforge.org/oauth-callback"
 toolforge envvars create SECRET_KEY "YOUR_RANDOM_SECRET_KEY"
 toolforge envvars create ADMIN_USERS "Username1,Username2"
-toolforge envvars create DATABASE_URL "mysql+pymysql://USER:PASSWORD@tools.db.svc.wikimedia.cloud/s57499__wiki-polis"
+toolforge envvars create DATABASE_URL "mysql+pymysql://USER:PASSWORD@tools.db.svc.wikimedia.cloud/s57499__wiki-polis"  # pragma: allowlist secret
 ```
 
-> `toolforge envvars list` masks values after creation — keep a local record of your secrets.
-
 ### 7. Set up the web service directory
-
-Toolforge expects `~/www/python/` to be a **real directory** (not a symlink). Create it and symlink the repo as `src`:
 
 ```bash
 mkdir -p ~/www/python
 ln -s ~/wiki-polis ~/www/python/src
 ```
 
-Then open a webservice shell to create the venv — **the venv must be created inside the webservice container**, not on the bastion, or it will not work:
+Then open a webservice shell to create the venv:
 
 ```bash
 toolforge webservice python3.13 shell
@@ -198,8 +198,6 @@ exit
 ```
 
 ### 8. Start the web service
-
-Run from your **home directory** — webservice commands fail silently when run from inside the repo:
 
 ```bash
 cd ~
@@ -220,30 +218,13 @@ The deploy script runs `git pull`, reinstalls dependencies, and restarts the web
 
 ```
 wiki-polis/
-  app.py          — Flask app, OAuth flow, routes, config block at top
-  db.py           — SQLAlchemy models (Participant, Conversation, Participation, ConversationInvite)
+  app.py          — Flask app, OAuth flow, routes
+  db.py           — SQLAlchemy models
   wsgi.py         — WSGI entry point
-  uwsgi.ini       — uWSGI config (buffer size for long OAuth codes)
-  deploy.sh       — Toolforge deploy script (git pull + pip install + restart)
+  uwsgi.ini       — uWSGI config
+  deploy.sh       — Toolforge deploy script
   pyproject.toml  — Dependencies (managed with UV)
-  templates/
-    base.html          — Header with event name, username, logout, admin links
-    welcome.html       — Logged-out landing page, lists public consultations
-    landing.html       — Logged-in landing page, lists open and joined consultations
-    accept.html        — Acceptance screen with notification preferences
-    index.html         — Polis embed with intro/outro text
-    admin.html         — Conversation management and participant list
-    admin_invites.html — Invite list management for invite-only conversations
-  static/
-    style.css     — Polis-inspired styling
+  templates/      — Jinja2 templates
+  static/         — CSS
+  v2/             — Planning documents for the next version
 ```
-
----
-
-## Analysis
-
-Polis handles clustering and consensus math internally. To analyse results:
-
-1. Export conversation data from pol.is (votes.csv, comments.csv, participants-votes.csv)
-2. Join the `xid` column in the export with the local `participants` table to recover Wikimedia usernames
-3. Run further analysis in Python as needed

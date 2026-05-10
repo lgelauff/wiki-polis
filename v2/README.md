@@ -1,23 +1,20 @@
-# Wiki-Polis v2-1
+# Wiki-Polis v2
 
-Working space for the second iteration of the v2 prototype.
+Planning documents for the second version of wiki-polis. v2 replaces the hosted pol.is embed with a self-hosted Polis + Particiapi stack, giving full control over the frontend and conversation lifecycle.
 
-## Why v2-1?
-
-v2 established the data model and auth layer but the frontend direction drifted. v2-1 is a fresh design pass to lock in architectural decisions before writing more code.
-
-## Files in this directory
+## Documents
 
 | File | Purpose |
 |---|---|
-| `context.md` | Where we came from; what v2 built; the known friction points |
-| `design_principles.md` | Core design goals — stable reference, not to be re-debated |
-| `approaches.md` | Three implementation options with honest trade-offs |
-| `open_questions.md` | Decisions we must align on before coding resumes |
+| `functional_design.md` | Full product specification — what the platform does, from the user's perspective |
+| `architecture.md` | Technical architecture, data model, and phase plan |
+| `design_principles.md` | Stable design rules — not to be re-debated per feature |
+| `next_steps.md` | Ordered implementation roadmap |
 
-## Process
+## Directories
 
-1. Read `context.md` + `design_principles.md` to re-establish shared ground.
-2. Read `approaches.md` and form a preference.
-3. Work through `open_questions.md` in Q&A.
-4. Pick an approach and add an `architecture.md` with the agreed design.
+| Directory | Purpose |
+|---|---|
+| `archive/` | Superseded docs and drafts (git-ignored) |
+| `cache/` | Fetched external references, setup guides (git-ignored) |
+| `tmp/` | Working files, patches, todos (git-ignored) |
