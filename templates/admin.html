@@ -136,6 +136,72 @@
     </tbody>
   </table>
 
+  <h2>Participant roles</h2>
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>User</th>
+        <th>Conversation</th>
+        <th>Role</th>
+        <th>Granted</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for role in roles %}
+      <tr>
+        <td>{{ role.participant.mw_username }}</td>
+        <td>
+          {% if role.conversation %}
+            <a href="{{ url_for('conversation', slug=role.conversation.slug) }}">{{ role.conversation.title }}</a>
+          {% else %}
+            Site-wide
+          {% endif %}
+        </td>
+        <td>{{ role.role }}</td>
+        <td>{{ role.granted_at.strftime('%Y-%m-%d') }}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin_remove_role', role_id=role.id) }}" style="display:inline">
+            <button type="submit">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">No roles assigned.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="edit-form">
+    <h3>Grant role</h3>
+      <form method="post" action="{{ url_for('admin_add_role') }}">
+          {% for p in pagination.items %}
+          <option value="{{ p.id }}">{{ p.mw_username }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Conversation
+        <select name="conversation_id">
+          <option value="">Site-wide</option>
+          {% for c in conversations %}
+          <option value="{{ c.id }}">{{ c.title }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Role
+        <select name="role">
+          <option value="admin">Admin</option>
+          <option value="moderator">Moderator</option>
+          <option value="curator">Curator</option>
+        </select>
+      </label>
+      <button type="submit">Grant role</button>
+    </form>
+    <p style="font-size:0.9em; color: var(--muted);">
+      Search for a user first if they are not on the current page.
+    </p>
+  </div>
+
   {% if pagination.pages > 1 %}
   <div class="pagination">
     {% if pagination.has_prev %}

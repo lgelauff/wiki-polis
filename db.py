@@ -58,6 +58,34 @@ class Participation(db.Model):
     conversation = db.relationship('Conversation', back_populates='participations')
 
 
+class AdminRole(db.Model):
+    __tablename__ = 'admin_roles'
+
+    id              = db.Column(db.Integer, primary_key=True)
+    participant_id  = db.Column(db.Integer, db.ForeignKey('participants.id'), nullable=False)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id'), nullable=True)
+    role            = db.Column(db.Enum('admin', 'moderator', 'curator', name='admin_role_type'), nullable=False)
+    granted_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    granted_by      = db.Column(db.Integer, db.ForeignKey('participants.id'), nullable=True)
+
+    participant  = db.relationship('Participant', foreign_keys=[participant_id], backref='roles')
+    conversation = db.relationship('Conversation', backref='roles')
+
+
+class ModAction(db.Model):
+    __tablename__ = 'mod_actions'
+
+    id            = db.Column(db.Integer, primary_key=True)
+    moderator_id  = db.Column(db.Integer, db.ForeignKey('participants.id'), nullable=False)
+    action_type   = db.Column(db.Enum('hide_statement', 'show_statement', 'block_user', 'unblock_user', name='mod_action_type'), nullable=False)
+    target_type   = db.Column(db.String(50))
+    target_id     = db.Column(db.Integer)
+    reason        = db.Column(db.Text)
+    created_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    moderator = db.relationship('Participant', foreign_keys=[moderator_id])
+
+
 class ConversationInvite(db.Model):
     __tablename__  = 'conversation_invites'
     __table_args__ = (db.UniqueConstraint('conversation_id', 'mw_username'),)

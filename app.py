@@ -36,8 +36,8 @@ from flask import (Flask, abort, redirect, render_template, request,
 from flask_migrate import Migrate
 from flask_session import Session
 
-from db import (ACCESS_POLICIES, Conversation, ConversationInvite,
-                Participant, Participation, db)
+from db import (ACCESS_POLICIES, AdminRole, Conversation, ConversationInvite,
+                ModAction, Participant, Participation, db)
 
 load_dotenv()
 
@@ -456,10 +456,12 @@ def _register_routes(app: Flask) -> None:
         pagination    = participant_q.paginate(page=page, per_page=50, error_out=False)
         conversations = Conversation.query.order_by(Conversation.created_at.desc()).all()
 
+        roles = AdminRole.query.order_by(AdminRole.role, AdminRole.created_at.desc()).all()
         return render_template('admin.html',
                                pagination=pagination,
                                search=search,
-                               conversations=conversations)
+                               conversations=conversations,
+                               roles=roles)
 
     @app.post('/admin/conversations/new')
     @login_required
@@ -504,6 +506,48 @@ def _register_routes(app: Flask) -> None:
         if participant.mw_username in ADMIN_USERS:
             abort(403)
         participant.is_admin = not participant.is_admin
+        db.session.commit()
+        return redirect(url_for('admin'))
+
+    @app.post('/admin/participant-roles/add')
+    @login_required
+    @admin_required
+    def admin_add_role():
+        participant_id = request.form.get('participant_id', type=int)
+        participant = Participant.query.get_or_404(participant_id)
+        conversation_id = request.form.get('conversation_id', type=int)
+        role = request.form.get('role', '').strip()
+
+        if role not in ('admin', 'moderator', 'curator'):
+            abort(400)
+
+        if conversation_id is not None:
+            Conversation.query.get_or_404(conversation_id)
+
+        existing = AdminRole.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conversation_id,
+            role=role,
+        ).first()
+        if existing:
+            return redirect(url_for('admin'))
+
+        grantor = _current_participant()
+        db.session.add(AdminRole(
+            participant_id=participant.id,
+            conversation_id=conversation_id,
+            role=role,
+            granted_by=grantor.id if grantor else None,
+        ))
+        db.session.commit()
+        return redirect(url_for('admin'))
+
+    @app.post('/admin/participant-roles/<int:role_id>/remove')
+    @login_required
+    @admin_required
+    def admin_remove_role(role_id):
+        role = AdminRole.query.get_or_404(role_id)
+        db.session.delete(role)
         db.session.commit()
         return redirect(url_for('admin'))
 
