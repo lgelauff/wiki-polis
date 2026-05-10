@@ -175,6 +175,8 @@
   <div class="edit-form">
     <h3>Grant role</h3>
       <form method="post" action="{{ url_for('admin_add_role') }}">
+      <label>Participant
+        <select name="participant_id">
           {% for p in pagination.items %}
           <option value="{{ p.id }}">{{ p.mw_username }}</option>
           {% endfor %}
