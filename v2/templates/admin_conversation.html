@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+
+  <p class="muted" style="margin-bottom:1.5rem">
+    <a href="{{ url_for('admin') }}">← admin panel</a>
+  </p>
+
+  <div style="display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;margin-bottom:.25rem">
+    <h2 style="margin-bottom:0">{{ conversation.title }}</h2>
+    {% if conversation.active %}
+      <span style="color:var(--green);font-size:13px;font-weight:600">active</span>
+    {% else %}
+      <span class="badge-inactive">closed</span>
+    {% endif %}
+  </div>
+  <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
+    <code>/c/{{ conversation.slug }}</code>
+    · {{ conversation.access_policy }}
+    · {{ participant_count }} joined
+    {% if polis_public_url %}
+    · <a href="{{ polis_public_url }}/{{ conversation.polis_id }}" target="_blank" rel="noopener">View on Polis →</a>
+    {% endif %}
+  </p>
+
+  <!-- ── Polis stats ───────────────────────────────────── -->
+  {% if polis_stats %}
+  <div class="edit-form" style="margin-bottom:1.5rem">
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-value">{{ polis_stats.n_participants }}</div>
+        <div class="stat-label">participants</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">{{ polis_stats.n_votes }}</div>
+        <div class="stat-label">votes cast</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">{{ polis_stats.avg_votes }}</div>
+        <div class="stat-label">avg votes / person</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">{{ polis_stats.median_votes | int }}</div>
+        <div class="stat-label">median votes / person</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">{{ polis_stats.n_statements }}</div>
+        <div class="stat-label">statements ({{ polis_stats.n_seed }} seed)</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Phases ──────────────────────────────────────── -->
+  <h3 class="section-heading">Phases</h3>
+  <div class="edit-form">
+    {% if is_admin %}
+    <form method="post"
+          action="{{ url_for('admin_conversation_phases', conv_id=conversation.id) }}"
+          class="phases-form" style="flex-wrap:wrap;gap:.75rem">
+      <label title="Submission open">
+        <input type="checkbox" name="phase_submission" value="1"
+               {% if conversation.phase_submission %}checked{% endif %}>
+        Statement submission
+      </label>
+      <label title="Personal results">
+        <input type="checkbox" name="phase_personal_results" value="1"
+               {% if conversation.phase_personal_results %}checked{% endif %}>
+        Personal results
+      </label>
+      <label title="Argument mapping">
+        <input type="checkbox" name="phase_argument_mapping" value="1"
+               {% if conversation.phase_argument_mapping %}checked{% endif %}>
+        Argument mapping
+      </label>
+      <label title="Public results">
+        <input type="checkbox" name="phase_public_results" value="1"
+               {% if conversation.phase_public_results %}checked{% endif %}>
+        Public results
+      </label>
+      <button type="submit" class="btn-small">save</button>
+    </form>
+    {% else %}
+    <p style="font-size:14px">
+      Submission: <strong>{{ 'on' if conversation.phase_submission else 'off' }}</strong>
+      &nbsp;·&nbsp;
+      Personal results: <strong>{{ 'on' if conversation.phase_personal_results else 'off' }}</strong>
+      &nbsp;·&nbsp;
+      Argument mapping: <strong>{{ 'on' if conversation.phase_argument_mapping else 'off' }}</strong>
+      &nbsp;·&nbsp;
+      Public results: <strong>{{ 'on' if conversation.phase_public_results else 'off' }}</strong>
+    </p>
+    {% endif %}
+  </div>
+
+  <!-- ── Content & access ─────────────────────────────── -->
+  <h3 class="section-heading">Content &amp; access</h3>
+  <div class="conv-action-grid">
+
+    <a href="{{ url_for('admin_conversation_statements', conv_id=conversation.id) }}"
+       class="conv-action-card">
+      <div class="conv-action-title">Statements</div>
+      <div class="conv-action-desc">Review, approve or hide participant statements; add seed statements</div>
+    </a>
+
+    <a href="{{ url_for('admin_conversation_invites', conv_id=conversation.id) }}"
+       class="conv-action-card">
+      <div class="conv-action-title">Invites</div>
+      <div class="conv-action-desc">
+        {{ invite_count }} invite{{ 's' if invite_count != 1 }} · manage who can join
+      </div>
+    </a>
+
+  </div>
+
+  {% if is_admin %}
+
+  <!-- ── Status ────────────────────────────────────────── -->
+  <h3 class="section-heading">Status</h3>
+  <div class="edit-form" style="display:flex;align-items:center;gap:1rem">
+    <form method="post"
+          action="{{ url_for('admin_conversation_toggle', conv_id=conversation.id) }}"
+          style="display:inline">
+      <button type="submit"
+              class="btn-small {% if conversation.active %}btn-danger{% else %}btn-approve{% endif %}">
+        Mark {{ 'closed' if conversation.active else 'active' }}
+      </button>
+    </form>
+    <span class="muted" style="font-size:13px">
+      Closing a conversation hides it from available consultations and disables voting.
+    </span>
+  </div>
+
+  <!-- ── Settings ──────────────────────────────────────── -->
+  <h3 class="section-heading">Settings</h3>
+  <div class="edit-form">
+    <form method="post"
+          action="{{ url_for('admin_conversation_edit', conv_id=conversation.id) }}">
+      <div class="edit-row-fields">
+        <label>Title
+          <input type="text" name="title" value="{{ conversation.title }}" required>
+        </label>
+        <label>Polis ID (zinvite)
+          <input type="text" name="polis_id" value="{{ conversation.polis_id }}" required>
+        </label>
+        <label>Access policy
+          <select name="access_policy">
+            {% for p in ['public', 'link_based', 'invite_only'] %}
+            <option value="{{ p }}" {% if conversation.access_policy == p %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="edit-row-texts">
+        <label>Intro text (HTML, optional)
+          <textarea name="intro_text" rows="4">{{ conversation.intro_text or '' }}</textarea>
+        </label>
+        <label>Outro text (HTML, optional)
+          <textarea name="outro_text" rows="4">{{ conversation.outro_text or '' }}</textarea>
+        </label>
+      </div>
+      <button type="submit">Save settings</button>
+    </form>
+  </div>
+
+  <!-- ── Moderators ─────────────────────────────────────── -->
+  <h3 class="section-heading">Moderators</h3>
+
+  {% if conv_roles %}
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Participant</th>
+        <th>Role</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for role in conv_roles %}
+      <tr>
+        <td>{{ role.participant.mw_username }}</td>
+        <td>{{ role.role }}</td>
+        <td>
+          <form method="post"
+                action="{{ url_for('admin_role_remove', role_id=role.id) }}"
+                style="display:inline">
+            <input type="hidden" name="redirect_to"
+                   value="{{ url_for('admin_conversation_detail', conv_id=conversation.id) }}">
+            <button type="submit" class="btn-small btn-danger">remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted" style="margin-bottom:1rem;font-size:14px">No moderators assigned.</p>
+  {% endif %}
+
+  <div class="edit-form">
+    <h3>Add moderator</h3>
+    <form method="post" action="{{ url_for('admin_role_add') }}">
+      <input type="hidden" name="conversation_id" value="{{ conversation.id }}">
+      <input type="hidden" name="redirect_to"
+             value="{{ url_for('admin_conversation_detail', conv_id=conversation.id) }}">
+      <div class="edit-row-fields">
+        <label>Participant
+          <select name="participant_id" required>
+            <option value="">— select —</option>
+            {% for p in participants %}
+            <option value="{{ p.id }}">{{ p.mw_username }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Role
+          <select name="role" required>
+            {% for r in admin_roles %}
+            <option value="{{ r }}">{{ r }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <button type="submit">Add</button>
+    </form>
+  </div>
+
+  {% endif %}{# is_admin #}
+
+</div>
+
+{% endblock %}

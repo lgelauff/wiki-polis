@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+  <div class="intro-text">
+
+    <h2>{{ conversation.title }}</h2>
+
+    {% if conversation.intro_text %}
+    {{ conversation.intro_text | safe }}
+    {% endif %}
+
+    <form method="post" action="{{ url_for('accept_post', slug=conversation.slug) }}">
+      <input type="hidden" name="emailable" value="{{ '1' if emailable else '0' }}">
+
+      <div class="accept-section">
+        <h3>Your pseudonym</h3>
+        <p>
+          Choose a pseudonym for this consultation. It will appear in public results
+          once the admin enables them. Your Wikimedia username stays private during voting.
+        </p>
+        <p>Pseudonyms are unique across the platform — no two participants share one.</p>
+
+        <div class="pseudonym-options" id="pseudonym-options">
+          {% for name in pseudonyms %}
+          <label class="pseudonym-label">
+            <input type="radio" name="pseudonym" value="{{ name }}"
+                   {% if loop.first %}checked{% endif %}>
+            <span class="pseudonym-name">{{ name }}</span>
+          </label>
+          {% endfor %}
+        </div>
+
+        <button type="button" class="reroll-btn" id="reroll-btn">
+          Show different options
+        </button>
+      </div>
+
+      <div class="accept-section">
+        <h3>Notification preferences</h3>
+        <p>How would you like to be notified of updates to this consultation?</p>
+
+        {% if emailable %}
+        <label class="checkbox-label">
+          <input type="checkbox" name="notify_email" value="1">
+          Email me updates (via your confirmed wiki email address)
+        </label>
+        {% else %}
+        <p class="muted">
+          Email notifications are unavailable — your wiki account does not have a confirmed
+          email address. You can
+          <a href="https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal"
+             target="_blank" rel="noopener">confirm your email on Meta-Wiki</a> and return to enable this.
+        </p>
+        {% endif %}
+
+        <label class="checkbox-label">
+          <input type="checkbox" name="notify_talk_page" value="1">
+          Post updates to my talk page
+        </label>
+      </div>
+
+      {% if error %}
+      <p class="error">{{ error }}</p>
+      {% endif %}
+
+      <button type="submit" class="participate-btn">Join this consultation</button>
+
+    </form>
+  </div>
+</div>
+
+<script>
+  document.getElementById('reroll-btn').addEventListener('click', function() {
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+
+    fetch('{{ url_for("accept_pseudonyms", slug=conversation.slug) }}')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var container = document.getElementById('pseudonym-options');
+        container.innerHTML = '';
+        data.pseudonyms.forEach(function(name, i) {
+          var label = document.createElement('label');
+          label.className = 'pseudonym-label';
+          label.innerHTML =
+            '<input type="radio" name="pseudonym" value="' + name + '"' +
+            (i === 0 ? ' checked' : '') + '>' +
+            '<span class="pseudonym-name">' + name + '</span>';
+          container.appendChild(label);
+        });
+        btn.disabled = false;
+        btn.textContent = 'Show different options';
+      })
+      .catch(function() {
+        btn.disabled = false;
+        btn.textContent = 'Show different options';
+      });
+  });
+</script>
+
+{% endblock %}

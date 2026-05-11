@@ -1,0 +1,677 @@
+/* wiki-polis v2 */
+
+:root {
+  --blue:      #3498db;
+  --blue-dark: #2176ae;
+  --text:      rgba(0, 0, 0, 0.7);
+  --muted:     rgba(0, 0, 0, 0.45);
+  --bg:        #f7f7f7;
+  --white:     #ffffff;
+  --border:    #e0e0e0;
+  --green:     #27ae60;
+  --red:       #e74c3c;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.6;
+}
+
+/* ── Header ── */
+
+header {
+  background: var(--blue);
+  color: white;
+  padding: 0 1.5rem;
+  height: 52px;
+  display: flex;
+  align-items: center;
+}
+
+.header-inner {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-title {
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: 0.01em;
+  color: white;
+  text-decoration: none;
+}
+
+.header-title:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+.header-user {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.header-user a {
+  color: white;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ── Main container ── */
+
+.container {
+  max-width: 720px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+
+/* ── Text blocks ── */
+
+.intro-text,
+.outro-text {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.intro-text p, .outro-text p { margin-bottom: 0.6rem; }
+.intro-text p:last-child, .outro-text p:last-child { margin-bottom: 0; }
+.outro-text { margin-top: 1.25rem; margin-bottom: 0; color: var(--muted); font-size: 14px; }
+
+/* ── Card sections ── */
+
+.landing-section {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.landing-section h2 { margin-bottom: 0.75rem; }
+
+/* ── Conversation list ── */
+
+.conversation-list {
+  list-style: none;
+  padding: 0;
+}
+
+.conversation-list li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+}
+
+.conversation-list li:last-child { border-bottom: none; }
+
+.conversation-list a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.conversation-list a:hover { text-decoration: underline; }
+
+.badge-inactive {
+  display: inline-block;
+  margin-left: 0.5rem;
+  background: var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+/* ── Voting wrapper ── */
+
+.voting-wrapper {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+pa-conversation:state(loading) { opacity: 0.5; }
+
+.vote-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  flex-wrap: wrap;
+}
+
+pa-vote-button::part(button) {
+  background: var(--white);
+  border: 2px solid var(--blue);
+  border-radius: 4px;
+  padding: 0.5rem 1.5rem;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--blue);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+pa-vote-button::part(button):hover {
+  background: var(--blue);
+  color: white;
+}
+
+pa-statement:state(no-statements) + .vote-buttons { display: none; }
+
+/* ── Propose prompt ── */
+
+#propose-prompt {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+#propose-prompt p {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+#propose-input {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.propose-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  align-items: center;
+}
+
+.propose-actions button,
+.propose-actions pa-submit-button::part(button) {
+  background: var(--blue);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 1rem;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.propose-actions button:last-child {
+  background: none;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+/* ── Accept form ── */
+
+.accept-section {
+  margin: 1.25rem 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.accept-section h3 {
+  font-size: 15px;
+  margin-bottom: 0.5rem;
+}
+
+.accept-section p {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.pseudonym-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.75rem 0;
+}
+
+.pseudonym-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.pseudonym-name {
+  font-family: monospace;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.reroll-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.75rem;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-top: 0.25rem;
+}
+
+.reroll-btn:hover { border-color: var(--blue); color: var(--blue); }
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.6rem 0;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; }
+
+.participate-btn {
+  margin-top: 1.25rem;
+  background: var(--blue);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.6rem 1.5rem;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.participate-btn:hover { background: var(--blue-dark); }
+
+/* ── Login button ── */
+
+.login-btn {
+  display: inline-block;
+  margin-top: 1rem;
+  background: var(--blue);
+  color: white;
+  text-decoration: none;
+  padding: 0.6rem 1.5rem;
+  border-radius: 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.login-btn:hover { background: var(--blue-dark); }
+
+/* ── Typography ── */
+
+h2 { margin-bottom: 1rem; font-size: 18px; }
+
+h3.section-heading {
+  font-size: 15px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 1.5rem 0 0.5rem;
+}
+
+.muted { color: var(--muted); font-size: 13px; }
+
+.error { color: var(--red); font-size: 13px; margin-top: 0.5rem; }
+
+code { font-family: monospace; font-size: 12px; color: var(--muted); }
+
+a { color: var(--blue); }
+
+/* ── Admin table ── */
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin-bottom: 1rem;
+}
+
+.admin-table th,
+.admin-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.admin-table th {
+  background: var(--bg);
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-table .admin-note { color: var(--muted); }
+
+.edit-row { background: #fafafa; }
+.edit-row td { padding: 0.75rem; }
+
+/* ── Admin edit forms ── */
+
+.edit-form {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.edit-form h3 { margin-bottom: 1rem; font-size: 15px; }
+
+.edit-form label,
+.edit-form-inline label {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.edit-form input[type="text"],
+.edit-form select,
+.edit-form textarea,
+.edit-form-inline input[type="text"],
+.edit-form-inline select,
+.edit-form-inline textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.edit-form textarea,
+.edit-form-inline textarea {
+  font-family: monospace;
+  resize: vertical;
+}
+
+.edit-form-inline {
+  padding: 0.5rem 0;
+}
+
+.edit-row-fields {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.edit-row-fields label { flex: 1; min-width: 160px; }
+
+.edit-row-texts {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.edit-row-texts label { flex: 1; min-width: 240px; }
+
+/* ── Buttons ── */
+
+.edit-form button,
+.edit-form-inline button {
+  background: var(--blue);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 1rem;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.edit-form button:hover,
+.edit-form-inline button:hover { background: var(--blue-dark); }
+
+.btn-small {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.2rem 0.5rem;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.btn-small:hover { border-color: var(--blue); color: var(--blue); }
+
+.btn-active { border-color: var(--green); color: var(--green); }
+.btn-inactive { border-color: var(--muted); color: var(--muted); }
+
+.btn-danger { border-color: var(--red); color: var(--red); }
+.btn-danger:hover { background: var(--red); color: white; border-color: var(--red); }
+
+/* ── Results section ── */
+
+.results-section h3 { margin-bottom: 1rem; }
+
+.results-block { margin-bottom: 1.25rem; }
+
+.results-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.results-group-heading {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0.75rem 0 0.25rem;
+}
+
+.results-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.results-row:last-child { border-bottom: none; }
+
+.results-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.results-agree   { background: #e8f8ee; color: var(--green); }
+.results-disagree { background: #fdecea; color: var(--red); }
+
+.results-text { flex: 1; color: var(--text); }
+
+.results-pct {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  min-width: 3rem;
+  text-align: right;
+}
+
+/* ── Conversation moderating row (home page) ── */
+
+.conv-mod-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.admin-action-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--blue);
+  border-radius: 4px;
+  padding: 0.2rem 0.6rem;
+  font-size: 12px;
+  color: var(--blue);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.admin-action-btn:hover {
+  background: var(--blue);
+  color: white;
+}
+
+/* ── Per-conversation admin action cards ── */
+
+.conv-action-grid {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.conv-action-card {
+  flex: 1;
+  min-width: 180px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  text-decoration: none;
+  color: var(--text);
+  transition: border-color 0.15s;
+}
+
+.conv-action-card:hover {
+  border-color: var(--blue);
+}
+
+.conv-action-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--blue);
+  margin-bottom: 0.25rem;
+}
+
+.conv-action-desc {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.badge-active-inline {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ── Statement moderation table ── */
+
+.stmt-table .stmt-text {
+  max-width: 380px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+}
+
+.stmt-votes {
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.stmt-actions {
+  white-space: nowrap;
+}
+
+.stmt-actions form + form { margin-left: 0.3rem; }
+
+.stmt-count {
+  display: inline-block;
+  background: var(--blue);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 1px 7px;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.btn-approve { border-color: var(--green); color: var(--green); }
+.btn-approve:hover { background: var(--green); color: white; border-color: var(--green); }
+
+/* ── Phase toggles (compact) ── */
+
+.phases-form {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.phases-form label {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+  margin: 0;
+}
+
+/* ── Stats grid ── */
+
+.stats-grid {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  min-width: 80px;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
+  margin-top: 2px;
+}

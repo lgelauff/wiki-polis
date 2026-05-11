@@ -1,0 +1,42 @@
+[project]
+name = "wiki-polis"
+version = "2.0.0"
+description = "Wikimedia community deliberation tool — Particiapi + Wikimedia OAuth"
+requires-python = ">=3.11"
+
+dependencies = [
+    # Web framework
+    "flask>=3.1",
+    "flask-sqlalchemy>=3.1",
+    "flask-session>=0.8",
+
+    # Database
+    "flask-migrate>=4.0",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "pymysql>=1.1",        # MySQL driver for Toolforge ToolsDB
+
+    # HTML sanitisation
+    "nh3>=0.2",
+
+    # HTTP
+    "requests>=2.31",
+
+    # Pseudonym generation
+    "coolname>=2.2",
+
+    # Local dev
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+]
+
+[tool.setuptools]
+packages = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

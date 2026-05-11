@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+
+  {% if conversation.intro_text %}
+  <div class="intro-text">
+    {{ conversation.intro_text | safe }}
+  </div>
+  {% endif %}
+
+  {% if not conversation.active %}
+  <div class="landing-section">
+    <p class="muted">This consultation is closed.</p>
+  </div>
+
+  {% elif not conversation.phase_submission %}
+  <div class="landing-section">
+    <p class="muted">Voting has not yet opened. Check back soon.</p>
+  </div>
+
+  {% else %}
+  <div class="voting-wrapper">
+
+    <script type="module"
+      src="{{ url_for('static', filename='particiapp-web-components.js') }}">
+    </script>
+
+    <pa-conversation
+      base="/proxy/particiapi"
+      conversation-id="{{ conversation.polis_id }}">
+
+      <pa-statement>
+        <p class="muted">
+          No statements to vote on right now.{% if conversation.phase_submission %} Check back later for new ones.{% endif %}
+        </p>
+      </pa-statement>
+
+      <div class="vote-buttons">
+        <pa-vote-button type="agree">Agree</pa-vote-button>
+        <pa-vote-button type="pass">Pass</pa-vote-button>
+        <pa-vote-button type="disagree">Disagree</pa-vote-button>
+      </div>
+
+      <div id="propose-prompt" hidden>
+        <p>Have a better way to put this?</p>
+        <textarea id="propose-input" maxlength="1000"
+                  placeholder="Propose an alternative statement…"></textarea>
+        <div class="propose-actions">
+          <pa-submit-button submitfor="propose-input">Submit alternative</pa-submit-button>
+          <button type="button" id="propose-skip">Skip</button>
+        </div>
+      </div>
+
+    </pa-conversation>
+
+  </div>
+  {% endif %}
+
+  {% if conversation.phase_personal_results or conversation.phase_public_results %}
+  <div class="landing-section results-section">
+    <h3>Results{% if polis_stats and polis_stats.n_participants %}<span class="muted" style="font-size:13px;font-weight:400;margin-left:.75rem">{{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}</span>{% endif %}</h3>
+
+    {% if conversation.phase_public_results %}
+
+      {% if results %}
+
+        {% if results.majority.agree or results.majority.disagree %}
+        <div class="results-block">
+          <p class="results-label">Areas of broad consensus</p>
+          {% for r in results.majority.agree %}
+          <div class="results-row">
+            <span class="results-badge results-agree">agree</span>
+            <span class="results-text">"{{ r.statement_text }}"</span>
+            <span class="results-pct">{{ (r.value * 100)|int }}%</span>
+          </div>
+          {% endfor %}
+          {% for r in results.majority.disagree %}
+          <div class="results-row">
+            <span class="results-badge results-disagree">disagree</span>
+            <span class="results-text">"{{ r.statement_text }}"</span>
+            <span class="results-pct">{{ (r.value * 100)|int }}%</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if results.groups %}
+        <div class="results-block">
+          <p class="results-label">
+            {{ results.groups|length }} opinion group{{ 's' if results.groups|length != 1 }} found
+          </p>
+          {% for group in results.groups %}
+          <p class="results-group-heading">Group {{ loop.index }}</p>
+          {% for r in group.agree %}
+          <div class="results-row">
+            <span class="results-badge results-agree">agree</span>
+            <span class="results-text">"{{ r.statement_text }}"</span>
+            <span class="results-pct">{{ (r.value * 100)|int }}%</span>
+          </div>
+          {% endfor %}
+          {% for r in group.disagree %}
+          <div class="results-row">
+            <span class="results-badge results-disagree">disagree</span>
+            <span class="results-text">"{{ r.statement_text }}"</span>
+            <span class="results-pct">{{ (r.value * 100)|int }}%</span>
+          </div>
+          {% endfor %}
+          {% endfor %}
+        </div>
+        {% endif %}
+
+      {% else %}
+        <p class="muted">Results will appear here once enough votes have been cast.</p>
+      {% endif %}
+
+      {% if polis_public_url %}
+      <p style="margin-top:1rem">
+        <a href="{{ polis_public_url }}/{{ conversation.polis_id }}"
+           target="_blank" rel="noopener">View full interactive results on Polis →</a>
+      </p>
+      {% endif %}
+
+    {% else %}
+      <p class="muted">Personal results coming soon.</p>
+    {% endif %}
+
+  </div>
+  {% endif %}
+
+  {% if conversation.outro_text %}
+  <div class="outro-text">
+    {{ conversation.outro_text | safe }}
+  </div>
+  {% endif %}
+
+</div>
+
+{% if conversation.phase_submission and conversation.active %}
+<script>
+  var conv   = document.querySelector('pa-conversation');
+  var prompt = document.getElementById('propose-prompt');
+  var input  = document.getElementById('propose-input');
+
+  conv.addEventListener('particiappvotesubmitsuccess', function() {
+    prompt.hidden = false;
+    input.focus();
+  });
+  document.getElementById('propose-skip').addEventListener('click', function() {
+    prompt.hidden = true;
+    input.value = '';
+  });
+  conv.addEventListener('particiappstatementsubmitsuccess', function() {
+    prompt.hidden = true;
+    input.value = '';
+  });
+</script>
+{% endif %}
+
+{% endblock %}

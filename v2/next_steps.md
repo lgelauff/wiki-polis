@@ -33,19 +33,21 @@ Ordered by dependency. Each step is independently testable before the next begin
 
 ---
 
-## Step 4 — Build Flask app v2
+## Step 4 — Build Flask app v2 ✓
 
-- [ ] Start fresh Flask app (builds on v1 structure)
-- [ ] Clean data model: Conversation (with 4 phase toggle fields), Participant, Participation, ConversationInvite, AdminRole, FeaturedStatement, Argument, ArgumentVote
-- [ ] Replace PolisClient with ParticiapiClient wrapping Particiapi JSON API
-- [ ] Wikimedia OAuth flow (port from v1)
-- [ ] Conversation listing: active / archived / available / moderating sections
-- [ ] Accept flow
-- [ ] Conversation page: embed `<pa-statement>` + `<pa-vote-button>`; inline "propose alternative" prompt
-- [ ] Admin panel: conversations, phase toggles, roles, invites
-- [ ] Confirm end-to-end: Flask login (Wikimedia OAuth) → Flask proxies voting with xid → Polis records vote
+- [x] Start fresh Flask app (builds on v1 structure)
+- [x] Clean data model: Conversation (with 4 phase toggle fields), Participant, Participation, ConversationInvite, AdminRole, FeaturedStatement, Argument, ArgumentVote
+- [x] Replace PolisClient with session-cookie proxy (browser ↔ Flask ↔ Particiapi; `pa_session` cookie rename pattern)
+- [x] Wikimedia OAuth flow (port from v1); dev-login bypass when OAuth not configured
+- [x] Conversation listing: active / archived / available / moderating sections
+- [x] Accept flow with coolname pseudonym selection (5 options + re-roll)
+- [x] Conversation page: `<pa-conversation>` + `<pa-statement>` + `<pa-vote-button>`; "propose alternative" prompt after each vote
+- [x] Admin panel: conversations, phase toggles (S/P/A/R), roles, invites
+- [x] Confirmed end-to-end locally: dev-login → accept → statement submission → vote → Polis recorded `{"value": -1}`
 
-**Deliverable:** End-to-end working app on Toolforge connected to VPS Polis.
+**Deliverable:** ✓ End-to-end confirmed locally against particiapp-docker stack.
+
+**Next:** Deploy to VPS (Step 2) then wire Flask to it (Step 4 → prod).
 
 ---
 

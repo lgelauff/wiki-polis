@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+
+  <h2>
+    Invites — <a href="{{ url_for('conversation', slug=conversation.slug) }}">{{ conversation.title }}</a>
+  </h2>
+  <p class="muted" style="margin-bottom: 1.25rem;">
+    Access policy: <strong>{{ conversation.access_policy }}</strong>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('admin') }}">← back to admin</a>
+  </p>
+
+  {% if conversation.access_policy != 'invite_only' %}
+  <div class="landing-section">
+    <p class="muted">
+      This conversation uses <strong>{{ conversation.access_policy }}</strong> access.
+      Invites only take effect when the policy is set to <strong>invite_only</strong>.
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="edit-form">
+    <h3>Add invites</h3>
+    <form method="post"
+          action="{{ url_for('admin_invite_add', conv_id=conversation.id) }}">
+      <label>Wikimedia usernames (one per line)
+        <textarea name="mw_usernames" rows="6"
+                  placeholder="Username1&#10;Username2&#10;Username3"></textarea>
+      </label>
+      <button type="submit">Add</button>
+    </form>
+  </div>
+
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Added</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inv in invites %}
+      <tr>
+        <td>{{ inv.mw_username }}</td>
+        <td class="muted">{{ inv.created_at.strftime('%Y-%m-%d') }}</td>
+        <td>
+          <form method="post"
+                action="{{ url_for('admin_invite_remove', conv_id=conversation.id, invite_id=inv.id) }}"
+                style="display:inline">
+            <button type="submit" class="btn-small btn-danger">remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      {% if not invites %}
+      <tr>
+        <td colspan="3" class="muted">No invites yet.</td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+</div>
+
+{% endblock %}

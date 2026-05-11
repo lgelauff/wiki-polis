@@ -1,0 +1,866 @@
+"""
+app.py — Flask application for wiki-polis v2.
+"""
+
+import base64
+import functools
+import hashlib
+import os
+import re
+import secrets
+from datetime import timedelta
+from urllib.parse import urlencode
+
+import coolname
+import nh3
+import requests
+from dotenv import load_dotenv
+from flask import (Flask, abort, current_app, make_response, redirect,
+                   render_template, request, session, url_for)
+from flask_migrate import Migrate
+from flask_session import Session
+
+from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument,
+                ArgumentVote, Conversation, ConversationInvite,
+                FeaturedStatement, Participant, Participation, db)
+from polis_admin import PolisAdminClient, PolisAdminError, get_polis_stats
+
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
+
+_MW_USER_AGENT   = 'wiki-polis/2.0 (Toolforge tool; https://wiki-polis.toolforge.org)'
+_TEXT_ALLOWED_TAGS  = {'p', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'br'}
+_TEXT_ALLOWED_ATTRS = {'a': {'href', 'title'}}
+_POLIS_ID_RE     = re.compile(r'^[A-Za-z0-9]{6,20}$')
+_SLUG_RE         = re.compile(r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
+_PSEUDONYM_RE    = re.compile(r'^[a-z]{2,20}-[a-z]{2,20}$')
+
+
+def _read_secret(name: str) -> str:
+    """Read from /run/secrets/wiki-polis/<name> (Kubernetes) or fall back to env var."""
+    file_path = f'/run/secrets/wiki-polis/{name}'
+    if os.path.exists(file_path):
+        with open(file_path) as f:
+            return f.read().strip()
+    return os.environ.get(name.upper().replace('-', '_'), '')
+
+
+ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.strip()]
+
+
+def _sanitise_text(html: str) -> str:
+    return nh3.clean(html or '', tags=_TEXT_ALLOWED_TAGS,
+                     attributes=_TEXT_ALLOWED_ATTRS, strip_comments=True)
+
+
+def _valid_polis_id(v: str) -> bool:
+    return bool(_POLIS_ID_RE.match(v or ''))
+
+
+def _valid_slug(v: str) -> bool:
+    return bool(_SLUG_RE.match(v or ''))
+
+
+def _parse_conversation_form() -> dict:
+    raw_policy = request.form.get('access_policy', 'public').strip()
+    return {
+        'polis_id':      request.form.get('polis_id', '').strip(),
+        'title':         request.form.get('title', '').strip(),
+        'intro_text':    _sanitise_text(request.form.get('intro_text', '')),
+        'outro_text':    _sanitise_text(request.form.get('outro_text', '')),
+        'access_policy': raw_policy if raw_policy in ACCESS_POLICIES else 'public',
+    }
+
+
+def _current_participant() -> 'Participant | None':
+    username = session.get('username')
+    if not username:
+        return None
+    return Participant.query.filter_by(mw_username=username).first()
+
+
+def _is_emailable(username: str) -> bool:
+    try:
+        resp = requests.get(
+            'https://meta.wikimedia.org/w/api.php',
+            params={'action': 'query', 'list': 'users', 'ususers': username,
+                    'usprop': 'emailable', 'format': 'json'},
+            headers={'User-Agent': _MW_USER_AGENT},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        user = resp.json()['query']['users'][0]
+        return 'emailable' in user
+    except Exception:
+        return False
+
+
+def _generate_pseudonyms(count: int = 5) -> list[str]:
+    """Generate unique coolname pseudonyms not yet used in any Participation."""
+    candidates: list[str] = []
+    attempts = 0
+    while len(candidates) < count and attempts < 200:
+        attempts += 1
+        name = coolname.generate_slug(2)
+        if name in candidates:
+            continue
+        if Participation.query.filter_by(pseudonym=name).first() is None:
+            candidates.append(name)
+    return candidates
+
+
+# ── Auth helpers ──────────────────────────────────────────────────────────────
+
+def login_required(f):
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        if 'username' not in session:
+            session['next'] = request.url
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def _is_global_admin(participant: 'Participant | None' = None) -> bool:
+    if session.get('username') in ADMIN_USERS:
+        return True
+    if participant is None:
+        participant = _current_participant()
+    if participant is None:
+        return False
+    return AdminRole.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=None,
+        role='admin',
+    ).first() is not None
+
+
+def _can_moderate(conversation, participant: 'Participant | None' = None) -> bool:
+    if _is_global_admin(participant):
+        return True
+    if participant is None:
+        participant = _current_participant()
+    if participant is None:
+        return False
+    return AdminRole.query.filter(
+        AdminRole.participant_id == participant.id,
+        AdminRole.conversation_id == conversation.id,
+    ).first() is not None
+
+
+def admin_required(f):
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        if not _is_global_admin():
+            abort(403)
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def _require_mod_for_conv(conv_id: int) -> 'Conversation':
+    """Return conversation or abort 403 if the current user can't moderate it."""
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _can_moderate(conv):
+        abort(403)
+    return conv
+
+
+def _check_conversation_access(conversation, participant) -> None:
+    if conversation.access_policy != 'invite_only':
+        return
+    if participant:
+        existing = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conversation.id,
+        ).first()
+        if existing:
+            return
+    username = session.get('username')
+    invited = ConversationInvite.query.filter_by(
+        conversation_id=conversation.id,
+        mw_username=username,
+    ).first()
+    if not invited:
+        abort(403)
+
+
+# ── Particiapi proxy ──────────────────────────────────────────────────────────
+
+def _proxy_to_particiapi(pa_path: str):
+    """
+    Proxy a browser request to Particiapi and return the response.
+
+    Browser ↔ Flask proxy ↔ Particiapi:
+    - The browser stores a 'pa_session' cookie (Particiapi's session, renamed to
+      avoid colliding with Flask's own 'session' cookie).
+    - On each request we map pa_session → session when forwarding to Particiapi.
+    - When Particiapi sets a new session cookie we rename it pa_session before
+      sending it back to the browser.
+    - CSRF tokens pass through unchanged via the X-CSRF-Token header.
+    """
+    url = f"{current_app.config['PARTICIAPI_BASE']}/{pa_path}"
+
+    forwarded_cookies = {}
+    pa_cookie = request.cookies.get('pa_session')
+    if pa_cookie:
+        forwarded_cookies['session'] = pa_cookie
+
+    params = dict(request.args)
+    # If the web component calls POST /api/session with no existing session,
+    # Particiapi returns 403 (auth required) unless we add ?create=true.
+    if pa_path == 'api/session' and request.method == 'POST' and not pa_cookie:
+        params['create'] = 'true'
+
+    headers = {}
+    if request.method in ('POST', 'PUT'):
+        csrf = request.headers.get('X-CSRF-Token')
+        if csrf:
+            headers['X-CSRF-Token'] = csrf
+        if request.content_type:
+            headers['Content-Type'] = request.content_type
+
+    try:
+        upstream = requests.request(
+            method=request.method,
+            url=url,
+            params=params,
+            headers=headers,
+            cookies=forwarded_cookies,
+            json=request.get_json(silent=True),
+            data=request.form if not request.is_json else None,
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        current_app.logger.error('Particiapi proxy error: %s', exc)
+        abort(502)
+
+    flask_resp = make_response(upstream.content, upstream.status_code)
+    flask_resp.headers['Content-Type'] = upstream.headers.get(
+        'Content-Type', 'application/json')
+
+    if 'session' in upstream.cookies:
+        flask_resp.set_cookie(
+            'pa_session',
+            upstream.cookies['session'],
+            httponly=True,
+            samesite='Lax',
+            secure=not current_app.debug,
+        )
+
+    return flask_resp
+
+
+# ── App factory ───────────────────────────────────────────────────────────────
+
+def create_app() -> Flask:
+    app = Flask(__name__)
+
+    app.config['SECRET_KEY']                     = _read_secret('secret-key') or 'dev-insecure-key'
+    app.config['SQLALCHEMY_DATABASE_URI']        = _read_secret('database-url') or 'sqlite:///dev.db'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SQLALCHEMY_ENGINE_OPTIONS']      = {'pool_recycle': 280, 'pool_pre_ping': True}
+
+    app.config['SESSION_TYPE']               = 'sqlalchemy'
+    app.config['SESSION_SQLALCHEMY']         = db
+    app.config['SESSION_PERMANENT']          = True
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+    app.config['SESSION_COOKIE_HTTPONLY']    = True
+    app.config['SESSION_COOKIE_SAMESITE']    = 'Lax'
+    app.config['SESSION_COOKIE_SECURE']      = not app.debug
+
+    app.config['OAUTH_CLIENT_ID']     = _read_secret('oauth-client-id')
+    app.config['OAUTH_CLIENT_SECRET'] = _read_secret('oauth-client-secret')
+    app.config['OAUTH_REDIRECT_URI']  = _read_secret('oauth-redirect-uri')
+    app.config['PARTICIAPI_BASE']     = (_read_secret('particiapi-base-url')
+                                         or os.environ.get('PARTICIAPI_BASE_URL', 'http://localhost:8000'))
+    app.config['POLIS_PUBLIC_URL']    = (_read_secret('polis-public-url')
+                                         or os.environ.get('POLIS_PUBLIC_URL', ''))
+    app.config['POLIS_DB_CONTAINER']  = os.environ.get('POLIS_DB_CONTAINER',
+                                                        'particiapp-docker-postgres-1')
+
+    db.init_app(app)
+    Migrate(app, db)
+    Session(app)
+
+    with app.app_context():
+        with db.engine.begin() as conn:
+            db.metadata.create_all(conn)
+
+    @app.context_processor
+    def _inject_globals():
+        participant = _current_participant()
+        return {
+            'is_admin': _is_global_admin(participant),
+            'username': session.get('username'),
+        }
+
+    _register_routes(app)
+    return app
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+def _register_routes(app: Flask) -> None:
+
+    if app.debug:
+        import pathlib
+        from flask import send_file as _send_file
+
+        # Resolve particiapp-web-components.js once at startup.
+        # Default: sibling repo layout (particiapp-docker/ next to wiki-polis/).
+        # Override with PARTICIAPP_WEB_COMPONENTS=/abs/path/to/file.js in .env.
+        _WC_DEFAULT = (pathlib.Path(__file__).parent.parent.parent /
+                       'particiapp-docker/subprojects'
+                       '/particiapp-web-components/particiapp-web-components.js')
+        _WC_PATH = pathlib.Path(
+            os.environ.get('PARTICIAPP_WEB_COMPONENTS', str(_WC_DEFAULT))
+        ).resolve()
+
+        @app.before_request
+        def _dev_serve_webcomponents():
+            if request.path == '/static/particiapp-web-components.js':
+                if _WC_PATH.exists():
+                    return _send_file(_WC_PATH, mimetype='application/javascript')
+                app.logger.warning(
+                    'particiapp-web-components.js not found at %s — '
+                    'set PARTICIAPP_WEB_COMPONENTS in .env', _WC_PATH)
+
+        @app.get('/dev-login')
+        def dev_login():
+            username = request.args.get('username', '').strip()
+            if not username:
+                return 'Usage: /dev-login?username=YourName', 400
+            xid = hashlib.sha256(f'dev-{username}'.encode()).hexdigest()
+            participant = Participant.query.filter_by(mw_username=username).first()
+            if participant is None:
+                participant = Participant(
+                    mw_user_id=abs(hash(username)) % 10**9,
+                    mw_username=username,
+                    xid=xid,
+                )
+                db.session.add(participant)
+                db.session.commit()
+            session['username'] = username
+            session['xid']      = xid
+            return redirect(url_for('index'))
+
+    # ── Home ─────────────────────────────────────────────────────────────────
+
+    @app.get('/')
+    def index():
+        if 'username' not in session:
+            public_convos = (Conversation.query
+                             .filter_by(active=True, access_policy='public')
+                             .order_by(Conversation.created_at.desc())
+                             .all())
+            return render_template('home.html', public_conversations=public_convos)
+
+        participant = _current_participant()
+        username    = session['username']
+
+        joined_parts = (
+            Participation.query.filter_by(participant_id=participant.id).all()
+            if participant else []
+        )
+        joined_ids = {p.conversation_id for p in joined_parts}
+
+        active_joined   = []
+        archived_joined = []
+        for part in joined_parts:
+            conv = Conversation.query.get(part.conversation_id)
+            if conv:
+                (active_joined if conv.active else archived_joined).append(conv)
+
+        invited_ids = [
+            inv.conversation_id
+            for inv in ConversationInvite.query.filter_by(mw_username=username).all()
+        ]
+        available = (Conversation.query
+                     .filter_by(active=True)
+                     .filter(~Conversation.id.in_(joined_ids or [0]))
+                     .filter(db.or_(
+                         Conversation.access_policy == 'public',
+                         db.and_(
+                             Conversation.access_policy == 'invite_only',
+                             Conversation.id.in_(invited_ids or [0]),
+                         ),
+                     ))
+                     .order_by(Conversation.created_at.desc())
+                     .all())
+
+        moderating = []
+        if participant:
+            if _is_global_admin(participant):
+                moderating = (Conversation.query
+                              .order_by(Conversation.created_at.desc()).all())
+            else:
+                roles = AdminRole.query.filter(
+                    AdminRole.participant_id == participant.id,
+                    AdminRole.conversation_id.isnot(None),
+                ).all()
+                if roles:
+                    mod_ids = {r.conversation_id for r in roles}
+                    moderating = Conversation.query.filter(
+                        Conversation.id.in_(mod_ids)).all()
+
+        return render_template('home.html',
+                               active_joined=active_joined,
+                               archived_joined=archived_joined,
+                               available=available,
+                               moderating=moderating)
+
+    # ── Accept ───────────────────────────────────────────────────────────────
+
+    @app.get('/accept/<slug>')
+    @login_required
+    def accept(slug):
+        conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+        participant = _current_participant()
+        _check_conversation_access(conv, participant)
+        if participant and Participation.query.filter_by(
+                participant_id=participant.id,
+                conversation_id=conv.id).first():
+            return redirect(url_for('conversation', slug=slug))
+        pseudonyms = _generate_pseudonyms(5)
+        emailable  = _is_emailable(session['username'])
+        return render_template('accept.html', conversation=conv,
+                               emailable=emailable, pseudonyms=pseudonyms)
+
+    @app.post('/accept/<slug>')
+    @login_required
+    def accept_post(slug):
+        conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+        participant = _current_participant()
+        if participant is None:
+            abort(404)
+        _check_conversation_access(conv, participant)
+
+        if Participation.query.filter_by(
+                participant_id=participant.id,
+                conversation_id=conv.id).first():
+            return redirect(url_for('conversation', slug=slug))
+
+        pseudonym = request.form.get('pseudonym', '').strip()
+        emailable = request.form.get('emailable') == '1'
+
+        if not _PSEUDONYM_RE.match(pseudonym):
+            abort(400)
+
+        if Participation.query.filter_by(pseudonym=pseudonym).first():
+            pseudonyms = _generate_pseudonyms(5)
+            return render_template('accept.html', conversation=conv,
+                                   emailable=emailable, pseudonyms=pseudonyms,
+                                   error='That pseudonym was just taken — please choose another.')
+
+        db.session.add(Participation(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+            pseudonym=pseudonym,
+            notify_email=bool(request.form.get('notify_email')) and emailable,
+            notify_talk_page=bool(request.form.get('notify_talk_page')),
+        ))
+        db.session.commit()
+        return redirect(url_for('conversation', slug=slug))
+
+    @app.get('/accept/<slug>/pseudonyms')
+    @login_required
+    def accept_pseudonyms(slug):
+        from flask import jsonify
+        Conversation.query.filter_by(slug=slug).first_or_404()
+        return jsonify({'pseudonyms': _generate_pseudonyms(5)})
+
+    # ── Conversation ─────────────────────────────────────────────────────────
+
+    @app.get('/c/<slug>')
+    @login_required
+    def conversation(slug):
+        conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+        participant = _current_participant()
+        _check_conversation_access(conv, participant)
+
+        participation = None
+        if participant:
+            participation = Participation.query.filter_by(
+                participant_id=participant.id,
+                conversation_id=conv.id,
+            ).first()
+
+        if participation is None:
+            return redirect(url_for('accept', slug=slug))
+
+        can_mod = _can_moderate(conv, participant)
+
+        results     = None
+        polis_stats = None
+        if conv.phase_public_results:
+            client      = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
+            results     = client.get_results(conv.polis_id)
+            polis_stats = get_polis_stats(conv.polis_id,
+                                          current_app.config['POLIS_DB_CONTAINER'])
+
+        return render_template('conversation.html',
+                               conversation=conv,
+                               participation=participation,
+                               can_moderate=can_mod,
+                               results=results,
+                               polis_stats=polis_stats,
+                               polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''))
+
+    # ── Particiapi proxy ──────────────────────────────────────────────────────
+
+    @app.route('/proxy/particiapi/<path:pa_path>',
+               methods=['GET', 'POST', 'PUT', 'DELETE'])
+    @login_required
+    def proxy_particiapi(pa_path):
+        return _proxy_to_particiapi(pa_path)
+
+    # ── OAuth ─────────────────────────────────────────────────────────────────
+
+    @app.get('/login')
+    def login():
+        if not app.config.get('OAUTH_CLIENT_ID'):
+            if app.debug:
+                return '''<!doctype html>
+<title>Dev login</title>
+<style>body{font-family:sans-serif;margin:3rem;}</style>
+<h2>Dev login</h2>
+<form action="/dev-login" method="get">
+  <input name="username" placeholder="Wikimedia username" autofocus
+         style="padding:.4rem;font-size:15px;width:240px">
+  <button style="padding:.4rem 1rem;font-size:15px;margin-left:.5rem">Log in</button>
+</form>'''
+            return 'OAuth not configured — set OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_REDIRECT_URI', 503
+
+        code_verifier  = secrets.token_urlsafe(64)
+        code_challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(code_verifier.encode()).digest()
+        ).rstrip(b'=').decode()
+
+        state = secrets.token_urlsafe(32)
+        session['oauth_state']         = state
+        session['oauth_code_verifier'] = code_verifier
+
+        params = urlencode({
+            'response_type':         'code',
+            'client_id':             app.config['OAUTH_CLIENT_ID'],
+            'redirect_uri':          app.config['OAUTH_REDIRECT_URI'],
+            'scope':                 'basic',
+            'state':                 state,
+            'code_challenge':        code_challenge,
+            'code_challenge_method': 'S256',
+        })
+        return redirect(f'https://meta.wikimedia.org/w/rest.php/oauth2/authorize?{params}')
+
+    @app.get('/oauth-callback')
+    def oauth_callback():
+        if request.args.get('state') != session.pop('oauth_state', None):
+            app.logger.warning('OAuth callback: state mismatch')
+            return redirect(url_for('index'))
+
+        code          = request.args.get('code', '')
+        code_verifier = session.pop('oauth_code_verifier', '')
+        if not code:
+            return redirect(url_for('index'))
+
+        try:
+            token_resp = requests.post(
+                'https://meta.wikimedia.org/w/rest.php/oauth2/access_token',
+                data={
+                    'grant_type':    'authorization_code',
+                    'code':          code,
+                    'redirect_uri':  app.config['OAUTH_REDIRECT_URI'],
+                    'client_id':     app.config['OAUTH_CLIENT_ID'],
+                    'client_secret': app.config['OAUTH_CLIENT_SECRET'],
+                    'code_verifier': code_verifier,
+                },
+                headers={'User-Agent': _MW_USER_AGENT},
+                timeout=10,
+            )
+            token_resp.raise_for_status()
+            access_token = token_resp.json()['access_token']
+
+            profile_resp = requests.get(
+                'https://meta.wikimedia.org/w/rest.php/oauth2/resource/profile',
+                headers={'Authorization': f'Bearer {access_token}',
+                         'User-Agent': _MW_USER_AGENT},
+                timeout=10,
+            )
+            profile_resp.raise_for_status()
+            identity = profile_resp.json()
+        except Exception as exc:
+            app.logger.warning('OAuth callback failed: %s', exc)
+            return redirect(url_for('index'))
+
+        username   = identity.get('username', '').strip()
+        mw_user_id = identity.get('sub')
+        if not username or not mw_user_id:
+            return redirect(url_for('index'))
+
+        xid = hashlib.sha256(str(mw_user_id).encode()).hexdigest()
+
+        participant = Participant.query.filter_by(mw_user_id=mw_user_id).first()
+        if participant is None:
+            participant = Participant(mw_user_id=mw_user_id, mw_username=username, xid=xid)
+            db.session.add(participant)
+        elif participant.mw_username != username:
+            participant.mw_username = username
+        db.session.commit()
+
+        next_url = session.pop('next', None)
+        session.clear()
+        session['username'] = username
+        session['xid']      = xid
+
+        return redirect(next_url or url_for('index'))
+
+    @app.get('/logout')
+    @login_required
+    def logout():
+        session.clear()
+        return redirect(url_for('login'))
+
+    # ── Admin ─────────────────────────────────────────────────────────────────
+
+    @app.get('/admin')
+    @login_required
+    @admin_required
+    def admin():
+        conversations = (Conversation.query
+                         .order_by(Conversation.created_at.desc()).all())
+        participants  = (Participant.query
+                         .order_by(Participant.mw_username).all())
+        roles         = (AdminRole.query
+                         .order_by(AdminRole.role, AdminRole.granted_at.desc()).all())
+        return render_template('admin.html',
+                               conversations=conversations,
+                               participants=participants,
+                               roles=roles,
+                               admin_roles=ADMIN_ROLES)
+
+    @app.get('/admin/conversations/<int:conv_id>')
+    @login_required
+    def admin_conversation_detail(conv_id):
+        conv        = _require_mod_for_conv(conv_id)
+        participant = _current_participant()
+        conv_roles  = (AdminRole.query
+                       .filter_by(conversation_id=conv_id)
+                       .all())
+        participants      = Participant.query.order_by(Participant.mw_username).all()
+        invite_count      = ConversationInvite.query.filter_by(conversation_id=conv_id).count()
+        participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
+        polis_stats       = get_polis_stats(conv.polis_id,
+                                            current_app.config['POLIS_DB_CONTAINER'])
+        return render_template('admin_conversation.html',
+                               conversation=conv,
+                               conv_roles=conv_roles,
+                               participants=participants,
+                               invite_count=invite_count,
+                               participant_count=participant_count,
+                               polis_stats=polis_stats,
+                               polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''),
+                               admin_roles=ADMIN_ROLES)
+
+    @app.post('/admin/conversations/new')
+    @login_required
+    @admin_required
+    def admin_conversation_new():
+        slug   = request.form.get('slug', '').strip().lower()
+        fields = _parse_conversation_form()
+
+        if not fields['title'] or not _valid_polis_id(fields['polis_id']) or not _valid_slug(slug):
+            abort(400)
+
+        db.session.add(Conversation(slug=slug, active=True, **fields))
+        db.session.commit()
+        return redirect(url_for('admin'))
+
+    @app.post('/admin/conversations/<int:conv_id>/edit')
+    @login_required
+    @admin_required
+    def admin_conversation_edit(conv_id):
+        conv   = Conversation.query.get_or_404(conv_id)
+        fields = _parse_conversation_form()
+
+        if not fields['title'] or not _valid_polis_id(fields['polis_id']):
+            abort(400)
+
+        conv.polis_id     = fields['polis_id']
+        conv.title        = fields['title']
+        conv.intro_text   = fields['intro_text']
+        conv.outro_text   = fields['outro_text']
+        conv.access_policy = fields['access_policy']
+        db.session.commit()
+        return redirect(url_for('admin_conversation_detail', conv_id=conv_id))
+
+    @app.post('/admin/conversations/<int:conv_id>/toggle')
+    @login_required
+    @admin_required
+    def admin_conversation_toggle(conv_id):
+        conv = Conversation.query.get_or_404(conv_id)
+        conv.active = not conv.active
+        db.session.commit()
+        return redirect(url_for('admin_conversation_detail', conv_id=conv_id))
+
+    @app.post('/admin/conversations/<int:conv_id>/phases')
+    @login_required
+    @admin_required
+    def admin_conversation_phases(conv_id):
+        conv = Conversation.query.get_or_404(conv_id)
+        conv.phase_submission       = bool(request.form.get('phase_submission'))
+        conv.phase_personal_results = bool(request.form.get('phase_personal_results'))
+        conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
+        conv.phase_public_results   = bool(request.form.get('phase_public_results'))
+        db.session.commit()
+        return redirect(url_for('admin_conversation_detail', conv_id=conv_id))
+
+    @app.post('/admin/roles/add')
+    @login_required
+    @admin_required
+    def admin_role_add():
+        participant_id  = request.form.get('participant_id', type=int)
+        conversation_id = request.form.get('conversation_id', type=int) or None
+        role            = request.form.get('role', '').strip()
+
+        if role not in ADMIN_ROLES:
+            abort(400)
+        Participant.query.get_or_404(participant_id)
+        if conversation_id is not None:
+            Conversation.query.get_or_404(conversation_id)
+
+        existing = AdminRole.query.filter_by(
+            participant_id=participant_id,
+            conversation_id=conversation_id,
+            role=role,
+        ).first()
+        if not existing:
+            grantor = _current_participant()
+            db.session.add(AdminRole(
+                participant_id=participant_id,
+                conversation_id=conversation_id,
+                role=role,
+                granted_by=grantor.id if grantor else None,
+            ))
+            db.session.commit()
+        next_url = request.form.get('redirect_to', '')
+        return redirect(next_url if next_url.startswith('/') else url_for('admin'))
+
+    @app.post('/admin/roles/<int:role_id>/remove')
+    @login_required
+    @admin_required
+    def admin_role_remove(role_id):
+        role = AdminRole.query.get_or_404(role_id)
+        db.session.delete(role)
+        db.session.commit()
+        next_url = request.form.get('redirect_to', '')
+        return redirect(next_url if next_url.startswith('/') else url_for('admin'))
+
+    @app.get('/admin/conversations/<int:conv_id>/invites')
+    @login_required
+    def admin_conversation_invites(conv_id):
+        conv    = _require_mod_for_conv(conv_id)
+        invites = (ConversationInvite.query
+                   .filter_by(conversation_id=conv_id)
+                   .order_by(ConversationInvite.mw_username)
+                   .all())
+        return render_template('admin_invites.html',
+                               conversation=conv, invites=invites)
+
+    @app.post('/admin/conversations/<int:conv_id>/invites/add')
+    @login_required
+    def admin_invite_add(conv_id):
+        _require_mod_for_conv(conv_id)
+        raw = [l.strip() for l in
+               request.form.get('mw_usernames', '').splitlines() if l.strip()]
+        usernames = [u for u in raw if 1 <= len(u) <= 255]
+        if not usernames:
+            return redirect(url_for('admin_conversation_invites', conv_id=conv_id))
+        existing = {inv.mw_username for inv in
+                    ConversationInvite.query.filter_by(conversation_id=conv_id).all()}
+        for username in usernames:
+            if username not in existing:
+                db.session.add(ConversationInvite(
+                    conversation_id=conv_id, mw_username=username))
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        return redirect(url_for('admin_conversation_invites', conv_id=conv_id))
+
+    @app.post('/admin/conversations/<int:conv_id>/invites/<int:invite_id>/remove')
+    @login_required
+    def admin_invite_remove(conv_id, invite_id):
+        _require_mod_for_conv(conv_id)
+        invite = ConversationInvite.query.filter_by(
+            id=invite_id, conversation_id=conv_id).first_or_404()
+        db.session.delete(invite)
+        db.session.commit()
+        return redirect(url_for('admin_conversation_invites', conv_id=conv_id))
+
+    # ── Admin: Polis statement moderation ─────────────────────────────────────
+
+    @app.get('/admin/conversations/<int:conv_id>/statements')
+    @login_required
+    def admin_conversation_statements(conv_id):
+        conv   = _require_mod_for_conv(conv_id)
+        client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
+        error  = None
+        pending = approved = hidden = []
+        settings = {}
+        try:
+            pending, approved, hidden = client.get_statements(conv.polis_id)
+            settings = client.get_settings(conv.polis_id)
+        except PolisAdminError as exc:
+            error = str(exc)
+        return render_template('admin_statements.html',
+                               conversation=conv,
+                               pending=pending,
+                               approved=approved,
+                               hidden=hidden,
+                               settings=settings,
+                               error=error)
+
+    @app.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
+    @login_required
+    def admin_statement_moderate(conv_id, tid):
+        conv = _require_mod_for_conv(conv_id)
+        mod  = request.form.get('mod', type=int)
+        if mod not in (-1, 0, 1):
+            abort(400)
+        client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
+        try:
+            client.moderate(conv.polis_id, tid, mod)
+        except PolisAdminError as exc:
+            current_app.logger.error('moderate failed: %s', exc)
+        return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
+
+    @app.post('/admin/conversations/<int:conv_id>/statements/seed')
+    @login_required
+    def admin_statement_seed(conv_id):
+        conv = _require_mod_for_conv(conv_id)
+        text = request.form.get('txt', '').strip()
+        text = nh3.clean(text, tags=frozenset())
+        if not text or len(text) > 280:
+            abort(400)
+        client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
+        try:
+            client.add_seed(conv.polis_id, text)
+        except PolisAdminError as exc:
+            current_app.logger.error('add_seed failed: %s', exc)
+        return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
+
+    @app.post('/admin/conversations/<int:conv_id>/strict-moderation')
+    @login_required
+    def admin_conversation_strict_moderation(conv_id):
+        conv    = _require_mod_for_conv(conv_id)
+        enabled = request.form.get('strict_moderation') == '1'
+        client  = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
+        try:
+            client.set_strict_moderation(conv.polis_id, enabled)
+        except PolisAdminError as exc:
+            current_app.logger.error('set_strict_moderation failed: %s', exc)
+        return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
+
+
+app = create_app()
+
+if __name__ == '__main__':
+    app.run(debug=True)

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+
+{% if not username %}
+
+  <div class="landing-section">
+    <h2>Community deliberation for Wikipedia</h2>
+    <p>
+      wiki-polis is a tool for structured community consultations.
+      Participants vote on short statements, opinion clusters emerge,
+      and a curated argument layer can be added on top.
+    </p>
+    <p>Log in with your Wikimedia account to join an open consultation.</p>
+    <a href="{{ url_for('login') }}" class="login-btn">Log in with Wikimedia</a>
+  </div>
+
+  {% if public_conversations %}
+  <div class="landing-section">
+    <h2>Open consultations</h2>
+    <ul class="conversation-list">
+      {% for c in public_conversations %}
+      <li>
+        <a href="{{ url_for('accept', slug=c.slug) }}">{{ c.title }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+{% else %}
+
+  {% if active_joined %}
+  <div class="landing-section">
+    <h2>Your consultations</h2>
+    <ul class="conversation-list">
+      {% for c in active_joined %}
+      <li>
+        <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if available %}
+  <div class="landing-section">
+    <h2>Available consultations</h2>
+    <ul class="conversation-list">
+      {% for c in available %}
+      <li>
+        <a href="{{ url_for('accept', slug=c.slug) }}">{{ c.title }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if archived_joined %}
+  <div class="landing-section">
+    <h2>Archived consultations</h2>
+    <ul class="conversation-list">
+      {% for c in archived_joined %}
+      <li>
+        <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
+        <span class="badge-inactive">closed</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if moderating %}
+  <div class="landing-section">
+    <h2>Consultations you moderate</h2>
+    <ul class="conversation-list">
+      {% for c in moderating %}
+      <li class="conv-mod-row">
+        <span>
+          <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
+          {% if not c.active %}<span class="badge-inactive">closed</span>{% endif %}
+        </span>
+        <a href="{{ url_for('admin_conversation_detail', conv_id=c.id) }}"
+           class="admin-action-btn">Admin actions</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if not active_joined and not available and not archived_joined and not moderating %}
+  <div class="landing-section">
+    <p>No consultations available at the moment. Check back later.</p>
+  </div>
+  {% endif %}
+
+{% endif %}
+
+</div>
+
+{% endblock %}

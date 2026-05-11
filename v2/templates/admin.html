@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+
+  <h2>Admin panel</h2>
+
+  <!-- ── Conversations ─────────────────────────────── -->
+  <h3 class="section-heading">Conversations</h3>
+
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Slug</th>
+        <th>Policy</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in conversations %}
+      <tr>
+        <td><a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a></td>
+        <td><code>{{ c.slug }}</code></td>
+        <td>{{ c.access_policy }}</td>
+        <td>
+          <span class="{% if c.active %}badge-active-inline{% else %}badge-inactive{% endif %}">
+            {{ 'active' if c.active else 'closed' }}
+          </span>
+        </td>
+        <td>
+          <a href="{{ url_for('admin_conversation_detail', conv_id=c.id) }}"
+             class="btn-small">manage</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- ── New conversation ──────────────────────────── -->
+  <div class="edit-form">
+    <h3>New conversation</h3>
+    <form method="post" action="{{ url_for('admin_conversation_new') }}">
+      <div class="edit-row-fields">
+        <label>Slug (URL-safe, immutable)
+          <input type="text" name="slug" placeholder="e.g. rfc-2024-adminship" required
+                 pattern="[a-z0-9]+(-[a-z0-9]+)*">
+        </label>
+        <label>Title
+          <input type="text" name="title" required>
+        </label>
+        <label>Polis ID (zinvite)
+          <input type="text" name="polis_id" placeholder="e.g. 3rf5ssn9ns" required>
+        </label>
+        <label>Access policy
+          <select name="access_policy">
+            <option value="public">public</option>
+            <option value="link_based">link_based</option>
+            <option value="invite_only">invite_only</option>
+          </select>
+        </label>
+      </div>
+      <div class="edit-row-texts">
+        <label>Intro text (HTML, optional)
+          <textarea name="intro_text" rows="4"></textarea>
+        </label>
+        <label>Outro text (HTML, optional)
+          <textarea name="outro_text" rows="4"></textarea>
+        </label>
+      </div>
+      <button type="submit">Create conversation</button>
+    </form>
+  </div>
+
+  <!-- ── Global roles ──────────────────────────────── -->
+  <h3 class="section-heading">Global admin roles</h3>
+  <p class="muted" style="font-size:13px;margin-bottom:.75rem">
+    Global roles grant platform-wide access.
+    To assign a moderator to a specific conversation, use
+    <strong>manage → moderators</strong> on that conversation.
+  </p>
+
+  {% set global_roles = roles | selectattr('conversation_id', 'none') | list %}
+
+  {% if global_roles %}
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Participant</th>
+        <th>Role</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for role in global_roles %}
+      <tr>
+        <td>{{ role.participant.mw_username }}</td>
+        <td>{{ role.role }}</td>
+        <td>
+          <form method="post"
+                action="{{ url_for('admin_role_remove', role_id=role.id) }}"
+                style="display:inline">
+            <button type="submit" class="btn-small btn-danger">remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted" style="font-size:14px;margin-bottom:1rem">No global roles assigned.</p>
+  {% endif %}
+
+  <div class="edit-form">
+    <h3>Grant global role</h3>
+    <form method="post" action="{{ url_for('admin_role_add') }}">
+      <div class="edit-row-fields">
+        <label>Participant
+          <select name="participant_id" required>
+            <option value="">— select —</option>
+            {% for p in participants %}
+            <option value="{{ p.id }}">{{ p.mw_username }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Role
+          <select name="role" required>
+            {% for r in admin_roles %}
+            <option value="{{ r }}">{{ r }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <button type="submit">Grant</button>
+    </form>
+  </div>
+
+</div>
+
+{% endblock %}
