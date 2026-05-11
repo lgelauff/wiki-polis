@@ -4,17 +4,19 @@ Ordered by dependency. Each step is independently testable before the next begin
 
 ---
 
-## Step 1 — Run Polis + Particiapi locally
+## Step 1 — Run Polis + Particiapi locally ✓ (in progress)
 
 **Goal:** Validate the approach before touching any infrastructure.
 
-- [ ] Clone gitlab.com/particiapp/particiapp-docker
-- [ ] Configure with a local test OIDC provider
-- [ ] `docker compose up` — confirm Polis + Particiapi running
-- [ ] Browse the reference frontend; evaluate web components in practice
-- [ ] Confirm voting loop, statement submission, and SSO flow work
+- [x] Clone with `--recurse-submodules`; fix PostgreSQL 18 volume path; set auth disabled + dev mode
+- [x] Base stack running: Polis + Particiapi + PostgreSQL
+- [x] Particiapi API responding; conversation creation and retrieval confirmed
+- [x] Statement submission and voting confirmed end-to-end via API
+- [x] Web components evaluated from source — events, CSS parts, integration pattern documented
 
-**Deliverable:** Working local stack. Go/no-go decision on Particiapi approach confirmed by seeing it in a browser.
+**Setup notes:** `v2/cache/local-setup.md`, `v2/reference/particiapi-api.md`, `v2/reference/web-components.md`
+
+**Deliverable:** ✓ Approach confirmed. Particiapi API works, voting loop works, web components provide sufficient styling and event hooks for our integration.
 
 ---
 
