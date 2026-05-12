@@ -25,9 +25,13 @@
         <td><code>{{ c.slug }}</code></td>
         <td>{{ c.access_policy }}</td>
         <td>
-          <span class="{% if c.active %}badge-active-inline{% else %}badge-inactive{% endif %}">
-            {{ 'active' if c.active else 'closed' }}
-          </span>
+          {% if not c.active %}
+            <span class="badge-inactive">closed</span>
+          {% elif c.paused %}
+            <span style="color:#b07800;font-size:12px;font-weight:600">paused</span>
+          {% else %}
+            <span class="badge-active-inline">active</span>
+          {% endif %}
         </td>
         <td>
           <a href="{{ url_for('admin_conversation_detail', conv_id=c.id) }}"
@@ -42,6 +46,7 @@
   <div class="edit-form">
     <h3>New conversation</h3>
     <form method="post" action="{{ url_for('admin_conversation_new') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="edit-row-fields">
         <label>Slug (URL-safe, immutable)
           <input type="text" name="slug" placeholder="e.g. rfc-2024-adminship" required
@@ -56,7 +61,6 @@
         <label>Access policy
           <select name="access_policy">
             <option value="public">public</option>
-            <option value="link_based">link_based</option>
             <option value="invite_only">invite_only</option>
           </select>
         </label>
@@ -101,6 +105,7 @@
           <form method="post"
                 action="{{ url_for('admin_role_remove', role_id=role.id) }}"
                 style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn-small btn-danger">remove</button>
           </form>
         </td>
@@ -115,6 +120,7 @@
   <div class="edit-form">
     <h3>Grant global role</h3>
     <form method="post" action="{{ url_for('admin_role_add') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="edit-row-fields">
         <label>Participant
           <select name="participant_id" required>

@@ -20,13 +20,13 @@ A deliberation tool for the Wikimedia community. Participants vote on atomic sta
 
 A conversation is a deliberation space on a specific topic. It has a title, an introductory text explaining the topic and purpose, and an optional closing text shown after a participant has voted on all available statements.
 
-Conversations can be:
+Conversations have three status states:
 - **Active** — open for participation
-- **Inactive** — closed; participants can still read results but cannot vote
+- **Paused** — temporarily suspended; voting is disabled and the conversation is hidden from public listings, but the admin can resume it at any time. The identity reveal clock does not start.
+- **Closed** — permanently ended; the conversation is hidden from available listings, voting is disabled, and the identity reveal timeline begins. Closing is irreversible.
 
 Each conversation has an access policy:
 - **Public** — anyone with a Wikimedia account can join
-- **Link-based** — only people who have the link can join; not listed publicly
 - **Invite-only** — only explicitly invited Wikimedia usernames can join
 
 Participants must explicitly accept a conversation before entering it. The acceptance screen shows the intro text and asks for confirmation. This is a deliberate friction point — participants should understand what they are joining.
@@ -78,6 +78,8 @@ Each logged-in participant can see clustering results, but only for statements t
 **Toggle 3 — Full public results**
 Complete clustering results are visible to everyone, including visitors who are not logged in. This is the full transparency view: consensus points, contention points, cluster breakdown across all statements.
 
+When the participant count for a conversation is below a minimum threshold (currently 25), a visible warning is shown above the results: opinion groups detected from small samples can shift substantially as more people participate. Results are still displayed — the warning contextualises them rather than hiding them.
+
 **Toggle 4 — Argument mapping**
 The pro/con argument layer becomes visible on featured statements. Participants can read, submit, and vote on short arguments. When this toggle is off, the argument tab is hidden entirely — the voting loop and results are unaffected.
 
@@ -126,7 +128,8 @@ Admins can:
 
 **Conversations:**
 - Create a conversation (title, intro text, outro text, access policy)
-- Toggle a conversation active or inactive
+- **Pause / Resume** — temporarily suspend a conversation without starting the identity reveal clock; reversible
+- **Close permanently** — irreversible; immediately starts the identity reveal timeline. A confirmation dialog and a prominent warning distinguish this from Pause.
 
 **Participants:**
 - Assign and revoke moderator or admin roles, either globally or for a specific conversation
@@ -171,16 +174,43 @@ At the accept screen, participants are offered 5 pseudonyms to choose from, gene
 
 Pseudonyms are generated using the `coolname` Python library (random adjective+noun combinations from a curated word list). This ensures names are readable, memorable, and not traceable to any other participant or external identifier.
 
-Pseudonyms are unique across the entire platform — a name chosen in one conversation cannot be chosen by any participant in any other conversation.
+Pseudonyms are unique across the entire platform — a name chosen in one conversation cannot be chosen by any participant in any other conversation. Once assigned, a pseudonym is permanently retired: the same pseudonym will never appear in any other conversation, for any participant.
 
-In public results, pseudonyms appear at the individual vote level (e.g. which cluster a participant belongs to). In Option B, the Wikimedia username may appear alongside the pseudonym. Pseudonyms are not visible to other participants until the appropriate phase — exact timing to be decided.
+In public results, pseudonyms appear at the individual vote level (e.g. which cluster a participant belongs to). The pseudonym is what appears in public cluster results once the admin enables them. Individual vote choices are never shown to others during voting (anti-herding).
 
-**Open:** whether participants can request a new set of 5 if they dislike the initial options.
+**Opt-in identity reveal (post-close)**
+After a conversation has closed and a cooldown period has elapsed, participants may choose to publicly associate their Wikimedia username with their pseudonym for that conversation. This is voluntary and irreversible.
 
-Individual vote choices are never shown to others during voting (anti-herding). The pseudonym is what appears in public cluster results once the admin enables them.
+When a participant reveals their identity:
+- Their Wikimedia username is stored directly in the participation record alongside the pseudonym (not as a replacement — both are retained permanently, ensuring older exports of the data remain valid)
+- In results displays, the Wikimedia username appears alongside or in place of the pseudonym
+- The pseudonym is never deleted, for backwards compatibility with any snapshot of the data taken before the reveal
 
-**Open question — to decide before first community test**
-Whether the pseudonym is the only identity shown (Option A — no link to Wikimedia account), or whether the Wikimedia username is also associated in results (Option B — named but independent). Both use the same pseudonym mechanism; the difference is only whether results also surface the Wikimedia account.
+Participants must be shown a clear, prominent warning before confirming: this action cannot be undone. Once a username is attached to a participation record it stays there.
+
+Cross-conversation tracking via pseudonym is structurally impossible — each conversation gets a different pseudonym, and old pseudonyms are never reused. Voluntary self-disclosure across conversations (e.g. a participant publicly stating they were a given pseudonym in two different conversations) is always possible and is the participant's own choice.
+
+**Identity reveal timeline:**
+
+Two configurable deltas control the timeline (both expressed in days):
+
+- **Cooldown** (`REVEAL_COOLDOWN_DAYS`, currently 30) — days after close before the reveal window opens. Gives time for any post-close investigation before participants can modify their records.
+- **Window** (`REVEAL_NULLIFY_DAYS`, currently 30) — duration of the open window, counted from when it opens. Nullification happens at `cooldown + window` days after close. This ensures nullification can never occur before the window has opened.
+
+| Day (with current defaults) | Event |
+|-----------------------------|-------|
+| 0 | Conversation closes — reveal clock starts |
+| 0 – 30 | Cooldown — reveal not yet available |
+| 30 | Reveal window opens — participants may attach their Wikimedia username to their pseudonym |
+| 60 (= 30 + 30) | Internal target: reveal window closes — `public_username` and `revealed_at` are nullified for all participation records in this conversation (data minimisation) |
+
+After nullification, the pseudonym remains in the database permanently (for export compatibility), but the association with any Wikimedia username is dropped. This applies to all participants regardless of individual reveal choices.
+
+The reveal action is irreversible for the participant during the reveal window — they cannot un-reveal. The platform-level nullification is automatic and runs lazily when any participant views the closed conversation.
+
+**Privacy policy commitment:** the public guarantee will be more conservative than the internal target — likely between 60 and 180 days after conversation close. The internal target gives operational flexibility to act sooner; the public commitment sets the maximum participants can rely on.
+
+**No individual early disconnection.** Participants cannot request early removal of their own identity link. Reason: someone could attempt to influence the deliberation process and then erase the evidence. Admins must retain the ability to investigate such cases for the full retention period. The platform-wide nullification at the end of the retention window is the only mechanism.
 
 ---
 
@@ -216,7 +246,7 @@ We must build these. Without them the platform cannot function as designed.
 - Wikimedia OAuth as the login provider (Flask handles auth; Particiapi runs with auth disabled on internal network)
 - Conversation creation and management (title, intro, outro, access policy)
 - Accept flow — deliberate opt-in before a participant enters a conversation
-- Access policies — public, link-based, invite-only enforcement
+- Access policies — public and invite-only enforcement
 - Per-conversation invite management
 - Per-conversation moderator roles; global admin roles
 - Four independent phase toggles per conversation: submission open, personal results, argument mapping, full public results

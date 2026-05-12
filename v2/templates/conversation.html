@@ -12,6 +12,32 @@
   {% if not conversation.active %}
   <div class="landing-section">
     <p class="muted">This consultation is closed.</p>
+
+    {% if reveal_state == 'revealed' %}
+    <p class="muted" style="margin-top:.5rem;font-size:13px">
+      You linked your identity — your username is associated with pseudonym
+      <strong>{{ participation.pseudonym }}</strong> in this consultation's records.
+    </p>
+
+    {% elif reveal_state == 'open' %}
+    <p style="margin-top:.75rem;font-size:13px">
+      The identity reveal window is open.
+      <a href="{{ url_for('reveal_identity', slug=conversation.slug) }}">Optionally link your username →</a>
+    </p>
+
+    {% elif reveal_state == 'pending' %}
+    <p class="muted" style="margin-top:.5rem;font-size:13px">
+      The identity reveal window opens {{ reveal_opens_at.strftime('%Y-%m-%d') }}.
+    </p>
+
+    {% endif %}
+    {# reveal_state == 'expired' or None: no reveal section shown #}
+
+  </div>
+
+  {% elif conversation.paused %}
+  <div class="landing-section">
+    <p class="muted">This consultation is temporarily paused. Check back soon.</p>
   </div>
 
   {% elif not conversation.phase_submission %}
@@ -64,6 +90,15 @@
     {% if conversation.phase_public_results %}
 
       {% if results %}
+
+        {% if polis_stats and polis_stats.n_participants < 25 %}
+        <div class="notice-low-n">
+          <strong>Small sample:</strong> these results are based on
+          {{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}.
+          Opinion groups detected from small samples can shift substantially as more people
+          participate — treat group boundaries with caution.
+        </div>
+        {% endif %}
 
         {% if results.majority.agree or results.majority.disagree %}
         <div class="results-block">

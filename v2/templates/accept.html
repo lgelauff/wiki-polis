@@ -11,15 +11,21 @@
     {% endif %}
 
     <form method="post" action="{{ url_for('accept_post', slug=conversation.slug) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="emailable" value="{{ '1' if emailable else '0' }}">
 
       <div class="accept-section">
         <h3>Your pseudonym</h3>
         <p>
           Choose a pseudonym for this consultation. It will appear in public results
-          once the admin enables them. Your Wikimedia username stays private during voting.
+          once the admin enables them. Your Wikimedia username is not visible to other
+          participants, but is held by the platform operator for the duration of the
+          retention period (up to 180 days after the consultation closes).
         </p>
-        <p>Pseudonyms are unique across the platform — no two participants share one.</p>
+        <p>
+          Each pseudonym is used only once across the entire platform — it will never
+          appear in any other consultation, for anyone.
+        </p>
 
         <div class="pseudonym-options" id="pseudonym-options">
           {% for name in pseudonyms %}

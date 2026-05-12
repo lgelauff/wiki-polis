@@ -9,10 +9,12 @@
 
   <div style="display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;margin-bottom:.25rem">
     <h2 style="margin-bottom:0">{{ conversation.title }}</h2>
-    {% if conversation.active %}
-      <span style="color:var(--green);font-size:13px;font-weight:600">active</span>
-    {% else %}
+    {% if not conversation.active %}
       <span class="badge-inactive">closed</span>
+    {% elif conversation.paused %}
+      <span style="color:#b07800;font-size:13px;font-weight:600">paused</span>
+    {% else %}
+      <span style="color:var(--green);font-size:13px;font-weight:600">active</span>
     {% endif %}
   </div>
   <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
@@ -59,6 +61,7 @@
     <form method="post"
           action="{{ url_for('admin_conversation_phases', conv_id=conversation.id) }}"
           class="phases-form" style="flex-wrap:wrap;gap:.75rem">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label title="Submission open">
         <input type="checkbox" name="phase_submission" value="1"
                {% if conversation.phase_submission %}checked{% endif %}>
@@ -118,18 +121,56 @@
 
   <!-- ── Status ────────────────────────────────────────── -->
   <h3 class="section-heading">Status</h3>
-  <div class="edit-form" style="display:flex;align-items:center;gap:1rem">
-    <form method="post"
-          action="{{ url_for('admin_conversation_toggle', conv_id=conversation.id) }}"
-          style="display:inline">
-      <button type="submit"
-              class="btn-small {% if conversation.active %}btn-danger{% else %}btn-approve{% endif %}">
-        Mark {{ 'closed' if conversation.active else 'active' }}
-      </button>
-    </form>
-    <span class="muted" style="font-size:13px">
-      Closing a conversation hides it from available consultations and disables voting.
-    </span>
+  <div class="edit-form">
+
+    {% if not conversation.active %}
+    <p class="muted" style="font-size:13px">
+      This consultation is <strong>permanently closed</strong>.
+      The 30-day identity reveal window has started and cannot be reset.
+    </p>
+
+    {% else %}
+
+    <!-- Pause / Resume -->
+    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
+      <form method="post"
+            action="{{ url_for('admin_conversation_pause', conv_id=conversation.id) }}"
+            style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit"
+                class="btn-small {% if conversation.paused %}btn-approve{% else %}btn-pause{% endif %}">
+          {{ 'Resume' if conversation.paused else 'Pause' }}
+        </button>
+      </form>
+      <span class="muted" style="font-size:13px">
+        {% if conversation.paused %}
+          Consultation is paused — participants cannot vote.
+          The identity reveal clock has <strong>not</strong> started; resuming is possible.
+        {% else %}
+          Pause temporarily disables voting without starting the reveal timeline.
+        {% endif %}
+      </span>
+    </div>
+
+    <!-- Close (irreversible) -->
+    <div class="close-warning">
+      <p style="font-weight:600;margin-bottom:.35rem">Close permanently</p>
+      <p style="font-size:13px;margin-bottom:.75rem">
+        Closing is <strong>irreversible</strong> and immediately starts the 30-day identity
+        reveal window. Use <em>Pause</em> above if you only need to temporarily suspend the
+        consultation.
+      </p>
+      <form method="post"
+            action="{{ url_for('admin_conversation_close', conv_id=conversation.id) }}"
+            style="display:inline"
+            onsubmit="return confirm('Close this consultation permanently?\n\nThis cannot be undone and starts the identity reveal timeline.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-small btn-danger">Close permanently</button>
+      </form>
+    </div>
+
+    {% endif %}
+
   </div>
 
   <!-- ── Settings ──────────────────────────────────────── -->
@@ -137,6 +178,7 @@
   <div class="edit-form">
     <form method="post"
           action="{{ url_for('admin_conversation_edit', conv_id=conversation.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="edit-row-fields">
         <label>Title
           <input type="text" name="title" value="{{ conversation.title }}" required>
@@ -146,7 +188,7 @@
         </label>
         <label>Access policy
           <select name="access_policy">
-            {% for p in ['public', 'link_based', 'invite_only'] %}
+            {% for p in ['public', 'invite_only'] %}
             <option value="{{ p }}" {% if conversation.access_policy == p %}selected{% endif %}>{{ p }}</option>
             {% endfor %}
           </select>
@@ -185,6 +227,7 @@
           <form method="post"
                 action="{{ url_for('admin_role_remove', role_id=role.id) }}"
                 style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="redirect_to"
                    value="{{ url_for('admin_conversation_detail', conv_id=conversation.id) }}">
             <button type="submit" class="btn-small btn-danger">remove</button>
@@ -201,6 +244,7 @@
   <div class="edit-form">
     <h3>Add moderator</h3>
     <form method="post" action="{{ url_for('admin_role_add') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="conversation_id" value="{{ conversation.id }}">
       <input type="hidden" name="redirect_to"
              value="{{ url_for('admin_conversation_detail', conv_id=conversation.id) }}">

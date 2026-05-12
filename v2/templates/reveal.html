@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+  <div class="intro-text">
+
+    <p class="muted" style="margin-bottom:1rem">
+      <a href="{{ url_for('conversation', slug=conversation.slug) }}">← {{ conversation.title }}</a>
+    </p>
+
+    <h2>Identity reveal</h2>
+    <p>
+      Your pseudonym in this consultation: <strong>{{ participation.pseudonym }}</strong>
+    </p>
+
+    {% if participation.public_username %}
+
+    <div class="landing-section" style="margin-top:1.25rem">
+      <p>
+        You have linked your Wikimedia username
+        (<strong>{{ participation.public_username }}</strong>)
+        to your pseudonym <strong>{{ participation.pseudonym }}</strong>.
+      </p>
+      <p class="muted" style="font-size:13px;margin-top:.5rem">
+        This is permanent and cannot be undone. The link will be retained for up to
+        60–180 days after this consultation closed, then removed.
+      </p>
+    </div>
+
+    {% elif window_closed %}
+
+    <div class="landing-section" style="margin-top:1.25rem">
+      <p class="muted">
+        The identity reveal window for this consultation has closed.
+        Participation data is now pseudonymous only.
+      </p>
+    </div>
+
+    {% elif not window_open %}
+
+    <div class="landing-section" style="margin-top:1.25rem">
+      <p class="muted">
+        The identity reveal window has not opened yet.
+        It will open on <strong>{{ opens_at.strftime('%Y-%m-%d') }}</strong>.
+      </p>
+      <p class="muted" style="font-size:13px;margin-top:.5rem">
+        After that date you may optionally link your Wikimedia username to your pseudonym
+        in this consultation's public record.
+      </p>
+    </div>
+
+    {% else %}
+
+    <p style="margin-top:1rem">
+      You may optionally link your Wikimedia username to your pseudonym
+      (<strong>{{ participation.pseudonym }}</strong>) in this consultation's public record.
+      This is entirely voluntary.
+    </p>
+
+    <div class="close-warning" style="margin:1.25rem 0">
+      <p style="font-weight:600;margin-bottom:.5rem">This action is irreversible</p>
+      <ul style="font-size:13px;margin:.25rem 0 0 1.25rem;line-height:1.7">
+        <li>
+          Your Wikimedia username (<strong>{{ username }}</strong>) will be permanently
+          associated with your pseudonym <strong>{{ participation.pseudonym }}</strong>
+          in exported records for this consultation.
+        </li>
+        <li>You cannot undo this or re-anonymise your participation.</li>
+        <li>
+          The link will be retained for up to 60–180 days after this consultation closed,
+          then removed by the platform.
+        </li>
+        <li>
+          Admins retain visibility of identity links for the duration of the retention
+          period to investigate potential process violations.
+        </li>
+      </ul>
+    </div>
+
+    <form method="post" action="{{ url_for('reveal_identity_post', slug=conversation.slug) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="checkbox-label">
+        <input type="checkbox" name="confirm" value="1" required>
+        I understand this is irreversible. Link my Wikimedia username
+        (<strong>{{ username }}</strong>) to my pseudonym
+        (<strong>{{ participation.pseudonym }}</strong>).
+      </label>
+      <div style="margin-top:1rem;display:flex;align-items:center;gap:1.5rem">
+        <button type="submit" class="btn-small btn-danger">Confirm identity link</button>
+        <a href="{{ url_for('conversation', slug=conversation.slug) }}"
+           style="font-size:13px">Cancel</a>
+      </div>
+    </form>
+
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}

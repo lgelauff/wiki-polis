@@ -8,17 +8,22 @@ import hashlib
 import os
 import re
 import secrets
-from datetime import timedelta
-from urllib.parse import urlencode
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode, urlparse, urljoin
 
 import coolname
 import nh3
 import requests
 from dotenv import load_dotenv
-from flask import (Flask, abort, current_app, make_response, redirect,
+from flask import (Flask, abort, current_app, g, make_response, redirect,
                    render_template, request, session, url_for)
 from flask_migrate import Migrate
 from flask_session import Session
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 
 from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument,
                 ArgumentVote, Conversation, ConversationInvite,
@@ -46,6 +51,43 @@ def _read_secret(name: str) -> str:
 
 ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.strip()]
 
+_REVEAL_COOLDOWN_DAYS = 30   # days after close before reveal window opens
+_REVEAL_NULLIFY_DAYS  = 30   # days after window opens before nullification (total = cooldown + nullify)
+
+
+def _nullify_expired_reveals(conv: 'Conversation') -> None:
+    """Clear public_username / revealed_at for all participations once past internal deadline."""
+    if not conv.closed_at:
+        return
+    # closed_at is stored as naive UTC
+    age = datetime.utcnow() - conv.closed_at.replace(tzinfo=None)
+    if age < timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
+        return
+    stale = (Participation.query
+             .filter_by(conversation_id=conv.id)
+             .filter(Participation.public_username.isnot(None))
+             .all())
+    for p in stale:
+        p.public_username = None
+        p.revealed_at     = None
+    if stale:
+        db.session.commit()
+
+
+csrf    = CSRFProtect()
+# No global default — limits applied per endpoint only.
+# On multi-worker deployments configure RATELIMIT_STORAGE_URI=redis://... in env.
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
+
+
+def _safe_redirect(target: str, fallback: str) -> str:
+    """Return target if it is a same-host relative URL, otherwise fallback."""
+    ref  = urlparse(request.host_url)
+    test = urlparse(urljoin(request.host_url, target))
+    if test.scheme in ('http', 'https') and test.netloc == ref.netloc:
+        return target
+    return fallback
+
 
 def _sanitise_text(html: str) -> str:
     return nh3.clean(html or '', tags=_TEXT_ALLOWED_TAGS,
@@ -72,10 +114,14 @@ def _parse_conversation_form() -> dict:
 
 
 def _current_participant() -> 'Participant | None':
+    if 'participant' in g:
+        return g.participant
     username = session.get('username')
     if not username:
+        g.participant = None
         return None
-    return Participant.query.filter_by(mw_username=username).first()
+    g.participant = Participant.query.filter_by(mw_username=username).first()
+    return g.participant
 
 
 def _is_emailable(username: str) -> bool:
@@ -196,7 +242,20 @@ def _proxy_to_particiapi(pa_path: str):
     - When Particiapi sets a new session cookie we rename it pa_session before
       sending it back to the browser.
     - CSRF tokens pass through unchanged via the X-CSRF-Token header.
+    - This route is CSRF-exempt (the web component uses its own token scheme);
+      Sec-Fetch-Site / Origin validation is the compensating control.
     """
+    # Origin validation as compensating control for CSRF exemption.
+    if request.method not in ('GET', 'HEAD'):
+        sec_fetch = request.headers.get('Sec-Fetch-Site')
+        if sec_fetch:
+            if sec_fetch != 'same-origin':
+                abort(403)
+        else:
+            origin = request.headers.get('Origin')
+            if origin and urlparse(origin).netloc != urlparse(request.host_url).netloc:
+                abort(403)
+
     url = f"{current_app.config['PARTICIAPI_BASE']}/{pa_path}"
 
     forwarded_cookies = {}
@@ -272,14 +331,16 @@ def create_app() -> Flask:
     app.config['OAUTH_REDIRECT_URI']  = _read_secret('oauth-redirect-uri')
     app.config['PARTICIAPI_BASE']     = (_read_secret('particiapi-base-url')
                                          or os.environ.get('PARTICIAPI_BASE_URL', 'http://localhost:8000'))
-    app.config['POLIS_PUBLIC_URL']    = (_read_secret('polis-public-url')
-                                         or os.environ.get('POLIS_PUBLIC_URL', ''))
-    app.config['POLIS_DB_CONTAINER']  = os.environ.get('POLIS_DB_CONTAINER',
-                                                        'particiapp-docker-postgres-1')
+    app.config['POLIS_PUBLIC_URL']   = (_read_secret('polis-public-url')
+                                        or os.environ.get('POLIS_PUBLIC_URL', ''))
+    app.config['POLIS_DATABASE_URL'] = (_read_secret('polis-database-url')
+                                        or os.environ.get('POLIS_DATABASE_URL', ''))
 
     db.init_app(app)
     Migrate(app, db)
     Session(app)
+    csrf.init_app(app)
+    limiter.init_app(app)
 
     with app.app_context():
         with db.engine.begin() as conn:
@@ -293,6 +354,13 @@ def create_app() -> Flask:
             'username': session.get('username'),
         }
 
+    @app.after_request
+    def _security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options']        = 'SAMEORIGIN'
+        response.headers['Referrer-Policy']        = 'strict-origin-when-cross-origin'
+        return response
+
     _register_routes(app)
     return app
 
@@ -300,6 +368,9 @@ def create_app() -> Flask:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 def _register_routes(app: Flask) -> None:
+
+    _dev_login_user = os.environ.get('DEV_LOGIN_USER', '').strip()
+    _on_toolforge   = bool(os.environ.get('TOOL_TOOLFORGE_API_URL'))
 
     if app.debug:
         import pathlib
@@ -324,11 +395,11 @@ def _register_routes(app: Flask) -> None:
                     'particiapp-web-components.js not found at %s — '
                     'set PARTICIAPP_WEB_COMPONENTS in .env', _WC_PATH)
 
+    if app.debug and _dev_login_user and not _on_toolforge:
         @app.get('/dev-login')
+        @limiter.limit('20 per minute')
         def dev_login():
-            username = request.args.get('username', '').strip()
-            if not username:
-                return 'Usage: /dev-login?username=YourName', 400
+            username = _dev_login_user
             xid = hashlib.sha256(f'dev-{username}'.encode()).hexdigest()
             participant = Participant.query.filter_by(mw_username=username).first()
             if participant is None:
@@ -339,8 +410,9 @@ def _register_routes(app: Flask) -> None:
                 )
                 db.session.add(participant)
                 db.session.commit()
-            session['username'] = username
-            session['xid']      = xid
+            session['username']  = username
+            session['xid']       = xid
+            session['emailable'] = _is_emailable(username)
             return redirect(url_for('index'))
 
     # ── Home ─────────────────────────────────────────────────────────────────
@@ -349,7 +421,7 @@ def _register_routes(app: Flask) -> None:
     def index():
         if 'username' not in session:
             public_convos = (Conversation.query
-                             .filter_by(active=True, access_policy='public')
+                             .filter_by(active=True, paused=False, access_policy='public')
                              .order_by(Conversation.created_at.desc())
                              .all())
             return render_template('home.html', public_conversations=public_convos)
@@ -358,7 +430,9 @@ def _register_routes(app: Flask) -> None:
         username    = session['username']
 
         joined_parts = (
-            Participation.query.filter_by(participant_id=participant.id).all()
+            Participation.query
+            .options(joinedload(Participation.conversation))
+            .filter_by(participant_id=participant.id).all()
             if participant else []
         )
         joined_ids = {p.conversation_id for p in joined_parts}
@@ -366,7 +440,7 @@ def _register_routes(app: Flask) -> None:
         active_joined   = []
         archived_joined = []
         for part in joined_parts:
-            conv = Conversation.query.get(part.conversation_id)
+            conv = part.conversation
             if conv:
                 (active_joined if conv.active else archived_joined).append(conv)
 
@@ -375,7 +449,7 @@ def _register_routes(app: Flask) -> None:
             for inv in ConversationInvite.query.filter_by(mw_username=username).all()
         ]
         available = (Conversation.query
-                     .filter_by(active=True)
+                     .filter_by(active=True, paused=False)
                      .filter(~Conversation.id.in_(joined_ids or [0]))
                      .filter(db.or_(
                          Conversation.access_policy == 'public',
@@ -421,12 +495,13 @@ def _register_routes(app: Flask) -> None:
                 conversation_id=conv.id).first():
             return redirect(url_for('conversation', slug=slug))
         pseudonyms = _generate_pseudonyms(5)
-        emailable  = _is_emailable(session['username'])
+        emailable  = session.get('emailable', False)
         return render_template('accept.html', conversation=conv,
                                emailable=emailable, pseudonyms=pseudonyms)
 
     @app.post('/accept/<slug>')
     @login_required
+    @limiter.limit('10 per minute')
     def accept_post(slug):
         conv        = Conversation.query.filter_by(slug=slug).first_or_404()
         participant = _current_participant()
@@ -445,12 +520,6 @@ def _register_routes(app: Flask) -> None:
         if not _PSEUDONYM_RE.match(pseudonym):
             abort(400)
 
-        if Participation.query.filter_by(pseudonym=pseudonym).first():
-            pseudonyms = _generate_pseudonyms(5)
-            return render_template('accept.html', conversation=conv,
-                                   emailable=emailable, pseudonyms=pseudonyms,
-                                   error='That pseudonym was just taken — please choose another.')
-
         db.session.add(Participation(
             participant_id=participant.id,
             conversation_id=conv.id,
@@ -458,11 +527,19 @@ def _register_routes(app: Flask) -> None:
             notify_email=bool(request.form.get('notify_email')) and emailable,
             notify_talk_page=bool(request.form.get('notify_talk_page')),
         ))
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            pseudonyms = _generate_pseudonyms(5)
+            return render_template('accept.html', conversation=conv,
+                                   emailable=emailable, pseudonyms=pseudonyms,
+                                   error='That pseudonym was just taken — please choose another.')
         return redirect(url_for('conversation', slug=slug))
 
     @app.get('/accept/<slug>/pseudonyms')
     @login_required
+    @limiter.limit('30 per minute')
     def accept_pseudonyms(slug):
         from flask import jsonify
         Conversation.query.filter_by(slug=slug).first_or_404()
@@ -487,6 +564,11 @@ def _register_routes(app: Flask) -> None:
         if participation is None:
             return redirect(url_for('accept', slug=slug))
 
+        # Lazy nullification: clear identity links past the internal retention deadline.
+        if conv.closed_at:
+            _nullify_expired_reveals(conv)
+            db.session.refresh(participation)
+
         can_mod = _can_moderate(conv, participant)
 
         results     = None
@@ -495,7 +577,22 @@ def _register_routes(app: Flask) -> None:
             client      = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
             results     = client.get_results(conv.polis_id)
             polis_stats = get_polis_stats(conv.polis_id,
-                                          current_app.config['POLIS_DB_CONTAINER'])
+                                          current_app.config['POLIS_DATABASE_URL'])
+
+        # Reveal window state for closed conversations.
+        reveal_state    = None
+        reveal_opens_at = None
+        if conv.closed_at:
+            age = datetime.utcnow() - conv.closed_at.replace(tzinfo=None)
+            reveal_opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
+            if participation.public_username:
+                reveal_state = 'revealed'
+            elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
+                reveal_state = 'expired'
+            elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
+                reveal_state = 'open'
+            else:
+                reveal_state = 'pending'
 
         return render_template('conversation.html',
                                conversation=conv,
@@ -503,31 +600,86 @@ def _register_routes(app: Flask) -> None:
                                can_moderate=can_mod,
                                results=results,
                                polis_stats=polis_stats,
-                               polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''))
+                               polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''),
+                               reveal_state=reveal_state,
+                               reveal_opens_at=reveal_opens_at)
 
     # ── Particiapi proxy ──────────────────────────────────────────────────────
 
     @app.route('/proxy/particiapi/<path:pa_path>',
                methods=['GET', 'POST', 'PUT', 'DELETE'])
     @login_required
+    @csrf.exempt
     def proxy_particiapi(pa_path):
         return _proxy_to_particiapi(pa_path)
+
+    # ── Identity reveal ───────────────────────────────────────────────────────
+
+    @app.get('/c/<slug>/reveal')
+    @login_required
+    def reveal_identity(slug):
+        conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+        participant = _current_participant()
+        if participant is None:
+            abort(404)
+        participation = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+        ).first_or_404()
+        if not conv.closed_at:
+            abort(404)
+
+        _nullify_expired_reveals(conv)
+        db.session.refresh(participation)
+
+        age = datetime.utcnow() - conv.closed_at.replace(tzinfo=None)
+        opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
+        return render_template('reveal.html',
+                               conversation=conv,
+                               participation=participation,
+                               window_open=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS),
+                               window_closed=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS),
+                               opens_at=opens_at)
+
+    @app.post('/c/<slug>/reveal')
+    @login_required
+    @limiter.limit('5 per minute')
+    def reveal_identity_post(slug):
+        conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+        participant = _current_participant()
+        if participant is None:
+            abort(404)
+        participation = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+        ).first_or_404()
+
+        if not conv.closed_at:
+            abort(400)
+
+        age = datetime.utcnow() - conv.closed_at.replace(tzinfo=None)
+        if age < timedelta(days=_REVEAL_COOLDOWN_DAYS):
+            abort(400)
+        if age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
+            abort(400)
+        if participation.public_username is not None:
+            abort(400)
+        if request.form.get('confirm') != '1':
+            return redirect(url_for('reveal_identity', slug=slug))
+
+        participation.public_username = participant.mw_username
+        participation.revealed_at     = datetime.now(timezone.utc)
+        db.session.commit()
+        return redirect(url_for('conversation', slug=slug))
 
     # ── OAuth ─────────────────────────────────────────────────────────────────
 
     @app.get('/login')
+    @limiter.limit('20 per minute')
     def login():
         if not app.config.get('OAUTH_CLIENT_ID'):
-            if app.debug:
-                return '''<!doctype html>
-<title>Dev login</title>
-<style>body{font-family:sans-serif;margin:3rem;}</style>
-<h2>Dev login</h2>
-<form action="/dev-login" method="get">
-  <input name="username" placeholder="Wikimedia username" autofocus
-         style="padding:.4rem;font-size:15px;width:240px">
-  <button style="padding:.4rem 1rem;font-size:15px;margin-left:.5rem">Log in</button>
-</form>'''
+            if app.debug and _dev_login_user and not _on_toolforge:
+                return redirect(url_for('dev_login'))
             return 'OAuth not configured — set OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_REDIRECT_URI', 503
 
         code_verifier  = secrets.token_urlsafe(64)
@@ -607,8 +759,9 @@ def _register_routes(app: Flask) -> None:
 
         next_url = session.pop('next', None)
         session.clear()
-        session['username'] = username
-        session['xid']      = xid
+        session['username']   = username
+        session['xid']        = xid
+        session['emailable']  = _is_emailable(username)
 
         return redirect(next_url or url_for('index'))
 
@@ -648,7 +801,7 @@ def _register_routes(app: Flask) -> None:
         invite_count      = ConversationInvite.query.filter_by(conversation_id=conv_id).count()
         participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
         polis_stats       = get_polis_stats(conv.polis_id,
-                                            current_app.config['POLIS_DB_CONTAINER'])
+                                            current_app.config['POLIS_DATABASE_URL'])
         return render_template('admin_conversation.html',
                                conversation=conv,
                                conv_roles=conv_roles,
@@ -691,12 +844,27 @@ def _register_routes(app: Flask) -> None:
         db.session.commit()
         return redirect(url_for('admin_conversation_detail', conv_id=conv_id))
 
-    @app.post('/admin/conversations/<int:conv_id>/toggle')
+    @app.post('/admin/conversations/<int:conv_id>/pause')
     @login_required
     @admin_required
-    def admin_conversation_toggle(conv_id):
+    def admin_conversation_pause(conv_id):
         conv = Conversation.query.get_or_404(conv_id)
-        conv.active = not conv.active
+        if not conv.active:
+            abort(400)
+        conv.paused = not conv.paused
+        db.session.commit()
+        return redirect(url_for('admin_conversation_detail', conv_id=conv_id))
+
+    @app.post('/admin/conversations/<int:conv_id>/close')
+    @login_required
+    @admin_required
+    def admin_conversation_close(conv_id):
+        conv = Conversation.query.get_or_404(conv_id)
+        if not conv.active:
+            abort(400)
+        conv.active    = False
+        conv.paused    = False
+        conv.closed_at = datetime.now(timezone.utc)
         db.session.commit()
         return redirect(url_for('admin_conversation_detail', conv_id=conv_id))
 
@@ -740,8 +908,7 @@ def _register_routes(app: Flask) -> None:
                 granted_by=grantor.id if grantor else None,
             ))
             db.session.commit()
-        next_url = request.form.get('redirect_to', '')
-        return redirect(next_url if next_url.startswith('/') else url_for('admin'))
+        return redirect(_safe_redirect(request.form.get('redirect_to', ''), url_for('admin')))
 
     @app.post('/admin/roles/<int:role_id>/remove')
     @login_required
@@ -750,8 +917,7 @@ def _register_routes(app: Flask) -> None:
         role = AdminRole.query.get_or_404(role_id)
         db.session.delete(role)
         db.session.commit()
-        next_url = request.form.get('redirect_to', '')
-        return redirect(next_url if next_url.startswith('/') else url_for('admin'))
+        return redirect(_safe_redirect(request.form.get('redirect_to', ''), url_for('admin')))
 
     @app.get('/admin/conversations/<int:conv_id>/invites')
     @login_required

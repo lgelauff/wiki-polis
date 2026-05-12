@@ -19,6 +19,7 @@
       Seed statements are pre-approved and immediately visible to all participants.
     </p>
     <form method="post" action="{{ url_for('admin_statement_seed', conv_id=conversation.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Statement text (max 280 characters)
         <textarea name="txt" rows="3" maxlength="280" id="seed-txt" required
                   placeholder="Enter a statement participants will vote on…"></textarea>
@@ -35,6 +36,7 @@
   <div class="edit-form" style="margin-bottom:2rem">
     <form method="post"
           action="{{ url_for('admin_conversation_strict_moderation', conv_id=conversation.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label class="checkbox-label" style="font-weight:normal;color:var(--text)">
         <input type="checkbox" name="strict_moderation" value="1"
                {% if settings.get('strict_moderation') %}checked{% endif %}>
@@ -77,11 +79,13 @@
         <td class="stmt-actions">
           <form method="post" style="display:inline"
                 action="{{ url_for('admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="1">
             <button type="submit" class="btn-small btn-approve">approve</button>
           </form>
           <form method="post" style="display:inline"
                 action="{{ url_for('admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="-1">
             <button type="submit" class="btn-small btn-danger">hide</button>
           </form>
@@ -123,11 +127,13 @@
         <td class="stmt-actions">
           <form method="post" style="display:inline"
                 action="{{ url_for('admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="-1">
             <button type="submit" class="btn-small btn-danger">hide</button>
           </form>
           <form method="post" style="display:inline"
                 action="{{ url_for('admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="0">
             <button type="submit" class="btn-small">pending</button>
           </form>
@@ -169,11 +175,13 @@
         <td class="stmt-actions">
           <form method="post" style="display:inline"
                 action="{{ url_for('admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="1">
             <button type="submit" class="btn-small btn-approve">approve</button>
           </form>
           <form method="post" style="display:inline"
                 action="{{ url_for('admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="0">
             <button type="submit" class="btn-small">pending</button>
           </form>

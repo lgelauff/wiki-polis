@@ -25,6 +25,7 @@
     <h3>Add invites</h3>
     <form method="post"
           action="{{ url_for('admin_invite_add', conv_id=conversation.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Wikimedia usernames (one per line)
         <textarea name="mw_usernames" rows="6"
                   placeholder="Username1&#10;Username2&#10;Username3"></textarea>
@@ -50,6 +51,7 @@
           <form method="post"
                 action="{{ url_for('admin_invite_remove', conv_id=conversation.id, invite_id=inv.id) }}"
                 style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn-small btn-danger">remove</button>
           </form>
         </td>

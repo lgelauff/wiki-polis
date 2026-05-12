@@ -4,7 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
-ACCESS_POLICIES = ('public', 'link_based', 'invite_only')
+ACCESS_POLICIES = ('public', 'invite_only')
 ADMIN_ROLES     = ('admin', 'moderator')
 ARGUMENT_SIDES  = ('pro', 'con')
 
@@ -33,8 +33,10 @@ class Conversation(db.Model):
     intro_text   = db.Column(db.Text, nullable=True)   # sanitised HTML
     outro_text   = db.Column(db.Text, nullable=True)   # sanitised HTML
     active       = db.Column(db.Boolean, default=True, nullable=False)
+    paused       = db.Column(db.Boolean, default=False, nullable=False)  # reversible; does NOT start reveal clock
     access_policy = db.Column(db.String(20), nullable=False, default='public')
     created_at   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    closed_at    = db.Column(db.DateTime, nullable=True)   # set on permanent close; drives reveal timeline (irreversible)
 
     # Phase toggles — independent, default off
     phase_submission       = db.Column(db.Boolean, default=False, nullable=False)
@@ -58,11 +60,16 @@ class Participation(db.Model):
     id              = db.Column(db.Integer, primary_key=True)
     participant_id  = db.Column(db.Integer, db.ForeignKey('participants.id'), nullable=False)
     conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id'), nullable=False)
-    pseudonym       = db.Column(db.String(80), nullable=False)  # unique across all participations
+    pseudonym       = db.Column(db.String(80), nullable=False)  # unique across all participations; never deleted
     accepted_at     = db.Column(db.DateTime, nullable=False,
                                 default=lambda: datetime.now(timezone.utc))
     notify_email      = db.Column(db.Boolean, default=False, nullable=False)
     notify_talk_page  = db.Column(db.Boolean, default=False, nullable=False)
+    # Opt-in identity reveal: set once by participant, irreversible during reveal window.
+    # Stored here (not derived from Participant) so older exports remain valid.
+    # Nullified automatically 60 days after conversation close (data minimisation).
+    public_username   = db.Column(db.String(255), nullable=True)
+    revealed_at       = db.Column(db.DateTime, nullable=True)
 
     participant  = db.relationship('Participant', back_populates='participations')
     conversation = db.relationship('Conversation', back_populates='participations')

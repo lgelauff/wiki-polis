@@ -7,72 +7,71 @@ for server-to-server calls from Flask.
 """
 
 import re
-import subprocess
 
 import requests
 
 _SAFE_ZINVITE = re.compile(r'^[A-Za-z0-9]{6,20}$')
 
+_POLIS_STATS_SQL = """
+    WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s),
+    vd AS (
+      SELECT pid, COUNT(*) FILTER (WHERE vote != 0) AS n
+      FROM votes WHERE zid = (SELECT zid FROM z) GROUP BY pid
+    ),
+    vs AS (
+      SELECT
+        COUNT(pid)::int AS n_participants,
+        COALESCE(SUM(n),0)::int AS n_votes,
+        COALESCE(ROUND(AVG(n)::numeric,1),0)::float AS avg_votes,
+        COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY n::float),0) AS median_votes
+      FROM vd
+    ),
+    ss AS (
+      SELECT COUNT(*)::int AS n_statements,
+             COUNT(*) FILTER (WHERE is_seed = TRUE)::int AS n_seed
+      FROM comments c, z WHERE c.zid = z.zid AND active = TRUE AND mod >= 0
+    )
+    SELECT n_participants, n_votes, avg_votes, median_votes, n_statements, n_seed
+    FROM vs, ss
+"""
 
-def get_polis_stats(zinvite: str,
-                    db_container: str = 'particiapp-docker-postgres-1') -> dict | None:
-    """Query Polis PostgreSQL for conversation stats via docker exec.
+
+def get_polis_stats(zinvite: str, db_url: str = '') -> dict | None:
+    """Query Polis PostgreSQL directly for conversation stats.
 
     Returns a dict with n_participants, n_votes, avg_votes, median_votes,
-    n_statements, n_seed — or None if unavailable (docker not running, etc.).
-    Only works in local dev; production will need a direct DB connection.
+    n_statements, n_seed — or None if unavailable (no db_url, connection error, etc.).
     """
-    if not _SAFE_ZINVITE.match(zinvite or ''):
+    if not db_url or not _SAFE_ZINVITE.match(zinvite or ''):
         return None
-
-    sql = (
-        "WITH z AS (SELECT zid FROM zinvites WHERE zinvite = '{zinvite}'),"
-        "vd AS ("
-        "  SELECT pid, COUNT(*) FILTER (WHERE vote != 0) AS n"
-        "  FROM votes WHERE zid = (SELECT zid FROM z) GROUP BY pid"
-        "),"
-        "vs AS ("
-        "  SELECT"
-        "    COUNT(pid)::int AS n_participants,"
-        "    COALESCE(SUM(n),0)::int AS n_votes,"
-        "    COALESCE(ROUND(AVG(n)::numeric,1),0)::float AS avg_votes,"
-        "    COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY n::float),0) AS median_votes"
-        "  FROM vd"
-        "),"
-        "ss AS ("
-        "  SELECT COUNT(*)::int AS n_statements,"
-        "         COUNT(*) FILTER (WHERE is_seed = TRUE)::int AS n_seed"
-        "  FROM comments c, z WHERE c.zid = z.zid AND active = TRUE AND mod >= 0"
-        ")"
-        "SELECT n_participants, n_votes, avg_votes, median_votes, n_statements, n_seed"
-        " FROM vs, ss;"
-    ).format(zinvite=zinvite)
 
     try:
-        r = subprocess.run(
-            ['docker', 'exec', db_container,
-             'psql', '-U', 'polis', 'polis', '-t', '-A', '-F', '\t', '-c', sql],
-            capture_output=True, text=True, timeout=10,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+        import psycopg2
+    except ImportError:
         return None
 
-    if r.returncode != 0:
+    try:
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(_POLIS_STATS_SQL, (zinvite,))
+                row = cur.fetchone()
+        finally:
+            conn.close()
+    except Exception:
         return None
 
-    line = next((l for l in r.stdout.splitlines() if l.strip()), '')
-    parts = line.split('\t')
-    if len(parts) < 6:
+    if not row or len(row) < 6:
         return None
 
     try:
         return {
-            'n_participants': int(parts[0]),
-            'n_votes':        int(parts[1]),
-            'avg_votes':      float(parts[2]),
-            'median_votes':   float(parts[3]),
-            'n_statements':   int(parts[4]),
-            'n_seed':         int(parts[5]),
+            'n_participants': int(row[0]),
+            'n_votes':        int(row[1]),
+            'avg_votes':      float(row[2]),
+            'median_votes':   float(row[3]),
+            'n_statements':   int(row[4]),
+            'n_seed':         int(row[5]),
         }
     except (ValueError, IndexError):
         return None

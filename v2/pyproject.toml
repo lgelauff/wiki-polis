@@ -9,12 +9,15 @@ dependencies = [
     "flask>=3.1",
     "flask-sqlalchemy>=3.1",
     "flask-session>=0.8",
+    "flask-wtf>=1.2",           # CSRF protection
+    "flask-limiter>=3.5",       # Rate limiting
 
     # Database
     "flask-migrate>=4.0",
     "sqlalchemy>=2.0",
     "alembic>=1.13",
-    "pymysql>=1.1",        # MySQL driver for Toolforge ToolsDB
+    "pymysql>=1.1",             # MySQL driver for Toolforge ToolsDB
+    "psycopg2-binary>=2.9",     # PostgreSQL driver for Polis stats
 
     # HTML sanitisation
     "nh3>=0.2",
