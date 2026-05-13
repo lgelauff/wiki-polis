@@ -111,7 +111,51 @@ Web component integration bugs found and fixed during browser testing:
 
 ## Step 5 — Featured statements + argument mapping tab (defer until Step 4 is community-tested)
 
-- [ ] Cluster analysis query to surface featured statement suggestions
-- [ ] Admin confirms / dismisses suggestions
-- [ ] Argument mapping tab: pro/con submission, usefulness voting, sorted display
-- [ ] Phase toggle 3 (argument mapping) wired to show/hide the tab
+### Design decisions (agreed 2026-05-13)
+
+**Featured statement curation:** system suggests group-representative statements (high within-group agree rate, cross-group variance) + seed proposals always surfaced. Admin confirms. Falls back to manual-by-tid when `POLIS_DATABASE_URL` unavailable.
+
+**Argument submission:** one pro + one con per participant per featured statement (DB-enforced via `UniqueConstraint('featured_statement_id', 'proposer_id', 'side')`). Two-column Pro | Con layout. Joined participants only (must have pseudonym for this conversation).
+
+**Importance voting mechanic (threshold-gated, K-approval):**
+- Voting method stored on `Conversation.argument_vote_method` (default `'kApproval'`) + `argument_vote_data` JSON (default `{'K': 2}`)
+- Unlocks per-side when that side reaches ≥ 5 arguments
+- Before a participant can cast importance votes they must complete a "contribute-or-skip" gate:
+  - For each side (pro and con), they either submit an argument OR click "nothing to add"
+  - Must complete both sides before voting on either
+  - Gate state stored in `ArgumentSideState` (`skipped=True` for "nothing to add"; proposed state derived from `Argument` table directly)
+- Once gated in: participant casts **K votes per side** (K=2 by default) on the arguments they find **most important** (terminology settled: "most important" — matches Citizens' Assembly practice; avoids persuasion framing of "convincing" and subjectivity of "meaningful")
+- Votes are whole (1 per argument, row presence = approval) — spending both votes on the same argument is not allowed
+- `ArgumentVote.value` is nullable: `NULL` for kApproval (presence = vote), integer rank for future ranked voting
+
+**Data model (current — all tables already in db.py):**
+- `Argument`: `proposer_id` nullable (NULL = seeded, no human author). `UniqueConstraint('featured_statement_id', 'proposer_id', 'side')` — SQL NULL semantics exempt seeds from uniqueness, allowing multiple seeds per (FS, side).
+- `ArgumentVote`: `UniqueConstraint('argument_id', 'participant_id')`. `value` nullable integer (NULL for kApproval, rank for ranking). 2-per-side cap enforced at app level, not DB level.
+- `ArgumentSideState`: one row per `(participant_id, featured_statement_id, side)`. Dual-purpose: `skipped` boolean (skip-gate) + `argument_order` JSON list of argument IDs (randomised display order, stable per participant, new arguments inserted at a random position on first encounter).
+
+**Gate check per side** (proposed OR skipped):
+```python
+from db import Argument, ArgumentSideState
+
+gate_passed = bool(
+    Argument.query.filter_by(proposer_id=participant.id, featured_statement_id=fs.id, side=side).first()
+    or
+    ArgumentSideState.query.filter_by(
+        participant_id=participant.id, featured_statement_id=fs.id, side=side, skipped=True).first()
+)
+```
+
+### Checklist
+
+- [x] Cluster analysis query (`get_featured_candidates`) — seeds first, then by agree rate; falls back gracefully when `POLIS_DATABASE_URL` absent
+- [x] Admin page: `/admin/conversations/<id>/featured` — suggest + confirm + manual add + remove
+- [x] Admin tile on conversation detail page
+- [x] Argument tab read view: two-column Pro | Con per featured statement
+- [x] Argument submission form (inline, one per side per FS)
+- [x] "Nothing to add" skip button per side (creates/updates `ArgumentSideState` with `skipped=True`)
+- [x] `ArgumentSideState` creation on first side view: randomise `argument_order`; append new arguments at random position on encounter
+- [x] Importance voting UI: "Select the K most important arguments" prompt; unlocks when side ≥ K args AND participant gate-passed both sides
+- [x] Importance vote POST route (K-cap enforced in app; unvote supported)
+- [x] Moderator delete of arguments
+- [x] Hash-aware tab restore (`#tab-arguments` after all argument form redirects)
+- [x] Phrasing settled: **"most important"** (matches Citizens' Assembly practice)

@@ -12,7 +12,6 @@
 
     <form method="post" action="{{ url_for('accept_post', slug=conversation.slug) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="emailable" value="{{ '1' if emailable else '0' }}">
 
       <div class="accept-section">
         <h3>Your pseudonym</h3>
@@ -98,7 +97,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce }}">
   document.getElementById('reroll-btn').addEventListener('click', function() {
     var btn = this;
     btn.disabled = true;
@@ -112,10 +111,16 @@
         data.pseudonyms.forEach(function(name, i) {
           var label = document.createElement('label');
           label.className = 'pseudonym-label';
-          label.innerHTML =
-            '<input type="radio" name="pseudonym" value="' + name + '"' +
-            (i === 0 ? ' checked' : '') + '>' +
-            '<span class="pseudonym-name">' + name + '</span>';
+          var radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.name = 'pseudonym';
+          radio.value = name;
+          if (i === 0) radio.checked = true;
+          var span = document.createElement('span');
+          span.className = 'pseudonym-name';
+          span.textContent = name;
+          label.appendChild(radio);
+          label.appendChild(span);
           container.appendChild(label);
         });
         btn.disabled = false;

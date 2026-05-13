@@ -18,6 +18,36 @@ import requests
 
 _SAFE_ZINVITE = re.compile(r'^[A-Za-z0-9]{6,20}$')
 
+# Returns all active statements with vote counts, seeds first then by agree rate.
+# The agree-rate ordering is a heuristic proxy for group-representativeness when
+# cluster data (math_main) is not yet available or computed.
+_FEATURED_CANDIDATES_SQL = """
+    WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s),
+    vote_stats AS (
+      SELECT
+        v.tid,
+        COUNT(*) FILTER (WHERE v.vote = -1)::int  AS n_agree,
+        COUNT(*) FILTER (WHERE v.vote =  1)::int  AS n_disagree,
+        COUNT(*) FILTER (WHERE v.vote != 0)::int  AS n_votes
+      FROM votes v, z WHERE v.zid = z.zid GROUP BY v.tid
+    )
+    SELECT
+      c.tid,
+      c.txt,
+      c.is_seed,
+      COALESCE(vs.n_agree,    0) AS n_agree,
+      COALESCE(vs.n_disagree, 0) AS n_disagree,
+      COALESCE(vs.n_votes,    0) AS n_votes
+    FROM comments c, z
+    LEFT JOIN vote_stats vs ON c.tid = vs.tid
+    WHERE c.zid = z.zid AND c.active = TRUE AND c.mod >= 0
+    ORDER BY
+      c.is_seed DESC,
+      (COALESCE(vs.n_votes, 0) >= 3) DESC,
+      COALESCE(vs.n_agree, 0)::float / NULLIF(vs.n_votes, 0) DESC NULLS LAST
+    LIMIT %s
+"""
+
 _POLIS_STATS_SQL = """
     WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s),
     vd AS (
@@ -40,6 +70,37 @@ _POLIS_STATS_SQL = """
     SELECT n_participants, n_votes, avg_votes, median_votes, n_statements, n_seed
     FROM vs, ss
 """
+
+
+def get_featured_candidates(zinvite: str, db_url: str = '',
+                            max_statements: int = 20) -> list[dict] | None:
+    """Return candidate statements for featuring, or None if unavailable.
+
+    Each item: {tid, text, is_seed, n_agree, n_disagree, n_votes}.
+    Seeds always appear first; remainder ranked by agree rate.
+    Returns None when POLIS_DATABASE_URL is absent or the query fails.
+    """
+    if not db_url or not _SAFE_ZINVITE.match(zinvite or ''):
+        return None
+    try:
+        import psycopg2
+    except ImportError:
+        return None
+    try:
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(_FEATURED_CANDIDATES_SQL, (zinvite, max_statements))
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+    except Exception:
+        return None
+    return [
+        {'tid': r[0], 'text': r[1], 'is_seed': r[2],
+         'n_agree': r[3], 'n_disagree': r[4], 'n_votes': r[5]}
+        for r in rows
+    ]
 
 
 def get_polis_stats(zinvite: str, db_url: str = '') -> dict | None:

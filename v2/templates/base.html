@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>wiki-polis</title>
+  <title>{% block title %}wiki-polis{% endblock %}</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   {% block head %}{% endblock %}
 </head>
@@ -15,7 +16,10 @@
         <span class="header-user">
           {{ username }}
           &nbsp;·&nbsp;
-          <a href="{{ url_for('logout') }}">log out</a>
+          <form method="post" action="{{ url_for('logout') }}" style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="link-btn">log out</button>
+          </form>
           {% if is_admin %}
             &nbsp;·&nbsp;
             <a href="{{ url_for('admin') }}">admin</a>

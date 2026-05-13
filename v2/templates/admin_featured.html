@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Featured statements — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block content %}
+
+<div class="container">
+
+  <h2>Featured statements — {{ conversation.title }}</h2>
+  <p class="muted" style="margin-bottom:1.5rem">
+    <a href="{{ url_for('admin_conversation_detail', conv_id=conversation.id) }}">← conversation</a>
+  </p>
+
+  <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
+    Featured statements appear in the argument mapping tab. Participants submit a pro and con
+    argument for each, then vote on the most important arguments submitted by others.
+  </p>
+
+  <!-- ── Confirmed ──────────────────────────────────────── -->
+  <h3 class="section-heading">Confirmed ({{ confirmed | length }})</h3>
+
+  {% if confirmed %}
+  <table class="admin-table" style="margin-bottom:1.5rem">
+    <thead>
+      <tr>
+        <th>TID</th>
+        <th>Statement</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for fs in confirmed %}
+      <tr>
+        <td style="white-space:nowrap">{{ fs.polis_statement_id }}</td>
+        <td style="font-size:13px">—</td>
+        <td>
+          <form method="post"
+                action="{{ url_for('admin_featured_remove', conv_id=conversation.id, fs_id=fs.id) }}"
+                style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-small btn-danger"
+                    onclick="return confirm('Remove this featured statement? All arguments and votes for it will be deleted.')">remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted" style="font-size:14px;margin-bottom:1.5rem">No featured statements yet.</p>
+  {% endif %}
+
+  <!-- ── System suggestions ─────────────────────────────── -->
+  <h3 class="section-heading">System suggestions</h3>
+
+  {% if candidates is none %}
+  <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
+    Not available — <code>POLIS_DATABASE_URL</code> is not configured.
+    Use the manual form below to add statements by TID.
+  </p>
+  {% elif candidates | length == 0 %}
+  <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
+    No unconfirmed candidates. All available statements are already featured,
+    or there are no statements yet.
+  </p>
+  {% else %}
+  <table class="admin-table" style="margin-bottom:1.5rem">
+    <thead>
+      <tr>
+        <th>TID</th>
+        <th>Text</th>
+        <th>Seed</th>
+        <th>Agree</th>
+        <th>Disagree</th>
+        <th>Votes</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in candidates %}
+      <tr>
+        <td>{{ c.tid }}</td>
+        <td style="font-size:13px">{{ c.text }}</td>
+        <td>{{ '✓' if c.is_seed else '' }}</td>
+        <td>{{ c.n_agree }}</td>
+        <td>{{ c.n_disagree }}</td>
+        <td>{{ c.n_votes }}</td>
+        <td>
+          <form method="post"
+                action="{{ url_for('admin_featured_confirm', conv_id=conversation.id) }}"
+                style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="tid" value="{{ c.tid }}">
+            <input type="hidden" name="system_suggested" value="1">
+            <button type="submit" class="btn-small">confirm</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <!-- ── Manual add ─────────────────────────────────────── -->
+  <h3 class="section-heading">Add by TID</h3>
+  <div class="edit-form">
+    <p class="muted" style="font-size:13px;margin-bottom:.75rem">
+      Enter the Polis statement ID (TID) to feature it directly.
+    </p>
+    <form method="post" action="{{ url_for('admin_featured_add', conv_id=conversation.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="edit-row-fields">
+        <label>Statement TID
+          <input type="number" name="tid" min="0" required style="width:100px">
+        </label>
+      </div>
+      <button type="submit">Add</button>
+    </form>
+  </div>
+
+</div>
+
+{% endblock %}

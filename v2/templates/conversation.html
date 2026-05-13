@@ -1,10 +1,11 @@
 {% extends "base.html" %}
+{% block title %}{{ conversation.title }} — wiki-polis{% endblock %}
 {% block head %}
 {% if conversation.active and not conversation.paused and conversation.phase_submission %}
-<script type="importmap">
+<script type="importmap" nonce="{{ csp_nonce }}">
 {"imports": {"@particiapp/particiapp-web-client": "{{ url_for('static', filename='particiapp-web-client.js') }}"}}
 </script>
-<script type="module" src="{{ url_for('static', filename='particiapp-web-components.js') }}"></script>
+<script type="module" nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='particiapp-web-components.js') }}"></script>
 {% endif %}
 {% endblock %}
 {% block content %}
@@ -66,17 +67,17 @@
   {% if tabs | length > 1 %}
   <div class="tab-bar" role="tablist">
     {% if 'vote' in tabs %}
-    <button class="tab-btn{% if tabs[0] == 'vote' %} tab-btn--active{% endif %}"
+    <button id="tab-btn-vote" class="tab-btn{% if tabs[0] == 'vote' %} tab-btn--active{% endif %}"
             role="tab" data-tab="tab-vote"
             aria-selected="{{ 'true' if tabs[0] == 'vote' else 'false' }}">Vote</button>
     {% endif %}
     {% if 'results' in tabs %}
-    <button class="tab-btn{% if tabs[0] == 'results' %} tab-btn--active{% endif %}"
+    <button id="tab-btn-results" class="tab-btn{% if tabs[0] == 'results' %} tab-btn--active{% endif %}"
             role="tab" data-tab="tab-results"
             aria-selected="{{ 'true' if tabs[0] == 'results' else 'false' }}">Results</button>
     {% endif %}
     {% if 'arguments' in tabs %}
-    <button class="tab-btn{% if tabs[0] == 'arguments' %} tab-btn--active{% endif %}"
+    <button id="tab-btn-arguments" class="tab-btn{% if tabs[0] == 'arguments' %} tab-btn--active{% endif %}"
             role="tab" data-tab="tab-arguments"
             aria-selected="{{ 'true' if tabs[0] == 'arguments' else 'false' }}">Arguments</button>
     {% endif %}
@@ -85,7 +86,7 @@
 
   {% if 'vote' in tabs %}
   <div id="tab-vote" class="tab-panel{% if tabs|length > 1 and tabs[0] != 'vote' %} tab-panel--hidden{% endif %}"
-       role="tabpanel">
+       role="tabpanel" aria-labelledby="tab-btn-vote">
     <div class="voting-wrapper">
 
       <pa-conversation
@@ -126,7 +127,7 @@
 
   {% if 'results' in tabs %}
   <div id="tab-results" class="tab-panel{% if tabs|length > 1 and tabs[0] != 'results' %} tab-panel--hidden{% endif %}"
-       role="tabpanel">
+       role="tabpanel" aria-labelledby="tab-btn-results">
     <div class="landing-section results-section">
       <h3>Results{% if polis_stats and polis_stats.n_participants %}<span class="muted" style="font-size:13px;font-weight:400;margin-left:.75rem">{{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}</span>{% endif %}</h3>
 
@@ -200,33 +201,189 @@
         {% endif %}
 
       {% else %}
-        <p class="muted">Personal results coming soon.</p>
+        <p class="muted">Results haven't been published yet. Check back soon.</p>
       {% endif %}
 
     </div>
   </div>
-  {% endif %}
+  {% endif %}{# end 'results' in tabs #}
 
   {% if 'arguments' in tabs %}
   <div id="tab-arguments" class="tab-panel{% if tabs|length > 1 and tabs[0] != 'arguments' %} tab-panel--hidden{% endif %}"
-       role="tabpanel">
+       role="tabpanel" aria-labelledby="tab-btn-arguments">
+
+    {% if featured_data | length == 0 %}
     <div class="landing-section">
-      <p class="muted">Arguments coming soon.</p>
+      <p class="muted">No statements have been selected for argument mapping yet.</p>
     </div>
+    {% endif %}
+
+    {% for item in featured_data %}
+    {% set fs = item.fs %}
+    {% set both_gate = item.pro_gate and item.con_gate %}
+
+    <div class="arg-statement" id="fs-{{ fs.id }}">
+      <p class="arg-statement-text">{{ item.text }}</p>
+
+      <div class="arg-columns">
+
+        {# ── Pro column ──────────────────────────────── #}
+        <div class="arg-col arg-col--pro">
+          <h4 class="arg-col-heading">Pro</h4>
+          {% if both_gate and len(item.pro_args) >= item.k %}
+          <p class="arg-vote-prompt muted">Select the {{ item.k }} most important pro arguments.</p>
+          {% endif %}
+
+          {% if item.pro_args | length == 0 %}
+          <p class="arg-empty muted">No pro arguments yet.</p>
+          {% endif %}
+
+          {% for arg in item.pro_args %}
+          <div class="arg-card{% if arg.id in item.voted_ids %} arg-card--voted{% endif %}">
+            <p class="arg-body">{{ arg.body }}</p>
+            <div class="arg-actions">
+              {% set vote_count = arg.votes | length %}
+              <span class="arg-votes">{{ vote_count }} vote{{ 's' if vote_count != 1 }}</span>
+              {% if both_gate and len(item.pro_args) >= item.k and arg.proposer_id != participation.participant_id %}
+                {% if arg.id in item.voted_ids %}
+                <form method="post" action="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn-small btn-voted">✓ most important</button>
+                </form>
+                {% else %}
+                <form method="post" action="{{ url_for('argument_vote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn-small">most important</button>
+                </form>
+                {% endif %}
+              {% endif %}
+              {% if can_moderate %}
+              <form method="post" action="{{ url_for('argument_delete', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this argument?')">delete</button>
+              </form>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+
+          {# Contribution gate for pro side #}
+          {% if not item.pro_gate %}
+          <div class="arg-contribute">
+            <form method="post" action="{{ url_for('argument_submit', slug=conversation.slug, fs_id=fs.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="side" value="pro">
+              <textarea name="body" maxlength="280" rows="3"
+                        placeholder="Add a pro argument (max 280 characters)…" required></textarea>
+              <div class="arg-form-actions">
+                <button type="submit" class="btn-small">Submit</button>
+              </div>
+            </form>
+            <form method="post" action="{{ url_for('argument_skip', slug=conversation.slug, fs_id=fs.id, side='pro') }}" style="margin-top:.35rem">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-small btn-muted">Nothing to add</button>
+            </form>
+          </div>
+          {% elif item.pro_proposed %}
+          <p class="arg-contributed muted">You contributed a pro argument.</p>
+          {% else %}
+          <p class="arg-contributed muted">You passed on pro arguments.</p>
+          {% endif %}
+
+          {% if both_gate and len(item.pro_args) < item.k %}
+          <p class="arg-threshold muted" style="font-size:12px">
+            Voting for the most important pro arguments unlocks at {{ item.k }} pro arguments
+            ({{ len(item.pro_args) }} so far).
+          </p>
+          {% endif %}
+        </div>{# end pro col #}
+
+        {# ── Con column ──────────────────────────────── #}
+        <div class="arg-col arg-col--con">
+          <h4 class="arg-col-heading">Con</h4>
+          {% if both_gate and len(item.con_args) >= item.k %}
+          <p class="arg-vote-prompt muted">Select the {{ item.k }} most important con arguments.</p>
+          {% endif %}
+
+          {% if item.con_args | length == 0 %}
+          <p class="arg-empty muted">No con arguments yet.</p>
+          {% endif %}
+
+          {% for arg in item.con_args %}
+          <div class="arg-card{% if arg.id in item.voted_ids %} arg-card--voted{% endif %}">
+            <p class="arg-body">{{ arg.body }}</p>
+            <div class="arg-actions">
+              {% set vote_count = arg.votes | length %}
+              <span class="arg-votes">{{ vote_count }} vote{{ 's' if vote_count != 1 }}</span>
+              {% if both_gate and len(item.con_args) >= item.k and arg.proposer_id != participation.participant_id %}
+                {% if arg.id in item.voted_ids %}
+                <form method="post" action="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn-small btn-voted">✓ most important</button>
+                </form>
+                {% else %}
+                <form method="post" action="{{ url_for('argument_vote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn-small">most important</button>
+                </form>
+                {% endif %}
+              {% endif %}
+              {% if can_moderate %}
+              <form method="post" action="{{ url_for('argument_delete', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this argument?')">delete</button>
+              </form>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+
+          {# Contribution gate for con side #}
+          {% if not item.con_gate %}
+          <div class="arg-contribute">
+            <form method="post" action="{{ url_for('argument_submit', slug=conversation.slug, fs_id=fs.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="side" value="con">
+              <textarea name="body" maxlength="280" rows="3"
+                        placeholder="Add a con argument (max 280 characters)…" required></textarea>
+              <div class="arg-form-actions">
+                <button type="submit" class="btn-small">Submit</button>
+              </div>
+            </form>
+            <form method="post" action="{{ url_for('argument_skip', slug=conversation.slug, fs_id=fs.id, side='con') }}" style="margin-top:.35rem">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-small btn-muted">Nothing to add</button>
+            </form>
+          </div>
+          {% elif item.con_proposed %}
+          <p class="arg-contributed muted">You contributed a con argument.</p>
+          {% else %}
+          <p class="arg-contributed muted">You passed on con arguments.</p>
+          {% endif %}
+
+          {% if both_gate and len(item.con_args) < item.k %}
+          <p class="arg-threshold muted" style="font-size:12px">
+            Voting for the most important con arguments unlocks at {{ item.k }} con arguments
+            ({{ len(item.con_args) }} so far).
+          </p>
+          {% endif %}
+        </div>{# end con col #}
+
+      </div>{# end arg-columns #}
+    </div>{# end arg-statement #}
+    {% endfor %}
+
   </div>
   {% endif %}
 
   {% if tabs | length > 1 %}
-  <script>
+  <script nonce="{{ csp_nonce }}">
   (function () {
     var bar    = document.querySelector('.tab-bar');
     var btns   = bar.querySelectorAll('.tab-btn');
     var panels = document.querySelectorAll('.tab-panel');
 
-    bar.addEventListener('click', function (e) {
-      var btn = e.target.closest('.tab-btn');
-      if (!btn) return;
-
+    function activate(btn) {
       btns.forEach(function (b) {
         b.classList.remove('tab-btn--active');
         b.setAttribute('aria-selected', 'false');
@@ -235,7 +392,6 @@
         p.classList.add('tab-panel--hidden');
         p.classList.remove('tab-panel--active');
       });
-
       btn.classList.add('tab-btn--active');
       btn.setAttribute('aria-selected', 'true');
       var target = document.getElementById(btn.dataset.tab);
@@ -243,7 +399,29 @@
         target.classList.remove('tab-panel--hidden');
         target.classList.add('tab-panel--active');
       }
+    }
+
+    bar.addEventListener('click', function (e) {
+      var btn = e.target.closest('.tab-btn');
+      if (btn) activate(btn);
     });
+
+    bar.addEventListener('keydown', function (e) {
+      var list = Array.prototype.slice.call(btns);
+      var idx  = list.indexOf(document.activeElement);
+      if (idx === -1) return;
+      if (e.key === 'ArrowRight') { var next = list[(idx + 1) % list.length]; activate(next); next.focus(); }
+      if (e.key === 'ArrowLeft')  { var prev = list[(idx - 1 + list.length) % list.length]; activate(prev); prev.focus(); }
+      if (e.key === 'Home')       { activate(list[0]); list[0].focus(); }
+      if (e.key === 'End')        { activate(list[list.length - 1]); list[list.length - 1].focus(); }
+    });
+
+    // Restore tab from URL hash (e.g. #tab-arguments after a form redirect).
+    var hash = window.location.hash.slice(1);
+    if (hash) {
+      var target = bar.querySelector('[data-tab="' + hash + '"]');
+      if (target) activate(target);
+    }
   }());
   </script>
   {% endif %}
@@ -259,8 +437,8 @@
 
 </div>
 
-{% if conversation.phase_submission and conversation.active %}
-<script>
+{% if conversation.phase_submission and conversation.active and not conversation.paused %}
+<script nonce="{{ csp_nonce }}">
   var conv    = document.querySelector('pa-conversation');
   var prompt  = document.getElementById('propose-prompt');
   var input   = document.getElementById('propose-input');

@@ -115,6 +115,14 @@
       </div>
     </a>
 
+    <a href="{{ url_for('admin_conversation_featured', conv_id=conversation.id) }}"
+       class="conv-action-card">
+      <div class="conv-action-title">Featured statements</div>
+      <div class="conv-action-desc">
+        {{ conversation.featured_statements | length }} featured · curate for argument mapping
+      </div>
+    </a>
+
   </div>
 
   {% if is_admin %}
@@ -160,13 +168,19 @@
         reveal window. Use <em>Pause</em> above if you only need to temporarily suspend the
         consultation.
       </p>
-      <form method="post"
+      <form id="close-permanently-form" method="post"
             action="{{ url_for('admin_conversation_close', conv_id=conversation.id) }}"
-            style="display:inline"
-            onsubmit="return confirm('Close this consultation permanently?\n\nThis cannot be undone and starts the identity reveal timeline.')">
+            style="display:inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn-small btn-danger">Close permanently</button>
       </form>
+      <script nonce="{{ csp_nonce }}">
+      document.getElementById('close-permanently-form').addEventListener('submit', function(e) {
+        if (!confirm('Close this consultation permanently?\n\nThis cannot be undone and starts the identity reveal timeline.')) {
+          e.preventDefault();
+        }
+      });
+      </script>
     </div>
 
     {% endif %}

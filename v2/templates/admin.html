@@ -77,33 +77,29 @@
     </form>
   </div>
 
-  <!-- ── Global roles ──────────────────────────────── -->
-  <h3 class="section-heading">Global admin roles</h3>
+  <!-- ── Global admins ─────────────────────────────── -->
+  <h3 class="section-heading">Global admins</h3>
   <p class="muted" style="font-size:13px;margin-bottom:.75rem">
-    Global roles grant platform-wide access.
+    Global admins have platform-wide access to all conversations and settings.
     To assign a moderator to a specific conversation, use
     <strong>manage → moderators</strong> on that conversation.
   </p>
 
-  {% set global_roles = roles | selectattr('conversation_id', 'none') | list %}
-
-  {% if global_roles %}
+  {% if global_admins %}
   <table class="admin-table">
     <thead>
       <tr>
         <th>Participant</th>
-        <th>Role</th>
         <th></th>
       </tr>
     </thead>
     <tbody>
-      {% for role in global_roles %}
+      {% for p in global_admins %}
       <tr>
-        <td>{{ role.participant.mw_username }}</td>
-        <td>{{ role.role }}</td>
+        <td>{{ p.mw_username }}</td>
         <td>
           <form method="post"
-                action="{{ url_for('admin_role_remove', role_id=role.id) }}"
+                action="{{ url_for('admin_global_admin_remove', participant_id=p.id) }}"
                 style="display:inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn-small btn-danger">remove</button>
@@ -114,12 +110,12 @@
     </tbody>
   </table>
   {% else %}
-  <p class="muted" style="font-size:14px;margin-bottom:1rem">No global roles assigned.</p>
+  <p class="muted" style="font-size:14px;margin-bottom:1rem">No global admins assigned.</p>
   {% endif %}
 
   <div class="edit-form">
-    <h3>Grant global role</h3>
-    <form method="post" action="{{ url_for('admin_role_add') }}">
+    <h3>Grant global admin</h3>
+    <form method="post" action="{{ url_for('admin_global_admin_add') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="edit-row-fields">
         <label>Participant
@@ -127,13 +123,6 @@
             <option value="">— select —</option>
             {% for p in participants %}
             <option value="{{ p.id }}">{{ p.mw_username }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label>Role
-          <select name="role" required>
-            {% for r in admin_roles %}
-            <option value="{{ r }}">{{ r }}</option>
             {% endfor %}
           </select>
         </label>

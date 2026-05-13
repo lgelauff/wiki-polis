@@ -26,9 +26,11 @@ from flask_wtf.csrf import CSRFProtect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
-from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Conversation,
-                ConversationInvite, Participant, Participation, db)
-from polis_admin import PolisAdminClient, PolisAdminError, get_polis_stats
+from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideState,
+                ArgumentVote, Conversation, ConversationInvite, FeaturedStatement,
+                Participant, Participation, db)
+from polis_admin import (PolisAdminClient, PolisAdminError, get_featured_candidates,
+                         get_polis_stats)
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -160,7 +162,7 @@ def login_required(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         if 'username' not in session:
-            session['next'] = request.url
+            session['next'] = request.path
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return wrapper
@@ -173,11 +175,7 @@ def _is_global_admin(participant: 'Participant | None' = None) -> bool:
         participant = _current_participant()
     if participant is None:
         return False
-    return AdminRole.query.filter_by(
-        participant_id=participant.id,
-        conversation_id=None,
-        role='admin',
-    ).first() is not None
+    return bool(participant.is_global_admin)
 
 
 def _can_moderate(conversation, participant: 'Participant | None' = None) -> bool:
@@ -256,6 +254,10 @@ def _proxy_to_particiapi(pa_path: str):
             if origin and urlparse(origin).netloc != urlparse(request.host_url).netloc:
                 abort(403)
 
+    # CRIT-1: Reject path traversal and non-API paths.
+    if '..' in pa_path.split('/') or not pa_path.startswith('api/'):
+        abort(404)
+
     url = f"{current_app.config['PARTICIAPI_BASE']}/{pa_path}"
 
     forwarded_cookies = {}
@@ -263,7 +265,9 @@ def _proxy_to_particiapi(pa_path: str):
     if pa_cookie:
         forwarded_cookies['session'] = pa_cookie
 
-    params = dict(request.args)
+    # HIGH-5: Only forward known safe query parameters to Particiapi.
+    _ALLOWED_PARAMS = frozenset({'create', 'zinvite', 'conversation_id', 'tid'})
+    params = {k: v for k, v in request.args.items() if k in _ALLOWED_PARAMS}
     # If the web component calls POST /api/session with no existing session,
     # Particiapi returns 403 (auth required) unless we add ?create=true.
     if pa_path == 'api/session' and request.method == 'POST' and not pa_cookie:
@@ -339,7 +343,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         app.config['SQLALCHEMY_DATABASE_URI'] = (
             _read_secret('database-url') or 'sqlite:///dev.db')
 
-    app.config['SECRET_KEY']                     = _read_secret('secret-key') or 'dev-insecure-key'
+    _secret_key = (test_config or {}).get('SECRET_KEY') or _read_secret('secret-key')
+    if not _secret_key:
+        if not app.debug:
+            raise RuntimeError('secret-key is required in production — set SECRET_KEY env var or Kubernetes secret')
+        _secret_key = 'dev-insecure-key'
+    app.config['SECRET_KEY'] = _secret_key
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SQLALCHEMY_ENGINE_OPTIONS']      = {'pool_recycle': 280, 'pool_pre_ping': True}
 
@@ -356,8 +365,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['OAUTH_REDIRECT_URI']  = _read_secret('oauth-redirect-uri')
     app.config['PARTICIAPI_BASE']     = (_read_secret('particiapi-base-url')
                                          or os.environ.get('PARTICIAPI_BASE_URL', 'http://localhost:8000'))
-    app.config['POLIS_PUBLIC_URL']   = (_read_secret('polis-public-url')
-                                        or os.environ.get('POLIS_PUBLIC_URL', ''))
+    _polis_public_url = (_read_secret('polis-public-url')
+                         or os.environ.get('POLIS_PUBLIC_URL', ''))
+    if _polis_public_url and not _polis_public_url.startswith('https://'):
+        app.logger.warning('POLIS_PUBLIC_URL is not https:// — ignoring')
+        _polis_public_url = ''
+    app.config['POLIS_PUBLIC_URL'] = _polis_public_url
     app.config['POLIS_DATABASE_URL'] = (_read_secret('polis-database-url')
                                         or os.environ.get('POLIS_DATABASE_URL', ''))
 
@@ -371,6 +384,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     Session(app)
     csrf.init_app(app)
     limiter.init_app(app)
+
+    if not app.debug and not os.environ.get('RATELIMIT_STORAGE_URI'):
+        app.logger.warning(
+            'RATELIMIT_STORAGE_URI not set — rate limits are per-worker and '
+            'ineffective on multi-replica deployments. Set RATELIMIT_STORAGE_URI=redis://...'
+        )
 
     @app.cli.command('init-db')
     def init_db_cmd():
@@ -399,19 +418,35 @@ def create_app(test_config: dict | None = None) -> Flask:
             _upgrade()
             click.echo('Database is at head revision.')
 
+    @app.before_request
+    def _set_csp_nonce():
+        g.csp_nonce = secrets.token_urlsafe(16)
+
     @app.context_processor
     def _inject_globals():
         participant = _current_participant()
         return {
-            'is_admin': _is_global_admin(participant),
-            'username': session.get('username'),
+            'is_admin':   _is_global_admin(participant),
+            'username':   session.get('username'),
+            'csp_nonce':  g.get('csp_nonce', ''),
         }
 
     @app.after_request
     def _security_headers(response):
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['X-Frame-Options']        = 'SAMEORIGIN'
-        response.headers['Referrer-Policy']        = 'strict-origin-when-cross-origin'
+        nonce = g.get('csp_nonce', '')
+        csp = (
+            "default-src 'self'; "
+            f"script-src 'self' 'nonce-{nonce}'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "connect-src 'self'; "
+            "img-src 'self' data:; "
+            "frame-ancestors 'none';"
+        )
+        response.headers['Content-Security-Policy'] = csp
+        response.headers['X-Content-Type-Options']  = 'nosniff'
+        response.headers['Referrer-Policy']         = 'strict-origin-when-cross-origin'
+        # X-Frame-Options superseded by frame-ancestors in CSP above, but kept for old browsers
+        response.headers['X-Frame-Options']         = 'DENY'
         return response
 
     _register_routes(app)
@@ -522,7 +557,6 @@ def _register_routes(app: Flask) -> None:
             else:
                 roles = AdminRole.query.filter(
                     AdminRole.participant_id == participant.id,
-                    AdminRole.conversation_id.isnot(None),
                 ).all()
                 if roles:
                     mod_ids = {r.conversation_id for r in roles}
@@ -571,7 +605,7 @@ def _register_routes(app: Flask) -> None:
             return redirect(url_for('conversation', slug=slug))
 
         pseudonym = request.form.get('pseudonym', '').strip()
-        emailable = request.form.get('emailable') == '1'
+        emailable = session.get('emailable', False)
 
         if not _PSEUDONYM_RE.match(pseudonym):
             abort(400)
@@ -600,6 +634,109 @@ def _register_routes(app: Flask) -> None:
         from flask import jsonify
         Conversation.query.filter_by(slug=slug).first_or_404()
         return jsonify({'pseudonyms': _generate_pseudonyms(5)})
+
+    # ── Argument helpers ──────────────────────────────────────────────────────
+
+    def _get_or_create_side_state(participant_id, fs_id, side, current_args):
+        """Return ArgumentSideState, creating it on first view.
+
+        On creation: randomise argument_order from current_args.
+        On subsequent views: append any new arguments at a random position.
+        Commits to DB if any change is made.
+        """
+        import random
+        state = ArgumentSideState.query.filter_by(
+            participant_id=participant_id,
+            featured_statement_id=fs_id,
+            side=side,
+        ).first()
+        changed = False
+        if state is None:
+            order = [a.id for a in current_args]
+            random.shuffle(order)
+            state = ArgumentSideState(
+                participant_id=participant_id,
+                featured_statement_id=fs_id,
+                side=side,
+                argument_order=order,
+            )
+            db.session.add(state)
+            changed = True
+        else:
+            known = set(state.argument_order)
+            new_ids = [a.id for a in current_args if a.id not in known]
+            if new_ids:
+                order = list(state.argument_order)
+                for aid in new_ids:
+                    pos = random.randint(0, len(order))
+                    order.insert(pos, aid)
+                state.argument_order = order
+                changed = True
+        if changed:
+            db.session.commit()
+        return state
+
+    def _build_featured_data(conv, participation):
+        """Return list of dicts for the argument tab, one per confirmed FS.
+
+        Each dict: {fs, text, pro_args, con_args, pro_state, con_state, voted_ids,
+                    pro_gate, con_gate}
+        Creates/updates ArgumentSideState records as a side effect.
+        """
+        from sqlalchemy.orm import joinedload
+        fss = (FeaturedStatement.query
+               .filter_by(conversation_id=conv.id, confirmed_by_admin=True)
+               .options(joinedload(FeaturedStatement.arguments))
+               .order_by(FeaturedStatement.created_at)
+               .all())
+        if not fss:
+            return []
+
+        stmt_texts = {}
+        try:
+            client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
+            _, approved, _ = client.get_statements(conv.polis_id)
+            stmt_texts = {s['tid']: s.get('txt', '') for s in approved}
+        except Exception:
+            pass
+
+        pid = participation.participant_id
+        voted_ids = {av.argument_id for av in
+                     ArgumentVote.query.filter_by(participant_id=pid).all()}
+
+        result = []
+        for fs in fss:
+            pro_args = [a for a in fs.arguments if a.side == 'pro']
+            con_args = [a for a in fs.arguments if a.side == 'con']
+
+            pro_state = _get_or_create_side_state(pid, fs.id, 'pro', pro_args)
+            con_state = _get_or_create_side_state(pid, fs.id, 'con', con_args)
+
+            def _ordered(args, state):
+                arg_map = {a.id: a for a in args}
+                return [arg_map[aid] for aid in state.argument_order if aid in arg_map]
+
+            pro_proposed = Argument.query.filter_by(
+                proposer_id=pid, featured_statement_id=fs.id, side='pro').first()
+            con_proposed = Argument.query.filter_by(
+                proposer_id=pid, featured_statement_id=fs.id, side='con').first()
+
+            result.append({
+                'fs':        fs,
+                'text':      stmt_texts.get(fs.polis_statement_id,
+                                            f'Statement #{fs.polis_statement_id}'),
+                'pro_args':  _ordered(pro_args, pro_state),
+                'con_args':  _ordered(con_args, con_state),
+                'pro_state': pro_state,
+                'con_state': con_state,
+                'voted_ids': voted_ids,
+                'pro_gate':  bool(pro_proposed or pro_state.skipped),
+                'con_gate':  bool(con_proposed or con_state.skipped),
+                'pro_proposed': pro_proposed,
+                'con_proposed': con_proposed,
+                'k': conv.argument_vote_data.get('K', 2),
+            })
+        return result
 
     # ── Conversation ─────────────────────────────────────────────────────────
 
@@ -650,6 +787,10 @@ def _register_routes(app: Flask) -> None:
             else:
                 reveal_state = 'pending'
 
+        featured_data = []
+        if conv.phase_argument_mapping and participation:
+            featured_data = _build_featured_data(conv, participation)
+
         return render_template('conversation.html',
                                conversation=conv,
                                participation=participation,
@@ -658,7 +799,180 @@ def _register_routes(app: Flask) -> None:
                                polis_stats=polis_stats,
                                polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''),
                                reveal_state=reveal_state,
-                               reveal_opens_at=reveal_opens_at)
+                               reveal_opens_at=reveal_opens_at,
+                               featured_data=featured_data)
+
+    # ── Arguments ────────────────────────────────────────────────────────────
+
+    def _require_arg_participation(slug):
+        """Return (conv, participation) or abort. Checks active + argument phase."""
+        conv = Conversation.query.filter_by(slug=slug).first_or_404()
+        if not conv.active or conv.paused or not conv.phase_argument_mapping:
+            abort(403)
+        participant = _current_participant()
+        if not participant:
+            abort(403)
+        part = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+        ).first_or_404()
+        return conv, part
+
+    @app.post('/c/<slug>/arguments/<int:fs_id>/submit')
+    @login_required
+    def argument_submit(slug, fs_id):
+        conv, part = _require_arg_participation(slug)
+        fs   = FeaturedStatement.query.filter_by(
+            id=fs_id, conversation_id=conv.id).first_or_404()
+        side = request.form.get('side', '').strip()
+        body = nh3.clean(request.form.get('body', '').strip(), tags=frozenset())
+        if side not in ('pro', 'con') or not body or len(body) > 280:
+            abort(400)
+
+        existing = Argument.query.filter_by(
+            proposer_id=part.participant_id,
+            featured_statement_id=fs_id,
+            side=side,
+        ).first()
+        if existing:
+            return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
+
+        arg = Argument(
+            featured_statement_id=fs_id,
+            proposer_id=part.participant_id,
+            body=body,
+            side=side,
+        )
+        db.session.add(arg)
+        db.session.flush()   # get arg.id before commit
+
+        # Insert new argument at a random position in this participant's display order.
+        # Create ArgumentSideState now if the participant hasn't visited the page yet.
+        import random
+        state = ArgumentSideState.query.filter_by(
+            participant_id=part.participant_id,
+            featured_statement_id=fs_id,
+            side=side,
+        ).first()
+        if state is None:
+            state = ArgumentSideState(
+                participant_id=part.participant_id,
+                featured_statement_id=fs_id,
+                side=side,
+                argument_order=[],
+            )
+            db.session.add(state)
+            db.session.flush()
+        order = list(state.argument_order)
+        order.insert(random.randint(0, len(order)), arg.id)
+        state.argument_order = order
+
+        db.session.commit()
+        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
+
+    @app.post('/c/<slug>/arguments/<int:fs_id>/<side>/skip')
+    @login_required
+    def argument_skip(slug, fs_id, side):
+        conv, part = _require_arg_participation(slug)
+        FeaturedStatement.query.filter_by(
+            id=fs_id, conversation_id=conv.id).first_or_404()
+        if side not in ('pro', 'con'):
+            abort(400)
+
+        state = ArgumentSideState.query.filter_by(
+            participant_id=part.participant_id,
+            featured_statement_id=fs_id,
+            side=side,
+        ).first()
+        if state is None:
+            state = ArgumentSideState(
+                participant_id=part.participant_id,
+                featured_statement_id=fs_id,
+                side=side,
+                skipped=True,
+            )
+            db.session.add(state)
+            db.session.commit()
+        elif not state.skipped:
+            state.skipped = True
+            db.session.commit()
+        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
+
+    @app.post('/c/<slug>/arguments/<int:arg_id>/vote')
+    @login_required
+    def argument_vote(slug, arg_id):
+        conv, part = _require_arg_participation(slug)
+        arg = Argument.query.filter_by(id=arg_id).first_or_404()
+        fs  = FeaturedStatement.query.filter_by(
+            id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+
+        # Gate: participant must have proposed or skipped both sides.
+        pro_state = ArgumentSideState.query.filter_by(
+            participant_id=part.participant_id,
+            featured_statement_id=fs.id, side='pro').first()
+        con_state = ArgumentSideState.query.filter_by(
+            participant_id=part.participant_id,
+            featured_statement_id=fs.id, side='con').first()
+        pro_proposed = Argument.query.filter_by(
+            proposer_id=part.participant_id,
+            featured_statement_id=fs.id, side='pro').first()
+        con_proposed = Argument.query.filter_by(
+            proposer_id=part.participant_id,
+            featured_statement_id=fs.id, side='con').first()
+        pro_gate = bool(pro_proposed or (pro_state and pro_state.skipped))
+        con_gate = bool(con_proposed or (con_state and con_state.skipped))
+        if not (pro_gate and con_gate):
+            abort(403)
+
+        # K-approval cap: count existing votes for this side.
+        k = conv.argument_vote_data.get('K', 2)
+        side_arg_ids = [a.id for a in
+                        Argument.query.filter_by(
+                            featured_statement_id=fs.id, side=arg.side).all()]
+        existing_votes = ArgumentVote.query.filter(
+            ArgumentVote.participant_id == part.participant_id,
+            ArgumentVote.argument_id.in_(side_arg_ids),
+        ).count()
+        if existing_votes >= k:
+            abort(409)   # cap reached
+
+        # Can't vote on own argument.
+        if arg.proposer_id == part.participant_id:
+            abort(403)
+
+        existing = ArgumentVote.query.filter_by(
+            participant_id=part.participant_id, argument_id=arg_id).first()
+        if not existing:
+            db.session.add(ArgumentVote(
+                argument_id=arg_id,
+                participant_id=part.participant_id,
+            ))
+            db.session.commit()
+        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
+
+    @app.post('/c/<slug>/arguments/<int:arg_id>/unvote')
+    @login_required
+    def argument_unvote(slug, arg_id):
+        conv, part = _require_arg_participation(slug)
+        existing = ArgumentVote.query.filter_by(
+            participant_id=part.participant_id, argument_id=arg_id).first()
+        if existing:
+            db.session.delete(existing)
+            db.session.commit()
+        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
+
+    @app.post('/c/<slug>/arguments/<int:arg_id>/delete')
+    @login_required
+    def argument_delete(slug, arg_id):
+        conv = Conversation.query.filter_by(slug=slug).first_or_404()
+        if not _can_moderate(conv):
+            abort(403)
+        arg = Argument.query.filter_by(id=arg_id).first_or_404()
+        FeaturedStatement.query.filter_by(
+            id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+        db.session.delete(arg)
+        db.session.commit()
+        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
 
     # ── Particiapi proxy ──────────────────────────────────────────────────────
 
@@ -759,10 +1073,11 @@ def _register_routes(app: Flask) -> None:
         return redirect(f'https://meta.wikimedia.org/w/rest.php/oauth2/authorize?{params}')
 
     @app.get('/oauth-callback')
+    @limiter.limit('30 per minute')
     def oauth_callback():
         if request.args.get('state') != session.pop('oauth_state', None):
             app.logger.warning('OAuth callback: state mismatch')
-            return redirect(url_for('index'))
+            abort(400)
 
         code          = request.args.get('code', '')
         code_verifier = session.pop('oauth_code_verifier', '')
@@ -819,9 +1134,9 @@ def _register_routes(app: Flask) -> None:
         session['xid']        = xid
         session['emailable']  = _is_emailable(username)
 
-        return redirect(next_url or url_for('index'))
+        return redirect(_safe_redirect(next_url or '', url_for('index')))
 
-    @app.get('/logout')
+    @app.post('/logout')
     @login_required
     def logout():
         session.clear()
@@ -833,17 +1148,17 @@ def _register_routes(app: Flask) -> None:
     @login_required
     @admin_required
     def admin():
-        conversations = (Conversation.query
-                         .order_by(Conversation.created_at.desc()).all())
-        participants  = (Participant.query
-                         .order_by(Participant.mw_username).all())
-        roles         = (AdminRole.query
-                         .order_by(AdminRole.role, AdminRole.granted_at.desc()).all())
+        conversations  = (Conversation.query
+                          .order_by(Conversation.created_at.desc()).all())
+        participants   = (Participant.query
+                          .order_by(Participant.mw_username).all())
+        global_admins  = (Participant.query
+                          .filter_by(is_global_admin=True)
+                          .order_by(Participant.mw_username).all())
         return render_template('admin.html',
                                conversations=conversations,
                                participants=participants,
-                               roles=roles,
-                               admin_roles=ADMIN_ROLES)
+                               global_admins=global_admins)
 
     @app.get('/admin/conversations/<int:conv_id>')
     @login_required
@@ -936,19 +1251,37 @@ def _register_routes(app: Flask) -> None:
         db.session.commit()
         return redirect(url_for('admin_conversation_detail', conv_id=conv_id))
 
+    @app.post('/admin/global-admins/add')
+    @login_required
+    @admin_required
+    def admin_global_admin_add():
+        participant_id = request.form.get('participant_id', type=int)
+        p = Participant.query.get_or_404(participant_id)
+        p.is_global_admin = True
+        db.session.commit()
+        return redirect(url_for('admin'))
+
+    @app.post('/admin/global-admins/<int:participant_id>/remove')
+    @login_required
+    @admin_required
+    def admin_global_admin_remove(participant_id):
+        p = Participant.query.get_or_404(participant_id)
+        p.is_global_admin = False
+        db.session.commit()
+        return redirect(url_for('admin'))
+
     @app.post('/admin/roles/add')
     @login_required
     @admin_required
     def admin_role_add():
         participant_id  = request.form.get('participant_id', type=int)
-        conversation_id = request.form.get('conversation_id', type=int) or None
+        conversation_id = request.form.get('conversation_id', type=int)
         role            = request.form.get('role', '').strip()
 
-        if role not in ADMIN_ROLES:
+        if role not in ADMIN_ROLES or not conversation_id:
             abort(400)
         Participant.query.get_or_404(participant_id)
-        if conversation_id is not None:
-            Conversation.query.get_or_404(conversation_id)
+        Conversation.query.get_or_404(conversation_id)
 
         existing = AdminRole.query.filter_by(
             participant_id=participant_id,
@@ -1080,6 +1413,71 @@ def _register_routes(app: Flask) -> None:
         except PolisAdminError as exc:
             current_app.logger.error('set_strict_moderation failed: %s', exc)
         return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
+
+    # ── Featured statements ───────────────────────────────────────────────────
+
+    @app.get('/admin/conversations/<int:conv_id>/featured')
+    @login_required
+    def admin_conversation_featured(conv_id):
+        conv        = _require_mod_for_conv(conv_id)
+        confirmed   = (FeaturedStatement.query
+                       .filter_by(conversation_id=conv_id)
+                       .order_by(FeaturedStatement.created_at).all())
+        confirmed_tids = {fs.polis_statement_id for fs in confirmed}
+        candidates  = get_featured_candidates(
+            conv.polis_id, current_app.config.get('POLIS_DATABASE_URL', ''))
+        if candidates is not None:
+            candidates = [c for c in candidates if c['tid'] not in confirmed_tids]
+        return render_template('admin_featured.html',
+                               conversation=conv,
+                               confirmed=confirmed,
+                               candidates=candidates)
+
+    @app.post('/admin/conversations/<int:conv_id>/featured/confirm')
+    @login_required
+    def admin_featured_confirm(conv_id):
+        conv = _require_mod_for_conv(conv_id)
+        tid  = request.form.get('tid', type=int)
+        if tid is None:
+            abort(400)
+        if not FeaturedStatement.query.filter_by(
+                conversation_id=conv_id, polis_statement_id=tid).first():
+            db.session.add(FeaturedStatement(
+                conversation_id=conv_id,
+                polis_statement_id=tid,
+                suggested_by_system=request.form.get('system_suggested') == '1',
+                confirmed_by_admin=True,
+            ))
+            db.session.commit()
+        return redirect(url_for('admin_conversation_featured', conv_id=conv_id))
+
+    @app.post('/admin/conversations/<int:conv_id>/featured/add')
+    @login_required
+    def admin_featured_add(conv_id):
+        conv = _require_mod_for_conv(conv_id)
+        tid  = request.form.get('tid', type=int)
+        if tid is None or tid < 0:
+            abort(400)
+        if not FeaturedStatement.query.filter_by(
+                conversation_id=conv_id, polis_statement_id=tid).first():
+            db.session.add(FeaturedStatement(
+                conversation_id=conv_id,
+                polis_statement_id=tid,
+                suggested_by_system=False,
+                confirmed_by_admin=True,
+            ))
+            db.session.commit()
+        return redirect(url_for('admin_conversation_featured', conv_id=conv_id))
+
+    @app.post('/admin/conversations/<int:conv_id>/featured/<int:fs_id>/remove')
+    @login_required
+    def admin_featured_remove(conv_id, fs_id):
+        _require_mod_for_conv(conv_id)
+        fs = FeaturedStatement.query.filter_by(
+            id=fs_id, conversation_id=conv_id).first_or_404()
+        db.session.delete(fs)
+        db.session.commit()
+        return redirect(url_for('admin_conversation_featured', conv_id=conv_id))
 
 
 if __name__ == '__main__':
