@@ -1,4 +1,12 @@
 {% extends "base.html" %}
+{% block head %}
+{% if conversation.active and not conversation.paused and conversation.phase_submission %}
+<script type="importmap">
+{"imports": {"@particiapp/particiapp-web-client": "{{ url_for('static', filename='particiapp-web-client.js') }}"}}
+</script>
+<script type="module" src="{{ url_for('static', filename='particiapp-web-components.js') }}"></script>
+{% endif %}
+{% endblock %}
 {% block content %}
 
 <div class="container">
@@ -48,12 +56,8 @@
   {% else %}
   <div class="voting-wrapper">
 
-    <script type="module"
-      src="{{ url_for('static', filename='particiapp-web-components.js') }}">
-    </script>
-
     <pa-conversation
-      base="/proxy/particiapi"
+      base="{{ request.url_root }}proxy/particiapi"
       conversation-id="{{ conversation.polis_id }}">
 
       <pa-statement>
@@ -64,17 +68,17 @@
 
       <div class="vote-buttons">
         <pa-vote-button type="agree">Agree</pa-vote-button>
-        <pa-vote-button type="pass">Pass</pa-vote-button>
+        <pa-vote-button type="neutral">Pass</pa-vote-button>
         <pa-vote-button type="disagree">Disagree</pa-vote-button>
       </div>
 
       <div id="propose-prompt" hidden>
-        <p>Have a better way to put this?</p>
+        <p>Want to propose a different statement? (optional)</p>
         <textarea id="propose-input" maxlength="1000"
                   placeholder="Propose an alternative statement…"></textarea>
         <div class="propose-actions">
-          <pa-submit-button submitfor="propose-input">Submit alternative</pa-submit-button>
-          <button type="button" id="propose-skip">Skip</button>
+          <pa-submit-button submitfor="propose-input">Submit &amp; next</pa-submit-button>
+          <button type="button" id="propose-skip">Next →</button>
         </div>
       </div>
 
@@ -173,22 +177,26 @@
 
 {% if conversation.phase_submission and conversation.active %}
 <script>
-  var conv   = document.querySelector('pa-conversation');
-  var prompt = document.getElementById('propose-prompt');
-  var input  = document.getElementById('propose-input');
+  var conv    = document.querySelector('pa-conversation');
+  var prompt  = document.getElementById('propose-prompt');
+  var input   = document.getElementById('propose-input');
+  var voteDiv = conv.querySelector('.vote-buttons');
 
-  conv.addEventListener('particiappvotesubmitsuccess', function() {
-    prompt.hidden = false;
+  function showPropose() {
+    voteDiv.hidden = true;
+    prompt.hidden  = false;
     input.focus();
-  });
-  document.getElementById('propose-skip').addEventListener('click', function() {
-    prompt.hidden = true;
-    input.value = '';
-  });
-  conv.addEventListener('particiappstatementsubmitsuccess', function() {
-    prompt.hidden = true;
-    input.value = '';
-  });
+  }
+
+  function dismissPropose() {
+    prompt.hidden  = true;
+    input.value    = '';
+    voteDiv.hidden = false;
+  }
+
+  conv.addEventListener('particiappvotesubmitsuccess', showPropose);
+  document.getElementById('propose-skip').addEventListener('click', dismissPropose);
+  conv.addEventListener('particiappstatementsubmitsuccess', dismissPropose);
 </script>
 {% endif %}
 

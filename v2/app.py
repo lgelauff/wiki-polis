@@ -3,6 +3,7 @@ app.py — Flask application for wiki-polis v2.
 """
 
 import base64
+import click
 import functools
 import hashlib
 import os
@@ -60,7 +61,7 @@ def _nullify_expired_reveals(conv: 'Conversation') -> None:
     if not conv.closed_at:
         return
     # closed_at is stored as naive UTC
-    age = datetime.utcnow() - conv.closed_at.replace(tzinfo=None)
+    age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
     if age < timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
         return
     stale = (Participation.query
@@ -310,11 +311,36 @@ def _proxy_to_particiapi(pa_path: str):
 
 # ── App factory ───────────────────────────────────────────────────────────────
 
-def create_app() -> Flask:
+def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
 
+    # ── Dev DB isolation ──────────────────────────────────────────────────────
+    # When running locally with DEV_LOGIN_USER set, force a separate SQLite DB
+    # regardless of what database-url/DATABASE_URL contains. This prevents a
+    # stray prod URL in .env from being touched during local dev.
+    # Production (Toolforge) is detected via TOOL_TOOLFORGE_API_URL and bypasses
+    # this branch entirely.
+    _dev_user     = os.environ.get('DEV_LOGIN_USER', '').strip()
+    _on_toolforge = bool(os.environ.get('TOOL_TOOLFORGE_API_URL'))
+    _is_dev_mode  = (app.debug or os.environ.get('FLASK_DEBUG') == '1') \
+                    and _dev_user and not _on_toolforge
+
+    if _is_dev_mode:
+        dev_url = os.environ.get('DEV_DATABASE_URL', '').strip() or 'sqlite:///dev.db'
+        if not dev_url.startswith('sqlite:///'):
+            raise RuntimeError(
+                'DEV_DATABASE_URL must be a sqlite:/// URL when DEV_LOGIN_USER '
+                'is set. Refusing to start to prevent accidental prod writes.'
+            )
+        app.config['SQLALCHEMY_DATABASE_URI'] = dev_url
+        app.logger.warning(
+            'DEV MODE: SQLALCHEMY_DATABASE_URI forced to %s '
+            '(ignoring database-url secret / DATABASE_URL env)', dev_url)
+    else:
+        app.config['SQLALCHEMY_DATABASE_URI'] = (
+            _read_secret('database-url') or 'sqlite:///dev.db')
+
     app.config['SECRET_KEY']                     = _read_secret('secret-key') or 'dev-insecure-key'
-    app.config['SQLALCHEMY_DATABASE_URI']        = _read_secret('database-url') or 'sqlite:///dev.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SQLALCHEMY_ENGINE_OPTIONS']      = {'pool_recycle': 280, 'pool_pre_ping': True}
 
@@ -336,15 +362,43 @@ def create_app() -> Flask:
     app.config['POLIS_DATABASE_URL'] = (_read_secret('polis-database-url')
                                         or os.environ.get('POLIS_DATABASE_URL', ''))
 
+    # Apply test overrides before extensions are initialised so SESSION_TYPE,
+    # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
+    if test_config is not None:
+        app.config.update(test_config)
+
     db.init_app(app)
     Migrate(app, db)
     Session(app)
     csrf.init_app(app)
     limiter.init_app(app)
 
-    with app.app_context():
-        with db.engine.begin() as conn:
-            db.metadata.create_all(conn)
+    @app.cli.command('init-db')
+    def init_db_cmd():
+        """Initialise or migrate the database. Idempotent.
+
+        Fresh DB: creates all tables via SQLAlchemy then stamps Alembic at head
+        (the incremental migrations assume a base schema already exists).
+        Existing DB: runs any pending Alembic migrations.
+        """
+        import sqlalchemy as _sa
+        from flask_migrate import upgrade as _upgrade
+        from alembic.config import Config as _AlembicConfig
+        from alembic import command as _alembic_cmd
+        inspector = _sa.inspect(db.engine)
+        # Check for an app-specific table to distinguish a truly fresh DB
+        # from one that only has the alembic_version tracking table.
+        if 'participants' not in inspector.get_table_names():
+            db.create_all()
+            # Stamp without running migrations: build config from Flask-Migrate.
+            from flask_migrate import Migrate as _Migrate
+            migrate_ext = app.extensions.get('migrate')
+            alembic_cfg = migrate_ext.migrate.get_config()
+            _alembic_cmd.stamp(alembic_cfg, 'head')
+            click.echo('Fresh database created and stamped at head.')
+        else:
+            _upgrade()
+            click.echo('Database is at head revision.')
 
     @app.context_processor
     def _inject_globals():
@@ -497,7 +551,10 @@ def _register_routes(app: Flask) -> None:
         pseudonyms = _generate_pseudonyms(5)
         emailable  = session.get('emailable', False)
         return render_template('accept.html', conversation=conv,
-                               emailable=emailable, pseudonyms=pseudonyms)
+                               emailable=emailable, pseudonyms=pseudonyms,
+                               reveal_cooldown=_REVEAL_COOLDOWN_DAYS,
+                               reveal_window_end=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS,
+                               retention_public_days=120)
 
     @app.post('/accept/<slug>')
     @login_required
@@ -583,7 +640,7 @@ def _register_routes(app: Flask) -> None:
         reveal_state    = None
         reveal_opens_at = None
         if conv.closed_at:
-            age = datetime.utcnow() - conv.closed_at.replace(tzinfo=None)
+            age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
             reveal_opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
             if participation.public_username:
                 reveal_state = 'revealed'
@@ -632,7 +689,7 @@ def _register_routes(app: Flask) -> None:
         _nullify_expired_reveals(conv)
         db.session.refresh(participation)
 
-        age = datetime.utcnow() - conv.closed_at.replace(tzinfo=None)
+        age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
         opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
         return render_template('reveal.html',
                                conversation=conv,
@@ -657,7 +714,7 @@ def _register_routes(app: Flask) -> None:
         if not conv.closed_at:
             abort(400)
 
-        age = datetime.utcnow() - conv.closed_at.replace(tzinfo=None)
+        age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
         if age < timedelta(days=_REVEAL_COOLDOWN_DAYS):
             abort(400)
         if age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
@@ -1026,7 +1083,6 @@ def _register_routes(app: Flask) -> None:
         return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
 
 
-app = create_app()
-
 if __name__ == '__main__':
+    app = create_app()
     app.run(debug=True)

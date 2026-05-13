@@ -44,6 +44,10 @@ Ordered by dependency. Each step is independently testable before the next begin
 - [x] Conversation page: `<pa-conversation>` + `<pa-statement>` + `<pa-vote-button>`; "propose alternative" prompt after each vote
 - [x] Admin panel: conversations, phase toggles (S/P/A/R), roles, invites
 - [x] Confirmed end-to-end locally: dev-login → accept → statement submission → vote → Polis recorded `{"value": -1}`
+- [x] `polis_admin.py` PolisAdminClient rewritten to use correct Particiapi paths (`api/conversations/<id>/statements/`, `/results/`); raises `PolisAdminError` for unsupported operations (moderate, seed, strict-moderation)
+- [x] Test suite (74 tests) green: unit, integration, security, reveal, polis_admin
+
+**Particiapi vote API:** `PUT /api/conversations/<id>/votes/<tid>` with `{"value": <int>}` (AGREE=-1, NEUTRAL=0, DISAGREE=1). Requires `@session_required` (web component handles session creation via `POST /api/session?create=true`).
 
 **Deliverable:** ✓ End-to-end confirmed locally against particiapp-docker stack.
 
@@ -82,6 +86,26 @@ Security, code quality, and computational social science reviews conducted (2026
 - [x] Lazy nullification in conversation view: clears identity links at `cooldown + window` days post-close
 - [x] Minimum-N warning on results (< 25 participants): shown above public results, does not hide results
 - [x] Consent copy on accept page updated to reflect platform-wide pseudonym uniqueness and operator data retention
+
+---
+
+## Step 4c — Frontend fixes (2026-05-13)
+
+Web component integration bugs found and fixed during browser testing:
+
+**Fixed**
+- [x] `base="/proxy/particiapi"` relative URL crashed `new URL()` in `ConversationClient` — changed to `{{ request.url_root }}proxy/particiapi`
+- [x] `#fetchConversation` missing `credentials: "include"` — session cookie not sent, proxy returned login redirect, JSON parse crashed
+- [x] `urlWithPath()` replaced entire pathname, discarding the `/proxy/particiapi` prefix from all API URLs
+- [x] Importmap placed in `<body>` inside conditional block — moved to `<head>` via `{% block head %}`, spec-compliant
+- [x] CSS selector typo `pa-statement:state(no-statements)` → `no-statement` (singular)
+- [x] `<pa-vote-button type="pass">` is not a valid type (silently fell back to neutral) — changed to `type="neutral"`
+- [x] Vote buttons stayed visible while propose-prompt was active — user could accidentally vote on next statement; now hidden during propose step
+- [x] "Skip" button relabelled "Next →"; submit button relabelled "Submit & next"
+
+**Open**
+- [ ] **Bug 4 (high):** If Particiapi rejects the session with `authentication_required`, `authenticationRequired` stays `true`, all vote buttons stay `inactive`, and the page shows blank with no visible error. Currently mitigated by the Flask proxy injecting `?create=true`, but if Particiapi ever requires its own user identity this will surface silently. Add a visible error state or fallback message in conversation.html when `pa-conversation` enters error/unauthenticated state.
+- [ ] **Bug 8 (low):** The `<pa-login-button>` popup flow opens `loginURL = base + /auth/login` which is not a valid Flask route through the proxy. The popup auth flow is incompatible with the proxy architecture. Remove or hide `<pa-login-button>` if it ever gets added, or document that Wikimedia OAuth fully replaces it.
 
 ---
 

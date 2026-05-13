@@ -10,6 +10,7 @@ Planning documents for the second version of wiki-polis. v2 replaces the hosted 
 | `architecture.md` | Technical architecture, data model, and phase plan |
 | `design_principles.md` | Stable design rules — not to be re-debated per feature |
 | `next_steps.md` | Ordered implementation roadmap |
+| `deployment.md` | Step-by-step deployment guide (Toolforge + Cloud VPS) |
 
 ## Directories
 

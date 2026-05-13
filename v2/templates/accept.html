@@ -17,14 +17,36 @@
       <div class="accept-section">
         <h3>Your pseudonym</h3>
         <p>
-          Choose a pseudonym for this consultation. It will appear in public results
-          once the admin enables them. Your Wikimedia username is not visible to other
-          participants, but is held by the platform operator for the duration of the
-          retention period (up to 180 days after the consultation closes).
+          Choose a pseudonym for this consultation. Other participants will see this
+          pseudonym — not your Wikimedia username — alongside any statements you
+          submit, once the moderator enables public results.
         </p>
         <p>
-          Each pseudonym is used only once across the entire platform — it will never
-          appear in any other consultation, for anyone.
+          Each pseudonym is used only once across the entire platform. It will never
+          appear in any other consultation, for anyone, so your contributions here
+          cannot be linked to your activity in any other consultation on this site.
+        </p>
+
+        <h3>What the platform operator holds</h3>
+        <p>
+          The platform operator stores the link between your Wikimedia username and
+          your pseudonym for the duration of the consultation. After the consultation
+          is permanently closed, this link is destroyed within
+          <strong>{{ retention_public_days }} days</strong> (our public commitment;
+          our internal target is {{ reveal_window_end }} days).
+        </p>
+        <p>
+          Any results published on Polis (votes, statements, clustering) contain
+          only your pseudonym — never your Wikimedia username or the link between them.
+        </p>
+
+        <h3>Optional identity reveal after close</h3>
+        <p>
+          Between <strong>{{ reveal_cooldown }} and {{ reveal_window_end }} days</strong>
+          after the consultation closes, you may optionally choose to publicly attach
+          your Wikimedia username to your pseudonym — for example, to take credit for
+          a contribution. This is irreversible during the reveal window. After the
+          window closes, the identity link is destroyed for everyone.
         </p>
 
         <div class="pseudonym-options" id="pseudonym-options">

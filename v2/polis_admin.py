@@ -4,6 +4,12 @@ polis_admin.py — Server-side Particiapi admin operations.
 All calls go to Particiapi (not directly to Polis). Because the stack runs
 with PARTICIAPI_AUTHENTICATION_DISABLED=True, no session cookie is needed
 for server-to-server calls from Flask.
+
+Note on feature parity:
+  Particiapi exposes a minimal API — conversation metadata, statements (read),
+  voting, and results. It does not expose moderation, seed-statement creation,
+  or strict-moderation settings; those remain Polis-only. Methods that cannot
+  be fulfilled raise PolisAdminError so callers can surface a clear message.
 """
 
 import re
@@ -99,62 +105,46 @@ class PolisAdminClient:
     # ── Statements ────────────────────────────────────────────────────────────
 
     def get_statements(self, conversation_id: str) -> tuple[list, list, list]:
-        """Return (pending, approved, hidden) lists for a conversation."""
-        visible = self._req('GET', 'api/v3/comments',
-                            params={'conversation_id': conversation_id})
-        if not isinstance(visible, list):
-            visible = []
+        """Return (pending, approved, hidden).
 
-        pending  = [s for s in visible if s.get('mod') == 0]
-        approved = [s for s in visible if s.get('mod') == 1]
-
-        try:
-            hidden = self._req('GET', 'api/v3/comments',
-                               params={'conversation_id': conversation_id, 'mod': -1})
-            if not isinstance(hidden, list):
-                hidden = []
-        except PolisAdminError:
-            hidden = []
-
-        return pending, approved, hidden
+        Particiapi has no moderation concept — all statements are returned as
+        approved. pending and hidden are always empty.
+        """
+        data = self._req('GET', f'api/conversations/{conversation_id}/statements/')
+        if not isinstance(data, dict):
+            return [], [], []
+        # Normalise to the {tid, txt, ...} shape the admin template expects.
+        approved = [
+            {'tid': int(tid), 'txt': s.get('text', ''), **s}
+            for tid, s in data.items()
+        ]
+        return [], approved, []
 
     def moderate(self, conversation_id: str, tid: int, mod: int) -> None:
-        """Set moderation status: -1=hidden, 0=pending, 1=approved."""
-        self._req('PUT', 'api/v3/comments', json={
-            'conversation_id': conversation_id,
-            'tid': tid,
-            'active': mod >= 0,
-            'mod': mod,
-            'is_meta': False,
-            'velocity': 1.0,
-        })
+        """Not available — Particiapi has no moderation endpoint."""
+        raise PolisAdminError(
+            'Statement moderation is not available through Particiapi.'
+        )
 
     def add_seed(self, conversation_id: str, text: str) -> None:
-        """Create a seed statement (pre-approved, shown to all participants)."""
-        self._req('POST', 'api/v3/comments', json={
-            'conversation_id': conversation_id,
-            'txt': text,
-            'is_seed': True,
-            'vote': 0,
-        })
+        """Not available server-side — Particiapi seed creation requires a browser session."""
+        raise PolisAdminError(
+            'Seed statement creation is not available server-side through Particiapi.'
+        )
 
     # ── Conversation settings ─────────────────────────────────────────────────
 
     def get_settings(self, conversation_id: str) -> dict:
         try:
-            result = self._req('GET', 'api/v3/conversations',
-                               params={'conversation_id': conversation_id})
-            if isinstance(result, list):
-                return result[0] if result else {}
-            return result if isinstance(result, dict) else {}
+            return self._req('GET', f'api/conversations/{conversation_id}')
         except PolisAdminError:
             return {}
 
     def set_strict_moderation(self, conversation_id: str, enabled: bool) -> None:
-        self._req('PUT', 'api/v3/conversations', json={
-            'conversation_id': conversation_id,
-            'strict_moderation': enabled,
-        })
+        """Not available — Particiapi has no strict-moderation setting."""
+        raise PolisAdminError(
+            'Strict moderation is not available through Particiapi.'
+        )
 
     def get_results(self, conversation_id: str) -> dict | None:
         """Return results dict, or None if not yet available."""

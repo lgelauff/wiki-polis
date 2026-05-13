@@ -171,7 +171,7 @@ pa-vote-button::part(button):hover {
   color: white;
 }
 
-pa-statement:state(no-statements) + .vote-buttons { display: none; }
+pa-statement:state(no-statement) + .vote-buttons { display: none; }
 
 /* ── Propose prompt ── */
 
