@@ -104,7 +104,7 @@ Web component integration bugs found and fixed during browser testing:
 - [x] "Skip" button relabelled "Next →"; submit button relabelled "Submit & next"
 
 **Open**
-- [ ] **Bug 4 (high):** If Particiapi rejects the session with `authentication_required`, `authenticationRequired` stays `true`, all vote buttons stay `inactive`, and the page shows blank with no visible error. Currently mitigated by the Flask proxy injecting `?create=true`, but if Particiapi ever requires its own user identity this will surface silently. Add a visible error state or fallback message in conversation.html when `pa-conversation` enters error/unauthenticated state.
+- [x] **Bug 4 (high):** `particiappstatechange` listener added to conversation.html — shows a visible error message when state is `error`, hides vote UI. `unauthenticated` state handled implicitly (proxy prevents it in normal flow).
 - [ ] **Bug 8 (low):** The `<pa-login-button>` popup flow opens `loginURL = base + /auth/login` which is not a valid Flask route through the proxy. The popup auth flow is incompatible with the proxy architecture. Remove or hide `<pa-login-button>` if it ever gets added, or document that Wikimedia OAuth fully replaces it.
 
 ---

@@ -48,124 +48,208 @@
     <p class="muted">This consultation is temporarily paused. Check back soon.</p>
   </div>
 
-  {% elif not conversation.phase_submission %}
+  {% else %}
+
+  {# Build the list of active tabs in display order #}
+  {% set tabs = [] %}
+  {% if conversation.phase_submission %}{% set _ = tabs.append('vote') %}{% endif %}
+  {% if conversation.phase_personal_results or conversation.phase_public_results %}{% set _ = tabs.append('results') %}{% endif %}
+  {% if conversation.phase_argument_mapping %}{% set _ = tabs.append('arguments') %}{% endif %}
+
+  {% if tabs | length == 0 %}
   <div class="landing-section">
-    <p class="muted">Voting has not yet opened. Check back soon.</p>
+    <p class="muted">Nothing is available yet. Check back soon.</p>
   </div>
 
   {% else %}
-  <div class="voting-wrapper">
 
-    <pa-conversation
-      base="{{ request.url_root }}proxy/particiapi"
-      conversation-id="{{ conversation.polis_id }}">
-
-      <pa-statement>
-        <p class="muted">
-          No statements to vote on right now.{% if conversation.phase_submission %} Check back later for new ones.{% endif %}
-        </p>
-      </pa-statement>
-
-      <div class="vote-buttons">
-        <pa-vote-button type="agree">Agree</pa-vote-button>
-        <pa-vote-button type="neutral">Pass</pa-vote-button>
-        <pa-vote-button type="disagree">Disagree</pa-vote-button>
-      </div>
-
-      <div id="propose-prompt" hidden>
-        <p>Want to propose a different statement? (optional)</p>
-        <textarea id="propose-input" maxlength="1000"
-                  placeholder="Propose an alternative statement…"></textarea>
-        <div class="propose-actions">
-          <pa-submit-button submitfor="propose-input">Submit &amp; next</pa-submit-button>
-          <button type="button" id="propose-skip">Next →</button>
-        </div>
-      </div>
-
-    </pa-conversation>
-
+  {% if tabs | length > 1 %}
+  <div class="tab-bar" role="tablist">
+    {% if 'vote' in tabs %}
+    <button class="tab-btn{% if tabs[0] == 'vote' %} tab-btn--active{% endif %}"
+            role="tab" data-tab="tab-vote"
+            aria-selected="{{ 'true' if tabs[0] == 'vote' else 'false' }}">Vote</button>
+    {% endif %}
+    {% if 'results' in tabs %}
+    <button class="tab-btn{% if tabs[0] == 'results' %} tab-btn--active{% endif %}"
+            role="tab" data-tab="tab-results"
+            aria-selected="{{ 'true' if tabs[0] == 'results' else 'false' }}">Results</button>
+    {% endif %}
+    {% if 'arguments' in tabs %}
+    <button class="tab-btn{% if tabs[0] == 'arguments' %} tab-btn--active{% endif %}"
+            role="tab" data-tab="tab-arguments"
+            aria-selected="{{ 'true' if tabs[0] == 'arguments' else 'false' }}">Arguments</button>
+    {% endif %}
   </div>
   {% endif %}
 
-  {% if conversation.phase_personal_results or conversation.phase_public_results %}
-  <div class="landing-section results-section">
-    <h3>Results{% if polis_stats and polis_stats.n_participants %}<span class="muted" style="font-size:13px;font-weight:400;margin-left:.75rem">{{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}</span>{% endif %}</h3>
+  {% if 'vote' in tabs %}
+  <div id="tab-vote" class="tab-panel{% if tabs|length > 1 and tabs[0] != 'vote' %} tab-panel--hidden{% endif %}"
+       role="tabpanel">
+    <div class="voting-wrapper">
 
-    {% if conversation.phase_public_results %}
+      <pa-conversation
+        base="{{ request.url_root }}proxy/particiapi"
+        conversation-id="{{ conversation.polis_id }}">
 
-      {% if results %}
-
-        {% if polis_stats and polis_stats.n_participants < 25 %}
-        <div class="notice-low-n">
-          <strong>Small sample:</strong> these results are based on
-          {{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}.
-          Opinion groups detected from small samples can shift substantially as more people
-          participate — treat group boundaries with caution.
-        </div>
-        {% endif %}
-
-        {% if results.majority.agree or results.majority.disagree %}
-        <div class="results-block">
-          <p class="results-label">Areas of broad consensus</p>
-          {% for r in results.majority.agree %}
-          <div class="results-row">
-            <span class="results-badge results-agree">agree</span>
-            <span class="results-text">"{{ r.statement_text }}"</span>
-            <span class="results-pct">{{ (r.value * 100)|int }}%</span>
-          </div>
-          {% endfor %}
-          {% for r in results.majority.disagree %}
-          <div class="results-row">
-            <span class="results-badge results-disagree">disagree</span>
-            <span class="results-text">"{{ r.statement_text }}"</span>
-            <span class="results-pct">{{ (r.value * 100)|int }}%</span>
-          </div>
-          {% endfor %}
-        </div>
-        {% endif %}
-
-        {% if results.groups %}
-        <div class="results-block">
-          <p class="results-label">
-            {{ results.groups|length }} opinion group{{ 's' if results.groups|length != 1 }} found
+        <pa-statement>
+          <p class="muted">
+            No statements to vote on right now. Check back later for new ones.
           </p>
-          {% for group in results.groups %}
-          <p class="results-group-heading">Group {{ loop.index }}</p>
-          {% for r in group.agree %}
-          <div class="results-row">
-            <span class="results-badge results-agree">agree</span>
-            <span class="results-text">"{{ r.statement_text }}"</span>
-            <span class="results-pct">{{ (r.value * 100)|int }}%</span>
-          </div>
-          {% endfor %}
-          {% for r in group.disagree %}
-          <div class="results-row">
-            <span class="results-badge results-disagree">disagree</span>
-            <span class="results-text">"{{ r.statement_text }}"</span>
-            <span class="results-pct">{{ (r.value * 100)|int }}%</span>
-          </div>
-          {% endfor %}
-          {% endfor %}
+        </pa-statement>
+
+        <div class="vote-buttons">
+          <pa-vote-button type="agree">Agree</pa-vote-button>
+          <pa-vote-button type="neutral">Pass</pa-vote-button>
+          <pa-vote-button type="disagree">Disagree</pa-vote-button>
         </div>
+
+        <div id="propose-prompt" hidden>
+          <p>Want to propose a different statement? (optional)</p>
+          <textarea id="propose-input" maxlength="1000"
+                    placeholder="Propose an alternative statement…"></textarea>
+          <div class="propose-actions">
+            <pa-submit-button submitfor="propose-input">Submit &amp; next</pa-submit-button>
+            <button type="button" id="propose-skip">Next →</button>
+          </div>
+        </div>
+
+        <div id="conv-error" hidden>
+          <p class="muted" id="conv-error-msg">Unable to load statements. Please refresh the page.</p>
+        </div>
+
+      </pa-conversation>
+
+    </div>
+  </div>
+  {% endif %}
+
+  {% if 'results' in tabs %}
+  <div id="tab-results" class="tab-panel{% if tabs|length > 1 and tabs[0] != 'results' %} tab-panel--hidden{% endif %}"
+       role="tabpanel">
+    <div class="landing-section results-section">
+      <h3>Results{% if polis_stats and polis_stats.n_participants %}<span class="muted" style="font-size:13px;font-weight:400;margin-left:.75rem">{{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}</span>{% endif %}</h3>
+
+      {% if conversation.phase_public_results %}
+
+        {% if results %}
+
+          {% if polis_stats and polis_stats.n_participants < 25 %}
+          <div class="notice-low-n">
+            <strong>Small sample:</strong> these results are based on
+            {{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}.
+            Opinion groups detected from small samples can shift substantially as more people
+            participate — treat group boundaries with caution.
+          </div>
+          {% endif %}
+
+          {% if results.majority.agree or results.majority.disagree %}
+          <div class="results-block">
+            <p class="results-label">Areas of broad consensus</p>
+            {% for r in results.majority.agree %}
+            <div class="results-row">
+              <span class="results-badge results-agree">agree</span>
+              <span class="results-text">"{{ r.statement_text }}"</span>
+              <span class="results-pct">{{ (r.value * 100)|int }}%</span>
+            </div>
+            {% endfor %}
+            {% for r in results.majority.disagree %}
+            <div class="results-row">
+              <span class="results-badge results-disagree">disagree</span>
+              <span class="results-text">"{{ r.statement_text }}"</span>
+              <span class="results-pct">{{ (r.value * 100)|int }}%</span>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {% if results.groups %}
+          <div class="results-block">
+            <p class="results-label">
+              {{ results.groups|length }} opinion group{{ 's' if results.groups|length != 1 }} found
+            </p>
+            {% for group in results.groups %}
+            <p class="results-group-heading">Group {{ loop.index }}</p>
+            {% for r in group.agree %}
+            <div class="results-row">
+              <span class="results-badge results-agree">agree</span>
+              <span class="results-text">"{{ r.statement_text }}"</span>
+              <span class="results-pct">{{ (r.value * 100)|int }}%</span>
+            </div>
+            {% endfor %}
+            {% for r in group.disagree %}
+            <div class="results-row">
+              <span class="results-badge results-disagree">disagree</span>
+              <span class="results-text">"{{ r.statement_text }}"</span>
+              <span class="results-pct">{{ (r.value * 100)|int }}%</span>
+            </div>
+            {% endfor %}
+            {% endfor %}
+          </div>
+          {% endif %}
+
+        {% else %}
+          <p class="muted">Results will appear here once enough votes have been cast.</p>
+        {% endif %}
+
+        {% if polis_public_url %}
+        <p style="margin-top:1rem">
+          <a href="{{ polis_public_url }}/{{ conversation.polis_id }}"
+             target="_blank" rel="noopener">View full interactive results on Polis →</a>
+        </p>
         {% endif %}
 
       {% else %}
-        <p class="muted">Results will appear here once enough votes have been cast.</p>
+        <p class="muted">Personal results coming soon.</p>
       {% endif %}
 
-      {% if polis_public_url %}
-      <p style="margin-top:1rem">
-        <a href="{{ polis_public_url }}/{{ conversation.polis_id }}"
-           target="_blank" rel="noopener">View full interactive results on Polis →</a>
-      </p>
-      {% endif %}
-
-    {% else %}
-      <p class="muted">Personal results coming soon.</p>
-    {% endif %}
-
+    </div>
   </div>
   {% endif %}
+
+  {% if 'arguments' in tabs %}
+  <div id="tab-arguments" class="tab-panel{% if tabs|length > 1 and tabs[0] != 'arguments' %} tab-panel--hidden{% endif %}"
+       role="tabpanel">
+    <div class="landing-section">
+      <p class="muted">Arguments coming soon.</p>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if tabs | length > 1 %}
+  <script>
+  (function () {
+    var bar    = document.querySelector('.tab-bar');
+    var btns   = bar.querySelectorAll('.tab-btn');
+    var panels = document.querySelectorAll('.tab-panel');
+
+    bar.addEventListener('click', function (e) {
+      var btn = e.target.closest('.tab-btn');
+      if (!btn) return;
+
+      btns.forEach(function (b) {
+        b.classList.remove('tab-btn--active');
+        b.setAttribute('aria-selected', 'false');
+      });
+      panels.forEach(function (p) {
+        p.classList.add('tab-panel--hidden');
+        p.classList.remove('tab-panel--active');
+      });
+
+      btn.classList.add('tab-btn--active');
+      btn.setAttribute('aria-selected', 'true');
+      var target = document.getElementById(btn.dataset.tab);
+      if (target) {
+        target.classList.remove('tab-panel--hidden');
+        target.classList.add('tab-panel--active');
+      }
+    });
+  }());
+  </script>
+  {% endif %}
+
+  {% endif %}{# end tabs | length > 0 #}
+  {% endif %}{# end active/paused/else #}
 
   {% if conversation.outro_text %}
   <div class="outro-text">
@@ -197,6 +281,19 @@
   conv.addEventListener('particiappvotesubmitsuccess', showPropose);
   document.getElementById('propose-skip').addEventListener('click', dismissPropose);
   conv.addEventListener('particiappstatementsubmitsuccess', dismissPropose);
+
+  var convError    = document.getElementById('conv-error');
+  var convErrorMsg = document.getElementById('conv-error-msg');
+  conv.addEventListener('particiappstatechange', function(e) {
+    if (e.state === 'error') {
+      voteDiv.hidden   = true;
+      prompt.hidden    = true;
+      convError.hidden = false;
+      convErrorMsg.textContent = 'Could not connect to the voting server. Please refresh the page.';
+    } else if (e.state === 'loaded' || e.state === 'loading') {
+      convError.hidden = true;
+    }
+  });
 </script>
 {% endif %}
 

@@ -26,9 +26,8 @@ from flask_wtf.csrf import CSRFProtect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
-from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument,
-                ArgumentVote, Conversation, ConversationInvite,
-                FeaturedStatement, Participant, Participation, db)
+from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Conversation,
+                ConversationInvite, Participant, Participation, db)
 from polis_admin import PolisAdminClient, PolisAdminError, get_polis_stats
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))

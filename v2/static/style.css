@@ -694,3 +694,38 @@ a { color: var(--blue); }
   font-weight: 600;
   margin-top: 2px;
 }
+
+/* ── Phase tabs ── */
+
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 1.25rem;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  padding: 0.5rem 1.1rem;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  letter-spacing: 0.01em;
+}
+
+.tab-btn:hover {
+  color: var(--text);
+}
+
+.tab-btn--active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+}
+
+.tab-panel--hidden {
+  display: none;
+}
