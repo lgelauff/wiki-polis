@@ -94,45 +94,81 @@
   {% if 'vote' in tabs %}
   <div id="tab-vote" class="tab-panel{% if tabs|length > 1 and tabs[0] != 'vote' %} tab-panel--hidden{% endif %}"
        role="tabpanel" aria-labelledby="tab-btn-vote">
-    <div class="voting-wrapper" id="voting-wrapper">
+    <div class="voting-col">
 
       <pa-conversation
         base="{{ request.url_root }}proxy/particiapi"
         conversation-id="{{ conversation.polis_id }}">
 
-        <pa-statement>
-          <p class="muted">
-            No statements to vote on right now. Check back later for new ones.
-          </p>
-        </pa-statement>
+        {# ── Progress row ── #}
+        <div class="vote-progress-row" id="vote-progress-row" style="display:none">
+          <span class="vote-progress-count">
+            <span id="votes-done" class="vote-progress-voted">0</span>
+            <span class="vote-progress-sep"> / </span>
+            <span id="votes-total">?</span>
+          </span>
+          <div class="vote-progress-bar-wrap">
+            <div class="vote-progress-bar" id="vote-progress-bar"></div>
+          </div>
+          <span class="vote-progress-queued" id="vote-progress-queued"></span>
+        </div>
 
-        {# ── Vote choice row ── #}
-        <div class="vote-choice-row" id="vote-choice-row">
-          <button type="button" class="vote-choice" data-type="agree">
-            <span class="vote-dot vote-dot--agree"></span>Agree
-          </button>
-          <button type="button" class="vote-choice" data-type="neutral">
-            <span class="vote-dot vote-dot--pass"></span>Pass
-          </button>
-          <button type="button" class="vote-choice" data-type="disagree">
-            <span class="vote-dot vote-dot--disagree"></span>Disagree
+        {# ── IDLE MODE: statement card with vote buttons + dashed propose inside ── #}
+        <div class="statement-card" id="state-idle">
+          <div class="statement-card-header">
+            <span class="stmt-meta-left">
+              <span class="stmt-dot"></span>
+              <span class="stmt-meta-label">STATEMENT</span>
+            </span>
+            <span class="stmt-meta-right">private vote</span>
+          </div>
+
+          <pa-statement>
+            <p class="muted">No statements to vote on right now. Check back later for new ones.</p>
+          </pa-statement>
+
+          <div class="vote-choice-row" id="vote-choice-row">
+            <button type="button" class="vote-choice" data-type="agree">
+              <span class="vote-dot vote-dot--agree"></span>Agree
+            </button>
+            <button type="button" class="vote-choice" data-type="neutral">
+              <span class="vote-dot vote-dot--pass"></span>Pass
+            </button>
+            <button type="button" class="vote-choice" data-type="disagree">
+              <span class="vote-dot vote-dot--disagree"></span>Disagree
+            </button>
+          </div>
+
+          {# Dashed propose affordance — inside the card, always visible in idle mode #}
+          <button type="button" id="propose-idle-btn" class="propose-affordance">
+            <span class="propose-glyph">+</span>
+            <span class="propose-label">Have a better way to put this?<span class="propose-sub"> propose your own statement</span></span>
+            <span class="propose-meta">OPTIONAL</span>
           </button>
         </div>
 
-        {# ── Propose affordance — 3 states: idle / composing / submitted ── #}
-        <div id="propose-wrapper">
-          {# State A: idle — dashed affordance, always visible #}
-          <button type="button" id="propose-idle-btn" class="propose-affordance">
-            <span class="propose-glyph">+</span>
-            <span class="propose-label">
-              Have a better way to put this?
-              <span class="propose-sub">propose your own statement</span>
-            </span>
-            <span class="propose-meta">OPTIONAL</span>
-          </button>
+        {# ── PROPOSE MODE: slim voted-badge card + compose form below ── #}
+        <div id="state-propose" hidden>
+          <div class="statement-card statement-card--voted">
+            <div class="statement-card-header">
+              <span class="stmt-meta-left">
+                <span class="stmt-dot"></span>
+                <span class="stmt-meta-label">STATEMENT</span>
+              </span>
+              <span id="voted-badge" class="voted-badge" data-type="agree">
+                <span class="voted-badge-check">
+                  <svg width="7" height="7" viewBox="0 0 12 12" fill="none">
+                    <path d="M2 6.5L4.8 9L10 3.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+                YOU VOTED <span id="voted-label">AGREE</span>
+                <button type="button" id="change-vote-btn" class="change-vote-btn">change</button>
+              </span>
+            </div>
+          </div>
 
-          {# State B: composing — textarea + char count + preview + actions #}
-          <div id="propose-composer" class="propose-composer" hidden>
+          {# Compose form — below the card, starts in composing state #}
+          <div id="propose-composer" class="propose-composer propose-below">
             <div class="propose-composer-header">
               <span class="propose-glyph filled">+</span>
               <span class="propose-composer-label">Your alternative phrasing · one sentence, one claim</span>
@@ -152,25 +188,23 @@
               <span class="propose-actions-hint">Goes to moderation, then into the same pool</span>
               <div class="propose-actions-btns">
                 <button type="button" id="propose-skip" class="btn-small btn-muted">Nothing to propose</button>
-                <button type="button" id="propose-submit-btn" class="propose-submit-btn">Submit &amp; next</button>
+                <button type="button" id="propose-submit-btn" class="propose-submit-btn" disabled>Submit &amp; next</button>
               </div>
             </div>
           </div>
 
-          {# State C: submitted — brief confirmation #}
           <div id="propose-submitted" class="propose-submitted" hidden>
-            <span class="check-pill">✓</span>
+            <span class="check-pill">
+              <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6.5L4.8 9L10 3.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
             <span class="propose-submitted-label">PROPOSED — heading to moderation</span>
-            <button type="button" id="propose-next" class="btn-small">Next statement →</button>
+            <button type="button" id="propose-next" class="propose-next-btn">Next statement →</button>
           </div>
         </div>
 
-        {# ── Vote submit row ── #}
-        <div class="vote-submit-row">
-          <button type="button" id="vote-submit-btn" class="vote-submit-btn" disabled>Submit →</button>
-        </div>
-
-        {# ── Hidden pa-vote-buttons / pa-submit-button for actual API submission ── #}
+        {# ── Hidden pa-* elements for API submission ── #}
         <span class="pvb-hidden">
           <pa-vote-button id="pvb-agree"    type="agree">Agree</pa-vote-button>
           <pa-vote-button id="pvb-neutral"  type="neutral">Pass</pa-vote-button>
@@ -537,99 +571,93 @@
 <script nonce="{{ csp_nonce }}">
 (function () {
   var conv             = document.querySelector('pa-conversation');
+  var stateIdle        = document.getElementById('state-idle');
+  var statePropose     = document.getElementById('state-propose');
   var choiceRow        = document.getElementById('vote-choice-row');
-  var submitBtn        = document.getElementById('vote-submit-btn');
+  var votedBadge       = document.getElementById('voted-badge');
+  var votedLabel       = document.getElementById('voted-label');
+  var proposeComposer  = document.getElementById('propose-composer');
+  var proposeSubmitted = document.getElementById('propose-submitted');
+  var proposeInput     = document.getElementById('propose-input');
+  var proposeLen       = document.getElementById('propose-len');
+  var proposeSubmitBtn = document.getElementById('propose-submit-btn');
   var pvb = {
     agree:    document.getElementById('pvb-agree'),
     neutral:  document.getElementById('pvb-neutral'),
     disagree: document.getElementById('pvb-disagree'),
   };
-  var pvbSubmitStmt    = document.getElementById('pvb-submit-stmt');
-  var proposeIdleBtn   = document.getElementById('propose-idle-btn');
-  var proposeComposer  = document.getElementById('propose-composer');
-  var proposeSubmitted = document.getElementById('propose-submitted');
-  var proposeInput     = document.getElementById('propose-input');
-  var proposeLen       = document.getElementById('propose-len');
-  var convError        = document.getElementById('conv-error');
-  var convErrorMsg     = document.getElementById('conv-error-msg');
-  var selected         = null;
+  var pvbSubmitStmt = document.getElementById('pvb-submit-stmt');
+  var convError     = document.getElementById('conv-error');
+  var convErrorMsg  = document.getElementById('conv-error-msg');
 
-  // ── Propose state machine ────────────────────────────────────────────────────
-  function showIdle() {
-    proposeIdleBtn.hidden    = false;
-    proposeComposer.hidden   = true;
-    proposeSubmitted.hidden  = true;
-    proposeInput.value       = '';
-    proposeLen.textContent   = '0';
-  }
+  var LABELS = { agree: 'AGREE', neutral: 'PASS', disagree: 'DISAGREE' };
 
-  function showComposing() {
-    proposeIdleBtn.hidden    = true;
+  // ── Mode: idle ───────────────────────────────────────────────────────────────
+  function enterIdle() {
+    stateIdle.hidden    = false;
+    statePropose.hidden = true;
+    proposeInput.value  = '';
+    proposeLen.textContent = '0';
+    proposeSubmitBtn.disabled = true;
     proposeComposer.hidden   = false;
     proposeSubmitted.hidden  = true;
+  }
+
+  // ── Mode: propose (after vote or idle-propose click) ─────────────────────────
+  function enterPropose(voteType) {
+    stateIdle.hidden    = true;
+    statePropose.hidden = false;
+    if (voteType) {
+      votedLabel.textContent   = LABELS[voteType];
+      votedBadge.dataset.type  = voteType;
+      votedBadge.hidden        = false;
+    } else {
+      votedBadge.hidden = true;     // no vote yet — user clicked idle propose
+    }
+    proposeComposer.hidden  = false;
+    proposeSubmitted.hidden = true;
     proposeInput.focus();
   }
 
-  function showSubmitted() {
-    proposeIdleBtn.hidden    = true;
-    proposeComposer.hidden   = true;
-    proposeSubmitted.hidden  = false;
-    setTimeout(showIdle, 600);
-  }
-
-  // ── Vote selection ───────────────────────────────────────────────────────────
+  // ── Vote buttons — single click = immediate vote ─────────────────────────────
   choiceRow.addEventListener('click', function (e) {
     var btn = e.target.closest('.vote-choice');
     if (!btn) return;
-    selected = btn.dataset.type;
-    choiceRow.querySelectorAll('.vote-choice').forEach(function (b) {
-      b.classList.toggle('vote-choice--selected', b === btn);
-    });
-    submitBtn.disabled = false;
+    var type = btn.dataset.type;
+    pvb[type].click();
+    enterPropose(type);
   });
 
-  // ── Vote submit ──────────────────────────────────────────────────────────────
-  submitBtn.addEventListener('click', function () {
-    if (!selected) return;
-    submitBtn.disabled = true;
-    pvb[selected].click();
+  // ── Idle propose affordance click → compose mode (no vote yet) ───────────────
+  document.getElementById('propose-idle-btn').addEventListener('click', function () {
+    enterPropose(null);
   });
 
-  // ── After vote success: reset selection + open compose ───────────────────────
-  conv.addEventListener('particiappvotesubmitsuccess', function () {
-    selected = null;
-    submitBtn.disabled = true;
-    choiceRow.querySelectorAll('.vote-choice').forEach(function (b) {
-      b.classList.remove('vote-choice--selected');
-    });
-    showComposing();
-  });
+  // ── Change vote → back to idle ───────────────────────────────────────────────
+  document.getElementById('change-vote-btn').addEventListener('click', enterIdle);
 
-  // ── Propose: idle → composing ────────────────────────────────────────────────
-  proposeIdleBtn.addEventListener('click', showComposing);
-
-  // ── Propose: nothing to add → idle ──────────────────────────────────────────
-  document.getElementById('propose-skip').addEventListener('click', showIdle);
-
-  // ── Propose: char count ──────────────────────────────────────────────────────
+  // ── Propose: char count + enable submit ──────────────────────────────────────
   proposeInput.addEventListener('input', function () {
     proposeLen.textContent = proposeInput.value.length;
+    proposeSubmitBtn.disabled = proposeInput.value.trim().length === 0;
   });
 
-  // ── Propose: submit & next ───────────────────────────────────────────────────
-  document.getElementById('propose-submit-btn').addEventListener('click', function () {
-    if (proposeInput.value.trim().length > 0) {
-      pvbSubmitStmt.click();
-      showSubmitted();
-    } else {
-      showIdle();
-    }
+  // ── Propose: nothing to propose → idle ───────────────────────────────────────
+  document.getElementById('propose-skip').addEventListener('click', enterIdle);
+
+  // ── Propose: submit & next ────────────────────────────────────────────────────
+  proposeSubmitBtn.addEventListener('click', function () {
+    if (proposeInput.value.trim().length === 0) return;
+    pvbSubmitStmt.click();
+    proposeComposer.hidden  = true;
+    proposeSubmitted.hidden = false;
+    setTimeout(enterIdle, 600);
   });
 
-  // ── Propose: next statement (submitted state) ────────────────────────────────
-  document.getElementById('propose-next').addEventListener('click', showIdle);
+  // ── Propose: next statement (manual fallback in submitted state) ──────────────
+  document.getElementById('propose-next').addEventListener('click', enterIdle);
 
-  // ── Error ────────────────────────────────────────────────────────────────────
+  // ── Error ─────────────────────────────────────────────────────────────────────
   conv.addEventListener('particiappstatechange', function (e) {
     if (e.state === 'error') {
       convError.hidden = false;
