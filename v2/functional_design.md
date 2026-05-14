@@ -47,15 +47,17 @@ Statements are presented to participants one at a time in a semi-random order. T
 
 The core loop:
 
-1. A statement appears
-2. The participant chooses: **Agree**, **Disagree**, or **Pass**
-3. An inline prompt appears: **"Have a better way to put this?"**
-4. The participant optionally types a short alternative statement and immediately casts their own vote on it
-5. The next statement appears
+1. A statement appears.
+2. The participant selects **Agree**, **Disagree**, or **Pass** — this highlights the chosen option but does not submit yet.
+3. A **"Have a better way to put this?"** box is shown below the selection. The participant can type a short alternative statement, or leave it blank.
+4. The participant clicks **Submit**.
+   - If the textarea is empty: the vote is cast immediately.
+   - If the textarea has content: a brief confirm appears — *"Also share your alternate phrasing with other participants?"* — with **Yes, suggest it** and **No, just my vote** options.
+5. The UI resets for the next statement.
 
-Step 3 appears after every vote — not only after disagree. It is always optional; the participant can skip straight to the next statement.
+The propose box is always visible alongside the vote buttons — it is not a separate step that appears only after voting. This keeps it a natural part of the flow rather than a secondary action.
 
-The proposed alternative is backend-identical to any other submitted statement: it enters the same statement pool and goes through the same moderation queue before others see it. The distinction is purely in emphasis — the prompt is surfaced inside the voting loop rather than hidden in a separate submission form, making contribution feel like a natural part of participation rather than an extra step.
+The proposed alternative is backend-identical to any other submitted statement: it enters the same statement pool and goes through the same moderation queue before others see it.
 
 Whether proposed alternatives require moderation before entering the pool is admin-configurable per conversation.
 
@@ -132,7 +134,7 @@ Admins can:
 - **Close permanently** — irreversible; immediately starts the identity reveal timeline. A confirmation dialog and a prominent warning distinguish this from Pause.
 
 **Participants:**
-- Assign and revoke moderator or admin roles, either globally or for a specific conversation
+- Assign and revoke moderator or admin roles, either globally or for a specific conversation. Global admin is granted by typing the Wikimedia username — the account must already have logged in at least once.
 - Invite specific Wikimedia usernames to an invite-only conversation
 - Remove invites
 
@@ -214,14 +216,18 @@ The reveal action is irreversible for the participant during the reveal window �
 
 ---
 
-## Notifications (future)
+## Notifications
 
-After the initial release, participants should be able to opt in to notifications when:
+At the accept screen, participants are asked whether they want to receive updates about the consultation. Two channels are offered:
+- **Email** — only shown if the participant has a confirmed email address on their Wikimedia account.
+- **Talk page** — a post to their Wikimedia user talk page.
+
+Both are opt-in checkboxes. Neither is pre-ticked. The platform makes clear that these are best-effort notifications and cannot be guaranteed to be sent.
+
+The preference is stored at join time. The actual sending of notifications is a future feature — the infrastructure for collecting consent is in place, but no notifications are dispatched yet. Planned triggers:
 - New statements have been added to a conversation they joined
 - A featured statement they voted on has a new argument
 - Their cluster assignment has changed
-
-Notifications can be delivered to the participant's Wikimedia talk page or by email if they have one set.
 
 ---
 

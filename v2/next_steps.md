@@ -109,6 +109,39 @@ Web component integration bugs found and fixed during browser testing:
 
 ---
 
+## Step 4d — UX improvements + documentation screenshots ✓ (2026-05-14)
+
+**Voting flow redesign**
+- [x] Agree/Pass/Disagree now select-and-highlight rather than immediately submitting; Submit button activates once a choice is made
+- [x] "Have a better way to put this?" propose box is always visible alongside the vote selection (not a post-vote interstitial), with a full-width amber-bordered textarea
+- [x] If propose box has content on Submit, shows inline confirm: "Also share alternate phrasing?" → **Yes, suggest it** (submits statement + vote) / **No, just my vote**
+- [x] Hidden `pa-vote-button` / `pa-submit-button` elements handle actual API submission via programmatic `.click()`
+
+**Accept / join page**
+- [x] Rewritten as plain-English "how it works" intro — less legalistic
+- [x] Privacy & data handling moved into a foldable `<details>` section with placeholder text (to be replaced before public launch)
+- [x] Notification preferences section clarifies these are best-effort and delivery is not guaranteed
+
+**Admin**
+- [x] Grant global admin: dropdown replaced with free-text Wikimedia username input; error shown if account not found
+
+**Visual**
+- [x] v2 badge removed from header
+- [x] `FeaturedStatement.statement_text` nullable field added — Particiapi fallback when API is unavailable; used by screenshot seed
+
+**Documentation screenshots**
+- [x] `.claude/screenshot.py`: seeds isolated DB, starts Flask in dev mode, takes 7 retina screenshots via Playwright, saves to `docs/screenshots/`
+- [x] Screenshots committed: home (logged-out + in), accept, vote, arguments, results, reveal
+
+**Bug fixes**
+- [x] Jinja2 `len()` → `|length` filter in `conversation.html` (Python built-ins not available in Jinja2 sandbox)
+- [x] Reveal consent label: wrapped text in `<span>` so `<strong>` elements don't become separate flex items
+
+**Simulation**
+- [x] `simulate_cats_vs_dogs.py`: Flask registration now uses SQLAlchemy directly (no HTTP dev-login needed); `--flask-url` CLI argument added
+
+---
+
 ## Step 5 — Featured statements + argument mapping tab (defer until Step 4 is community-tested)
 
 ### Design decisions (agreed 2026-05-13)
