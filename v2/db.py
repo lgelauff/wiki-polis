@@ -133,6 +133,7 @@ class FeaturedStatement(db.Model):
     id                  = db.Column(db.Integer, primary_key=True)
     conversation_id     = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
     polis_statement_id  = db.Column(db.Integer, nullable=False)
+    statement_text      = db.Column(db.Text, nullable=True)  # cached from Particiapi; used when API is unavailable
     suggested_by_system = db.Column(db.Boolean, default=False, nullable=False)
     confirmed_by_admin  = db.Column(db.Boolean, default=False, nullable=False)
     created_at          = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))

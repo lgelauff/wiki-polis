@@ -723,8 +723,9 @@ def _register_routes(app: Flask) -> None:
 
             result.append({
                 'fs':        fs,
-                'text':      stmt_texts.get(fs.polis_statement_id,
-                                            f'Statement #{fs.polis_statement_id}'),
+                'text':      stmt_texts.get(fs.polis_statement_id)
+                             or fs.statement_text
+                             or f'Statement #{fs.polis_statement_id}',
                 'pro_args':  _ordered(pro_args, pro_state),
                 'con_args':  _ordered(con_args, con_state),
                 'pro_state': pro_state,

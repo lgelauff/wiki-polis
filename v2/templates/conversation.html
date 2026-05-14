@@ -256,7 +256,7 @@
             <span class="arg-col-heading">For</span>
             <span class="arg-col-count">{{ item.pro_args | length }} argument{{ 's' if item.pro_args | length != 1 }}</span>
           </div>
-          {% if both_gate and len(item.pro_args) >= item.k %}
+          {% if both_gate and item.pro_args | length >= item.k %}
           <p class="arg-vote-prompt">Select the {{ item.k }} most important for-arguments.</p>
           {% endif %}
 
@@ -272,7 +272,7 @@
               {% set vote_count = arg.votes | length %}
               <span class="arg-votes">{{ vote_count }} vote{{ 's' if vote_count != 1 }}</span>
               {% endif %}
-              {% if both_gate and len(item.pro_args) >= item.k and arg.proposer_id != participation.participant_id %}
+              {% if both_gate and item.pro_args | length >= item.k and arg.proposer_id != participation.participant_id %}
                 {% if arg.id in item.voted_ids %}
                 <form method="post" action="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -323,9 +323,9 @@
           <p class="arg-contributed">You passed on for-arguments.</p>
           {% endif %}
 
-          {% if both_gate and len(item.pro_args) < item.k %}
+          {% if both_gate and item.pro_args | length < item.k %}
           <p class="arg-threshold">
-            Importance voting unlocks at {{ item.k }} for-arguments ({{ len(item.pro_args) }} so far).
+            Importance voting unlocks at {{ item.k }} for-arguments ({{ item.pro_args | length }} so far).
           </p>
           {% endif %}
         </div>{# end pro col #}
@@ -337,7 +337,7 @@
             <span class="arg-col-heading">Against</span>
             <span class="arg-col-count">{{ item.con_args | length }} argument{{ 's' if item.con_args | length != 1 }}</span>
           </div>
-          {% if both_gate and len(item.con_args) >= item.k %}
+          {% if both_gate and item.con_args | length >= item.k %}
           <p class="arg-vote-prompt">Select the {{ item.k }} most important against-arguments.</p>
           {% endif %}
 
@@ -353,7 +353,7 @@
               {% set vote_count = arg.votes | length %}
               <span class="arg-votes">{{ vote_count }} vote{{ 's' if vote_count != 1 }}</span>
               {% endif %}
-              {% if both_gate and len(item.con_args) >= item.k and arg.proposer_id != participation.participant_id %}
+              {% if both_gate and item.con_args | length >= item.k and arg.proposer_id != participation.participant_id %}
                 {% if arg.id in item.voted_ids %}
                 <form method="post" action="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -404,9 +404,9 @@
           <p class="arg-contributed">You passed on against-arguments.</p>
           {% endif %}
 
-          {% if both_gate and len(item.con_args) < item.k %}
+          {% if both_gate and item.con_args | length < item.k %}
           <p class="arg-threshold">
-            Importance voting unlocks at {{ item.k }} against-arguments ({{ len(item.con_args) }} so far).
+            Importance voting unlocks at {{ item.k }} against-arguments ({{ item.con_args | length }} so far).
           </p>
           {% endif %}
         </div>{# end con col #}

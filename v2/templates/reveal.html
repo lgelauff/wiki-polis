@@ -133,9 +133,9 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label class="checkbox-label" style="margin-bottom:16px">
       <input type="checkbox" name="confirm" value="1" required>
-      I understand this is irreversible. Link my Wikimedia username
+      <span>I understand this is irreversible. Link my Wikimedia username
       (<strong>{{ username }}</strong>) to my pseudonym
-      (<strong>{{ participation.pseudonym }}</strong>).
+      (<strong>{{ participation.pseudonym }}</strong>).</span>
     </label>
     <div style="display:flex;align-items:center;gap:16px">
       <button type="submit" class="participate-btn" style="background:var(--ink)">Yes, link my identity</button>
