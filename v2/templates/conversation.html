@@ -94,7 +94,7 @@
   {% if 'vote' in tabs %}
   <div id="tab-vote" class="tab-panel{% if tabs|length > 1 and tabs[0] != 'vote' %} tab-panel--hidden{% endif %}"
        role="tabpanel" aria-labelledby="tab-btn-vote">
-    <div class="voting-wrapper">
+    <div class="voting-wrapper" id="voting-wrapper">
 
       <pa-conversation
         base="{{ request.url_root }}proxy/particiapi"
@@ -106,23 +106,43 @@
           </p>
         </pa-statement>
 
-        <div class="vote-buttons">
-          <pa-vote-button type="agree">Agree</pa-vote-button>
-          <pa-vote-button type="neutral">Pass</pa-vote-button>
-          <pa-vote-button type="disagree">Disagree</pa-vote-button>
+        {# ── Visible vote-selection buttons (do not submit on click) ── #}
+        <div class="vote-choice-row" id="vote-choice-row">
+          <button type="button" class="vote-choice" data-type="agree">Agree</button>
+          <button type="button" class="vote-choice" data-type="neutral">Pass</button>
+          <button type="button" class="vote-choice" data-type="disagree">Disagree</button>
         </div>
 
-        <div id="propose-prompt" hidden>
-          <div class="propose-heading">Have a better way to put this?</div>
-          <p>One claim, one sentence. We'll add it to the pool.</p>
-          <textarea id="propose-input" maxlength="1000"
-                    placeholder="Propose an alternative statement…"></textarea>
-          <div class="propose-actions">
-            <span class="propose-hint">optional</span>
-            <button type="button" id="propose-skip">Skip →</button>
-            <pa-submit-button submitfor="propose-input">Submit &amp; next</pa-submit-button>
+        {# ── Propose box + submit ── #}
+        <div id="vote-action-row">
+          <div class="propose-box">
+            <div class="propose-heading">Have a better way to put this?</div>
+            <p class="propose-sub">One claim, one sentence. We'll add it to the pool.</p>
+            <textarea id="propose-input" maxlength="1000"
+                      class="vote-propose-textarea"
+                      placeholder="Suggest an alternate phrasing…"></textarea>
+          </div>
+          <div class="vote-submit-row">
+            <button type="button" id="vote-submit-btn" class="vote-submit-btn" disabled>Submit →</button>
           </div>
         </div>
+
+        {# ── Confirm: also suggest phrasing? ── #}
+        <div id="vote-confirm" class="vote-confirm" hidden>
+          <p>Also share your alternate phrasing with other participants?</p>
+          <div class="vote-confirm-actions">
+            <button type="button" id="vote-confirm-yes">Yes, suggest it</button>
+            <button type="button" id="vote-confirm-no">No, just my vote</button>
+          </div>
+        </div>
+
+        {# ── Hidden pa-vote-buttons for actual API submission ── #}
+        <span class="pvb-hidden">
+          <pa-vote-button id="pvb-agree"    type="agree">Agree</pa-vote-button>
+          <pa-vote-button id="pvb-neutral"  type="neutral">Pass</pa-vote-button>
+          <pa-vote-button id="pvb-disagree" type="disagree">Disagree</pa-vote-button>
+          <pa-submit-button id="pvb-submit-stmt" submitfor="propose-input">suggest</pa-submit-button>
+        </span>
 
         <div id="conv-error" hidden>
           <p class="muted" id="conv-error-msg">Unable to load statements. Please refresh the page.</p>
@@ -481,39 +501,92 @@
 
 {% if conversation.phase_submission and conversation.active and not conversation.paused %}
 <script nonce="{{ csp_nonce }}">
-  var conv    = document.querySelector('pa-conversation');
-  var prompt  = document.getElementById('propose-prompt');
-  var input   = document.getElementById('propose-input');
-  var voteDiv = conv.querySelector('.vote-buttons');
+(function () {
+  var conv        = document.querySelector('pa-conversation');
+  var choiceRow   = document.getElementById('vote-choice-row');
+  var actionRow   = document.getElementById('vote-action-row');
+  var proposeInput= document.getElementById('propose-input');
+  var submitBtn   = document.getElementById('vote-submit-btn');
+  var confirmBox  = document.getElementById('vote-confirm');
+  var convError   = document.getElementById('conv-error');
+  var convErrorMsg= document.getElementById('conv-error-msg');
 
-  function showPropose() {
-    voteDiv.hidden = true;
-    prompt.hidden  = false;
-    input.focus();
+  var pvb = {
+    agree:    document.getElementById('pvb-agree'),
+    neutral:  document.getElementById('pvb-neutral'),
+    disagree: document.getElementById('pvb-disagree'),
+  };
+  var pvbSubmitStmt = document.getElementById('pvb-submit-stmt');
+
+  var selected = null;   // 'agree' | 'neutral' | 'disagree' | null
+
+  // ── Selection ───────────────────────────────────────────────────────────────
+  choiceRow.addEventListener('click', function (e) {
+    var btn = e.target.closest('.vote-choice');
+    if (!btn) return;
+    selected = btn.dataset.type;
+    choiceRow.querySelectorAll('.vote-choice').forEach(function (b) {
+      b.classList.toggle('vote-choice--selected', b === btn);
+    });
+    submitBtn.disabled = false;
+  });
+
+  // Propose textarea: visual feedback when it has content
+  proposeInput.addEventListener('input', function () {
+    proposeInput.classList.toggle('vote-propose-textarea--active', proposeInput.value.trim().length > 0);
+  });
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
+  submitBtn.addEventListener('click', function () {
+    if (!selected) return;
+    if (proposeInput.value.trim().length > 0) {
+      actionRow.hidden = true;
+      confirmBox.hidden = false;
+    } else {
+      castVote();
+    }
+  });
+
+  document.getElementById('vote-confirm-yes').addEventListener('click', function () {
+    confirmBox.hidden = true;
+    // Submit statement then vote (both use current statement ID)
+    pvbSubmitStmt.click();
+    pvb[selected].click();
+  });
+
+  document.getElementById('vote-confirm-no').addEventListener('click', function () {
+    confirmBox.hidden = true;
+    castVote();
+  });
+
+  function castVote() {
+    submitBtn.disabled = true;
+    pvb[selected].click();
   }
 
-  function dismissPropose() {
-    prompt.hidden  = true;
-    input.value    = '';
-    voteDiv.hidden = false;
-  }
+  // ── Reset after vote ────────────────────────────────────────────────────────
+  conv.addEventListener('particiappvotesubmitsuccess', function () {
+    selected = null;
+    proposeInput.value = '';
+    proposeInput.classList.remove('vote-propose-textarea--active');
+    submitBtn.disabled = true;
+    actionRow.hidden = false;
+    confirmBox.hidden = true;
+    choiceRow.querySelectorAll('.vote-choice').forEach(function (b) {
+      b.classList.remove('vote-choice--selected');
+    });
+  });
 
-  conv.addEventListener('particiappvotesubmitsuccess', showPropose);
-  document.getElementById('propose-skip').addEventListener('click', dismissPropose);
-  conv.addEventListener('particiappstatementsubmitsuccess', dismissPropose);
-
-  var convError    = document.getElementById('conv-error');
-  var convErrorMsg = document.getElementById('conv-error-msg');
-  conv.addEventListener('particiappstatechange', function(e) {
+  // ── Error ───────────────────────────────────────────────────────────────────
+  conv.addEventListener('particiappstatechange', function (e) {
     if (e.state === 'error') {
-      voteDiv.hidden   = true;
-      prompt.hidden    = true;
       convError.hidden = false;
       convErrorMsg.textContent = 'Could not connect to the voting server. Please refresh the page.';
     } else if (e.state === 'loaded' || e.state === 'loading') {
       convError.hidden = true;
     }
   });
+}());
 </script>
 {% endif %}
 

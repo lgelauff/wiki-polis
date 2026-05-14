@@ -31,7 +31,7 @@ import sys
 import requests
 
 PARTICIAPI  = "http://localhost:8000"
-FLASK       = "http://localhost:5001"
+FLASK       = "http://localhost:5000"  # overridden by --flask-url
 DB_CONTAINER = "particiapp-docker-postgres-1"
 
 # ── Statements ────────────────────────────────────────────────────────────────
@@ -191,42 +191,34 @@ def create_polis_conversation(topic: str, description: str) -> str:
 
 
 def register_in_flask(zinvite: str) -> None:
-    """Register the conversation in the wiki-polis Flask DB."""
+    """Register the conversation in the wiki-polis Flask DB directly via SQLAlchemy."""
+    from app import create_app
+    from db import Conversation, db as flask_db
+
+    app = create_app()
     base_slug = f"cats-vs-dogs-{zinvite[:6]}"
-    s = requests.Session()
-    r = s.get(f"{FLASK}/dev-login?username=DevUser", allow_redirects=True)
-    if r.status_code != 200:
-        print(f"  Flask login failed ({r.status_code}) — skipping registration")
-        return
-    slug = base_slug
-    for attempt in range(1, 10):
-        r = s.post(f"{FLASK}/admin/conversations/new", allow_redirects=False, data={
-            "slug": slug,
-            "title": "Cats vs Dogs",
-            "polis_id": zinvite,
-            "access_policy": "public",
-            "intro_text": "Should you own a cat or a dog? Vote on the statements below.",
-        })
-        if r.status_code in (200, 302):
-            break
-        if r.status_code == 400:
+    with app.app_context():
+        slug = base_slug
+        for attempt in range(1, 10):
+            if not Conversation.query.filter_by(slug=slug).first():
+                break
             slug = f"{base_slug}-{attempt + 1}"
-            continue
-        print(f"  Flask registration returned {r.status_code}")
-        return
-    if r.status_code in (200, 302):
-        print(f"  Registered: /c/{slug}")
-        # Enable submission + public results phases
-        # Find the conv_id by slug
-        from app import app
-        from db import Conversation, db
-        with app.app_context():
-            conv = Conversation.query.filter_by(slug=slug).first()
-            if conv:
-                conv.phase_submission   = True
-                conv.phase_public_results = True
-                db.session.commit()
-                print(f"  Phases enabled (submission + public results)")
+
+        conv = Conversation(
+            slug=slug,
+            polis_id=zinvite,
+            title='Cats vs Dogs',
+            intro_text='Should you own a cat or a dog? Vote on the statements below.',
+            access_policy='public',
+            active=True,
+            phase_submission=True,
+            phase_personal_results=True,
+            phase_argument_mapping=True,
+            phase_public_results=True,
+        )
+        flask_db.session.add(conv)
+        flask_db.session.commit()
+        print(f"  Registered: /c/{slug}  (all phases enabled)")
 
 
 # ── Main simulation ───────────────────────────────────────────────────────────
@@ -338,7 +330,12 @@ def main():
                         help="Use an existing Polis conversation instead of creating one")
     parser.add_argument("--skip-flask", action="store_true",
                         help="Skip wiki-polis Flask DB registration")
+    parser.add_argument("--flask-url", metavar="URL", default="http://localhost:5000",
+                        help="Base URL of the wiki-polis Flask app (default: http://localhost:5000)")
     args = parser.parse_args()
+
+    global FLASK
+    FLASK = args.flask_url.rstrip("/")
 
     conv_id = args.conversation_id
     if not conv_id:

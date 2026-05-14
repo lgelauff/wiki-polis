@@ -1159,7 +1159,8 @@ def _register_routes(app: Flask) -> None:
         return render_template('admin.html',
                                conversations=conversations,
                                participants=participants,
-                               global_admins=global_admins)
+                               global_admins=global_admins,
+                               admin_error=request.args.get('error'))
 
     @app.get('/admin/conversations/<int:conv_id>')
     @login_required
@@ -1256,8 +1257,12 @@ def _register_routes(app: Flask) -> None:
     @login_required
     @admin_required
     def admin_global_admin_add():
-        participant_id = request.form.get('participant_id', type=int)
-        p = Participant.query.get_or_404(participant_id)
+        mw_username = (request.form.get('mw_username') or '').strip()
+        if not mw_username:
+            return redirect(url_for('admin', error='Enter a Wikimedia username.'))
+        p = Participant.query.filter_by(mw_username=mw_username).first()
+        if not p:
+            return redirect(url_for('admin', error=f'No account found for "{mw_username}". They must log in at least once first.'))
         p.is_global_admin = True
         db.session.commit()
         return redirect(url_for('admin'))
