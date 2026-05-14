@@ -218,6 +218,9 @@
     </div>
     {% endif %}
 
+    {# Votes are hidden while argument mapping is open to prevent anchoring bias. #}
+    {% set arg_voting_open = conversation.active and not conversation.paused and conversation.phase_argument_mapping %}
+
     {% for item in featured_data %}
     {% set fs = item.fs %}
     {% set both_gate = item.pro_gate and item.con_gate %}
@@ -242,8 +245,10 @@
           <div class="arg-card{% if arg.id in item.voted_ids %} arg-card--voted{% endif %}">
             <p class="arg-body">{{ arg.body }}</p>
             <div class="arg-actions">
+              {% if not arg_voting_open %}
               {% set vote_count = arg.votes | length %}
               <span class="arg-votes">{{ vote_count }} vote{{ 's' if vote_count != 1 }}</span>
+              {% endif %}
               {% if both_gate and len(item.pro_args) >= item.k and arg.proposer_id != participation.participant_id %}
                 {% if arg.id in item.voted_ids %}
                 <form method="post" action="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
@@ -313,8 +318,10 @@
           <div class="arg-card{% if arg.id in item.voted_ids %} arg-card--voted{% endif %}">
             <p class="arg-body">{{ arg.body }}</p>
             <div class="arg-actions">
+              {% if not arg_voting_open %}
               {% set vote_count = arg.votes | length %}
               <span class="arg-votes">{{ vote_count }} vote{{ 's' if vote_count != 1 }}</span>
+              {% endif %}
               {% if both_gate and len(item.con_args) >= item.k and arg.proposer_id != participation.participant_id %}
                 {% if arg.id in item.voted_ids %}
                 <form method="post" action="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
