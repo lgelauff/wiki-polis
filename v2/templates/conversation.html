@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ conversation.title }} — wiki-polis{% endblock %}
+
+{% block header_crumb %}
+<span class="header-crumb">
+  <span class="header-crumb-sep">/</span>
+  <span>{{ conversation.title | truncate(40, True, '…') }}</span>
+</span>
+{% endblock %}
 {% block head %}
 {% if conversation.active and not conversation.paused and conversation.phase_submission %}
 <script type="importmap" nonce="{{ csp_nonce }}">
@@ -106,12 +113,14 @@
         </div>
 
         <div id="propose-prompt" hidden>
-          <p>Want to propose a different statement? (optional)</p>
+          <div class="propose-heading">Have a better way to put this?</div>
+          <p>One claim, one sentence. We'll add it to the pool.</p>
           <textarea id="propose-input" maxlength="1000"
                     placeholder="Propose an alternative statement…"></textarea>
           <div class="propose-actions">
+            <span class="propose-hint">optional</span>
+            <button type="button" id="propose-skip">Skip →</button>
             <pa-submit-button submitfor="propose-input">Submit &amp; next</pa-submit-button>
-            <button type="button" id="propose-skip">Next →</button>
           </div>
         </div>
 
@@ -226,19 +235,33 @@
     {% set both_gate = item.pro_gate and item.con_gate %}
 
     <div class="arg-statement" id="fs-{{ fs.id }}">
+      <div class="arg-featured-badge">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1" stroke-linecap="round"
+             stroke-dasharray="1.4 1.6" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/>
+          <ellipse cx="12" cy="12" rx="9" ry="3.5"/>
+          <ellipse cx="12" cy="12" rx="3.5" ry="9"/>
+        </svg>
+        Featured statement
+      </div>
       <p class="arg-statement-text">{{ item.text }}</p>
 
       <div class="arg-columns">
 
         {# ── Pro column ──────────────────────────────── #}
         <div class="arg-col arg-col--pro">
-          <h4 class="arg-col-heading">Pro</h4>
+          <div class="arg-col-heading-row">
+            <span class="arg-col-sign">+</span>
+            <span class="arg-col-heading">For</span>
+            <span class="arg-col-count">{{ item.pro_args | length }} argument{{ 's' if item.pro_args | length != 1 }}</span>
+          </div>
           {% if both_gate and len(item.pro_args) >= item.k %}
-          <p class="arg-vote-prompt muted">Select the {{ item.k }} most important pro arguments.</p>
+          <p class="arg-vote-prompt">Select the {{ item.k }} most important for-arguments.</p>
           {% endif %}
 
           {% if item.pro_args | length == 0 %}
-          <p class="arg-empty muted">No pro arguments yet.</p>
+          <p class="arg-empty">No for-arguments yet.</p>
           {% endif %}
 
           {% for arg in item.pro_args %}
@@ -253,12 +276,17 @@
                 {% if arg.id in item.voted_ids %}
                 <form method="post" action="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn-small btn-voted">✓ most important</button>
+                  <button type="submit" class="btn-arg-vote btn-arg-vote--voted">
+                    ✓ most important
+                  </button>
                 </form>
                 {% else %}
                 <form method="post" action="{{ url_for('argument_vote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn-small">most important</button>
+                  <button type="submit" class="btn-arg-vote">
+                    <span class="btn-arg-vote-dot"></span>
+                    most important
+                  </button>
                 </form>
                 {% endif %}
               {% endif %}
@@ -279,7 +307,7 @@
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="side" value="pro">
               <textarea name="body" maxlength="280" rows="3"
-                        placeholder="Add a pro argument (max 280 characters)…" required></textarea>
+                        placeholder="Add a short for-argument (max 280 characters)…" required></textarea>
               <div class="arg-form-actions">
                 <button type="submit" class="btn-small">Submit</button>
               </div>
@@ -290,28 +318,31 @@
             </form>
           </div>
           {% elif item.pro_proposed %}
-          <p class="arg-contributed muted">You contributed a pro argument.</p>
+          <p class="arg-contributed">You contributed a for-argument.</p>
           {% else %}
-          <p class="arg-contributed muted">You passed on pro arguments.</p>
+          <p class="arg-contributed">You passed on for-arguments.</p>
           {% endif %}
 
           {% if both_gate and len(item.pro_args) < item.k %}
-          <p class="arg-threshold muted" style="font-size:12px">
-            Voting for the most important pro arguments unlocks at {{ item.k }} pro arguments
-            ({{ len(item.pro_args) }} so far).
+          <p class="arg-threshold">
+            Importance voting unlocks at {{ item.k }} for-arguments ({{ len(item.pro_args) }} so far).
           </p>
           {% endif %}
         </div>{# end pro col #}
 
         {# ── Con column ──────────────────────────────── #}
         <div class="arg-col arg-col--con">
-          <h4 class="arg-col-heading">Con</h4>
+          <div class="arg-col-heading-row">
+            <span class="arg-col-sign">−</span>
+            <span class="arg-col-heading">Against</span>
+            <span class="arg-col-count">{{ item.con_args | length }} argument{{ 's' if item.con_args | length != 1 }}</span>
+          </div>
           {% if both_gate and len(item.con_args) >= item.k %}
-          <p class="arg-vote-prompt muted">Select the {{ item.k }} most important con arguments.</p>
+          <p class="arg-vote-prompt">Select the {{ item.k }} most important against-arguments.</p>
           {% endif %}
 
           {% if item.con_args | length == 0 %}
-          <p class="arg-empty muted">No con arguments yet.</p>
+          <p class="arg-empty">No against-arguments yet.</p>
           {% endif %}
 
           {% for arg in item.con_args %}
@@ -326,12 +357,17 @@
                 {% if arg.id in item.voted_ids %}
                 <form method="post" action="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn-small btn-voted">✓ most important</button>
+                  <button type="submit" class="btn-arg-vote btn-arg-vote--voted">
+                    ✓ most important
+                  </button>
                 </form>
                 {% else %}
                 <form method="post" action="{{ url_for('argument_vote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn-small">most important</button>
+                  <button type="submit" class="btn-arg-vote">
+                    <span class="btn-arg-vote-dot"></span>
+                    most important
+                  </button>
                 </form>
                 {% endif %}
               {% endif %}
@@ -352,7 +388,7 @@
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="side" value="con">
               <textarea name="body" maxlength="280" rows="3"
-                        placeholder="Add a con argument (max 280 characters)…" required></textarea>
+                        placeholder="Add a short against-argument (max 280 characters)…" required></textarea>
               <div class="arg-form-actions">
                 <button type="submit" class="btn-small">Submit</button>
               </div>
@@ -363,15 +399,14 @@
             </form>
           </div>
           {% elif item.con_proposed %}
-          <p class="arg-contributed muted">You contributed a con argument.</p>
+          <p class="arg-contributed">You contributed an against-argument.</p>
           {% else %}
-          <p class="arg-contributed muted">You passed on con arguments.</p>
+          <p class="arg-contributed">You passed on against-arguments.</p>
           {% endif %}
 
           {% if both_gate and len(item.con_args) < item.k %}
-          <p class="arg-threshold muted" style="font-size:12px">
-            Voting for the most important con arguments unlocks at {{ item.k }} con arguments
-            ({{ len(item.con_args) }} so far).
+          <p class="arg-threshold">
+            Importance voting unlocks at {{ item.k }} against-arguments ({{ len(item.con_args) }} so far).
           </p>
           {% endif %}
         </div>{# end con col #}

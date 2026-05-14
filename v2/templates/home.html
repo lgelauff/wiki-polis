@@ -6,22 +6,33 @@
 {% if not username %}
 
   <div class="landing-section">
-    <h2>Community deliberation for Wikipedia</h2>
-    <p>
-      wiki-polis is a tool for structured community consultations.
-      Participants vote on short statements, opinion clusters emerge,
-      and a curated argument layer can be added on top.
+    <h2>Where the community actually stands.</h2>
+    <p style="font-size:15px;line-height:1.6;color:var(--body);margin-top:4px;max-width:520px">
+      Vote on short statements, watch opinion clusters emerge.
+      No threads, no replies — just signal.
     </p>
-    <p>Log in with your Wikimedia account to join an open consultation.</p>
-    <a href="{{ url_for('login') }}" class="login-btn">Log in with Wikimedia</a>
+    <p style="font-size:14px;color:var(--muted);margin-top:10px">
+      Log in with your Wikimedia account to join an open consultation.
+    </p>
+    <a href="{{ url_for('login') }}" class="login-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="1" stroke-linecap="round"
+           stroke-dasharray="1.4 1.6" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/>
+        <ellipse cx="12" cy="12" rx="9" ry="3.5"/>
+        <ellipse cx="12" cy="12" rx="3.5" ry="9"/>
+      </svg>
+      Continue with Wikimedia
+    </a>
   </div>
 
   {% if public_conversations %}
   <div class="landing-section">
-    <h2>Open consultations</h2>
+    <p class="section-label">Open consultations</p>
     <ul class="conversation-list">
       {% for c in public_conversations %}
       <li>
+        <span class="conv-dot conv-dot--available"></span>
         <a href="{{ url_for('accept', slug=c.slug) }}">{{ c.title }}</a>
       </li>
       {% endfor %}
@@ -33,10 +44,11 @@
 
   {% if active_joined %}
   <div class="landing-section">
-    <h2>Your consultations</h2>
+    <p class="section-label">Your consultations</p>
     <ul class="conversation-list">
       {% for c in active_joined %}
       <li>
+        <span class="conv-dot conv-dot--active"></span>
         <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
       </li>
       {% endfor %}
@@ -46,10 +58,11 @@
 
   {% if available %}
   <div class="landing-section">
-    <h2>Available consultations</h2>
+    <p class="section-label">Open to you</p>
     <ul class="conversation-list">
       {% for c in available %}
       <li>
+        <span class="conv-dot conv-dot--available"></span>
         <a href="{{ url_for('accept', slug=c.slug) }}">{{ c.title }}</a>
       </li>
       {% endfor %}
@@ -59,10 +72,11 @@
 
   {% if archived_joined %}
   <div class="landing-section">
-    <h2>Archived consultations</h2>
+    <p class="section-label">Closed</p>
     <ul class="conversation-list">
       {% for c in archived_joined %}
       <li>
+        <span class="conv-dot conv-dot--closed"></span>
         <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
         <span class="badge-inactive">closed</span>
       </li>
@@ -73,16 +87,17 @@
 
   {% if moderating %}
   <div class="landing-section">
-    <h2>Consultations you moderate</h2>
+    <p class="section-label">You moderate</p>
     <ul class="conversation-list">
       {% for c in moderating %}
       <li class="conv-mod-row">
-        <span>
+        <span style="display:flex;align-items:center;gap:10px">
+          <span class="conv-dot {{ 'conv-dot--active' if c.active else 'conv-dot--closed' }}"></span>
           <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
           {% if not c.active %}<span class="badge-inactive">closed</span>{% endif %}
         </span>
         <a href="{{ url_for('admin_conversation_detail', conv_id=c.id) }}"
-           class="admin-action-btn">Admin actions</a>
+           class="admin-action-btn">Admin →</a>
       </li>
       {% endfor %}
     </ul>
@@ -91,7 +106,7 @@
 
   {% if not active_joined and not available and not archived_joined and not moderating %}
   <div class="landing-section">
-    <p>No consultations available at the moment. Check back later.</p>
+    <p class="muted">No consultations available at the moment. Check back later.</p>
   </div>
   {% endif %}
 

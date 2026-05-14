@@ -5,31 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}wiki-polis{% endblock %}</title>
   <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   {% block head %}{% endblock %}
 </head>
 <body>
   <header>
     <div class="header-inner">
-      <a href="{{ url_for('index') }}" class="header-title">wiki-polis</a>
-      {% if username %}
-        <span class="header-user">
-          {{ username }}
-          &nbsp;·&nbsp;
+      <div style="display:flex;align-items:center;gap:14px">
+        <a href="{{ url_for('index') }}" class="header-logo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="1" stroke-linecap="round"
+               stroke-dasharray="1.4 1.6" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/>
+            <ellipse cx="12" cy="12" rx="9" ry="3.5"/>
+            <ellipse cx="12" cy="12" rx="3.5" ry="9"/>
+          </svg>
+          <span class="header-title">wiki-polis</span>
+          <span class="header-v2-badge">v2</span>
+        </a>
+        {% block header_crumb %}{% endblock %}
+      </div>
+
+      <div class="header-right">
+        {% if username %}
+          <span class="header-user-chip">
+            <span class="header-user-chip-dot"></span>
+            {{ username }}
+          </span>
           <form method="post" action="{{ url_for('logout') }}" style="display:inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="link-btn">log out</button>
+            <button type="submit" class="header-logout">log out</button>
           </form>
           {% if is_admin %}
-            &nbsp;·&nbsp;
-            <a href="{{ url_for('admin') }}">admin</a>
+            <a href="{{ url_for('admin') }}" class="header-admin-link">admin</a>
           {% endif %}
-        </span>
-      {% else %}
-        <span class="header-user">
-          <a href="{{ url_for('login') }}">log in</a>
-        </span>
-      {% endif %}
+        {% else %}
+          <a href="{{ url_for('login') }}" style="color:var(--muted);font-size:13px;text-decoration:none">log in</a>
+        {% endif %}
+      </div>
     </div>
   </header>
 

@@ -1,136 +1,188 @@
 {% extends "base.html" %}
+
+{% block header_crumb %}
+<span class="header-crumb">
+  <span class="header-crumb-sep">/</span>
+  <span>join</span>
+</span>
+{% endblock %}
+
 {% block content %}
 
-<div class="container">
-  <div class="intro-text">
+<div class="container" style="max-width:700px">
 
-    <h2>{{ conversation.title }}</h2>
+  <div class="accept-crumb">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="1" stroke-linecap="round"
+         stroke-dasharray="1.4 1.6" aria-hidden="true">
+      <circle cx="12" cy="12" r="9"/>
+      <ellipse cx="12" cy="12" rx="9" ry="3.5"/>
+      <ellipse cx="12" cy="12" rx="3.5" ry="9"/>
+    </svg>
+    joining consultation
+  </div>
 
-    {% if conversation.intro_text %}
+  <h1 style="font-size:30px;font-weight:600;color:var(--ink);letter-spacing:-0.02em;line-height:1.2;margin:0">
+    {{ conversation.title }}
+  </h1>
+
+  {% if conversation.intro_text %}
+  <div style="font-size:15px;line-height:1.6;color:var(--body);margin-top:14px">
     {{ conversation.intro_text | safe }}
-    {% endif %}
+  </div>
+  {% endif %}
 
-    <form method="post" action="{{ url_for('accept_post', slug=conversation.slug) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <form method="post" action="{{ url_for('accept_post', slug=conversation.slug) }}" id="accept-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-      <div class="accept-section">
-        <h3>Your pseudonym</h3>
-        <p>
-          Choose a pseudonym for this consultation. Other participants will see this
-          pseudonym — not your Wikimedia username — alongside any statements you
-          submit, once the moderator enables public results.
-        </p>
-        <p>
-          Each pseudonym is used only once across the entire platform. It will never
-          appear in any other consultation, for anyone, so your contributions here
-          cannot be linked to your activity in any other consultation on this site.
-        </p>
-
-        <h3>What the platform operator holds</h3>
-        <p>
-          The platform operator stores the link between your Wikimedia username and
-          your pseudonym for the duration of the consultation. After the consultation
-          is permanently closed, this link is destroyed within
-          <strong>{{ retention_public_days }} days</strong> (our public commitment;
-          our internal target is {{ reveal_window_end }} days).
-        </p>
-        <p>
-          Any results published on Polis (votes, statements, clustering) contain
-          only your pseudonym — never your Wikimedia username or the link between them.
-        </p>
-
-        <h3>Optional identity reveal after close</h3>
-        <p>
-          Between <strong>{{ reveal_cooldown }} and {{ reveal_window_end }} days</strong>
-          after the consultation closes, you may optionally choose to publicly attach
-          your Wikimedia username to your pseudonym — for example, to take credit for
-          a contribution. This is irreversible during the reveal window. After the
-          window closes, the identity link is destroyed for everyone.
-        </p>
-
-        <div class="pseudonym-options" id="pseudonym-options">
-          {% for name in pseudonyms %}
-          <label class="pseudonym-label">
-            <input type="radio" name="pseudonym" value="{{ name }}"
-                   {% if loop.first %}checked{% endif %}>
-            <span class="pseudonym-name">{{ name }}</span>
-          </label>
-          {% endfor %}
-        </div>
-
-        <button type="button" class="reroll-btn" id="reroll-btn">
-          Show different options
-        </button>
+    {# ── Pseudonym card ── #}
+    <div class="pseudonym-card">
+      <div class="pseudonym-card-header">
+        <div class="pseudonym-card-title">Pick a name for this consultation</div>
+        <button type="button" class="reroll-btn" id="reroll-btn">↻ reroll</button>
+      </div>
+      <div class="pseudonym-card-sub">
+        Used inside this consultation only · permanently retired afterwards · unique platform-wide
       </div>
 
-      <div class="accept-section">
-        <h3>Notification preferences</h3>
-        <p>How would you like to be notified of updates to this consultation?</p>
-
-        {% if emailable %}
-        <label class="checkbox-label">
-          <input type="checkbox" name="notify_email" value="1">
-          Email me updates (via your confirmed wiki email address)
+      <div class="pseudonym-options" id="pseudonym-options">
+        {% for name in pseudonyms %}
+        <label class="pseudonym-label">
+          <input type="radio" name="pseudonym" value="{{ name }}"
+                 {% if loop.first %}checked{% endif %}>
+          <span class="pseudonym-name">{{ name }}</span>
         </label>
-        {% else %}
-        <p class="muted">
-          Email notifications are unavailable — your wiki account does not have a confirmed
-          email address. You can
-          <a href="https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal"
-             target="_blank" rel="noopener">confirm your email on Meta-Wiki</a> and return to enable this.
-        </p>
-        {% endif %}
-
-        <label class="checkbox-label">
-          <input type="checkbox" name="notify_talk_page" value="1">
-          Post updates to my talk page
-        </label>
+        {% endfor %}
       </div>
+    </div>
 
-      {% if error %}
-      <p class="error">{{ error }}</p>
+    {# ── Privacy disclosure ── #}
+    <div class="accept-section">
+      <h3>What the platform stores</h3>
+      <p>
+        The platform operator stores the link between your Wikimedia username and your pseudonym
+        for the duration of this consultation. After permanent close, this link is destroyed within
+        <strong>{{ retention_public_days }} days</strong>.
+      </p>
+      <p>
+        Any results published on Polis (votes, statements, clustering) contain only your pseudonym
+        — never your Wikimedia username.
+      </p>
+
+      <h3 style="margin-top:1rem">Optional identity reveal after close</h3>
+      <p>
+        Between <strong>{{ reveal_cooldown }} and {{ reveal_window_end }} days</strong>
+        after close you may optionally attach your Wikimedia username to your pseudonym.
+        This is irreversible during the reveal window. After the window closes, the link is
+        destroyed for everyone.
+      </p>
+    </div>
+
+    {# ── Notification preferences ── #}
+    <div class="accept-section">
+      <h3>Notification preferences</h3>
+      <p>How would you like to be notified of updates to this consultation?</p>
+
+      {% if emailable %}
+      <label class="checkbox-label">
+        <input type="checkbox" name="notify_email" value="1">
+        Email me updates (via your confirmed wiki email address)
+      </label>
+      {% else %}
+      <p class="muted" style="margin-top:.25rem">
+        Email notifications are unavailable — your wiki account does not have a confirmed
+        email address. You can
+        <a href="https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal"
+           target="_blank" rel="noopener">confirm your email on Meta-Wiki</a> and return to enable this.
+      </p>
       {% endif %}
 
-      <button type="submit" class="participate-btn">Join this consultation</button>
+      <label class="checkbox-label">
+        <input type="checkbox" name="notify_talk_page" value="1">
+        Post updates to my talk page
+      </label>
+    </div>
 
-    </form>
-  </div>
+    {# ── Consent ── #}
+    <label class="consent-label" id="consent-label">
+      <input type="checkbox" name="consent" id="consent-check" value="1" required>
+      <span>
+        I understand that votes stay private during this consultation, and that I may optionally
+        choose to publicly link my Wikimedia username to my pseudonym after the consultation closes.
+      </span>
+    </label>
+
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    {% endif %}
+
+    <div style="display:flex;align-items:center;gap:16px;margin-top:22px">
+      <button type="submit" class="participate-btn" id="submit-btn">
+        Enter as <span id="chosen-name">{{ pseudonyms[0] }}</span> →
+      </button>
+      <a href="{{ url_for('index') }}" style="color:var(--muted);font-size:13px;text-decoration:none">Cancel</a>
+    </div>
+
+  </form>
 </div>
 
 <script nonce="{{ csp_nonce }}">
-  document.getElementById('reroll-btn').addEventListener('click', function() {
+(function () {
+  var container = document.getElementById('pseudonym-options');
+  var submitBtn = document.getElementById('submit-btn');
+  var chosenSpan = document.getElementById('chosen-name');
+
+  function getSelected() {
+    var checked = container.querySelector('input[type="radio"]:checked');
+    return checked ? checked.value : null;
+  }
+
+  function updateLabel() {
+    var name = getSelected();
+    if (name && chosenSpan) chosenSpan.textContent = name;
+  }
+
+  container.addEventListener('change', updateLabel);
+
+  function buildOptions(names) {
+    container.innerHTML = '';
+    names.forEach(function (name, i) {
+      var label = document.createElement('label');
+      label.className = 'pseudonym-label';
+      var radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'pseudonym';
+      radio.value = name;
+      if (i === 0) radio.checked = true;
+      var span = document.createElement('span');
+      span.className = 'pseudonym-name';
+      span.textContent = name;
+      label.appendChild(radio);
+      label.appendChild(span);
+      container.appendChild(label);
+    });
+    updateLabel();
+  }
+
+  document.getElementById('reroll-btn').addEventListener('click', function () {
     var btn = this;
     btn.disabled = true;
-    btn.textContent = 'Loading…';
-
+    btn.textContent = '↻ loading…';
     fetch('{{ url_for("accept_pseudonyms", slug=conversation.slug) }}')
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var container = document.getElementById('pseudonym-options');
-        container.innerHTML = '';
-        data.pseudonyms.forEach(function(name, i) {
-          var label = document.createElement('label');
-          label.className = 'pseudonym-label';
-          var radio = document.createElement('input');
-          radio.type = 'radio';
-          radio.name = 'pseudonym';
-          radio.value = name;
-          if (i === 0) radio.checked = true;
-          var span = document.createElement('span');
-          span.className = 'pseudonym-name';
-          span.textContent = name;
-          label.appendChild(radio);
-          label.appendChild(span);
-          container.appendChild(label);
-        });
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        buildOptions(data.pseudonyms);
         btn.disabled = false;
-        btn.textContent = 'Show different options';
+        btn.textContent = '↻ reroll';
       })
-      .catch(function() {
+      .catch(function () {
         btn.disabled = false;
-        btn.textContent = 'Show different options';
+        btn.textContent = '↻ reroll';
       });
   });
+
+  updateLabel();
+}());
 </script>
 
 {% endblock %}
