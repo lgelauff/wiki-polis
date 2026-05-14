@@ -106,37 +106,71 @@
           </p>
         </pa-statement>
 
-        {# ── Visible vote-selection buttons (do not submit on click) ── #}
+        {# ── Vote choice row ── #}
         <div class="vote-choice-row" id="vote-choice-row">
-          <button type="button" class="vote-choice" data-type="agree">Agree</button>
-          <button type="button" class="vote-choice" data-type="neutral">Pass</button>
-          <button type="button" class="vote-choice" data-type="disagree">Disagree</button>
+          <button type="button" class="vote-choice" data-type="agree">
+            <span class="vote-dot vote-dot--agree"></span>Agree
+          </button>
+          <button type="button" class="vote-choice" data-type="neutral">
+            <span class="vote-dot vote-dot--pass"></span>Pass
+          </button>
+          <button type="button" class="vote-choice" data-type="disagree">
+            <span class="vote-dot vote-dot--disagree"></span>Disagree
+          </button>
         </div>
 
-        {# ── Propose box + submit ── #}
-        <div id="vote-action-row">
-          <div class="propose-box">
-            <div class="propose-heading">Have a better way to put this?</div>
-            <p class="propose-sub">One claim, one sentence. We'll add it to the pool.</p>
-            <textarea id="propose-input" maxlength="1000"
-                      class="vote-propose-textarea"
-                      placeholder="Suggest an alternate phrasing…"></textarea>
+        {# ── Propose affordance — 3 states: idle / composing / submitted ── #}
+        <div id="propose-wrapper">
+          {# State A: idle — dashed affordance, always visible #}
+          <button type="button" id="propose-idle-btn" class="propose-affordance">
+            <span class="propose-glyph">+</span>
+            <span class="propose-label">
+              Have a better way to put this?
+              <span class="propose-sub">propose your own statement</span>
+            </span>
+            <span class="propose-meta">OPTIONAL</span>
+          </button>
+
+          {# State B: composing — textarea + char count + preview + actions #}
+          <div id="propose-composer" class="propose-composer" hidden>
+            <div class="propose-composer-header">
+              <span class="propose-glyph filled">+</span>
+              <span class="propose-composer-label">Your alternative phrasing · one sentence, one claim</span>
+              <span class="propose-charcount"><span id="propose-len">0</span> / 280</span>
+            </div>
+            <textarea id="propose-input" class="propose-textarea" maxlength="280"
+                      placeholder="Re-confirmation every five years would balance accountability against admin burnout…"></textarea>
+            <div class="propose-preview">
+              <span class="propose-preview-label">You'll vote first ⟶</span>
+              <div class="propose-preview-buttons">
+                <span class="ppb ppb-agree">Agree</span>
+                <span class="ppb ppb-pass">Pass</span>
+                <span class="ppb ppb-disagree">Disagree</span>
+              </div>
+            </div>
+            <div class="propose-actions">
+              <span class="propose-actions-hint">Goes to moderation, then into the same pool</span>
+              <div class="propose-actions-btns">
+                <button type="button" id="propose-skip" class="btn-small btn-muted">Nothing to propose</button>
+                <button type="button" id="propose-submit-btn" class="propose-submit-btn">Submit &amp; next</button>
+              </div>
+            </div>
           </div>
-          <div class="vote-submit-row">
-            <button type="button" id="vote-submit-btn" class="vote-submit-btn" disabled>Submit →</button>
+
+          {# State C: submitted — brief confirmation #}
+          <div id="propose-submitted" class="propose-submitted" hidden>
+            <span class="check-pill">✓</span>
+            <span class="propose-submitted-label">PROPOSED — heading to moderation</span>
+            <button type="button" id="propose-next" class="btn-small">Next statement →</button>
           </div>
         </div>
 
-        {# ── Confirm: also suggest phrasing? ── #}
-        <div id="vote-confirm" class="vote-confirm" hidden>
-          <p>Also share your alternate phrasing with other participants?</p>
-          <div class="vote-confirm-actions">
-            <button type="button" id="vote-confirm-yes">Yes, suggest it</button>
-            <button type="button" id="vote-confirm-no">No, just my vote</button>
-          </div>
+        {# ── Vote submit row ── #}
+        <div class="vote-submit-row">
+          <button type="button" id="vote-submit-btn" class="vote-submit-btn" disabled>Submit →</button>
         </div>
 
-        {# ── Hidden pa-vote-buttons for actual API submission ── #}
+        {# ── Hidden pa-vote-buttons / pa-submit-button for actual API submission ── #}
         <span class="pvb-hidden">
           <pa-vote-button id="pvb-agree"    type="agree">Agree</pa-vote-button>
           <pa-vote-button id="pvb-neutral"  type="neutral">Pass</pa-vote-button>
@@ -502,25 +536,48 @@
 {% if conversation.phase_submission and conversation.active and not conversation.paused %}
 <script nonce="{{ csp_nonce }}">
 (function () {
-  var conv        = document.querySelector('pa-conversation');
-  var choiceRow   = document.getElementById('vote-choice-row');
-  var actionRow   = document.getElementById('vote-action-row');
-  var proposeInput= document.getElementById('propose-input');
-  var submitBtn   = document.getElementById('vote-submit-btn');
-  var confirmBox  = document.getElementById('vote-confirm');
-  var convError   = document.getElementById('conv-error');
-  var convErrorMsg= document.getElementById('conv-error-msg');
-
+  var conv             = document.querySelector('pa-conversation');
+  var choiceRow        = document.getElementById('vote-choice-row');
+  var submitBtn        = document.getElementById('vote-submit-btn');
   var pvb = {
     agree:    document.getElementById('pvb-agree'),
     neutral:  document.getElementById('pvb-neutral'),
     disagree: document.getElementById('pvb-disagree'),
   };
-  var pvbSubmitStmt = document.getElementById('pvb-submit-stmt');
+  var pvbSubmitStmt    = document.getElementById('pvb-submit-stmt');
+  var proposeIdleBtn   = document.getElementById('propose-idle-btn');
+  var proposeComposer  = document.getElementById('propose-composer');
+  var proposeSubmitted = document.getElementById('propose-submitted');
+  var proposeInput     = document.getElementById('propose-input');
+  var proposeLen       = document.getElementById('propose-len');
+  var convError        = document.getElementById('conv-error');
+  var convErrorMsg     = document.getElementById('conv-error-msg');
+  var selected         = null;
 
-  var selected = null;   // 'agree' | 'neutral' | 'disagree' | null
+  // ── Propose state machine ────────────────────────────────────────────────────
+  function showIdle() {
+    proposeIdleBtn.hidden    = false;
+    proposeComposer.hidden   = true;
+    proposeSubmitted.hidden  = true;
+    proposeInput.value       = '';
+    proposeLen.textContent   = '0';
+  }
 
-  // ── Selection ───────────────────────────────────────────────────────────────
+  function showComposing() {
+    proposeIdleBtn.hidden    = true;
+    proposeComposer.hidden   = false;
+    proposeSubmitted.hidden  = true;
+    proposeInput.focus();
+  }
+
+  function showSubmitted() {
+    proposeIdleBtn.hidden    = true;
+    proposeComposer.hidden   = true;
+    proposeSubmitted.hidden  = false;
+    setTimeout(showIdle, 600);
+  }
+
+  // ── Vote selection ───────────────────────────────────────────────────────────
   choiceRow.addEventListener('click', function (e) {
     var btn = e.target.closest('.vote-choice');
     if (!btn) return;
@@ -531,53 +588,48 @@
     submitBtn.disabled = false;
   });
 
-  // Propose textarea: visual feedback when it has content
-  proposeInput.addEventListener('input', function () {
-    proposeInput.classList.toggle('vote-propose-textarea--active', proposeInput.value.trim().length > 0);
-  });
-
-  // ── Submit ──────────────────────────────────────────────────────────────────
+  // ── Vote submit ──────────────────────────────────────────────────────────────
   submitBtn.addEventListener('click', function () {
     if (!selected) return;
-    if (proposeInput.value.trim().length > 0) {
-      actionRow.hidden = true;
-      confirmBox.hidden = false;
-    } else {
-      castVote();
-    }
-  });
-
-  document.getElementById('vote-confirm-yes').addEventListener('click', function () {
-    confirmBox.hidden = true;
-    // Submit statement then vote (both use current statement ID)
-    pvbSubmitStmt.click();
-    pvb[selected].click();
-  });
-
-  document.getElementById('vote-confirm-no').addEventListener('click', function () {
-    confirmBox.hidden = true;
-    castVote();
-  });
-
-  function castVote() {
     submitBtn.disabled = true;
     pvb[selected].click();
-  }
+  });
 
-  // ── Reset after vote ────────────────────────────────────────────────────────
+  // ── After vote success: reset selection + open compose ───────────────────────
   conv.addEventListener('particiappvotesubmitsuccess', function () {
     selected = null;
-    proposeInput.value = '';
-    proposeInput.classList.remove('vote-propose-textarea--active');
     submitBtn.disabled = true;
-    actionRow.hidden = false;
-    confirmBox.hidden = true;
     choiceRow.querySelectorAll('.vote-choice').forEach(function (b) {
       b.classList.remove('vote-choice--selected');
     });
+    showComposing();
   });
 
-  // ── Error ───────────────────────────────────────────────────────────────────
+  // ── Propose: idle → composing ────────────────────────────────────────────────
+  proposeIdleBtn.addEventListener('click', showComposing);
+
+  // ── Propose: nothing to add → idle ──────────────────────────────────────────
+  document.getElementById('propose-skip').addEventListener('click', showIdle);
+
+  // ── Propose: char count ──────────────────────────────────────────────────────
+  proposeInput.addEventListener('input', function () {
+    proposeLen.textContent = proposeInput.value.length;
+  });
+
+  // ── Propose: submit & next ───────────────────────────────────────────────────
+  document.getElementById('propose-submit-btn').addEventListener('click', function () {
+    if (proposeInput.value.trim().length > 0) {
+      pvbSubmitStmt.click();
+      showSubmitted();
+    } else {
+      showIdle();
+    }
+  });
+
+  // ── Propose: next statement (submitted state) ────────────────────────────────
+  document.getElementById('propose-next').addEventListener('click', showIdle);
+
+  // ── Error ────────────────────────────────────────────────────────────────────
   conv.addEventListener('particiappstatechange', function (e) {
     if (e.state === 'error') {
       convError.hidden = false;

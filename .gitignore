@@ -3,6 +3,12 @@
 notes.md
 tmp/
 
+# Design handoff (local reference only)
+design_handoff_propose_and_arguments/
+
+# Working databases
+*.db
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

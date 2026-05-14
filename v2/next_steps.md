@@ -117,6 +117,13 @@ Web component integration bugs found and fixed during browser testing:
 - [x] If propose box has content on Submit, shows inline confirm: "Also share alternate phrasing?" → **Yes, suggest it** (submits statement + vote) / **No, just my vote**
 - [x] Hidden `pa-vote-button` / `pa-submit-button` elements handle actual API submission via programmatic `.click()`
 
+**Voting flow — design handoff (2026-05-14)**
+- [x] Propose affordance redesigned as dashed button INSIDE the statement card (design handoff spec); replaced separate amber propose-box
+- [x] Three states: idle (dashed, always visible) → composing (expanded composer with textarea, char count, vote preview, submit/skip) → submitted (brief confirmation + auto-dismiss)
+- [x] After vote success (`particiappvotesubmitsuccess`): composer auto-opens for that statement
+- [x] Vote buttons: colored dot indicators (8×8, per-side color) replace colored left-border
+- [x] Composing state shows char count (0 / 280) and vote-preview row ("You'll vote first ⟶")
+
 **Accept / join page**
 - [x] Rewritten as plain-English "how it works" intro — less legalistic
 - [x] Privacy & data handling moved into a foldable `<details>` section with placeholder text (to be replaced before public launch)
