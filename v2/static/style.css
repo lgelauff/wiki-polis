@@ -349,11 +349,19 @@ pa-conversation:state(loading) { opacity: 0.5; }
   margin-bottom: 0;
 }
 
+.propose-stmt-display {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text);
+  opacity: 0.7;
+}
+
 .statement-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .stmt-meta-left {
