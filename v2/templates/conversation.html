@@ -165,6 +165,7 @@
                 <button type="button" id="change-vote-btn" class="change-vote-btn">change</button>
               </span>
             </div>
+            <p id="propose-stmt-display" class="propose-stmt-display"></p>
           </div>
 
           {# Compose form — below the card, starts in composing state #}
@@ -187,8 +188,8 @@
             <div class="propose-actions">
               <span class="propose-actions-hint">Goes to moderation, then into the same pool</span>
               <div class="propose-actions-btns">
-                <button type="button" id="propose-skip" class="btn-small btn-muted">Nothing to propose</button>
-                <button type="button" id="propose-submit-btn" class="propose-submit-btn" disabled>Submit &amp; next</button>
+                <button type="button" id="propose-skip" class="btn-small btn-muted">The current wording is good as it is</button>
+                <button type="button" id="propose-submit-btn" class="propose-submit-btn" disabled>Submit my version as alternative</button>
               </div>
             </div>
           </div>
@@ -591,6 +592,8 @@
   var convErrorMsg  = document.getElementById('conv-error-msg');
 
   var LABELS = { agree: 'AGREE', neutral: 'PASS', disagree: 'DISAGREE' };
+  var originalStmtText = '';
+  var proposeStmtDisplay = document.getElementById('propose-stmt-display');
 
   // ── Mode: idle ───────────────────────────────────────────────────────────────
   function enterIdle() {
@@ -601,10 +604,13 @@
     proposeSubmitBtn.disabled = true;
     proposeComposer.hidden   = false;
     proposeSubmitted.hidden  = true;
+    originalStmtText = '';
   }
 
   // ── Mode: propose (after vote or idle-propose click) ─────────────────────────
-  function enterPropose(voteType) {
+  // stmtText must be captured BEFORE triggering the vote, because pvb.click()
+  // causes the web component to advance pa-statement.text synchronously.
+  function enterPropose(voteType, stmtText) {
     stateIdle.hidden    = true;
     statePropose.hidden = false;
     if (voteType) {
@@ -612,11 +618,17 @@
       votedBadge.dataset.type  = voteType;
       votedBadge.hidden        = false;
     } else {
-      votedBadge.hidden = true;     // no vote yet — user clicked idle propose
+      votedBadge.hidden = true;
     }
     proposeComposer.hidden  = false;
     proposeSubmitted.hidden = true;
+    originalStmtText = (stmtText || '').trim();
+    proposeStmtDisplay.textContent = originalStmtText;
+    proposeInput.value = originalStmtText;
+    proposeLen.textContent = proposeInput.value.length;
+    proposeSubmitBtn.disabled = true;
     proposeInput.focus();
+    proposeInput.select();
   }
 
   // ── Vote buttons — single click = immediate vote ─────────────────────────────
@@ -624,13 +636,18 @@
     var btn = e.target.closest('.vote-choice');
     if (!btn) return;
     var type = btn.dataset.type;
+    // Capture text before clicking — pvb.click() advances pa-statement synchronously
+    var paStmt = conv.querySelector('pa-statement');
+    var stmtText = paStmt ? (paStmt.text || '').trim() : '';
     pvb[type].click();
-    enterPropose(type);
+    enterPropose(type, stmtText);
   });
 
   // ── Idle propose affordance click → compose mode (no vote yet) ───────────────
   document.getElementById('propose-idle-btn').addEventListener('click', function () {
-    enterPropose(null);
+    var paStmt = conv.querySelector('pa-statement');
+    var stmtText = paStmt ? (paStmt.text || '').trim() : '';
+    enterPropose(null, stmtText);
   });
 
   // ── Change vote → back to idle ───────────────────────────────────────────────
@@ -639,7 +656,8 @@
   // ── Propose: char count + enable submit ──────────────────────────────────────
   proposeInput.addEventListener('input', function () {
     proposeLen.textContent = proposeInput.value.length;
-    proposeSubmitBtn.disabled = proposeInput.value.trim().length === 0;
+    var val = proposeInput.value.trim();
+    proposeSubmitBtn.disabled = val.length === 0 || val === originalStmtText.trim();
   });
 
   // ── Propose: nothing to propose → idle ───────────────────────────────────────
@@ -647,7 +665,8 @@
 
   // ── Propose: submit & next ────────────────────────────────────────────────────
   proposeSubmitBtn.addEventListener('click', function () {
-    if (proposeInput.value.trim().length === 0) return;
+    var val = proposeInput.value.trim();
+    if (val.length === 0 || val === originalStmtText.trim()) return;
     pvbSubmitStmt.click();
     proposeComposer.hidden  = true;
     proposeSubmitted.hidden = false;
