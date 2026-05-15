@@ -582,6 +582,11 @@
   var pvbSubmitStmt = document.getElementById('pvb-submit-stmt');
   var convError     = document.getElementById('conv-error');
   var convErrorMsg  = document.getElementById('conv-error-msg');
+  var progressRow   = document.getElementById('vote-progress-row');
+  var votesDone     = document.getElementById('votes-done');
+  var votesTotal    = document.getElementById('votes-total');
+  var progressBar   = document.getElementById('vote-progress-bar');
+  var stmtMetaLabels = document.querySelectorAll('.stmt-meta-label');
 
   var LABELS = { agree: 'AGREE', neutral: 'PASS', disagree: 'DISAGREE' };
   var originalStmtText = '';
@@ -667,6 +672,51 @@
 
   // ── Propose: next statement (manual fallback in submitted state) ──────────────
   document.getElementById('propose-next').addEventListener('click', enterIdle);
+
+  // ── Progress row + statement sequence number (issues #2 and #3) ──────────────
+  conv.addEventListener('particiappstatementschange', function (e) {
+    var statements = e.statements; // Map<number, Statement>
+    var total = statements.size;
+    if (total === 0) return;
+
+    var current = conv.statement; // null if all done
+    var done = total; // default: all done
+    if (current !== null) {
+      var pos = 0;
+      var found = false;
+      statements.forEach(function (stmt) {
+        if (!found) {
+          if (stmt.id === current.id) { done = pos; found = true; }
+          else { pos++; }
+        }
+      });
+    }
+
+    // Show progress row and populate counts
+    progressRow.style.display = '';
+    votesDone.textContent = done;
+    votesTotal.textContent = total;
+
+    // Rebuild segmented bar
+    var segs = [];
+    var i = 0;
+    statements.forEach(function () {
+      var seg = document.createElement('div');
+      seg.className = 'vote-seg ' + (i < done ? 'vote-seg--done' : i === done ? 'vote-seg--current' : 'vote-seg--queued');
+      segs.push(seg);
+      i++;
+    });
+    progressBar.innerHTML = '';
+    segs.forEach(function (seg) { progressBar.appendChild(seg); });
+
+    // Update statement label (issue #3)
+    if (current !== null) {
+      var idx = done + 1; // 1-based index of current statement
+      stmtMetaLabels.forEach(function (el) {
+        el.textContent = 'STATEMENT · #' + idx;
+      });
+    }
+  });
 
   // ── Error ─────────────────────────────────────────────────────────────────────
   conv.addEventListener('particiappstatechange', function (e) {
