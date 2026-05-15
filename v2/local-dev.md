@@ -17,7 +17,7 @@ git clone --recurse-submodules https://gitlab.com/particiapp/particiapp-docker
 If you already cloned without submodules:
 
 ```bash
-rm -rf subprojects/ && git submodule update --init
+git submodule update --init
 ```
 
 ## 2. Create the local compose override
@@ -32,7 +32,9 @@ services:
       - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
 ```
 
-The port defaults to `5432`. If that conflicts with a local postgres, add `POSTGRES_HOST_PORT=5433` (or any free port) to `particiapp-docker/.env` and update the port in `v2/.env` to match.
+The port defaults to `5432`. If that conflicts with a local postgres, add `POSTGRES_HOST_PORT=5433` (or any free port) to `particiapp-docker/.env` (or your shell environment) and update the port in `v2/.env` to match.
+
+`docker compose` automatically reads `particiapp-docker/.env` — it must exist before running step 3. A committed version with dev defaults ships with the repo; you don't need to create it.
 
 ## 3. Start the backend stack
 
