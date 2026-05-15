@@ -30,7 +30,7 @@
       {% for fs in confirmed %}
       <tr>
         <td style="white-space:nowrap">{{ fs.polis_statement_id }}</td>
-        <td style="font-size:13px">—</td>
+        <td style="font-size:13px">{{ fs.statement_text or '—' }}</td>
         <td>
           <form method="post"
                 action="{{ url_for('admin_featured_remove', conv_id=conversation.id, fs_id=fs.id) }}"

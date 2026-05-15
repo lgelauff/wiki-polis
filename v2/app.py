@@ -1363,7 +1363,7 @@ def _register_routes(app: Flask) -> None:
     def admin_conversation_statements(conv_id):
         conv   = _require_mod_for_conv(conv_id)
         client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
-        error  = None
+        error  = request.args.get('error')
         pending = approved = hidden = []
         settings = {}
         try:
@@ -1391,6 +1391,8 @@ def _register_routes(app: Flask) -> None:
             client.moderate(conv.polis_id, tid, mod)
         except PolisAdminError as exc:
             current_app.logger.error('moderate failed: %s', exc)
+            return redirect(url_for('admin_conversation_statements',
+                                    conv_id=conv_id, error=str(exc)))
         return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
 
     @app.post('/admin/conversations/<int:conv_id>/statements/seed')
@@ -1422,6 +1424,27 @@ def _register_routes(app: Flask) -> None:
 
     # ── Featured statements ───────────────────────────────────────────────────
 
+    def _backfill_statement_texts(conv, confirmed: list) -> bool:
+        """Fetch and store statement_text for any confirmed FS that is missing it."""
+        missing = [fs for fs in confirmed if not fs.statement_text]
+        if not missing:
+            return False
+        client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
+        try:
+            _, approved, _ = client.get_statements(conv.polis_id)
+            text_by_tid = {s['tid']: (s.get('text') or s.get('txt', '')) for s in approved}
+        except PolisAdminError:
+            return False
+        changed = False
+        for fs in missing:
+            text = text_by_tid.get(fs.polis_statement_id, '')
+            if text:
+                fs.statement_text = text
+                changed = True
+        if changed:
+            db.session.commit()
+        return changed
+
     @app.get('/admin/conversations/<int:conv_id>/featured')
     @login_required
     def admin_conversation_featured(conv_id):
@@ -1429,6 +1452,7 @@ def _register_routes(app: Flask) -> None:
         confirmed   = (FeaturedStatement.query
                        .filter_by(conversation_id=conv_id)
                        .order_by(FeaturedStatement.created_at).all())
+        _backfill_statement_texts(conv, confirmed)
         confirmed_tids = {fs.polis_statement_id for fs in confirmed}
         candidates  = get_featured_candidates(
             conv.polis_id, current_app.config.get('POLIS_DATABASE_URL', ''))
@@ -1438,6 +1462,17 @@ def _register_routes(app: Flask) -> None:
                                conversation=conv,
                                confirmed=confirmed,
                                candidates=candidates)
+
+    def _fetch_statement_text(conv_polis_id: str, tid: int) -> str:
+        client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
+        try:
+            _, approved, _ = client.get_statements(conv_polis_id)
+            for s in approved:
+                if s.get('tid') == tid:
+                    return s.get('text') or s.get('txt', '')
+        except PolisAdminError:
+            pass
+        return ''
 
     @app.post('/admin/conversations/<int:conv_id>/featured/confirm')
     @login_required
@@ -1451,6 +1486,7 @@ def _register_routes(app: Flask) -> None:
             db.session.add(FeaturedStatement(
                 conversation_id=conv_id,
                 polis_statement_id=tid,
+                statement_text=_fetch_statement_text(conv.polis_id, tid),
                 suggested_by_system=request.form.get('system_suggested') == '1',
                 confirmed_by_admin=True,
             ))
@@ -1469,6 +1505,7 @@ def _register_routes(app: Flask) -> None:
             db.session.add(FeaturedStatement(
                 conversation_id=conv_id,
                 polis_statement_id=tid,
+                statement_text=_fetch_statement_text(conv.polis_id, tid),
                 suggested_by_system=False,
                 confirmed_by_admin=True,
             ))
