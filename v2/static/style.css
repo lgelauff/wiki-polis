@@ -589,41 +589,6 @@ pa-statement:state(no-statement) ~ .propose-affordance { display: none; }
   box-sizing: border-box;
 }
 
-.propose-preview {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
-  padding: 8px 10px;
-  background: var(--surface2);
-  border-radius: 7px;
-}
-
-.propose-preview-label {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.propose-preview-buttons { display: flex; gap: 5px; flex: 1; }
-
-.ppb {
-  flex: 1;
-  padding: 5px 10px;
-  border-radius: 5px;
-  background: var(--surface);
-  font-size: 11.5px;
-  font-weight: 600;
-  text-align: center;
-  opacity: 0.7;
-}
-.ppb-agree    { color: var(--agree);    border: 1px dashed rgba(31,138,91,0.35); }
-.ppb-pass     { color: var(--pass);     border: 1px dashed rgba(61,109,186,0.35); }
-.ppb-disagree { color: var(--disagree); border: 1px dashed rgba(196,74,74,0.35); }
-
 .propose-actions {
   display: flex;
   justify-content: space-between;
