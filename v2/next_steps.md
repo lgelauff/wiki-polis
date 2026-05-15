@@ -117,12 +117,17 @@ Web component integration bugs found and fixed during browser testing:
 - [x] If propose box has content on Submit, shows inline confirm: "Also share alternate phrasing?" → **Yes, suggest it** (submits statement + vote) / **No, just my vote**
 - [x] Hidden `pa-vote-button` / `pa-submit-button` elements handle actual API submission via programmatic `.click()`
 
-**Voting flow — design handoff (2026-05-14)**
-- [x] Propose affordance redesigned as dashed button INSIDE the statement card (design handoff spec); replaced separate amber propose-box
-- [x] Three states: idle (dashed, always visible) → composing (expanded composer with textarea, char count, vote preview, submit/skip) → submitted (brief confirmation + auto-dismiss)
-- [x] After vote success (`particiappvotesubmitsuccess`): composer auto-opens for that statement
-- [x] Vote buttons: colored dot indicators (8×8, per-side color) replace colored left-border
-- [x] Composing state shows char count (0 / 280) and vote-preview row ("You'll vote first ⟶")
+**Voting flow — design handoff (2026-05-14/15)**
+- [x] Two screen modes: **idle** (full card: header + pa-statement + vote buttons + dashed propose inside) and **propose** (slim card: voted badge + compose form below)
+- [x] Vote is a single click — no Submit step; immediately fires API vote and switches to propose mode
+- [x] Voted badge in propose header: ✓ YOU VOTED [AGREE/PASS/DISAGREE] + change link; color-keyed to vote type
+- [x] Compose form below card: starts open; submit disabled until textarea has content; submitted state uses amber/spot palette
+- [x] Clicking idle propose affordance also enters propose mode (compose form, no voted badge)
+- [x] Propose affordance inside idle card: dashed amber button, margin-top 18px from vote buttons
+
+**Voting flow — remaining from design handoff**
+- [ ] **Progress row not populated**: DOM stub exists (`#vote-progress-row`) but no JS reads vote counts or statement totals from `pa-conversation`; row stays hidden. Need to find the right `particiappstatechange` event payload to extract voted/total/queued counts and build `.vote-seg` elements.
+- [ ] **Statement number missing**: Header shows "STATEMENT" not "STATEMENT · #15". Statement sequence number not exposed by web component in a known attribute; needs investigation.
 
 **Accept / join page**
 - [x] Rewritten as plain-English "how it works" intro — less legalistic
@@ -146,6 +151,48 @@ Web component integration bugs found and fixed during browser testing:
 
 **Simulation**
 - [x] `simulate_cats_vs_dogs.py`: Flask registration now uses SQLAlchemy directly (no HTTP dev-login needed); `--flask-url` CLI argument added
+
+---
+
+## Step 4e — Arguments tab design handoff (not started)
+
+Backend logic and routes are complete (Step 5 checklist below). What remains is a **visual and interaction overhaul** of the arguments tab to match `design_handoff_propose_and_arguments/README.md` (Screen 2).
+
+### What needs to change
+
+**Featured statement card** (`.arg-statement`)
+- Shrink padding to 14px 18px; border-radius 12px
+- Inline vote-stat strip: `61% agree · 32% disagree · 7% pass` — replace separate sentiment bar with inline mono text
+
+**Status strip** (currently missing entirely)
+- Pre-gate: amber-tinted strip — "Add or skip on each side, then pick the 2 most important."
+- Post-gate (both sides done): white card with hairline border — "Pick the 2 most important on each side."
+- Right side: FOR / AGAINST progress chips showing gate state → post-gate picks counters (e.g. `FOR · 2/2`)
+
+**Contribute affordance** (currently a plain `<form>` in `.arg-contribute`)
+- Replace with dashed button (same pattern as propose affordance but green/red tinted per side)
+- Three states: idle → composing (inline textarea, Submit + Nothing to add) → submitted ("YOU ADDED ONE") or skipped ("NOTHING TO ADD — skipped [change my mind]")
+- State rendered server-side on page load; JS handles inline transitions
+
+**Argument cards** (`.arg-card`)
+- Add reserved **checkbox slot** on the left (20×20, transparent border pre-gate; materialises post-gate)
+- Add `data-can-vote`, `data-picked`, `data-own`, `data-side`, `data-limit-reached` attributes
+- Selected state: `border: 1.5px solid var(--side-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--side-color) 10%, transparent)`
+- Limit reached (already cast K votes on this side): `opacity: 0.6; cursor: not-allowed`
+- **YOURS pill**: mono 9.5px, side-color background at 12% opacity — shown on user's own argument
+- Importance star count: shown only post-gate (`.arguments-tab[data-voting="false"] .argument-importance { display:none }`)
+- Vote action: click card (not a separate button) when `data-can-vote="true"` → POST to vote/unvote endpoint
+
+**Layout / typography**
+- Two-column grid gap 12px (currently 1.25rem)
+- Argument text 13.5px (currently 14px)
+- Card padding 11px 14px (currently 14px 16px)
+- Column max-width 940px (arguments tab is wider than vote tab)
+
+**What NOT to do (per spec)**
+- Do not redirect to a gate page before loading the tab
+- Do not hide existing arguments until user gates in
+- Do not change layout when voting unlocks — reserve checkbox column from the start
 
 ---
 
