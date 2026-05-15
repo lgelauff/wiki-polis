@@ -126,8 +126,8 @@ Web component integration bugs found and fixed during browser testing:
 - [x] Propose affordance inside idle card: dashed amber button, margin-top 18px from vote buttons
 
 **Voting flow — remaining from design handoff**
-- [ ] **Progress row not populated**: DOM stub exists (`#vote-progress-row`) but no JS reads vote counts or statement totals from `pa-conversation`; row stays hidden. Need to find the right `particiappstatechange` event payload to extract voted/total/queued counts and build `.vote-seg` elements.
-- [ ] **Statement number missing**: Header shows "STATEMENT" not "STATEMENT · #15". Statement sequence number not exposed by web component in a known attribute; needs investigation.
+- [x] **Progress row not populated** (#2): `particiappstatementschange` listener added; derives `done`/`total` from `e.statements` Map position of `conv.statement`; populates bar and count. (PR #21)
+- [x] **Statement number missing** (#3): Same listener updates `.stmt-meta-label` to `STATEMENT · #N`. (PR #21)
 
 **Accept / join page**
 - [x] Rewritten as plain-English "how it works" intro — less legalistic
@@ -151,6 +151,25 @@ Web component integration bugs found and fixed during browser testing:
 
 **Simulation**
 - [x] `simulate_cats_vs_dogs.py`: Flask registration now uses SQLAlchemy directly (no HTTP dev-login needed); `--flask-url` CLI argument added
+
+---
+
+## Step 4f — Bug fixes and local dev improvements (2026-05-15)
+
+**Voting flow fixes (PRs #15, #17)**
+- [x] Propose mode: statement text now stays visible and pre-fills textarea after voting (#1)
+- [x] Removed "You'll vote first →" promise — Particiapi 403s self-votes so it could never be fulfilled (#16)
+- [x] Button labels: "Nothing to propose" → "The current wording is good as it is"; "Submit & next" → "Submit my version as alternative"
+- [x] Submit button greyed out until textarea differs from original text
+
+**Admin fixes (PR #18)**
+- [x] Featured statements admin: confirmed table now shows statement text (fetched from Particiapi on add/confirm; backfilled on page load for older rows) (#8)
+
+**Local dev setup (PR #20)**
+- [x] `v2/local-dev.md`: full setup guide for native Flask + Docker backend
+- [x] `particiapp-docker/docker-compose.local.yaml` (gitignored): exposes postgres to host on configurable port (`POSTGRES_HOST_PORT`)
+- [x] `POLIS_DATABASE_URL` set in `v2/.env`; system suggestions and Polis stats now work locally (#9 / #19)
+- [x] SQL scope bug in `get_featured_candidates` fixed (mixed comma + explicit JOIN) (#19)
 
 ---
 
