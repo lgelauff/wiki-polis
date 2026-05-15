@@ -38,9 +38,10 @@ _FEATURED_CANDIDATES_SQL = """
       COALESCE(vs.n_agree,    0) AS n_agree,
       COALESCE(vs.n_disagree, 0) AS n_disagree,
       COALESCE(vs.n_votes,    0) AS n_votes
-    FROM comments c, z
+    FROM comments c
+    JOIN z ON c.zid = z.zid
     LEFT JOIN vote_stats vs ON c.tid = vs.tid
-    WHERE c.zid = z.zid AND c.active = TRUE AND c.mod >= 0
+    WHERE c.active = TRUE AND c.mod >= 0
     ORDER BY
       c.is_seed DESC,
       (COALESCE(vs.n_votes, 0) >= 3) DESC,
