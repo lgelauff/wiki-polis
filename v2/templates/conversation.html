@@ -674,8 +674,7 @@
   document.getElementById('propose-next').addEventListener('click', enterIdle);
 
   // ── Progress row + statement sequence number (issues #2 and #3) ──────────────
-  conv.addEventListener('particiappstatementschange', function (e) {
-    var statements = e.statements; // Map<number, Statement>
+  function updateProgress(statements) {
     var total = statements.size;
     if (total === 0) return;
 
@@ -709,13 +708,14 @@
     progressBar.innerHTML = '';
     segs.forEach(function (seg) { progressBar.appendChild(seg); });
 
-    // Update statement label (issue #3)
-    if (current !== null) {
-      var idx = done + 1; // 1-based index of current statement
-      stmtMetaLabels.forEach(function (el) {
-        el.textContent = 'STATEMENT · #' + idx;
-      });
-    }
+    // Statement order is randomised per session; a sequence number would be
+    // misleading. Labels stay as the static "STATEMENT" text in the HTML.
+  }
+
+  // particiappstatementschange only fires on poll cycles, not on initial load.
+  // We also call updateProgress from the 'loaded' state handler using conv.client.statements.
+  conv.addEventListener('particiappstatementschange', function (e) {
+    updateProgress(e.statements);
   });
 
   // ── Error ─────────────────────────────────────────────────────────────────────
@@ -725,6 +725,9 @@
       convErrorMsg.textContent = 'Could not connect to the voting server. Please refresh the page.';
     } else if (e.state === 'loaded' || e.state === 'loading') {
       convError.hidden = true;
+    }
+    if (e.state === 'loaded' && conv.client) {
+      updateProgress(conv.client.statements);
     }
   });
 }());

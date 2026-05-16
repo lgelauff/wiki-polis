@@ -2,6 +2,7 @@
 .claude/
 notes.md
 tmp/
+.dev-session
 
 # Design handoff (local reference only)
 design_handoff_propose_and_arguments/

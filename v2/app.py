@@ -346,7 +346,11 @@ def create_app(test_config: dict | None = None) -> Flask:
     _secret_key = (test_config or {}).get('SECRET_KEY') or _read_secret('secret-key')
     if not _secret_key:
         if not app.debug:
-            raise RuntimeError('secret-key is required in production — set SECRET_KEY env var or Kubernetes secret')
+            raise RuntimeError(
+                'SECRET_KEY is not set. '
+                'Generate one with: python -c "import secrets; print(secrets.token_hex(32))" '
+                'then set it as the "secret-key" Kubernetes secret or SECRET_KEY env var.'
+            )
         _secret_key = 'dev-insecure-key'
     app.config['SECRET_KEY'] = _secret_key
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
