@@ -708,6 +708,10 @@
     updateProgress(e.statements);
   });
 
+  conv.addEventListener('particiappvotesubmitsuccess', function () {
+    updateProgress(conv.client.statements);
+  });
+
   // ── Error ─────────────────────────────────────────────────────────────────────
   conv.addEventListener('particiappstatechange', function (e) {
     if (e.state === 'error') {
