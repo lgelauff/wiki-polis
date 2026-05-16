@@ -678,38 +678,28 @@
     var total = statements.size;
     if (total === 0) return;
 
-    var current = conv.statement; // null if all done
-    var done = total; // default: all done
-    if (current !== null) {
-      var pos = 0;
-      var found = false;
-      statements.forEach(function (stmt) {
-        if (!found) {
-          if (stmt.id === current.id) { done = pos; found = true; }
-          else { pos++; }
-        }
-      });
-    }
+    // Count votes from the server-persisted participant record so progress
+    // is accurate across sessions. Own submitted statements are auto-voted
+    // server-side and already included in participant.votes.
+    var votedIds = conv.client.participant.votes;
+    var done = 0;
+    statements.forEach(function (stmt, id) {
+      if (votedIds.has(id)) done++;
+    });
 
     // Show progress row and populate counts
     progressRow.style.display = '';
     votesDone.textContent = done;
     votesTotal.textContent = total;
 
-    // Rebuild segmented bar
-    var segs = [];
-    var i = 0;
-    statements.forEach(function () {
-      var seg = document.createElement('div');
-      seg.className = 'vote-seg ' + (i < done ? 'vote-seg--done' : i === done ? 'vote-seg--current' : 'vote-seg--queued');
-      segs.push(seg);
-      i++;
-    });
+    // Rebuild segmented bar: done segments first, then current (if any), then queued.
+    var current = conv.statement; // null if all done
     progressBar.innerHTML = '';
-    segs.forEach(function (seg) { progressBar.appendChild(seg); });
-
-    // Statement order is randomised per session; a sequence number would be
-    // misleading. Labels stay as the static "STATEMENT" text in the HTML.
+    for (var i = 0; i < total; i++) {
+      var seg = document.createElement('div');
+      seg.className = 'vote-seg ' + (i < done ? 'vote-seg--done' : (current !== null && i === done) ? 'vote-seg--current' : 'vote-seg--queued');
+      progressBar.appendChild(seg);
+    }
   }
 
   // particiappstatementschange only fires on poll cycles, not on initial load.
