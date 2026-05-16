@@ -582,6 +582,11 @@
   var pvbSubmitStmt = document.getElementById('pvb-submit-stmt');
   var convError     = document.getElementById('conv-error');
   var convErrorMsg  = document.getElementById('conv-error-msg');
+  var progressRow   = document.getElementById('vote-progress-row');
+  var votesDone     = document.getElementById('votes-done');
+  var votesTotal    = document.getElementById('votes-total');
+  var progressBar   = document.getElementById('vote-progress-bar');
+  var stmtMetaLabels = document.querySelectorAll('.stmt-meta-label');
 
   var LABELS = { agree: 'AGREE', neutral: 'PASS', disagree: 'DISAGREE' };
   var originalStmtText = '';
@@ -668,6 +673,45 @@
   // ── Propose: next statement (manual fallback in submitted state) ──────────────
   document.getElementById('propose-next').addEventListener('click', enterIdle);
 
+  // ── Progress row + statement sequence number (issues #2 and #3) ──────────────
+  function updateProgress(statements) {
+    var total = statements.size;
+    if (total === 0) return;
+
+    // Count votes from the server-persisted participant record so progress
+    // is accurate across sessions. Own submitted statements are auto-voted
+    // server-side and already included in participant.votes.
+    var votedIds = conv.client.participant.votes;
+    var done = 0;
+    statements.forEach(function (stmt, id) {
+      if (votedIds.has(id)) done++;
+    });
+
+    // Show progress row and populate counts
+    progressRow.style.display = '';
+    votesDone.textContent = done;
+    votesTotal.textContent = total;
+
+    // Rebuild segmented bar: done segments first, then current (if any), then queued.
+    var current = conv.statement; // null if all done
+    progressBar.innerHTML = '';
+    for (var i = 0; i < total; i++) {
+      var seg = document.createElement('div');
+      seg.className = 'vote-seg ' + (i < done ? 'vote-seg--done' : (current !== null && i === done) ? 'vote-seg--current' : 'vote-seg--queued');
+      progressBar.appendChild(seg);
+    }
+  }
+
+  // particiappstatementschange only fires on poll cycles, not on initial load.
+  // We also call updateProgress from the 'loaded' state handler using conv.client.statements.
+  conv.addEventListener('particiappstatementschange', function (e) {
+    updateProgress(e.statements);
+  });
+
+  conv.addEventListener('particiappvotesubmitsuccess', function () {
+    updateProgress(conv.client.statements);
+  });
+
   // ── Error ─────────────────────────────────────────────────────────────────────
   conv.addEventListener('particiappstatechange', function (e) {
     if (e.state === 'error') {
@@ -675,6 +719,9 @@
       convErrorMsg.textContent = 'Could not connect to the voting server. Please refresh the page.';
     } else if (e.state === 'loaded' || e.state === 'loading') {
       convError.hidden = true;
+    }
+    if (e.state === 'loaded' && conv.client) {
+      updateProgress(conv.client.statements);
     }
   });
 }());

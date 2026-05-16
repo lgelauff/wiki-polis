@@ -86,6 +86,7 @@ Security, code quality, and computational social science reviews conducted (2026
 - [x] Lazy nullification in conversation view: clears identity links at `cooldown + window` days post-close
 - [x] Minimum-N warning on results (< 25 participants): shown above public results, does not hide results
 - [x] Consent copy on accept page updated to reflect platform-wide pseudonym uniqueness and operator data retention
+- [ ] **TODO: open GitHub issue** — audit consistency of pseudonymity / vote privacy messaging across all user-facing surfaces (accept page, conversation view, results page, reveal flow). Ensure the platform's promises (votes are private, pseudonym is per-platform, identity reveal is opt-in post-close) are communicated clearly and consistently everywhere a participant might wonder.
 
 ---
 
@@ -126,8 +127,8 @@ Web component integration bugs found and fixed during browser testing:
 - [x] Propose affordance inside idle card: dashed amber button, margin-top 18px from vote buttons
 
 **Voting flow — remaining from design handoff**
-- [x] **Progress row not populated** (#2): `particiappstatementschange` listener added; derives `done`/`total` from `e.statements` Map position of `conv.statement`; populates bar and count. (PR #21)
-- [x] **Statement number missing** (#3): Same listener updates `.stmt-meta-label` to `STATEMENT · #N`. (PR #21)
+- [x] **Progress row not populated**: Fixed in PR #21. Listens to `particiappstatementschange` (poll cycles) and `particiappstatechange` `'loaded'` (initial load via `conv.client.statements`); builds `.vote-seg` elements and shows done/total counts.
+- [x] **Statement number removed**: `STATEMENT · #N` was dropped — statement order is session-specific and random (Fisher-Yates shuffle in `particiapp-web-client.js` → `#fetchStatements`, then re-sorted meta → seed → user-submitted), so a sequence number is meaningless across users. Label stays as plain `STATEMENT`. No information-gain routing is implemented yet (described aspirationally in `functional_design.md`).
 
 **Accept / join page**
 - [x] Rewritten as plain-English "how it works" intro — less legalistic
