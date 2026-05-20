@@ -16,8 +16,8 @@ import coolname
 import nh3
 import requests
 from dotenv import load_dotenv
-from flask import (Flask, abort, current_app, g, make_response, redirect,
-                   render_template, request, session, url_for)
+from flask import (Flask, abort, current_app, g, jsonify, make_response,
+                   redirect, render_template, request, session, url_for)
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
@@ -635,7 +635,6 @@ def _register_routes(app: Flask) -> None:
     @login_required
     @limiter.limit('30 per minute')
     def accept_pseudonyms(slug):
-        from flask import jsonify
         Conversation.query.filter_by(slug=slug).first_or_404()
         return jsonify({'pseudonyms': _generate_pseudonyms(5)})
 
@@ -708,6 +707,18 @@ def _register_routes(app: Flask) -> None:
         voted_ids = {av.argument_id for av in
                      ArgumentVote.query.filter_by(participant_id=pid).all()}
 
+        # Proposer pseudonyms: one query for all proposers across all FSs.
+        all_proposer_ids = {a.proposer_id for fs in fss for a in fs.arguments
+                            if a.proposer_id is not None}
+        if all_proposer_ids:
+            proposer_parts = Participation.query.filter(
+                Participation.participant_id.in_(all_proposer_ids),
+                Participation.conversation_id == conv.id,
+            ).all()
+            proposer_pseudonym_map = {p.participant_id: p.pseudonym for p in proposer_parts}
+        else:
+            proposer_pseudonym_map = {}
+
         result = []
         for fs in fss:
             pro_args = [a for a in fs.arguments if a.side == 'pro']
@@ -725,13 +736,18 @@ def _register_routes(app: Flask) -> None:
             con_proposed = Argument.query.filter_by(
                 proposer_id=pid, featured_statement_id=fs.id, side='con').first()
 
+            ordered_pro = _ordered(pro_args, pro_state)
+            ordered_con = _ordered(con_args, con_state)
+            pro_voted_count = sum(1 for a in ordered_pro if a.id in voted_ids)
+            con_voted_count = sum(1 for a in ordered_con if a.id in voted_ids)
+
             result.append({
                 'fs':        fs,
                 'text':      stmt_texts.get(fs.polis_statement_id)
                              or fs.statement_text
                              or f'Statement #{fs.polis_statement_id}',
-                'pro_args':  _ordered(pro_args, pro_state),
-                'con_args':  _ordered(con_args, con_state),
+                'pro_args':  ordered_pro,
+                'con_args':  ordered_con,
                 'pro_state': pro_state,
                 'con_state': con_state,
                 'voted_ids': voted_ids,
@@ -740,6 +756,9 @@ def _register_routes(app: Flask) -> None:
                 'pro_proposed': pro_proposed,
                 'con_proposed': con_proposed,
                 'k': conv.argument_vote_data.get('K', 2),
+                'pro_voted_count': pro_voted_count,
+                'con_voted_count': con_voted_count,
+                'proposer_pseudonyms': proposer_pseudonym_map,
             })
         return result
 
@@ -873,6 +892,8 @@ def _register_routes(app: Flask) -> None:
         state.argument_order = order
 
         db.session.commit()
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({'ok': True, 'id': arg.id, 'body': body})
         return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
 
     @app.post('/c/<slug>/arguments/<int:fs_id>/<side>/skip')
@@ -901,6 +922,8 @@ def _register_routes(app: Flask) -> None:
         elif not state.skipped:
             state.skipped = True
             db.session.commit()
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({'ok': True})
         return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
 
     @app.post('/c/<slug>/arguments/<int:arg_id>/vote')
@@ -926,7 +949,10 @@ def _register_routes(app: Flask) -> None:
             featured_statement_id=fs.id, side='con').first()
         pro_gate = bool(pro_proposed or (pro_state and pro_state.skipped))
         con_gate = bool(con_proposed or (con_state and con_state.skipped))
+        is_ajax = request.headers.get('X-Requested-With') == 'fetch'
         if not (pro_gate and con_gate):
+            if is_ajax:
+                return jsonify({'ok': False, 'reason': 'gate'}), 403
             abort(403)
 
         # K-approval cap: count existing votes for this side.
@@ -939,10 +965,14 @@ def _register_routes(app: Flask) -> None:
             ArgumentVote.argument_id.in_(side_arg_ids),
         ).count()
         if existing_votes >= k:
+            if is_ajax:
+                return jsonify({'ok': False, 'reason': 'cap'}), 409
             abort(409)   # cap reached
 
         # Can't vote on own argument.
         if arg.proposer_id == part.participant_id:
+            if is_ajax:
+                return jsonify({'ok': False, 'reason': 'own'}), 403
             abort(403)
 
         existing = ArgumentVote.query.filter_by(
@@ -953,6 +983,8 @@ def _register_routes(app: Flask) -> None:
                 participant_id=part.participant_id,
             ))
             db.session.commit()
+        if is_ajax:
+            return jsonify({'ok': True})
         return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
 
     @app.post('/c/<slug>/arguments/<int:arg_id>/unvote')
@@ -964,6 +996,8 @@ def _register_routes(app: Flask) -> None:
         if existing:
             db.session.delete(existing)
             db.session.commit()
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({'ok': True})
         return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
 
     @app.post('/c/<slug>/arguments/<int:arg_id>/delete')
