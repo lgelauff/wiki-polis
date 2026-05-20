@@ -102,6 +102,64 @@ VOTES = [
 
 GROUP_SIZES = [35, 30, 10]   # cat people, dog people, neutral
 
+# ── Seeded arguments for featured statements ──────────────────────────────────
+# Maps statement text → {'pro': [...], 'con': [...]}
+# proposer_id=None marks these as admin-seeded (not participant-authored).
+# Two arguments per side satisfies the default K=2 importance-voting threshold.
+
+FEATURED_ARGS = {
+    "Cats make better companions than dogs": {
+        'pro': [
+            "Cats provide calm, low-maintenance company that suits people who live alone or work from home.",
+            "Unlike dogs, cats don't require constant attention, which respects the owner's time and space.",
+        ],
+        'con': [
+            "Dogs actively engage with their owners and respond to emotions — cats are mostly indifferent.",
+            "Dog owners consistently report lower loneliness scores; cats don't create the same social bond.",
+        ],
+    },
+    "Dogs are more loyal than cats": {
+        'pro': [
+            "Dogs evolved as pack animals and transfer that unconditional loyalty to their human family.",
+            "A dog waits at the door for hours; most cats barely acknowledge an owner's return.",
+        ],
+        'con': [
+            "Cats form genuine attachments — they just express them on their own terms, not on demand.",
+            "Loyalty that requires continuous reinforcement with treats and commands is trained behaviour, not devotion.",
+        ],
+    },
+    "Cats are easier to care for than dogs": {
+        'pro': [
+            "Cats self-groom, use a litter box, and can be left alone for a full working day without issue.",
+            "The time and financial cost of cat ownership is significantly lower than for dogs of comparable size.",
+        ],
+        'con': [
+            "Lower maintenance does not mean easier — litter box upkeep is unpleasant and easy to neglect.",
+            "Dogs adapt their schedule to yours; cats impose their own routine regardless of what the owner needs.",
+        ],
+    },
+    "Dogs are better for families with young children": {
+        'pro': [
+            "Dogs are patient and gentle with children and actively participate in play in a way cats rarely do.",
+            "Growing up with a dog teaches children responsibility, empathy, and respect for animals' boundaries.",
+        ],
+        'con': [
+            "Dogs can bite when startled or stressed, posing a real safety risk around toddlers who can't read warning signs.",
+            "A cat's calmer temperament often makes it a safer choice for homes with very young children.",
+        ],
+    },
+    "Dogs are more affectionate than cats": {
+        'pro': [
+            "Dogs consistently seek physical contact, make eye contact, and show excitement at their owner's presence.",
+            "The neurochemistry of dogs is similar to humans in ways that support genuine emotional bonding.",
+        ],
+        'con': [
+            "Cat affection is freely given rather than performed — a purring cat on your lap chose to be there.",
+            "Measuring affection by enthusiasm conflates neediness with love; cats bond deeply without requiring constant validation.",
+        ],
+    },
+}
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -188,6 +246,55 @@ def create_polis_conversation(topic: str, description: str) -> str:
     )
     psql(f"INSERT INTO zinvites (zid, zinvite) VALUES ({zid}, '{zinvite}');")
     return zinvite
+
+
+def seed_featured_statements(conv_id: str, text_to_tid: dict) -> None:
+    """Create FeaturedStatement + seeded Argument records in the Flask DB."""
+    from app import create_app
+    from db import Argument, Conversation, FeaturedStatement, db as flask_db
+
+    app = create_app()
+    with app.app_context():
+        conv = Conversation.query.filter_by(polis_id=conv_id).first()
+        if not conv:
+            print("  [skip] conversation not found in Flask DB")
+            return
+
+        fs_count = arg_count = 0
+        for text, sides in FEATURED_ARGS.items():
+            tid = text_to_tid.get(text)
+            if tid is None:
+                print(f"  [skip] tid not found for: {text[:60]}")
+                continue
+
+            fs = FeaturedStatement.query.filter_by(
+                conversation_id=conv.id, polis_statement_id=tid).first()
+            if not fs:
+                fs = FeaturedStatement(
+                    conversation_id=conv.id,
+                    polis_statement_id=tid,
+                    confirmed_by_admin=True,
+                    statement_text=text,
+                )
+                flask_db.session.add(fs)
+                flask_db.session.flush()
+                fs_count += 1
+
+            for side in ('pro', 'con'):
+                for body in sides[side]:
+                    exists = Argument.query.filter_by(
+                        featured_statement_id=fs.id, body=body, side=side).first()
+                    if not exists:
+                        flask_db.session.add(Argument(
+                            featured_statement_id=fs.id,
+                            proposer_id=None,
+                            body=body,
+                            side=side,
+                        ))
+                        arg_count += 1
+
+        flask_db.session.commit()
+        print(f"  Seeded {fs_count} featured statement(s), {arg_count} argument(s)")
 
 
 def register_in_flask(zinvite: str) -> None:
@@ -322,6 +429,17 @@ def run_simulation(conv_id: str) -> None:
     print(f"  Particiapi results: {PARTICIAPI}/api/conversations/{conv_id}/results/")
     print(f"  (Polis math runs in the background — typically 30–60 s)")
 
+    # Build text → tid mapping for the caller (used by seed_featured_statements).
+    text_to_tid = {}
+    for tid, votes_idx in pool:
+        if votes_idx < len(SEED_STATEMENTS):
+            text_to_tid[SEED_STATEMENTS[votes_idx]] = tid
+        else:
+            fi = votes_idx - len(SEED_STATEMENTS)
+            if fi < len(FOLLOWUP_STATEMENTS):
+                text_to_tid[FOLLOWUP_STATEMENTS[fi]] = tid
+    return text_to_tid
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
@@ -359,11 +477,18 @@ def main():
                 print(f"  Flask registration failed: {e} (continuing anyway)")
 
     try:
-        run_simulation(conv_id)
+        text_to_tid = run_simulation(conv_id)
     except requests.ConnectionError:
         print("Error: cannot reach Particiapi at http://localhost:8000")
         print("Is the particiapp-docker stack running?  docker compose up")
         sys.exit(1)
+
+    if not args.skip_flask:
+        print("\nSeeding featured statements and arguments...")
+        try:
+            seed_featured_statements(conv_id, text_to_tid)
+        except Exception as e:
+            print(f"  Featured statement seeding failed: {e} (continuing anyway)")
 
 
 if __name__ == "__main__":
