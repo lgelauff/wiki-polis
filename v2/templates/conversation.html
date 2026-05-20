@@ -338,9 +338,19 @@
       {# ── Status strip ── #}
       <div class="arg-status-strip{% if both_gate %} arg-status-strip--gated{% endif %}"
            data-fs="{{ fs.id }}">
+        {% set pro_vote_ready = item.pro_args | length > item.k %}
+        {% set con_vote_ready = item.con_args | length > item.k %}
         <span class="arg-status-text">
           {% if both_gate %}
-            Pick the {{ item.k }} most important on each side. You can change your mind any time.
+            {% if pro_vote_ready and con_vote_ready %}
+              Pick the {{ item.k }} most important on each side. You can change your mind any time.
+            {% elif pro_vote_ready %}
+              Pick the {{ item.k }} most important for-arguments. Voting on the against side unlocks once there are at least {{ item.k + 1 }} arguments there.
+            {% elif con_vote_ready %}
+              Pick the {{ item.k }} most important against-arguments. Voting on the for side unlocks once there are at least {{ item.k + 1 }} arguments there.
+            {% else %}
+              Voting unlocks once each side has at least {{ item.k + 1 }} arguments.
+            {% endif %}
           {% else %}
             Add or skip on each side, then pick the {{ item.k }} most important.
           {% endif %}
@@ -348,7 +358,7 @@
         <div class="arg-status-chips">
           <span class="arg-chip arg-chip--pro{% if item.pro_gate %} arg-chip--done{% endif %}"
                 id="chip-pro-{{ fs.id }}">
-            {% if both_gate %}
+            {% if both_gate and pro_vote_ready %}
               FOR · <span class="chip-count">{{ item.pro_voted_count }}</span>/{{ item.k }}
             {% elif item.pro_gate %}
               <svg width="9" height="7" viewBox="0 0 9 7" fill="none" aria-hidden="true"><path d="M1 3.5L3 5.5L8 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -359,7 +369,7 @@
           </span>
           <span class="arg-chip arg-chip--con{% if item.con_gate %} arg-chip--done{% endif %}"
                 id="chip-con-{{ fs.id }}">
-            {% if both_gate %}
+            {% if both_gate and con_vote_ready %}
               AGAINST · <span class="chip-count">{{ item.con_voted_count }}</span>/{{ item.k }}
             {% elif item.con_gate %}
               <svg width="9" height="7" viewBox="0 0 9 7" fill="none" aria-hidden="true"><path d="M1 3.5L3 5.5L8 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -427,7 +437,7 @@
           {% for arg in item.pro_args %}
           {% set is_own = arg.proposer_id == participation.participant_id %}
           {% set is_picked = arg.id in item.voted_ids %}
-          {% set pro_can_vote = both_gate and item.pro_args | length >= item.k and not is_own %}
+          {% set pro_can_vote = both_gate and item.pro_args | length > item.k and not is_own %}
           {% set pro_limit_reached = pro_can_vote and item.pro_voted_count >= item.k and not is_picked %}
           <div class="argument-card"
                data-side="pro"
@@ -528,7 +538,7 @@
           {% for arg in item.con_args %}
           {% set is_own = arg.proposer_id == participation.participant_id %}
           {% set is_picked = arg.id in item.voted_ids %}
-          {% set con_can_vote = both_gate and item.con_args | length >= item.k and not is_own %}
+          {% set con_can_vote = both_gate and item.con_args | length > item.k and not is_own %}
           {% set con_limit_reached = con_can_vote and item.con_voted_count >= item.k and not is_picked %}
           <div class="argument-card"
                data-side="con"
@@ -1009,31 +1019,44 @@
     if (chip) chip.classList.add('arg-chip--done');
 
     if (bothGated) {
+      var block = document.getElementById('fs-' + fsId);
+      var proWrap = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
+      var conWrap = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="con"]');
+      var kVal = getK(proWrap);  // k is the same for both sides
+      var nPro = block ? block.querySelectorAll('.argument-card[data-side="pro"]').length : 0;
+      var nCon = block ? block.querySelectorAll('.argument-card[data-side="con"]').length : 0;
+      var proReady = nPro > kVal;
+      var conReady = nCon > kVal;
+
       // Transition status strip to post-gate style
       var strip = tab.querySelector('.arg-status-strip[data-fs="' + fsId + '"]');
       if (strip) {
         strip.classList.add('arg-status-strip--gated');
-        strip.querySelector('.arg-status-text').textContent =
-          'Pick the most important on each side. You can change your mind any time.';
-        // Update chips to show counters
+        var stripMsg;
+        if (proReady && conReady) {
+          stripMsg = 'Pick the ' + kVal + ' most important on each side. You can change your mind any time.';
+        } else if (proReady) {
+          stripMsg = 'Pick the ' + kVal + ' most important for-arguments. Voting on the against side unlocks once there are at least ' + (kVal + 1) + ' arguments there.';
+        } else if (conReady) {
+          stripMsg = 'Pick the ' + kVal + ' most important against-arguments. Voting on the for side unlocks once there are at least ' + (kVal + 1) + ' arguments there.';
+        } else {
+          stripMsg = 'Voting unlocks once each side has at least ' + (kVal + 1) + ' arguments.';
+        }
+        strip.querySelector('.arg-status-text').textContent = stripMsg;
+        // Update chips to show vote counters only on sides that are ready
         ['pro', 'con'].forEach(function(s) {
           var c = document.getElementById('chip-' + s + '-' + fsId);
-          if (c) {
-            var wN = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="' + s + '"]');
-            var k = getK(wN);
-            c.innerHTML = s.toUpperCase() === 'PRO' ? 'FOR' : 'AGAINST';
-            c.innerHTML = (s === 'pro' ? 'FOR' : 'AGAINST') + ' · <span class="chip-count">0</span>/' + k;
+          var ready = s === 'pro' ? proReady : conReady;
+          if (c && ready) {
+            c.innerHTML = (s === 'pro' ? 'FOR' : 'AGAINST') + ' · <span class="chip-count">0</span>/' + kVal;
           }
         });
       }
-      // Enable voting on all cards in this block where threshold is met
-      var block = document.getElementById('fs-' + fsId);
+      // Enable voting on cards only where K+1 threshold is met
       if (block) {
         ['pro', 'con'].forEach(function (s) {
-          var sideCards = block.querySelectorAll('.argument-card[data-side="' + s + '"]').length;
-          var wN = block.querySelector('.contribute-wrapper[data-side="' + s + '"]');
-          var k = getK(wN);
-          if (sideCards >= k) {
+          var ready = s === 'pro' ? proReady : conReady;
+          if (ready) {
             block.querySelectorAll('.argument-card[data-side="' + s + '"]').forEach(function (card) {
               if (card.dataset.own !== 'true') {
                 card.dataset.canVote = 'true';
