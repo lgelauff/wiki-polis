@@ -1449,6 +1449,12 @@ a { color: var(--pass); }
   border-color: var(--hairline);
 }
 
+.arg-status-strip--error {
+  background: rgba(196,74,74,0.06);
+  border-color: rgba(196,74,74,0.3);
+  transition: background .2s, border-color .2s;
+}
+
 .arg-status-text {
   font-size: 13px;
   color: var(--body);

@@ -859,6 +859,8 @@ def _register_routes(app: Flask) -> None:
             side=side,
         ).first()
         if existing:
+            if request.headers.get('X-Requested-With') == 'fetch':
+                return jsonify({'ok': True, 'id': existing.id, 'body': existing.body})
             return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
 
         arg = Argument(

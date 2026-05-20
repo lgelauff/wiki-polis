@@ -1126,6 +1126,25 @@
           }
           updateLimitReached(fsId, side);
           updateChip(fsId, side);
+          // Surface the rejection reason in the status strip
+          r.json().then(function (data) {
+            var msgs = {
+              cap:  'You’ve already picked your ' + getK(tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="' + side + '"]')) + ' most important — unvote one first.',
+              gate: 'Voting is not open yet — add or skip on each side first.',
+              own:  'You can’t vote for your own argument.',
+            };
+            var strip = tab.querySelector('.arg-status-strip[data-fs="' + fsId + '"]');
+            if (strip && data && msgs[data.reason]) {
+              var txt = strip.querySelector('.arg-status-text');
+              var prev = txt.textContent;
+              txt.textContent = msgs[data.reason];
+              strip.classList.add('arg-status-strip--error');
+              setTimeout(function () {
+                txt.textContent = prev;
+                strip.classList.remove('arg-status-strip--error');
+              }, 3500);
+            }
+          }).catch(function () {});
         }
       });
     });

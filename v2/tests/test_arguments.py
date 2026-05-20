@@ -257,6 +257,50 @@ def test_unvote_removes_vote(auth_client, arg_conv, arg_part, fs,
         participant_id=participant.id, argument_id=args[0].id).first() is None
 
 
+# ── P1 bug reproductions ──────────────────────────────────────────────────────
+
+AJAX = {'X-Requested-With': 'fetch'}
+
+
+def test_p1_1_duplicate_ajax_submit_returns_json(auth_client, arg_conv, arg_part, fs):
+    """P1-1: Second AJAX submit on the same side must return JSON, not a redirect.
+
+    First call succeeds. Second call hits the duplicate-check branch (line 861)
+    which currently returns redirect() unconditionally — the AJAX header is never
+    checked. Fetch follows the redirect, r.ok is true but r.json() throws, the
+    .catch re-enables submitBtn and leaves the wrapper stuck in composing.
+    """
+    auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit',
+                     data={'side': 'pro', 'body': 'First.'}, headers=AJAX)
+    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit',
+                            data={'side': 'pro', 'body': 'Duplicate.'}, headers=AJAX)
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data is not None, "Expected JSON response, got redirect/HTML"
+    assert data.get('ok') is True
+
+
+def test_p1_2_cap_exceeded_ajax_returns_json_reason(auth_client, arg_conv,
+                                                     arg_part, fs, app):
+    """P1-2: When the K-cap is exceeded via AJAX the server returns the error JSON,
+    but the JS has no code to surface `reason` to the user — the optimistic
+    update silently reverts.
+
+    This test confirms the server side works (returns {'ok': False, 'reason': 'cap'}).
+    The missing feedback is in the JS wireCard handler (no UI response to reason).
+    """
+    _pass_gate(auth_client, 'arg-conv', fs.id)
+    args = _make_args(fs.id, None, 'pro', 5)
+    auth_client.post(f'/c/arg-conv/arguments/{args[0].id}/vote', headers=AJAX)
+    auth_client.post(f'/c/arg-conv/arguments/{args[1].id}/vote', headers=AJAX)
+    resp = auth_client.post(f'/c/arg-conv/arguments/{args[2].id}/vote', headers=AJAX)
+    assert resp.status_code == 409
+    data = resp.get_json()
+    assert data == {'ok': False, 'reason': 'cap'}
+    # NOTE: the JS wireCard handler checks only r.ok and reverts the optimistic
+    # update, but never reads data.reason or shows any message to the user.
+
+
 # ── Moderator delete ──────────────────────────────────────────────────────────
 
 def test_moderator_can_delete_argument(admin_client, arg_conv, arg_part, fs,
