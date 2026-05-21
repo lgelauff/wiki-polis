@@ -58,18 +58,25 @@ POSTGRES_PASSWORD=<strong-random-password>
 SECRET_KEY=<strong-random-secret>
 ```
 
-Bind Particiapi to localhost only — add to `docker-compose.yml` under the `particiapi` service:
+Bind Particiapi to the VM's private IP so Toolforge can reach it (both are in the same WMCS OpenStack network). Add to `docker-compose.yml` under the `particiapi` service:
 
 ```yaml
 ports:
-  - "127.0.0.1:8000:8000"
+  - "0.0.0.0:8000:8000"
+restart: unless-stopped
+```
+
+Add `restart: unless-stopped` to all services and enable Docker on boot:
+
+```bash
+sudo systemctl enable docker
 ```
 
 Start the stack:
 
 ```bash
 docker compose up -d
-curl http://127.0.0.1:8000/api/conversations/   # should return []
+curl http://localhost:8000/api/conversations/   # should return []
 ```
 
 ### Backups
@@ -138,12 +145,13 @@ Toolforge picks this up automatically from `~/www/python/src/uwsgi.ini`.
 ### Set secrets
 
 ```bash
-toolforge envvars create SECRET_KEY            "your-strong-secret"
-toolforge envvars create OAUTH_CLIENT_ID       "your-oauth-client-id"
-toolforge envvars create OAUTH_CLIENT_SECRET   "your-oauth-secret"
-toolforge envvars create OAUTH_REDIRECT_URI    "https://wiki-polis.toolforge.org/oauth-callback"
-toolforge envvars create PARTICIAPI_BASE_URL   "http://<vps-internal-ip>:8000"
-toolforge envvars create DATABASE_URL          "mysql+pymysql://s_wiki_polis:<password>@tools.db.svc.wikimedia.cloud/s_wiki_polis__main"
+toolforge envvars create SECRET_KEY            'your-strong-secret'
+toolforge envvars create OAUTH_CLIENT_ID       'your-oauth-client-id'
+toolforge envvars create OAUTH_CLIENT_SECRET   'your-oauth-secret'
+toolforge envvars create OAUTH_REDIRECT_URI    'https://wiki-polis.toolforge.org/oauth-callback'
+toolforge envvars create PARTICIAPI_BASE_URL   'http://<vps-internal-ip>:8000'
+toolforge envvars create DATABASE_URL          'mysql+pymysql://s_wiki_polis:<password>@tools.db.svc.wikimedia.cloud/s_wiki_polis__main?charset=utf8mb4'
+toolforge envvars create admin-users           'YourWikimediaUsername'
 ```
 
 > `toolforge envvars list` shows names only, not values. Keep a local record.
@@ -154,7 +162,7 @@ The app reads secrets from env vars via `_read_secret()` in `app.py`. On Kuberne
 
 ```bash
 sql tools   # opens MySQL as your tool user
-CREATE DATABASE s_wiki_polis__main CHARACTER SET utf8;
+CREATE DATABASE s_wiki_polis__main CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 exit
 ```
 
@@ -170,11 +178,11 @@ Fill in `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, and `OAUTH_REDIRECT_URI` envva
 ### Initialise database and start
 
 ```bash
+# Run init-db BEFORE starting the webservice — requests before tables exist return 500
+flask --app ~/wiki-polis/v2/app.py init-db
+
 cd ~   # webservice commands must run from home directory
 toolforge webservice python3.13 start
-
-# Run once to create tables
-flask --app ~/wiki-polis/v2/app.py init-db
 ```
 
 ### Verify
