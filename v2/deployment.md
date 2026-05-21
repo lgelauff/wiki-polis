@@ -153,7 +153,7 @@ toolforge envvars create OAUTH_CLIENT_SECRET   'your-oauth-secret'
 toolforge envvars create OAUTH_REDIRECT_URI    'https://wiki-polis.toolforge.org/oauth-callback'
 toolforge envvars create PARTICIAPI_BASE_URL   'http://<vps-internal-ip>:8000'
 toolforge envvars create DATABASE_URL          'mysql+pymysql://s_wiki_polis:<password>@tools.db.svc.wikimedia.cloud/s_wiki_polis__main?charset=utf8mb4'
-toolforge envvars create admin-users           'YourWikimediaUsername'
+toolforge envvars create ADMIN_USERS           'YourWikimediaUsername'
 ```
 
 > `toolforge envvars list` shows names only, not values. Keep a local record.

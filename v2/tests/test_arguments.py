@@ -411,8 +411,8 @@ def test_unvote_wrong_conversation_returns_404(auth_client, arg_conv, arg_part,
                               phase_argument_mapping=True)
     db.session.add(other_conv)
     db.session.commit()
-    Participation(participant_id=participant.id, conversation_id=other_conv.id,
-                  pseudonym='test-wolf')
+    db.session.add(Participation(participant_id=participant.id,
+                                 conversation_id=other_conv.id, pseudonym='test-wolf'))
     other_fs = FeaturedStatement(conversation_id=other_conv.id,
                                  polis_statement_id=99, confirmed_by_admin=True)
     db.session.add(other_fs)

@@ -340,8 +340,15 @@ def create_app(test_config: dict | None = None) -> Flask:
             'DEV MODE: SQLALCHEMY_DATABASE_URI forced to %s '
             '(ignoring database-url secret / DATABASE_URL env)', dev_url)
     else:
-        app.config['SQLALCHEMY_DATABASE_URI'] = (
-            _read_secret('database-url') or 'sqlite:///dev.db')
+        _db_url = (test_config or {}).get('SQLALCHEMY_DATABASE_URI') or _read_secret('database-url')
+        if not _db_url:
+            raise RuntimeError(
+                'DATABASE_URL is not set. '
+                'Set it via `toolforge envvars create DATABASE_URL <url>` or the '
+                'DATABASE_URL environment variable. '
+                'Example: mysql+pymysql://s_wiki_polis:<pw>@tools.db.svc.wikimedia.cloud/s_wiki_polis__main?charset=utf8mb4'
+            )
+        app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 
     _secret_key = (test_config or {}).get('SECRET_KEY') or _read_secret('secret-key')
     if not _secret_key:
