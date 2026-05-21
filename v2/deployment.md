@@ -37,17 +37,23 @@ Request a WMCS Cloud VPS project at https://horizon.wikimedia.org, or use any VP
 #### Provisioning in WMCS Horizon (step by step)
 
 1. Go to https://horizon.wikimedia.org and select your project (e.g. `wiki-polis-backend`)
-2. **SSH key** *(first time only)*: Compute → Key Pairs → Import Public Key. Name it `wiki-polis-vps`, paste `~/.ssh/wiki_polis_vps.pub`. Skip if already imported.
-3. **Launch instance**: Compute → Instances → Launch Instance
+2. **Launch instance**: Compute → Instances → Launch Instance
    - **Instance Name**: `wiki-polis-backend`
    - **Description**: `wiki-polis Particiapi/Polis backend` (optional but useful)
    - **Source**: `Debian 12 Bookworm` (do not use Debian 13 Trixie — still testing; avoid Fedora, CoreOS, Magnum)
    - **Flavor**: `g4.cores2.ram4.disk20` (2 vCPU, 4 GB RAM, 20 GB disk)
-   - **Networks / Network Ports / Security Groups**: leave all as default
-   - **Configuration / Server Groups / Scheduler Hints / Metadata**: leave all as default
-   - **Key Pair**: select the key you imported above
-4. **Assign a floating IP**: Networks → Floating IPs → Allocate IP, then Associate it to the instance. This is the IP you'll SSH to.
-5. **Note the private IP**: shown in Compute → Instances. This is the internal OpenStack IP used for Toolforge → Particiapi traffic.
+   - **Networks / Network Ports / Security Groups / Configuration / Server Groups / Scheduler Hints / Metadata**: leave all as default
+   - **Key Pair**: leave as default (WMCS managed instances use LDAP, not Horizon keys — see SSH section below)
+3. **Note the private IP**: shown in Compute → Instances. This is the internal OpenStack IP used for Toolforge → Particiapi traffic. It is fixed for the lifetime of the instance.
+
+> **Floating IP**: WMCS quotas are limited. A floating IP is not needed — use the ProxyJump config below instead.
+
+#### SSH key setup (one-time)
+
+WMCS Cloud VPS instances use **LDAP-managed SSH keys**, not Horizon Key Pairs. You must upload your public key to the Wikimedia Identity Management system:
+
+1. Go to https://idm.wikimedia.org/keymanagement/ and upload your public key (`~/.ssh/<your-vps-key>.pub`)
+2. Your SSH username is the **"SSH access (shell) username"** shown at idm.wikimedia.org — note it down
 
 #### SSH config
 
@@ -55,9 +61,10 @@ Add to `~/.ssh/config` on your local machine:
 
 ```
 Host wiki-polis-vps
-    HostName <floating-ip>
-    User debian
-    IdentityFile ~/.ssh/wiki_polis_vps
+    HostName wiki-polis-backend.wiki-polis-backend.eqiad1.wikimedia.cloud
+    User <your-shell-username>
+    IdentityFile ~/.ssh/<your-vps-key>
+    ProxyJump <your-shell-username>@bastion.wmcloud.org
 ```
 
 Then connect with:
@@ -71,9 +78,12 @@ On first connect, accept the host fingerprint prompt — SSH will save it to `~/
 ### Install Docker
 
 ```bash
-sudo apt update && sudo apt install -y docker.io docker-compose-plugin
+sudo apt update && sudo apt install -y docker.io docker-compose
 sudo usermod -aG docker $USER && newgrp docker
+sudo systemctl enable docker
 ```
+
+> Note: Debian 12 repos provide `docker-compose` (standalone v1) and `docker.io` as separate packages. `docker-compose-plugin` is not available. Use `docker-compose` (with hyphen) instead of `docker compose` (with space).
 
 ### Deploy particiapp-docker
 
@@ -102,16 +112,12 @@ restart: unless-stopped
 
 > Do **not** use `0.0.0.0:8000:8000` — that binds Particiapi on all interfaces including any public IP. The WMCS security group is your only other defence.
 
-Add `restart: unless-stopped` to all services and enable Docker on boot:
-
-```bash
-sudo systemctl enable docker
-```
+Add `restart: unless-stopped` to all services.
 
 Start the stack:
 
 ```bash
-docker compose up -d
+docker-compose up -d
 curl http://localhost:8000/api/conversations/   # should return []
 ```
 
