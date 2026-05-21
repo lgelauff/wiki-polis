@@ -305,8 +305,8 @@ def test_p1_2_cap_exceeded_ajax_returns_json_reason(auth_client, arg_conv,
 
 def test_moderator_can_delete_argument(admin_client, arg_conv, arg_part, fs,
                                        admin_participant, app):
-    Participation(participant_id=admin_participant.id,
-                  conversation_id=arg_conv.id, pseudonym='admin-fox')
+    db.session.add(Participation(participant_id=admin_participant.id,
+                                 conversation_id=arg_conv.id, pseudonym='admin-fox'))
     arg = Argument(featured_statement_id=fs.id, proposer_id=None,
                    body='To be deleted.', side='pro')
     db.session.add(arg)
@@ -338,8 +338,8 @@ def _make_visible_arg(fs_id, side='pro'):
 
 def test_moderator_can_hide_argument(admin_client, arg_conv, arg_part, fs,
                                      admin_participant, app):
-    Participation(participant_id=admin_participant.id,
-                  conversation_id=arg_conv.id, pseudonym='admin-fox')
+    db.session.add(Participation(participant_id=admin_participant.id,
+                                 conversation_id=arg_conv.id, pseudonym='admin-fox'))
     arg = _make_visible_arg(fs.id)
     resp = admin_client.post(f'/c/arg-conv/arguments/{arg.id}/hide')
     assert resp.status_code == 302
@@ -349,8 +349,8 @@ def test_moderator_can_hide_argument(admin_client, arg_conv, arg_part, fs,
 
 def test_moderator_can_unhide_argument(admin_client, arg_conv, arg_part, fs,
                                        admin_participant, app):
-    Participation(participant_id=admin_participant.id,
-                  conversation_id=arg_conv.id, pseudonym='admin-fox')
+    db.session.add(Participation(participant_id=admin_participant.id,
+                                 conversation_id=arg_conv.id, pseudonym='admin-fox'))
     arg = Argument(featured_statement_id=fs.id, proposer_id=None,
                    body='Was hidden.', side='pro', hidden=True)
     db.session.add(arg)
@@ -365,6 +365,28 @@ def test_participant_cannot_hide_argument(auth_client, arg_conv, arg_part, fs, a
     arg = _make_visible_arg(fs.id)
     resp = auth_client.post(f'/c/arg-conv/arguments/{arg.id}/hide')
     assert resp.status_code == 403
+    db.session.refresh(arg)
+    assert arg.hidden is False
+
+
+def test_hide_argument_wrong_conversation_returns_404(admin_client, arg_conv,
+                                                      admin_participant, app):
+    """Moderator cannot hide an arg belonging to a different conversation via slug mismatch."""
+    other_conv = Conversation(slug='other-conv2', polis_id='oth9999999',
+                              title='Other', active=True, access_policy='public',
+                              phase_argument_mapping=True)
+    db.session.add(other_conv)
+    db.session.flush()
+    other_fs = FeaturedStatement(conversation_id=other_conv.id,
+                                 polis_statement_id=88, confirmed_by_admin=True)
+    db.session.add(other_fs)
+    db.session.flush()
+    arg = Argument(featured_statement_id=other_fs.id, proposer_id=None,
+                   body='Belongs to other conv.', side='pro')
+    db.session.add(arg)
+    db.session.commit()
+    resp = admin_client.post(f'/c/arg-conv/arguments/{arg.id}/hide')
+    assert resp.status_code == 404
     db.session.refresh(arg)
     assert arg.hidden is False
 

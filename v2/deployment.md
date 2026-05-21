@@ -58,13 +58,15 @@ POSTGRES_PASSWORD=<strong-random-password>
 SECRET_KEY=<strong-random-secret>
 ```
 
-Bind Particiapi to the VM's private IP so Toolforge can reach it (both are in the same WMCS OpenStack network). Add to `docker-compose.yml` under the `particiapi` service:
+Bind Particiapi to the VM's **private IP** so Toolforge can reach it (both are in the same WMCS OpenStack network). Replace `<private-ip>` with the actual internal IP shown by `hostname -I`. Add to `docker-compose.yml` under the `particiapi` service:
 
 ```yaml
 ports:
-  - "0.0.0.0:8000:8000"
+  - "<private-ip>:8000:8000"
 restart: unless-stopped
 ```
+
+> Do **not** use `0.0.0.0:8000:8000` — that binds Particiapi on all interfaces including any public IP. The WMCS security group is your only other defence.
 
 Add `restart: unless-stopped` to all services and enable Docker on boot:
 
@@ -200,6 +202,7 @@ https://wiki-polis.toolforge.org/login     → redirects to Wikimedia OAuth
 # On Toolforge as wiki-polis user:
 cd ~/wiki-polis && git pull
 ~/www/python/venv/bin/pip install -e ~/wiki-polis/v2
+flask --app ~/wiki-polis/v2/app.py db upgrade
 cd ~ && webservice restart
 ```
 
