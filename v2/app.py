@@ -993,6 +993,9 @@ def _register_routes(app: Flask) -> None:
     @login_required
     def argument_unvote(slug, arg_id):
         conv, part = _require_arg_participation(slug)
+        arg = Argument.query.filter_by(id=arg_id).first_or_404()
+        FeaturedStatement.query.filter_by(
+            id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
         existing = ArgumentVote.query.filter_by(
             participant_id=part.participant_id, argument_id=arg_id).first()
         if existing:
