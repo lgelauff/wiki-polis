@@ -133,7 +133,7 @@ def _is_emailable(username: str) -> bool:
             params={'action': 'query', 'list': 'users', 'ususers': username,
                     'usprop': 'emailable', 'format': 'json'},
             headers={'User-Agent': _MW_USER_AGENT},
-            timeout=5,
+            timeout=2,
         )
         resp.raise_for_status()
         user = resp.json()['query']['users'][0]
@@ -340,8 +340,15 @@ def create_app(test_config: dict | None = None) -> Flask:
             'DEV MODE: SQLALCHEMY_DATABASE_URI forced to %s '
             '(ignoring database-url secret / DATABASE_URL env)', dev_url)
     else:
-        app.config['SQLALCHEMY_DATABASE_URI'] = (
-            _read_secret('database-url') or 'sqlite:///dev.db')
+        _db_url = (test_config or {}).get('SQLALCHEMY_DATABASE_URI') or _read_secret('database-url')
+        if not _db_url:
+            raise RuntimeError(
+                'DATABASE_URL is not set. '
+                'Set it via `toolforge envvars create DATABASE_URL <url>` or the '
+                'DATABASE_URL environment variable. '
+                'Example: mysql+pymysql://s_wiki_polis:<pw>@tools.db.svc.wikimedia.cloud/s_wiki_polis__main?charset=utf8mb4'
+            )
+        app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 
     _secret_key = (test_config or {}).get('SECRET_KEY') or _read_secret('secret-key')
     if not _secret_key:
@@ -679,12 +686,13 @@ def _register_routes(app: Flask) -> None:
             db.session.commit()
         return state
 
-    def _build_featured_data(conv, participation):
+    def _build_featured_data(conv, participation, can_mod=False):
         """Return list of dicts for the argument tab, one per confirmed FS.
 
         Each dict: {fs, text, pro_args, con_args, pro_state, con_state, voted_ids,
                     pro_gate, con_gate}
         Creates/updates ArgumentSideState records as a side effect.
+        Moderators see hidden arguments (marked); participants never see them.
         """
         from sqlalchemy.orm import joinedload
         fss = (FeaturedStatement.query
@@ -721,8 +729,8 @@ def _register_routes(app: Flask) -> None:
 
         result = []
         for fs in fss:
-            pro_args = [a for a in fs.arguments if a.side == 'pro']
-            con_args = [a for a in fs.arguments if a.side == 'con']
+            pro_args = [a for a in fs.arguments if a.side == 'pro' and (can_mod or not a.hidden)]
+            con_args = [a for a in fs.arguments if a.side == 'con' and (can_mod or not a.hidden)]
 
             pro_state = _get_or_create_side_state(pid, fs.id, 'pro', pro_args)
             con_state = _get_or_create_side_state(pid, fs.id, 'con', con_args)
@@ -813,7 +821,7 @@ def _register_routes(app: Flask) -> None:
 
         featured_data = []
         if conv.phase_argument_mapping and participation:
-            featured_data = _build_featured_data(conv, participation)
+            featured_data = _build_featured_data(conv, participation, can_mod=can_mod)
 
         return render_template('conversation.html',
                                conversation=conv,
@@ -971,7 +979,11 @@ def _register_routes(app: Flask) -> None:
                 return jsonify({'ok': False, 'reason': 'cap'}), 409
             abort(409)   # cap reached
 
-        # Can't vote on own argument.
+        # Can't vote on hidden or own argument.
+        if arg.hidden:
+            if is_ajax:
+                return jsonify({'ok': False, 'reason': 'hidden'}), 403
+            abort(403)
         if arg.proposer_id == part.participant_id:
             if is_ajax:
                 return jsonify({'ok': False, 'reason': 'own'}), 403
@@ -1018,10 +1030,36 @@ def _register_routes(app: Flask) -> None:
         db.session.commit()
         return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
 
+    @app.post('/c/<slug>/arguments/<int:arg_id>/hide')
+    @login_required
+    def argument_hide(slug, arg_id):
+        conv = Conversation.query.filter_by(slug=slug).first_or_404()
+        if not _can_moderate(conv):
+            abort(403)
+        arg = Argument.query.filter_by(id=arg_id).first_or_404()
+        FeaturedStatement.query.filter_by(
+            id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+        arg.hidden = True
+        db.session.commit()
+        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
+
+    @app.post('/c/<slug>/arguments/<int:arg_id>/unhide')
+    @login_required
+    def argument_unhide(slug, arg_id):
+        conv = Conversation.query.filter_by(slug=slug).first_or_404()
+        if not _can_moderate(conv):
+            abort(403)
+        arg = Argument.query.filter_by(id=arg_id).first_or_404()
+        FeaturedStatement.query.filter_by(
+            id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+        arg.hidden = False
+        db.session.commit()
+        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
+
     # ── Particiapi proxy ──────────────────────────────────────────────────────
 
     @app.route('/proxy/particiapi/<path:pa_path>',
-               methods=['GET', 'POST', 'PUT', 'DELETE'])
+               methods=['GET', 'POST', 'PUT'])
     @login_required
     @csrf.exempt
     def proxy_particiapi(pa_path):
@@ -1420,7 +1458,8 @@ def _register_routes(app: Flask) -> None:
                                approved=approved,
                                hidden=hidden,
                                settings=settings,
-                               error=error)
+                               error=error,
+                               polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', 'https://pol.is'))
 
     @app.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
     @login_required

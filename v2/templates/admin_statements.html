@@ -8,8 +8,14 @@
     <a href="{{ url_for('admin') }}">← admin</a>
   </p>
 
+  <div class="info-box" style="margin-bottom:1.5rem;padding:.75rem 1rem;background:#fff8e1;border:1px solid #ffe082;border-radius:6px;font-size:13px">
+    Statement moderation and strict-moderation settings are not available through Particiapi.
+    Manage statements directly via the Polis admin interface at
+    <code>{{ polis_public_url }}/m/{{ conversation.polis_id }}</code> (requires a Polis account).
+  </div>
+
   {% if error %}
-  <p class="error" style="margin-bottom:1rem">Could not reach Particiapi: {{ error }}</p>
+  <p class="error" style="margin-bottom:1rem">{{ error }}</p>
   {% endif %}
 
   <!-- ── Add seed statement ──────────────────────────── -->

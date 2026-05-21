@@ -437,7 +437,7 @@
           {% for arg in item.pro_args %}
           {% set is_own = arg.proposer_id == participation.participant_id %}
           {% set is_picked = arg.id in item.voted_ids %}
-          {% set pro_can_vote = both_gate and item.pro_args | length > item.k and not is_own %}
+          {% set pro_can_vote = both_gate and item.pro_args | length > item.k and not is_own and not arg.hidden %}
           {% set pro_limit_reached = pro_can_vote and item.pro_voted_count >= item.k and not is_picked %}
           <div class="argument-card"
                data-side="pro"
@@ -446,6 +446,7 @@
                data-own="{{ 'true' if is_own else 'false' }}"
                data-can-vote="{{ 'true' if pro_can_vote else 'false' }}"
                data-limit-reached="{{ 'true' if pro_limit_reached else 'false' }}"
+               data-hidden="{{ 'true' if arg.hidden else 'false' }}"
                data-vote-url="{{ url_for('argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
                data-unvote-url="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
                data-csrf="{{ csrf_token() }}">
@@ -469,11 +470,25 @@
                 </span>
                 <span class="argument-by">{{ item.proposer_pseudonyms.get(arg.proposer_id, 'admin') if arg.proposer_id else 'admin' }}</span>
                 {% if is_own %}<span class="argument-yours">YOURS</span>{% endif %}
+                {% if arg.hidden %}<span class="argument-hidden-badge">HIDDEN</span>{% endif %}
                 {% if can_moderate %}
-                <form method="post" action="{{ url_for('argument_delete', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline;margin-left:auto">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete?')">delete</button>
-                </form>
+                <span style="display:inline-flex;gap:4px;margin-left:auto">
+                  {% if arg.hidden %}
+                  <form method="post" action="{{ url_for('argument_unhide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-small">unhide</button>
+                  </form>
+                  {% else %}
+                  <form method="post" action="{{ url_for('argument_hide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-small btn-warn">hide</button>
+                  </form>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('argument_delete', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete?')">delete</button>
+                  </form>
+                </span>
                 {% endif %}
               </div>
             </div>
@@ -538,7 +553,7 @@
           {% for arg in item.con_args %}
           {% set is_own = arg.proposer_id == participation.participant_id %}
           {% set is_picked = arg.id in item.voted_ids %}
-          {% set con_can_vote = both_gate and item.con_args | length > item.k and not is_own %}
+          {% set con_can_vote = both_gate and item.con_args | length > item.k and not is_own and not arg.hidden %}
           {% set con_limit_reached = con_can_vote and item.con_voted_count >= item.k and not is_picked %}
           <div class="argument-card"
                data-side="con"
@@ -547,6 +562,7 @@
                data-own="{{ 'true' if is_own else 'false' }}"
                data-can-vote="{{ 'true' if con_can_vote else 'false' }}"
                data-limit-reached="{{ 'true' if con_limit_reached else 'false' }}"
+               data-hidden="{{ 'true' if arg.hidden else 'false' }}"
                data-vote-url="{{ url_for('argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
                data-unvote-url="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
                data-csrf="{{ csrf_token() }}">
@@ -570,11 +586,25 @@
                 </span>
                 <span class="argument-by">{{ item.proposer_pseudonyms.get(arg.proposer_id, 'admin') if arg.proposer_id else 'admin' }}</span>
                 {% if is_own %}<span class="argument-yours">YOURS</span>{% endif %}
+                {% if arg.hidden %}<span class="argument-hidden-badge">HIDDEN</span>{% endif %}
                 {% if can_moderate %}
-                <form method="post" action="{{ url_for('argument_delete', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline;margin-left:auto">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete?')">delete</button>
-                </form>
+                <span style="display:inline-flex;gap:4px;margin-left:auto">
+                  {% if arg.hidden %}
+                  <form method="post" action="{{ url_for('argument_unhide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-small">unhide</button>
+                  </form>
+                  {% else %}
+                  <form method="post" action="{{ url_for('argument_hide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-small btn-warn">hide</button>
+                  </form>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('argument_delete', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete?')">delete</button>
+                  </form>
+                </span>
                 {% endif %}
               </div>
             </div>
@@ -1080,7 +1110,7 @@
 
   function wireCard(card) {
     card.addEventListener('click', function (e) {
-      if (e.target.closest('form') || e.target.closest('.btn-danger')) return; // moderator delete
+      if (e.target.closest('form') || e.target.closest('.btn-danger') || e.target.closest('.btn-warn')) return; // moderator controls
       if (card.dataset.canVote !== 'true') return;
       if (card.dataset.limitReached === 'true') return;
 
