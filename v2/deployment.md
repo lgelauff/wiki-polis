@@ -34,6 +34,40 @@ The VPS does **not** need a public-facing port for Particiapi. Only the Flask ap
 
 Request a WMCS Cloud VPS project at https://horizon.wikimedia.org, or use any VPS provider. A small instance (2 vCPU, 4 GB RAM) is enough for a pilot.
 
+#### Provisioning in WMCS Horizon (step by step)
+
+1. Go to https://horizon.wikimedia.org and select your project (e.g. `wiki-polis-backend`)
+2. **SSH key** *(first time only)*: Compute → Key Pairs → Import Public Key. Name it `wiki-polis-vps`, paste `~/.ssh/wiki_polis_vps.pub`. Skip if already imported.
+3. **Launch instance**: Compute → Instances → Launch Instance
+   - **Instance Name**: `wiki-polis-backend`
+   - **Description**: `wiki-polis Particiapi/Polis backend` (optional but useful)
+   - **Source**: `Debian 12 Bookworm` (do not use Debian 13 Trixie — still testing; avoid Fedora, CoreOS, Magnum)
+   - **Flavor**: `g4.cores2.ram4.disk20` (2 vCPU, 4 GB RAM, 20 GB disk)
+   - **Networks / Network Ports / Security Groups**: leave all as default
+   - **Configuration / Server Groups / Scheduler Hints / Metadata**: leave all as default
+   - **Key Pair**: select the key you imported above
+4. **Assign a floating IP**: Networks → Floating IPs → Allocate IP, then Associate it to the instance. This is the IP you'll SSH to.
+5. **Note the private IP**: shown in Compute → Instances. This is the internal OpenStack IP used for Toolforge → Particiapi traffic.
+
+#### SSH config
+
+Add to `~/.ssh/config` on your local machine:
+
+```
+Host wiki-polis-vps
+    HostName <floating-ip>
+    User debian
+    IdentityFile ~/.ssh/wiki_polis_vps
+```
+
+Then connect with:
+
+```bash
+ssh wiki-polis-vps
+```
+
+On first connect, accept the host fingerprint prompt — SSH will save it to `~/.ssh/known_hosts` for future verification. The fingerprint itself is safe to store.
+
 ### Install Docker
 
 ```bash
