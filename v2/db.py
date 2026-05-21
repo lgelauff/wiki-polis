@@ -157,6 +157,7 @@ class Argument(db.Model):
     proposer_id           = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
     body                  = db.Column(db.String(280), nullable=False)
     side                  = db.Column(db.Enum(*ARGUMENT_SIDES, name='argument_side'), nullable=False)
+    hidden                = db.Column(db.Boolean, nullable=False, default=False)
     created_at            = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     featured_statement = db.relationship('FeaturedStatement', back_populates='arguments')

@@ -326,6 +326,84 @@ def test_participant_cannot_delete_argument(auth_client, arg_conv, arg_part, fs,
     assert db.session.get(Argument, arg.id) is not None
 
 
+# ── Argument hide / unhide ────────────────────────────────────────────────────
+
+def _make_visible_arg(fs_id, side='pro'):
+    arg = Argument(featured_statement_id=fs_id, proposer_id=None,
+                   body='Visible argument.', side=side)
+    db.session.add(arg)
+    db.session.commit()
+    return arg
+
+
+def test_moderator_can_hide_argument(admin_client, arg_conv, arg_part, fs,
+                                     admin_participant, app):
+    Participation(participant_id=admin_participant.id,
+                  conversation_id=arg_conv.id, pseudonym='admin-fox')
+    arg = _make_visible_arg(fs.id)
+    resp = admin_client.post(f'/c/arg-conv/arguments/{arg.id}/hide')
+    assert resp.status_code == 302
+    db.session.refresh(arg)
+    assert arg.hidden is True
+
+
+def test_moderator_can_unhide_argument(admin_client, arg_conv, arg_part, fs,
+                                       admin_participant, app):
+    Participation(participant_id=admin_participant.id,
+                  conversation_id=arg_conv.id, pseudonym='admin-fox')
+    arg = Argument(featured_statement_id=fs.id, proposer_id=None,
+                   body='Was hidden.', side='pro', hidden=True)
+    db.session.add(arg)
+    db.session.commit()
+    resp = admin_client.post(f'/c/arg-conv/arguments/{arg.id}/unhide')
+    assert resp.status_code == 302
+    db.session.refresh(arg)
+    assert arg.hidden is False
+
+
+def test_participant_cannot_hide_argument(auth_client, arg_conv, arg_part, fs, app):
+    arg = _make_visible_arg(fs.id)
+    resp = auth_client.post(f'/c/arg-conv/arguments/{arg.id}/hide')
+    assert resp.status_code == 403
+    db.session.refresh(arg)
+    assert arg.hidden is False
+
+
+def test_vote_on_hidden_argument_blocked(auth_client, arg_conv, arg_part, fs,
+                                         participant, app):
+    _pass_gate(auth_client, 'arg-conv', fs.id)
+    _make_args(fs.id, None, 'pro', 3)
+    hidden_arg = Argument(featured_statement_id=fs.id, proposer_id=None,
+                          body='Hidden.', side='pro', hidden=True)
+    db.session.add(hidden_arg)
+    db.session.commit()
+    resp = auth_client.post(f'/c/arg-conv/arguments/{hidden_arg.id}/vote')
+    assert resp.status_code == 403
+
+
+def test_unvote_wrong_conversation_returns_404(auth_client, arg_conv, arg_part,
+                                               fs, participant, app):
+    """argument_unvote must verify the argument belongs to the conversation in the URL."""
+    other_conv = Conversation(slug='other-conv', polis_id='oth1234567',
+                              title='Other', active=True, access_policy='public',
+                              phase_argument_mapping=True)
+    db.session.add(other_conv)
+    db.session.commit()
+    Participation(participant_id=participant.id, conversation_id=other_conv.id,
+                  pseudonym='test-wolf')
+    other_fs = FeaturedStatement(conversation_id=other_conv.id,
+                                 polis_statement_id=99, confirmed_by_admin=True)
+    db.session.add(other_fs)
+    db.session.commit()
+    arg = Argument(featured_statement_id=other_fs.id, proposer_id=None,
+                   body='Other conv arg.', side='pro')
+    db.session.add(arg)
+    db.session.commit()
+    # Try to unvote an argument from other_conv via arg-conv URL
+    resp = auth_client.post(f'/c/arg-conv/arguments/{arg.id}/unvote')
+    assert resp.status_code == 404
+
+
 # ── Admin featured statements ──────────────────────────────────────────────────
 
 def test_admin_featured_page_accessible(admin_client, arg_conv, admin_participant):

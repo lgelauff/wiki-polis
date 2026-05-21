@@ -83,3 +83,9 @@ def test_dev_db_isolation_skipped_without_dev_login_user(tmp_path):
             'SESSION_FILE_DIR': str(tmp_path),
         })
         assert a is not None
+
+
+def test_proxy_delete_method_not_allowed(auth_client):
+    """DELETE is not in the allowed proxy methods."""
+    resp = auth_client.delete('/proxy/particiapi/api/conversations/')
+    assert resp.status_code == 405
