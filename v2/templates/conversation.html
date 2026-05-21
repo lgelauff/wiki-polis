@@ -299,8 +299,12 @@
   {% endif %}{# end 'results' in tabs #}
 
   {% if 'arguments' in tabs %}
-  <div id="tab-arguments" class="tab-panel{% if tabs|length > 1 and tabs[0] != 'arguments' %} tab-panel--hidden{% endif %}"
-       role="tabpanel" aria-labelledby="tab-btn-arguments">
+  {# Votes are hidden while argument mapping is open to prevent anchoring bias. #}
+  {% set arg_voting_open = conversation.active and not conversation.paused and conversation.phase_argument_mapping %}
+  <div id="tab-arguments"
+       class="tab-panel arguments-tab{% if tabs|length > 1 and tabs[0] != 'arguments' %} tab-panel--hidden{% endif %}"
+       role="tabpanel" aria-labelledby="tab-btn-arguments"
+       data-voting="{{ 'true' if arg_voting_open else 'false' }}">
 
     {% if featured_data | length == 0 %}
     <div class="landing-section">
@@ -308,192 +312,282 @@
     </div>
     {% endif %}
 
-    {# Votes are hidden while argument mapping is open to prevent anchoring bias. #}
-    {% set arg_voting_open = conversation.active and not conversation.paused and conversation.phase_argument_mapping %}
-
     {% for item in featured_data %}
     {% set fs = item.fs %}
     {% set both_gate = item.pro_gate and item.con_gate %}
 
-    <div class="arg-statement" id="fs-{{ fs.id }}">
-      <div class="arg-featured-badge">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="1" stroke-linecap="round"
-             stroke-dasharray="1.4 1.6" aria-hidden="true">
-          <circle cx="12" cy="12" r="9"/>
-          <ellipse cx="12" cy="12" rx="9" ry="3.5"/>
-          <ellipse cx="12" cy="12" rx="3.5" ry="9"/>
-        </svg>
-        Featured statement
-      </div>
-      <p class="arg-statement-text">{{ item.text }}</p>
+    <div class="arg-block" id="fs-{{ fs.id }}">
 
+      {# ── Featured statement card ── #}
+      <div class="arg-statement">
+        <div class="arg-statement-header">
+          <div class="arg-featured-badge">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="1.2" stroke-linecap="round"
+                 stroke-dasharray="1.4 1.6" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"/>
+              <ellipse cx="12" cy="12" rx="9" ry="3.5"/>
+              <ellipse cx="12" cy="12" rx="3.5" ry="9"/>
+            </svg>
+            FEATURED
+          </div>
+        </div>
+        <p class="arg-statement-text">{{ item.text }}</p>
+      </div>
+
+      {# ── Status strip ── #}
+      <div class="arg-status-strip{% if both_gate %} arg-status-strip--gated{% endif %}"
+           data-fs="{{ fs.id }}">
+        {% set pro_vote_ready = item.pro_args | length > item.k %}
+        {% set con_vote_ready = item.con_args | length > item.k %}
+        <span class="arg-status-text">
+          {% if both_gate %}
+            {% if pro_vote_ready and con_vote_ready %}
+              Pick the {{ item.k }} most important on each side. You can change your mind any time.
+            {% elif pro_vote_ready %}
+              Pick the {{ item.k }} most important for-arguments. Voting on the against side unlocks once there are at least {{ item.k + 1 }} arguments there.
+            {% elif con_vote_ready %}
+              Pick the {{ item.k }} most important against-arguments. Voting on the for side unlocks once there are at least {{ item.k + 1 }} arguments there.
+            {% else %}
+              Voting unlocks once each side has at least {{ item.k + 1 }} arguments.
+            {% endif %}
+          {% else %}
+            Add or skip on each side, then pick the {{ item.k }} most important.
+          {% endif %}
+        </span>
+        <div class="arg-status-chips">
+          <span class="arg-chip arg-chip--pro{% if item.pro_gate %} arg-chip--done{% endif %}"
+                id="chip-pro-{{ fs.id }}">
+            {% if both_gate and pro_vote_ready %}
+              FOR · <span class="chip-count">{{ item.pro_voted_count }}</span>/{{ item.k }}
+            {% elif item.pro_gate %}
+              <svg width="9" height="7" viewBox="0 0 9 7" fill="none" aria-hidden="true"><path d="M1 3.5L3 5.5L8 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              FOR
+            {% else %}
+              FOR
+            {% endif %}
+          </span>
+          <span class="arg-chip arg-chip--con{% if item.con_gate %} arg-chip--done{% endif %}"
+                id="chip-con-{{ fs.id }}">
+            {% if both_gate and con_vote_ready %}
+              AGAINST · <span class="chip-count">{{ item.con_voted_count }}</span>/{{ item.k }}
+            {% elif item.con_gate %}
+              <svg width="9" height="7" viewBox="0 0 9 7" fill="none" aria-hidden="true"><path d="M1 3.5L3 5.5L8 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              AGAINST
+            {% else %}
+              AGAINST
+            {% endif %}
+          </span>
+        </div>
+      </div>
+
+      {# ── Two-column grid ── #}
       <div class="arg-columns">
 
-        {# ── Pro column ──────────────────────────────── #}
+        {# ── Pro column ── #}
         <div class="arg-col arg-col--pro">
           <div class="arg-col-heading-row">
             <span class="arg-col-sign">+</span>
             <span class="arg-col-heading">For</span>
-            <span class="arg-col-count">{{ item.pro_args | length }} argument{{ 's' if item.pro_args | length != 1 }}</span>
+            <span class="arg-col-count">{{ item.pro_args | length }}</span>
           </div>
-          {% if both_gate and item.pro_args | length >= item.k %}
-          <p class="arg-vote-prompt">Select the {{ item.k }} most important for-arguments.</p>
-          {% endif %}
 
+          {# Contribute affordance — pro #}
+          <div class="contribute-wrapper"
+               data-state="{{ 'submitted' if item.pro_proposed else ('skipped' if item.pro_gate else 'idle') }}"
+               data-side="pro"
+               data-fs="{{ fs.id }}"
+               data-submit-url="{{ url_for('argument_submit', slug=conversation.slug, fs_id=fs.id) }}"
+               data-skip-url="{{ url_for('argument_skip', slug=conversation.slug, fs_id=fs.id, side='pro') }}"
+               data-csrf="{{ csrf_token() }}"
+               data-k="{{ item.k }}"
+               data-my-pseudonym="{{ participation.pseudonym }}">
+            <button class="contribute-affordance contribute-affordance--pro" type="button">
+              <span class="contribute-glyph">+</span>
+              <span class="contribute-label">Add one for, or skip</span>
+              <span class="contribute-meta">unlocks voting</span>
+            </button>
+            <div class="contribute-composer">
+              <div class="contribute-composer-header">
+                <span class="contribute-glyph filled">+</span>
+                <span class="contribute-composer-label">Your for-argument · one sentence, one claim</span>
+                <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
+              </div>
+              <textarea class="contribute-textarea" maxlength="280" rows="3"
+                        placeholder="Add a short for-argument (one sentence, max 280 characters)…"></textarea>
+              <div class="contribute-actions">
+                <button type="button" class="btn-secondary contribute-skip-btn">Nothing to add</button>
+                <button type="button" class="btn-primary contribute-submit-btn" disabled>Submit argument</button>
+              </div>
+            </div>
+            <div class="contribute-submitted contribute-submitted--pro">
+              YOU ADDED ONE — see below
+            </div>
+            <div class="contribute-skipped">
+              <span class="contribute-skipped-label">NOTHING TO ADD — skipped</span>
+              <button type="button" class="contribute-changemind">change my mind</button>
+            </div>
+          </div>
+
+          {# Argument cards — pro #}
           {% if item.pro_args | length == 0 %}
           <p class="arg-empty">No for-arguments yet.</p>
           {% endif %}
 
           {% for arg in item.pro_args %}
-          <div class="arg-card{% if arg.id in item.voted_ids %} arg-card--voted{% endif %}">
-            <p class="arg-body">{{ arg.body }}</p>
-            <div class="arg-actions">
-              {% if not arg_voting_open %}
-              {% set vote_count = arg.votes | length %}
-              <span class="arg-votes">{{ vote_count }} vote{{ 's' if vote_count != 1 }}</span>
+          {% set is_own = arg.proposer_id == participation.participant_id %}
+          {% set is_picked = arg.id in item.voted_ids %}
+          {% set pro_can_vote = both_gate and item.pro_args | length > item.k and not is_own %}
+          {% set pro_limit_reached = pro_can_vote and item.pro_voted_count >= item.k and not is_picked %}
+          <div class="argument-card"
+               data-side="pro"
+               data-arg-id="{{ arg.id }}"
+               data-picked="{{ 'true' if is_picked else 'false' }}"
+               data-own="{{ 'true' if is_own else 'false' }}"
+               data-can-vote="{{ 'true' if pro_can_vote else 'false' }}"
+               data-limit-reached="{{ 'true' if pro_limit_reached else 'false' }}"
+               data-vote-url="{{ url_for('argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
+               data-unvote-url="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
+               data-csrf="{{ csrf_token() }}">
+            <button class="argument-checkbox" aria-label="Mark as most important"
+                    tabindex="{{ '0' if pro_can_vote else '-1' }}">
+              {% if is_picked %}
+              <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
+                <path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
               {% endif %}
-              {% if both_gate and item.pro_args | length >= item.k and arg.proposer_id != participation.participant_id %}
-                {% if arg.id in item.voted_ids %}
-                <form method="post" action="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+            </button>
+            <div class="argument-body">
+              <p class="argument-text">{{ arg.body }}</p>
+              <div class="argument-meta">
+                <span class="argument-importance">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <strong class="importance-count">{{ arg.votes | length }}</strong>
+                </span>
+                <span class="argument-by">{{ item.proposer_pseudonyms.get(arg.proposer_id, 'admin') if arg.proposer_id else 'admin' }}</span>
+                {% if is_own %}<span class="argument-yours">YOURS</span>{% endif %}
+                {% if can_moderate %}
+                <form method="post" action="{{ url_for('argument_delete', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline;margin-left:auto">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn-arg-vote btn-arg-vote--voted">
-                    ✓ most important
-                  </button>
-                </form>
-                {% else %}
-                <form method="post" action="{{ url_for('argument_vote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn-arg-vote">
-                    <span class="btn-arg-vote-dot"></span>
-                    most important
-                  </button>
+                  <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete?')">delete</button>
                 </form>
                 {% endif %}
-              {% endif %}
-              {% if can_moderate %}
-              <form method="post" action="{{ url_for('argument_delete', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this argument?')">delete</button>
-              </form>
-              {% endif %}
+              </div>
             </div>
           </div>
           {% endfor %}
 
-          {# Contribution gate for pro side #}
-          {% if not item.pro_gate %}
-          <div class="arg-contribute">
-            <form method="post" action="{{ url_for('argument_submit', slug=conversation.slug, fs_id=fs.id) }}">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="side" value="pro">
-              <textarea name="body" maxlength="280" rows="3"
-                        placeholder="Add a short for-argument (max 280 characters)…" required></textarea>
-              <div class="arg-form-actions">
-                <button type="submit" class="btn-small">Submit</button>
-              </div>
-            </form>
-            <form method="post" action="{{ url_for('argument_skip', slug=conversation.slug, fs_id=fs.id, side='pro') }}" style="margin-top:.35rem">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn-small btn-muted">Nothing to add</button>
-            </form>
-          </div>
-          {% elif item.pro_proposed %}
-          <p class="arg-contributed">You contributed a for-argument.</p>
-          {% else %}
-          <p class="arg-contributed">You passed on for-arguments.</p>
-          {% endif %}
-
           {% if both_gate and item.pro_args | length < item.k %}
-          <p class="arg-threshold">
-            Importance voting unlocks at {{ item.k }} for-arguments ({{ item.pro_args | length }} so far).
-          </p>
+          <p class="arg-threshold">Importance voting unlocks at {{ item.k }} for-arguments ({{ item.pro_args | length }} so far).</p>
           {% endif %}
         </div>{# end pro col #}
 
-        {# ── Con column ──────────────────────────────── #}
+        {# ── Con column ── #}
         <div class="arg-col arg-col--con">
           <div class="arg-col-heading-row">
             <span class="arg-col-sign">−</span>
             <span class="arg-col-heading">Against</span>
-            <span class="arg-col-count">{{ item.con_args | length }} argument{{ 's' if item.con_args | length != 1 }}</span>
+            <span class="arg-col-count">{{ item.con_args | length }}</span>
           </div>
-          {% if both_gate and item.con_args | length >= item.k %}
-          <p class="arg-vote-prompt">Select the {{ item.k }} most important against-arguments.</p>
-          {% endif %}
 
+          {# Contribute affordance — con #}
+          <div class="contribute-wrapper"
+               data-state="{{ 'submitted' if item.con_proposed else ('skipped' if item.con_gate else 'idle') }}"
+               data-side="con"
+               data-fs="{{ fs.id }}"
+               data-submit-url="{{ url_for('argument_submit', slug=conversation.slug, fs_id=fs.id) }}"
+               data-skip-url="{{ url_for('argument_skip', slug=conversation.slug, fs_id=fs.id, side='con') }}"
+               data-csrf="{{ csrf_token() }}"
+               data-k="{{ item.k }}"
+               data-my-pseudonym="{{ participation.pseudonym }}">
+            <button class="contribute-affordance contribute-affordance--con" type="button">
+              <span class="contribute-glyph">−</span>
+              <span class="contribute-label">Add one against, or skip</span>
+              <span class="contribute-meta">unlocks voting</span>
+            </button>
+            <div class="contribute-composer">
+              <div class="contribute-composer-header">
+                <span class="contribute-glyph filled">−</span>
+                <span class="contribute-composer-label">Your against-argument · one sentence, one claim</span>
+                <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
+              </div>
+              <textarea class="contribute-textarea" maxlength="280" rows="3"
+                        placeholder="Add a short against-argument (one sentence, max 280 characters)…"></textarea>
+              <div class="contribute-actions">
+                <button type="button" class="btn-secondary contribute-skip-btn">Nothing to add</button>
+                <button type="button" class="btn-primary contribute-submit-btn" disabled>Submit argument</button>
+              </div>
+            </div>
+            <div class="contribute-submitted contribute-submitted--con">
+              YOU ADDED ONE — see below
+            </div>
+            <div class="contribute-skipped">
+              <span class="contribute-skipped-label">NOTHING TO ADD — skipped</span>
+              <button type="button" class="contribute-changemind">change my mind</button>
+            </div>
+          </div>
+
+          {# Argument cards — con #}
           {% if item.con_args | length == 0 %}
           <p class="arg-empty">No against-arguments yet.</p>
           {% endif %}
 
           {% for arg in item.con_args %}
-          <div class="arg-card{% if arg.id in item.voted_ids %} arg-card--voted{% endif %}">
-            <p class="arg-body">{{ arg.body }}</p>
-            <div class="arg-actions">
-              {% if not arg_voting_open %}
-              {% set vote_count = arg.votes | length %}
-              <span class="arg-votes">{{ vote_count }} vote{{ 's' if vote_count != 1 }}</span>
+          {% set is_own = arg.proposer_id == participation.participant_id %}
+          {% set is_picked = arg.id in item.voted_ids %}
+          {% set con_can_vote = both_gate and item.con_args | length > item.k and not is_own %}
+          {% set con_limit_reached = con_can_vote and item.con_voted_count >= item.k and not is_picked %}
+          <div class="argument-card"
+               data-side="con"
+               data-arg-id="{{ arg.id }}"
+               data-picked="{{ 'true' if is_picked else 'false' }}"
+               data-own="{{ 'true' if is_own else 'false' }}"
+               data-can-vote="{{ 'true' if con_can_vote else 'false' }}"
+               data-limit-reached="{{ 'true' if con_limit_reached else 'false' }}"
+               data-vote-url="{{ url_for('argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
+               data-unvote-url="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
+               data-csrf="{{ csrf_token() }}">
+            <button class="argument-checkbox" aria-label="Mark as most important"
+                    tabindex="{{ '0' if con_can_vote else '-1' }}">
+              {% if is_picked %}
+              <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
+                <path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
               {% endif %}
-              {% if both_gate and item.con_args | length >= item.k and arg.proposer_id != participation.participant_id %}
-                {% if arg.id in item.voted_ids %}
-                <form method="post" action="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+            </button>
+            <div class="argument-body">
+              <p class="argument-text">{{ arg.body }}</p>
+              <div class="argument-meta">
+                <span class="argument-importance">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <strong class="importance-count">{{ arg.votes | length }}</strong>
+                </span>
+                <span class="argument-by">{{ item.proposer_pseudonyms.get(arg.proposer_id, 'admin') if arg.proposer_id else 'admin' }}</span>
+                {% if is_own %}<span class="argument-yours">YOURS</span>{% endif %}
+                {% if can_moderate %}
+                <form method="post" action="{{ url_for('argument_delete', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline;margin-left:auto">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn-arg-vote btn-arg-vote--voted">
-                    ✓ most important
-                  </button>
-                </form>
-                {% else %}
-                <form method="post" action="{{ url_for('argument_vote', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn-arg-vote">
-                    <span class="btn-arg-vote-dot"></span>
-                    most important
-                  </button>
+                  <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete?')">delete</button>
                 </form>
                 {% endif %}
-              {% endif %}
-              {% if can_moderate %}
-              <form method="post" action="{{ url_for('argument_delete', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this argument?')">delete</button>
-              </form>
-              {% endif %}
+              </div>
             </div>
           </div>
           {% endfor %}
 
-          {# Contribution gate for con side #}
-          {% if not item.con_gate %}
-          <div class="arg-contribute">
-            <form method="post" action="{{ url_for('argument_submit', slug=conversation.slug, fs_id=fs.id) }}">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="side" value="con">
-              <textarea name="body" maxlength="280" rows="3"
-                        placeholder="Add a short against-argument (max 280 characters)…" required></textarea>
-              <div class="arg-form-actions">
-                <button type="submit" class="btn-small">Submit</button>
-              </div>
-            </form>
-            <form method="post" action="{{ url_for('argument_skip', slug=conversation.slug, fs_id=fs.id, side='con') }}" style="margin-top:.35rem">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn-small btn-muted">Nothing to add</button>
-            </form>
-          </div>
-          {% elif item.con_proposed %}
-          <p class="arg-contributed">You contributed an against-argument.</p>
-          {% else %}
-          <p class="arg-contributed">You passed on against-arguments.</p>
-          {% endif %}
-
           {% if both_gate and item.con_args | length < item.k %}
-          <p class="arg-threshold">
-            Importance voting unlocks at {{ item.k }} against-arguments ({{ item.con_args | length }} so far).
-          </p>
+          <p class="arg-threshold">Importance voting unlocks at {{ item.k }} against-arguments ({{ item.con_args | length }} so far).</p>
           {% endif %}
         </div>{# end con col #}
 
       </div>{# end arg-columns #}
-    </div>{# end arg-statement #}
+    </div>{# end arg-block #}
     {% endfor %}
 
   </div>
@@ -724,6 +818,340 @@
       updateProgress(conv.client.statements);
     }
   });
+}());
+</script>
+{% endif %}
+
+{% if 'arguments' in tabs %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  var tab = document.getElementById('tab-arguments');
+  if (!tab) return;
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  function argFetch(url, csrf, body) {
+    var fd = new FormData();
+    if (body) Object.keys(body).forEach(function(k) { fd.append(k, body[k]); });
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'fetch', 'X-CSRFToken': csrf },
+      body: fd,
+      credentials: 'same-origin',
+    });
+  }
+
+  function countVoted(fsId, side) {
+    var block = document.getElementById('fs-' + fsId);
+    if (!block) return 0;
+    return block.querySelectorAll('.argument-card[data-side="' + side + '"][data-picked="true"]').length;
+  }
+
+  function getK(wrapper) {
+    return parseInt(wrapper ? (wrapper.dataset.k || '2') : '2', 10);
+  }
+
+  function updateLimitReached(fsId, side) {
+    var block = document.getElementById('fs-' + fsId);
+    if (!block) return;
+    var wN = block.querySelector('.contribute-wrapper[data-side="' + side + '"]');
+    var k = getK(wN);
+    var voted = countVoted(fsId, side);
+    block.querySelectorAll('.argument-card[data-side="' + side + '"]').forEach(function (card) {
+      var isPicked = card.dataset.picked === 'true';
+      var canVote  = card.dataset.canVote === 'true';
+      if (canVote) {
+        card.dataset.limitReached = (!isPicked && voted >= k) ? 'true' : 'false';
+      }
+    });
+  }
+
+  function updateChip(fsId, side) {
+    var chip = document.getElementById('chip-' + side + '-' + fsId);
+    if (!chip) return;
+    if (!chip.classList.contains('arg-chip--done')) return; // pre-gate: don't touch
+    var wrapper = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="' + side + '"]');
+    var k = getK(wrapper);
+    var voted = countVoted(fsId, side);
+    var countEl = chip.querySelector('.chip-count');
+    if (countEl) countEl.textContent = voted;
+  }
+
+  // Build a new argument card element (used after contribute submit)
+  function buildArgCard(argId, body, pseudonym, side, voteUrl, unvoteUrl, csrf) {
+    var div = document.createElement('div');
+    div.className = 'argument-card';
+    div.dataset.side = side;
+    div.dataset.argId = argId;
+    div.dataset.picked = 'false';
+    div.dataset.own = 'true';
+    div.dataset.canVote = 'false';
+    div.dataset.limitReached = 'false';
+    div.dataset.voteUrl = voteUrl;
+    div.dataset.unvoteUrl = unvoteUrl;
+    div.dataset.csrf = csrf;
+    div.innerHTML =
+      '<button class="argument-checkbox" aria-label="Mark as most important" tabindex="-1"></button>' +
+      '<div class="argument-body">' +
+        '<p class="argument-text">' + escapeHtml(body) + '</p>' +
+        '<div class="argument-meta">' +
+          '<span class="argument-importance">' +
+            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+              '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+            '</svg>' +
+            '<strong class="importance-count">0</strong>' +
+          '</span>' +
+          '<span class="argument-by">' + escapeHtml(pseudonym) + '</span>' +
+          '<span class="argument-yours">YOURS</span>' +
+        '</div>' +
+      '</div>';
+    return div;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Contribute wrapper state machine ─────────────────────────────────────────
+
+  tab.querySelectorAll('.contribute-wrapper').forEach(function (wrapper) {
+    var affordance  = wrapper.querySelector('.contribute-affordance');
+    var composer    = wrapper.querySelector('.contribute-composer');
+    var submitted   = wrapper.querySelector('.contribute-submitted');
+    var skipped     = wrapper.querySelector('.contribute-skipped');
+    var textarea    = wrapper.querySelector('.contribute-textarea');
+    var ccLen       = wrapper.querySelector('.cc-len');
+    var submitBtn   = wrapper.querySelector('.contribute-submit-btn');
+    var skipBtn     = wrapper.querySelector('.contribute-skip-btn');
+    var changemind  = wrapper.querySelector('.contribute-changemind');
+
+    function setState(s) {
+      wrapper.dataset.state = s;
+    }
+
+    function enterComposing() {
+      setState('composing');
+      textarea.focus();
+    }
+
+    // Idle button → composing
+    affordance.addEventListener('click', enterComposing);
+
+    // Change my mind (skipped) → composing (no API call; submitting will create the arg)
+    if (changemind) changemind.addEventListener('click', enterComposing);
+
+    // Textarea char count + enable submit
+    textarea.addEventListener('input', function () {
+      var len = textarea.value.length;
+      ccLen.textContent = len;
+      submitBtn.disabled = len === 0;
+    });
+
+    // Skip button → skip API call → skipped state
+    skipBtn.addEventListener('click', function () {
+      var url   = wrapper.dataset.skipUrl;
+      var csrf  = wrapper.dataset.csrf;
+      argFetch(url, csrf).then(function (r) {
+        if (r.ok) {
+          setState('skipped');
+          checkGateTransition(wrapper);
+        }
+      });
+    });
+
+    // Submit button → argument submit API → submitted state + insert card
+    submitBtn.addEventListener('click', function () {
+      var body  = textarea.value.trim();
+      if (!body) return;
+      var url   = wrapper.dataset.submitUrl;
+      var csrf  = wrapper.dataset.csrf;
+      var side  = wrapper.dataset.side;
+      var fsId  = wrapper.dataset.fs;
+      var pseudo = wrapper.dataset.myPseudonym;
+      submitBtn.disabled = true;
+      argFetch(url, csrf, { side: side, body: body }).then(function (r) {
+        if (r.ok) {
+          return r.json().then(function (data) {
+            setState('submitted');
+            // Insert the new card into the column's argument list
+            var col = wrapper.closest('.arg-col');
+            var colCards = col.querySelectorAll('.argument-card');
+            var emptyNotice = col.querySelector('.arg-empty');
+            if (emptyNotice) emptyNotice.remove();
+            // Append before threshold notice if it exists
+            var threshold = col.querySelector('.arg-threshold');
+            var voteUrl   = wrapper.dataset.submitUrl.replace('/submit', '/' + data.id + '/vote').replace('/arguments/' + fsId, '/arguments/' + data.id);
+            // Derive URLs from data-vote-url of any existing card, or construct from submitUrl
+            var anyCard = col.querySelector('.argument-card');
+            var vU = anyCard ? anyCard.dataset.voteUrl.replace(/\/\d+\/vote$/, '/' + data.id + '/vote') : '';
+            var uU = anyCard ? anyCard.dataset.unvoteUrl.replace(/\/\d+\/unvote$/, '/' + data.id + '/unvote') : '';
+            var newCard = buildArgCard(data.id, data.body, pseudo, side, vU, uU, csrf);
+            if (threshold) {
+              col.insertBefore(newCard, threshold);
+            } else {
+              col.appendChild(newCard);
+            }
+            wireCard(newCard);
+            checkGateTransition(wrapper);
+          });
+        } else {
+          submitBtn.disabled = false;
+        }
+      }).catch(function () { submitBtn.disabled = false; });
+    });
+  });
+
+  // After skipping or submitting, check if both sides are now gated
+  // and if so update the status strip to the post-gate style.
+  function checkGateTransition(wrapper) {
+    var fsId = wrapper.dataset.fs;
+    var proW = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
+    var conW = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="con"]');
+    if (!proW || !conW) return;
+    var proState = proW.dataset.state;
+    var conState = conW.dataset.state;
+    var bothGated = (proState === 'submitted' || proState === 'skipped')
+                 && (conState === 'submitted' || conState === 'skipped');
+
+    // Update chip to "done" on the just-completed side
+    var side = wrapper.dataset.side;
+    var chip = document.getElementById('chip-' + side + '-' + fsId);
+    if (chip) chip.classList.add('arg-chip--done');
+
+    if (bothGated) {
+      var block = document.getElementById('fs-' + fsId);
+      var proWrap = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
+      var conWrap = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="con"]');
+      var kVal = getK(proWrap);  // k is the same for both sides
+      var nPro = block ? block.querySelectorAll('.argument-card[data-side="pro"]').length : 0;
+      var nCon = block ? block.querySelectorAll('.argument-card[data-side="con"]').length : 0;
+      var proReady = nPro > kVal;
+      var conReady = nCon > kVal;
+
+      // Transition status strip to post-gate style
+      var strip = tab.querySelector('.arg-status-strip[data-fs="' + fsId + '"]');
+      if (strip) {
+        strip.classList.add('arg-status-strip--gated');
+        var stripMsg;
+        if (proReady && conReady) {
+          stripMsg = 'Pick the ' + kVal + ' most important on each side. You can change your mind any time.';
+        } else if (proReady) {
+          stripMsg = 'Pick the ' + kVal + ' most important for-arguments. Voting on the against side unlocks once there are at least ' + (kVal + 1) + ' arguments there.';
+        } else if (conReady) {
+          stripMsg = 'Pick the ' + kVal + ' most important against-arguments. Voting on the for side unlocks once there are at least ' + (kVal + 1) + ' arguments there.';
+        } else {
+          stripMsg = 'Voting unlocks once each side has at least ' + (kVal + 1) + ' arguments.';
+        }
+        strip.querySelector('.arg-status-text').textContent = stripMsg;
+        // Update chips to show vote counters only on sides that are ready
+        ['pro', 'con'].forEach(function(s) {
+          var c = document.getElementById('chip-' + s + '-' + fsId);
+          var ready = s === 'pro' ? proReady : conReady;
+          if (c && ready) {
+            c.innerHTML = (s === 'pro' ? 'FOR' : 'AGAINST') + ' · <span class="chip-count">0</span>/' + kVal;
+          }
+        });
+      }
+      // Enable voting on cards only where K+1 threshold is met
+      if (block) {
+        ['pro', 'con'].forEach(function (s) {
+          var ready = s === 'pro' ? proReady : conReady;
+          if (ready) {
+            block.querySelectorAll('.argument-card[data-side="' + s + '"]').forEach(function (card) {
+              if (card.dataset.own !== 'true') {
+                card.dataset.canVote = 'true';
+                var cb = card.querySelector('.argument-checkbox');
+                if (cb) cb.tabIndex = 0;
+              }
+            });
+          }
+          updateLimitReached(fsId, s);
+        });
+      }
+    }
+  }
+
+  function getCardFsId(card) {
+    var col = card.closest('.arg-block');
+    return col ? col.id.replace('fs-', '') : null;
+  }
+
+  // ── Argument card click-to-vote ───────────────────────────────────────────────
+
+  function wireCard(card) {
+    card.addEventListener('click', function (e) {
+      if (e.target.closest('form') || e.target.closest('.btn-danger')) return; // moderator delete
+      if (card.dataset.canVote !== 'true') return;
+      if (card.dataset.limitReached === 'true') return;
+
+      var isPicked = card.dataset.picked === 'true';
+      var url  = isPicked ? card.dataset.unvoteUrl : card.dataset.voteUrl;
+      var csrf = card.dataset.csrf;
+      var side = card.dataset.side;
+      var fsId = getCardFsId(card);
+
+      // Optimistic update
+      if (isPicked) {
+        card.dataset.picked = 'false';
+        var cb = card.querySelector('.argument-checkbox');
+        if (cb) cb.innerHTML = '';
+        var cnt = card.querySelector('.importance-count');
+        if (cnt) cnt.textContent = Math.max(0, parseInt(cnt.textContent, 10) - 1);
+      } else {
+        card.dataset.picked = 'true';
+        var cb = card.querySelector('.argument-checkbox');
+        if (cb) cb.innerHTML = '<svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        var cnt = card.querySelector('.importance-count');
+        if (cnt) cnt.textContent = parseInt(cnt.textContent, 10) + 1;
+      }
+
+      updateLimitReached(fsId, side);
+      updateChip(fsId, side);
+
+      argFetch(url, csrf).then(function (r) {
+        if (!r.ok) {
+          // Revert on error
+          if (isPicked) {
+            card.dataset.picked = 'true';
+            var cb = card.querySelector('.argument-checkbox');
+            if (cb) cb.innerHTML = '<svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            var cnt = card.querySelector('.importance-count');
+            if (cnt) cnt.textContent = parseInt(cnt.textContent, 10) + 1;
+          } else {
+            card.dataset.picked = 'false';
+            var cb = card.querySelector('.argument-checkbox');
+            if (cb) cb.innerHTML = '';
+            var cnt = card.querySelector('.importance-count');
+            if (cnt) cnt.textContent = Math.max(0, parseInt(cnt.textContent, 10) - 1);
+          }
+          updateLimitReached(fsId, side);
+          updateChip(fsId, side);
+          // Surface the rejection reason in the status strip
+          r.json().then(function (data) {
+            var msgs = {
+              cap:  'You’ve already picked your ' + getK(tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="' + side + '"]')) + ' most important — unvote one first.',
+              gate: 'Voting is not open yet — add or skip on each side first.',
+              own:  'You can’t vote for your own argument.',
+            };
+            var strip = tab.querySelector('.arg-status-strip[data-fs="' + fsId + '"]');
+            if (strip && data && msgs[data.reason]) {
+              var txt = strip.querySelector('.arg-status-text');
+              var prev = txt.textContent;
+              txt.textContent = msgs[data.reason];
+              strip.classList.add('arg-status-strip--error');
+              setTimeout(function () {
+                txt.textContent = prev;
+                strip.classList.remove('arg-status-strip--error');
+              }, 3500);
+            }
+          }).catch(function () {});
+        }
+      });
+    });
+  }
+
+  tab.querySelectorAll('.argument-card').forEach(wireCard);
+
 }());
 </script>
 {% endif %}

@@ -1386,13 +1386,25 @@ a { color: var(--pass); }
 
 /* ── Argument mapping ─────────────────────────────────── */
 
+.arguments-tab { max-width: 940px; }
+
+.arg-block { margin-bottom: 2.5rem; }
+
+/* Featured statement card */
 .arg-statement {
   background: var(--surface);
   border: 1px solid var(--hairline);
-  border-radius: 14px;
-  padding: 20px 24px;
-  margin-bottom: 1.5rem;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: .75rem;
   box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+.arg-statement-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
 
 .arg-featured-badge {
@@ -1405,9 +1417,9 @@ a { color: var(--pass); }
   color: var(--spot);
   font-family: var(--mono);
   font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  margin-bottom: 8px;
 }
 
 .arg-statement-text {
@@ -1415,36 +1427,70 @@ a { color: var(--pass); }
   font-weight: 500;
   color: var(--ink);
   letter-spacing: -0.015em;
-  line-height: 1.3;
-  margin-bottom: 1rem;
+  line-height: 1.35;
+  margin: 0;
 }
 
-.arg-sentiment-bar {
+/* Status strip */
+.arg-status-strip {
   display: flex;
-  height: 6px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--hairline-soft);
-  margin-bottom: 4px;
-}
-
-.arg-sentiment-bar .bar-agree { background: var(--agree); }
-.arg-sentiment-bar .bar-pass  { background: var(--muted);  }
-.arg-sentiment-bar .bar-disagree { background: var(--disagree); }
-
-.arg-sentiment-stats {
-  display: flex;
+  align-items: center;
   justify-content: space-between;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: .75rem;
+  background: rgba(245,158,11,0.06);
+  border: 1px solid rgba(245,158,11,0.25);
 }
 
+.arg-status-strip--gated {
+  background: var(--surface);
+  border-color: var(--hairline);
+}
+
+.arg-status-strip--error {
+  background: rgba(196,74,74,0.06);
+  border-color: rgba(196,74,74,0.3);
+  transition: background .2s, border-color .2s;
+}
+
+.arg-status-text {
+  font-size: 13px;
+  color: var(--body);
+  flex: 1;
+}
+
+.arg-status-chips {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.arg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--hairline);
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.arg-chip--pro.arg-chip--done  { color: var(--agree);    border-color: rgba(31,138,91,0.35); background: rgba(31,138,91,0.06); }
+.arg-chip--con.arg-chip--done  { color: var(--disagree); border-color: rgba(196,74,74,0.35); background: rgba(196,74,74,0.06); }
+
+/* Column grid */
 .arg-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-  margin-top: 16px;
+  gap: 12px;
 }
 
 @media (max-width: 600px) {
@@ -1454,7 +1500,7 @@ a { color: var(--pass); }
 .arg-col-heading-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 10px;
 }
 
@@ -1471,100 +1517,306 @@ a { color: var(--pass); }
   flex-shrink: 0;
 }
 
-.arg-col--pro .arg-col-sign {
-  background: rgba(31,138,91,0.1);
-  color: var(--agree);
-}
-
-.arg-col--con .arg-col-sign {
-  background: rgba(196,74,74,0.1);
-  color: var(--disagree);
-}
+.arg-col--pro .arg-col-sign { background: rgba(31,138,91,0.1); color: var(--agree); }
+.arg-col--con .arg-col-sign { background: rgba(196,74,74,0.1); color: var(--disagree); }
 
 .arg-col-heading {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--ink);
   letter-spacing: -0.01em;
 }
 
 .arg-col-count {
-  font-size: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
   color: var(--muted);
 }
 
-.arg-card {
-  background: var(--surface);
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 10px;
+/* Contribute affordance — state machine via data-state attribute */
+.contribute-wrapper .contribute-affordance,
+.contribute-wrapper .contribute-composer,
+.contribute-wrapper .contribute-submitted,
+.contribute-wrapper .contribute-skipped { display: none; }
+
+.contribute-wrapper[data-state="idle"]      .contribute-affordance { display: flex; }
+.contribute-wrapper[data-state="composing"] .contribute-composer   { display: block; }
+.contribute-wrapper[data-state="submitted"] .contribute-submitted  { display: flex; }
+.contribute-wrapper[data-state="skipped"]   .contribute-skipped    { display: flex; }
+
+/* Idle dashed button */
+.contribute-affordance {
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 9px;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+  margin-bottom: 8px;
 }
 
-.arg-card--voted {
-  border-color: var(--agree);
-  background: rgba(31,138,91,0.03);
+.contribute-affordance--pro {
+  background: rgba(31,138,91,0.05);
+  border: 1.5px dashed rgba(31,138,91,0.45);
+  color: var(--agree);
 }
+.contribute-affordance--pro:hover { background: rgba(31,138,91,0.1); }
 
-.arg-body {
+.contribute-affordance--con {
+  background: rgba(196,74,74,0.05);
+  border: 1.5px dashed rgba(196,74,74,0.45);
+  color: var(--disagree);
+}
+.contribute-affordance--con:hover { background: rgba(196,74,74,0.1); }
+
+.contribute-glyph {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  font-family: var(--mono);
   font-size: 14px;
-  line-height: 1.55;
-  color: var(--ink);
-  margin-bottom: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.arg-actions {
+.arg-col--pro .contribute-glyph { background: rgba(31,138,91,0.15); color: var(--agree); }
+.arg-col--con .contribute-glyph { background: rgba(196,74,74,0.15); color: var(--disagree); }
+.contribute-glyph.filled        { background: var(--agree); color: #fff; }
+.arg-col--con .contribute-glyph.filled { background: var(--disagree); }
+
+.contribute-label { flex: 1; }
+.contribute-meta  {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+/* Composing state */
+.contribute-composer {
+  border: 1.5px solid var(--hairline);
+  border-radius: 9px;
+  padding: 13px 15px;
+  margin-bottom: 8px;
+  background: var(--surface);
+}
+
+.arg-col--pro .contribute-composer { border-color: var(--agree); box-shadow: 0 0 0 3px rgba(31,138,91,0.07); }
+.arg-col--con .contribute-composer { border-color: var(--disagree); box-shadow: 0 0 0 3px rgba(196,74,74,0.07); }
+
+.contribute-composer-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.contribute-composer-label {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.arg-col--pro .contribute-composer-label { color: var(--agree); }
+.arg-col--con .contribute-composer-label { color: var(--disagree); }
+
+.contribute-charcount {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.contribute-textarea {
+  width: 100%;
+  min-height: 64px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+  box-sizing: border-box;
+}
+
+.contribute-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-top: 9px;
+  margin-top: 8px;
+  border-top: 1px dashed var(--hairline-soft);
+}
+
+/* Submitted / skipped final states */
+.contribute-submitted {
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.contribute-submitted--pro { background: rgba(31,138,91,0.08); color: var(--agree); }
+.contribute-submitted--con { background: rgba(196,74,74,0.08); color: var(--disagree); }
+
+.contribute-skipped {
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  margin-bottom: 8px;
+}
+
+.contribute-skipped-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.contribute-changemind {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+.contribute-changemind:hover { color: var(--ink); }
+
+/* Argument cards */
+.argument-card {
+  display: flex;
+  gap: 10px;
+  padding: 11px 14px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  margin-bottom: 7px;
+  cursor: default;
+  transition: border-color .12s, box-shadow .12s, opacity .12s;
+}
+
+.argument-card[data-side="pro"] { --side-color: var(--agree); }
+.argument-card[data-side="con"] { --side-color: var(--disagree); }
+
+.argument-card[data-can-vote="true"]       { cursor: pointer; }
+.argument-card[data-can-vote="true"]:hover {
+  border-color: color-mix(in srgb, var(--side-color) 50%, transparent);
+}
+.argument-card[data-picked="true"] {
+  border: 1.5px solid var(--side-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--side-color) 10%, transparent);
+}
+.argument-card[data-own="true"] {
+  border-color: color-mix(in srgb, var(--side-color) 38%, transparent);
+}
+.argument-card[data-limit-reached="true"]  { opacity: 0.6; cursor: not-allowed; }
+
+/* Checkbox slot — always reserved, materialises when voting opens */
+.argument-checkbox {
+  flex-shrink: 0;
+  margin-top: 1px;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1.5px solid transparent;
+  background: transparent;
+  cursor: default;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .12s, background .12s;
+  padding: 0;
+}
+
+.argument-card[data-can-vote="true"] .argument-checkbox {
+  border-color: var(--hairline);
+  cursor: pointer;
+}
+
+.argument-card[data-can-vote="true"] .argument-checkbox::before {
+  content: "";
+  display: block;
+  width: 5px;
+  height: 5px;
+  background: var(--hairline-soft);
+  border-radius: 50%;
+}
+
+.argument-card[data-picked="true"] .argument-checkbox {
+  border-color: var(--side-color);
+  background: var(--side-color);
+}
+
+.argument-card[data-picked="true"] .argument-checkbox::before { display: none; }
+
+.argument-body  { flex: 1; min-width: 0; }
+
+.argument-text  {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  margin: 0 0 6px;
+}
+
+.argument-meta  {
+  display: flex;
+  gap: 8px;
+  align-items: center;
   flex-wrap: wrap;
 }
 
-.arg-votes {
-  font-size: 12px;
+.argument-importance {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
   font-family: var(--mono);
+  font-size: 10.5px;
   color: var(--muted);
 }
 
-/* Pill-style "most important" vote button */
-.btn-arg-vote {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--surface2);
-  border: 1px solid var(--hairline);
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 12px;
-  color: var(--ink);
-  cursor: pointer;
-  font-family: var(--sans);
-  transition: background 0.1s, border-color 0.1s;
+.argument-importance strong { color: var(--ink); font-weight: 600; }
+
+/* Hide importance count until voting phase is open */
+.arguments-tab[data-voting="false"] .argument-importance { display: none; }
+
+.argument-by {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
 }
 
-.btn-arg-vote-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: inline-block;
-}
-
-.arg-col--pro  .btn-arg-vote-dot { background: var(--agree); }
-.arg-col--con  .btn-arg-vote-dot { background: var(--disagree); }
-
-.btn-arg-vote:hover {
-  border-color: var(--accent);
-}
-
-.btn-arg-vote--voted {
-  background: var(--agree);
-  border-color: var(--agree);
-  color: #fff;
-}
-
-.btn-arg-vote--voted .btn-arg-vote-dot {
-  background: rgba(255,255,255,0.6);
+.argument-yours {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--side-color);
+  background: color-mix(in srgb, var(--side-color) 12%, transparent);
 }
 
 .arg-empty {
@@ -1573,33 +1825,11 @@ a { color: var(--pass); }
   margin-bottom: .5rem;
 }
 
-.arg-contribute {
-  margin-top: .75rem;
-}
-
-.arg-contribute textarea {
-  width: 100%;
-  font-size: 13px;
-  font-family: var(--sans);
-  padding: 10px 12px;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  resize: vertical;
-  box-sizing: border-box;
-  line-height: 1.5;
-  color: var(--ink);
-}
-
-.arg-contribute textarea:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
-.arg-form-actions {
-  display: flex;
-  gap: .5rem;
-  margin-top: .4rem;
-  flex-wrap: wrap;
+.arg-threshold {
+  margin-top: .5rem;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--mono);
 }
 
 .btn-muted {
@@ -1611,27 +1841,6 @@ a { color: var(--pass); }
 .btn-muted:hover {
   color: var(--ink);
   border-color: var(--accent);
-}
-
-.arg-contributed {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: .5rem;
-  font-family: var(--mono);
-}
-
-.arg-threshold {
-  margin-top: .5rem;
-  font-size: 12px;
-  color: var(--muted);
-  font-family: var(--mono);
-}
-
-.arg-vote-prompt {
-  font-size: 13px;
-  color: var(--muted);
-  margin-bottom: .5rem;
-  font-style: italic;
 }
 
 /* ── Reveal page ── */
