@@ -1524,6 +1524,8 @@ def _register_routes(app: Flask) -> None:
             client.add_seed(conv.polis_id, text)
         except PolisAdminError as exc:
             current_app.logger.error('add_seed failed: %s', exc)
+            return redirect(url_for('admin_conversation_statements',
+                                    conv_id=conv_id, error=str(exc)))
         return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
 
     @app.post('/admin/conversations/<int:conv_id>/strict-moderation')

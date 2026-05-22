@@ -841,6 +841,9 @@
     if (e.state === 'error') {
       convError.hidden = false;
       convErrorMsg.textContent = 'Could not connect to the voting server. Please refresh the page.';
+    } else if (e.state === 'loaded' && e.authenticationRequired) {
+      convError.hidden = false;
+      convErrorMsg.textContent = 'Authentication is required to participate. Please log in and try again.';
     } else if (e.state === 'loaded' || e.state === 'loading') {
       convError.hidden = true;
     }

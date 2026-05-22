@@ -193,10 +193,46 @@ class PolisAdminClient:
         )
 
     def add_seed(self, conversation_id: str, text: str) -> None:
-        """Not available server-side — Particiapi seed creation requires a browser session."""
-        raise PolisAdminError(
-            'Seed statement creation is not available server-side through Particiapi.'
-        )
+        """Add a statement via a server-side Particiapi session.
+
+        Creates a temporary anonymous session to obtain a CSRF token, then posts
+        the statement.  Note: Particiapi does not support server-side seed marking;
+        the statement appears as a regular participant statement in the vote view.
+        """
+        # Step 1: create an anonymous session to get uid + CSRF token.
+        try:
+            r = requests.post(
+                f'{self._base}/api/session',
+                params={'create': 'true'},
+                timeout=10,
+            )
+        except requests.RequestException as exc:
+            raise PolisAdminError(str(exc)) from exc
+        if not r.ok:
+            raise PolisAdminError(
+                f'Session create HTTP {r.status_code}: {r.text[:200]}'
+            )
+        session_data  = r.json()
+        csrf_token    = session_data.get('csrf_token', '')
+        session_cookie = r.cookies.get('session', '')
+        if not csrf_token or not session_cookie:
+            raise PolisAdminError('Particiapi did not return session credentials')
+
+        # Step 2: post the statement with the session cookie and CSRF token.
+        try:
+            r2 = requests.post(
+                f'{self._base}/api/conversations/{conversation_id}/statements/',
+                json={'text': text},
+                headers={'X-CSRF-Token': csrf_token},
+                cookies={'session': session_cookie},
+                timeout=10,
+            )
+        except requests.RequestException as exc:
+            raise PolisAdminError(str(exc)) from exc
+        if not r2.ok:
+            raise PolisAdminError(
+                f'Statement POST HTTP {r2.status_code}: {r2.text[:200]}'
+            )
 
     # ── Conversation settings ─────────────────────────────────────────────────
 
