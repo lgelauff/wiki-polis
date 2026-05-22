@@ -346,7 +346,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                 'DATABASE_URL is not set. '
                 'Set it via `toolforge envvars create DATABASE_URL <url>` or the '
                 'DATABASE_URL environment variable. '
-                'Example: mysql+pymysql://s_wiki_polis:<pw>@tools.db.svc.wikimedia.cloud/s_wiki_polis__main?charset=utf8mb4'
+                'Example: mysql+pymysql://s11111:<pw>@tools.db.svc.wikimedia.cloud/s11111__wiki-polis?charset=utf8mb4'
             )
         app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 
@@ -1605,6 +1605,7 @@ def _register_routes(app: Flask) -> None:
         return redirect(url_for('admin_conversation_featured', conv_id=conv_id))
 
 
+app = create_app()
+
 if __name__ == '__main__':
-    app = create_app()
     app.run(debug=True)

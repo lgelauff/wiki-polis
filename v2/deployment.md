@@ -48,6 +48,20 @@ Request a WMCS Cloud VPS project at https://horizon.wikimedia.org, or use any VP
 
 > **Floating IP**: WMCS quotas are limited. A floating IP is not needed — use the ProxyJump config below instead.
 
+#### Security group (after Docker stack is running)
+
+In Horizon → Network → Security Groups → **Manage Rules** on the default group → **Add Rule**:
+
+- **Rule:** Custom TCP Rule
+- **Direction:** Ingress
+- **Port:** 8000
+- **CIDR:** `172.16.0.0/17`
+- **Description:** `Allow Toolforge pods to reach Particiapi on port 8000`
+
+`172.16.0.0/17` covers all WMCS internal traffic (Toolforge workers, Cloud VPS instances). The full Toolforge worker list is at `https://tools-static.wmflabs.org/admin/meta/worker-ips.json` — 77 individual IPs, too many for per-IP rules.
+
+> **Note:** Instance snapshots are blocked by WMCS policy (`os_compute_api:servers:create_image` — HTTP 403). Use pg_dump for backups instead.
+
 #### SSH key setup (one-time)
 
 WMCS Cloud VPS instances use **LDAP-managed SSH keys**, not Horizon Key Pairs. You must upload your public key to the Wikimedia Identity Management system:
@@ -91,31 +105,62 @@ sudo systemctl enable docker
 git clone --recurse-submodules \
   https://gitlab.com/particiapp/particiapp-docker.git
 cd particiapp-docker
-cp .env.example .env
+cp env .env
+mkdir -p ~/particiapp-data/postgresql-data ~/particiapp-data/postgres-backups
 nano .env
 ```
 
-Set in `.env` (the file is `docker-compose.yaml` — it reads `BIND_ADDRESS` for port binding):
+Set these values in `.env` (replace `<private-ip>` with the VM's internal IP from `hostname -I`):
 
 ```
-PARTICIAPI_AUTHENTICATION_DISABLED=True
+DATA_DIR=/home/<your-username>/particiapp-data
+PARTICIAPI_DIR=/home/<your-username>/particiapp-docker
 POSTGRES_PASSWORD=<strong-random-password>
-SECRET_KEY=<strong-random-secret>
+POLIS_SERVER_NAME=polis.internal
+PARTICIAPI_HOSTNAME=particiapi
+PARTICIAPI_DOMAINNAME=internal
+PARTICIAPI_SECRET_KEY=<strong-random-secret>
+PARTICIAPI_CORS_ORIGINS=https://wiki-polis.toolforge.org
+PARTICIAPI_IDP_API_BASE_URL=
+PARTICIAPI_IDP_CLIENT_ID=
+PARTICIAPI_IDP_CLIENT_SECRET=
+PARTICIAPI_AUTHENTICATION_DISABLED=True
 BIND_ADDRESS=<private-ip>
 ```
 
-`BIND_ADDRESS` controls which interface Particiapi binds to. Set it to the VM's private IP (from `hostname -I`) so only Toolforge can reach it. Do **not** use `0.0.0.0` — that would expose Particiapi on all interfaces.
+Notes:
+- `DATA_DIR` — persistent postgres data; survives container restarts
+- `PARTICIAPI_DIR` — the cloned repo root (needed for the schema.sql submodule)
+- `BIND_ADDRESS` — private IP only; do **not** use `0.0.0.0`
+- IDP fields can be left empty when `PARTICIAPI_AUTHENTICATION_DISABLED=True`
+- `restart: always` is already set on all services — do not modify it
+- The container-internal Particiapi port is 5000, mapped to host port 8000
 
-> `restart: always` is already set on all services in `docker-compose.yaml` — do not modify it.
+Pre-seed the Polis schema volume before first start. Postgres runs init scripts on first boot — the migration files must be in the volume before that happens, but the normal startup order prevents this. Run once manually:
+
+```bash
+docker run --rm -v particiapp-docker_polis-schemas:/data \
+  registry.gitlab.com/particiapp/polis/server:latest \
+  cp -r /app/postgres/migrations/. /data/
+```
 
 Start the stack:
 
 ```bash
 docker-compose up -d
+```
+
+Some containers may fail on first run due to healthcheck timing. Run it a second time to start any that were skipped:
+
+```bash
+docker-compose up -d
+docker ps   # all 5 services should show (healthy) or Up
 curl http://<private-ip>:8000/api/conversations/   # should return []
 ```
 
 > Note: uses `docker-compose` (v1 hyphen) as installed on Debian 12. If v2 plugin is available, use `docker compose` instead.
+
+> **Postgres data directory permissions:** Docker runs postgres as an internal user, so `~/particiapp-data/postgresql-data/` will be owned by that user, not by you. If you ever need to delete it (e.g. to re-initialise the database), use `sudo rm -rf ~/particiapp-data/postgresql-data/`.
 
 ### Backups
 
@@ -203,7 +248,7 @@ Values to enter at the prompts:
 - `SECRET_KEY` — your strong random secret
 - `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` — from OAuth registration
 - `PARTICIAPI_BASE_URL` — `http://<vps-private-ip>:8000`
-- `DATABASE_URL` — `mysql+pymysql://<creduser>:<password>@tools.db.svc.wikimedia.cloud/<creduser>__main?charset=utf8mb4` (see ToolsDB step below for `<creduser>`)
+- `DATABASE_URL` — `mysql+pymysql://<creduser>:<password>@tools.db.svc.wikimedia.cloud/<creduser>__wiki-polis?charset=utf8mb4` (see ToolsDB step below for `<creduser>`)
 - `ADMIN_USERS` — your Wikimedia username
 
 > `toolforge envvars list` shows names only, not values. Keep a local record.
@@ -215,11 +260,11 @@ The app reads secrets from env vars via `_read_secret()` in `app.py`. On Kuberne
 ```bash
 sql tools   # opens MySQL as your tool user
 SELECT SUBSTRING_INDEX(CURRENT_USER(), '@', 1);   -- note this value, it's your <creduser>
-CREATE DATABASE <creduser>__main CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE `<creduser>__wiki-polis` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 exit
 ```
 
-The database name must use the exact credential username shown by `CURRENT_USER()` — you cannot choose it freely. It will be something like `s51234` or `s_wiki_polis`. Use this same value in the `DATABASE_URL` envvar above.
+The database name must use the exact credential username shown by `CURRENT_USER()` — you cannot choose it freely. It will be a numeric ID like `s11111` (not a tool name). Use this same value in the `DATABASE_URL` envvar above.
 
 ### Register Wikimedia OAuth application
 
