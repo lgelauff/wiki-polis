@@ -275,9 +275,7 @@ class PolisServerClient:
                 f'Polis login failed (HTTP {resp.status_code}). '
                 'Check POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD env vars.'
             )
-        token = resp.cookies.get('token') or next(
-            (c.value for c in sess.cookies if c.name == 'token'), None
-        )
+        token = resp.json().get('token')
         extra = {'Cookie': f'token={token}'} if token else {}
         return sess, extra
 
