@@ -276,7 +276,7 @@ class PolisServerClient:
                 'Check POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD env vars.'
             )
         token = resp.json().get('token')
-        extra = {'Cookie': f'token={token}'} if token else {}
+        extra = {'x-polis': token} if token else {}
         return sess, extra
 
     def create_conversation(self, title: str) -> str:
