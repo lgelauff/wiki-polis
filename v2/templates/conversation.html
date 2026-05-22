@@ -788,10 +788,28 @@
   proposeSubmitBtn.addEventListener('click', function () {
     var val = proposeInput.value.trim();
     if (val.length === 0 || val === originalStmtText.trim()) return;
+
+    proposeSubmitBtn.disabled = true;
+
+    function onSuccess() {
+      conv.removeEventListener('particiappstatementsubmitsuccess', onSuccess);
+      conv.removeEventListener('particiappstatementsubmiterror', onError);
+      proposeComposer.hidden  = true;
+      proposeSubmitted.hidden = false;
+      setTimeout(enterIdle, 1200);
+    }
+    function onError(e) {
+      conv.removeEventListener('particiappstatementsubmitsuccess', onSuccess);
+      conv.removeEventListener('particiappstatementsubmiterror', onError);
+      proposeSubmitBtn.disabled = false;
+      convError.hidden = false;
+      convErrorMsg.textContent = 'Could not submit statement'
+        + (e.error && e.error.message ? ': ' + e.error.message : '') + '.';
+    }
+    conv.addEventListener('particiappstatementsubmitsuccess', onSuccess);
+    conv.addEventListener('particiappstatementsubmiterror', onError);
+
     pvbSubmitStmt.click();
-    proposeComposer.hidden  = true;
-    proposeSubmitted.hidden = false;
-    setTimeout(enterIdle, 600);
   });
 
   // ── Propose: next statement (manual fallback in submitted state) ──────────────
