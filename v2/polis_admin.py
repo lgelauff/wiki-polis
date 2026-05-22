@@ -247,12 +247,18 @@ class PolisServerClient:
         self._email    = email
         self._password = password
 
+    # Polis rejects plain HTTP form submissions unless the request appears to
+    # come via HTTPS (checked via X-Forwarded-Proto). Since we call it over the
+    # internal private network this header is safe to add.
+    _HEADERS = {'X-Forwarded-Proto': 'https'}
+
     def _login(self) -> requests.Session:
         sess = requests.Session()
         try:
             resp = sess.post(
                 f'{self._base}/api/v3/auth/login',
                 json={'email': self._email, 'password': self._password},
+                headers=self._HEADERS,
                 timeout=10,
             )
         except requests.RequestException as exc:
@@ -288,6 +294,7 @@ class PolisServerClient:
                         'strict_moderation':  False,
                         'conversation_id':    zinvite,
                     },
+                    headers=self._HEADERS,
                     timeout=10,
                 )
             except requests.RequestException as exc:
