@@ -252,7 +252,14 @@ class PolisServerClient:
     # internal private network this header is safe to add.
     _HEADERS = {'X-Forwarded-Proto': 'https'}
 
-    def _login(self) -> requests.Session:
+    def _login(self) -> tuple[requests.Session, dict]:
+        """Return (session, extra_headers) where extra_headers carries the auth token.
+
+        Polis sets the token cookie with domain=POLIS_SERVER_NAME (e.g. polis.internal).
+        That domain never matches our internal VPS hostname, so requests won't send the
+        cookie automatically.  We extract the raw token from the response and return it
+        as an explicit Cookie header for callers to merge into their requests.
+        """
         sess = requests.Session()
         try:
             resp = sess.post(
@@ -268,13 +275,11 @@ class PolisServerClient:
                 f'Polis login failed (HTTP {resp.status_code}). '
                 'Check POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD env vars.'
             )
-        # Polis sets the token cookie with domain=POLIS_SERVER_NAME (e.g. polis.internal),
-        # which doesn't match our internal hostname. Re-set without domain so requests
-        # sends it on all subsequent calls in this session.
-        token = next((c.value for c in sess.cookies if c.name == 'token'), None)
-        if token:
-            sess.cookies.set('token', token)
-        return sess
+        token = resp.cookies.get('token') or next(
+            (c.value for c in sess.cookies if c.name == 'token'), None
+        )
+        extra = {'Cookie': f'token={token}'} if token else {}
+        return sess, extra
 
     def create_conversation(self, title: str) -> str:
         """Create a Polis conversation and return its zinvite.
@@ -283,7 +288,8 @@ class PolisServerClient:
         Polis uses it directly if not already taken.  On collision (extremely
         unlikely), retries once with a fresh token.
         """
-        sess = self._login()
+        sess, auth_headers = self._login()
+        headers = {**self._HEADERS, **auth_headers}
         for _ in range(2):
             zinvite = _generate_zinvite()
             try:
@@ -300,7 +306,7 @@ class PolisServerClient:
                         'strict_moderation':  False,
                         'conversation_id':    zinvite,
                     },
-                    headers=self._HEADERS,
+                    headers=headers,
                     timeout=10,
                 )
             except requests.RequestException as exc:
