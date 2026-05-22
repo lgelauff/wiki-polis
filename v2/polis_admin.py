@@ -1,11 +1,15 @@
 """
-polis_admin.py — Server-side Particiapi admin operations.
+polis_admin.py — Server-side Particiapi and Polis admin operations.
 
-All calls go to Particiapi (not directly to Polis). Because the stack runs
-with PARTICIAPI_AUTHENTICATION_DISABLED=True, no session cookie is needed
-for server-to-server calls from Flask.
+Particiapi calls (PolisAdminClient): use PARTICIAPI_BASE_URL (port 8000).
+Auth disabled on Particiapi — no session cookie needed for these calls.
 
-Note on feature parity:
+Polis direct calls (PolisServerClient): use POLIS_SERVER_URL (port 8001).
+Requires a Polis system account (POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD).
+Used only for admin operations not available via Particiapi — currently
+conversation creation only.
+
+Note on Particiapi feature parity:
   Particiapi exposes a minimal API — conversation metadata, statements (read),
   voting, and results. It does not expose moderation, seed-statement creation,
   or strict-moderation settings; those remain Polis-only. Methods that cannot
@@ -13,6 +17,8 @@ Note on feature parity:
 """
 
 import re
+import secrets
+import string
 
 import requests
 
@@ -214,3 +220,92 @@ class PolisAdminClient:
             return self._req('GET', f'api/conversations/{conversation_id}/results/')
         except PolisAdminError:
             return None
+
+
+# ── Polis server direct client ────────────────────────────────────────────────
+
+def _generate_zinvite() -> str:
+    """Return a random 11-char alphanumeric string matching Polis zinvite format."""
+    alphabet = string.ascii_lowercase + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(11))
+
+
+class PolisServerError(Exception):
+    pass
+
+
+class PolisServerClient:
+    """Direct Polis server API client (port 8001 on VPS).
+
+    Used for admin operations not available via Particiapi — currently
+    conversation creation only.  Requires a Polis system account created
+    once on the VPS (see deployment.md).
+    """
+
+    def __init__(self, polis_server_url: str, email: str, password: str):
+        self._base     = polis_server_url.rstrip('/')
+        self._email    = email
+        self._password = password
+
+    def _login(self) -> requests.Session:
+        sess = requests.Session()
+        try:
+            resp = sess.post(
+                f'{self._base}/api/v3/auth/login',
+                json={'email': self._email, 'password': self._password},
+                timeout=10,
+            )
+        except requests.RequestException as exc:
+            raise PolisServerError(str(exc)) from exc
+        if not resp.ok:
+            raise PolisServerError(
+                f'Polis login failed (HTTP {resp.status_code}). '
+                'Check POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD env vars.'
+            )
+        return sess
+
+    def create_conversation(self, title: str) -> str:
+        """Create a Polis conversation and return its zinvite.
+
+        Generates the zinvite client-side and passes it as conversation_id;
+        Polis uses it directly if not already taken.  On collision (extremely
+        unlikely), retries once with a fresh token.
+        """
+        sess = self._login()
+        for _ in range(2):
+            zinvite = _generate_zinvite()
+            try:
+                resp = sess.post(
+                    f'{self._base}/api/v3/conversations',
+                    json={
+                        'topic':              title,
+                        'description':        '',
+                        'is_active':          True,
+                        'is_draft':           False,
+                        'is_anon':            False,
+                        'profanity_filter':   False,
+                        'spam_filter':        False,
+                        'strict_moderation':  False,
+                        'conversation_id':    zinvite,
+                    },
+                    timeout=10,
+                )
+            except requests.RequestException as exc:
+                raise PolisServerError(str(exc)) from exc
+            if resp.status_code == 400:
+                # conversation_id already taken — retry
+                continue
+            if not resp.ok:
+                raise PolisServerError(
+                    f'Polis conversation creation failed (HTTP {resp.status_code}): '
+                    f'{resp.text[:300]}'
+                )
+            # Response: {url: "...", zid: N}  — zinvite is the last path segment of url
+            data = resp.json()
+            url  = data.get('url', '')
+            if url:
+                slug = url.rstrip('/').rsplit('/', 1)[-1]
+                if re.match(r'^[A-Za-z0-9]{6,20}$', slug):
+                    return slug
+            return zinvite
+        raise PolisServerError('Polis zinvite collision on two attempts — try again.')

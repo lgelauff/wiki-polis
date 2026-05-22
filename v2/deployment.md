@@ -50,15 +50,16 @@ Request a WMCS Cloud VPS project at https://horizon.wikimedia.org, or use any VP
 
 #### Security group (after Docker stack is running)
 
-In Horizon → Network → Security Groups → **Manage Rules** on the default group → **Add Rule**:
+In Horizon → Network → Security Groups → **Manage Rules** on the default group → **Add Rule** (repeat for each rule below):
 
-- **Rule:** Custom TCP Rule
-- **Direction:** Ingress
-- **Port:** 8000
-- **CIDR:** `172.16.0.0/17`
-- **Description:** `Allow Toolforge pods to reach Particiapi on port 8000`
+| Port | Purpose | CIDR | Description |
+|---|---|---|---|
+| 8000 | Particiapi — participant voting | `172.16.0.0/17` | Allow Toolforge pods to reach Particiapi |
+| 8001 | Polis server — conversation creation | `172.16.0.0/17` | Allow Toolforge pods to create Polis conversations |
 
 `172.16.0.0/17` covers all WMCS internal traffic (Toolforge workers, Cloud VPS instances). The full Toolforge worker list is at `https://tools-static.wmflabs.org/admin/meta/worker-ips.json` — 77 individual IPs, too many for per-IP rules.
+
+> **Port 8001 surface:** port 8001 exposes the Polis HTTP API. The CIDR restricts it to Toolforge pods. Protect further with `POLIS_ADMIN_PASSWORD` strength and by not exposing the Polis admin UI to the public internet.
 
 > **Note:** Instance snapshots are blocked by WMCS policy (`os_compute_api:servers:create_image` — HTTP 403). Use pg_dump for backups instead.
 
@@ -162,6 +163,26 @@ curl http://<private-ip>:8000/api/conversations/   # should return []
 
 > **Postgres data directory permissions:** Docker runs postgres as an internal user, so `~/particiapp-data/postgresql-data/` will be owned by that user, not by you. If you ever need to delete it (e.g. to re-initialise the database), use `sudo rm -rf ~/particiapp-data/postgresql-data/`.
 
+### Polis system account (one-time)
+
+The wiki-polis admin panel creates Polis conversations by calling the Polis API at port 8001. This requires a dedicated Polis user account. Create it once on the VPS:
+
+```bash
+# SSH to VPS, then:
+curl -s -X POST http://localhost:8001/api/v3/auth/new \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "email": "wiki-polis-system@internal.invalid",
+    "password": "<strong-random-password>",
+    "hname": "wiki-polis system",
+    "gatekeeperTosPrivacy": true
+  }'
+```
+
+A successful response returns JSON with a `uid`. Store the email and password in your password manager — they go into the `POLIS_ADMIN_EMAIL` and `POLIS_ADMIN_PASSWORD` Toolforge env vars.
+
+> **Why `localhost:8001`?** Port 8001 inside the VPS hits `127.0.0.1` which maps to the Polis container (bound on the private IP). From inside the VPS, both `localhost:8001` and `<private-ip>:8001` work.
+
 ### Backups
 
 Set up a daily `pg_dump` to WMCS Object Storage (Swift) or any offsite location:
@@ -236,6 +257,9 @@ toolforge envvars create OAUTH_CLIENT_SECRET
 toolforge envvars create PARTICIAPI_BASE_URL
 toolforge envvars create DATABASE_URL
 toolforge envvars create ADMIN_USERS
+toolforge envvars create POLIS_SERVER_URL
+toolforge envvars create POLIS_ADMIN_EMAIL
+toolforge envvars create POLIS_ADMIN_PASSWORD
 ```
 
 Non-secret values can be passed as arguments:
@@ -250,6 +274,9 @@ Values to enter at the prompts:
 - `PARTICIAPI_BASE_URL` — `http://<vps-private-ip>:8000`
 - `DATABASE_URL` — `mysql+pymysql://<creduser>:<password>@tools.db.svc.wikimedia.cloud/<creduser>__wiki-polis?charset=utf8mb4` (see ToolsDB step below for `<creduser>`)
 - `ADMIN_USERS` — your Wikimedia username
+- `POLIS_SERVER_URL` — `http://<vps-private-ip>:8001` (Polis server, for conversation creation)
+- `POLIS_ADMIN_EMAIL` — email of the Polis system account (see Polis system account step below)
+- `POLIS_ADMIN_PASSWORD` — password of the Polis system account
 
 > `toolforge envvars list` shows names only, not values. Keep a local record.
 
@@ -329,6 +356,9 @@ cd ~ && webservice restart
 | `OAUTH_REDIRECT_URI` | yes (prod) | Must match registered callback URL |
 | `PARTICIAPI_BASE_URL` | yes | Internal URL of Particiapi (e.g. `http://10.x.x.x:8000`) |
 | `DATABASE_URL` | yes (prod) | SQLAlchemy DB URL; defaults to `sqlite:///dev.db` |
+| `POLIS_SERVER_URL` | yes | Direct Polis server URL (e.g. `http://10.x.x.x:8001`) — required for conversation creation |
+| `POLIS_ADMIN_EMAIL` | yes | Email of the Polis system account (created once on VPS) |
+| `POLIS_ADMIN_PASSWORD` | yes | Password of the Polis system account |
 | `POLIS_DATABASE_URL` | no | Direct Postgres connection for admin stats panel; leave blank to disable |
 | `POLIS_PUBLIC_URL` | no | Public Polis URL for "view full results" links |
 | `DEV_LOGIN_USER` | dev only | Bypasses OAuth in local dev; never set in production |

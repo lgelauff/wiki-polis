@@ -29,8 +29,8 @@ from sqlalchemy.orm import joinedload
 from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideState,
                 ArgumentVote, Conversation, ConversationInvite, FeaturedStatement,
                 Participant, Participation, db)
-from polis_admin import (PolisAdminClient, PolisAdminError, get_featured_candidates,
-                         get_polis_stats)
+from polis_admin import (PolisAdminClient, PolisAdminError, PolisServerClient,
+                         PolisServerError, get_featured_candidates, get_polis_stats)
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -109,7 +109,6 @@ def _valid_slug(v: str) -> bool:
 def _parse_conversation_form() -> dict:
     raw_policy = request.form.get('access_policy', 'public').strip()
     return {
-        'polis_id':      request.form.get('polis_id', '').strip(),
         'title':         request.form.get('title', '').strip(),
         'intro_text':    _sanitise_text(request.form.get('intro_text', '')),
         'outro_text':    _sanitise_text(request.form.get('outro_text', '')),
@@ -386,6 +385,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['POLIS_PUBLIC_URL'] = _polis_public_url
     app.config['POLIS_DATABASE_URL'] = (_read_secret('polis-database-url')
                                         or os.environ.get('POLIS_DATABASE_URL', ''))
+    app.config['POLIS_SERVER_URL']   = (_read_secret('polis-server-url')
+                                        or os.environ.get('POLIS_SERVER_URL', ''))
+    app.config['POLIS_ADMIN_EMAIL']  = (_read_secret('polis-admin-email')
+                                        or os.environ.get('POLIS_ADMIN_EMAIL', ''))
+    app.config['POLIS_ADMIN_PASSWORD'] = (_read_secret('polis-admin-password')
+                                          or os.environ.get('POLIS_ADMIN_PASSWORD', ''))
 
     # Apply test overrides before extensions are initialised so SESSION_TYPE,
     # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
@@ -1275,10 +1280,30 @@ def _register_routes(app: Flask) -> None:
         slug   = request.form.get('slug', '').strip().lower()
         fields = _parse_conversation_form()
 
-        if not fields['title'] or not _valid_polis_id(fields['polis_id']) or not _valid_slug(slug):
+        if not fields['title'] or not _valid_slug(slug):
             abort(400)
 
-        db.session.add(Conversation(slug=slug, active=True, **fields))
+        polis_url      = current_app.config.get('POLIS_SERVER_URL', '')
+        polis_email    = current_app.config.get('POLIS_ADMIN_EMAIL', '')
+        polis_password = current_app.config.get('POLIS_ADMIN_PASSWORD', '')
+
+        if polis_url and polis_email and polis_password:
+            try:
+                client   = PolisServerClient(polis_url, polis_email, polis_password)
+                polis_id = client.create_conversation(fields['title'])
+            except PolisServerError as exc:
+                current_app.logger.error('Polis conversation creation failed: %s', exc)
+                return redirect(url_for('admin', error=f'Could not create Polis conversation: {exc}'))
+        else:
+            # Fallback: accept manually supplied polis_id (local dev / misconfigured prod)
+            polis_id = request.form.get('polis_id', '').strip()
+            if not _valid_polis_id(polis_id):
+                return redirect(url_for('admin', error=(
+                    'POLIS_SERVER_URL / POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD not configured. '
+                    'Pass a polis_id manually or set the env vars.'
+                )))
+
+        db.session.add(Conversation(slug=slug, active=True, polis_id=polis_id, **fields))
         db.session.commit()
         return redirect(url_for('admin'))
 
@@ -1289,13 +1314,12 @@ def _register_routes(app: Flask) -> None:
         conv   = Conversation.query.get_or_404(conv_id)
         fields = _parse_conversation_form()
 
-        if not fields['title'] or not _valid_polis_id(fields['polis_id']):
+        if not fields['title']:
             abort(400)
 
-        conv.polis_id     = fields['polis_id']
-        conv.title        = fields['title']
-        conv.intro_text   = fields['intro_text']
-        conv.outro_text   = fields['outro_text']
+        conv.title         = fields['title']
+        conv.intro_text    = fields['intro_text']
+        conv.outro_text    = fields['outro_text']
         conv.access_policy = fields['access_policy']
         db.session.commit()
         return redirect(url_for('admin_conversation_detail', conv_id=conv_id))
