@@ -84,6 +84,8 @@ limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 def _safe_redirect(target: str, fallback: str) -> str:
     """Return target if it is a same-host relative URL, otherwise fallback."""
+    if not target:
+        return fallback
     ref  = urlparse(request.host_url)
     test = urlparse(urljoin(request.host_url, target))
     if test.scheme in ('http', 'https') and test.netloc == ref.netloc:
