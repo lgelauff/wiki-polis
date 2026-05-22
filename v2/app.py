@@ -297,6 +297,14 @@ def _proxy_to_particiapi(pa_path: str):
         current_app.logger.error('Particiapi proxy error: %s', exc)
         abort(502)
 
+    # Particiapi returns 403 on /results/ when math hasn't run yet (no clusters).
+    # The web component treats any 403 as a fatal error and clears the UI.
+    # Convert to 200 with empty body so the component stays in a usable state.
+    if upstream.status_code == 403 and pa_path.endswith('/results/'):
+        flask_resp = make_response('{}', 200)
+        flask_resp.headers['Content-Type'] = 'application/json'
+        return flask_resp
+
     flask_resp = make_response(upstream.content, upstream.status_code)
     flask_resp.headers['Content-Type'] = upstream.headers.get(
         'Content-Type', 'application/json')
