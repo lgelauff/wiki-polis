@@ -89,37 +89,33 @@ sudo systemctl enable docker
 
 ```bash
 git clone --recurse-submodules \
-  https://gitlab.wikimedia.org/repos/tool-labs/particiapp/particiapp-docker.git
+  https://gitlab.com/particiapp/particiapp-docker.git
 cd particiapp-docker
 cp .env.example .env
+nano .env
 ```
 
-Edit `.env`:
+Set in `.env` (the file is `docker-compose.yaml` — it reads `BIND_ADDRESS` for port binding):
 
 ```
 PARTICIAPI_AUTHENTICATION_DISABLED=True
 POSTGRES_PASSWORD=<strong-random-password>
 SECRET_KEY=<strong-random-secret>
+BIND_ADDRESS=<private-ip>
 ```
 
-Bind Particiapi to the VM's **private IP** so Toolforge can reach it (both are in the same WMCS OpenStack network). Replace `<private-ip>` with the actual internal IP shown by `hostname -I`. Add to `docker-compose.yml` under the `particiapi` service:
+`BIND_ADDRESS` controls which interface Particiapi binds to. Set it to the VM's private IP (from `hostname -I`) so only Toolforge can reach it. Do **not** use `0.0.0.0` — that would expose Particiapi on all interfaces.
 
-```yaml
-ports:
-  - "<private-ip>:8000:8000"
-restart: unless-stopped
-```
-
-> Do **not** use `0.0.0.0:8000:8000` — that binds Particiapi on all interfaces including any public IP. The WMCS security group is your only other defence.
-
-Add `restart: unless-stopped` to all services.
+> `restart: always` is already set on all services in `docker-compose.yaml` — do not modify it.
 
 Start the stack:
 
 ```bash
 docker-compose up -d
-curl http://localhost:8000/api/conversations/   # should return []
+curl http://<private-ip>:8000/api/conversations/   # should return []
 ```
+
+> Note: uses `docker-compose` (v1 hyphen) as installed on Debian 12. If v2 plugin is available, use `docker compose` instead.
 
 ### Backups
 
@@ -176,25 +172,39 @@ exit
 
 ### Add uwsgi.ini
 
-Wikimedia OAuth tokens exceed uWSGI's default 4 KB header buffer, causing silent failures. Create `wiki-polis/v2/uwsgi.ini`:
+Wikimedia OAuth tokens exceed uWSGI's default 4 KB header buffer, causing silent failures. Create `~/www/python/uwsgi.ini`:
 
-```ini
-buffer-size = 65536
+```bash
+echo "buffer-size = 65536" > ~/www/python/uwsgi.ini
 ```
 
-Toolforge picks this up automatically from `~/www/python/src/uwsgi.ini`.
+Toolforge picks this up from `~/www/python/uwsgi.ini` — this is the required location.
 
 ### Set secrets
 
+**Do not pass secret values as CLI arguments** — they are logged to shell history and visible to other bastion users. Use the interactive prompt instead (input is hidden):
+
 ```bash
-toolforge envvars create SECRET_KEY            'your-strong-secret'
-toolforge envvars create OAUTH_CLIENT_ID       'your-oauth-client-id'
-toolforge envvars create OAUTH_CLIENT_SECRET   'your-oauth-secret'
-toolforge envvars create OAUTH_REDIRECT_URI    'https://wiki-polis.toolforge.org/oauth-callback'
-toolforge envvars create PARTICIAPI_BASE_URL   'http://<vps-internal-ip>:8000'
-toolforge envvars create DATABASE_URL          'mysql+pymysql://s_wiki_polis:<password>@tools.db.svc.wikimedia.cloud/s_wiki_polis__main?charset=utf8mb4'
-toolforge envvars create ADMIN_USERS           'YourWikimediaUsername'
+toolforge envvars create SECRET_KEY
+toolforge envvars create OAUTH_CLIENT_ID
+toolforge envvars create OAUTH_CLIENT_SECRET
+toolforge envvars create PARTICIAPI_BASE_URL
+toolforge envvars create DATABASE_URL
+toolforge envvars create ADMIN_USERS
 ```
+
+Non-secret values can be passed as arguments:
+
+```bash
+toolforge envvars create OAUTH_REDIRECT_URI 'https://wiki-polis.toolforge.org/oauth-callback'
+```
+
+Values to enter at the prompts:
+- `SECRET_KEY` — your strong random secret
+- `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` — from OAuth registration
+- `PARTICIAPI_BASE_URL` — `http://<vps-private-ip>:8000`
+- `DATABASE_URL` — `mysql+pymysql://<creduser>:<password>@tools.db.svc.wikimedia.cloud/<creduser>__main?charset=utf8mb4` (see ToolsDB step below for `<creduser>`)
+- `ADMIN_USERS` — your Wikimedia username
 
 > `toolforge envvars list` shows names only, not values. Keep a local record.
 
@@ -204,9 +214,12 @@ The app reads secrets from env vars via `_read_secret()` in `app.py`. On Kuberne
 
 ```bash
 sql tools   # opens MySQL as your tool user
-CREATE DATABASE s_wiki_polis__main CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+SELECT SUBSTRING_INDEX(CURRENT_USER(), '@', 1);   -- note this value, it's your <creduser>
+CREATE DATABASE <creduser>__main CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 exit
 ```
+
+The database name must use the exact credential username shown by `CURRENT_USER()` — you cannot choose it freely. It will be something like `s51234` or `s_wiki_polis`. Use this same value in the `DATABASE_URL` envvar above.
 
 ### Register Wikimedia OAuth application
 
