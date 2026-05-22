@@ -225,7 +225,12 @@ def _check_conversation_access(conversation, participant) -> None:
         mw_username=username,
     ).first()
     if not invited:
-        abort(403)
+        can_mod = _can_moderate(conversation, participant)
+        abort(make_response(render_template(
+            'forbidden_invite_only.html',
+            conversation=conversation,
+            can_moderate=can_mod,
+        ), 403))
 
 
 # ── Particiapi proxy ──────────────────────────────────────────────────────────
