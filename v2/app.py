@@ -456,6 +456,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             "default-src 'self'; "
             f"script-src 'self' 'nonce-{nonce}'; "
             "style-src 'self' 'unsafe-inline'; "
+            "font-src 'self'; "
             "connect-src 'self'; "
             "img-src 'self' data:; "
             "frame-ancestors 'none';"
