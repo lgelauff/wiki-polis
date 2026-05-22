@@ -17,8 +17,6 @@ Note on Particiapi feature parity:
 """
 
 import re
-import secrets
-import string
 
 import requests
 
@@ -224,12 +222,6 @@ class PolisAdminClient:
 
 # ── Polis server direct client ────────────────────────────────────────────────
 
-def _generate_zinvite() -> str:
-    """Return a random 11-char alphanumeric string matching Polis zinvite format."""
-    alphabet = string.ascii_lowercase + string.digits
-    return ''.join(secrets.choice(alphabet) for _ in range(11))
-
-
 class PolisServerError(Exception):
     pass
 
@@ -282,47 +274,38 @@ class PolisServerClient:
     def create_conversation(self, title: str) -> str:
         """Create a Polis conversation and return its zinvite.
 
-        Generates the zinvite client-side and passes it as conversation_id;
-        Polis uses it directly if not already taken.  On collision (extremely
-        unlikely), retries once with a fresh token.
+        Lets Polis generate the zinvite; parses it from the response URL.
         """
         sess, auth_headers = self._login()
         headers = {**self._HEADERS, **auth_headers}
-        for _ in range(2):
-            zinvite = _generate_zinvite()
-            try:
-                resp = sess.post(
-                    f'{self._base}/api/v3/conversations',
-                    json={
-                        'topic':              title,
-                        'description':        '',
-                        'is_active':          True,
-                        'is_draft':           False,
-                        'is_anon':            False,
-                        'profanity_filter':   False,
-                        'spam_filter':        False,
-                        'strict_moderation':  False,
-                        'conversation_id':    zinvite,
-                    },
-                    headers=headers,
-                    timeout=10,
-                )
-            except requests.RequestException as exc:
-                raise PolisServerError(str(exc)) from exc
-            if resp.status_code == 400:
-                # conversation_id already taken — retry
-                continue
-            if not resp.ok:
-                raise PolisServerError(
-                    f'Polis conversation creation failed (HTTP {resp.status_code}): '
-                    f'{resp.text[:300]}'
-                )
-            # Response: {url: "...", zid: N}  — zinvite is the last path segment of url
-            data = resp.json()
-            url  = data.get('url', '')
-            if url:
-                slug = url.rstrip('/').rsplit('/', 1)[-1]
-                if re.match(r'^[A-Za-z0-9]{6,20}$', slug):
-                    return slug
-            return zinvite
-        raise PolisServerError('Polis zinvite collision on two attempts — try again.')
+        try:
+            resp = sess.post(
+                f'{self._base}/api/v3/conversations',
+                json={
+                    'topic':             title,
+                    'description':       '',
+                    'is_active':         True,
+                    'is_draft':          False,
+                    'is_anon':           False,
+                    'profanity_filter':  False,
+                    'spam_filter':       False,
+                    'strict_moderation': False,
+                },
+                headers=headers,
+                timeout=10,
+            )
+        except requests.RequestException as exc:
+            raise PolisServerError(str(exc)) from exc
+        if not resp.ok:
+            raise PolisServerError(
+                f'Polis conversation creation failed (HTTP {resp.status_code}): '
+                f'{resp.text[:300]}'
+            )
+        # Response: {url: "...", zid: N}  — zinvite is the last path segment of url
+        data = resp.json()
+        url  = data.get('url', '')
+        if url:
+            slug = url.rstrip('/').rsplit('/', 1)[-1]
+            if re.match(r'^[A-Za-z0-9]{6,20}$', slug):
+                return slug
+        raise PolisServerError('Polis returned no usable zinvite in response.')
