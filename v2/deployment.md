@@ -189,8 +189,8 @@ Set up a daily `pg_dump` to WMCS Object Storage (Swift) or any offsite location:
 
 ```bash
 # Example cron (adjust credentials and bucket name)
-0 3 * * * docker exec particiapp-docker-db-1 \
-  pg_dump -U postgres particiapp | gzip > /backup/particiapp-$(date +\%F).sql.gz
+0 3 * * * docker exec $(docker ps --filter name=postgres --format '{{.Names}}' | head -1) \
+  pg_dump -U polis polis | gzip > /backup/polis-$(date +\%F).sql.gz
 ```
 
 ---

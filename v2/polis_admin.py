@@ -268,6 +268,12 @@ class PolisServerClient:
                 f'Polis login failed (HTTP {resp.status_code}). '
                 'Check POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD env vars.'
             )
+        # Polis sets the token cookie with domain=POLIS_SERVER_NAME (e.g. polis.internal),
+        # which doesn't match our internal hostname. Re-set without domain so requests
+        # sends it on all subsequent calls in this session.
+        token = next((c.value for c in sess.cookies if c.name == 'token'), None)
+        if token:
+            sess.cookies.set('token', token)
         return sess
 
     def create_conversation(self, title: str) -> str:
