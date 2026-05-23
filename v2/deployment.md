@@ -226,7 +226,7 @@ curl -s -X POST http://localhost:8001/api/v3/auth/new \
 
 A successful response returns JSON with a `uid`. Store the email and password in your password manager — they go into the `POLIS_ADMIN_EMAIL` and `POLIS_ADMIN_PASSWORD` Toolforge env vars.
 
-> **Why `localhost:8001`?** Port 8001 inside the VPS hits `127.0.0.1` which maps to the Polis container (bound on the private IP). From inside the VPS, both `localhost:8001` and `<private-ip>:8001` work.
+> **If Polis replies "Please use HTTPS":** the port is bound to the private IP, not loopback, so add `-H 'X-Forwarded-Proto: https'` to the curl command.
 
 ### Backups
 
@@ -277,7 +277,8 @@ Dependencies must be installed **inside the webservice shell** — a venv create
 ```bash
 toolforge webservice python3.13 shell
 python3 -m venv ~/www/python/venv
-~/www/python/venv/bin/pip install -e ~/wiki-polis/v2
+source ~/www/python/venv/bin/activate
+pip install -e ~/wiki-polis/v2
 exit
 ```
 
@@ -286,10 +287,10 @@ exit
 Wikimedia OAuth tokens exceed uWSGI's default 4 KB header buffer, causing silent failures. Create `~/www/python/uwsgi.ini`:
 
 ```bash
-echo "buffer-size = 65536" > ~/www/python/uwsgi.ini
+printf '[uwsgi]\nbuffer-size = 65536\n' > ~/www/python/uwsgi.ini
 ```
 
-Toolforge picks this up from `~/www/python/uwsgi.ini` — this is the required location.
+Toolforge picks this up from `~/www/python/uwsgi.ini` — this is the required location. The `[uwsgi]` section header is mandatory; without it uWSGI silently ignores the file and uses its 4 KB default.
 
 ### Set secrets
 
@@ -319,7 +320,7 @@ Values to enter at the prompts:
 - `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` — from OAuth registration
 - `PARTICIAPI_BASE_URL` — `http://<vps-private-ip>:8000`
 - `DATABASE_URL` — `mysql+pymysql://<creduser>:<password>@tools.db.svc.wikimedia.cloud/<creduser>__wiki-polis?charset=utf8mb4` (see ToolsDB step below for `<creduser>`)
-- `ADMIN_USERS` — your Wikimedia username
+- `ADMIN_USERS` — your Wikimedia username, exact capitalisation (e.g. `YourUsername`)
 - `POLIS_SERVER_URL` — `http://<vps-private-ip>:8001` (Polis server, for conversation creation)
 - `POLIS_ADMIN_EMAIL` — email of the Polis system account (see Polis system account step below)
 - `POLIS_ADMIN_PASSWORD` — password of the Polis system account
@@ -354,9 +355,14 @@ Fill in `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, and `OAUTH_REDIRECT_URI` envva
 ### Initialise database and start
 
 ```bash
-# Run init-db BEFORE starting the webservice — requests before tables exist return 500
-flask --app ~/wiki-polis/v2/app.py init-db
+# init-db must run inside the webservice shell — envvars are not available on the bastion
+toolforge webservice python3.13 shell
+source ~/www/python/venv/bin/activate
+cd ~/wiki-polis/v2
+flask --app app.py init-db
+exit
 
+# start from the bastion
 cd ~   # webservice commands must run from home directory
 toolforge webservice python3.13 start
 ```
@@ -375,8 +381,9 @@ https://wiki-polis.toolforge.org/login     → redirects to Wikimedia OAuth
 ```bash
 # On Toolforge as wiki-polis user:
 cd ~/wiki-polis && git pull
-~/www/python/venv/bin/pip install -e ~/wiki-polis/v2
-flask --app ~/wiki-polis/v2/app.py db upgrade
+source ~/www/python/venv/bin/activate
+pip install -e ~/wiki-polis/v2
+cd v2 && flask --app app.py db upgrade
 toolforge webservice restart
 ```
 
@@ -393,7 +400,7 @@ bash ~/wiki-polis/deploy.sh
 | Issue | Fix |
 |---|---|
 | `pip install` breaks uWSGI | Always install inside `toolforge webservice python3.13 shell` |
-| OAuth callback fails silently | `uwsgi.ini` with `buffer-size = 65536` is required |
+| OAuth callback fails silently | `uwsgi.ini` must have `[uwsgi]` section header + `buffer-size = 65536`; without the header uWSGI ignores the file |
 | `webservice restart` fails | Must run from `~`, not from inside the repo |
 | No SQLite CLI on Toolforge | Use `python3 -c 'import sqlite3; ...'` if needed |
 | Replica DBs unavailable locally | `get_polis_stats()` already handles missing `POLIS_DATABASE_URL` gracefully |
