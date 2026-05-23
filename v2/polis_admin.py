@@ -23,6 +23,31 @@ _SAFE_ZINVITE = re.compile(r'^[A-Za-z0-9]{6,20}$')
 # Returns all active statements with vote counts, seeds first then by agree rate.
 # The agree-rate ordering is a heuristic proxy for group-representativeness when
 # cluster data (math_main) is not yet available or computed.
+_STATEMENTS_SQL = """
+    WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s),
+    vote_stats AS (
+      SELECT
+        v.tid,
+        COUNT(*) FILTER (WHERE v.vote = -1)::int AS agree_count,
+        COUNT(*) FILTER (WHERE v.vote =  1)::int AS disagree_count,
+        COUNT(*) FILTER (WHERE v.vote =  0)::int AS pass_count
+      FROM votes v, z WHERE v.zid = z.zid GROUP BY v.tid
+    )
+    SELECT
+      c.tid,
+      c.txt,
+      c.mod,
+      c.is_seed,
+      COALESCE(vs.agree_count,    0) AS agree_count,
+      COALESCE(vs.disagree_count, 0) AS disagree_count,
+      COALESCE(vs.pass_count,     0) AS pass_count
+    FROM comments c
+    JOIN z ON c.zid = z.zid
+    LEFT JOIN vote_stats vs ON c.tid = vs.tid
+    WHERE c.active = TRUE
+    ORDER BY c.tid
+"""
+
 _FEATURED_CANDIDATES_SQL = """
     WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s),
     vote_stats AS (
@@ -295,6 +320,47 @@ class PolisServerClient:
             )
 
     # ── Direct Postgres reads ─────────────────────────────────────────────────
+
+    def get_statements(self, zinvite: str) -> tuple[list, list, list] | None:
+        """Return (pending, approved, hidden) from Postgres, or None if unavailable.
+
+        mod=0 → pending, mod=1 → approved, mod=-1 → hidden.
+        Returns None when db_url is absent so caller can fall back to Particiapi.
+        """
+        if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
+            return None
+        try:
+            import psycopg2
+        except ImportError:
+            return None
+        try:
+            conn = psycopg2.connect(self._db_url)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(_STATEMENTS_SQL, (zinvite,))
+                    rows = cur.fetchall()
+            finally:
+                conn.close()
+        except Exception:
+            return None
+        pending, approved, hidden = [], [], []
+        for r in rows:
+            s = {
+                'tid':          r[0],
+                'txt':          r[1],
+                'mod':          r[2],
+                'is_seed':      r[3],
+                'agree_count':    r[4],
+                'disagree_count': r[5],
+                'pass_count':     r[6],
+            }
+            if r[2] == 1:
+                approved.append(s)
+            elif r[2] == -1:
+                hidden.append(s)
+            else:
+                pending.append(s)
+        return pending, approved, hidden
 
     def get_featured_candidates(self, zinvite: str,
                                 max_statements: int = 20) -> list[dict] | None:

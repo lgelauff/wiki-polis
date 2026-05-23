@@ -1495,16 +1495,27 @@ def _register_routes(app: Flask) -> None:
     @app.get('/admin/conversations/<int:conv_id>/statements')
     @login_required
     def admin_conversation_statements(conv_id):
-        conv   = _require_mod_for_conv(conv_id)
-        client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
+        conv     = _require_mod_for_conv(conv_id)
         pending = approved = hidden = []
         settings = {}
+        # Prefer Postgres for accurate mod state; fall back to Particiapi when unavailable.
+        result = _polis_server_client().get_statements(conv.polis_id)
+        if result is not None:
+            pending, approved, hidden = result
+        else:
+            try:
+                pending, approved, hidden = PolisParticipantClient(
+                    current_app.config['PARTICIAPI_BASE']
+                ).get_statements(conv.polis_id)
+            except PolisParticipantError as exc:
+                current_app.logger.exception('get_statements failed')
+                flash('Could not load statements. Check server logs.', 'error')
         try:
-            pending, approved, hidden = client.get_statements(conv.polis_id)
-            settings = client.get_settings(conv.polis_id)
-        except PolisParticipantError as exc:
-            current_app.logger.exception('get_statements failed')
-            flash('Could not load statements from Particiapi. Check server logs.', 'error')
+            settings = PolisParticipantClient(
+                current_app.config['PARTICIAPI_BASE']
+            ).get_settings(conv.polis_id)
+        except PolisParticipantError:
+            pass
         return render_template('admin_statements.html',
                                conversation=conv,
                                pending=pending,
