@@ -462,22 +462,30 @@ def create_app(test_config: dict | None = None) -> Flask:
         """
         import sqlalchemy as _sa
         from flask_migrate import upgrade as _upgrade
-        from alembic.config import Config as _AlembicConfig
         from alembic import command as _alembic_cmd
+        from alembic.runtime.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+        migrate_ext = app.extensions.get('migrate')
+        alembic_cfg = migrate_ext.migrate.get_config()
         inspector = _sa.inspect(db.engine)
-        # Check for an app-specific table to distinguish a truly fresh DB
-        # from one that only has the alembic_version tracking table.
-        if 'participants' not in inspector.get_table_names():
+        with db.engine.connect() as _conn:
+            current_rev = MigrationContext.configure(_conn).get_current_revision()
+        head_rev = ScriptDirectory.from_config(alembic_cfg).get_current_head()
+        if current_rev == head_rev:
+            click.echo('Database already at head revision.')
+        elif 'participants' not in inspector.get_table_names():
             db.create_all()
-            # Stamp without running migrations: build config from Flask-Migrate.
-            from flask_migrate import Migrate as _Migrate
-            migrate_ext = app.extensions.get('migrate')
-            alembic_cfg = migrate_ext.migrate.get_config()
             _alembic_cmd.stamp(alembic_cfg, 'head')
             click.echo('Fresh database created and stamped at head.')
+        elif current_rev is None:
+            # Tables exist but alembic_version is empty — create_all() ran but
+            # stamp() failed (e.g. wrong working directory). Schema is already
+            # current; just record the revision.
+            _alembic_cmd.stamp(alembic_cfg, 'head')
+            click.echo('Existing schema stamped at head.')
         else:
             _upgrade()
-            click.echo('Database is at head revision.')
+            click.echo('Database migrated to head revision.')
 
     @app.before_request
     def _set_csp_nonce():
