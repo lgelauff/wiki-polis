@@ -14,9 +14,12 @@ Direct Postgres reads (also via PolisServerClient): use POLIS_DATABASE_URL.
 Used for featured candidates and stats — data not exposed by the Polis API.
 """
 
+import logging
 import re
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 _SAFE_ZINVITE = re.compile(r'^[A-Za-z0-9]{6,20}$')
 
@@ -332,6 +335,7 @@ class PolisServerClient:
         try:
             import psycopg2
         except ImportError:
+            logger.exception('psycopg2 not available — falling back to Particiapi')
             return None
         try:
             conn = psycopg2.connect(self._db_url)
@@ -342,6 +346,7 @@ class PolisServerClient:
             finally:
                 conn.close()
         except Exception:
+            logger.exception('Postgres get_statements failed — falling back to Particiapi')
             return None
         pending, approved, hidden = [], [], []
         for r in rows:
@@ -375,6 +380,7 @@ class PolisServerClient:
         try:
             import psycopg2
         except ImportError:
+            logger.exception('psycopg2 not available — get_featured_candidates unavailable')
             return None
         try:
             conn = psycopg2.connect(self._db_url)
@@ -385,6 +391,7 @@ class PolisServerClient:
             finally:
                 conn.close()
         except Exception:
+            logger.exception('Postgres get_featured_candidates failed')
             return None
         return [
             {'tid': r[0], 'text': r[1], 'is_seed': r[2],
@@ -399,6 +406,7 @@ class PolisServerClient:
         try:
             import psycopg2
         except ImportError:
+            logger.exception('psycopg2 not available — get_polis_stats unavailable')
             return None
         try:
             conn = psycopg2.connect(self._db_url)
@@ -409,6 +417,7 @@ class PolisServerClient:
             finally:
                 conn.close()
         except Exception:
+            logger.exception('Postgres get_polis_stats failed')
             return None
         if not row or len(row) < 6:
             return None
