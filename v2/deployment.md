@@ -147,7 +147,7 @@ ports:
 
 This binds Postgres only to the private IP, not publicly.
 
-Pre-seed the Polis schema volume before first start. Postgres runs init scripts on first boot — the migration files must be in the volume before that happens, but the normal startup order prevents this. Run once manually:
+Pre-seed the Polis schema volume before first start:
 
 ```bash
 docker run --rm -v particiapp-docker_polis-schemas:/data \
@@ -155,18 +155,38 @@ docker run --rm -v particiapp-docker_polis-schemas:/data \
   cp -r /app/postgres/migrations/. /data/
 ```
 
+> The volume name uses the compose project name as prefix. With no `-p` flag the project defaults to the directory name (`particiapp-docker`), giving `particiapp-docker_polis-schemas`.
+
 Start the stack:
 
 ```bash
 docker-compose up -d
+docker ps   # all 5 services should show (healthy) or Up
 ```
 
-Some containers may fail on first run due to healthcheck timing. Run it a second time to start any that were skipped:
+**Run Polis migrations manually** — polis-server does not auto-apply schema migrations on a fresh database. After the stack is up, copy the migration files into the postgres container and run them:
 
 ```bash
-docker-compose up -d
-docker ps   # all 5 services should show (healthy) or Up
-curl http://<private-ip>:8000/api/conversations/   # should return []
+docker create --name tmp-migrations -v particiapp-docker_polis-schemas:/migrations alpine
+docker cp tmp-migrations:/migrations /tmp/polis-migrations
+docker rm tmp-migrations
+docker cp /tmp/polis-migrations particiapp-docker_postgres_1:/tmp/polis-migrations
+docker exec particiapp-docker_postgres_1 \
+  sh -c 'for f in $(ls /tmp/polis-migrations/0*.sql | sort); do echo "$f"; psql -U polis polis -f "$f"; done'
+```
+
+Then restart polis-server:
+
+```bash
+docker-compose restart polis-server
+docker ps   # polis-server should show (healthy) within ~30 seconds
+```
+
+Health check:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://<private-ip>:8000/
+# returns 200 when particiapi is up
 ```
 
 > Note: uses `docker-compose` (v1 hyphen) as installed on Debian 12. If v2 plugin is available, use `docker compose` instead.
