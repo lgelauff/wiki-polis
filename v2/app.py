@@ -344,6 +344,20 @@ def _proxy_to_particiapi(pa_path: str):
 
 # ── App factory ───────────────────────────────────────────────────────────────
 
+def _git_version() -> str:
+    try:
+        import subprocess
+        return subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        return 'unknown'
+
+_GIT_VERSION = _git_version()
+
+
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
 
@@ -476,6 +490,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             'is_admin':   _is_global_admin(participant),
             'username':   session.get('username'),
             'csp_nonce':  g.get('csp_nonce', ''),
+            'git_version': _GIT_VERSION,
         }
 
     @app.after_request
