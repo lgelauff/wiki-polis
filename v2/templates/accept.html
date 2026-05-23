@@ -36,22 +36,8 @@
         action="{{ url_for('accept_post', slug=conversation.slug) }}"
         id="accept-form"
         aria-labelledby="accept-title"
-        aria-describedby="accept-before-desc accept-summary-list accept-privacy-summary-copy{% if error %} accept-error{% endif %}">
+        aria-describedby="accept-privacy-summary-copy{% if error %} accept-error{% endif %}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-    {# ── How it works ── #}
-    <div class="accept-section" style="margin-top:1.5rem">
-      <h3 id="accept-before-title">Before you join</h3>
-      <p id="accept-before-desc">
-        Choose a consultation pseudonym and privacy preferences before entering
-        the voting page.
-      </p>
-      <ul class="accept-summary-list" id="accept-summary-list">
-        <li>Vote privately on short statements: agree, disagree, or pass.</li>
-        <li>Shared results show opinion patterns, not individual vote records.</li>
-        <li>Participate under a pseudonym that is separate from your Wikimedia username.</li>
-      </ul>
-    </div>
 
     {# ── Pseudonym card ── #}
     <div class="pseudonym-card"

@@ -11,18 +11,26 @@
     (screenshots welcome).
   </div>
 
-{% if not username %}
-
   <div class="landing-section">
     <h2>Where the community actually stands.</h2>
     <p style="font-size:15px;line-height:1.6;color:var(--body);margin-top:4px;max-width:520px">
       Vote on short statements, watch opinion clusters emerge.
       No threads, no replies — just signal.
     </p>
-    <p style="font-size:14px;color:var(--muted);margin-top:10px">
+    <p style="font-size:15px;line-height:1.6;color:var(--body);margin-top:10px;max-width:520px">
+      Vote privately on short statements — agree, disagree, or pass. No one sees how
+      you voted individually; only the patterns that emerge across all participants are
+      shared. You'll participate under a pseudonym that's unique to each consultation.
+    </p>
+  </div>
+
+{% if not username %}
+
+  <div class="landing-section">
+    <p style="font-size:14px;color:var(--muted)">
       Log in with your Wikimedia account to join an open consultation.
     </p>
-    <a href="{{ url_for('login') }}" class="login-btn">
+    <a href="{{ url_for('login') }}" class="login-btn" style="margin-top:10px">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="1" stroke-linecap="round"
            stroke-dasharray="1.4 1.6" aria-hidden="true">
@@ -41,7 +49,7 @@
       {% for c in public_conversations %}
       <li>
         <span class="conv-dot conv-dot--available"></span>
-        <a href="{{ url_for('accept', slug=c.slug) }}">{{ c.title }}</a>
+        <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
       </li>
       {% endfor %}
     </ul>
@@ -71,7 +79,7 @@
       {% for c in available %}
       <li>
         <span class="conv-dot conv-dot--available"></span>
-        <a href="{{ url_for('accept', slug=c.slug) }}">{{ c.title }}</a>
+        <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
       </li>
       {% endfor %}
     </ul>
