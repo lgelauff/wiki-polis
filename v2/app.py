@@ -315,7 +315,7 @@ def _proxy_to_particiapi(pa_path: str):
             timeout=10,
         )
     except requests.RequestException as exc:
-        current_app.logger.error('Particiapi proxy error: %s', exc)
+        current_app.logger.exception('Particiapi proxy error')
         abort(502)
 
     # Particiapi returns 403 on /results/ when math hasn't run yet (no clusters).
@@ -1316,7 +1316,7 @@ def _register_routes(app: Flask) -> None:
             try:
                 polis_id = _polis_server_client().create_conversation(fields['title'])
             except PolisServerError as exc:
-                current_app.logger.error('Polis conversation creation failed: %s', exc)
+                current_app.logger.exception('Polis conversation creation failed')
                 flash('Could not create the Polis conversation. Check server logs for details.', 'error')
                 return redirect(url_for('admin'))
         else:
@@ -1503,7 +1503,7 @@ def _register_routes(app: Flask) -> None:
             pending, approved, hidden = client.get_statements(conv.polis_id)
             settings = client.get_settings(conv.polis_id)
         except PolisParticipantError as exc:
-            current_app.logger.error('get_statements failed: %s', exc)
+            current_app.logger.exception('get_statements failed')
             flash('Could not load statements from Particiapi. Check server logs.', 'error')
         return render_template('admin_statements.html',
                                conversation=conv,
@@ -1511,7 +1511,7 @@ def _register_routes(app: Flask) -> None:
                                approved=approved,
                                hidden=hidden,
                                settings=settings,
-                               polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', 'https://pol.is'))
+                               polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is')
 
     @app.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
     @login_required
@@ -1523,7 +1523,7 @@ def _register_routes(app: Flask) -> None:
         try:
             _polis_server_client().moderate(conv.polis_id, tid, mod)
         except PolisServerError as exc:
-            current_app.logger.error('moderate failed: %s', exc)
+            current_app.logger.exception('moderate failed')
             flash('Moderation action failed. Check server logs for details.', 'error')
             return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
         return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
@@ -1538,8 +1538,9 @@ def _register_routes(app: Flask) -> None:
             abort(400)
         try:
             _polis_server_client().add_seed(conv.polis_id, text)
+            flash('Seed statement added.', 'success')
         except PolisServerError as exc:
-            current_app.logger.error('add_seed failed: %s', exc)
+            current_app.logger.exception('add_seed failed')
             flash('Could not add seed statement. Check server logs for details.', 'error')
         return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
 
@@ -1551,7 +1552,7 @@ def _register_routes(app: Flask) -> None:
         try:
             _polis_server_client().set_strict_moderation(conv.polis_id, enabled)
         except PolisServerError as exc:
-            current_app.logger.error('set_strict_moderation failed: %s', exc)
+            current_app.logger.exception('set_strict_moderation failed')
             flash('Could not update moderation settings. Check server logs for details.', 'error')
         return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
 
