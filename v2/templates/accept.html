@@ -22,7 +22,7 @@
     joining consultation
   </div>
 
-  <h1 style="font-size:30px;font-weight:600;color:var(--ink);letter-spacing:-0.02em;line-height:1.2;margin:0">
+  <h1 id="accept-title" style="font-size:30px;font-weight:600;color:var(--ink);letter-spacing:-0.02em;line-height:1.2;margin:0">
     {{ conversation.title }}
   </h1>
 
@@ -32,32 +32,52 @@
   </div>
   {% endif %}
 
-  <form method="post" action="{{ url_for('accept_post', slug=conversation.slug) }}" id="accept-form">
+  <form method="post"
+        action="{{ url_for('accept_post', slug=conversation.slug) }}"
+        id="accept-form"
+        aria-labelledby="accept-title"
+        aria-describedby="accept-before-desc accept-summary-list accept-privacy-summary-copy{% if error %} accept-error{% endif %}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     {# ── How it works ── #}
     <div class="accept-section" style="margin-top:1.5rem">
-      <p style="font-size:15px;line-height:1.6;color:var(--body);margin:0">
-        Vote on short statements — agree, disagree, or pass.
-        No one sees how you voted individually; only the patterns that emerge across all participants are shared.
-        You'll join under a pseudonym that's unique to this consultation.
+      <h3 id="accept-before-title">Before you join</h3>
+      <p id="accept-before-desc">
+        Choose a consultation pseudonym and privacy preferences before entering
+        the voting page.
       </p>
+      <ul class="accept-summary-list" id="accept-summary-list">
+        <li>Vote privately on short statements: agree, disagree, or pass.</li>
+        <li>Shared results show opinion patterns, not individual vote records.</li>
+        <li>Participate under a pseudonym that is separate from your Wikimedia username.</li>
+      </ul>
     </div>
 
     {# ── Pseudonym card ── #}
-    <div class="pseudonym-card">
+    <div class="pseudonym-card"
+         role="radiogroup"
+         aria-labelledby="pseudonym-title"
+         aria-describedby="pseudonym-help pseudonym-status">
       <div class="pseudonym-card-header">
-        <div class="pseudonym-card-title">Pick a name for this consultation</div>
-        <button type="button" class="reroll-btn" id="reroll-btn">↻ reroll</button>
+        <div class="pseudonym-card-title" id="pseudonym-title">Pick a name for this consultation</div>
+        <button type="button"
+                class="reroll-btn"
+                id="reroll-btn"
+                aria-controls="pseudonym-options"
+                aria-label="Generate new pseudonym options">↻ reroll</button>
       </div>
-      <div class="pseudonym-card-sub">
-        Used inside this consultation only · retired afterwards · unique platform-wide
+      <div class="pseudonym-card-sub" id="pseudonym-help">
+        This name appears inside this consultation. It is separate from your Wikimedia username.
       </div>
+      <p class="sr-only" id="pseudonym-status" role="status" aria-live="polite"></p>
 
       <div class="pseudonym-options" id="pseudonym-options">
         {% for name in pseudonyms %}
-        <label class="pseudonym-label">
-          <input type="radio" name="pseudonym" value="{{ name }}"
+        <label class="pseudonym-label" for="pseudonym-{{ loop.index }}">
+          <input type="radio"
+                 id="pseudonym-{{ loop.index }}"
+                 name="pseudonym"
+                 value="{{ name }}"
                  {% if loop.first %}checked{% endif %}>
           <span class="pseudonym-name">{{ name }}</span>
         </label>
@@ -66,11 +86,14 @@
     </div>
 
     {# ── Notification preferences ── #}
-    <div class="accept-section">
-      <h3>Stay informed</h3>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:.75rem">
-        We may send updates when this consultation closes or results are published.
-        We can't guarantee delivery — these are best-effort notifications.
+    <div class="accept-section"
+         role="group"
+         aria-labelledby="notification-title"
+         aria-describedby="notification-help">
+      <h3 id="notification-title">Stay informed</h3>
+      <p id="notification-help" style="color:var(--muted);font-size:13px;margin-bottom:.75rem">
+        Choose whether wiki-polis can send best-effort updates when this
+        consultation closes or when results are published.
       </p>
 
       {% if emailable %}
@@ -92,19 +115,39 @@
       </label>
     </div>
 
-    {# ── Privacy — foldable ── #}
+    {# ── Privacy summary and foldable details ── #}
+    <div class="accept-section">
+      <h3>Privacy summary</h3>
+      <div id="accept-privacy-summary-copy">
+        <p>
+          wiki-polis keeps an internal link between your Wikimedia username and
+          your consultation pseudonym for login, access checks, notifications,
+          moderation, and privacy controls. That link is not shown to other
+          participants or in public results.
+        </p>
+        <p>
+          After the consultation closes, you may get a time-limited option to
+          reveal your username in the public record. If you do nothing, public
+          records stay pseudonymous.
+        </p>
+      </div>
+    </div>
+
     <div class="accept-section" style="padding:0">
       <details class="privacy-details">
-        <summary class="privacy-summary">Privacy &amp; data handling</summary>
-        <div class="privacy-body">
-          <p><em>This privacy statement is a placeholder and will be replaced before public launch.</em></p>
+        <summary class="privacy-summary" aria-controls="privacy-details-body">
+          Privacy &amp; data handling
+        </summary>
+        <div class="privacy-body" id="privacy-details-body">
           <p>
-            The platform links your Wikimedia username to your pseudonym for the duration of this consultation.
-            This link is not shared publicly. After the consultation closes, it is destroyed within
-            <strong>{{ retention_public_days }} days</strong>.
+            Your pseudonym is used for consultation records and participant-facing
+            displays. Your Wikimedia username is used internally for login,
+            access checks, moderation, and notification preferences.
           </p>
           <p>
-            Any published results (votes, clusters) reference only your pseudonym — never your username.
+            Public results may include aggregate votes, clusters, and pseudonyms.
+            They do not show your Wikimedia username unless you explicitly reveal
+            it after the consultation closes.
           </p>
           <p>
             Between <strong>{{ reveal_cooldown }}</strong> and <strong>{{ reveal_window_end }} days</strong>
@@ -116,23 +159,29 @@
     </div>
 
     {# ── Consent ── #}
-    <label class="consent-label" id="consent-label" style="margin-top:1.25rem">
-      <input type="checkbox" name="consent" id="consent-check" value="1" required>
+    <label class="consent-label" id="consent-label" for="consent-check" style="margin-top:1.25rem">
+      <input type="checkbox"
+             name="consent"
+             id="consent-check"
+             value="1"
+             required
+             aria-required="true">
       <span>
-        I understand that my individual votes are private, and that I can optionally
-        link my Wikimedia username to my pseudonym after the consultation closes.
+        I understand that my individual votes are private, my pseudonym may appear
+        in consultation records, and wiki-polis keeps an internal username link
+        while the consultation is running.
       </span>
     </label>
 
     {% if error %}
-    <p class="error">{{ error }}</p>
+    <p class="error" id="accept-error" role="alert">{{ error }}</p>
     {% endif %}
 
     <div style="display:flex;align-items:center;gap:16px;margin-top:22px">
       <button type="submit" class="participate-btn" id="submit-btn">
-        Join as <span id="chosen-name">{{ pseudonyms[0] }}</span> →
+        Join consultation as <span id="chosen-name">{{ pseudonyms[0] }}</span> →
       </button>
-      <a href="{{ url_for('index') }}" style="color:var(--muted);font-size:13px;text-decoration:none">Cancel</a>
+      <a href="{{ url_for('index') }}" style="color:var(--muted);font-size:13px;text-decoration:none">Not now</a>
     </div>
 
   </form>
@@ -141,28 +190,36 @@
 <script nonce="{{ csp_nonce }}">
 (function () {
   var container = document.getElementById('pseudonym-options');
-  var submitBtn = document.getElementById('submit-btn');
   var chosenSpan = document.getElementById('chosen-name');
+  var statusEl = document.getElementById('pseudonym-status');
 
   function getSelected() {
     var checked = container.querySelector('input[type="radio"]:checked');
     return checked ? checked.value : null;
   }
 
-  function updateLabel() {
+  function updateLabel(announce) {
     var name = getSelected();
     if (name && chosenSpan) chosenSpan.textContent = name;
+    if (announce && name && statusEl) {
+      statusEl.textContent = 'Selected pseudonym ' + name + '.';
+    }
   }
 
-  container.addEventListener('change', updateLabel);
+  container.addEventListener('change', function () {
+    updateLabel(true);
+  });
 
   function buildOptions(names) {
     container.innerHTML = '';
     names.forEach(function (name, i) {
+      var radioId = 'pseudonym-option-' + i + '-' + name.replace(/[^a-z0-9-]/g, '');
       var label = document.createElement('label');
       label.className = 'pseudonym-label';
+      label.setAttribute('for', radioId);
       var radio = document.createElement('input');
       radio.type = 'radio';
+      radio.id = radioId;
       radio.name = 'pseudonym';
       radio.value = name;
       if (i === 0) radio.checked = true;
@@ -173,27 +230,35 @@
       label.appendChild(span);
       container.appendChild(label);
     });
-    updateLabel();
+    updateLabel(false);
+    if (statusEl && names.length) {
+      statusEl.textContent = 'New pseudonym options generated. Selected ' + names[0] + '.';
+    }
   }
 
   document.getElementById('reroll-btn').addEventListener('click', function () {
     var btn = this;
     btn.disabled = true;
+    container.setAttribute('aria-busy', 'true');
+    if (statusEl) statusEl.textContent = 'Generating new pseudonym options.';
     btn.textContent = '↻ loading…';
     fetch('{{ url_for("accept_pseudonyms", slug=conversation.slug) }}')
       .then(function (r) { return r.json(); })
       .then(function (data) {
         buildOptions(data.pseudonyms);
         btn.disabled = false;
+        container.setAttribute('aria-busy', 'false');
         btn.textContent = '↻ reroll';
       })
       .catch(function () {
         btn.disabled = false;
+        container.setAttribute('aria-busy', 'false');
+        if (statusEl) statusEl.textContent = 'Could not generate new pseudonym options. Try again.';
         btn.textContent = '↻ reroll';
       });
   });
 
-  updateLabel();
+  updateLabel(false);
 }());
 </script>
 
