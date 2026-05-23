@@ -137,6 +137,7 @@ export ADMIN_USERS="${ADMIN_USERS:-DevUser}"
 export DEV_LOGIN_USER="${DEV_LOGIN_USER:-DevUser}"
 export DEV_DATABASE_URL="${DEV_DATABASE_URL:-sqlite:///dev.db}"
 export PARTICIAPI_BASE_URL="http://127.0.0.1:$PARTICIAPI_PORT"
+export POLIS_SERVER_URL="http://127.0.0.1:$POLIS_PORT"
 export POLIS_DATABASE_URL="postgresql://polis:polis@127.0.0.1:$POSTGRES_PORT/polis"
 
 uv run flask --app app init-db

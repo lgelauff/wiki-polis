@@ -96,8 +96,22 @@ That override:
 - mounts Postgres data under `v2/tmp/postgresql`, using the Postgres 18
   compatible `/var/lib/postgresql` mount point.
 
-Flask reads `v2/.env` for manual runs. `dev.sh` also exports the same core
-values so `.dev-session` port changes are reflected automatically:
+Copy the example Flask environment file before the first run:
+
+```bash
+cp v2/.env.example v2/.env
+```
+
+Then edit `v2/.env`:
+
+- Set `SECRET_KEY` to a random value:
+  `python3 -c "import secrets; print(secrets.token_hex(32))"`.
+- Set `ADMIN_USERS` and `DEV_LOGIN_USER` to your Wikimedia username.
+- Optionally set `POLIS_ADMIN_EMAIL` and `POLIS_ADMIN_PASSWORD` if you have
+  created a local Polis system account.
+
+All other defaults work for local dev out of the box. `dev.sh` also exports the
+same core values so `.dev-session` port changes are reflected automatically:
 
 ```ini
 FLASK_DEBUG=1
@@ -107,11 +121,33 @@ ADMIN_USERS=DevUser
 DEV_LOGIN_USER=DevUser
 DEV_DATABASE_URL=sqlite:///dev.db
 PARTICIAPI_BASE_URL=http://127.0.0.1:8002
+POLIS_SERVER_URL=http://127.0.0.1:8003
+POLIS_PUBLIC_URL=
 POLIS_DATABASE_URL=postgresql://polis:polis@127.0.0.1:5433/polis
+POLIS_ADMIN_EMAIL=
+POLIS_ADMIN_PASSWORD=
 ```
 
 Do not set `POLIS_PUBLIC_URL` to an `http://` URL for local dev. The Flask app
 ignores non-HTTPS values by design.
+
+If `POLIS_ADMIN_EMAIL` and `POLIS_ADMIN_PASSWORD` are blank, creating a
+wiki-polis conversation from the admin form requires entering an existing
+`polis_id` manually. To enable automated conversation creation locally, create a
+Polis system account after the Docker stack is running:
+
+```bash
+curl -s -X POST http://127.0.0.1:8003/api/v3/auth/new \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "email": "wiki-polis-system@internal.invalid",
+    "password": "localdev",
+    "hname": "wiki-polis system",
+    "gatekeeperTosPrivacy": true
+  }'
+```
+
+Then put those credentials in `v2/.env`.
 
 ## Manual Backend Commands
 
