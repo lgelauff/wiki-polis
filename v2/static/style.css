@@ -751,6 +751,30 @@ pa-statement:state(no-statement) ~ .propose-affordance { display: none; }
   margin-bottom: 0.5rem;
 }
 
+.accept-summary-list {
+  margin: 0.75rem 0 0;
+  padding-left: 1.15rem;
+  color: var(--body);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.accept-summary-list li {
+  margin: 0.35rem 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Pseudonym card */
 
 .pseudonym-card {
@@ -786,6 +810,10 @@ pa-statement:state(no-statement) ~ .propose-affordance { display: none; }
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin: 0;
+}
+
+.pseudonym-options[aria-busy="true"] {
+  opacity: 0.65;
 }
 
 .pseudonym-label {
@@ -845,6 +873,15 @@ pa-statement:state(no-statement) ~ .propose-affordance { display: none; }
 }
 
 .reroll-btn:hover { color: var(--ink); }
+
+.reroll-btn:focus-visible,
+.pseudonym-label:focus-within,
+.checkbox-label:focus-within,
+.consent-label:focus-within,
+.participate-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
 
 .checkbox-label {
   display: flex;
