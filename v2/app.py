@@ -16,7 +16,7 @@ import coolname
 import nh3
 import requests
 from dotenv import load_dotenv
-from flask import (Flask, abort, current_app, g, jsonify, make_response,
+from flask import (Flask, abort, current_app, flash, g, jsonify, make_response,
                    redirect, render_template, request, session, url_for)
 from flask_migrate import Migrate
 from flask_session import Session
@@ -29,8 +29,8 @@ from sqlalchemy.orm import joinedload
 from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideState,
                 ArgumentVote, Conversation, ConversationInvite, FeaturedStatement,
                 Participant, Participation, db)
-from polis_admin import (PolisAdminClient, PolisAdminError, PolisServerClient,
-                         PolisServerError, get_featured_candidates, get_polis_stats)
+from polis_admin import (PolisParticipantClient, PolisParticipantError,
+                         PolisServerClient, PolisServerError)
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -201,6 +201,22 @@ def admin_required(f):
     return wrapper
 
 
+def _polis_server_client() -> PolisServerClient:
+    """Return a PolisServerClient from config.
+
+    Always returns a client — DB-only methods (get_polis_stats,
+    get_featured_candidates) work with db_url alone.  HTTP admin methods
+    (moderate, add_seed, etc.) will raise PolisServerError at login if
+    POLIS_SERVER_URL / POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD are absent.
+    """
+    return PolisServerClient(
+        current_app.config.get('POLIS_SERVER_URL', ''),
+        current_app.config.get('POLIS_ADMIN_EMAIL', ''),
+        current_app.config.get('POLIS_ADMIN_PASSWORD', ''),
+        db_url=current_app.config.get('POLIS_DATABASE_URL', ''),
+    )
+
+
 def _require_mod_for_conv(conv_id: int) -> 'Conversation':
     """Return conversation or abort 403 if the current user can't moderate it."""
     conv = Conversation.query.get_or_404(conv_id)
@@ -299,7 +315,7 @@ def _proxy_to_particiapi(pa_path: str):
             timeout=10,
         )
     except requests.RequestException as exc:
-        current_app.logger.error('Particiapi proxy error: %s', exc)
+        current_app.logger.exception('Particiapi proxy error')
         abort(502)
 
     # Particiapi returns 403 on /results/ when math hasn't run yet (no clusters).
@@ -725,7 +741,7 @@ def _register_routes(app: Flask) -> None:
 
         stmt_texts = {}
         try:
-            client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
+            client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
             _, approved, _ = client.get_statements(conv.polis_id)
             stmt_texts = {s['tid']: s.get('txt', '') for s in approved}
         except Exception:
@@ -819,10 +835,9 @@ def _register_routes(app: Flask) -> None:
         results     = None
         polis_stats = None
         if conv.phase_public_results:
-            client      = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
-            results     = client.get_results(conv.polis_id)
-            polis_stats = get_polis_stats(conv.polis_id,
-                                          current_app.config['POLIS_DATABASE_URL'])
+            results      = PolisParticipantClient(
+                current_app.config['PARTICIAPI_BASE']).get_results(conv.polis_id)
+            polis_stats = _polis_server_client().get_polis_stats(conv.polis_id)
 
         # Reveal window state for closed conversations.
         reveal_state    = None
@@ -1261,7 +1276,7 @@ def _register_routes(app: Flask) -> None:
                                conversations=conversations,
                                participants=participants,
                                global_admins=global_admins,
-                               admin_error=request.args.get('error'))
+                               )
 
     @app.get('/admin/conversations/<int:conv_id>')
     @login_required
@@ -1274,8 +1289,7 @@ def _register_routes(app: Flask) -> None:
         participants      = Participant.query.order_by(Participant.mw_username).all()
         invite_count      = ConversationInvite.query.filter_by(conversation_id=conv_id).count()
         participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
-        polis_stats       = get_polis_stats(conv.polis_id,
-                                            current_app.config['POLIS_DATABASE_URL'])
+        polis_stats       = _polis_server_client().get_polis_stats(conv.polis_id)
         return render_template('admin_conversation.html',
                                conversation=conv,
                                conv_roles=conv_roles,
@@ -1296,17 +1310,15 @@ def _register_routes(app: Flask) -> None:
         if not fields['title'] or not _valid_slug(slug):
             abort(400)
 
-        polis_url      = current_app.config.get('POLIS_SERVER_URL', '')
-        polis_email    = current_app.config.get('POLIS_ADMIN_EMAIL', '')
-        polis_password = current_app.config.get('POLIS_ADMIN_PASSWORD', '')
-
-        if polis_url and polis_email and polis_password:
+        polis_configured = all(current_app.config.get(k) for k in (
+            'POLIS_SERVER_URL', 'POLIS_ADMIN_EMAIL', 'POLIS_ADMIN_PASSWORD'))
+        if polis_configured:
             try:
-                client   = PolisServerClient(polis_url, polis_email, polis_password)
-                polis_id = client.create_conversation(fields['title'])
+                polis_id = _polis_server_client().create_conversation(fields['title'])
             except PolisServerError as exc:
-                current_app.logger.error('Polis conversation creation failed: %s', exc)
-                return redirect(url_for('admin', error=f'Could not create Polis conversation: {exc}'))
+                current_app.logger.exception('Polis conversation creation failed')
+                flash('Could not create the Polis conversation. Check server logs for details.', 'error')
+                return redirect(url_for('admin'))
         else:
             # Fallback: accept manually supplied polis_id (local dev / misconfigured prod)
             polis_id = request.form.get('polis_id', '').strip()
@@ -1379,10 +1391,12 @@ def _register_routes(app: Flask) -> None:
     def admin_global_admin_add():
         mw_username = (request.form.get('mw_username') or '').strip()
         if not mw_username:
-            return redirect(url_for('admin', error='Enter a Wikimedia username.'))
+            flash('Enter a Wikimedia username.', 'error')
+            return redirect(url_for('admin'))
         p = Participant.query.filter_by(mw_username=mw_username).first()
         if not p:
-            return redirect(url_for('admin', error=f'No account found for "{mw_username}". They must log in at least once first.'))
+            flash(f'No account found for "{mw_username}". They must log in at least once first.', 'error')
+            return redirect(url_for('admin'))
         p.is_global_admin = True
         db.session.commit()
         return redirect(url_for('admin'))
@@ -1482,23 +1496,22 @@ def _register_routes(app: Flask) -> None:
     @login_required
     def admin_conversation_statements(conv_id):
         conv   = _require_mod_for_conv(conv_id)
-        client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
-        error  = request.args.get('error')
+        client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
         pending = approved = hidden = []
         settings = {}
         try:
             pending, approved, hidden = client.get_statements(conv.polis_id)
             settings = client.get_settings(conv.polis_id)
-        except PolisAdminError as exc:
-            error = str(exc)
+        except PolisParticipantError as exc:
+            current_app.logger.exception('get_statements failed')
+            flash('Could not load statements from Particiapi. Check server logs.', 'error')
         return render_template('admin_statements.html',
                                conversation=conv,
                                pending=pending,
                                approved=approved,
                                hidden=hidden,
                                settings=settings,
-                               error=error,
-                               polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', 'https://pol.is'))
+                               polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is')
 
     @app.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
     @login_required
@@ -1507,13 +1520,12 @@ def _register_routes(app: Flask) -> None:
         mod  = request.form.get('mod', type=int)
         if mod not in (-1, 0, 1):
             abort(400)
-        client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
         try:
-            client.moderate(conv.polis_id, tid, mod)
-        except PolisAdminError as exc:
-            current_app.logger.error('moderate failed: %s', exc)
-            return redirect(url_for('admin_conversation_statements',
-                                    conv_id=conv_id, error=str(exc)))
+            _polis_server_client().moderate(conv.polis_id, tid, mod)
+        except PolisServerError as exc:
+            current_app.logger.exception('moderate failed')
+            flash('Moderation action failed. Check server logs for details.', 'error')
+            return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
         return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
 
     @app.post('/admin/conversations/<int:conv_id>/statements/seed')
@@ -1524,13 +1536,12 @@ def _register_routes(app: Flask) -> None:
         text = nh3.clean(text, tags=frozenset())
         if not text or len(text) > 280:
             abort(400)
-        client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
         try:
-            client.add_seed(conv.polis_id, text)
-        except PolisAdminError as exc:
-            current_app.logger.error('add_seed failed: %s', exc)
-            return redirect(url_for('admin_conversation_statements',
-                                    conv_id=conv_id, error=str(exc)))
+            _polis_server_client().add_seed(conv.polis_id, text)
+            flash('Seed statement added.', 'success')
+        except PolisServerError as exc:
+            current_app.logger.exception('add_seed failed')
+            flash('Could not add seed statement. Check server logs for details.', 'error')
         return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
 
     @app.post('/admin/conversations/<int:conv_id>/strict-moderation')
@@ -1538,11 +1549,11 @@ def _register_routes(app: Flask) -> None:
     def admin_conversation_strict_moderation(conv_id):
         conv    = _require_mod_for_conv(conv_id)
         enabled = request.form.get('strict_moderation') == '1'
-        client  = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
         try:
-            client.set_strict_moderation(conv.polis_id, enabled)
-        except PolisAdminError as exc:
-            current_app.logger.error('set_strict_moderation failed: %s', exc)
+            _polis_server_client().set_strict_moderation(conv.polis_id, enabled)
+        except PolisServerError as exc:
+            current_app.logger.exception('set_strict_moderation failed')
+            flash('Could not update moderation settings. Check server logs for details.', 'error')
         return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
 
     # ── Featured statements ───────────────────────────────────────────────────
@@ -1552,11 +1563,11 @@ def _register_routes(app: Flask) -> None:
         missing = [fs for fs in confirmed if not fs.statement_text]
         if not missing:
             return False
-        client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
+        client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
         try:
             _, approved, _ = client.get_statements(conv.polis_id)
             text_by_tid = {s['tid']: (s.get('text') or s.get('txt', '')) for s in approved}
-        except PolisAdminError:
+        except PolisParticipantError:
             return False
         changed = False
         for fs in missing:
@@ -1577,8 +1588,7 @@ def _register_routes(app: Flask) -> None:
                        .order_by(FeaturedStatement.created_at).all())
         _backfill_statement_texts(conv, confirmed)
         confirmed_tids = {fs.polis_statement_id for fs in confirmed}
-        candidates  = get_featured_candidates(
-            conv.polis_id, current_app.config.get('POLIS_DATABASE_URL', ''))
+        candidates   = _polis_server_client().get_featured_candidates(conv.polis_id)
         if candidates is not None:
             candidates = [c for c in candidates if c['tid'] not in confirmed_tids]
         return render_template('admin_featured.html',
@@ -1587,13 +1597,13 @@ def _register_routes(app: Flask) -> None:
                                candidates=candidates)
 
     def _fetch_statement_text(conv_polis_id: str, tid: int) -> str:
-        client = PolisAdminClient(current_app.config['PARTICIAPI_BASE'])
+        client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
         try:
             _, approved, _ = client.get_statements(conv_polis_id)
             for s in approved:
                 if s.get('tid') == tid:
                     return s.get('text') or s.get('txt', '')
-        except PolisAdminError:
+        except PolisParticipantError:
             pass
         return ''
 

@@ -51,5 +51,38 @@
   <main>
     {% block content %}{% endblock %}
   </main>
+
+  <div id="toast-container" aria-live="polite"></div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <script nonce="{{ csp_nonce }}">
+  (function () {
+    var toasts = {{ messages | tojson }};
+    var container = document.getElementById('toast-container');
+    var DURATIONS = { error: 8000, warning: 6000, success: 4000, info: 5000 };
+    toasts.forEach(function (pair) {
+      var category = pair[0], message = pair[1];
+      var el = document.createElement('div');
+      el.className = 'toast toast--' + category;
+      el.setAttribute('role', 'alert');
+      el.innerHTML =
+        '<span class="toast__msg">' + message + '</span>' +
+        '<button class="toast__close" aria-label="Dismiss">&times;</button>';
+      el.querySelector('.toast__close').addEventListener('click', function () { dismiss(el); });
+      container.appendChild(el);
+      console.error('[wiki-polis] ' + category + ': ' + message);
+      var t = setTimeout(function () { dismiss(el); }, DURATIONS[category] || 6000);
+      el._timer = t;
+    });
+    function dismiss(el) {
+      clearTimeout(el._timer);
+      el.classList.add('toast--out');
+      setTimeout(function () { el.remove(); }, 320);
+    }
+  })();
+  </script>
+  {% endif %}
+  {% endwith %}
 </body>
 </html>

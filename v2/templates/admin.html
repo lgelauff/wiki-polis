@@ -45,9 +45,6 @@
   <!-- ── New conversation ──────────────────────────── -->
   <div class="edit-form">
     <h3>New conversation</h3>
-    {% if admin_error %}
-    <p class="error" style="margin-bottom:.75rem">{{ admin_error }}</p>
-    {% endif %}
     <form method="post" action="{{ url_for('admin_conversation_new') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="edit-row-fields">
@@ -115,9 +112,6 @@
 
   <div class="edit-form">
     <h3>Grant global admin</h3>
-    {% if admin_error %}
-    <p class="error" style="margin-bottom:.75rem">{{ admin_error }}</p>
-    {% endif %}
     <form method="post" action="{{ url_for('admin_global_admin_add') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="edit-row-fields">
