@@ -56,6 +56,7 @@ In Horizon → Network → Security Groups → **Manage Rules** on the default g
 |---|---|---|---|
 | 8000 | Particiapi — participant voting | `172.16.0.0/17` | Allow Toolforge pods to reach Particiapi |
 | 8001 | Polis server — conversation creation | `172.16.0.0/17` | Allow Toolforge pods to create Polis conversations |
+| 5432 | Postgres — admin stats | `172.16.0.0/17` | Allow Toolforge pods to query Polis DB directly (needed for moderation view) |
 
 `172.16.0.0/17` covers all WMCS internal traffic (Toolforge workers, Cloud VPS instances). The full Toolforge worker list is at `https://tools-static.wmflabs.org/admin/meta/worker-ips.json` — 77 individual IPs, too many for per-IP rules.
 
@@ -137,6 +138,15 @@ Notes:
 - `restart: always` is already set on all services — do not modify it
 - The container-internal Particiapi port is 5000, mapped to host port 8000
 
+**Expose Postgres to Toolforge** (required for the admin moderation view): in `docker-compose.yaml`, add a `ports` entry to the `postgres` service:
+
+```yaml
+ports:
+  - "<private-ip>:5432:5432"
+```
+
+This binds Postgres only to the private IP, not publicly.
+
 Pre-seed the Polis schema volume before first start. Postgres runs init scripts on first boot — the migration files must be in the volume before that happens, but the normal startup order prevents this. Run once manually:
 
 ```bash
@@ -162,6 +172,21 @@ curl http://<private-ip>:8000/api/conversations/   # should return []
 > Note: uses `docker-compose` (v1 hyphen) as installed on Debian 12. If v2 plugin is available, use `docker compose` instead.
 
 > **Postgres data directory permissions:** Docker runs postgres as an internal user, so `~/particiapp-data/postgresql-data/` will be owned by that user, not by you. If you ever need to delete it (e.g. to re-initialise the database), use `sudo rm -rf ~/particiapp-data/postgresql-data/`.
+
+### Security hardening (one-time, after stack is running)
+
+**Tighten `.env` permissions:**
+```bash
+chmod 600 ~/particiapp-docker/.env
+```
+
+**Create a read-only Postgres role** for the Flask admin connection — do not use the `polis` superuser for external connections:
+
+```bash
+docker exec -it particiapp-docker_postgres_1 psql -U polis polis -c "CREATE ROLE wiki_polis_ro WITH LOGIN PASSWORD '<strong-password>'; GRANT CONNECT ON DATABASE polis TO wiki_polis_ro; GRANT USAGE ON SCHEMA public TO wiki_polis_ro; GRANT SELECT ON ALL TABLES IN SCHEMA public TO wiki_polis_ro; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO wiki_polis_ro;"
+```
+
+Use this role in the `POLIS_DATABASE_URL` Toolforge envvar: `postgresql://wiki_polis_ro:<password>@<private-ip>:5432/polis`
 
 ### Polis system account (one-time)
 
@@ -260,6 +285,7 @@ toolforge envvars create ADMIN_USERS
 toolforge envvars create POLIS_SERVER_URL
 toolforge envvars create POLIS_ADMIN_EMAIL
 toolforge envvars create POLIS_ADMIN_PASSWORD
+toolforge envvars create POLIS_DATABASE_URL
 ```
 
 Non-secret values can be passed as arguments:
@@ -277,8 +303,11 @@ Values to enter at the prompts:
 - `POLIS_SERVER_URL` — `http://<vps-private-ip>:8001` (Polis server, for conversation creation)
 - `POLIS_ADMIN_EMAIL` — email of the Polis system account (see Polis system account step below)
 - `POLIS_ADMIN_PASSWORD` — password of the Polis system account
+- `POLIS_DATABASE_URL` — `postgresql://wiki_polis_ro:<password>@<vps-private-ip>:5432/polis` — use the password set when creating the `wiki_polis_ro` role (see Security hardening step above); do not use the `polis` superuser here
 
 > `toolforge envvars list` shows names only, not values. Keep a local record.
+
+> `toolforge envvars` has no `update` command — to change a value, delete and recreate: `toolforge envvars delete <NAME>` then `toolforge envvars create <NAME>`.
 
 The app reads secrets from env vars via `_read_secret()` in `app.py`. On Kubernetes it also checks `/run/secrets/wiki-polis/<name>` first, so either mechanism works.
 
