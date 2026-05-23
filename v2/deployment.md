@@ -323,9 +323,6 @@ https://wiki-polis.toolforge.org/login     → redirects to Wikimedia OAuth
 
 ## Ongoing deploys
 
-> **Note:** The git repository lives at `~/wiki-polis`, not `~/www/python`.
-> `~/www/python` is a Toolforge working directory — running `git pull` there will fail.
-
 ```bash
 # On Toolforge as wiki-polis user:
 cd ~/wiki-polis && git pull
