@@ -55,23 +55,17 @@ This starts:
 
 ## 4. Configure v2/.env
 
-`v2/.env` should contain (these are the defaults for local dev):
+Copy the example file and fill in the two required values:
 
-```ini
-FLASK_DEBUG=1
-FLASK_APP=app.py
-
-PARTICIAPI_BASE_URL=http://127.0.0.1:8000
-POLIS_PUBLIC_URL=http://127.0.0.1:8001
-POLIS_DATABASE_URL=postgresql://polis:polis@127.0.0.1:5432/polis
-
-ADMIN_USERS=DevUser
-DEV_LOGIN_USER=DevUser
-
-OAUTH_CLIENT_ID=
-OAUTH_CLIENT_SECRET=
-OAUTH_REDIRECT_URI=
+```bash
+cp v2/.env.example v2/.env
 ```
+
+Then edit `v2/.env`:
+- Set `SECRET_KEY` to a random value: `python3 -c "import secrets; print(secrets.token_hex(32))"`
+- Set `ADMIN_USERS` and `DEV_LOGIN_USER` to your Wikimedia username
+
+All other defaults work for local dev out of the box.
 
 ## 5. Start the Flask app
 
