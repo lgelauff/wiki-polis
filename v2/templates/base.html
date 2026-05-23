@@ -54,6 +54,10 @@
 
   <div id="toast-container" aria-live="polite"></div>
 
+  <footer style="text-align:right;padding:.5rem 1rem;font-size:11px;color:var(--muted)">
+    <code>{{ git_version }}</code>
+  </footer>
+
   {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
   <script nonce="{{ csp_nonce }}">
