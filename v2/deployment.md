@@ -323,12 +323,21 @@ https://wiki-polis.toolforge.org/login     → redirects to Wikimedia OAuth
 
 ## Ongoing deploys
 
+> **Note:** The git repository lives at `~/wiki-polis`, not `~/www/python`.
+> `~/www/python` is a Toolforge working directory — running `git pull` there will fail.
+
 ```bash
 # On Toolforge as wiki-polis user:
 cd ~/wiki-polis && git pull
 ~/www/python/venv/bin/pip install -e ~/wiki-polis/v2
 flask --app ~/wiki-polis/v2/app.py db upgrade
-cd ~ && webservice restart
+toolforge webservice restart
+```
+
+Or use the deploy script (which handles all steps):
+
+```bash
+bash ~/wiki-polis/deploy.sh
 ```
 
 ---
