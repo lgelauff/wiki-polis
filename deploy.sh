@@ -4,9 +4,24 @@
 
 set -euo pipefail
 
+BRANCH="${1:-}"
+
 echo "==> Pulling latest changes..."
 cd ~/wiki-polis
-git pull
+if [ -n "$BRANCH" ]; then
+  git fetch origin
+  git checkout "$BRANCH"
+  git pull origin "$BRANCH"
+else
+  git pull
+fi
+
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+LAST_HASH=$(git log -1 --format="%h")
+LAST_MSG=$(git log -1 --format="%s")
+LAST_AGO=$(git log -1 --format="%cr")
+echo "    Branch : $CURRENT_BRANCH"
+echo "    Last   : $LAST_HASH $LAST_MSG ($LAST_AGO)"
 
 echo "==> Syncing dependencies (v2)..."
 ~/www/python/venv/bin/pip install -e ~/wiki-polis/v2
