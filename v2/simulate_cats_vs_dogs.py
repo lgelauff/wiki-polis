@@ -18,20 +18,26 @@ Requires:
 Usage (from v2/ directory):
   uv run python simulate_cats_vs_dogs.py
   uv run python simulate_cats_vs_dogs.py --conversation-id <existing_zinvite>
+  uv run python simulate_cats_vs_dogs.py --particiapi-url http://127.0.0.1:8002
   uv run python simulate_cats_vs_dogs.py --skip-flask
 """
 
 import argparse
+import os
 import random
 import re
 import string
 import subprocess
 import sys
+from pathlib import Path
 
 import requests
+from dotenv import load_dotenv
 
-PARTICIAPI  = "http://localhost:8000"
-FLASK       = "http://localhost:5000"  # overridden by --flask-url
+load_dotenv(Path(__file__).with_name(".env"))
+
+PARTICIAPI  = os.environ.get("PARTICIAPI_BASE_URL", "http://127.0.0.1:8002").rstrip("/")
+FLASK       = os.environ.get("WIKI_POLIS_FLASK_URL", "http://127.0.0.1:5001").rstrip("/")
 DB_CONTAINER = "particiapp-docker-postgres-1"
 
 # ── Statements ────────────────────────────────────────────────────────────────
@@ -442,18 +448,22 @@ def run_simulation(conv_id: str) -> None:
 
 
 def main():
+    global FLASK, PARTICIAPI
+
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--conversation-id", metavar="ZINVITE",
                         help="Use an existing Polis conversation instead of creating one")
     parser.add_argument("--skip-flask", action="store_true",
                         help="Skip wiki-polis Flask DB registration")
-    parser.add_argument("--flask-url", metavar="URL", default="http://localhost:5000",
-                        help="Base URL of the wiki-polis Flask app (default: http://localhost:5000)")
+    parser.add_argument("--flask-url", metavar="URL", default=FLASK,
+                        help=f"Base URL of the wiki-polis Flask app (default: {FLASK})")
+    parser.add_argument("--particiapi-url", metavar="URL", default=PARTICIAPI,
+                        help=f"Base URL of Particiapi (default: {PARTICIAPI})")
     args = parser.parse_args()
 
-    global FLASK
     FLASK = args.flask_url.rstrip("/")
+    PARTICIAPI = args.particiapi_url.rstrip("/")
 
     conv_id = args.conversation_id
     if not conv_id:
@@ -479,7 +489,7 @@ def main():
     try:
         text_to_tid = run_simulation(conv_id)
     except requests.ConnectionError:
-        print("Error: cannot reach Particiapi at http://localhost:8000")
+        print(f"Error: cannot reach Particiapi at {PARTICIAPI}")
         print("Is the particiapp-docker stack running?  docker compose up")
         sys.exit(1)
 

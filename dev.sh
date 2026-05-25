@@ -2,7 +2,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DOCKER_DIR="$(cd "$SCRIPT_DIR/../particiapp-docker" && pwd)"
+DOCKER_DIR="${PARTICIAPP_DOCKER_DIR:-$SCRIPT_DIR/../particiapp-docker}"
+if [ ! -d "$DOCKER_DIR" ]; then
+  echo "ERROR: particiapp-docker not found at $DOCKER_DIR" >&2
+  echo "Clone it next to wiki-polis, or set PARTICIAPP_DOCKER_DIR=/path/to/particiapp-docker." >&2
+  exit 1
+fi
+DOCKER_DIR="$(cd "$DOCKER_DIR" && pwd)"
 FLASK_DIR="$SCRIPT_DIR/v2"
 SESSION_FILE="$SCRIPT_DIR/.dev-session"
 
@@ -11,10 +17,10 @@ SESSION_FILE="$SCRIPT_DIR/.dev-session"
 
 if [ ! -f "$SESSION_FILE" ]; then
   cat > "$SESSION_FILE" <<'EOF'
-POSTGRES_PORT=5432
-PARTICIAPI_PORT=8000
-POLIS_PORT=8001
-FLASK_PORT=5000
+POSTGRES_PORT=5433
+PARTICIAPI_PORT=8002
+POLIS_PORT=8003
+FLASK_PORT=5001
 EOF
 fi
 
@@ -32,25 +38,54 @@ session_set() {
 
 # ── Docker stack ──────────────────────────────────────────────────────────────
 
-COMPOSE="docker compose \
-  -f $DOCKER_DIR/docker-compose.yaml \
-  -f $DOCKER_DIR/docker-compose.wiki-polis.yaml \
-  -f $DOCKER_DIR/docker-compose.local.yaml"
+if [ -f "$DOCKER_DIR/.env" ]; then
+  DOCKER_ENV_FILE="$DOCKER_DIR/.env"
+elif [ -f "$DOCKER_DIR/dev.env" ]; then
+  DOCKER_ENV_FILE="$DOCKER_DIR/dev.env"
+else
+  echo "ERROR: no particiapp-docker env file found. Expected $DOCKER_DIR/.env or $DOCKER_DIR/dev.env." >&2
+  exit 1
+fi
+
+if docker compose version >/dev/null 2>&1; then
+  COMPOSE=(docker compose)
+elif command -v docker-compose >/dev/null 2>&1; then
+  COMPOSE=(docker-compose)
+else
+  echo "ERROR: Docker Compose not found. Install either the 'docker compose' plugin or docker-compose." >&2
+  exit 1
+fi
+
+COMPOSE+=(
+  --env-file "$DOCKER_ENV_FILE"
+  -f "$DOCKER_DIR/docker-compose.yaml"
+  -f "$FLASK_DIR/docker-compose.wiki-polis.local.yaml"
+)
+
+compose() {
+  env \
+    POSTGRES_HOST_PORT="$POSTGRES_PORT" \
+    PARTICIAPI_HOST_PORT="$PARTICIAPI_PORT" \
+    POLIS_HOST_PORT="$POLIS_PORT" \
+    FLASK_HOST_PORT="$FLASK_PORT" \
+    WIKI_POLIS_DIR="$SCRIPT_DIR" \
+    "${COMPOSE[@]}" "$@"
+}
 
 stop_docker() {
   echo ""
   echo "Stopping Docker stack..."
-  $COMPOSE down
+  compose down
   session_set POSTGRES_STATUS stopped
   session_set PARTICIAPI_STATUS stopped
   session_set FLASK_STATUS stopped
 }
 
 if docker ps --filter "name=particiapp-docker" --format "{{.Names}}" | grep -q .; then
-  echo "particiapp-docker stack already running — skipping docker compose up"
+  echo "particiapp-docker stack already running — skipping Docker Compose up"
 else
   echo "Starting Docker stack..."
-  POSTGRES_HOST_PORT=$POSTGRES_PORT $COMPOSE up -d
+  compose up -d
   trap stop_docker EXIT
 fi
 
@@ -95,4 +130,15 @@ fi
 
 session_set FLASK_STATUS running
 cd "$FLASK_DIR"
-exec uv run flask run --host 127.0.0.1 --port "$FLASK_PORT"
+export FLASK_DEBUG=1
+export FLASK_APP=app.py
+export SECRET_KEY="${SECRET_KEY:-dev-insecure-key}"
+export ADMIN_USERS="${ADMIN_USERS:-DevUser}"
+export DEV_LOGIN_USER="${DEV_LOGIN_USER:-DevUser}"
+export DEV_DATABASE_URL="${DEV_DATABASE_URL:-sqlite:///dev.db}"
+export PARTICIAPI_BASE_URL="http://127.0.0.1:$PARTICIAPI_PORT"
+export POLIS_SERVER_URL="http://127.0.0.1:$POLIS_PORT"
+export POLIS_DATABASE_URL="postgresql://polis:polis@127.0.0.1:$POSTGRES_PORT/polis"
+
+uv run flask --app app init-db
+exec uv run flask --app app run --host 127.0.0.1 --port "$FLASK_PORT"
