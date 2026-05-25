@@ -312,11 +312,29 @@
     </div>
     {% endif %}
 
+    {% if featured_data | length > 1 %}
+    <nav class="arg-toc" aria-label="Proposals navigation">
+      <ul class="arg-toc-list">
+        {% for item in featured_data %}
+        <li>
+          <button class="arg-toc-btn{% if loop.first %} arg-toc-btn--active{% endif %}"
+                  data-target="fs-{{ item.fs.id }}"
+                  type="button">
+            <span class="arg-toc-index">{{ loop.index }}</span>
+            <span class="arg-toc-label">{{ item.short_title }}</span>
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+    </nav>
+    {% endif %}
+
+    <div class="arg-panels">
     {% for item in featured_data %}
     {% set fs = item.fs %}
     {% set both_gate = item.pro_gate and item.con_gate %}
 
-    <div class="arg-block" id="fs-{{ fs.id }}">
+    <div class="arg-block{% if not loop.first %} arg-block--hidden{% endif %}" id="fs-{{ fs.id }}">
 
       {# ── Featured statement card ── #}
       <div class="arg-statement">
@@ -619,6 +637,7 @@
       </div>{# end arg-columns #}
     </div>{# end arg-block #}
     {% endfor %}
+    </div>{# end arg-panels #}
 
   </div>
   {% endif %}
@@ -878,6 +897,25 @@
 (function () {
   var tab = document.getElementById('tab-arguments');
   if (!tab) return;
+
+  // ── ToC / single-panel navigation ────────────────────────────────────────────
+  var toc = tab.querySelector('.arg-toc');
+  if (toc) {
+    toc.addEventListener('click', function (e) {
+      var btn = e.target.closest('.arg-toc-btn');
+      if (!btn) return;
+      var targetId = btn.dataset.target;
+      tab.querySelectorAll('.arg-panels .arg-block').forEach(function (block) {
+        block.classList.add('arg-block--hidden');
+      });
+      var panel = document.getElementById(targetId);
+      if (panel) panel.classList.remove('arg-block--hidden');
+      toc.querySelectorAll('.arg-toc-btn').forEach(function (b) {
+        b.classList.remove('arg-toc-btn--active');
+      });
+      btn.classList.add('arg-toc-btn--active');
+    });
+  }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 

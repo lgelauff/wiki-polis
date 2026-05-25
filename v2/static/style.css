@@ -1671,9 +1671,72 @@ a { color: var(--pass); }
 
 /* ── Argument mapping ─────────────────────────────────── */
 
-.arguments-tab { max-width: 940px; }
+.arguments-tab {
+  max-width: 1100px;
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
 
-.arg-block { margin-bottom: 2.5rem; }
+.arg-toc {
+  flex-shrink: 0;
+  width: 200px;
+  position: sticky;
+  top: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 8px 0;
+}
+
+.arg-toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.arg-toc-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--muted);
+  transition: color .12s, background .12s;
+}
+.arg-toc-btn:hover { color: var(--ink); background: var(--surface2); }
+.arg-toc-btn--active { color: var(--ink); font-weight: 600; background: var(--surface2); }
+
+.arg-toc-index {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+  min-width: 14px;
+}
+.arg-toc-btn--active .arg-toc-index { color: var(--accent); }
+
+.arg-toc-label { word-break: break-word; overflow-wrap: anywhere; }
+
+.arg-panels { flex: 1; min-width: 0; max-width: 940px; }
+
+.arg-block { margin-bottom: 0; }
+.arg-block--hidden { display: none; }
+
+@media (max-width: 720px) {
+  .arguments-tab { flex-direction: column; max-width: 940px; }
+  .arg-toc { width: 100%; position: static; }
+  .arg-toc-list { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; }
+  .arg-toc-btn { width: auto; border-radius: 6px; padding: 5px 10px; border: 1px solid var(--hairline); }
+}
 
 /* Featured statement card */
 .arg-statement {
