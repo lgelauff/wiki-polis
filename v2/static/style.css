@@ -1671,7 +1671,7 @@ a { color: var(--pass); }
 
 /* ── Argument mapping ─────────────────────────────────── */
 
-.arguments-tab {
+.arguments-tab:not(.tab-panel--hidden) {
   max-width: 1100px;
   display: flex;
   gap: 24px;
@@ -1713,16 +1713,6 @@ a { color: var(--pass); }
 }
 .arg-toc-btn:hover { color: var(--ink); background: var(--surface2); }
 .arg-toc-btn--active { color: var(--ink); font-weight: 600; background: var(--surface2); }
-
-.arg-toc-index {
-  flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-  margin-top: 2px;
-  min-width: 14px;
-}
-.arg-toc-btn--active .arg-toc-index { color: var(--accent); }
 
 .arg-toc-label { word-break: break-word; overflow-wrap: anywhere; }
 
