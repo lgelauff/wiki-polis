@@ -13,7 +13,9 @@ The v1 app embeds hosted `pol.is`. For a fully local stack, use v2.
 ## Prerequisites
 
 - Docker Desktop, Colima, or another Docker runtime.
-- Docker Compose as either `docker compose` or `docker-compose`.
+- Docker Compose v2.24+ (shipped with Docker Desktop v4.27+, Jan 2024) as
+  either `docker compose` or `docker-compose`. The standalone `docker-compose`
+  v1 binary is not supported.
 - Python 3.11+.
 - `uv` for Python dependency management.
 
