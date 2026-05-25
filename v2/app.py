@@ -7,6 +7,7 @@ import click
 import functools
 import hashlib
 import os
+import random
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -80,6 +81,14 @@ csrf    = CSRFProtect()
 # No global default — limits applied per endpoint only.
 # On multi-worker deployments configure RATELIMIT_STORAGE_URI=redis://... in env.
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
+
+
+def _short_title(text: str, max_len: int = 80) -> str:
+    if len(text) <= max_len:
+        return text
+    truncated = text[:max_len]
+    last_space = truncated.rfind(' ')
+    return (truncated[:last_space] if last_space > 0 else truncated) + '…'
 
 
 def _safe_redirect(target: str, fallback: str) -> str:
@@ -791,13 +800,6 @@ def _register_routes(app: Flask) -> None:
             db.session.commit()
         return state
 
-    def _short_title(text, max_len=80):
-        if len(text) <= max_len:
-            return text
-        truncated = text[:max_len]
-        last_space = truncated.rfind(' ')
-        return (truncated[:last_space] if last_space > 0 else truncated) + '…'
-
     def _build_featured_data(conv, participation, can_mod=False):
         """Return list of dicts for the argument tab, one per confirmed FS.
 
@@ -884,8 +886,7 @@ def _register_routes(app: Flask) -> None:
                 'proposer_pseudonyms': proposer_pseudonym_map,
             })
 
-        import random as _random
-        _random.Random(pid).shuffle(result)
+        random.Random(pid).shuffle(result)
         return result
 
     # ── Conversation ─────────────────────────────────────────────────────────
