@@ -270,6 +270,115 @@ header {
   vertical-align: middle;
 }
 
+/* ── Home page — Cluster card layout ── */
+
+.home-section {
+  margin-bottom: 24px;
+}
+
+.home-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.home-section-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.home-section-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.conv-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.12s;
+}
+
+.conv-card:hover {
+  border-color: var(--accent);
+}
+
+.conv-card-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.conv-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.conv-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.conv-card-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+a.conv-card-title:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.conv-card-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--surface2);
+  border: 1px solid var(--hairline);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.conv-card-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.conv-card-action {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.conv-card-action--muted { color: var(--muted); }
+
 /* ── Voting column (outer container, no card styling) ── */
 
 .voting-col {

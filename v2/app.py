@@ -634,11 +634,13 @@ def _register_routes(app: Flask) -> None:
                     moderating = Conversation.query.filter(
                         Conversation.id.in_(mod_ids)).all()
 
+        part_map = {p.conversation_id: p for p in joined_parts}
         return render_template('home.html',
                                active_joined=active_joined,
                                archived_joined=archived_joined,
                                available=available,
-                               moderating=moderating)
+                               moderating=moderating,
+                               part_map=part_map)
 
     # ── Accept ───────────────────────────────────────────────────────────────
 
