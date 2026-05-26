@@ -574,16 +574,56 @@ def _register_routes(app: Flask) -> None:
             session['emailable'] = _is_emailable(username)
             return redirect(url_for('index'))
 
+    # ── Dev test users (DEV_FAKE_LOGIN=1) ────────────────────────────────────
+    # Hardcoded test accounts with negative mw_user_ids so they can never
+    # collide with real Wikimedia accounts. Only active when DEV_FAKE_LOGIN=1
+    # is set in the environment — never enable this on production.
+
+    _DEV_TEST_USERS = [
+        {'username': 'dev-user-1', 'mw_user_id': -1},
+        {'username': 'dev-user-2', 'mw_user_id': -2},
+        {'username': 'dev-user-3', 'mw_user_id': -3},
+    ]
+
+    _fake_login_enabled = os.environ.get('DEV_FAKE_LOGIN', '').strip() == '1'
+    app.config['DEV_FAKE_LOGIN'] = _fake_login_enabled
+    app.config['DEV_TEST_USERS'] = _DEV_TEST_USERS if _fake_login_enabled else []
+
+    if _fake_login_enabled:
+        @app.get('/dev/login/<username>')
+        @limiter.limit('30 per minute')
+        def dev_fake_login(username):
+            user = next((u for u in _DEV_TEST_USERS if u['username'] == username), None)
+            if user is None:
+                return 'Unknown test user', 404
+            xid = hashlib.sha256(f'dev-fake-{username}'.encode()).hexdigest()
+            participant = Participant.query.filter_by(mw_user_id=user['mw_user_id']).first()
+            if participant is None:
+                participant = Participant(
+                    mw_user_id=user['mw_user_id'],
+                    mw_username=username,
+                    xid=xid,
+                )
+                db.session.add(participant)
+                db.session.commit()
+            session['username']  = username
+            session['xid']       = xid
+            session['emailable'] = False
+            return redirect(url_for('index'))
+
     # ── Home ─────────────────────────────────────────────────────────────────
 
     @app.get('/')
     def index():
+        dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
         if 'username' not in session:
             public_convos = (Conversation.query
                              .filter_by(active=True, paused=False, access_policy='public')
                              .order_by(Conversation.created_at.desc())
                              .all())
-            return render_template('home.html', public_conversations=public_convos)
+            return render_template('home.html',
+                                   public_conversations=public_convos,
+                                   dev_test_users=dev_test_users)
 
         participant = _current_participant()
         username    = session['username']
@@ -642,7 +682,8 @@ def _register_routes(app: Flask) -> None:
                                archived_joined=archived_joined,
                                available=available,
                                moderating=moderating,
-                               pseudonym_map=pseudonym_map)
+                               pseudonym_map=pseudonym_map,
+                               dev_test_users=dev_test_users)
 
     # ── Accept ───────────────────────────────────────────────────────────────
 

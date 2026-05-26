@@ -11,9 +11,11 @@ cd ~/wiki-polis
 if [ -n "$BRANCH" ]; then
   git fetch origin
   git checkout "$BRANCH"
-  git pull origin "$BRANCH"
+  # Use reset instead of pull to handle force-pushed branches cleanly
+  git reset --hard "origin/$BRANCH"
 else
-  git pull
+  git fetch origin
+  git reset --hard "origin/$(git rev-parse --abbrev-ref HEAD)"
 fi
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)

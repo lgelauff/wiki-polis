@@ -424,4 +424,5 @@ bash ~/wiki-polis/deploy.sh
 | `POLIS_DATABASE_URL` | no | Direct Postgres connection for admin stats panel; leave blank to disable |
 | `POLIS_PUBLIC_URL` | no | Public Polis URL for "view full results" links |
 | `DEV_LOGIN_USER` | dev only | Bypasses OAuth in local dev; never set in production |
+| `DEV_FAKE_LOGIN` | dev only | Set to `1` to show hardcoded test-user badges on the home page; never set in production |
 | `FLASK_DEBUG` | dev only | Enables debug mode; never set in production |

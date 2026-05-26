@@ -27,6 +27,16 @@
       </svg>
       Continue with Wikimedia
     </a>
+    {% if dev_test_users %}
+    <div style="margin-top:1.25rem;padding:10px 14px;border:1px dashed var(--spot);border-radius:8px;background:rgba(245,158,11,0.05);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--spot)">Dev</span>
+      {% for u in dev_test_users %}
+      <a href="{{ url_for('dev_fake_login', username=u.username) }}"
+         style="font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:4px;background:var(--surface2);border:1px solid var(--hairline);color:var(--ink);text-decoration:none"
+         title="Log in as {{ u.username }}">{{ u.username }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
 
   {% if public_conversations %}
@@ -83,7 +93,7 @@
   {% endif %}
 
   {% if available %}
-  <section aria-label="Open consultations">
+  <section aria-label="Open to you">
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-label">Open to you</span>
