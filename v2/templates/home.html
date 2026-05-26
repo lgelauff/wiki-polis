@@ -1,36 +1,23 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="container">
+<div class="container home-container">
 
-  <div style="margin-bottom:1.25rem;padding:0.6rem 1rem;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:13px;color:var(--muted);line-height:1.6">
-    This is a prototype in active development — things may break or change.
-    Found a bug or have a suggestion?
+  <div style="margin-bottom:1.25rem;padding:10px 14px;border:1px solid var(--hairline);border-radius:8px;background:var(--surface);font-size:13px;color:var(--muted);line-height:1.6">
+    Prototype in active development — things may change.
     <a href="https://github.com/lgelauff/wiki-polis/issues/new"
-       target="_blank" rel="noopener" style="color:var(--accent)">Open an issue on GitHub</a>
-    (screenshots welcome).
-  </div>
-
-  <div class="landing-section">
-    <h2>Where the community actually stands.</h2>
-    <p style="font-size:15px;line-height:1.6;color:var(--body);margin-top:4px;max-width:520px">
-      Vote on short statements, watch opinion clusters emerge.
-      No threads, no replies — just signal.
-    </p>
-    <p style="font-size:15px;line-height:1.6;color:var(--body);margin-top:10px;max-width:520px">
-      Vote privately on short statements — agree, disagree, or pass. No one sees how
-      you voted individually; only the patterns that emerge across all participants are
-      shared. You'll participate under a pseudonym that's unique to each consultation.
-    </p>
+       target="_blank" rel="noopener" style="color:var(--pass)">Open an issue</a> if you find a bug.
   </div>
 
 {% if not username %}
 
   <div class="landing-section">
-    <p style="font-size:14px;color:var(--muted)">
-      Log in with your Wikimedia account to join an open consultation.
+    <h2 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Where the community actually stands.</h2>
+    <p style="font-size:15px;line-height:1.6;color:var(--body);max-width:520px">
+      Vote on short statements, watch opinion clusters emerge.
+      No threads, no replies — just signal.
     </p>
-    <a href="{{ url_for('login') }}" class="login-btn" style="margin-top:10px">
+    <a href="{{ url_for('login') }}" class="login-btn" style="margin-top:18px">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="1" stroke-linecap="round"
            stroke-dasharray="1.4 1.6" aria-hidden="true">
@@ -43,81 +30,135 @@
   </div>
 
   {% if public_conversations %}
-  <div class="landing-section">
-    <p class="section-label">Open consultations</p>
-    <ul class="conversation-list">
+  <section aria-label="Open consultations">
+    <div class="home-section">
+      <div class="home-section-header">
+        <span class="home-section-label">Open consultations</span>
+        <span class="home-section-count" aria-hidden="true">{{ public_conversations | length }} total</span>
+      </div>
       {% for c in public_conversations %}
-      <li>
-        <span class="conv-dot conv-dot--available"></span>
-        <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
-      </li>
+      <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
+         aria-label="{{ c.title }} — join consultation">
+        <div class="conv-card-left">
+          <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
+          <span class="conv-card-title">{{ c.title }}</span>
+        </div>
+        <span class="conv-card-action" aria-hidden="true">JOIN →</span>
+      </a>
       {% endfor %}
-    </ul>
-  </div>
+    </div>
+  </section>
   {% endif %}
 
 {% else %}
 
   {% if active_joined %}
-  <div class="landing-section">
-    <p class="section-label">Your consultations</p>
-    <ul class="conversation-list">
+  <section aria-label="Active consultations">
+    <div class="home-section">
+      <div class="home-section-header">
+        <span class="home-section-label">Active</span>
+        <span class="home-section-count" aria-hidden="true">{{ active_joined | length }} consultation{{ 's' if active_joined | length != 1 }}</span>
+      </div>
       {% for c in active_joined %}
-      <li>
-        <span class="conv-dot conv-dot--active"></span>
-        <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
-      </li>
+      {% set part = pseudonym_map.get(c.id) %}
+      <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
+         aria-label="{{ c.title }}{% if part %} — {{ part.pseudonym }}{% endif %} — {{ 'temporarily paused' if c.paused else 'voting open' }} — continue">
+        <div class="conv-card-left">
+          <span class="conv-dot conv-dot--active" aria-hidden="true"></span>
+          <div class="conv-card-info">
+            <div class="conv-card-title-row">
+              <span class="conv-card-title">{{ c.title }}</span>
+              {% if part %}<span class="conv-card-badge">{{ part.pseudonym }}</span>{% endif %}
+            </div>
+            <div class="conv-card-sub">
+              {%- if c.paused -%}temporarily paused{%- else -%}voting open{%- endif -%}
+            </div>
+          </div>
+        </div>
+        <span class="conv-card-action" aria-hidden="true">CONTINUE →</span>
+      </a>
       {% endfor %}
-    </ul>
-  </div>
+    </div>
+  </section>
   {% endif %}
 
   {% if available %}
-  <div class="landing-section">
-    <p class="section-label">Open to you</p>
-    <ul class="conversation-list">
+  <section aria-label="Open consultations">
+    <div class="home-section">
+      <div class="home-section-header">
+        <span class="home-section-label">Open to you</span>
+        <span class="home-section-count" aria-hidden="true">{{ available | length }} consultation{{ 's' if available | length != 1 }}</span>
+      </div>
       {% for c in available %}
-      <li>
-        <span class="conv-dot conv-dot--available"></span>
-        <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
-      </li>
+      <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
+         aria-label="{{ c.title }} — join consultation">
+        <div class="conv-card-left">
+          <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
+          <div class="conv-card-info">
+            <span class="conv-card-title">{{ c.title }}</span>
+          </div>
+        </div>
+        <span class="conv-card-action" aria-hidden="true">JOIN →</span>
+      </a>
       {% endfor %}
-    </ul>
-  </div>
+    </div>
+  </section>
   {% endif %}
 
   {% if archived_joined %}
-  <div class="landing-section">
-    <p class="section-label">Closed</p>
-    <ul class="conversation-list">
+  <section aria-label="Closed consultations">
+    <div class="home-section">
+      <div class="home-section-header">
+        <span class="home-section-label">Closed</span>
+        <span class="home-section-count" aria-hidden="true">{{ archived_joined | length }} consultation{{ 's' if archived_joined | length != 1 }}</span>
+      </div>
       {% for c in archived_joined %}
-      <li>
-        <span class="conv-dot conv-dot--closed"></span>
-        <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
-        <span class="badge-inactive">closed</span>
-      </li>
+      {% set part = pseudonym_map.get(c.id) %}
+      <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
+         aria-label="{{ c.title }}{% if part %} — {{ part.pseudonym }}{% endif %} — closed{% if c.closed_at %} {{ c.closed_at.strftime('%B %Y') }}{% endif %}">
+        <div class="conv-card-left">
+          <span class="conv-dot conv-dot--closed" aria-hidden="true"></span>
+          <div class="conv-card-info">
+            <div class="conv-card-title-row">
+              <span class="conv-card-title">{{ c.title }}</span>
+              {% if part %}<span class="conv-card-badge">{{ part.pseudonym }}</span>{% endif %}
+            </div>
+            {% if c.closed_at %}
+            <div class="conv-card-sub">closed {{ c.closed_at.strftime('%b %Y') }}</div>
+            {% endif %}
+          </div>
+        </div>
+        <span class="conv-card-action" aria-hidden="true">VIEW →</span>
+      </a>
       {% endfor %}
-    </ul>
-  </div>
+    </div>
+  </section>
   {% endif %}
 
   {% if moderating %}
-  <div class="landing-section">
-    <p class="section-label">You moderate</p>
-    <ul class="conversation-list">
+  <section aria-label="Consultations you moderate">
+    <div class="home-section">
+      <div class="home-section-header">
+        <span class="home-section-label">You moderate</span>
+        <span class="home-section-count" aria-hidden="true">{{ moderating | length }} consultation{{ 's' if moderating | length != 1 }}</span>
+      </div>
       {% for c in moderating %}
-      <li class="conv-mod-row">
-        <span style="display:flex;align-items:center;gap:10px">
-          <span class="conv-dot {{ 'conv-dot--active' if c.active else 'conv-dot--closed' }}"></span>
-          <a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a>
-          {% if not c.active %}<span class="badge-inactive">closed</span>{% endif %}
+      <div class="conv-card conv-card--split">
+        <span class="conv-card-left">
+          <span class="conv-dot {{ 'conv-dot--active' if c.active else 'conv-dot--closed' }}" aria-hidden="true"></span>
+          <a href="{{ url_for('conversation', slug=c.slug) }}"
+             class="conv-card-title">{{ c.title }}</a>
+          {% if not c.active %}<span class="conv-card-badge">closed</span>{% endif %}
         </span>
+        <span class="conv-card-divider" aria-hidden="true"></span>
+        {# → aria-hidden on "Admin →" not needed — the aria-label overrides the text content #}
         <a href="{{ url_for('admin_conversation_detail', conv_id=c.id) }}"
-           class="admin-action-btn">Admin →</a>
-      </li>
+           class="admin-action-btn"
+           aria-label="Open admin panel for {{ c.title }}">Admin →</a>
+      </div>
       {% endfor %}
-    </ul>
-  </div>
+    </div>
+  </section>
   {% endif %}
 
   {% if not active_joined and not available and not archived_joined and not moderating %}
@@ -127,7 +168,6 @@
   {% endif %}
 
 {% endif %}
-
 
 </div>
 
