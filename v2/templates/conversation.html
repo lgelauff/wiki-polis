@@ -350,7 +350,7 @@
             FEATURED
           </div>
         </div>
-        <p class="arg-statement-text">{{ item.text }}</p>
+        <p class="arg-statement-text" tabindex="-1">{{ item.text }}</p>
       </div>
 
       {# ── Status strip ── #}
@@ -925,13 +925,16 @@
       });
       if (moveFocus) {
         var panel = document.getElementById(targetId);
-        if (panel) panel.focus();
+        if (panel) {
+          var first = panel.querySelector('.arg-statement-text');
+          (first || panel).focus();
+        }
       }
     }
 
     toc.addEventListener('click', function (e) {
       var btn = e.target.closest('.arg-toc-btn');
-      if (btn) activatePanel(btn.dataset.target);
+      if (btn && btn.dataset.target) activatePanel(btn.dataset.target);
     });
 
     toc.addEventListener('keydown', function (e) {
@@ -951,6 +954,8 @@
       } else if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         activatePanel(btns[idx].dataset.target, true);
+      } else if (e.key === 'Escape') {
+        document.activeElement.blur();
       }
     });
 

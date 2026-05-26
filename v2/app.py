@@ -84,6 +84,9 @@ limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 
 def _short_title(text: str, max_len: int = 80) -> str:
+    text = text.strip()
+    if not text:
+        return text
     if len(text) <= max_len:
         return text
     truncated = text[:max_len]
