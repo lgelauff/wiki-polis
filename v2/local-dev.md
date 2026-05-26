@@ -197,6 +197,24 @@ uv run python simulate_cats_vs_dogs.py --particiapi-url http://127.0.0.1:8012
 
 The script also reads `PARTICIAPI_BASE_URL` from `v2/.env`.
 
+## Dev Test Users
+
+Three generic test accounts let you switch between user identities without going through Wikimedia OAuth. Enable them by setting `DEV_FAKE_LOGIN=1` in `v2/.env`.
+
+**Local dev** — `v2/.env`:
+```
+DEV_FAKE_LOGIN=1
+```
+
+**Toolforge dev tool** — on the bastion:
+```bash
+toolforge envvars create DEV_FAKE_LOGIN 1
+```
+
+Restart Flask (or the webservice), then visit the home page. An amber badge strip appears below the login button with three accounts: `dev-user-1`, `dev-user-2`, `dev-user-3`. Clicking a badge logs you in immediately — the `Participant` record is created on first use. Use the accounts to simulate multiple participants interacting in the same consultation.
+
+These accounts use negative `mw_user_id` values so they never collide with real Wikimedia accounts. Do not set `DEV_FAKE_LOGIN=1` in production.
+
 ## Stopping The Stack
 
 If you started with `./dev.sh`, press `Ctrl-C`; the script stops the Docker
