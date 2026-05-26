@@ -29,9 +29,31 @@
     <tbody>
       {% for fs in confirmed %}
       <tr>
-        <td style="white-space:nowrap">{{ fs.polis_statement_id }}</td>
-        <td style="font-size:13px">{{ fs.statement_text or '—' }}</td>
-        <td>
+        <td style="white-space:nowrap;vertical-align:top">{{ fs.polis_statement_id }}</td>
+        <td style="font-size:13px;vertical-align:top">
+          <div style="margin-bottom:{% if fs.arguments %}0.5rem{% else %}0{% endif %}">{{ fs.statement_text or '—' }}</div>
+          {% if fs.arguments %}
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            {% for arg in fs.arguments | sort(attribute='side') %}
+            <tr style="border-top:1px solid var(--hairline)">
+              <td style="padding:4px 8px 4px 0;white-space:nowrap;color:var(--muted)">{{ arg.side }}</td>
+              <td style="padding:4px 8px;color:var(--body)">{{ arg.body }}</td>
+              <td style="padding:4px 0 4px 8px;white-space:nowrap;color:var(--muted)">{{ arg.proposer.mw_username if arg.proposer else '—' }}</td>
+              <td style="padding:4px 0 4px 8px;white-space:nowrap">
+                <form method="post"
+                      action="{{ url_for('admin_argument_delete', conv_id=conversation.id, arg_id=arg.id) }}"
+                      style="display:inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn-small btn-danger"
+                          onclick="return confirm('Delete this argument? This cannot be undone.')">delete</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </table>
+          {% endif %}
+        </td>
+        <td style="vertical-align:top">
           <form method="post"
                 action="{{ url_for('admin_featured_remove', conv_id=conversation.id, fs_id=fs.id) }}"
                 style="display:inline">
