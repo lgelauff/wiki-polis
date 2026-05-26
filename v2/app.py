@@ -24,6 +24,7 @@ from flask_session import Session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
+from sqlalchemy import text as _sa_text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
@@ -1749,6 +1750,29 @@ def _register_routes(app: Flask) -> None:
         db.session.delete(arg)
         db.session.commit()
         return redirect(url_for('admin_conversation_featured', conv_id=conv_id))
+
+    # ── Health ────────────────────────────────────────────────────────────────
+
+    @app.get('/health')
+    @limiter.exempt
+    def health():
+        result = {'db': 'ok', 'particiapi': 'ok'}
+
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(_sa_text('SELECT 1'))
+        except Exception:
+            result['db'] = 'error'
+
+        try:
+            base = current_app.config.get('PARTICIAPI_BASE', '')
+            requests.get(f'{base}/api/conversations/', timeout=2)
+        except Exception:
+            result['particiapi'] = 'unreachable'
+
+        result['status'] = 'ok' if all(v == 'ok' for v in result.values()) else 'degraded'
+        status_code = 200 if result['status'] == 'ok' else 503
+        return jsonify(result), status_code
 
 
 app = create_app()
