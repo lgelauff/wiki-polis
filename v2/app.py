@@ -580,10 +580,9 @@ def _register_routes(app: Flask) -> None:
     # is set in the environment — never enable this on production.
 
     _DEV_TEST_USERS = [
-        {'username': 'test-viewer',      'mw_user_id': -1},
-        {'username': 'test-participant', 'mw_user_id': -2},
-        {'username': 'test-moderator',   'mw_user_id': -3},
-        {'username': 'test-closed',      'mw_user_id': -4},
+        {'username': 'dev-user-1', 'mw_user_id': -1},
+        {'username': 'dev-user-2', 'mw_user_id': -2},
+        {'username': 'dev-user-3', 'mw_user_id': -3},
     ]
 
     _fake_login_enabled = os.environ.get('DEV_FAKE_LOGIN', '').strip() == '1'
