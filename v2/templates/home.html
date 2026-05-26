@@ -30,7 +30,7 @@
   </div>
 
   {% if public_conversations %}
-  <section aria-label="Open consultations, {{ public_conversations | length }}">
+  <section aria-label="Open consultations">
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-label">Open consultations</span>
@@ -53,7 +53,7 @@
 {% else %}
 
   {% if active_joined %}
-  <section aria-label="Active consultations, {{ active_joined | length }}">
+  <section aria-label="Active consultations">
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-label">Active</span>
@@ -62,7 +62,7 @@
       {% for c in active_joined %}
       {% set part = pseudonym_map.get(c.id) %}
       <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
-         aria-label="{{ c.title }}{% if part %} ({{ part.pseudonym }}){% endif %}, {{ 'temporarily paused' if c.paused else 'voting open' }} — continue">
+         aria-label="{{ c.title }}{% if part %} — {{ part.pseudonym }}{% endif %} — {{ 'temporarily paused' if c.paused else 'voting open' }} — continue">
         <div class="conv-card-left">
           <span class="conv-dot conv-dot--active" aria-hidden="true"></span>
           <div class="conv-card-info">
@@ -83,7 +83,7 @@
   {% endif %}
 
   {% if available %}
-  <section aria-label="Open to you, {{ available | length }}">
+  <section aria-label="Open consultations">
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-label">Open to you</span>
@@ -106,7 +106,7 @@
   {% endif %}
 
   {% if archived_joined %}
-  <section aria-label="Closed consultations, {{ archived_joined | length }}">
+  <section aria-label="Closed consultations">
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-label">Closed</span>
@@ -115,7 +115,7 @@
       {% for c in archived_joined %}
       {% set part = pseudonym_map.get(c.id) %}
       <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
-         aria-label="{{ c.title }}{% if part %} ({{ part.pseudonym }}){% endif %}, closed{% if c.closed_at %} {{ c.closed_at.strftime('%B %Y') }}{% endif %}">
+         aria-label="{{ c.title }}{% if part %} — {{ part.pseudonym }}{% endif %} — closed{% if c.closed_at %} {{ c.closed_at.strftime('%B %Y') }}{% endif %}">
         <div class="conv-card-left">
           <span class="conv-dot conv-dot--closed" aria-hidden="true"></span>
           <div class="conv-card-info">
@@ -136,14 +136,14 @@
   {% endif %}
 
   {% if moderating %}
-  <section aria-label="You moderate, {{ moderating | length }}">
+  <section aria-label="Consultations you moderate">
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-label">You moderate</span>
         <span class="home-section-count" aria-hidden="true">{{ moderating | length }} consultation{{ 's' if moderating | length != 1 }}</span>
       </div>
       {% for c in moderating %}
-      <div class="conv-card conv-card--split" role="group" aria-label="{{ c.title }}">
+      <div class="conv-card conv-card--split">
         <span class="conv-card-left">
           <span class="conv-dot {{ 'conv-dot--active' if c.active else 'conv-dot--closed' }}" aria-hidden="true"></span>
           <a href="{{ url_for('conversation', slug=c.slug) }}"
@@ -151,6 +151,7 @@
           {% if not c.active %}<span class="conv-card-badge">closed</span>{% endif %}
         </span>
         <span class="conv-card-divider" aria-hidden="true"></span>
+        {# → aria-hidden on "Admin →" not needed — the aria-label overrides the text content #}
         <a href="{{ url_for('admin_conversation_detail', conv_id=c.id) }}"
            class="admin-action-btn"
            aria-label="Open admin panel for {{ c.title }}">Admin →</a>
