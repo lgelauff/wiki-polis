@@ -31,27 +31,29 @@
       <tr>
         <td style="white-space:nowrap;vertical-align:top">{{ fs.polis_statement_id }}</td>
         <td style="font-size:13px;vertical-align:top">
-          <div style="margin-bottom:{% if fs.arguments %}0.5rem{% else %}0{% endif %}">{{ fs.statement_text or '—' }}</div>
-          {% if fs.arguments %}
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            {% for arg in fs.arguments | sort(attribute='side') %}
-            <tr style="border-top:1px solid var(--hairline)">
-              <td style="padding:4px 8px 4px 0;white-space:nowrap;color:var(--muted)">{{ arg.side }}</td>
-              <td style="padding:4px 8px;color:var(--body)">{{ arg.body }}</td>
-              <td style="padding:4px 0 4px 8px;white-space:nowrap;color:var(--muted)">{{ arg.proposer.mw_username if arg.proposer else '—' }}</td>
-              <td style="padding:4px 0 4px 8px;white-space:nowrap">
-                <form method="post"
-                      action="{{ url_for('admin_argument_delete', conv_id=conversation.id, arg_id=arg.id) }}"
-                      style="display:inline">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn-small btn-danger"
-                          onclick="return confirm('Delete this argument? This cannot be undone.')">delete</button>
-                </form>
-              </td>
-            </tr>
+          <div style="margin-bottom:0.5rem">{{ fs.statement_text or '—' }}</div>
+          <div style="border-top:1px solid var(--hairline);padding-top:0.4rem;margin-top:0.1rem">
+            <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Arguments</span>
+            {% if fs.arguments %}
+            {% for arg in fs.arguments %}
+            <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin-top:4px;font-size:12px">
+              <span style="color:var(--muted);min-width:2rem;flex-shrink:0">{{ arg.side }}</span>
+              <span style="flex:1;min-width:120px;color:var(--body)">{{ arg.body }}</span>
+              <span style="color:var(--muted);white-space:nowrap">{{ arg.proposer.mw_username if arg.proposer else '—' }}</span>
+              <span style="color:var(--muted);white-space:nowrap">{{ arg.created_at.strftime('%Y-%m-%d') if arg.created_at else '' }}</span>
+              <form method="post"
+                    action="{{ url_for('admin_argument_delete', conv_id=conversation.id, arg_id=arg.id) }}"
+                    style="display:inline;flex-shrink:0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-small btn-danger"
+                        onclick="return confirm('Delete this argument and all its votes? This cannot be undone.')">delete</button>
+              </form>
+            </div>
             {% endfor %}
-          </table>
-          {% endif %}
+            {% else %}
+            <p style="font-size:12px;color:var(--muted);margin:4px 0 0">no arguments yet</p>
+            {% endif %}
+          </div>
         </td>
         <td style="vertical-align:top">
           <form method="post"

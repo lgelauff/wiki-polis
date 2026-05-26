@@ -1652,7 +1652,10 @@ def _register_routes(app: Flask) -> None:
         conv        = _require_mod_for_conv(conv_id)
         confirmed   = (FeaturedStatement.query
                        .filter_by(conversation_id=conv_id)
+                       .options(joinedload(FeaturedStatement.arguments))
                        .order_by(FeaturedStatement.created_at).all())
+        for fs in confirmed:
+            fs.arguments.sort(key=lambda a: a.side if isinstance(a.side, str) else a.side.value)
         _backfill_statement_texts(conv, confirmed)
         confirmed_tids = {fs.polis_statement_id for fs in confirmed}
         candidates   = _polis_server_client().get_featured_candidates(conv.polis_id)
