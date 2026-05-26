@@ -334,7 +334,7 @@
     {% set fs = item.fs %}
     {% set both_gate = item.pro_gate and item.con_gate %}
 
-    <div class="arg-block" id="fs-{{ fs.id }}">
+    <div class="arg-block" id="fs-{{ fs.id }}" tabindex="-1">
 
       {# ── Featured statement card ── #}
       <div class="arg-statement">
@@ -911,7 +911,7 @@
       }
     });
 
-    function activatePanel(targetId) {
+    function activatePanel(targetId, moveFocus) {
       allPanels.forEach(function (block) {
         var hide = block.id !== targetId;
         block.classList.toggle('arg-block--hidden', hide);
@@ -923,11 +923,35 @@
         if (active) { b.setAttribute('aria-current', 'true'); }
         else         { b.removeAttribute('aria-current'); }
       });
+      if (moveFocus) {
+        var panel = document.getElementById(targetId);
+        if (panel) panel.focus();
+      }
     }
 
     toc.addEventListener('click', function (e) {
       var btn = e.target.closest('.arg-toc-btn');
       if (btn) activatePanel(btn.dataset.target);
+    });
+
+    toc.addEventListener('keydown', function (e) {
+      var btns = Array.prototype.slice.call(toc.querySelectorAll('.arg-toc-btn'));
+      var idx  = btns.indexOf(document.activeElement);
+      if (idx === -1) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        var next = btns[(idx + 1) % btns.length];
+        activatePanel(next.dataset.target);
+        next.focus();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        var prev = btns[(idx - 1 + btns.length) % btns.length];
+        activatePanel(prev.dataset.target);
+        prev.focus();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activatePanel(btns[idx].dataset.target, true);
+      }
     });
 
     // Activate the panel whose id matches the URL hash (e.g. after a
