@@ -357,6 +357,7 @@ header {
 @media (prefers-reduced-motion: reduce) {
   .conv-card { transition: none; }
   .conv-card:active { transform: none; }
+  /* shadow change on :active is retained intentionally — not vestibular motion */
 }
 
 .conv-card-left {
@@ -449,15 +450,27 @@ header {
 }
 
 .conv-card--split:hover {
+  /* intentional: split cards don't lift — whole card is not a single click target */
+  background: var(--surface2);
   border-color: var(--hairline);
   box-shadow: none;
 }
 
+.conv-card--split:has(:focus-visible) {
+  border-color: var(--accent);
+}
+
 @media (max-width: 480px) {
+  .conv-card--split {
+    flex-wrap: wrap;
+  }
   .conv-card--split .conv-card-divider { display: none; }
   .conv-card--split .admin-action-btn {
     flex-basis: 100%;
-    margin-top: 8px;
+    margin-top: 12px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
     justify-content: center;
   }
 }

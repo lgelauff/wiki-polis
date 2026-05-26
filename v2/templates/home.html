@@ -143,7 +143,7 @@
         <span class="home-section-count" aria-hidden="true">{{ moderating | length }} consultation{{ 's' if moderating | length != 1 }}</span>
       </div>
       {% for c in moderating %}
-      <div class="conv-card conv-card--split">
+      <div class="conv-card conv-card--split" role="group" aria-label="{{ c.title }}">
         <span class="conv-card-left">
           <span class="conv-dot {{ 'conv-dot--active' if c.active else 'conv-dot--closed' }}" aria-hidden="true"></span>
           <a href="{{ url_for('conversation', slug=c.slug) }}"
