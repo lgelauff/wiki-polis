@@ -7,6 +7,7 @@ import click
 import functools
 import hashlib
 import os
+import random
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -80,6 +81,14 @@ csrf    = CSRFProtect()
 # No global default — limits applied per endpoint only.
 # On multi-worker deployments configure RATELIMIT_STORAGE_URI=redis://... in env.
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
+
+
+def _short_title(text: str, max_len: int = 80) -> str:
+    if len(text) <= max_len:
+        return text
+    truncated = text[:max_len]
+    last_space = truncated.rfind(' ')
+    return (truncated[:last_space] if last_space > 0 else truncated) + '…'
 
 
 def _safe_redirect(target: str, fallback: str) -> str:
@@ -794,10 +803,11 @@ def _register_routes(app: Flask) -> None:
     def _build_featured_data(conv, participation, can_mod=False):
         """Return list of dicts for the argument tab, one per confirmed FS.
 
-        Each dict: {fs, text, pro_args, con_args, pro_state, con_state, voted_ids,
-                    pro_gate, con_gate}
+        Each dict: {fs, text, short_title, pro_args, con_args, pro_state,
+                    con_state, voted_ids, pro_gate, con_gate}
         Creates/updates ArgumentSideState records as a side effect.
         Moderators see hidden arguments (marked); participants never see them.
+        Order is deterministically randomised per participant.
         """
         from sqlalchemy.orm import joinedload
         fss = (FeaturedStatement.query
@@ -854,11 +864,13 @@ def _register_routes(app: Flask) -> None:
             pro_voted_count = sum(1 for a in ordered_pro if a.id in voted_ids)
             con_voted_count = sum(1 for a in ordered_con if a.id in voted_ids)
 
+            text_value = (stmt_texts.get(fs.polis_statement_id)
+                          or fs.statement_text
+                          or f'Statement #{fs.polis_statement_id}')
             result.append({
-                'fs':        fs,
-                'text':      stmt_texts.get(fs.polis_statement_id)
-                             or fs.statement_text
-                             or f'Statement #{fs.polis_statement_id}',
+                'fs':          fs,
+                'text':        text_value,
+                'short_title': _short_title(text_value),
                 'pro_args':  ordered_pro,
                 'con_args':  ordered_con,
                 'pro_state': pro_state,
@@ -873,6 +885,8 @@ def _register_routes(app: Flask) -> None:
                 'con_voted_count': con_voted_count,
                 'proposer_pseudonyms': proposer_pseudonym_map,
             })
+
+        random.Random(pid).shuffle(result)
         return result
 
     # ── Conversation ─────────────────────────────────────────────────────────

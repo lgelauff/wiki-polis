@@ -312,11 +312,29 @@
     </div>
     {% endif %}
 
+    {% if featured_data | length > 1 %}
+    <nav class="arg-toc" aria-label="Proposals navigation">
+      <ul class="arg-toc-list">
+        {% for item in featured_data %}
+        <li>
+          <button class="arg-toc-btn{% if loop.first %} arg-toc-btn--active{% endif %}"
+                  data-target="fs-{{ item.fs.id }}"
+                  {% if loop.first %}aria-current="true"{% endif %}
+                  type="button">
+            <span class="arg-toc-label">{{ item.short_title }}</span>
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+    </nav>
+    {% endif %}
+
+    <div class="arg-panels">
     {% for item in featured_data %}
     {% set fs = item.fs %}
     {% set both_gate = item.pro_gate and item.con_gate %}
 
-    <div class="arg-block" id="fs-{{ fs.id }}">
+    <div class="arg-block" id="fs-{{ fs.id }}" tabindex="-1">
 
       {# ── Featured statement card ── #}
       <div class="arg-statement">
@@ -619,6 +637,7 @@
       </div>{# end arg-columns #}
     </div>{# end arg-block #}
     {% endfor %}
+    </div>{# end arg-panels #}
 
   </div>
   {% endif %}
@@ -878,6 +897,71 @@
 (function () {
   var tab = document.getElementById('tab-arguments');
   if (!tab) return;
+
+  // ── ToC / single-panel navigation ────────────────────────────────────────────
+  var toc = tab.querySelector('.arg-toc');
+  if (toc) {
+    var allPanels = Array.prototype.slice.call(tab.querySelectorAll('.arg-panels .arg-block'));
+
+    // Apply initial hidden state via JS so no-JS users see all panels stacked.
+    allPanels.forEach(function (block, i) {
+      if (i > 0) {
+        block.classList.add('arg-block--hidden');
+        block.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    function activatePanel(targetId, moveFocus) {
+      allPanels.forEach(function (block) {
+        var hide = block.id !== targetId;
+        block.classList.toggle('arg-block--hidden', hide);
+        block.setAttribute('aria-hidden', hide ? 'true' : 'false');
+      });
+      toc.querySelectorAll('.arg-toc-btn').forEach(function (b) {
+        var active = b.dataset.target === targetId;
+        b.classList.toggle('arg-toc-btn--active', active);
+        if (active) { b.setAttribute('aria-current', 'true'); }
+        else         { b.removeAttribute('aria-current'); }
+      });
+      if (moveFocus) {
+        var panel = document.getElementById(targetId);
+        if (panel) panel.focus();
+      }
+    }
+
+    toc.addEventListener('click', function (e) {
+      var btn = e.target.closest('.arg-toc-btn');
+      if (btn) activatePanel(btn.dataset.target);
+    });
+
+    toc.addEventListener('keydown', function (e) {
+      var btns = Array.prototype.slice.call(toc.querySelectorAll('.arg-toc-btn'));
+      var idx  = btns.indexOf(document.activeElement);
+      if (idx === -1) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        var next = btns[(idx + 1) % btns.length];
+        activatePanel(next.dataset.target);
+        next.focus();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        var prev = btns[(idx - 1 + btns.length) % btns.length];
+        activatePanel(prev.dataset.target);
+        prev.focus();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activatePanel(btns[idx].dataset.target, true);
+      }
+    });
+
+    // Activate the panel whose id matches the URL hash (e.g. after a
+    // contribute/skip form posts and redirects back to #fs-N).
+    var hash = window.location.hash;
+    if (hash && hash.indexOf('#fs-') === 0) {
+      var hashId = hash.slice(1);
+      if (document.getElementById(hashId)) activatePanel(hashId);
+    }
+  }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
