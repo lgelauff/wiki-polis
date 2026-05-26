@@ -502,10 +502,6 @@
                     <button type="submit" class="btn-small btn-warn">hide</button>
                   </form>
                   {% endif %}
-                  <form method="post" action="{{ url_for('argument_delete', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete?')">delete</button>
-                  </form>
                 </span>
                 {% endif %}
               </div>
@@ -618,10 +614,6 @@
                     <button type="submit" class="btn-small btn-warn">hide</button>
                   </form>
                   {% endif %}
-                  <form method="post" action="{{ url_for('argument_delete', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete?')">delete</button>
-                  </form>
                 </span>
                 {% endif %}
               </div>
