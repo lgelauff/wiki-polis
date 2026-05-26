@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="container" style="max-width:820px">
+<div class="container home-container">
 
   <div style="margin-bottom:1.25rem;padding:10px 14px;border:1px solid var(--hairline);border-radius:8px;background:var(--surface);font-size:13px;color:var(--muted);line-height:1.6">
     Prototype in active development — things may change.
@@ -36,12 +36,13 @@
       <span class="home-section-count">{{ public_conversations | length }} total</span>
     </div>
     {% for c in public_conversations %}
-    <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card">
+    <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
+       aria-label="{{ c.title }} — join consultation">
       <div class="conv-card-left">
-        <span class="conv-dot conv-dot--available"></span>
+        <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
         <span class="conv-card-title">{{ c.title }}</span>
       </div>
-      <span class="conv-card-action">JOIN →</span>
+      <span class="conv-card-action" aria-hidden="true">JOIN →</span>
     </a>
     {% endfor %}
   </div>
@@ -56,10 +57,11 @@
       <span class="home-section-count">{{ active_joined | length }} consultation{{ 's' if active_joined | length != 1 }}</span>
     </div>
     {% for c in active_joined %}
-    {% set part = part_map.get(c.id) %}
-    <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card">
+    {% set part = pseudonym_map.get(c.id) %}
+    <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
+       aria-label="{{ c.title }}{% if part %} ({{ part.pseudonym }}){% endif %}, {{ 'temporarily paused' if c.paused else 'voting open' }} — continue">
       <div class="conv-card-left">
-        <span class="conv-dot conv-dot--active"></span>
+        <span class="conv-dot conv-dot--active" aria-hidden="true"></span>
         <div class="conv-card-info">
           <div class="conv-card-title-row">
             <span class="conv-card-title">{{ c.title }}</span>
@@ -70,7 +72,7 @@
           </div>
         </div>
       </div>
-      <span class="conv-card-action">CONTINUE →</span>
+      <span class="conv-card-action" aria-hidden="true">CONTINUE →</span>
     </a>
     {% endfor %}
   </div>
@@ -82,14 +84,15 @@
       <span class="home-section-label">Open to you</span>
     </div>
     {% for c in available %}
-    <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card">
+    <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
+       aria-label="{{ c.title }} — join consultation">
       <div class="conv-card-left">
-        <span class="conv-dot conv-dot--available"></span>
+        <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
         <div class="conv-card-info">
           <span class="conv-card-title">{{ c.title }}</span>
         </div>
       </div>
-      <span class="conv-card-action">JOIN →</span>
+      <span class="conv-card-action" aria-hidden="true">JOIN →</span>
     </a>
     {% endfor %}
   </div>
@@ -101,10 +104,11 @@
       <span class="home-section-label">Closed</span>
     </div>
     {% for c in archived_joined %}
-    {% set part = part_map.get(c.id) %}
-    <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card">
+    {% set part = pseudonym_map.get(c.id) %}
+    <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
+       aria-label="{{ c.title }}{% if part %} ({{ part.pseudonym }}){% endif %}, closed{% if c.closed_at %} {{ c.closed_at.strftime('%B %Y') }}{% endif %}">
       <div class="conv-card-left">
-        <span class="conv-dot conv-dot--closed"></span>
+        <span class="conv-dot conv-dot--closed" aria-hidden="true"></span>
         <div class="conv-card-info">
           <div class="conv-card-title-row">
             <span class="conv-card-title">{{ c.title }}</span>
@@ -115,7 +119,7 @@
           {% endif %}
         </div>
       </div>
-      <span class="conv-card-action conv-card-action--muted">DONE</span>
+      <span class="conv-card-action conv-card-action--muted" aria-hidden="true">DONE</span>
     </a>
     {% endfor %}
   </div>
@@ -129,7 +133,7 @@
     {% for c in moderating %}
     <div class="conv-card">
       <div class="conv-card-left">
-        <span class="conv-dot {{ 'conv-dot--active' if c.active else 'conv-dot--closed' }}"></span>
+        <span class="conv-dot {{ 'conv-dot--active' if c.active else 'conv-dot--closed' }}" aria-hidden="true"></span>
         <div class="conv-card-info">
           <div class="conv-card-title-row">
             <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card-title">{{ c.title }}</a>
