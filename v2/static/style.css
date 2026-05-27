@@ -835,6 +835,27 @@ pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
 .propose-submit-btn:hover { background: var(--accent); }
 
 /* State C: submitted — spot/amber (not agree green) */
+/* ── All done message ── */
+.all-done-msg {
+  padding: 28px 0 12px;
+  text-align: center;
+}
+.all-done-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+.all-done-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* In all-done state, show only the Propose New card */
+.v2-triad--alldone .v2-option-card { display: none; }
+.v2-triad--alldone #triad-newstmt  { display: flex; }
+
 .propose-submitted {
   display: flex;
   align-items: center;

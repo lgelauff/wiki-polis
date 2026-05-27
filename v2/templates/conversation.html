@@ -265,6 +265,12 @@
           <button type="button" id="propose-next" class="propose-next-btn">Next statement →</button>
         </div>
 
+        {# ── All done message ── #}
+        <div id="all-done-msg" class="all-done-msg" hidden>
+          <p class="all-done-label">You've voted on all available statements.</p>
+          <p class="all-done-sub">New statements may appear when others propose them.</p>
+        </div>
+
         {# ── Hidden pa-* elements for API submission ── #}
         <span class="pvb-hidden">
           <pa-vote-button id="pvb-agree"    type="agree">Agree</pa-vote-button>
@@ -806,7 +812,10 @@
 
   var LABELS = { agree: 'AGREE', neutral: 'PASS', disagree: 'DISAGREE' };
   var NEW_STMT_UNLOCK_AT = {{ new_stmt_unlock_at | default(10) }};
+  var NEW_STMT_MAX  = {{ new_stmt_max | default(3) }};
+  var NEW_STMT_USED = {{ new_stmt_ids | length }};
   var originalStmtText = '';
+  var newstmtOrigin = 'voted'; // 'voted' | 'alldone' — tracks where composer was opened from
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -814,6 +823,10 @@
 
   function getVotedCount() {
     try { return conv.client.participant.votes.size; } catch (e) { return 0; }
+  }
+
+  function getTotalStatements() {
+    try { return conv.client.statements.size; } catch (e) { return NEW_STMT_UNLOCK_AT; }
   }
 
   function isAllDone() {
@@ -829,30 +842,40 @@
   }
 
   function updateNewstmtCard() {
-    var unlocked = getVotedCount() >= NEW_STMT_UNLOCK_AT || isAllDone();
-    var remaining = Math.max(0, NEW_STMT_UNLOCK_AT - getVotedCount());
-    triadNewstmt.classList.toggle('v2-option-card--locked', !unlocked);
-    if (unlocked) {
-      triadNewstmtSub.textContent = 'A different angle entirely';
-      triadNewstmtAction.hidden   = false;
-      triadNewstmt.querySelector('.v2-lock-icon').style.display = 'none';
-    } else {
+    var effectiveUnlock = Math.min(NEW_STMT_UNLOCK_AT, getTotalStatements() || NEW_STMT_UNLOCK_AT);
+    var unlocked  = getVotedCount() >= effectiveUnlock || isAllDone();
+    var quotaLeft = Math.max(0, NEW_STMT_MAX - NEW_STMT_USED);
+    var active    = unlocked && quotaLeft > 0;
+
+    triadNewstmt.classList.toggle('v2-option-card--locked', !active);
+    triadNewstmt.querySelector('.v2-lock-icon').style.display = active ? 'none' : '';
+
+    if (!unlocked) {
+      var remaining = Math.max(0, effectiveUnlock - getVotedCount());
       triadNewstmtSub.textContent = 'Unlocks after ' + remaining + ' more vote' + (remaining === 1 ? '' : 's');
-      triadNewstmtAction.hidden   = true;
-      triadNewstmt.querySelector('.v2-lock-icon').style.display = '';
+      triadNewstmtAction.hidden = true;
+    } else if (quotaLeft === 0) {
+      triadNewstmtSub.textContent = 'Limit reached';
+      triadNewstmtAction.hidden = true;
+    } else {
+      triadNewstmtSub.textContent = quotaLeft + ' of ' + NEW_STMT_MAX + ' remaining';
+      triadNewstmtAction.hidden = false;
     }
-    // Sync aria-disabled for the newstmt card when triad is active
-    if (triad.classList.contains('v2-triad--active')) {
-      setAriaDisabled(triadNewstmt, !unlocked);
+
+    if (triad.classList.contains('v2-triad--active') || triad.classList.contains('v2-triad--alldone')) {
+      setAriaDisabled(triadNewstmt, !active);
     }
   }
 
   // ── Mode: idle ────────────────────────────────────────────────────────────────
   function enterIdle(focusTarget) {
     stmtCard.classList.remove('statement-card--voted');
+    stmtCard.hidden        = false;
     votedStmtText.hidden   = true;
     votedBadge.hidden      = true;
     originalStmtText       = '';
+    if (allDoneMsg) allDoneMsg.hidden = true;
+    triad.classList.remove('v2-triad--alldone');
 
     triad.hidden = false;
     triadLabel.textContent = 'After you vote, you can…';
@@ -968,6 +991,7 @@
 
   // ── Triad: propose new statement ─────────────────────────────────────────────
   triadGuard(triadNewstmt, function () {
+    newstmtOrigin          = triad.classList.contains('v2-triad--alldone') ? 'alldone' : 'voted';
     triad.hidden           = true;
     composerNewstmt.hidden = false;
     newstmtInput.value     = '';
@@ -1003,13 +1027,45 @@
 
   document.getElementById('newstmt-cancel').addEventListener('click', function () {
     composerNewstmt.hidden = true;
-    triad.hidden           = false;
-    triadNewstmt.focus();
+    if (newstmtOrigin === 'alldone') {
+      enterAllDone();
+    } else {
+      triad.hidden = false;
+      triadNewstmt.focus();
+    }
   });
 
   newstmtSubmit.addEventListener('click', function () {
-    if (!newstmtInput.value.trim()) return;
-    submitComposer(pvbSubmitNewstmt, newstmtSubmit, composerNewstmt);
+    var text = newstmtInput.value.trim();
+    if (!text) return;
+    newstmtSubmit.disabled = true;
+    fetch('{{ url_for("conversation_statement_new", slug=conversation.slug) }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      body: JSON.stringify({ text: text }),
+    }).then(function (resp) {
+      if (resp.ok) {
+        composerNewstmt.hidden  = true;
+        proposeSubmitted.hidden = false;
+        NEW_STMT_USED++;
+        updateNewstmtCard();
+        if (newstmtOrigin === 'alldone') {
+          setTimeout(function () { proposeSubmitted.hidden = true; }, 1200);
+        } else {
+          setTimeout(enterIdle, 1200);
+        }
+      } else {
+        newstmtSubmit.disabled = false;
+        convError.hidden = false;
+        convErrorMsg.textContent = resp.status === 403
+          ? 'You have reached the proposal limit for this consultation.'
+          : 'Could not submit statement. Please try again.';
+      }
+    }).catch(function () {
+      newstmtSubmit.disabled = false;
+      convError.hidden = false;
+      convErrorMsg.textContent = 'Network error. Please try again.';
+    });
   });
 
   // ── Submitted: manual next ────────────────────────────────────────────────────
@@ -1040,13 +1096,34 @@
     updateNewstmtCard();
   }
 
+  var allDoneMsg = document.getElementById('all-done-msg');
+
+  function enterAllDone() {
+    stmtCard.classList.remove('statement-card--voted');
+    stmtCard.hidden     = true;
+    allDoneMsg.hidden   = false;
+
+    composerSuggest.hidden  = true;
+    composerNewstmt.hidden  = true;
+    proposeSubmitted.hidden = true;
+
+    triad.hidden = false;
+    triad.classList.remove('v2-triad--active');
+    triad.classList.add('v2-triad--alldone');
+    triadLabel.textContent = 'Want to add something new?';
+    setAriaDisabled(triadSuggest, true);
+    setAriaDisabled(triadNext,    true);
+    updateNewstmtCard();
+  }
+
   function handleNoStatement() {
-    // All statements voted — hide the triad dimmed preview; it makes no sense
-    // to show "After you vote…" when there is nothing left to vote on.
-    if (isAllDone() && !triad.classList.contains('v2-triad--active')) {
-      triad.hidden = true;
+    if (isAllDone()) {
+      if (!triad.classList.contains('v2-triad--active')) {
+        enterAllDone();
+      }
+    } else {
+      updateNewstmtCard();
     }
-    updateNewstmtCard(); // may unlock new-statement card
   }
 
   conv.addEventListener('particiappstatementschange', function (e) { updateProgress(e.statements); });
