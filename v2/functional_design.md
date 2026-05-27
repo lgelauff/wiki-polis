@@ -92,27 +92,34 @@ Wording suggestions ("Suggest different wording") do not count against this quot
 #### States
 
 - **Idle** — statement visible, Agree/Pass/Disagree buttons shown, triad dimmed below with label "After you vote, you can…"
-- **Voted** — vote submitted, statement text frozen as snapshot with badge (e.g. "YOU VOTED AGREE"), vote buttons hidden, triad activated ("What now?") with three cards
+- **Voted: below threshold** — vote submitted, statement frozen with badge, vote buttons hidden, triad active with two live cards: "Suggest different wording" and "Move on". "Propose new statement" card is present but locked, showing the unlock condition.
+- **Voted: above threshold** — same as above but "Propose new statement" card is also live (if quota > 0) or permanently disabled (if quota = 0). Quota remaining shown on the card.
 - **Composing: suggest** — triad hidden, suggest-wording textarea open, pre-filled with the statement text
 - **Composing: new** — triad hidden, blank new-statement textarea open
 - **Submitted** — confirmation shown ("Proposed — heading to moderation"), next button available
-- **All done** — no more statements to vote on; triad hidden, completion message shown
+- **All done** — no more statements to vote on; completion message shown. "Propose new statement" becomes available (threshold is met by definition — you've voted on everything). Quota rules still apply.
+
+The threshold for moving from "below" to "above" is `min(new_stmt_unlock_at, total_statements_currently_available)`, where `new_stmt_unlock_at` defaults to 10.
 
 #### Transitions
 
 | From | Trigger | To | Side effect |
 |---|---|---|---|
-| Idle | Click Agree / Pass / Disagree | Voted | Vote sent to API immediately |
-| Voted | Click "Move on" | Idle | Next statement loads |
-| Voted | Click "Suggest different wording" | Composing: suggest | — |
-| Voted | Click "Propose new statement" (unlocked, quota > 0) | Composing: new | — |
-| Voted | Click "change" in voted badge | Idle | No new API call — Polis allows revoting on next submit |
-| Composing: suggest | Click Cancel | Voted | Returns to triad for the same statement |
+| Idle | Click Agree / Pass / Disagree (threshold not yet met) | Voted: below threshold | Vote → API; vote counter +1; voted badge shown |
+| Idle | Click Agree / Pass / Disagree (threshold already met) | Voted: above threshold | Vote → API; vote counter +1; voted badge shown |
+| Voted: any | Click "Move on" | Idle | Next statement loads |
+| Voted: any | Click "Suggest different wording" | Composing: suggest | — |
+| Voted: above threshold | Click "Propose new statement" (quota > 0) | Composing: new | — |
+| Voted: any | Click "change" in voted badge | Idle | No new API call; vote counter -1 |
+| Composing: suggest | Click Cancel | Voted: (same threshold state) | Returns to triad for the same statement |
 | Composing: suggest | Click Submit (success) | Submitted | Statement sent to pool |
-| Composing: new | Click Cancel | Voted | Returns to triad for the same statement |
+| Composing: new | Click Cancel | Voted: above threshold | Returns to triad for the same statement |
 | Composing: new | Click Submit (success) | Submitted | Statement sent to pool; participant quota decremented |
 | Submitted | Click "Next statement" | Idle | Next statement loads |
 | Any | All statements voted | All done | — |
+| All done | Click "Propose new statement" (quota > 0) | Composing: new | — |
+| Composing: new (from All done) | Click Cancel | All done | Returns to completion screen |
+| Composing: new (from All done) | Click Submit (success) | All done | Statement sent to pool; participant quota decremented |
 
 #### Open questions (not yet decided)
 
