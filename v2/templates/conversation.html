@@ -768,6 +768,7 @@
 <script nonce="{{ csp_nonce }}">
 (function () {
   var conv             = document.querySelector('pa-conversation');
+  var stmtCard         = document.getElementById('statement-card');
   var choiceRow        = document.getElementById('vote-choice-row');
   var stmtRightLabel   = document.getElementById('stmt-right-label');
   var votedBadge       = document.getElementById('voted-badge');
@@ -848,11 +849,8 @@
 
   // ── Mode: idle ────────────────────────────────────────────────────────────────
   function enterIdle(focusTarget) {
-    var stmt = liveStmt();
-    if (stmt) stmt.hidden = false;
+    stmtCard.classList.remove('statement-card--voted');
     votedStmtText.hidden   = true;
-    choiceRow.hidden       = false;
-    stmtRightLabel.hidden  = false;
     votedBadge.hidden      = true;
     originalStmtText       = '';
 
@@ -887,12 +885,9 @@
   function enterVoted(voteType, stmtText) {
     originalStmtText = (stmtText || '').trim();
 
-    var stmt = liveStmt();
-    if (stmt) stmt.hidden = true;
+    stmtCard.classList.add('statement-card--voted');
     votedStmtText.textContent = originalStmtText;
     votedStmtText.hidden   = false;
-    choiceRow.hidden       = true;
-    stmtRightLabel.hidden  = true;
     votedBadge.hidden      = false;
     votedLabel.textContent = LABELS[voteType];
     votedBadge.dataset.type = voteType;

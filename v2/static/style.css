@@ -553,6 +553,13 @@ pa-conversation:state(loading) { opacity: 0.5; }
   margin-bottom: 0;
 }
 
+/* In voted state, hide the live statement and vote buttons via parent class.
+   Using CSS (not just hidden attr) because pa-statement may re-show itself
+   when it receives the next statement from the web component. */
+.statement-card--voted pa-statement   { display: none !important; }
+.statement-card--voted .vote-choice-row { display: none !important; }
+.statement-card--voted .stmt-meta-right { visibility: hidden; }
+
 .propose-stmt-display {
   margin: 0;
   font-size: 15px;

@@ -80,6 +80,19 @@ X-CSRF-Token: <token>
 
 Requires `@session_required`. Field is `text`, not `txt`.
 
+Response (201):
+```json
+{
+  "id": 42,
+  "text": "Statement text here",
+  "is_meta": false,
+  "is_seed": false,
+  "last_modified": "2026-05-27T12:00:00"
+}
+```
+
+`id` is the Polis `tid` — the statement ID used in vote routes.
+
 ---
 
 ## Participant

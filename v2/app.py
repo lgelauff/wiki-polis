@@ -952,7 +952,9 @@ def _register_routes(app: Flask) -> None:
                                reveal_state=reveal_state,
                                reveal_opens_at=reveal_opens_at,
                                featured_data=featured_data,
-                               new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10)
+                               new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10,
+                               new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
+                               new_stmt_ids=participation.new_stmt_ids if participation else [])
 
     # ── Arguments ────────────────────────────────────────────────────────────
 
