@@ -89,6 +89,8 @@ Once unlocked, each participant may submit at most **3 new statements** per conv
 
 Wording suggestions ("Suggest different wording") do not count against this quota.
 
+Quota slots are consumed at submission time and are never returned. If a moderator hides, rejects, or removes a proposed statement, the participant does not get that slot back. Once used, it is used.
+
 #### States
 
 - **Idle** — statement visible, Agree/Pass/Disagree buttons shown, triad dimmed below with label "After you vote, you can…"

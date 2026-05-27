@@ -816,6 +816,7 @@
   var NEW_STMT_USED = {{ new_stmt_ids | length }};
   var originalStmtText = '';
   var newstmtOrigin = 'voted'; // 'voted' | 'alldone' — tracks where composer was opened from
+  var mySubmittedStmtIds = new Set(); // tids of statements this participant submitted; Polis 403s on own-vote
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1045,6 +1046,14 @@
       body: JSON.stringify({ text: text }),
     }).then(function (resp) {
       if (resp.ok) {
+        resp.json().then(function (data) {
+          if (data && data.id != null) {
+            var tid = Number(data.id);
+            mySubmittedStmtIds.add(tid);
+            // Mark as voted in the web component so it never appears in the queue
+            try { conv.client.participant.votes.add(tid); } catch (e) {}
+          }
+        });
         composerNewstmt.hidden  = true;
         proposeSubmitted.hidden = false;
         NEW_STMT_USED++;
@@ -1128,6 +1137,21 @@
 
   conv.addEventListener('particiappstatementschange', function (e) { updateProgress(e.statements); });
   conv.addEventListener('particiappvotesubmitsuccess', function ()  { updateProgress(conv.client.statements); });
+
+  // Track the last statement ID being voted on (statementID comes from pa-vote-button event).
+  var lastVoteStmtId = null;
+  conv.addEventListener('particiappvotesubmit', function (e) {
+    lastVoteStmtId = e.statementID != null ? Number(e.statementID) : null;
+  });
+
+  // On vote failure: mark the statement as voted in the web component so it advances,
+  // then reset UI. Covers both own-statement 403s and any other transient failures.
+  conv.addEventListener('particiappvotesubmiterror', function () {
+    if (lastVoteStmtId != null) {
+      try { conv.client.participant.votes.add(lastVoteStmtId); } catch (e) {}
+    }
+    enterIdle(choiceRow.querySelector('.vote-choice'));
+  });
 
   // ── Error / loaded ────────────────────────────────────────────────────────────
   conv.addEventListener('particiappstatechange', function (e) {
