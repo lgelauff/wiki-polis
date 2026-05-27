@@ -152,10 +152,11 @@
 
         {# ── V2 Option Triad — always rendered, dimmed pre-vote, active post-vote ── #}
         <div class="v2-triad" id="v2-triad">
-          <div class="v2-triad-label" id="v2-triad-label">After you vote, you can&hellip;</div>
-          <div class="v2-triad-grid">
+          <div class="v2-triad-label" id="v2-triad-label" aria-live="polite">After you vote, you can&hellip;</div>
+          <div class="v2-triad-grid" role="group" aria-labelledby="v2-triad-label">
 
-            <button type="button" class="v2-option-card" id="triad-suggest" disabled>
+            <button type="button" class="v2-option-card" id="triad-suggest"
+                    aria-disabled="true" tabindex="0">
               <div class="v2-option-top">
                 <span class="v2-option-glyph">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -167,11 +168,12 @@
               <div class="v2-option-bottom">
                 <div class="v2-option-title">Suggest different wording</div>
                 <div class="v2-option-sub">Same idea, clearer phrasing</div>
-                <div class="v2-option-action">Write yours →</div>
+                <div class="v2-option-action">Write yours &rarr;</div>
               </div>
             </button>
 
-            <button type="button" class="v2-option-card" id="triad-next" disabled>
+            <button type="button" class="v2-option-card" id="triad-next"
+                    aria-disabled="true" tabindex="0">
               <div class="v2-option-top">
                 <span class="v2-option-glyph">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -183,11 +185,13 @@
               <div class="v2-option-bottom">
                 <div class="v2-option-title">Move on</div>
                 <div class="v2-option-sub">Next statement, nothing to add</div>
-                <div class="v2-option-action">Next →</div>
+                <div class="v2-option-action">Next &rarr;</div>
               </div>
             </button>
 
-            <button type="button" class="v2-option-card v2-option-card--locked" id="triad-newstmt" disabled>
+            <button type="button" class="v2-option-card v2-option-card--locked" id="triad-newstmt"
+                    aria-disabled="true" tabindex="0"
+                    aria-describedby="triad-newstmt-sub">
               <div class="v2-option-top">
                 <span class="v2-option-glyph">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -203,7 +207,7 @@
               <div class="v2-option-bottom">
                 <div class="v2-option-title">Propose a new statement</div>
                 <div class="v2-option-sub" id="triad-newstmt-sub">Unlocks after {{ new_stmt_unlock_at | default(10) }} votes</div>
-                <div class="v2-option-action" id="triad-newstmt-action" hidden>Compose →</div>
+                <div class="v2-option-action" id="triad-newstmt-action" hidden>Compose &rarr;</div>
               </div>
             </button>
 
@@ -266,8 +270,8 @@
           <pa-vote-button id="pvb-agree"    type="agree">Agree</pa-vote-button>
           <pa-vote-button id="pvb-neutral"  type="neutral">Pass</pa-vote-button>
           <pa-vote-button id="pvb-disagree" type="disagree">Disagree</pa-vote-button>
-          <pa-submit-button id="pvb-submit-suggest" submitfor="suggest-input">suggest</pa-submit-button>
-          <pa-submit-button id="pvb-submit-newstmt" submitfor="newstmt-input">suggest</pa-submit-button>
+          <pa-submit-button id="pvb-submit-suggest" submitfor="suggest-input">suggest-wording</pa-submit-button>
+          <pa-submit-button id="pvb-submit-newstmt" submitfor="newstmt-input">new-statement</pa-submit-button>
         </span>
 
         <div id="conv-error" hidden>
@@ -763,28 +767,27 @@
 {% if conversation.phase_submission and conversation.active and not conversation.paused %}
 <script nonce="{{ csp_nonce }}">
 (function () {
-  var conv            = document.querySelector('pa-conversation');
-  var paStmt          = conv.querySelector('pa-statement');
-  var choiceRow       = document.getElementById('vote-choice-row');
-  var stmtRightLabel  = document.getElementById('stmt-right-label');
-  var votedBadge      = document.getElementById('voted-badge');
-  var votedLabel      = document.getElementById('voted-label');
-  var votedStmtText   = document.getElementById('voted-stmt-text');
-  var triad           = document.getElementById('v2-triad');
-  var triadLabel      = document.getElementById('v2-triad-label');
-  var triadSuggest    = document.getElementById('triad-suggest');
-  var triadNext       = document.getElementById('triad-next');
-  var triadNewstmt    = document.getElementById('triad-newstmt');
-  var triadNewstmtSub = document.getElementById('triad-newstmt-sub');
+  var conv             = document.querySelector('pa-conversation');
+  var choiceRow        = document.getElementById('vote-choice-row');
+  var stmtRightLabel   = document.getElementById('stmt-right-label');
+  var votedBadge       = document.getElementById('voted-badge');
+  var votedLabel       = document.getElementById('voted-label');
+  var votedStmtText    = document.getElementById('voted-stmt-text');
+  var triad            = document.getElementById('v2-triad');
+  var triadLabel       = document.getElementById('v2-triad-label');
+  var triadSuggest     = document.getElementById('triad-suggest');
+  var triadNext        = document.getElementById('triad-next');
+  var triadNewstmt     = document.getElementById('triad-newstmt');
+  var triadNewstmtSub  = document.getElementById('triad-newstmt-sub');
   var triadNewstmtAction = document.getElementById('triad-newstmt-action');
-  var composerSuggest = document.getElementById('composer-suggest');
-  var composerNewstmt = document.getElementById('composer-newstmt');
-  var suggestInput    = document.getElementById('suggest-input');
-  var suggestLen      = document.getElementById('suggest-len');
-  var suggestSubmit   = document.getElementById('suggest-submit');
-  var newstmtInput    = document.getElementById('newstmt-input');
-  var newstmtLen      = document.getElementById('newstmt-len');
-  var newstmtSubmit   = document.getElementById('newstmt-submit');
+  var composerSuggest  = document.getElementById('composer-suggest');
+  var composerNewstmt  = document.getElementById('composer-newstmt');
+  var suggestInput     = document.getElementById('suggest-input');
+  var suggestLen       = document.getElementById('suggest-len');
+  var suggestSubmit    = document.getElementById('suggest-submit');
+  var newstmtInput     = document.getElementById('newstmt-input');
+  var newstmtLen       = document.getElementById('newstmt-len');
+  var newstmtSubmit    = document.getElementById('newstmt-submit');
   var proposeSubmitted = document.getElementById('propose-submitted');
   var pvb = {
     agree:    document.getElementById('pvb-agree'),
@@ -806,14 +809,27 @@
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
+  function liveStmt() { return conv.querySelector('pa-statement'); }
+
   function getVotedCount() {
     try { return conv.client.participant.votes.size; } catch (e) { return 0; }
   }
 
+  function isAllDone() {
+    try { return conv.statement === null && conv.client.statements.size > 0; } catch (e) { return false; }
+  }
+
+  function setAriaDisabled(btn, disabled) {
+    btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+  }
+
+  function isAriaDisabled(btn) {
+    return btn.getAttribute('aria-disabled') === 'true';
+  }
+
   function updateNewstmtCard() {
-    var n = getVotedCount();
-    var remaining = Math.max(0, NEW_STMT_UNLOCK_AT - n);
-    var unlocked  = n >= NEW_STMT_UNLOCK_AT;
+    var unlocked = getVotedCount() >= NEW_STMT_UNLOCK_AT || isAllDone();
+    var remaining = Math.max(0, NEW_STMT_UNLOCK_AT - getVotedCount());
     triadNewstmt.classList.toggle('v2-option-card--locked', !unlocked);
     if (unlocked) {
       triadNewstmtSub.textContent = 'A different angle entirely';
@@ -824,28 +840,30 @@
       triadNewstmtAction.hidden   = true;
       triadNewstmt.querySelector('.v2-lock-icon').style.display = '';
     }
+    // Sync aria-disabled for the newstmt card when triad is active
+    if (triad.classList.contains('v2-triad--active')) {
+      setAriaDisabled(triadNewstmt, !unlocked);
+    }
   }
 
   // ── Mode: idle ────────────────────────────────────────────────────────────────
-  function enterIdle() {
-    // Restore statement card to pre-vote state
-    paStmt.hidden           = false;
-    votedStmtText.hidden    = true;
-    choiceRow.hidden        = false;
-    stmtRightLabel.hidden   = false;
-    votedBadge.hidden       = true;
-    originalStmtText        = '';
+  function enterIdle(focusTarget) {
+    var stmt = liveStmt();
+    if (stmt) stmt.hidden = false;
+    votedStmtText.hidden   = true;
+    choiceRow.hidden       = false;
+    stmtRightLabel.hidden  = false;
+    votedBadge.hidden      = true;
+    originalStmtText       = '';
 
-    // Triad — dimmed preview
-    triad.hidden    = false;
+    triad.hidden = false;
     triadLabel.textContent = 'After you vote, you can…';
     triad.classList.remove('v2-triad--active');
-    triadSuggest.disabled = true;
-    triadNext.disabled    = true;
+    setAriaDisabled(triadSuggest, true);
+    setAriaDisabled(triadNext,    true);
+    setAriaDisabled(triadNewstmt, true);
     triadNext.classList.remove('v2-option-card--primary');
-    triadNewstmt.disabled = true;
 
-    // Composers + submitted
     composerSuggest.hidden  = true;
     composerNewstmt.hidden  = true;
     proposeSubmitted.hidden = true;
@@ -855,6 +873,12 @@
     newstmtInput.value      = '';
     newstmtLen.textContent  = '0';
     newstmtSubmit.disabled  = true;
+
+    updateNewstmtCard();
+
+    // Restore keyboard focus
+    var target = focusTarget || choiceRow.querySelector('.vote-choice');
+    if (target) target.focus();
   }
 
   // ── Mode: voted ───────────────────────────────────────────────────────────────
@@ -863,35 +887,51 @@
   function enterVoted(voteType, stmtText) {
     originalStmtText = (stmtText || '').trim();
 
-    // Show voted snapshot of statement
-    paStmt.hidden           = true;
+    var stmt = liveStmt();
+    if (stmt) stmt.hidden = true;
     votedStmtText.textContent = originalStmtText;
-    votedStmtText.hidden    = false;
-    choiceRow.hidden        = true;
-    stmtRightLabel.hidden   = true;
-    votedBadge.hidden       = false;
-    votedLabel.textContent  = LABELS[voteType];
+    votedStmtText.hidden   = false;
+    choiceRow.hidden       = true;
+    stmtRightLabel.hidden  = true;
+    votedBadge.hidden      = false;
+    votedLabel.textContent = LABELS[voteType];
     votedBadge.dataset.type = voteType;
 
-    // Triad — active
-    triad.hidden    = false;
+    triad.hidden = false;
     triadLabel.textContent = 'What now?';
     triad.classList.add('v2-triad--active');
-    triadSuggest.disabled = false;
-    triadNext.disabled    = false;
+    setAriaDisabled(triadSuggest, false);
+    setAriaDisabled(triadNext,    false);
     triadNext.classList.add('v2-option-card--primary');
     updateNewstmtCard();
-    triadNewstmt.disabled = getVotedCount() < NEW_STMT_UNLOCK_AT;
 
-    // Pre-fill suggest textarea
     suggestInput.value     = originalStmtText;
     suggestLen.textContent = suggestInput.value.length;
     suggestSubmit.disabled = true;
 
-    // Composers hidden
     composerSuggest.hidden  = true;
     composerNewstmt.hidden  = true;
     proposeSubmitted.hidden = true;
+
+    // Move focus to first active triad card
+    triadSuggest.focus();
+  }
+
+  // ── Shared submit handler ─────────────────────────────────────────────────────
+  function submitComposer(pvbEl, submitBtn, composerEl) {
+    submitBtn.disabled = true;
+    conv.addEventListener('particiappstatementsubmitsuccess', function () {
+      composerEl.hidden       = true;
+      proposeSubmitted.hidden = false;
+      setTimeout(enterIdle, 1200);
+    }, { once: true });
+    conv.addEventListener('particiappstatementsubmiterror', function (ev) {
+      submitBtn.disabled = false;
+      convError.hidden   = false;
+      convErrorMsg.textContent = 'Could not submit statement'
+        + (ev.error && ev.error.message ? ': ' + ev.error.message : '') + '.';
+    }, { once: true });
+    pvbEl.click();
   }
 
   // ── Vote buttons ──────────────────────────────────────────────────────────────
@@ -899,17 +939,27 @@
     var btn = e.target.closest('.vote-choice');
     if (!btn) return;
     var type    = btn.dataset.type;
-    var stmtTxt = paStmt ? (paStmt.text || '').trim() : '';
+    var stmt    = liveStmt();
+    var stmtTxt = stmt ? (stmt.text || '').trim() : '';
     pvb[type].click();
     enterVoted(type, stmtTxt);
   });
 
   // ── Change vote ───────────────────────────────────────────────────────────────
-  document.getElementById('change-vote-btn').addEventListener('click', enterIdle);
+  document.getElementById('change-vote-btn').addEventListener('click', function () {
+    enterIdle(choiceRow.querySelector('.vote-choice'));
+  });
+
+  // ── Triad click guard (aria-disabled) ────────────────────────────────────────
+  function triadGuard(btn, fn) {
+    btn.addEventListener('click', function () { if (!isAriaDisabled(btn)) fn(); });
+    btn.addEventListener('keydown', function (e) {
+      if ((e.key === 'Enter' || e.key === ' ') && !isAriaDisabled(btn)) { e.preventDefault(); fn(); }
+    });
+  }
 
   // ── Triad: suggest different wording ─────────────────────────────────────────
-  triadSuggest.addEventListener('click', function () {
-    if (this.disabled) return;
+  triadGuard(triadSuggest, function () {
     triad.hidden           = true;
     composerSuggest.hidden = false;
     suggestInput.focus();
@@ -917,19 +967,17 @@
   });
 
   // ── Triad: move on ────────────────────────────────────────────────────────────
-  triadNext.addEventListener('click', function () {
-    if (this.disabled) return;
-    enterIdle();
+  triadGuard(triadNext, function () {
+    enterIdle(choiceRow.querySelector('.vote-choice'));
   });
 
   // ── Triad: propose new statement ─────────────────────────────────────────────
-  triadNewstmt.addEventListener('click', function () {
-    if (this.disabled) return;
-    triad.hidden            = true;
-    composerNewstmt.hidden  = false;
-    newstmtInput.value      = '';
-    newstmtLen.textContent  = '0';
-    newstmtSubmit.disabled  = true;
+  triadGuard(triadNewstmt, function () {
+    triad.hidden           = true;
+    composerNewstmt.hidden = false;
+    newstmtInput.value     = '';
+    newstmtLen.textContent = '0';
+    newstmtSubmit.disabled = true;
     newstmtInput.focus();
   });
 
@@ -943,30 +991,13 @@
   document.getElementById('suggest-cancel').addEventListener('click', function () {
     composerSuggest.hidden = true;
     triad.hidden           = false;
+    triadSuggest.focus();
   });
 
   suggestSubmit.addEventListener('click', function () {
     var val = suggestInput.value.trim();
     if (!val || val === originalStmtText.trim()) return;
-    suggestSubmit.disabled = true;
-    function onSuccess() {
-      conv.removeEventListener('particiappstatementsubmitsuccess', onSuccess);
-      conv.removeEventListener('particiappstatementsubmiterror', onError);
-      composerSuggest.hidden  = true;
-      proposeSubmitted.hidden = false;
-      setTimeout(enterIdle, 1200);
-    }
-    function onError(ev) {
-      conv.removeEventListener('particiappstatementsubmitsuccess', onSuccess);
-      conv.removeEventListener('particiappstatementsubmiterror', onError);
-      suggestSubmit.disabled = false;
-      convError.hidden = false;
-      convErrorMsg.textContent = 'Could not submit statement'
-        + (ev.error && ev.error.message ? ': ' + ev.error.message : '') + '.';
-    }
-    conv.addEventListener('particiappstatementsubmitsuccess', onSuccess);
-    conv.addEventListener('particiappstatementsubmiterror', onError);
-    pvbSubmitSuggest.click();
+    submitComposer(pvbSubmitSuggest, suggestSubmit, composerSuggest);
   });
 
   // ── New statement composer ────────────────────────────────────────────────────
@@ -978,36 +1009,20 @@
   document.getElementById('newstmt-cancel').addEventListener('click', function () {
     composerNewstmt.hidden = true;
     triad.hidden           = false;
+    triadNewstmt.focus();
   });
 
   newstmtSubmit.addEventListener('click', function () {
-    var val = newstmtInput.value.trim();
-    if (!val) return;
-    newstmtSubmit.disabled = true;
-    function onSuccess() {
-      conv.removeEventListener('particiappstatementsubmitsuccess', onSuccess);
-      conv.removeEventListener('particiappstatementsubmiterror', onError);
-      composerNewstmt.hidden  = true;
-      proposeSubmitted.hidden = false;
-      setTimeout(enterIdle, 1200);
-    }
-    function onError(ev) {
-      conv.removeEventListener('particiappstatementsubmitsuccess', onSuccess);
-      conv.removeEventListener('particiappstatementsubmiterror', onError);
-      newstmtSubmit.disabled = false;
-      convError.hidden = false;
-      convErrorMsg.textContent = 'Could not submit statement'
-        + (ev.error && ev.error.message ? ': ' + ev.error.message : '') + '.';
-    }
-    conv.addEventListener('particiappstatementsubmitsuccess', onSuccess);
-    conv.addEventListener('particiappstatementsubmiterror', onError);
-    pvbSubmitNewstmt.click();
+    if (!newstmtInput.value.trim()) return;
+    submitComposer(pvbSubmitNewstmt, newstmtSubmit, composerNewstmt);
   });
 
   // ── Submitted: manual next ────────────────────────────────────────────────────
-  document.getElementById('propose-next').addEventListener('click', enterIdle);
+  document.getElementById('propose-next').addEventListener('click', function () {
+    enterIdle(choiceRow.querySelector('.vote-choice'));
+  });
 
-  // ── Progress ──────────────────────────────────────────────────────────────────
+  // ── Progress + no-statement handling ─────────────────────────────────────────
   function updateProgress(statements) {
     var total = statements.size;
     if (total === 0) return;
@@ -1022,13 +1037,21 @@
     for (var i = 0; i < total; i++) {
       var seg = document.createElement('div');
       seg.className = 'vote-seg '
-        + (i < done ? 'vote-seg--done' : (current !== null && i === done) ? 'vote-seg--current' : 'vote-seg--queued');
+        + (i < done ? 'vote-seg--done'
+           : (current !== null && i === done) ? 'vote-seg--current'
+           : 'vote-seg--queued');
       progressBar.appendChild(seg);
     }
     updateNewstmtCard();
-    if (triad.classList.contains('v2-triad--active')) {
-      triadNewstmt.disabled = getVotedCount() < NEW_STMT_UNLOCK_AT;
+  }
+
+  function handleNoStatement() {
+    // All statements voted — hide the triad dimmed preview; it makes no sense
+    // to show "After you vote…" when there is nothing left to vote on.
+    if (isAllDone() && !triad.classList.contains('v2-triad--active')) {
+      triad.hidden = true;
     }
+    updateNewstmtCard(); // may unlock new-statement card
   }
 
   conv.addEventListener('particiappstatementschange', function (e) { updateProgress(e.statements); });
@@ -1047,6 +1070,7 @@
     }
     if (e.state === 'loaded' && conv.client) {
       updateProgress(conv.client.statements);
+      handleNoStatement();
     }
   });
 }());

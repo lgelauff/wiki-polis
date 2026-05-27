@@ -1,5 +1,8 @@
 /* wiki-polis v2 — Cluster design */
 
+/* Enforce [hidden] over any display rules — must come before all component CSS */
+[hidden] { display: none !important; }
+
 :root {
   /* Cluster palette */
   --ink:           #0c0c0e;
@@ -8,6 +11,7 @@
   --bg:            #fafaf9;
   --surface:       #ffffff;
   --surface2:      #f4f4f3;
+  --surface3:      #eeece6;
   --hairline:      #e5e5e6;
   --hairline-soft: #efefef;
   --agree:         #1f8a5b;
@@ -917,29 +921,37 @@ pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
   transition: border-color 0.12s, box-shadow 0.12s, opacity 0.12s;
 }
 
+/* Hide action labels in pre-vote dimmed state */
+.v2-triad:not(.v2-triad--active) .v2-option-action { visibility: hidden; }
+
 /* Active state — set when triad has v2-triad--active */
-.v2-triad--active .v2-option-card:not([disabled]) {
+.v2-triad--active .v2-option-card:not([aria-disabled="true"]) {
   opacity: 1;
   cursor: pointer;
 }
-.v2-triad--active .v2-option-card:not([disabled]):hover {
+.v2-triad--active .v2-option-card:not([aria-disabled="true"]):hover {
+  border-color: #888; /* fallback for Safari < 15.4 */
   border-color: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
-.v2-triad--active .v2-option-card--primary:not([disabled]) {
-  background: var(--surface2);
+.v2-triad--active .v2-option-card--primary:not([aria-disabled="true"]) {
+  background: var(--surface3);
+  border-color: #c4c2bb; /* fallback */
   border-color: color-mix(in srgb, var(--ink) 25%, transparent);
 }
-.v2-triad--active .v2-option-card--primary:not([disabled]):hover {
+.v2-triad--active .v2-option-card--primary:not([aria-disabled="true"]):hover {
+  border-color: #888; /* fallback */
   border-color: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
-.v2-option-card--locked {
+.v2-option-card--locked,
+.v2-option-card[aria-disabled="true"] {
   background: var(--surface2);
   border-color: var(--hairline-soft);
-  cursor: not-allowed !important;
   opacity: 1;
 }
+.v2-option-card--locked { cursor: not-allowed; }
+.v2-option-card[aria-disabled="true"]:not(.v2-option-card--locked) { cursor: default; }
 
 .v2-option-top {
   display: flex;
