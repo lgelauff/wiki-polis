@@ -379,11 +379,15 @@ https://wiki-polis.toolforge.org/login     → redirects to Wikimedia OAuth
 ## Ongoing deploys
 
 ```bash
-# On Toolforge as wiki-polis user:
+# On Toolforge bastion as wiki-polis user:
 cd ~/wiki-polis && git pull
-source ~/www/python/venv/bin/activate
-pip install -e ~/wiki-polis/v2
-cd v2 && flask --app app.py db upgrade
+pip install -e ~/wiki-polis/v2   # skip if no new dependencies
+```
+
+If the deploy includes database migrations, run them **before** restarting (see [Database migrations](#database-migrations) below).
+
+```bash
+cd ~   # webservice commands must run from home directory
 toolforge webservice restart
 ```
 
@@ -392,6 +396,89 @@ Or use the deploy script (which handles all steps):
 ```bash
 bash ~/wiki-polis/deploy.sh
 ```
+
+---
+
+## Database migrations
+
+Alembic migrations must run inside `toolforge webservice python3.13 shell` — **not** on the bastion shell. The reason: `toolforge envvars` (including `DATABASE_URL`) are only injected into the webservice pod environment, not exported to regular bastion sessions. Running `flask db upgrade` on the bastion will fail with `RuntimeError: DATABASE_URL is not set`.
+
+### Check whether a migration is needed
+
+After `git pull`, check if the new commits added any migration files:
+
+```bash
+ls ~/wiki-polis/v2/migrations/versions/
+```
+
+If there are new files since the last deploy, run the migration steps below before restarting.
+
+### Run migrations
+
+```bash
+# Step 1 — enter the webservice shell (envvars are available here)
+toolforge webservice python3.13 shell
+
+# Step 2 — activate the venv (flask is not on PATH by default)
+source /data/project/wiki-polis/www/python/venv/bin/activate
+
+# Step 3 — run the migration from the app directory
+cd ~/wiki-polis/v2
+flask --app app db upgrade
+
+# Step 4 — exit the webservice shell
+exit
+```
+
+Expected output:
+
+```
+INFO  [alembic.runtime.migration] Context impl MySQLImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade <prev> -> <new>, <description>
+```
+
+No output after "Will assume non-transactional DDL." means the database is already up to date.
+
+### After migration — restart the webservice
+
+Run this from the **bastion** (not inside the webservice shell):
+
+```bash
+cd ~
+toolforge webservice restart
+```
+
+### Verify
+
+Check the live app returns 200, then inspect the log for errors:
+
+```bash
+tail -50 /data/project/wiki-polis/uwsgi.log | grep -v lseek
+```
+
+### If something goes wrong — rollback
+
+To undo the last migration:
+
+```bash
+toolforge webservice python3.13 shell
+source /data/project/wiki-polis/www/python/venv/bin/activate
+cd ~/wiki-polis/v2
+flask --app app db downgrade   # rolls back one step
+exit
+```
+
+Then revert the code change and restart.
+
+### Toolforge gotchas specific to migrations
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `RuntimeError: DATABASE_URL is not set` | Running `flask` on the bastion shell | Use `toolforge webservice python3.13 shell` — envvars only exist there |
+| `flask: command not found` | Venv not activated inside webservice shell | `source /data/project/wiki-polis/www/python/venv/bin/activate` |
+| `Error: No such command 'db'` | Wrong working directory or FLASK_APP not set | `cd ~/wiki-polis/v2` first, then `flask --app app db upgrade` |
+| `No such file or directory: .../activate` | Wrong venv path guessed | Run `find /data/project/wiki-polis -name activate -path "*/venv/*"` to find the real path |
 
 ---
 

@@ -45,25 +45,86 @@ Statements are presented to participants one at a time in a semi-random order. T
 
 ## Voting
 
+> The original design had an always-visible textarea for proposing alternatives below the vote buttons. Feedback indicated this was too aggressive. The current implementation replaces it with a post-vote triad (see state machine below). The description here reflects the current implementation.
+
 The core loop:
 
 1. A statement appears.
-2. The participant selects **Agree**, **Disagree**, or **Pass** — this highlights the chosen option but does not submit yet.
-3. A **"Have a better way to put this?"** box is shown below the selection. The participant can type a short alternative statement, or leave it blank.
-4. The participant clicks **Submit**.
-   - If the textarea is empty: the vote is cast immediately.
-   - If the textarea has content: a brief confirm appears — *"Also share your alternate phrasing with other participants?"* — with **Yes, suggest it** and **No, just my vote** options.
+2. The participant selects **Agree**, **Disagree**, or **Pass** — the vote is submitted immediately.
+3. A three-option triad appears below: **Suggest different wording**, **Move on**, **Propose a new statement**.
+4. The participant picks one, or does nothing (Move on is the default path).
 5. The UI resets for the next statement.
 
-The propose box is always visible alongside the vote buttons — it is not a separate step that appears only after voting. This keeps it a natural part of the flow rather than a secondary action.
+There is no discussion on the voting screen. No visible vote counts. No indication of how others voted. The experience is fast and private.
 
-The proposed alternative is backend-identical to any other submitted statement: it enters the same statement pool and goes through the same moderation queue before others see it.
+After voting on all available statements, the participant is shown a brief completion screen. The "Propose a new statement" option remains available there if quota permits. If new statements are added by others after the participant finishes, those appear on the next session.
 
-Whether proposed alternatives require moderation before entering the pool is admin-configurable per conversation.
+Statements submitted by a participant never appear in their own voting queue. Polis rejects self-votes (403); the app pre-emptively marks submitted statement IDs as voted in the web component so they are silently skipped.
 
-There is no discussion on the voting screen beyond this. No visible vote counts. No indication of how others voted. The experience is fast and private.
+### Current implementation — state machine (working state, not confirmed design)
 
-After voting on all available statements, the participant is shown a brief completion screen. If new statements have been added since their last visit, those appear on the next session.
+> The flow below describes what the code currently does. It diverges from the original spec above in one key way: feedback indicated the always-visible textarea was too aggressive, so a post-vote three-option triad was introduced instead. The triad is a lighter invitation: vote first, then choose what (if anything) to do with the statement. The triad design and its rules were agreed on 2026-05-27.
+
+#### Post-vote triad
+
+After every vote, a three-card triad appears below the statement. The three options are:
+
+1. **Suggest different wording** — open a composer pre-filled with the statement text; submit a rephrased version into the same statement pool. No quota; available after every vote.
+2. **Move on** — proceed immediately to the next statement.
+3. **Propose a new statement** — open a blank composer to submit an entirely new statement. Subject to unlock condition and per-participant quota (see below). May move to a different location in a future iteration.
+
+#### Propose new statement — unlock and quota rules
+
+"Propose a new statement" is locked until the participant has seen enough of the existing statement pool. The unlock threshold is:
+
+> **min(10, total statements currently available)**
+
+So if there are 6 statements, unlock requires 6 votes (100%). If there are 20, unlock requires 10 votes. The threshold can be configured per conversation (`new_stmt_unlock_at`, default 10).
+
+Once unlocked, each participant may submit at most **3 new statements** per conversation (default; future: configurable per conversation as `new_stmt_max`). The remaining count is shown on the card (e.g. "2 of 3 remaining"). Once the quota is exhausted, the card is permanently disabled for that participant in that conversation.
+
+Wording suggestions ("Suggest different wording") do not count against this quota.
+
+Quota slots are consumed at submission time and are never returned. If a moderator hides, rejects, or removes a proposed statement, the participant does not get that slot back. Once used, it is used.
+
+#### States
+
+- **Idle** — statement visible, Agree/Pass/Disagree buttons shown, triad dimmed below with label "After you vote, you can…"
+- **Voted: below threshold** — vote submitted, statement frozen with badge, vote buttons hidden, triad active with two live cards: "Suggest different wording" and "Move on". "Propose new statement" card is present but locked, showing the unlock condition.
+- **Voted: above threshold** — same as above but "Propose new statement" card is also live (if quota > 0) or permanently disabled (if quota = 0). Quota remaining shown on the card.
+- **Composing: suggest** — triad hidden, suggest-wording textarea open, pre-filled with the statement text
+- **Composing: new** — triad hidden, blank new-statement textarea open
+- **Submitted** — confirmation shown ("Proposed — heading to moderation"), next button available
+- **All done** — no more statements to vote on; completion message shown. "Propose new statement" becomes available (threshold is met by definition — you've voted on everything). Quota rules still apply.
+
+The threshold for moving from "below" to "above" is `min(new_stmt_unlock_at, total_statements_currently_available)`, where `new_stmt_unlock_at` defaults to 10.
+
+#### Transitions
+
+| From | Trigger | To | Side effect |
+|---|---|---|---|
+| Idle | Click Agree / Pass / Disagree (threshold not yet met) | Voted: below threshold | Vote → API; vote counter +1; voted badge shown |
+| Idle | Click Agree / Pass / Disagree (threshold already met) | Voted: above threshold | Vote → API; vote counter +1; voted badge shown |
+| Voted: any | Click "Move on" | Idle | Next statement loads |
+| Voted: any | Click "Suggest different wording" | Composing: suggest | — |
+| Voted: above threshold | Click "Propose new statement" (quota > 0) | Composing: new | — |
+| Voted: any | Click "change" in voted badge | Idle | No new API call; vote counter -1 |
+| Composing: suggest | Click Cancel | Voted: (same threshold state) | Returns to triad for the same statement |
+| Composing: suggest | Click Submit (success) | Submitted | Statement sent to pool |
+| Composing: new | Click Cancel | Voted: above threshold | Returns to triad for the same statement |
+| Composing: new | Click Submit (success) | Submitted | Statement sent to pool; participant quota decremented |
+| Submitted | Click "Next statement" | Idle | Next statement loads |
+| Any | All statements voted | All done | — |
+| Any | Own submitted statement appears in queue | Idle (skipped) | Statement ID added to web component votes Set; no vote submitted |
+| All done | Click "Propose new statement" (quota > 0) | Composing: new | — |
+| Composing: new (from All done) | Click Cancel | All done | Returns to completion screen |
+| Composing: new (from All done) | Click Submit (success) | All done | Statement sent to pool; participant quota decremented |
+
+#### Open questions (not yet decided)
+
+- Should "change vote" reopen voting for the same statement, or silently allow Polis revoting on next visit?
+- Should Submitted auto-advance after a delay, or always wait for an explicit click?
+- Is "Move on" as a required click the right level of friction, or should the next statement appear automatically after a short pause unless the user engages with the triad?
 
 ---
 

@@ -4,7 +4,14 @@
 
 set -euo pipefail
 
-BRANCH="${1:-}"
+BRANCH=""
+MIGRATE=0
+for arg in "$@"; do
+  case "$arg" in
+    --migrate) MIGRATE=1 ;;
+    *) BRANCH="$arg" ;;
+  esac
+done
 
 echo "==> Pulling latest changes..."
 cd ~/wiki-polis
@@ -40,6 +47,16 @@ if [ ! -f "$WC_DST" ]; then
   echo "    into v2/static/ before the conversation page will work."
 else
   echo "    Found."
+fi
+
+if [ "$MIGRATE" -eq 1 ]; then
+  echo "==> Running database migrations..."
+  DATABASE_URL=$(toolforge envvars show DATABASE_URL)
+  export DATABASE_URL
+  source ~/www/python/venv/bin/activate
+  cd ~/wiki-polis/v2
+  flask --app app db upgrade
+  echo "    Migrations done."
 fi
 
 echo "==> Restarting web service..."

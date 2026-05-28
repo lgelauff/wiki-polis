@@ -93,6 +93,9 @@ class Participation(db.Model):
     # Nullified automatically 60 days after conversation close (data minimisation).
     public_username   = db.Column(db.String(255), nullable=True)
     revealed_at       = db.Column(db.DateTime, nullable=True)
+    # Polis statement IDs of entirely new statements submitted by this participant.
+    # Quota = len(new_stmt_ids). Slots consumed at submit time; never returned.
+    new_stmt_ids      = db.Column(db.JSON, nullable=False, default=list)
 
     participant  = db.relationship('Participant', back_populates='participations')
     conversation = db.relationship('Conversation', back_populates='participations')

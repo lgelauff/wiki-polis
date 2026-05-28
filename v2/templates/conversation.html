@@ -113,19 +113,29 @@
           <span class="vote-progress-queued" id="vote-progress-queued"></span>
         </div>
 
-        {# ── IDLE MODE: statement card with vote buttons + dashed propose inside ── #}
-        <div class="statement-card" id="state-idle">
+        {# ── Statement card — always visible ── #}
+        <div class="statement-card" id="statement-card">
           <div class="statement-card-header">
             <span class="stmt-meta-left">
               <span class="stmt-dot"></span>
               <span class="stmt-meta-label">STATEMENT</span>
             </span>
-            <span class="stmt-meta-right">private vote</span>
+            <span class="stmt-meta-right" id="stmt-right-label">private vote</span>
+            <span id="voted-badge" class="voted-badge" data-type="agree" hidden>
+              <span class="voted-badge-check">
+                <svg width="7" height="7" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 6.5L4.8 9L10 3.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              YOU VOTED <span id="voted-label">AGREE</span>
+              <button type="button" id="change-vote-btn" class="change-vote-btn">change</button>
+            </span>
           </div>
 
           <pa-statement>
             <p class="muted">No statements to vote on right now. Check back later for new ones.</p>
           </pa-statement>
+          <p id="voted-stmt-text" class="voted-stmt-text" hidden></p>
 
           <div class="vote-choice-row" id="vote-choice-row">
             <button type="button" class="vote-choice" data-type="agree">
@@ -138,63 +148,127 @@
               <span class="vote-dot vote-dot--disagree"></span>Disagree
             </button>
           </div>
-
-          {# Dashed propose affordance — inside the card, always visible in idle mode #}
-          <button type="button" id="propose-idle-btn" class="propose-affordance">
-            <span class="propose-glyph">+</span>
-            <span class="propose-label">Have a better way to put this?<span class="propose-sub"> propose your own statement</span></span>
-            <span class="propose-meta">OPTIONAL</span>
-          </button>
         </div>
 
-        {# ── PROPOSE MODE: slim voted-badge card + compose form below ── #}
-        <div id="state-propose" hidden>
-          <div class="statement-card statement-card--voted">
-            <div class="statement-card-header">
-              <span class="stmt-meta-left">
-                <span class="stmt-dot"></span>
-                <span class="stmt-meta-label">STATEMENT</span>
-              </span>
-              <span id="voted-badge" class="voted-badge" data-type="agree">
-                <span class="voted-badge-check">
-                  <svg width="7" height="7" viewBox="0 0 12 12" fill="none">
-                    <path d="M2 6.5L4.8 9L10 3.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        {# ── V2 Option Triad — always rendered, dimmed pre-vote, active post-vote ── #}
+        <div class="v2-triad" id="v2-triad">
+          <div class="v2-triad-label" id="v2-triad-label" aria-live="polite">After you vote, you can&hellip;</div>
+          <div class="v2-triad-grid" role="group" aria-labelledby="v2-triad-label">
+
+            <button type="button" class="v2-option-card" id="triad-suggest"
+                    aria-disabled="true" tabindex="0">
+              <div class="v2-option-top">
+                <span class="v2-option-glyph">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 17l6-6 4 4 8-8"/>
+                    <path d="M14 7h7v7"/>
                   </svg>
                 </span>
-                YOU VOTED <span id="voted-label">AGREE</span>
-                <button type="button" id="change-vote-btn" class="change-vote-btn">change</button>
-              </span>
-            </div>
-            <p id="propose-stmt-display" class="propose-stmt-display"></p>
-          </div>
-
-          {# Compose form — below the card, starts in composing state #}
-          <div id="propose-composer" class="propose-composer propose-below">
-            <div class="propose-composer-header">
-              <span class="propose-glyph filled">+</span>
-              <span class="propose-composer-label">Your alternative phrasing · one sentence, one claim</span>
-              <span class="propose-charcount"><span id="propose-len">0</span> / 280</span>
-            </div>
-            <textarea id="propose-input" class="propose-textarea" maxlength="280"
-                      placeholder="Re-confirmation every five years would balance accountability against admin burnout…"></textarea>
-            <div class="propose-actions">
-              <span class="propose-actions-hint">Goes to moderation, then into the same pool</span>
-              <div class="propose-actions-btns">
-                <button type="button" id="propose-skip" class="btn-small btn-muted">The current wording is good as it is</button>
-                <button type="button" id="propose-submit-btn" class="propose-submit-btn" disabled>Submit my version as alternative</button>
               </div>
+              <div class="v2-option-bottom">
+                <div class="v2-option-title">Suggest different wording</div>
+                <div class="v2-option-sub">Same idea, clearer phrasing</div>
+                <div class="v2-option-action">Write yours &rarr;</div>
+              </div>
+            </button>
+
+            <button type="button" class="v2-option-card" id="triad-next"
+                    aria-disabled="true" tabindex="0">
+              <div class="v2-option-top">
+                <span class="v2-option-glyph">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M5 12h14"/>
+                    <path d="M13 5l7 7-7 7"/>
+                  </svg>
+                </span>
+              </div>
+              <div class="v2-option-bottom">
+                <div class="v2-option-title">Move on</div>
+                <div class="v2-option-sub">Next statement, nothing to add</div>
+                <div class="v2-option-action">Next &rarr;</div>
+              </div>
+            </button>
+
+            <button type="button" class="v2-option-card v2-option-card--locked" id="triad-newstmt"
+                    aria-disabled="true" tabindex="0"
+                    aria-describedby="triad-newstmt-sub">
+              <div class="v2-option-top">
+                <span class="v2-option-glyph">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 5v14"/>
+                    <path d="M5 12h14"/>
+                  </svg>
+                </span>
+                <svg class="v2-lock-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </div>
+              <div class="v2-option-bottom">
+                <div class="v2-option-title">Propose a new statement</div>
+                <div class="v2-option-sub" id="triad-newstmt-sub">Unlocks after {{ new_stmt_unlock_at | default(10) }} votes</div>
+                <div class="v2-option-action" id="triad-newstmt-action" hidden>Compose &rarr;</div>
+              </div>
+            </button>
+
+          </div>
+        </div>
+
+        {# ── Inline composer: suggest different wording ── #}
+        <div id="composer-suggest" class="v2-composer" hidden>
+          <div class="v2-composer-header">
+            <div>
+              <div class="v2-composer-title">Suggest different wording</div>
+              <div class="v2-composer-helper">Stays close to the same idea — just a clearer or fairer phrasing.</div>
+            </div>
+            <span class="propose-charcount"><span id="suggest-len">0</span> / 280</span>
+          </div>
+          <textarea id="suggest-input" class="v2-composer-textarea" maxlength="280"
+                    placeholder="Re-confirmation every five years would balance accountability against admin burnout…"></textarea>
+          <div class="v2-composer-footer">
+            <span class="v2-composer-hint">Goes into the pool with the original</span>
+            <div class="v2-composer-btns">
+              <button type="button" id="suggest-cancel" class="btn-small btn-muted">Cancel</button>
+              <button type="button" id="suggest-submit" class="propose-submit-btn" disabled>Submit &amp; next</button>
             </div>
           </div>
+        </div>
 
-          <div id="propose-submitted" class="propose-submitted" hidden>
-            <span class="check-pill">
-              <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
-                <path d="M2 6.5L4.8 9L10 3.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
-            <span class="propose-submitted-label">PROPOSED — heading to moderation</span>
-            <button type="button" id="propose-next" class="propose-next-btn">Next statement →</button>
+        {# ── Inline composer: propose a new statement ── #}
+        <div id="composer-newstmt" class="v2-composer" hidden>
+          <div class="v2-composer-header">
+            <div>
+              <div class="v2-composer-title">Propose a new statement</div>
+              <div class="v2-composer-helper">A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool.</div>
+            </div>
+            <span class="propose-charcount"><span id="newstmt-len">0</span> / 280</span>
           </div>
+          <textarea id="newstmt-input" class="v2-composer-textarea" maxlength="280"
+                    placeholder="A new angle on the topic…"></textarea>
+          <div class="v2-composer-footer">
+            <span class="v2-composer-hint">A separate statement — others will vote on it too</span>
+            <div class="v2-composer-btns">
+              <button type="button" id="newstmt-cancel" class="btn-small btn-muted">Cancel</button>
+              <button type="button" id="newstmt-submit" class="propose-submit-btn" disabled>Submit &amp; next</button>
+            </div>
+          </div>
+        </div>
+
+        {# ── Submitted confirmation ── #}
+        <div id="propose-submitted" class="propose-submitted" hidden>
+          <span class="check-pill">
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+              <path d="M2 6.5L4.8 9L10 3.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span class="propose-submitted-label">PROPOSED — heading to moderation</span>
+          <button type="button" id="propose-next" class="propose-next-btn">Next statement →</button>
+        </div>
+
+        {# ── All done message ── #}
+        <div id="all-done-msg" class="all-done-msg" hidden>
+          <p class="all-done-label">You've voted on all available statements.</p>
+          <p class="all-done-sub">New statements may appear when others propose them.</p>
         </div>
 
         {# ── Hidden pa-* elements for API submission ── #}
@@ -202,7 +276,8 @@
           <pa-vote-button id="pvb-agree"    type="agree">Agree</pa-vote-button>
           <pa-vote-button id="pvb-neutral"  type="neutral">Pass</pa-vote-button>
           <pa-vote-button id="pvb-disagree" type="disagree">Disagree</pa-vote-button>
-          <pa-submit-button id="pvb-submit-stmt" submitfor="propose-input">suggest</pa-submit-button>
+          <pa-submit-button id="pvb-submit-suggest" submitfor="suggest-input">suggest-wording</pa-submit-button>
+          <pa-submit-button id="pvb-submit-newstmt" submitfor="newstmt-input">new-statement</pa-submit-button>
         </span>
 
         <div id="conv-error" hidden>
@@ -699,173 +774,386 @@
 <script nonce="{{ csp_nonce }}">
 (function () {
   var conv             = document.querySelector('pa-conversation');
-  var stateIdle        = document.getElementById('state-idle');
-  var statePropose     = document.getElementById('state-propose');
+  var stmtCard         = document.getElementById('statement-card');
   var choiceRow        = document.getElementById('vote-choice-row');
+  var stmtRightLabel   = document.getElementById('stmt-right-label');
   var votedBadge       = document.getElementById('voted-badge');
   var votedLabel       = document.getElementById('voted-label');
-  var proposeComposer  = document.getElementById('propose-composer');
+  var votedStmtText    = document.getElementById('voted-stmt-text');
+  var triad            = document.getElementById('v2-triad');
+  var triadLabel       = document.getElementById('v2-triad-label');
+  var triadSuggest     = document.getElementById('triad-suggest');
+  var triadNext        = document.getElementById('triad-next');
+  var triadNewstmt     = document.getElementById('triad-newstmt');
+  var triadNewstmtSub  = document.getElementById('triad-newstmt-sub');
+  var triadNewstmtAction = document.getElementById('triad-newstmt-action');
+  var composerSuggest  = document.getElementById('composer-suggest');
+  var composerNewstmt  = document.getElementById('composer-newstmt');
+  var suggestInput     = document.getElementById('suggest-input');
+  var suggestLen       = document.getElementById('suggest-len');
+  var suggestSubmit    = document.getElementById('suggest-submit');
+  var newstmtInput     = document.getElementById('newstmt-input');
+  var newstmtLen       = document.getElementById('newstmt-len');
+  var newstmtSubmit    = document.getElementById('newstmt-submit');
   var proposeSubmitted = document.getElementById('propose-submitted');
-  var proposeInput     = document.getElementById('propose-input');
-  var proposeLen       = document.getElementById('propose-len');
-  var proposeSubmitBtn = document.getElementById('propose-submit-btn');
   var pvb = {
     agree:    document.getElementById('pvb-agree'),
     neutral:  document.getElementById('pvb-neutral'),
     disagree: document.getElementById('pvb-disagree'),
   };
-  var pvbSubmitStmt = document.getElementById('pvb-submit-stmt');
-  var convError     = document.getElementById('conv-error');
-  var convErrorMsg  = document.getElementById('conv-error-msg');
-  var progressRow   = document.getElementById('vote-progress-row');
-  var votesDone     = document.getElementById('votes-done');
-  var votesTotal    = document.getElementById('votes-total');
-  var progressBar   = document.getElementById('vote-progress-bar');
-  var stmtMetaLabels = document.querySelectorAll('.stmt-meta-label');
+  var pvbSubmitSuggest = document.getElementById('pvb-submit-suggest');
+  var pvbSubmitNewstmt = document.getElementById('pvb-submit-newstmt');
+  var convError        = document.getElementById('conv-error');
+  var convErrorMsg     = document.getElementById('conv-error-msg');
+  var progressRow      = document.getElementById('vote-progress-row');
+  var votesDone        = document.getElementById('votes-done');
+  var votesTotal       = document.getElementById('votes-total');
+  var progressBar      = document.getElementById('vote-progress-bar');
 
   var LABELS = { agree: 'AGREE', neutral: 'PASS', disagree: 'DISAGREE' };
+  var NEW_STMT_UNLOCK_AT = {{ new_stmt_unlock_at | default(10) }};
+  var NEW_STMT_MAX  = {{ new_stmt_max | default(3) }};
+  var NEW_STMT_USED = {{ new_stmt_ids | length }};
   var originalStmtText = '';
-  var proposeStmtDisplay = document.getElementById('propose-stmt-display');
+  var newstmtOrigin = 'voted'; // 'voted' | 'alldone' — tracks where composer was opened from
+  var mySubmittedStmtIds = new Set(); // tids of statements this participant submitted; Polis 403s on own-vote
 
-  // ── Mode: idle ───────────────────────────────────────────────────────────────
-  function enterIdle() {
-    stateIdle.hidden    = false;
-    statePropose.hidden = true;
-    proposeInput.value  = '';
-    proposeLen.textContent = '0';
-    proposeSubmitBtn.disabled = true;
-    proposeComposer.hidden   = false;
-    proposeSubmitted.hidden  = true;
-    originalStmtText = '';
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+
+  function liveStmt() { return conv.querySelector('pa-statement'); }
+
+  function getVotedCount() {
+    try { return conv.client.participant.votes.size; } catch (e) { return 0; }
   }
 
-  // ── Mode: propose (after vote or idle-propose click) ─────────────────────────
-  // stmtText must be captured BEFORE triggering the vote, because pvb.click()
-  // causes the web component to advance pa-statement.text synchronously.
-  function enterPropose(voteType, stmtText) {
-    stateIdle.hidden    = true;
-    statePropose.hidden = false;
-    if (voteType) {
-      votedLabel.textContent   = LABELS[voteType];
-      votedBadge.dataset.type  = voteType;
-      votedBadge.hidden        = false;
+  function getTotalStatements() {
+    try { return conv.client.statements.size; } catch (e) { return NEW_STMT_UNLOCK_AT; }
+  }
+
+  function isAllDone() {
+    try { return conv.statement === null && conv.client.statements.size > 0; } catch (e) { return false; }
+  }
+
+  function setAriaDisabled(btn, disabled) {
+    btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+  }
+
+  function isAriaDisabled(btn) {
+    return btn.getAttribute('aria-disabled') === 'true';
+  }
+
+  function updateNewstmtCard() {
+    var effectiveUnlock = Math.min(NEW_STMT_UNLOCK_AT, getTotalStatements() || NEW_STMT_UNLOCK_AT);
+    var unlocked  = getVotedCount() >= effectiveUnlock || isAllDone();
+    var quotaLeft = Math.max(0, NEW_STMT_MAX - NEW_STMT_USED);
+    var active    = unlocked && quotaLeft > 0;
+
+    triadNewstmt.classList.toggle('v2-option-card--locked', !active);
+    triadNewstmt.querySelector('.v2-lock-icon').style.display = active ? 'none' : '';
+
+    if (!unlocked) {
+      var remaining = Math.max(0, effectiveUnlock - getVotedCount());
+      triadNewstmtSub.textContent = 'Unlocks after ' + remaining + ' more vote' + (remaining === 1 ? '' : 's');
+      triadNewstmtAction.hidden = true;
+    } else if (quotaLeft === 0) {
+      triadNewstmtSub.textContent = 'Limit reached';
+      triadNewstmtAction.hidden = true;
     } else {
-      votedBadge.hidden = true;
+      triadNewstmtSub.textContent = quotaLeft + ' of ' + NEW_STMT_MAX + ' remaining';
+      triadNewstmtAction.hidden = false;
     }
-    proposeComposer.hidden  = false;
-    proposeSubmitted.hidden = true;
-    originalStmtText = (stmtText || '').trim();
-    proposeStmtDisplay.textContent = originalStmtText;
-    proposeInput.value = originalStmtText;
-    proposeLen.textContent = proposeInput.value.length;
-    proposeSubmitBtn.disabled = true;
-    proposeInput.focus();
-    proposeInput.select();
+
+    if (triad.classList.contains('v2-triad--active') || triad.classList.contains('v2-triad--alldone')) {
+      setAriaDisabled(triadNewstmt, !active);
+    }
   }
 
-  // ── Vote buttons — single click = immediate vote ─────────────────────────────
+  // ── Mode: idle ────────────────────────────────────────────────────────────────
+  function enterIdle(focusTarget) {
+    stmtCard.classList.remove('statement-card--voted');
+    stmtCard.hidden        = false;
+    votedStmtText.hidden   = true;
+    votedBadge.hidden      = true;
+    originalStmtText       = '';
+    if (allDoneMsg) allDoneMsg.hidden = true;
+    triad.classList.remove('v2-triad--alldone');
+
+    triad.hidden = false;
+    triadLabel.textContent = 'After you vote, you can…';
+    triad.classList.remove('v2-triad--active');
+    setAriaDisabled(triadSuggest, true);
+    setAriaDisabled(triadNext,    true);
+    setAriaDisabled(triadNewstmt, true);
+    triadNext.classList.remove('v2-option-card--primary');
+
+    composerSuggest.hidden  = true;
+    composerNewstmt.hidden  = true;
+    proposeSubmitted.hidden = true;
+    suggestInput.value      = '';
+    suggestLen.textContent  = '0';
+    suggestSubmit.disabled  = true;
+    newstmtInput.value      = '';
+    newstmtLen.textContent  = '0';
+    newstmtSubmit.disabled  = true;
+
+    updateNewstmtCard();
+
+    // Restore keyboard focus
+    var target = focusTarget || choiceRow.querySelector('.vote-choice');
+    if (target) target.focus();
+  }
+
+  // ── Mode: voted ───────────────────────────────────────────────────────────────
+  // stmtText must be captured BEFORE pvb.click() — the web component advances
+  // pa-statement.text synchronously on vote submission.
+  function enterVoted(voteType, stmtText) {
+    originalStmtText = (stmtText || '').trim();
+
+    stmtCard.classList.add('statement-card--voted');
+    votedStmtText.textContent = originalStmtText;
+    votedStmtText.hidden   = false;
+    votedBadge.hidden      = false;
+    votedLabel.textContent = LABELS[voteType];
+    votedBadge.dataset.type = voteType;
+
+    triad.hidden = false;
+    triadLabel.textContent = 'What now?';
+    triad.classList.add('v2-triad--active');
+    setAriaDisabled(triadSuggest, false);
+    setAriaDisabled(triadNext,    false);
+    triadNext.classList.add('v2-option-card--primary');
+    updateNewstmtCard();
+
+    suggestInput.value     = originalStmtText;
+    suggestLen.textContent = suggestInput.value.length;
+    suggestSubmit.disabled = true;
+
+    composerSuggest.hidden  = true;
+    composerNewstmt.hidden  = true;
+    proposeSubmitted.hidden = true;
+
+    // Move focus to first active triad card
+    triadSuggest.focus();
+  }
+
+  // ── Shared submit handler ─────────────────────────────────────────────────────
+  function submitComposer(pvbEl, submitBtn, composerEl) {
+    submitBtn.disabled = true;
+    conv.addEventListener('particiappstatementsubmitsuccess', function () {
+      composerEl.hidden       = true;
+      proposeSubmitted.hidden = false;
+      setTimeout(enterIdle, 1200);
+    }, { once: true });
+    conv.addEventListener('particiappstatementsubmiterror', function (ev) {
+      submitBtn.disabled = false;
+      convError.hidden   = false;
+      convErrorMsg.textContent = 'Could not submit statement'
+        + (ev.error && ev.error.message ? ': ' + ev.error.message : '') + '.';
+    }, { once: true });
+    pvbEl.click();
+  }
+
+  // ── Vote buttons ──────────────────────────────────────────────────────────────
   choiceRow.addEventListener('click', function (e) {
     var btn = e.target.closest('.vote-choice');
     if (!btn) return;
-    var type = btn.dataset.type;
-    // Capture text before clicking — pvb.click() advances pa-statement synchronously
-    var paStmt = conv.querySelector('pa-statement');
-    var stmtText = paStmt ? (paStmt.text || '').trim() : '';
+    var type    = btn.dataset.type;
+    var stmt    = liveStmt();
+    var stmtTxt = stmt ? (stmt.text || '').trim() : '';
     pvb[type].click();
-    enterPropose(type, stmtText);
+    enterVoted(type, stmtTxt);
   });
 
-  // ── Idle propose affordance click → compose mode (no vote yet) ───────────────
-  document.getElementById('propose-idle-btn').addEventListener('click', function () {
-    var paStmt = conv.querySelector('pa-statement');
-    var stmtText = paStmt ? (paStmt.text || '').trim() : '';
-    enterPropose(null, stmtText);
+  // ── Change vote ───────────────────────────────────────────────────────────────
+  document.getElementById('change-vote-btn').addEventListener('click', function () {
+    enterIdle(choiceRow.querySelector('.vote-choice'));
   });
 
-  // ── Change vote → back to idle ───────────────────────────────────────────────
-  document.getElementById('change-vote-btn').addEventListener('click', enterIdle);
+  // ── Triad click guard (aria-disabled) ────────────────────────────────────────
+  function triadGuard(btn, fn) {
+    btn.addEventListener('click', function () { if (!isAriaDisabled(btn)) fn(); });
+    btn.addEventListener('keydown', function (e) {
+      if ((e.key === 'Enter' || e.key === ' ') && !isAriaDisabled(btn)) { e.preventDefault(); fn(); }
+    });
+  }
 
-  // ── Propose: char count + enable submit ──────────────────────────────────────
-  proposeInput.addEventListener('input', function () {
-    proposeLen.textContent = proposeInput.value.length;
-    var val = proposeInput.value.trim();
-    proposeSubmitBtn.disabled = val.length === 0 || val === originalStmtText.trim();
+  // ── Triad: suggest different wording ─────────────────────────────────────────
+  triadGuard(triadSuggest, function () {
+    triad.hidden           = true;
+    composerSuggest.hidden = false;
+    suggestInput.focus();
+    suggestInput.select();
   });
 
-  // ── Propose: nothing to propose → idle ───────────────────────────────────────
-  document.getElementById('propose-skip').addEventListener('click', enterIdle);
+  // ── Triad: move on ────────────────────────────────────────────────────────────
+  triadGuard(triadNext, function () {
+    enterIdle(choiceRow.querySelector('.vote-choice'));
+  });
 
-  // ── Propose: submit & next ────────────────────────────────────────────────────
-  proposeSubmitBtn.addEventListener('click', function () {
-    var val = proposeInput.value.trim();
-    if (val.length === 0 || val === originalStmtText.trim()) return;
+  // ── Triad: propose new statement ─────────────────────────────────────────────
+  triadGuard(triadNewstmt, function () {
+    newstmtOrigin          = triad.classList.contains('v2-triad--alldone') ? 'alldone' : 'voted';
+    triad.hidden           = true;
+    composerNewstmt.hidden = false;
+    newstmtInput.value     = '';
+    newstmtLen.textContent = '0';
+    newstmtSubmit.disabled = true;
+    newstmtInput.focus();
+  });
 
-    proposeSubmitBtn.disabled = true;
+  // ── Suggest composer ──────────────────────────────────────────────────────────
+  suggestInput.addEventListener('input', function () {
+    suggestLen.textContent = suggestInput.value.length;
+    var val = suggestInput.value.trim();
+    suggestSubmit.disabled = val.length === 0 || val === originalStmtText.trim();
+  });
 
-    function onSuccess() {
-      conv.removeEventListener('particiappstatementsubmitsuccess', onSuccess);
-      conv.removeEventListener('particiappstatementsubmiterror', onError);
-      proposeComposer.hidden  = true;
-      proposeSubmitted.hidden = false;
-      setTimeout(enterIdle, 1200);
+  document.getElementById('suggest-cancel').addEventListener('click', function () {
+    composerSuggest.hidden = true;
+    triad.hidden           = false;
+    triadSuggest.focus();
+  });
+
+  suggestSubmit.addEventListener('click', function () {
+    var val = suggestInput.value.trim();
+    if (!val || val === originalStmtText.trim()) return;
+    submitComposer(pvbSubmitSuggest, suggestSubmit, composerSuggest);
+  });
+
+  // ── New statement composer ────────────────────────────────────────────────────
+  newstmtInput.addEventListener('input', function () {
+    newstmtLen.textContent = newstmtInput.value.length;
+    newstmtSubmit.disabled = newstmtInput.value.trim().length === 0;
+  });
+
+  document.getElementById('newstmt-cancel').addEventListener('click', function () {
+    composerNewstmt.hidden = true;
+    if (newstmtOrigin === 'alldone') {
+      enterAllDone();
+    } else {
+      triad.hidden = false;
+      triadNewstmt.focus();
     }
-    function onError(e) {
-      conv.removeEventListener('particiappstatementsubmitsuccess', onSuccess);
-      conv.removeEventListener('particiappstatementsubmiterror', onError);
-      proposeSubmitBtn.disabled = false;
+  });
+
+  newstmtSubmit.addEventListener('click', function () {
+    var text = newstmtInput.value.trim();
+    if (!text) return;
+    newstmtSubmit.disabled = true;
+    fetch('{{ url_for("conversation_statement_new", slug=conversation.slug) }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      body: JSON.stringify({ text: text }),
+    }).then(function (resp) {
+      if (resp.ok) {
+        resp.json().then(function (data) {
+          if (data && data.id != null) {
+            var tid = Number(data.id);
+            mySubmittedStmtIds.add(tid);
+            // Mark as voted in the web component so it never appears in the queue
+            try { conv.client.participant.votes.add(tid); } catch (e) {}
+          }
+        });
+        composerNewstmt.hidden  = true;
+        proposeSubmitted.hidden = false;
+        NEW_STMT_USED++;
+        updateNewstmtCard();
+        if (newstmtOrigin === 'alldone') {
+          setTimeout(function () { proposeSubmitted.hidden = true; }, 1200);
+        } else {
+          setTimeout(enterIdle, 1200);
+        }
+      } else {
+        newstmtSubmit.disabled = false;
+        convError.hidden = false;
+        convErrorMsg.textContent = resp.status === 403
+          ? 'You have reached the proposal limit for this consultation.'
+          : 'Could not submit statement. Please try again.';
+      }
+    }).catch(function () {
+      newstmtSubmit.disabled = false;
       convError.hidden = false;
-      convErrorMsg.textContent = 'Could not submit statement'
-        + (e.error && e.error.message ? ': ' + e.error.message : '') + '.';
-    }
-    conv.addEventListener('particiappstatementsubmitsuccess', onSuccess);
-    conv.addEventListener('particiappstatementsubmiterror', onError);
-
-    pvbSubmitStmt.click();
+      convErrorMsg.textContent = 'Network error. Please try again.';
+    });
   });
 
-  // ── Propose: next statement (manual fallback in submitted state) ──────────────
-  document.getElementById('propose-next').addEventListener('click', enterIdle);
+  // ── Submitted: manual next ────────────────────────────────────────────────────
+  document.getElementById('propose-next').addEventListener('click', function () {
+    enterIdle(choiceRow.querySelector('.vote-choice'));
+  });
 
-  // ── Progress row + statement sequence number (issues #2 and #3) ──────────────
+  // ── Progress + no-statement handling ─────────────────────────────────────────
   function updateProgress(statements) {
     var total = statements.size;
     if (total === 0) return;
-
-    // Count votes from the server-persisted participant record so progress
-    // is accurate across sessions. Own submitted statements are auto-voted
-    // server-side and already included in participant.votes.
     var votedIds = conv.client.participant.votes;
     var done = 0;
-    statements.forEach(function (stmt, id) {
-      if (votedIds.has(id)) done++;
-    });
-
-    // Show progress row and populate counts
+    statements.forEach(function (stmt, id) { if (votedIds.has(id)) done++; });
     progressRow.style.display = '';
-    votesDone.textContent = done;
+    votesDone.textContent  = done;
     votesTotal.textContent = total;
-
-    // Rebuild segmented bar: done segments first, then current (if any), then queued.
-    var current = conv.statement; // null if all done
+    var current = conv.statement;
     progressBar.innerHTML = '';
     for (var i = 0; i < total; i++) {
       var seg = document.createElement('div');
-      seg.className = 'vote-seg ' + (i < done ? 'vote-seg--done' : (current !== null && i === done) ? 'vote-seg--current' : 'vote-seg--queued');
+      seg.className = 'vote-seg '
+        + (i < done ? 'vote-seg--done'
+           : (current !== null && i === done) ? 'vote-seg--current'
+           : 'vote-seg--queued');
       progressBar.appendChild(seg);
+    }
+    updateNewstmtCard();
+  }
+
+  var allDoneMsg = document.getElementById('all-done-msg');
+
+  function enterAllDone() {
+    stmtCard.classList.remove('statement-card--voted');
+    stmtCard.hidden     = true;
+    allDoneMsg.hidden   = false;
+
+    composerSuggest.hidden  = true;
+    composerNewstmt.hidden  = true;
+    proposeSubmitted.hidden = true;
+
+    triad.hidden = false;
+    triad.classList.remove('v2-triad--active');
+    triad.classList.add('v2-triad--alldone');
+    triadLabel.textContent = 'Want to add something new?';
+    setAriaDisabled(triadSuggest, true);
+    setAriaDisabled(triadNext,    true);
+    updateNewstmtCard();
+  }
+
+  function handleNoStatement() {
+    if (isAllDone()) {
+      if (!triad.classList.contains('v2-triad--active')) {
+        enterAllDone();
+      }
+    } else {
+      updateNewstmtCard();
     }
   }
 
-  // particiappstatementschange only fires on poll cycles, not on initial load.
-  // We also call updateProgress from the 'loaded' state handler using conv.client.statements.
-  conv.addEventListener('particiappstatementschange', function (e) {
-    updateProgress(e.statements);
+  conv.addEventListener('particiappstatementschange', function (e) { updateProgress(e.statements); });
+  conv.addEventListener('particiappvotesubmitsuccess', function ()  { updateProgress(conv.client.statements); });
+
+  // Track the last statement ID being voted on (statementID comes from pa-vote-button event).
+  var lastVoteStmtId = null;
+  conv.addEventListener('particiappvotesubmit', function (e) {
+    lastVoteStmtId = e.statementID != null ? Number(e.statementID) : null;
   });
 
-  conv.addEventListener('particiappvotesubmitsuccess', function () {
-    updateProgress(conv.client.statements);
+  // On vote failure: mark the statement as voted in the web component so it advances,
+  // then reset UI. Covers both own-statement 403s and any other transient failures.
+  conv.addEventListener('particiappvotesubmiterror', function () {
+    if (lastVoteStmtId != null) {
+      try { conv.client.participant.votes.add(lastVoteStmtId); } catch (e) {}
+    }
+    enterIdle(choiceRow.querySelector('.vote-choice'));
   });
 
-  // ── Error ─────────────────────────────────────────────────────────────────────
+  // ── Error / loaded ────────────────────────────────────────────────────────────
   conv.addEventListener('particiappstatechange', function (e) {
     if (e.state === 'error') {
       convError.hidden = false;
@@ -878,6 +1166,7 @@
     }
     if (e.state === 'loaded' && conv.client) {
       updateProgress(conv.client.statements);
+      handleNoStatement();
     }
   });
 }());

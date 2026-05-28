@@ -1,5 +1,8 @@
 /* wiki-polis v2 — Cluster design */
 
+/* Enforce [hidden] over any display rules — must come before all component CSS */
+[hidden] { display: none !important; }
+
 :root {
   /* Cluster palette */
   --ink:           #0c0c0e;
@@ -8,6 +11,7 @@
   --bg:            #fafaf9;
   --surface:       #ffffff;
   --surface2:      #f4f4f3;
+  --surface3:      #eeece6;
   --hairline:      #e5e5e6;
   --hairline-soft: #efefef;
   --agree:         #1f8a5b;
@@ -549,6 +553,13 @@ pa-conversation:state(loading) { opacity: 0.5; }
   margin-bottom: 0;
 }
 
+/* In voted state, hide the live statement and vote buttons via parent class.
+   Using CSS (not just hidden attr) because pa-statement may re-show itself
+   when it receives the next statement from the web component. */
+.statement-card--voted pa-statement   { display: none !important; }
+.statement-card--voted .vote-choice-row { display: none !important; }
+.statement-card--voted .stmt-meta-right { visibility: hidden; }
+
 .propose-stmt-display {
   margin: 0;
   font-size: 15px;
@@ -686,8 +697,7 @@ pa-statement { display: block; }
 .vote-dot--pass     { background: var(--pass); }
 .vote-dot--disagree { background: var(--disagree); }
 
-pa-statement:state(no-statement) ~ .vote-choice-row,
-pa-statement:state(no-statement) ~ .propose-affordance { display: none; }
+pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
 
 /* ── Propose affordance (3 states) ── */
 
@@ -825,6 +835,27 @@ pa-statement:state(no-statement) ~ .propose-affordance { display: none; }
 .propose-submit-btn:hover { background: var(--accent); }
 
 /* State C: submitted — spot/amber (not agree green) */
+/* ── All done message ── */
+.all-done-msg {
+  padding: 28px 0 12px;
+  text-align: center;
+}
+.all-done-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+.all-done-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* In all-done state, show only the Propose New card */
+.v2-triad--alldone .v2-option-card { display: none; }
+.v2-triad--alldone #triad-newstmt  { display: flex; }
+
 .propose-submitted {
   display: flex;
   align-items: center;
@@ -868,6 +899,216 @@ pa-statement:state(no-statement) ~ .propose-affordance { display: none; }
   cursor: pointer;
 }
 .propose-next-btn:hover { background: var(--accent); }
+
+/* ── Voted statement snapshot ── */
+
+.voted-stmt-text {
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.28;
+  letter-spacing: -0.018em;
+  color: var(--muted);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+/* ── V2 Option Triad ── */
+
+.v2-triad {
+  margin-top: 22px;
+}
+
+.v2-triad-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.v2-triad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.v2-option-card {
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 14px 16px;
+  cursor: default;
+  opacity: 0.72;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 120px;
+  font-family: var(--sans);
+  transition: border-color 0.12s, box-shadow 0.12s, opacity 0.12s;
+}
+
+/* Hide action labels in pre-vote dimmed state */
+.v2-triad:not(.v2-triad--active) .v2-option-action { visibility: hidden; }
+
+/* Active state — set when triad has v2-triad--active */
+.v2-triad--active .v2-option-card:not([aria-disabled="true"]) {
+  opacity: 1;
+  cursor: pointer;
+}
+.v2-triad--active .v2-option-card:not([aria-disabled="true"]):hover {
+  border-color: #888; /* fallback for Safari < 15.4 */
+  border-color: color-mix(in srgb, var(--ink) 55%, transparent);
+}
+
+.v2-triad--active .v2-option-card--primary:not([aria-disabled="true"]) {
+  background: var(--surface3);
+  border-color: #c4c2bb; /* fallback */
+  border-color: color-mix(in srgb, var(--ink) 25%, transparent);
+}
+.v2-triad--active .v2-option-card--primary:not([aria-disabled="true"]):hover {
+  border-color: #888; /* fallback */
+  border-color: color-mix(in srgb, var(--ink) 55%, transparent);
+}
+
+.v2-option-card--locked,
+.v2-option-card[aria-disabled="true"] {
+  background: var(--surface2);
+  border-color: var(--hairline-soft);
+  opacity: 1;
+}
+.v2-option-card--locked { cursor: not-allowed; }
+.v2-option-card[aria-disabled="true"]:not(.v2-option-card--locked) { cursor: default; }
+
+.v2-option-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.v2-option-glyph {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--surface2);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.v2-option-card--locked .v2-option-glyph { color: #9ca3af; }
+
+.v2-lock-icon { flex-shrink: 0; }
+
+.v2-option-bottom {
+  margin-top: auto;
+}
+
+.v2-option-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.v2-option-card--locked .v2-option-title { color: var(--muted); }
+
+.v2-option-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.v2-option-card--locked .v2-option-sub { color: #9ca3af; }
+
+.v2-option-action {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+  letter-spacing: 0.05em;
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+/* ── V2 Inline composer ── */
+
+.v2-composer {
+  margin-top: 14px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+.v2-composer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.v2-composer-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.v2-composer-helper {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.v2-composer-textarea {
+  width: 100%;
+  min-height: 84px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  outline: none;
+  resize: vertical;
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink);
+  letter-spacing: -0.008em;
+  background: var(--surface);
+  box-sizing: border-box;
+}
+
+.v2-composer-textarea:focus { border-color: var(--muted); }
+
+.v2-composer-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.v2-composer-hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.v2-composer-btns {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 560px) {
+  .v2-triad-grid { grid-template-columns: 1fr; }
+  .v2-composer-footer { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .v2-composer-btns { width: 100%; justify-content: flex-end; }
+}
 
 /* ── Hidden pa-vote-button/pa-submit-button for API submission ── */
 
