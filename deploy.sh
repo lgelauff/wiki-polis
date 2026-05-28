@@ -51,9 +51,10 @@ fi
 
 if [ "$MIGRATE" -eq 1 ]; then
   echo "==> Running database migrations..."
-  export DATABASE_URL=$(toolforge envvars show DATABASE_URL)
-  export SECRET_KEY=$(toolforge envvars show SECRET_KEY)
-  export PARTICIAPI_BASE_URL=$(toolforge envvars show PARTICIAPI_BASE_URL)
+  _envvar() { toolforge envvars show "$1" | tail -1 | awk '{print $NF}'; }
+  export DATABASE_URL=$(_envvar DATABASE_URL)
+  export SECRET_KEY=$(_envvar SECRET_KEY)
+  export PARTICIAPI_BASE_URL=$(_envvar PARTICIAPI_BASE_URL)
   source ~/www/python/venv/bin/activate
   cd ~/wiki-polis/v2
   flask --app app db upgrade
