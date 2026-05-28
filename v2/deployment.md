@@ -475,10 +475,27 @@ Then revert the code change and restart.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `RuntimeError: DATABASE_URL is not set` | Running `flask` on the bastion shell | Use `toolforge webservice python3.13 shell` — envvars only exist there |
-| `flask: command not found` | Venv not activated inside webservice shell | `source /data/project/wiki-polis/www/python/venv/bin/activate` |
+| `RuntimeError: DATABASE_URL is not set` | Running `flask` on the bastion shell without exporting envvars | Use `deploy.sh --migrate`, or export manually (see below) |
+| `flask: command not found` | Venv not activated | `source /data/project/wiki-polis/www/python/venv/bin/activate` |
 | `Error: No such command 'db'` | Wrong working directory or FLASK_APP not set | `cd ~/wiki-polis/v2` first, then `flask --app app db upgrade` |
-| `No such file or directory: .../activate` | Wrong venv path guessed | Run `find /data/project/wiki-polis -name activate -path "*/venv/*"` to find the real path |
+| `No such file or directory: .../activate` | Wrong venv path | Run `find /data/project/wiki-polis -name activate -path "*/venv/*"` to find the real path |
+
+### Exporting envvars manually
+
+`toolforge envvars show <NAME>` outputs a two-column table, not a raw value:
+
+```
+name        value
+SECRET_KEY  <value>
+```
+
+To export an envvar to the shell:
+
+```bash
+export SECRET_KEY=$(toolforge envvars show SECRET_KEY | tail -1 | awk '{print $NF}')
+```
+
+`deploy.sh --migrate` does this automatically for `DATABASE_URL`, `SECRET_KEY`, and `PARTICIAPI_BASE_URL`.
 
 ---
 
