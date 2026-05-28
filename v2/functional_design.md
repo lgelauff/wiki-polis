@@ -45,25 +45,21 @@ Statements are presented to participants one at a time in a semi-random order. T
 
 ## Voting
 
+> The original design had an always-visible textarea for proposing alternatives below the vote buttons. Feedback indicated this was too aggressive. The current implementation replaces it with a post-vote triad (see state machine below). The description here reflects the current implementation.
+
 The core loop:
 
 1. A statement appears.
-2. The participant selects **Agree**, **Disagree**, or **Pass** — this highlights the chosen option but does not submit yet.
-3. A **"Have a better way to put this?"** box is shown below the selection. The participant can type a short alternative statement, or leave it blank.
-4. The participant clicks **Submit**.
-   - If the textarea is empty: the vote is cast immediately.
-   - If the textarea has content: a brief confirm appears — *"Also share your alternate phrasing with other participants?"* — with **Yes, suggest it** and **No, just my vote** options.
+2. The participant selects **Agree**, **Disagree**, or **Pass** — the vote is submitted immediately.
+3. A three-option triad appears below: **Suggest different wording**, **Move on**, **Propose a new statement**.
+4. The participant picks one, or does nothing (Move on is the default path).
 5. The UI resets for the next statement.
 
-The propose box is always visible alongside the vote buttons — it is not a separate step that appears only after voting. This keeps it a natural part of the flow rather than a secondary action.
+There is no discussion on the voting screen. No visible vote counts. No indication of how others voted. The experience is fast and private.
 
-The proposed alternative is backend-identical to any other submitted statement: it enters the same statement pool and goes through the same moderation queue before others see it.
+After voting on all available statements, the participant is shown a brief completion screen. The "Propose a new statement" option remains available there if quota permits. If new statements are added by others after the participant finishes, those appear on the next session.
 
-Whether proposed alternatives require moderation before entering the pool is admin-configurable per conversation.
-
-There is no discussion on the voting screen beyond this. No visible vote counts. No indication of how others voted. The experience is fast and private.
-
-After voting on all available statements, the participant is shown a brief completion screen. If new statements have been added since their last visit, those appear on the next session.
+Statements submitted by a participant never appear in their own voting queue. Polis rejects self-votes (403); the app pre-emptively marks submitted statement IDs as voted in the web component so they are silently skipped.
 
 ### Current implementation — state machine (working state, not confirmed design)
 
@@ -119,6 +115,7 @@ The threshold for moving from "below" to "above" is `min(new_stmt_unlock_at, tot
 | Composing: new | Click Submit (success) | Submitted | Statement sent to pool; participant quota decremented |
 | Submitted | Click "Next statement" | Idle | Next statement loads |
 | Any | All statements voted | All done | — |
+| Any | Own submitted statement appears in queue | Idle (skipped) | Statement ID added to web component votes Set; no vote submitted |
 | All done | Click "Propose new statement" (quota > 0) | Composing: new | — |
 | Composing: new (from All done) | Click Cancel | All done | Returns to completion screen |
 | Composing: new (from All done) | Click Submit (success) | All done | Statement sent to pool; participant quota decremented |
