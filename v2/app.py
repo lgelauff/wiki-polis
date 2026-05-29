@@ -1354,8 +1354,9 @@ def _register_routes(app: Flask) -> None:
     @limiter.limit('30 per minute')
     def oauth_callback():
         if request.args.get('state') != session.pop('oauth_state', None):
-            app.logger.warning('OAuth callback: state mismatch')
-            abort(400)
+            app.logger.warning('OAuth callback: state mismatch (likely duplicate login tab or expired session)')
+            flash('Login failed — please try again.', 'error')
+            return redirect(url_for('login'))
 
         code          = request.args.get('code', '')
         code_verifier = session.pop('oauth_code_verifier', '')
