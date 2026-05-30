@@ -173,7 +173,8 @@ def login_required(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         if 'username' not in session:
-            session['next'] = request.path
+            if not request.path.startswith('/proxy/'):
+                session['next'] = request.path
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return wrapper
