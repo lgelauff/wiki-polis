@@ -1476,9 +1476,7 @@ def _register_routes(app: Flask) -> None:
             'POLIS_SERVER_URL', 'POLIS_ADMIN_EMAIL', 'POLIS_ADMIN_PASSWORD'))
         if polis_configured:
             try:
-                client   = _polis_server_client()
-                polis_id = client.create_conversation(fields['title'])
-                client.set_strict_moderation(polis_id, True)
+                polis_id = _polis_server_client().create_conversation(fields['title'])
             except PolisServerError as exc:
                 current_app.logger.exception('Polis conversation creation failed')
                 flash('Could not create the Polis conversation. Check server logs for details.', 'error')
