@@ -208,7 +208,7 @@ class PolisServerClient:
 
     # ── Conversations ─────────────────────────────────────────────────────────
 
-    def create_conversation(self, title: str, strict_moderation: bool = True) -> str:
+    def create_conversation(self, title: str, strict_moderation: bool = False) -> str:
         """Create a Polis conversation and return its zinvite."""
         sess, auth_headers = self._login()
         headers = {**self._HEADERS, **auth_headers}

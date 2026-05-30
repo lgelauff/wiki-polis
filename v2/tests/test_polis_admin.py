@@ -153,12 +153,12 @@ def _setup_create(zinvite='abc123'):
     return client, sess, login_patch
 
 
-def test_create_conversation_sends_strict_moderation_true_by_default():
+def test_create_conversation_sends_strict_moderation_false_by_default():
     client, sess, login_patch = _setup_create()
     with login_patch:
         client.create_conversation('My conversation')
     payload = sess.post.call_args[1]['json']
-    assert payload['strict_moderation'] is True
+    assert payload['strict_moderation'] is False
 
 
 def test_create_conversation_strict_moderation_can_be_overridden():
