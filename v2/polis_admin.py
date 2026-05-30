@@ -223,7 +223,7 @@ class PolisServerClient:
                     'is_anon':           False,
                     'profanity_filter':  False,
                     'spam_filter':       False,
-                    'strict_moderation': False,
+                    'strict_moderation': True,
                 },
                 headers=headers,
                 timeout=10,
