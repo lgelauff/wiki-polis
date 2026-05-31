@@ -46,7 +46,7 @@ block. Extracted to `_pg_query(sql, params, label)` on `PolisServerClient`.
 
 ## Step 5 — Lift non-route helpers to module level
 
-**GitHub issue:** #89  
+**GitHub issue:** #90  
 **Risk:** Medium | **Size:** M (~200 lines relocated, no logic change)
 
 `_register_routes` (`app.py:546`) is a 1,300-line closure with C901 = 177. It contains
@@ -71,7 +71,7 @@ drops materially; full test suite stays green.
 
 ## Step 6 — Consolidate statement-text fetch blocks
 
-**GitHub issue:** #90  
+**GitHub issue:** #89  
 **Risk:** Medium | **Size:** S-M (~40 lines)
 
 Three near-duplicate blocks each instantiate `PolisParticipantClient`, call
