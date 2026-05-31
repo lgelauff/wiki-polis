@@ -1,6 +1,6 @@
 # Wiki-Polis v1
 
-The current live deployment. A lightweight Flask app that wraps a hosted pol.is conversation behind Wikimedia OAuth.
+Retired. Superseded by v2 (self-hosted Polis + Particiapi stack).
 
 ---
 
