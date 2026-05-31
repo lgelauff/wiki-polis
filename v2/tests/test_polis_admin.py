@@ -93,7 +93,7 @@ def _make_stats_client(db_rows=None, db_error=None):
     if db_error:
         cur.execute.side_effect = db_error
     else:
-        cur.fetchone.return_value = db_rows
+        cur.fetchall.return_value = [db_rows] if db_rows is not None else []
     return client, mock_conn
 
 

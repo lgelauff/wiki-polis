@@ -1,7 +1,10 @@
 """Tests for admin conversation management, roles, and phase toggles."""
+from unittest.mock import patch
+
 import pytest
 
 from db import AdminRole, Conversation, ConversationInvite, Participation, db
+from polis_admin import PolisServerError
 
 
 @pytest.fixture
@@ -30,16 +33,18 @@ def test_admin_index_accessible_to_global_admin(admin_client):
 # ── Conversation CRUD ─────────────────────────────────────────────────────────
 
 def test_create_conversation(admin_client):
-    resp = admin_client.post('/admin/conversations/new', data={
-        'slug': 'new-conv',
-        'polis_id': 'new1234567',
-        'title': 'New Conversation',
-        'access_policy': 'public',
-    })
+    with patch('app.PolisServerClient.create_conversation',
+               return_value='newpolis12'):
+        resp = admin_client.post('/admin/conversations/new', data={
+            'slug': 'new-conv',
+            'title': 'New Conversation',
+            'access_policy': 'public',
+        })
     assert resp.status_code == 302
     conv = Conversation.query.filter_by(slug='new-conv').first()
     assert conv is not None
     assert conv.title == 'New Conversation'
+    assert conv.polis_id == 'newpolis12'
     assert conv.active is True
 
 
@@ -53,14 +58,17 @@ def test_create_conversation_invalid_slug_rejected(admin_client):
     assert resp.status_code == 400
 
 
-def test_create_conversation_invalid_polis_id_rejected(admin_client):
-    resp = admin_client.post('/admin/conversations/new', data={
-        'slug': 'good-slug',
-        'polis_id': 'bad id!',
-        'title': 'Test',
-        'access_policy': 'public',
-    })
-    assert resp.status_code == 400
+def test_create_conversation_polis_failure_redirects(admin_client):
+    """Polis server error on creation → redirect to admin with flash, no conv written."""
+    with patch('app.PolisServerClient.create_conversation',
+               side_effect=PolisServerError('test error')):
+        resp = admin_client.post('/admin/conversations/new', data={
+            'slug': 'should-not-exist',
+            'title': 'Test',
+            'access_policy': 'public',
+        })
+    assert resp.status_code == 302
+    assert Conversation.query.filter_by(slug='should-not-exist').first() is None
 
 
 def test_edit_conversation(admin_client, conv):

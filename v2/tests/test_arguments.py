@@ -311,7 +311,8 @@ def test_moderator_can_delete_argument(admin_client, arg_conv, arg_part, fs,
                    body='To be deleted.', side='pro')
     db.session.add(arg)
     db.session.commit()
-    resp = admin_client.post(f'/c/arg-conv/arguments/{arg.id}/delete')
+    resp = admin_client.post(
+        f'/admin/conversations/{arg_conv.id}/arguments/{arg.id}/delete')
     assert resp.status_code == 302
     assert db.session.get(Argument, arg.id) is None
 
@@ -321,7 +322,8 @@ def test_participant_cannot_delete_argument(auth_client, arg_conv, arg_part, fs,
                    body='Should survive.', side='pro')
     db.session.add(arg)
     db.session.commit()
-    resp = auth_client.post(f'/c/arg-conv/arguments/{arg.id}/delete')
+    resp = auth_client.post(
+        f'/admin/conversations/{arg_conv.id}/arguments/{arg.id}/delete')
     assert resp.status_code == 403
     assert db.session.get(Argument, arg.id) is not None
 
