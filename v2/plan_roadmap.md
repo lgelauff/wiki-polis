@@ -74,6 +74,14 @@ retention commitment (decision D-PRIV), pending legal/comms review.
   (≤180 days). The current code nullifies revealed links at the retention window —
   change `_nullify_expired_reveals` to stop touching reveals. *(pending — reconcile
   `spec_functional-design.md` to the model first)*
+- **xid is reversible — weak anonymisation.** `xid = sha256(mw_user_id)` and MW user IDs
+  are sequential, so the xid can be brute-forced back to an account. Removing the
+  internal link at the retention window does **not** anonymise the Polis vote data,
+  because the xid is recomputable from a user ID. Fix: **salt** the hash with a
+  per-deployment secret, and/or **delete/rotate** the xid mapping at anonymisation —
+  non-trivial because xid is the live participant identity in Polis (re-keying orphans
+  existing votes). Needs design; relates to the security model (N11). *(pending —
+  [#96](https://github.com/lgelauff/wiki-polis/issues/96))*
 
 ## 5. Deferred / later
 

@@ -114,7 +114,7 @@ The one doc to trust for each concept (others should link here, not restate):
 | What the app does today (product behaviour) | `spec_functional-design.md` |
 | Where the product might go next (not built) | `prop_phase-model.md` (proposal) |
 | System shape, components, data flow | `spec_architecture.md` |
-| Database schema & data ownership | data-model reference (to be generated from `db.py`) |
+| Database schema & data ownership | [`ref_data-model.md`](../ref_data-model.md) (derived from `db.py`) |
 | Stable design rules | `spec_design-principles.md` |
 | What changed and when | changelog / build-log (to be created) |
 | What's planned next | roadmap (to be created) |

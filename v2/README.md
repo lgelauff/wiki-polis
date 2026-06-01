@@ -8,6 +8,7 @@ The live wiki-polis app. Replaces the v1 hosted pol.is embed with a self-hosted 
 |---|---|
 | `spec_functional-design.md` | Full product specification — what the platform does, from the user's perspective |
 | `spec_architecture.md` | Technical architecture, data model, and phase plan |
+| `ref_data-model.md` | Database schema reference (derived from `db.py`) |
 | `spec_design-principles.md` | Stable design rules — not to be re-debated per feature |
 | `plan_roadmap.md` | What's planned next (forward-looking) |
 | `log_changelog.md` | Append-only build log — what was built, and when |
