@@ -6,7 +6,7 @@ Hosted on [Toolforge](https://wikitech.wikimedia.org/wiki/Portal:Toolforge) at `
 
 ---
 
-## Architecture (v2, in development)
+## Architecture
 
 ```
   Browser ──▶ Flask app (Toolforge)
@@ -27,8 +27,8 @@ Hosted on [Toolforge](https://wikitech.wikimedia.org/wiki/Portal:Toolforge) at `
 
 | Directory | Contents |
 |---|---|
-| `v1/` | Current live deployment — local dev and Toolforge deployment docs |
-| `v2/` | v2 planning: architecture, functional design, data model, roadmap |
+| `v1/` | Retired v1 code and docs (hosted pol.is embed, superseded by v2) |
+| `v2/` | Live app: Flask app, templates, migrations, tests, deployment docs |
 | `v2/reference/` | Reference notes on Particiapi API and web components |
 
 ---
@@ -37,8 +37,8 @@ Hosted on [Toolforge](https://wikitech.wikimedia.org/wiki/Portal:Toolforge) at `
 
 ```
 wiki-polis/
-  app.py          — Flask app (v1, live)
-  db.py           — SQLAlchemy models (v1)
+  app.py          — Flask app (v1, retired)
+  db.py           — SQLAlchemy models (v1, retired)
   wsgi.py         — WSGI entry point
   uwsgi.ini       — uWSGI config
   deploy.sh       — Toolforge deploy script
@@ -46,5 +46,5 @@ wiki-polis/
   templates/      — Jinja2 templates
   static/         — CSS
   v1/             — v1 docs
-  v2/             — v2 planning docs
+  v2/             — Live app (deployed via wsgi.py)
 ```
