@@ -18,7 +18,7 @@ banner at the top.
 | Class | Changes… | Trigger to update | Trust rule | Examples |
 |---|---|---|---|---|
 | **Tracks-code reference** | whenever the code does | schema / API / dependency change | only trust with a current "verified against `<ref>`" stamp | data-model reference, `reference/particiapi-api.md`, `reference/web-components.md` |
-| **Deliberate spec** | rarely, on purpose | a decision to change the product | authoritative for the *current* system | `functional_design.md`, `architecture.md`, `design_principles.md` |
+| **Deliberate spec** | rarely, on purpose | a decision to change the product | authoritative for how the system is *meant to work*; divergences are bugs/gaps tracked elsewhere | `functional_design.md`, `architecture.md`, `design_principles.md` |
 | **Proposal (under discussion)** | during discussion | consensus reached → adopted or rejected | **not** describing what's built; do not implement from it | `phase_model_extension.md` |
 | **Forward plan** | often (weekly-ish) | priorities shift | reflects intent, not commitments | roadmap |
 | **Append-only history** | never edited retroactively | a release / merge happens | a faithful record; old entries stay as written | changelog / build log |
@@ -31,8 +31,47 @@ roadmap/changelog tangle. When in doubt, split.
 
 ---
 
+## File naming
+
+Encode the **stable role** in the filename via a prefix; keep **mutable lifecycle
+status** (draft → active → deprecated → archived) in the top-of-file banner, never in
+the name — renaming on every status change rots links and git history. After the
+prefix, names are lowercase with hyphens.
+
+| Prefix | Role (lifespan class) | Examples |
+|---|---|---|
+| `spec_` | deliberate spec — current truth | `spec_functional-design.md`, `spec_architecture.md`, `spec_design-principles.md` |
+| `ref_` | tracks-code / external reference | `ref_data-model.md`, `ref_particiapi-api.md`, `ref_web-components.md` |
+| `guide_` | how-to for humans | `guide_local-dev.md`, `guide_deployment.md`, `guide_organizer.md`, `guide_contributing.md` |
+| `plan_` | forward-looking plan | `plan_roadmap.md`, `plan_doc-improvement.md` |
+| `prop_` | proposal under discussion | `prop_phase-model.md` |
+| `log_` | append-only history | `log_changelog.md` |
+| `pub_` | public-facing participant copy | `pub_privacy.md`, `pub_participant-help.md` |
+| `research_` | draft research synthesis | `research_statements.md`, `research_terminology.md` |
+
+- **Role change = deliberate rename.** When a proposal is adopted, `prop_` → `spec_`
+  is an intentional rename that signals the transition; update inbound links in the
+  same change.
+- **Retirement = move, not rename.** Send superseded docs to `archive/` rather than
+  renaming them in place — location carries the terminal status.
+
+---
+
 ## Rules
 
+- **Specs describe intent, not the build.** A `spec_` / `architecture` /
+  `design_principles` doc says how the system is *meant to work* — the agreed design.
+  Don't narrate current-but-wrong behaviour, and don't compare to superseded designs,
+  in a permanent doc. Where intent isn't built yet (or the build diverges), state the
+  intended behaviour and flag the gap with a transient `*(pending — …)*` marker. The
+  markers **are** the record of known gaps — there is no aggregated deviations list;
+  find them with `grep -rn "pending —"`. A marker may link a tracking issue, but isn't
+  required to.
+- **Operational docs mark per-procedure liveness.** In a runbook/ops doc people follow
+  to *run* things, any procedure not yet live or unverified in production carries an
+  inline **⚠️ not live yet** tag; unmarked steps are live. Clear the tag once it's been
+  run for real. (Different axis from `pending`: `pending` flags a doc/spec gap; **⚠️ not
+  live yet** flags operational readiness.)
 - **Generate, don't transcribe.** Facts that live in code (the schema, route lists,
   API shapes) should be derived from the source, not hand-copied into prose. A
   hand-copied data model drifted within weeks. Where generation isn't practical, stamp
@@ -51,6 +90,12 @@ roadmap/changelog tangle. When in doubt, split.
 - **Status banners.** Every doc states its class and status at the top. Drafts keep a
   "not fact-checked" banner until verified; references carry a "last verified" date;
   proposals say "under discussion, not yet adopted."
+- **Mark transient references.** Inline pointers to open issues/PRs or other
+  not-yet-resolved work are *temporary* — they should be removed, or folded into the
+  spec as permanent text, once the item resolves. Tag them so they read as provisional
+  and are greppable: `*(pending — [#NN](url))*`. Run `grep -rn "pending —" docs/` to
+  find everything due for cleanup. Permanent cross-references (to another doc or a
+  stable concept) are **not** marked.
 - **Public before private only after review.** Anything a participant or the wider
   community will read (privacy, help pages) goes through human review first; privacy
   commitments additionally need legal/policy review.

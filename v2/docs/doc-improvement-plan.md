@@ -44,7 +44,7 @@ the user-facing and architecture docs must be reconciled against.
 | `README.md` (root) | newcomer / contributor | yes | **Stale** — still frames v1 as "live" and v2 as "in development"; see §2 |
 | `v2/README.md` | contributor | yes | OK as a doc index; minor drift (references archived dirs) |
 | `v2/architecture.md` | engineer / operator | yes | **Partly stale** — data model out of date (C3); "phase plan" reads as a roadmap though the build is done. Documents *current* toggles only (6-phase model stays in the proposal, per D-PHASE) |
-| `v2/functional_design.md` | product / facilitator / engineer | yes | Mostly current; the 3 open questions are now resolved (D-VOTE); still carries a dual (old + current) voting spec to collapse |
+| `v2/functional_design.md` | product / organizer / maintainer | yes | Mostly current; the 3 open questions are now resolved (D-VOTE); still carries a dual (old + current) voting spec to collapse |
 | `v2/design_principles.md` | everyone | yes | Stable & good; one gap (informed voting / deliberation depth) |
 | `v2/next_steps.md` | engineer | yes | **Conflated** — half roadmap, half changelog; step numbering broken (no Step 3); contains resolved TODOs |
 | `v2/phase_model_extension.md` | product / engineer | **no (untracked)** | Forward-looking proposal, under discussion (D-PHASE) — kept *separate* from current-truth specs; needs a status banner + tracking |
@@ -54,14 +54,14 @@ the user-facing and architecture docs must be reconciled against.
 | `v2/reference/web-components.md` | engineer | yes | Same as above |
 | `plan.md` (root) | maintainer | yes | Deployment plan w/ a "current state" table that goes stale fast; overlaps next_steps + deployment |
 | `notes.md` (root) | maintainer | yes | Early research notes; largely superseded by `docs/research/` |
-| `docs/research/01–06` (root) | facilitator / product | yes | Useful synthesis, all marked **"Draft — not fact-checked"**; `05-website-copy.md` is the source for participant copy (issue #57) |
+| `docs/research/01–06` (root) | organizer / product | yes | Useful synthesis, all marked **"Draft — not fact-checked"**; `05-website-copy.md` is the source for participant copy (issue #57) |
 | `v2/audit/codebase-audit.md` | engineer | no (PR #94) | Accurate static audit; ground truth for refactor |
 | `v2/audit/runtime-audit.md` | engineer | no (PR #94) | Accurate runtime audit |
 | `v2/audit/refactor-plan.md` | engineer | no (PR #94) | Steps 1–4 done (PR #88); 5–9 = issues #89–93 |
 | `v2/audit/walk-1.md` | engineer | no | Browser walk of public/entry paths |
 
 **Missing entirely** (no doc exists): privacy policy / data-handling statement,
-facilitator/organizer guide, operator runbook (incident/restore/monitoring),
+organizer guide, operator runbook (incident/restore/monitoring),
 data-model & API reference derived from code, CONTRIBUTING / testing guide, security
 & threat model, participant help pages (only draft copy exists), CHANGELOG, a docs
 home/index, and an ADR (decision record) trail.
@@ -164,7 +164,7 @@ These affect multiple docs and should be resolved before fine-grained editing.
 - **Decisions before editing:** D-VOTE (the three open questions).
 - **Scope:** medium. Keep it as the canonical *current* spec: resolve or explicitly
   defer each open question, collapse the dual voting spec to one, and add the
-  status/pointer banner. Audience: product + facilitator + engineer.
+  status/pointer banner. Audience: product + organizer + maintainer.
 
 ### `v2/design_principles.md`
 - **Gaps:** very minor — it predates informed voting / "deliberation depth" as a
@@ -227,7 +227,7 @@ These affect multiple docs and should be resolved before fine-grained editing.
 - **Decisions before editing:** who fact-checks against primary sources; which of
   these become public-facing vs stay internal.
 - **Scope:** a verification pass (separate from this doc work) → then `02`, `04`, `05`
-  feed the participant help pages (N4) and facilitator guide (N10).
+  feed the participant help pages (N4) and organizer guide (N10).
 
 ---
 
@@ -238,7 +238,7 @@ decisions-first · scope.**
 
 ### N0 — Documentation home / `docs/README.md` (index + reading paths)
 - **Why:** C5 — ~20 docs, no single entry. A short "if you are a participant /
-  facilitator / contributor / operator, start here" map.
+  organizer / maintainer, start here" map.
 - **Audience:** everyone. **Decisions:** final doc taxonomy (where things live).
 - **Scope:** S. One page of links + audience routing. Write last-ish (it indexes the
   others) but stub early.
@@ -338,13 +338,13 @@ decisions-first · scope.**
   and what gates merges.
 - **Scope:** L (strategy + doc), not S-M. The doc is small; the rethink is the work.
 
-### N10 — Facilitator / organizer guide ⭐ maturity-critical
+### N10 — Organizer guide ⭐ maturity-critical
 - **Why:** the product is only as good as the consultations run on it. Nothing tells
   an organizer how to scope a topic (`06-scope-and-topic.md`), write seed statements
   (`02`), sequence the phase toggles (the phase model, C2), curate featured
   statements, interpret cluster results, and run identity-reveal responsibly. This is
   the difference between "deployed software" and "a tool people can actually use."
-- **Audience:** conversation admins/facilitators (Wikimedia organizers).
+- **Audience:** organizers — people who run consultations (create conversations, seed statements, sequence phases, read results).
 - **Decisions:** which research docs are promoted; the min-N (currently 25) and
   reveal-window guidance.
 - **Scope:** M — **mostly restructuring, not net-new writing.** The raw material
@@ -372,13 +372,14 @@ decisions-first · scope.**
 | ~~**D-V1**~~ ✅ | **Resolved:** keep v1 as a historical archive (not deleted, not maintained). v2 is live; v3 possible later but not a doc concern now. **v1/ may be restructured or relocated** (e.g. into an archive area) as part of cleanup — it need not stay where it is. | (unblocked) | maintainer |
 | ~~**C4**~~ ✅ | **Resolved:** split next_steps into a forward roadmap (N7) + a historical record / changelog (N8) so outdated work can't accidentally drive future decisions. | (unblocked) | maintainer |
 | ~~**D-VOTE**~~ ✅ | **Resolved:** (1) "change vote" **reopens the statement and resubmits** the new vote to Polis (fixes #69); (2) after a **proposal submission**, auto-advance to the next statement after a brief pause — make that pause **a bit longer** than a default; (3) after a **plain vote**, keep the **explicit "Move on"** click. (Implementation note: #69 needs a code change, not just docs.) | (unblocked) | product |
-| ~~**D-PRIV**~~ ✅ | **Resolved: 180-day public commitment.** Public guarantee = username↔pseudonym links removed within **180 days** of conversation close; internal nullification target stays at day 60 (operators may act sooner). N2 drafts toward 180 but is **not publishable until legal/comms review**. The "what's logged" disclosure is drafted in N2 and brought back for review. | N2, accept page | maintainer + review |
+| ~~**D-PRIV**~~ ✅ | **Resolved (clarified).** A participant's voluntary public reveal of their username↔pseudonym is **permanent and irreversible — never nullified.** Separately, the **internal** account↔pseudonym link (held by platform managers, for technical/dedup purposes) is removed within **180 days** of close (internal target sooner). ⚠️ `functional_design.md` and the current code still *nullify reveals* — both need reconciling to this model (spec edit + a code change to `_nullify_expired_reveals`). N2 drafts toward it; not publishable until legal/comms review. | N2, functional_design, code | maintainer + review |
 | ~~**D-AUDIT**~~ ✅ | **Resolved:** merge PR #94 to keep the audits in version control, but treat them as a **point-in-time record** — archive or delete once obsolete. Durable findings must be folded into `architecture.md` / the data-model reference so their value survives the audits' eventual removal. | (unblocked) | maintainer |
 | ~~**D-STORE**~~ ✅ | **Resolved: intended design.** It's effectively the only workable split — admins need moderation state + vote counts that only Polis Postgres exposes; participants get the live Particiapi HTTP view. Document the data-ownership in `architecture.md` as intended; note the inconsistent dict shapes as a minor cleanup, not a redesign. | (unblocked) | engineer |
 | ~~**D-MON**~~ ✅ | **Resolved (split):** monitoring/log-aggregation (#49) is **deferred** — runbook keeps a monitoring TODO until the production VPS is provisioned; document `/health` and its reachability-only limitation in the meantime. **Staging is permanent** — document `wiki-polis-dev` as a standing environment incl. prod-vs-staging differences (dev-login, separate DB). | deployment, N5 | operator |
 | ~~**D-RESEARCH**~~ ✅ | **Resolved:** Claude runs the verification pass — re-check each claim against primary sources (web + MediaWiki API), mark verified/uncertain — then **human sign-off** before any public use. | N4, N10 | product (sign-off) |
 | **D-TEST** 🟡 | **Leaning CI gate, pending colleague discussion.** Recommendations written up in `.claude/testing-strategy-recommendations.md` (phased: CI-on-PR → hermetic suite → backfill risky paths). Finalise after that discussion; then N9 documents the agreed approach. | N9 | maintainer + engineer |
 | ~~**D-GA**~~ ✅ | **Resolved: feature-complete + hardened.** Launch = the agreed planned scope shipped + blueprint refactor (#89–93) + CI/tests (D-TEST) + monitoring (D-MON) in place. (Note: "planned scope" = the current/agreed feature set; the forward 6-phase proposal is **not** auto-included — its inclusion depends on C2 consensus.) Roadmap (N7) orders toward this bar. | N7 | maintainer |
+| ~~**D-NAMING**~~ ✅ | **Resolved:** role-prefix filenames (`spec_`/`ref_`/`guide_`/`plan_`/`prop_`/`log_`/`pub_`/`research_`) + mutable status in banners; transient inline refs tagged `*(pending — #NN)*`. Recorded in `documentation-standards.md`. **New docs adopt it immediately; renaming the existing docs to the scheme is its own wave** (link updates + `git mv`). | all new/renamed docs | maintainer |
 
 ---
 
@@ -417,7 +418,7 @@ Dependencies drive this. Each wave is independently shippable.
 
 **Wave 4 — Make it usable by humans (maturity)**
 12. Research verification pass (**D-RESEARCH**) on `docs/research/*`.
-13. Write **N4** (participant help) and **N10** (facilitator guide) — the docs that
+13. Write **N4** (participant help) and **N10** (organizer guide) — the docs that
     turn "running software" into "a tool a community can actually adopt."
 14. Finalize **N0** (doc home) now that everything it points to exists.
 
@@ -427,7 +428,7 @@ Not every doc needs the same scrutiny. Proposed gate by stake:
 
 - **Review-gated (you approve an outline/redline before I write the full thing):**
   the README rewrite, any `functional_design.md` change, **N2 (privacy)**, and
-  **N10 (facilitator guide)**. These are either public-facing or define the product —
+  **N10 (organizer guide)**. These are either public-facing or define the product —
   cheap to course-correct at outline stage, expensive after a full draft.
 - **Decision-gated (you settle the linked decision, then I proceed):** all are now
   resolved except **D-TEST** (leaning CI gate, pending your colleague discussion).
@@ -446,12 +447,10 @@ decision with context one at a time; everything else I'll just do and show you.
 
 | Audience | Has today | Will have after this plan |
 |---|---|---|
+| **Organizer** (runs consultations) | scattered research drafts | organizer guide (N10) + verified research |
+| **Maintainer** (builds, deploys & operates — one technical role) | local-dev, deployment, audits-in-PR, commit archaeology | runbook (N5 ✓), data-model ref (N3), CONTRIBUTING/testing (N9), ADRs (N6), changelog (N8 ✓), roadmap (N7 ✓), tracked audits (N1) |
+| Participant (uses the website, not the repo) | in-app microcopy | help pages (N4) + privacy statement (N2, draft) — delivered via the website |
 | First-time visitor | stale README | accurate README + doc home (N0) |
-| Participant | in-app microcopy only | help pages (N4) + public privacy statement (N2) |
-| Facilitator / organizer | scattered research drafts | facilitator guide (N10) + verified research |
-| Contributor / engineer | local-dev + audits-in-PR | CONTRIBUTING/testing (N9), data-model ref (N3), ADRs (N6), tracked audits (N1) |
-| Operator | deployment guide | runbook (N5) + security model (N11) |
-| Future maintainer | commit archaeology | ADRs (N6), changelog (N8), roadmap (N7) |
 
 ---
 

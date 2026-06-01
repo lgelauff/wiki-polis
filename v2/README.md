@@ -9,9 +9,12 @@ Planning documents for the second version of wiki-polis. v2 replaces the hosted 
 | `functional_design.md` | Full product specification — what the platform does, from the user's perspective |
 | `architecture.md` | Technical architecture, data model, and phase plan |
 | `design_principles.md` | Stable design rules — not to be re-debated per feature |
-| `next_steps.md` | Ordered implementation roadmap |
+| `plan_roadmap.md` | What's planned next (forward-looking) |
+| `log_changelog.md` | Append-only build log — what was built, and when |
 | `local-dev.md` | Local development setup (Flask + Docker backend) |
 | `deployment.md` | Step-by-step deployment guide (Toolforge + Cloud VPS) |
+| `guide_runbook.md` | Operator runbook — day-2 operations |
+| `pub_privacy.md` | Privacy & data-handling statement (draft, pre-publication) |
 
 ## Directories
 

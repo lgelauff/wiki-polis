@@ -1,5 +1,12 @@
 # Wiki-Polis Functional Design
 
+> **Status — current spec.** This specifies how wiki-polis is *meant to work* — the
+> agreed design for the current version. Where the implementation diverges, that's a
+> tracked bug/gap (flagged inline with a `pending` marker), not a change to this spec.
+> Forward-looking ideas still under discussion (e.g. the six-phase model) live in
+> [`phase_model_extension.md`](phase_model_extension.md) and are **not** described here
+> until adopted.
+
 A deliberation tool for the Wikimedia community. Participants vote on atomic statements, clusters of opinion emerge, and curated debate layers can be added on top.
 
 ---
@@ -23,7 +30,7 @@ A conversation is a deliberation space on a specific topic. It has a title, an i
 Conversations have three status states:
 - **Active** — open for participation
 - **Paused** — temporarily suspended; voting is disabled and the conversation is hidden from public listings, but the admin can resume it at any time. The identity reveal clock does not start.
-- **Closed** — permanently ended; the conversation is hidden from available listings, voting is disabled, and the identity reveal timeline begins. Closing is irreversible.
+- **Closed** — permanently ended; the conversation is hidden from available listings, voting is disabled, and the identity reveal timeline begins. Closing is irreversible. *(pending — closed conversations should surface the reveal-window end date and what happens next, [#70](https://github.com/lgelauff/wiki-polis/issues/70))*
 
 Each conversation has an access policy:
 - **Public** — anyone with a Wikimedia account can join
@@ -39,13 +46,11 @@ A statement is an atomic claim: one idea, one sentence. Examples: *"Wikipedia's 
 
 Anyone who has joined a conversation can submit a statement. Statements go into a moderation queue before appearing to other participants. Moderators (scoped to their conversation) and admins approve or hide them.
 
-Statements are presented to participants one at a time in a semi-random order. The system routes statements to maximise the information gained from each vote and reduce order effects.
+Statements are presented to participants one at a time, in an order chosen to maximise the information gained from each vote and reduce order effects. *(pending — routing not yet implemented)*
 
 ---
 
 ## Voting
-
-> The original design had an always-visible textarea for proposing alternatives below the vote buttons. Feedback indicated this was too aggressive. The current implementation replaces it with a post-vote triad (see state machine below). The description here reflects the current implementation.
 
 The core loop:
 
@@ -61,9 +66,9 @@ After voting on all available statements, the participant is shown a brief compl
 
 Statements submitted by a participant never appear in their own voting queue. Polis rejects self-votes (403); the app pre-emptively marks submitted statement IDs as voted in the web component so they are silently skipped.
 
-### Current implementation — state machine (working state, not confirmed design)
+### State machine
 
-> The flow below describes what the code currently does. It diverges from the original spec above in one key way: feedback indicated the always-visible textarea was too aggressive, so a post-vote three-option triad was introduced instead. The triad is a lighter invitation: vote first, then choose what (if anything) to do with the statement. The triad design and its rules were agreed on 2026-05-27.
+The voting interaction is a small state machine: see a statement, vote, then optionally act on it via a post-vote triad before moving to the next.
 
 #### Post-vote triad
 
@@ -94,7 +99,7 @@ Quota slots are consumed at submission time and are never returned. If a moderat
 - **Voted: above threshold** — same as above but "Propose new statement" card is also live (if quota > 0) or permanently disabled (if quota = 0). Quota remaining shown on the card.
 - **Composing: suggest** — triad hidden, suggest-wording textarea open, pre-filled with the statement text
 - **Composing: new** — triad hidden, blank new-statement textarea open
-- **Submitted** — confirmation shown ("Proposed — heading to moderation"), next button available
+- **Submitted** — confirmation shown ("Proposed — heading to moderation"); **auto-advances to the next statement after a brief pause long enough to read the confirmation**; a Next button is also available to advance immediately
 - **All done** — no more statements to vote on; completion message shown. "Propose new statement" becomes available (threshold is met by definition — you've voted on everything). Quota rules still apply.
 
 The threshold for moving from "below" to "above" is `min(new_stmt_unlock_at, total_statements_currently_available)`, where `new_stmt_unlock_at` defaults to 10.
@@ -108,23 +113,17 @@ The threshold for moving from "below" to "above" is `min(new_stmt_unlock_at, tot
 | Voted: any | Click "Move on" | Idle | Next statement loads |
 | Voted: any | Click "Suggest different wording" | Composing: suggest | — |
 | Voted: above threshold | Click "Propose new statement" (quota > 0) | Composing: new | — |
-| Voted: any | Click "change" in voted badge | Idle | No new API call; vote counter -1 |
+| Voted: any | Click "change" in voted badge | Idle (same statement, re-votable) | Vote buttons re-enabled for this statement; selecting a new option **resubmits the changed vote** to Polis; vote counter unchanged *(pending — [#69](https://github.com/lgelauff/wiki-polis/issues/69))* |
 | Composing: suggest | Click Cancel | Voted: (same threshold state) | Returns to triad for the same statement |
 | Composing: suggest | Click Submit (success) | Submitted | Statement sent to pool |
 | Composing: new | Click Cancel | Voted: above threshold | Returns to triad for the same statement |
 | Composing: new | Click Submit (success) | Submitted | Statement sent to pool; participant quota decremented |
-| Submitted | Click "Next statement" | Idle | Next statement loads |
+| Submitted | Pause elapses, or click "Next statement" | Idle | Next statement loads |
 | Any | All statements voted | All done | — |
 | Any | Own submitted statement appears in queue | Idle (skipped) | Statement ID added to web component votes Set; no vote submitted |
 | All done | Click "Propose new statement" (quota > 0) | Composing: new | — |
 | Composing: new (from All done) | Click Cancel | All done | Returns to completion screen |
 | Composing: new (from All done) | Click Submit (success) | All done | Statement sent to pool; participant quota decremented |
-
-#### Open questions (not yet decided)
-
-- Should "change vote" reopen voting for the same statement, or silently allow Polis revoting on next visit?
-- Should Submitted auto-advance after a delay, or always wait for an explicit click?
-- Is "Move on" as a required click the right level of friction, or should the next statement appear automatically after a short pause unless the user engages with the triad?
 
 ---
 

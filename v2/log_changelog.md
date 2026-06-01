@@ -1,6 +1,9 @@
-# Next Steps
+# Build log
 
-Ordered by dependency. Each step is independently testable before the next begins.
+> **Append-only history** of what has been built, in roughly the order it happened.
+> Entries are a record — not edited retroactively. For what's *next*, see
+> [`plan_roadmap.md`](plan_roadmap.md); for how the app is *meant to work*, see
+> [`functional_design.md`](functional_design.md).
 
 ---
 
@@ -17,19 +20,6 @@ Ordered by dependency. Each step is independently testable before the next begin
 **Setup notes:** `v2/cache/local-setup.md`, `v2/reference/particiapi-api.md`, `v2/reference/web-components.md`
 
 **Deliverable:** ✓ Approach confirmed. Particiapi API works, voting loop works, web components provide sufficient styling and event hooks for our integration.
-
----
-
-## Step 2 — Deploy VPS stack
-
-- [ ] Provision a VPS (~$6/month, any provider)
-- [ ] Install Docker + Docker Compose
-- [ ] Deploy stock particiapp-docker stack (Polis + Particiapi with `PARTICIAPI_AUTHENTICATION_DISABLED=True`)
-- [ ] Configure HTTPS (reverse proxy); Particiapi must not be publicly exposed
-- [ ] Set up nightly `pg_dump` → offsite backup (Swift or equivalent)
-- [ ] Confirm production stack reachable from Flask
-
-**Deliverable:** Polis + Particiapi running in production, internal only.
 
 ---
 
@@ -171,48 +161,6 @@ Web component integration bugs found and fixed during browser testing:
 - [x] `particiapp-docker/docker-compose.local.yaml` (gitignored): exposes postgres to host on configurable port (`POSTGRES_HOST_PORT`)
 - [x] `POLIS_DATABASE_URL` set in `v2/.env`; system suggestions and Polis stats now work locally (#9 / #19)
 - [x] SQL scope bug in `get_featured_candidates` fixed (mixed comma + explicit JOIN) (#19)
-
----
-
-## Step 4e — Arguments tab design handoff (not started)
-
-Backend logic and routes are complete (Step 5 checklist below). What remains is a **visual and interaction overhaul** of the arguments tab to match `design_handoff_propose_and_arguments/README.md` (Screen 2).
-
-### What needs to change
-
-**Featured statement card** (`.arg-statement`)
-- Shrink padding to 14px 18px; border-radius 12px
-- Inline vote-stat strip: `61% agree · 32% disagree · 7% pass` — replace separate sentiment bar with inline mono text
-
-**Status strip** (currently missing entirely)
-- Pre-gate: amber-tinted strip — "Add or skip on each side, then pick the 2 most important."
-- Post-gate (both sides done): white card with hairline border — "Pick the 2 most important on each side."
-- Right side: FOR / AGAINST progress chips showing gate state → post-gate picks counters (e.g. `FOR · 2/2`)
-
-**Contribute affordance** (currently a plain `<form>` in `.arg-contribute`)
-- Replace with dashed button (same pattern as propose affordance but green/red tinted per side)
-- Three states: idle → composing (inline textarea, Submit + Nothing to add) → submitted ("YOU ADDED ONE") or skipped ("NOTHING TO ADD — skipped [change my mind]")
-- State rendered server-side on page load; JS handles inline transitions
-
-**Argument cards** (`.arg-card`)
-- Add reserved **checkbox slot** on the left (20×20, transparent border pre-gate; materialises post-gate)
-- Add `data-can-vote`, `data-picked`, `data-own`, `data-side`, `data-limit-reached` attributes
-- Selected state: `border: 1.5px solid var(--side-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--side-color) 10%, transparent)`
-- Limit reached (already cast K votes on this side): `opacity: 0.6; cursor: not-allowed`
-- **YOURS pill**: mono 9.5px, side-color background at 12% opacity — shown on user's own argument
-- Importance star count: shown only post-gate (`.arguments-tab[data-voting="false"] .argument-importance { display:none }`)
-- Vote action: click card (not a separate button) when `data-can-vote="true"` → POST to vote/unvote endpoint
-
-**Layout / typography**
-- Two-column grid gap 12px (currently 1.25rem)
-- Argument text 13.5px (currently 14px)
-- Card padding 11px 14px (currently 14px 16px)
-- Column max-width 940px (arguments tab is wider than vote tab)
-
-**What NOT to do (per spec)**
-- Do not redirect to a gate page before loading the tab
-- Do not hide existing arguments until user gates in
-- Do not change layout when voting unlocks — reserve checkbox column from the start
 
 ---
 
