@@ -11,6 +11,10 @@ Browser → Toolforge (wiki-polis Flask app) → Cloud VPS (Particiapi + Polis +
 - **Cloud VPS** (WMCS or any ~$6/mo VPS) runs the Particiapi/Polis Docker stack
 - Particiapi is never exposed publicly — Flask proxies to it over the internal network
 
+> This guide covers **first-time provisioning**. For day-2 operations (monitoring,
+> backups/restore, logs, staging, secrets rotation, outages), see the operator runbook:
+> [`guide_runbook.md`](guide_runbook.md).
+
 ---
 
 ## Part 1 — Cloud VPS: Particiapi + Polis backend

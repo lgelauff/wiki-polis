@@ -27,9 +27,10 @@ Hosted on [Toolforge](https://wikitech.wikimedia.org/wiki/Portal:Toolforge) at `
 
 | Directory | Contents |
 |---|---|
-| `v1/` | Retired v1 code and docs (hosted pol.is embed, superseded by v2) |
-| `v2/` | Live app: Flask app, templates, migrations, tests, deployment docs |
+| `v2/` | **The live application** — Flask app, models, templates, tests, and v2 docs |
 | `v2/reference/` | Reference notes on Particiapi API and web components |
+| `docs/research/` | Background research syntheses (Polis objectives, statement writing, terminology) |
+| `v1/` | Archived first version (hosted pol.is embed); superseded by v2, kept for reference |
 
 ---
 
@@ -37,14 +38,10 @@ Hosted on [Toolforge](https://wikitech.wikimedia.org/wiki/Portal:Toolforge) at `
 
 ```
 wiki-polis/
-  app.py          — Flask app (v1, retired)
-  db.py           — SQLAlchemy models (v1, retired)
-  wsgi.py         — WSGI entry point
-  uwsgi.ini       — uWSGI config
-  deploy.sh       — Toolforge deploy script
-  pyproject.toml  — Dependencies (UV)
-  templates/      — Jinja2 templates
-  static/         — CSS
-  v1/             — v1 docs
-  v2/             — Live app (deployed via wsgi.py)
+  wsgi.py         — WSGI entry point (loads the v2 app)
+  deploy.sh       — Toolforge deploy script (deploys v2)
+  v2/             — the live application: Flask app, models, templates, tests, docs
+  v1/             — archived first version (hosted pol.is embed); not deployed
+  docs/research/  — background research syntheses
+  app.py, db.py, templates/, static/  — legacy v1 app code, superseded by v2/ (not deployed)
 ```

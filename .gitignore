@@ -3,6 +3,7 @@
 notes.md
 tmp/
 .dev-session
+audit/
 
 # Design handoff (local reference only)
 design_handoff_propose_and_arguments/
@@ -58,6 +59,7 @@ htmlcov/
 v2/cache/
 v2/tmp/
 v2/archive/
+archive/
 nosetests.xml
 coverage.xml
 *.cover

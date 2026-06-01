@@ -61,7 +61,7 @@ Local SQLite at `instance/dev.db` — created automatically on first run.
 
 ## Deployment (Toolforge)
 
-> **⚠️ Retired — do not follow.** These instructions deploy v1 (hosted pol.is embed), which is no longer the live app. For the current deployment runbook see [`v2/deployment.md`](../v2/deployment.md).
+> **⚠️ Retired — do not follow.** These instructions deploy v1 (hosted pol.is embed), which is no longer the live app. For the current deployment runbook see [`v2/guide_deployment.md`](../v2/guide_deployment.md).
 
 ### 1. Register the tool
 
