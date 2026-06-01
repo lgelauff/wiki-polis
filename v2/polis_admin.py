@@ -244,19 +244,13 @@ class PolisServerClient:
                 return slug
         raise PolisServerError('Polis returned no usable zinvite in response.')
 
-    def update_conversation_settings(self, conversation_id: str, **kwargs) -> None:
-        """Update Polis-side conversation settings.
-
-        Accepted kwargs: strict_moderation, vis_type, auth_needed_to_vote,
-        auth_needed_to_write, is_active, topic, description, and other Polis
-        PUT /api/v3/conversations fields.
-        """
+    def set_strict_moderation(self, conversation_id: str, enabled: bool) -> None:
         sess, auth_headers = self._login()
         headers = {**self._HEADERS, **auth_headers}
         try:
             resp = sess.put(
                 f'{self._base}/api/v3/conversations',
-                json={'conversation_id': conversation_id, **kwargs},
+                json={'conversation_id': conversation_id, 'strict_moderation': enabled},
                 headers=headers,
                 timeout=10,
             )
@@ -267,9 +261,6 @@ class PolisServerClient:
                 f'Polis conversation settings update failed (HTTP {resp.status_code}): '
                 f'{resp.text[:300]}'
             )
-
-    def set_strict_moderation(self, conversation_id: str, enabled: bool) -> None:
-        self.update_conversation_settings(conversation_id, strict_moderation=enabled)
 
     # ── Statements ────────────────────────────────────────────────────────────
 
@@ -324,6 +315,30 @@ class PolisServerClient:
 
     # ── Direct Postgres reads ─────────────────────────────────────────────────
 
+    def _pg_query(self, sql: str, params: tuple, label: str) -> list[tuple] | None:
+        """Run a parameterised Postgres query and return all rows, or None on failure.
+
+        Returns None when db_url is absent, psycopg2 is unavailable, or the
+        query raises. Callers are responsible for their own zinvite guard.
+        """
+        try:
+            import psycopg2
+        except ImportError:
+            logger.exception('psycopg2 not available — %s unavailable', label)
+            return None
+        try:
+            conn = psycopg2.connect(self._db_url)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql, params)
+                    rows = cur.fetchall()
+            finally:
+                conn.close()
+        except Exception:
+            logger.exception('Postgres %s failed', label)
+            return None
+        return rows
+
     def get_statements(self, zinvite: str) -> tuple[list, list, list] | None:
         """Return (pending, approved, hidden) from Postgres, or None if unavailable.
 
@@ -332,21 +347,9 @@ class PolisServerClient:
         """
         if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
             return None
-        try:
-            import psycopg2
-        except ImportError:
-            logger.exception('psycopg2 not available — falling back to Particiapi')
-            return None
-        try:
-            conn = psycopg2.connect(self._db_url)
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(_STATEMENTS_SQL, (zinvite,))
-                    rows = cur.fetchall()
-            finally:
-                conn.close()
-        except Exception:
-            logger.exception('Postgres get_statements failed — falling back to Particiapi')
+        rows = self._pg_query(_STATEMENTS_SQL, (zinvite,),
+                              'get_statements — falling back to Particiapi')
+        if rows is None:
             return None
         pending, approved, hidden = [], [], []
         for r in rows:
@@ -377,21 +380,9 @@ class PolisServerClient:
         """
         if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
             return None
-        try:
-            import psycopg2
-        except ImportError:
-            logger.exception('psycopg2 not available — get_featured_candidates unavailable')
-            return None
-        try:
-            conn = psycopg2.connect(self._db_url)
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(_FEATURED_CANDIDATES_SQL, (zinvite, max_statements))
-                    rows = cur.fetchall()
-            finally:
-                conn.close()
-        except Exception:
-            logger.exception('Postgres get_featured_candidates failed')
+        rows = self._pg_query(_FEATURED_CANDIDATES_SQL, (zinvite, max_statements),
+                              'get_featured_candidates')
+        if rows is None:
             return None
         return [
             {'tid': r[0], 'text': r[1], 'is_seed': r[2],
@@ -403,22 +394,10 @@ class PolisServerClient:
         """Return conversation stats from Polis Postgres, or None if unavailable."""
         if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
             return None
-        try:
-            import psycopg2
-        except ImportError:
-            logger.exception('psycopg2 not available — get_polis_stats unavailable')
+        rows = self._pg_query(_POLIS_STATS_SQL, (zinvite,), 'get_polis_stats')
+        if rows is None:
             return None
-        try:
-            conn = psycopg2.connect(self._db_url)
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(_POLIS_STATS_SQL, (zinvite,))
-                    row = cur.fetchone()
-            finally:
-                conn.close()
-        except Exception:
-            logger.exception('Postgres get_polis_stats failed')
-            return None
+        row = rows[0] if rows else None
         if not row or len(row) < 6:
             return None
         try:
