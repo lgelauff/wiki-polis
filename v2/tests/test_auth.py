@@ -19,10 +19,11 @@ def test_login_with_oauth_redirects_to_wikimedia(client, app):
     assert 'code_challenge' in resp.headers['Location']
 
 
-def test_oauth_callback_state_mismatch_returns_400(client):
-    """Bad state in callback → 400, no session set."""
+def test_oauth_callback_state_mismatch_redirects_to_login(client):
+    """Bad state in callback → redirect to /login, no session set."""
     resp = client.get('/oauth-callback?code=abc&state=bad-state')
-    assert resp.status_code == 400
+    assert resp.status_code == 302
+    assert '/login' in resp.headers['Location']
     with client.session_transaction() as sess:
         assert 'username' not in sess
 

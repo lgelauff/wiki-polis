@@ -173,7 +173,8 @@ def login_required(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         if 'username' not in session:
-            session['next'] = request.path
+            if not request.path.startswith('/proxy/'):
+                session['next'] = request.path
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return wrapper
@@ -330,7 +331,7 @@ def _proxy_to_particiapi(pa_path: str):
             data=request.form if not request.is_json else None,
             timeout=10,
         )
-    except requests.RequestException as exc:
+    except requests.RequestException:
         current_app.logger.exception('Particiapi proxy error')
         abort(502)
 
@@ -775,7 +776,6 @@ def _register_routes(app: Flask) -> None:
         On subsequent views: append any new arguments at a random position.
         Commits to DB if any change is made.
         """
-        import random
         state = ArgumentSideState.query.filter_by(
             participant_id=participant_id,
             featured_statement_id=fs_id,
@@ -816,7 +816,6 @@ def _register_routes(app: Flask) -> None:
         Moderators see hidden arguments (marked); participants never see them.
         Order is deterministically randomised per participant.
         """
-        from sqlalchemy.orm import joinedload
         fss = (FeaturedStatement.query
                .filter_by(conversation_id=conv.id, confirmed_by_admin=True)
                .options(joinedload(FeaturedStatement.arguments))
@@ -982,7 +981,7 @@ def _register_routes(app: Flask) -> None:
     @login_required
     def argument_submit(slug, fs_id):
         conv, part = _require_arg_participation(slug)
-        fs   = FeaturedStatement.query.filter_by(
+        FeaturedStatement.query.filter_by(
             id=fs_id, conversation_id=conv.id).first_or_404()
         side = request.form.get('side', '').strip()
         body = nh3.clean(request.form.get('body', '').strip(), tags=frozenset())
@@ -1010,7 +1009,6 @@ def _register_routes(app: Flask) -> None:
 
         # Insert new argument at a random position in this participant's display order.
         # Create ArgumentSideState now if the participant hasn't visited the page yet.
-        import random
         state = ArgumentSideState.query.filter_by(
             participant_id=part.participant_id,
             featured_statement_id=fs_id,
@@ -1443,9 +1441,8 @@ def _register_routes(app: Flask) -> None:
     @app.get('/admin/conversations/<int:conv_id>')
     @login_required
     def admin_conversation_detail(conv_id):
-        conv        = _require_mod_for_conv(conv_id)
-        participant = _current_participant()
-        conv_roles  = (AdminRole.query
+        conv       = _require_mod_for_conv(conv_id)
+        conv_roles = (AdminRole.query
                        .filter_by(conversation_id=conv_id)
                        .all())
         participants      = Participant.query.order_by(Participant.mw_username).all()
@@ -1476,8 +1473,8 @@ def _register_routes(app: Flask) -> None:
             'POLIS_SERVER_URL', 'POLIS_ADMIN_EMAIL', 'POLIS_ADMIN_PASSWORD'))
         if polis_configured:
             try:
-                polis_id = _polis_server_client().create_conversation(fields['title'])
-            except PolisServerError as exc:
+                polis_id = _polis_server_client().create_conversation(fields['title'], strict_moderation=True)
+            except PolisServerError:
                 current_app.logger.exception('Polis conversation creation failed')
                 flash('Could not create the Polis conversation. Check server logs for details.', 'error')
                 return redirect(url_for('admin'))
@@ -1669,7 +1666,7 @@ def _register_routes(app: Flask) -> None:
                 pending, approved, hidden = PolisParticipantClient(
                     current_app.config['PARTICIAPI_BASE']
                 ).get_statements(conv.polis_id)
-            except PolisParticipantError as exc:
+            except PolisParticipantError:
                 current_app.logger.exception('get_statements failed')
                 flash('Could not load statements. Check server logs.', 'error')
         try:
@@ -1695,7 +1692,7 @@ def _register_routes(app: Flask) -> None:
             abort(400)
         try:
             _polis_server_client().moderate(conv.polis_id, tid, mod)
-        except PolisServerError as exc:
+        except PolisServerError:
             current_app.logger.exception('moderate failed')
             flash('Moderation action failed. Check server logs for details.', 'error')
             return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
@@ -1712,7 +1709,7 @@ def _register_routes(app: Flask) -> None:
         try:
             _polis_server_client().add_seed(conv.polis_id, text)
             flash('Seed statement added.', 'success')
-        except PolisServerError as exc:
+        except PolisServerError:
             current_app.logger.exception('add_seed failed')
             flash('Could not add seed statement. Check server logs for details.', 'error')
         return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
@@ -1724,7 +1721,7 @@ def _register_routes(app: Flask) -> None:
         enabled = request.form.get('strict_moderation') == '1'
         try:
             _polis_server_client().set_strict_moderation(conv.polis_id, enabled)
-        except PolisServerError as exc:
+        except PolisServerError:
             current_app.logger.exception('set_strict_moderation failed')
             flash('Could not update moderation settings. Check server logs for details.', 'error')
         return redirect(url_for('admin_conversation_statements', conv_id=conv_id))

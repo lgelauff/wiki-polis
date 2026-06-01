@@ -34,7 +34,7 @@
 - [x] Conversation page: `<pa-conversation>` + `<pa-statement>` + `<pa-vote-button>`; "propose alternative" prompt after each vote
 - [x] Admin panel: conversations, phase toggles (S/P/A/R), roles, invites
 - [x] Confirmed end-to-end locally: dev-login → accept → statement submission → vote → Polis recorded `{"value": -1}`
-- [x] `polis_admin.py` PolisAdminClient rewritten to use correct Particiapi paths (`api/conversations/<id>/statements/`, `/results/`); raises `PolisAdminError` for unsupported operations (moderate, seed, strict-moderation)
+- [x] `polis_admin.py` split into `PolisParticipantClient` (Particiapi HTTP reads) and `PolisServerClient` (Polis admin API + direct Postgres); raises `PolisParticipantError` / `PolisServerError`
 - [x] Test suite (74 tests) green: unit, integration, security, reveal, polis_admin
 
 **Particiapi vote API:** `PUT /api/conversations/<id>/votes/<tid>` with `{"value": <int>}` (AGREE=-1, NEUTRAL=0, DISAGREE=1). Requires `@session_required` (web component handles session creation via `POST /api/session?create=true`).
@@ -174,7 +174,6 @@ Web component integration bugs found and fixed during browser testing:
 
 **Importance voting mechanic (threshold-gated, K-approval):**
 - Voting method stored on `Conversation.argument_vote_method` (default `'kApproval'`) + `argument_vote_data` JSON (default `{'K': 2}`)
-- Unlocks per-side when that side reaches ≥ 5 arguments
 - Before a participant can cast importance votes they must complete a "contribute-or-skip" gate:
   - For each side (pro and con), they either submit an argument OR click "nothing to add"
   - Must complete both sides before voting on either

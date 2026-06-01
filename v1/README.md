@@ -1,6 +1,6 @@
 # Wiki-Polis v1
 
-The current live deployment. A lightweight Flask app that wraps a hosted pol.is conversation behind Wikimedia OAuth.
+Retired. Superseded by v2 (self-hosted Polis + Particiapi stack).
 
 ---
 
@@ -60,6 +60,8 @@ Local SQLite at `instance/dev.db` — created automatically on first run.
 ---
 
 ## Deployment (Toolforge)
+
+> **⚠️ Retired — do not follow.** These instructions deploy v1 (hosted pol.is embed), which is no longer the live app. For the current deployment runbook see [`v2/deployment.md`](../v2/deployment.md).
 
 ### 1. Register the tool
 

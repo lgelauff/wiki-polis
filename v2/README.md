@@ -1,6 +1,6 @@
 # Wiki-Polis v2
 
-Planning documents for the second version of wiki-polis. v2 replaces the hosted pol.is embed with a self-hosted Polis + Particiapi stack, giving full control over the frontend and conversation lifecycle.
+The live wiki-polis app. Replaces the v1 hosted pol.is embed with a self-hosted Polis + Particiapi stack.
 
 ## Documents
 

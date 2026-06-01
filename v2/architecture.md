@@ -104,7 +104,7 @@ We use stock Particiapi with `PARTICIAPI_AUTHENTICATION_DISABLED=True`. No fork 
 | Database (our data) | MariaDB via SQLAlchemy | Toolforge ToolsDB |
 | Database (Polis data) | PostgreSQL | VPS, managed by Polis Docker container |
 | Polis runtime | Stock Polis (Node.js) | VPS via Docker Compose; no fork |
-| Moderation | Polis admin UI | No in-app moderation UI |
+| Moderation | Polis admin UI + Flask admin panel | Statement moderation (approve/hide/seed) and argument moderation (hide/delete) in Flask admin; Polis admin UI for clustering/math |
 
 ---
 
@@ -118,13 +118,13 @@ We use stock Particiapi with `PARTICIAPI_AUTHENTICATION_DISABLED=True`. No fork 
 
 **ConversationInvite** — conversation + mw_username
 
-**AdminRole** — participant + role (admin / moderator) + scope (global or per-conversation)
+**AdminRole** — participant + role (moderator only; site-wide access via `Participant.is_global_admin`) + conversation_id
 
 **FeaturedStatement** — conversation + polis_statement_id + suggested_by_system (bool) + confirmed_by_admin (bool)
 
 **Argument** — featured_statement + author (Participant) + body (max 280 chars) + side (pro / con) + created_at
 
-**ArgumentVote** — argument + participant + useful (bool)
+**ArgumentVote** — argument + participant + value (nullable integer; NULL = kApproval row-presence, integer rank for future ranked voting)
 
 Removed vs. old v2: `ModAction` (not needed), `featured` flag on Conversation (removed), `arguments_enabled` on FeaturedStatement (replaced by conversation-level `phase_argument_mapping` toggle).
 
