@@ -1,8 +1,8 @@
 # wiki-polis documentation
 
-> **Stub — to be completed** (N0 in the [documentation improvement plan](../v2/docs/doc-improvement-plan.md)).
-> This page will become the single entry point that routes each audience to the right
-> docs. Links marked _coming_ are planned documents that don't exist yet.
+> Documentation index for wiki-polis — start here. Several docs are **AI-generated or
+> pre-publication drafts** (flagged inline); links marked _coming_ don't exist yet. See
+> the [improvement plan](../v2/docs/doc-improvement-plan.md) for what's still outstanding.
 
 ## Start here — by who you are
 
@@ -14,7 +14,7 @@
 Participants use the **website**, not this repo — they are not expected to read these docs. This material is authored here but delivered through the app:
 
 - [Privacy & data handling](../v2/pub_privacy.md) (draft, pre-publication)
-- _Help — how voting works, writing good statements / arguments — coming (N4)_
+- [Participant help](../v2/pub_participant-help.md) — how voting works, writing statements / arguments (AI draft, pre-publication)
 
 ## Forward-looking (not current behaviour)
 
