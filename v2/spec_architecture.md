@@ -1,6 +1,11 @@
 # Wiki-Polis v2 Architecture
 
-Decisions finalised 2026-05-10.
+> **Status — current spec (architecture as built).** How wiki-polis is structured and
+> why. Describes the system as it is *meant to work* today; where the build diverges,
+> that's a tracked gap (`pending` marker). Product behaviour →
+> [`spec_functional-design.md`](spec_functional-design.md); database schema →
+> [`ref_data-model.md`](ref_data-model.md); what's built / what's next →
+> [`log_changelog.md`](log_changelog.md) / [`plan_roadmap.md`](plan_roadmap.md).
 
 ---
 
@@ -17,7 +22,7 @@ Decisions finalised 2026-05-10.
                         │    accept flow)                       │
                         │  - Admin: conversations, roles,       │
                         │    invites, featured statements,      │
-                        │    phase toggles                      │
+                        │    phase toggles, moderation          │
                         │  - Proxies voting calls to VPS        │
                         │  - MariaDB (ToolsDB) — identity layer │
                         └──────────────┬──────────────────────┘
@@ -36,39 +41,47 @@ Decisions finalised 2026-05-10.
                         │  - Admin UI (moderation)              │
                         │                                       │
                         │  PostgreSQL + Redis                   │
-                        │  — deliberation layer (pseudonymised) │
+                        │  — deliberation layer                 │
                         └─────────────────────────────────────┘
 ```
 
-The VPS runs a standard Docker Compose stack. Same `docker-compose.yml` used locally and in production. Particiapi is not exposed publicly — Flask proxies all calls to it.
+The VPS runs a standard Docker Compose stack — the same `docker-compose.yml` locally and
+in production. Particiapi is not exposed publicly; Flask proxies all calls to it.
 
 ---
 
-## Data separation
+## Data ownership
 
-The two databases reflect a separation of concerns between identity management and deliberation data.
+**Two stores**, split by concern:
 
-**Toolforge — MariaDB — identity layer**
+**1. App database — MariaDB (ToolsDB) in prod, SQLite in dev — the identity & argument layer.**
+Conversations, participants, participations (pseudonyms, reveal state), invites, roles,
+featured statements, arguments, argument votes, and side states. Full schema:
+[`ref_data-model.md`](ref_data-model.md).
 
-| Data | Notes |
-|---|---|
-| Participants | mw_user_id, mw_username, xid |
-| Conversations | metadata, access policy, phase toggles |
-| Participation records | who joined what |
-| Invites + roles | access control |
-| Featured statements | curation metadata |
-| Arguments + argument votes | argument layer |
+**2. Polis — PostgreSQL on the VPS — the deliberation layer.**
+Votes, statements, and clustering/PCA results, attributed to the **xid** only — Polis
+never receives the username or user ID. (The Redis alongside it is a cache/queue, not a
+store of record.)
 
-**VPS — PostgreSQL — deliberation layer**
-Polis receives only the xid (SHA-256 of the Wikimedia user ID), not the username or user ID directly.
+**Two routes to the Polis store — not a third store.** Particiapi is the JSON API *in
+front of* Polis Postgres; it doesn't hold data of its own. The same deliberation data is
+reached two ways depending on the surface (intended, decision **D-STORE**):
+- *Participants* (the voting page and the proxy) go Browser → Flask proxy →
+  **Particiapi (HTTP)** → Polis Postgres — the live, approved view.
+- *Admins* (moderation and stats views) read **Polis Postgres directly** via raw SQL,
+  because they need moderation buckets and vote counts the participant API doesn't
+  expose. An HTTP fallback exists but doesn't fire while Postgres is up.
 
-| Data | Notes |
-|---|---|
-| Votes | attributed to xid |
-| Statements | attributed to xid |
-| Clusters + math results | aggregate |
+Same data, two routes; the two clients return slightly different shapes — a minor
+cleanup, not a redesign.
 
-Note: xid is not cryptographically anonymous — Wikimedia user IDs are enumerable. Vote data is kept separate during collection to support independent opinion formation (anti-herding), not to provide identity protection. Cluster positions become public when the admin enables full public results.
+**xid is not anonymous.** `xid = sha256(mw_user_id)`; Wikimedia user IDs are enumerable,
+so the xid is brute-forceable. The store split exists to support independent opinion
+formation (anti-herding) during collection, **not** to provide identity protection.
+Cluster positions become public when the admin enables full public results. *(pending —
+[#96](https://github.com/lgelauff/wiki-polis/issues/96): strengthen or delete the xid at
+anonymisation.)*
 
 ---
 
@@ -81,15 +94,19 @@ Single login. Particiapi is on an internal Docker network — not publicly acces
 3. User votes → browser calls Flask → Flask proxies the request to Particiapi with the xid as the participant identity
 4. Particiapi records the vote against the xid in Polis
 
-Particiapi runs with `PARTICIAPI_AUTHENTICATION_DISABLED=True`. It trusts requests from Flask. The browser never communicates with Particiapi directly.
+Particiapi runs with `PARTICIAPI_AUTHENTICATION_DISABLED=True`. It trusts requests from
+Flask. The browser never communicates with Particiapi directly.
 
-**One Wikimedia OAuth client registration:** `wiki-polis` (Flask app) — already exists. No second registration needed.
+**One Wikimedia OAuth client registration:** `wiki-polis` (Flask app) — already exists.
+No second registration needed.
 
 ---
 
 ## Particiapi
 
-We use stock Particiapi with `PARTICIAPI_AUTHENTICATION_DISABLED=True`. No fork needed for auth — Flask handles Wikimedia OAuth entirely. The email_verified patch (in `v2/tmp/`) is still worth submitting upstream as a general improvement, but it is no longer a blocker for our deployment.
+We use stock Particiapi with `PARTICIAPI_AUTHENTICATION_DISABLED=True`. No fork needed for
+auth — Flask handles Wikimedia OAuth entirely. (An `email_verified` patch was prepared as
+a general upstream improvement; it is not a blocker for our deployment.)
 
 ---
 
@@ -101,73 +118,25 @@ We use stock Particiapi with `PARTICIAPI_AUTHENTICATION_DISABLED=True`. No fork 
 | Polis API abstraction | Particiapi (stock, auth disabled) | Runs on VPS via Docker Compose; Flask proxies all calls |
 | Voting UI | Particiapp web components | `<pa-statement>`, `<pa-vote-button>` only |
 | Everything else | Our Flask templates + vanilla JS | Argument tab, conversation list, accept flow |
-| Database (our data) | MariaDB via SQLAlchemy | Toolforge ToolsDB |
-| Database (Polis data) | PostgreSQL | VPS, managed by Polis Docker container |
+| Database (our data) | MariaDB via SQLAlchemy | Toolforge ToolsDB (SQLite in dev) |
+| Database (Polis data) | PostgreSQL | VPS, managed by the Polis Docker container |
 | Polis runtime | Stock Polis (Node.js) | VPS via Docker Compose; no fork |
-| Moderation | Polis admin UI + Flask admin panel | Statement moderation (approve/hide/seed) and argument moderation (hide/delete) in Flask admin; Polis admin UI for clustering/math |
+| Moderation | Flask admin panel + Polis admin UI | Statement moderation (approve/hide/seed) and argument moderation (hide/delete) in the Flask admin; Polis admin UI for clustering/math |
 
 ---
 
-## Data model
+## Status & roadmap
 
-**Conversation** — slug, polis_id, title, intro_text, outro_text, active, access_policy, phase_submission, phase_personal_results, phase_argument_mapping, phase_public_results, created_at
-
-**Participant** — mw_user_id, mw_username, xid, created_at
-
-**Participation** — participant + conversation + pseudonym (unique across all participations) + notify_email + notify_talk_page
-
-**ConversationInvite** — conversation + mw_username
-
-**AdminRole** — participant + role (moderator only; site-wide access via `Participant.is_global_admin`) + conversation_id
-
-**FeaturedStatement** — conversation + polis_statement_id + suggested_by_system (bool) + confirmed_by_admin (bool)
-
-**Argument** — featured_statement + author (Participant) + body (max 280 chars) + side (pro / con) + created_at
-
-**ArgumentVote** — argument + participant + value (nullable integer; NULL = kApproval row-presence, integer rank for future ranked voting)
-
-Removed vs. old v2: `ModAction` (not needed), `featured` flag on Conversation (removed), `arguments_enabled` on FeaturedStatement (replaced by conversation-level `phase_argument_mapping` toggle).
-
----
-
-## Phase plan
-
-### Phase 0 — Complete ✓
-Hosted pol.is working, xid integration working, Wikimedia OAuth working in v1.
-
-### Phase 1 — Infrastructure + foundation
-- Deploy Polis + Particiapi on VPS via Docker Compose (Particiapi with `PARTICIAPI_AUTHENTICATION_DISABLED=True`)
-- Flask app: clean data model, replace PolisClient with ParticiapiClient
-- Conversation page: remove alpha embed, add voting web components
-- Flask proxies all voting calls to Particiapi with xid as participant identity
-- Access policies enforced; admin can create conversations, manage roles and invites
-
-### Phase 2 — Frontend
-- Inline "propose a better alternative" prompt in voting loop
-- Phase toggles in admin panel (submission, personal results, argument mapping, public results)
-- Home page: active / archived / available / moderating sections
-- Accept flow with intro/outro text
-- Mobile-responsive layout
-
-### Phase 3 — Featured statements + argument mapping
-- Cluster-based system suggestions for featured statements
-- Admin confirms/dismisses suggestions; can also manually feature
-- Argument mapping tab: pro/con submission, usefulness voting, sorted display
-
-### Phase 4 — Return engagement (deferred)
-- "New since last visit" indicators
-- Notifications (talk page or email)
-
-### Phase 5 — Analytics export (deferred)
-- Structured export of votes, clusters, arguments
-- Anonymisation options
+This document describes the architecture **as built**, not a build sequence. For the
+product phases (the four toggles), see
+[`spec_functional-design.md`](spec_functional-design.md); for what has been built, the
+[build log](log_changelog.md); for what's planned next, the [roadmap](plan_roadmap.md).
 
 ---
 
 ## What we do not build
 
-- In-app moderation UI (Polis admin panel handles this)
-- Clustering visualisation (Polis results page; custom viz deferred)
+- Custom clustering visualisation (we use the Polis results page; custom viz deferred)
 - Nested replies or threading
 - Recommendation feeds
 - Any AI features (out of MVP scope)
