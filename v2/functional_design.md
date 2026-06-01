@@ -252,27 +252,27 @@ Participants must be shown a clear, prominent warning before confirming: this ac
 
 Cross-conversation tracking via pseudonym is structurally impossible — each conversation gets a different pseudonym, and old pseudonyms are never reused. Voluntary self-disclosure across conversations (e.g. a participant publicly stating they were a given pseudonym in two different conversations) is always possible and is the participant's own choice.
 
-**Identity reveal timeline:**
+**Identity reveal & internal-link retention timeline:**
 
-Two configurable deltas control the timeline (both expressed in days):
+Two separate things run after a conversation closes: a participant's *voluntary, permanent* reveal, and the *removal* of the internal account↔pseudonym link the platform holds.
 
-- **Cooldown** (`REVEAL_COOLDOWN_DAYS`, currently 30) — days after close before the reveal window opens. Gives time for any post-close investigation before participants can modify their records.
-- **Window** (`REVEAL_NULLIFY_DAYS`, currently 30) — duration of the open window, counted from when it opens. Nullification happens at `cooldown + window` days after close. This ensures nullification can never occur before the window has opened.
+- **Cooldown** (`REVEAL_COOLDOWN_DAYS`, currently 30) — days after close before the reveal window opens. Gives time for any post-close review before participants attach their name.
+- **Internal-link retention** — the internal account↔pseudonym link is removed by at most **180 days** after close (the public commitment; the internal target is sooner). Removal applies to participants who did **not** reveal; once it happens, no further reveals are possible.
 
-| Day (with current defaults) | Event |
-|-----------------------------|-------|
-| 0 | Conversation closes — reveal clock starts |
+| Day (current defaults) | Event |
+|---|---|
+| 0 | Conversation closes |
 | 0 – 30 | Cooldown — reveal not yet available |
-| 30 | Reveal window opens — participants may attach their Wikimedia username to their pseudonym |
-| 60 (= 30 + 30) | Internal target: reveal window closes — `public_username` and `revealed_at` are nullified for all participation records in this conversation (data minimisation) |
+| 30 → removal | Reveal window open — a participant may *voluntarily and permanently* attach their Wikimedia username to their pseudonym. A reveal is never undone. |
+| ≤ 180 (internal target sooner) | The internal account↔pseudonym link is removed for participants who did **not** reveal (data minimisation). Reveals already made remain — they are public by the participant's own choice. |
 
-After nullification, the pseudonym remains in the database permanently (for export compatibility), but the association with any Wikimedia username is dropped. This applies to all participants regardless of individual reveal choices.
+A reveal is **permanent**: once a username is attached to a pseudonym it stays, and is never nullified. Removal at the retention deadline affects only the *internal* link of participants who did not reveal; the pseudonym itself remains (for export compatibility), but its connection to a Wikimedia account is dropped.
 
-The reveal action is irreversible for the participant during the reveal window — they cannot un-reveal. The platform-level nullification is automatic and runs lazily when any participant views the closed conversation.
+*(pending — the current code nullifies revealed links at the retention window via `_nullify_expired_reveals`; that must change to match this model. See decision D-PRIV.)*
 
-**Privacy policy commitment:** the public guarantee will be more conservative than the internal target — likely between 60 and 180 days after conversation close. The internal target gives operational flexibility to act sooner; the public commitment sets the maximum participants can rely on.
+**Privacy policy commitment:** the public guarantee for removing the internal link is **180 days** after close; the internal target is sooner. Voluntary reveals are permanent and sit outside this clock.
 
-**No individual early disconnection.** Participants cannot request early removal of their own identity link. Reason: someone could attempt to influence the deliberation process and then erase the evidence. Admins must retain the ability to investigate such cases for the full retention period. The platform-wide nullification at the end of the retention window is the only mechanism.
+**No individual early disconnection.** Participants cannot request early removal of the internal link. Reason: someone could attempt to influence the process and then erase the evidence, so the platform must retain the ability to investigate for the retention period. The platform-wide removal at the deadline is the only mechanism. (Revealing your name, by contrast, is voluntary and permanent.)
 
 ---
 
