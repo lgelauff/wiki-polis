@@ -43,22 +43,22 @@ the user-facing and architecture docs must be reconciled against.
 |---|---|---|---|
 | `README.md` (root) | newcomer / contributor | yes | **Stale** — still frames v1 as "live" and v2 as "in development"; see §2 |
 | `v2/README.md` | contributor | yes | OK as a doc index; minor drift (references archived dirs) |
-| `v2/spec_architecture.md` | engineer / operator | yes | **Partly stale** — data model out of date (C3); "phase plan" reads as a roadmap though the build is done. Documents *current* toggles only (6-phase model stays in the proposal, per D-PHASE) |
+| `v2/spec_architecture.md` | maintainer | yes | **Partly stale** — data model out of date (C3); "phase plan" reads as a roadmap though the build is done. Documents *current* toggles only (6-phase model stays in the proposal, per D-PHASE) |
 | `v2/spec_functional-design.md` | product / organizer / maintainer | yes | Mostly current; the 3 open questions are now resolved (D-VOTE); still carries a dual (old + current) voting spec to collapse |
 | `v2/spec_design-principles.md` | everyone | yes | Stable & good; one gap (informed voting / deliberation depth) |
-| `v2/next_steps.md` | engineer | yes | **Conflated** — half roadmap, half changelog; step numbering broken (no Step 3); contains resolved TODOs |
-| `v2/prop_phase-model.md` | product / engineer | **no (untracked)** | Forward-looking proposal, under discussion (D-PHASE) — kept *separate* from current-truth specs; needs a status banner + tracking |
-| `v2/guide_deployment.md` | operator | yes | Strong & detailed; missing the staging tool, monitoring/runbook, secrets rotation |
+| `v2/next_steps.md` | maintainer | yes | **Conflated** — half roadmap, half changelog; step numbering broken (no Step 3); contains resolved TODOs |
+| `v2/prop_phase-model.md` | product / maintainer | **no (untracked)** | Forward-looking proposal, under discussion (D-PHASE) — kept *separate* from current-truth specs; needs a status banner + tracking |
+| `v2/guide_deployment.md` | maintainer | yes | Strong & detailed; missing the staging tool, monitoring/runbook, secrets rotation |
 | `v2/guide_local-dev.md` | contributor | yes | Current and good |
-| `v2/reference/particiapi-api.md` | engineer | yes | Reference snapshot (2026-05-11); needs a "verified against version X" stamp |
-| `v2/reference/web-components.md` | engineer | yes | Same as above |
+| `v2/reference/particiapi-api.md` | maintainer | yes | Reference snapshot (2026-05-11); needs a "verified against version X" stamp |
+| `v2/reference/web-components.md` | maintainer | yes | Same as above |
 | `plan.md` (root) | maintainer | yes | Deployment plan w/ a "current state" table that goes stale fast; overlaps next_steps + deployment |
 | `notes.md` (root) | maintainer | yes | Early research notes; largely superseded by `docs/research/` |
 | `docs/research/01–06` (root) | organizer / product | yes | Useful synthesis, all marked **"Draft — not fact-checked"**; `05-website-copy.md` is the source for participant copy (issue #57) |
-| `v2/audit/codebase-audit.md` | engineer | no (PR #94) | Accurate static audit; ground truth for refactor |
-| `v2/audit/runtime-audit.md` | engineer | no (PR #94) | Accurate runtime audit |
-| `v2/audit/refactor-plan.md` | engineer | no (PR #94) | Steps 1–4 done (PR #88); 5–9 = issues #89–93 |
-| `v2/audit/walk-1.md` | engineer | no | Browser walk of public/entry paths |
+| `v2/audit/codebase-audit.md` | maintainer | no (PR #94) | Accurate static audit; ground truth for refactor |
+| `v2/audit/runtime-audit.md` | maintainer | no (PR #94) | Accurate runtime audit |
+| `v2/audit/refactor-plan.md` | maintainer | no (PR #94) | Steps 1–4 done (PR #88); 5–9 = issues #89–93 |
+| `v2/audit/walk-1.md` | maintainer | no | Browser walk of public/entry paths |
 
 **Missing entirely** (no doc exists): privacy policy / data-handling statement,
 organizer guide, operator runbook (incident/restore/monitoring),
@@ -251,7 +251,7 @@ decisions-first · scope.**
   findings into the docs that *are* maintained — data-ownership map + N+1 + dead-code
   notes → `spec_architecture.md` and the data-model reference (N3); (3) when the audits no
   longer match reality, archive or delete them rather than maintaining them in place.
-- **Audience:** engineers, future maintainers.
+- **Audience:** maintainers.
 - **Scope:** S to land + M to migrate findings (overlaps the `spec_architecture.md` rewrite
   and N3, so do it as part of those).
 
@@ -260,7 +260,7 @@ decisions-first · scope.**
   `next_steps.md` both flag this as required before any public launch. The
   identity-reveal timeline, pseudonym uniqueness, xid-is-not-anonymous caveat, and
   operator data retention all need a public, plain-language commitment.
-- **Audience:** participants (public), with an internal annex for operators.
+- **Audience:** participants (public), with an internal annex for maintainers.
 - **Decisions:** retention commitment **settled (D-PRIV): 180 days** (internal
   nullification target stays at day 60). Still to draft within N2 and bring back for
   review: what is logged, who can see raw identity links, lawful basis /
@@ -273,7 +273,7 @@ decisions-first · scope.**
   source and generate/maintain a reference beside it (tables, columns, constraints,
   the `UniqueConstraint` semantics, naive-UTC datetime convention, the
   `ArgumentVote.value`/"ranking" dead field, the proposed `phase6_*` fields).
-- **Audience:** engineers. **Decisions:** generated vs hand-maintained; include the
+- **Audience:** maintainers. **Decisions:** generated vs hand-maintained; include the
   data-ownership map (which store is authoritative per concept) from the runtime audit.
 - **Scope:** M. Replaces the data-model prose in `spec_architecture.md` with a link.
 
@@ -290,7 +290,7 @@ decisions-first · scope.**
   backup **restore** drill, responding to a down VPS/Particiapi, the `/health`
   caveat, log locations (Toolforge `uwsgi.log` + VPS docker logs), updating the Polis
   stack, rotating secrets, the nightly `pg_dump` verification.
-- **Audience:** operator/maintainer. **Decisions:** monitoring stack (issue #49);
+- **Audience:** maintainer. **Decisions:** monitoring stack (issue #49);
   on-call expectations (likely "best effort, single maintainer").
 - **Scope:** M. Seeded by splitting the recurring half out of `guide_deployment.md`.
 
@@ -301,7 +301,7 @@ decisions-first · scope.**
   why per-conversation pseudonyms, why the 403→200 `/results/` rewrite, why
   refactor-not-rewrite (refactor-plan.md already states this), the phase-model decision
   (C2).
-- **Audience:** engineers/maintainers. **Decisions:** lightweight format (1 file per
+- **Audience:** maintainers. **Decisions:** lightweight format (1 file per
   decision, ~1 page); seed set to backfill.
 - **Scope:** M as a backfill, then S per future decision. Note: the phase-model ADR
   is written **if/when** the proposal is adopted and implemented — until then
@@ -374,10 +374,10 @@ decisions-first · scope.**
 | ~~**D-VOTE**~~ ✅ | **Resolved:** (1) "change vote" **reopens the statement and resubmits** the new vote to Polis (fixes #69); (2) after a **proposal submission**, auto-advance to the next statement after a brief pause — make that pause **a bit longer** than a default; (3) after a **plain vote**, keep the **explicit "Move on"** click. (Implementation note: #69 needs a code change, not just docs.) | (unblocked) | product |
 | ~~**D-PRIV**~~ ✅ | **Resolved (clarified).** A participant's voluntary public reveal of their username↔pseudonym is **permanent and irreversible — never nullified.** Separately, the **internal** account↔pseudonym link (held by platform managers, for technical/dedup purposes) is removed within **180 days** of close (internal target sooner). ⚠️ `spec_functional-design.md` and the current code still *nullify reveals* — both need reconciling to this model (spec edit + a code change to `_nullify_expired_reveals`). N2 drafts toward it; not publishable until legal/comms review. | N2, functional_design, code | maintainer + review |
 | ~~**D-AUDIT**~~ ✅ | **Resolved:** merge PR #94 to keep the audits in version control, but treat them as a **point-in-time record** — archive or delete once obsolete. Durable findings must be folded into `spec_architecture.md` / the data-model reference so their value survives the audits' eventual removal. | (unblocked) | maintainer |
-| ~~**D-STORE**~~ ✅ | **Resolved: intended design.** It's effectively the only workable split — admins need moderation state + vote counts that only Polis Postgres exposes; participants get the live Particiapi HTTP view. Document the data-ownership in `spec_architecture.md` as intended; note the inconsistent dict shapes as a minor cleanup, not a redesign. | (unblocked) | engineer |
-| ~~**D-MON**~~ ✅ | **Resolved (split):** monitoring/log-aggregation (#49) is **deferred** — runbook keeps a monitoring TODO until the production VPS is provisioned; document `/health` and its reachability-only limitation in the meantime. **Staging is permanent** — document `wiki-polis-dev` as a standing environment incl. prod-vs-staging differences (dev-login, separate DB). | deployment, N5 | operator |
+| ~~**D-STORE**~~ ✅ | **Resolved: intended design.** The two read paths are **routes to the same store, not separate stores** — admins read Polis Postgres directly (moderation buckets + vote counts the participant API doesn't expose); participants get the live Particiapi-HTTP view of the same data. Documented in `spec_architecture.md`; the inconsistent client shapes are a minor cleanup, not a redesign. | (unblocked) | maintainer |
+| ~~**D-MON**~~ ✅ | **Resolved (split):** monitoring/log-aggregation (#49) is **deferred** — runbook keeps a monitoring TODO until the production VPS is provisioned; document `/health` and its reachability-only limitation in the meantime. **Staging is permanent** — document `wiki-polis-dev` as a standing environment incl. prod-vs-staging differences (dev-login, separate DB). | deployment, N5 | maintainer |
 | ~~**D-RESEARCH**~~ ✅ | **Resolved:** Claude runs the verification pass — re-check each claim against primary sources (web + MediaWiki API), mark verified/uncertain — then **human sign-off** before any public use. | N4, N10 | product (sign-off) |
-| **D-TEST** 🟡 | **Leaning CI gate, pending colleague discussion.** Recommendations written up in `.claude/testing-strategy-recommendations.md` (phased: CI-on-PR → hermetic suite → backfill risky paths). Finalise after that discussion; then N9 documents the agreed approach. | N9 | maintainer + engineer |
+| **D-TEST** 🟡 | **Leaning CI gate, pending colleague discussion.** Recommendations written up in `.claude/testing-strategy-recommendations.md` (phased: CI-on-PR → hermetic suite → backfill risky paths). Finalise after that discussion; then N9 documents the agreed approach. | N9 | maintainer |
 | ~~**D-GA**~~ ✅ | **Resolved: feature-complete + hardened.** Launch = the agreed planned scope shipped + blueprint refactor (#89–93) + CI/tests (D-TEST) + monitoring (D-MON) in place. (Note: "planned scope" = the current/agreed feature set; the forward 6-phase proposal is **not** auto-included — its inclusion depends on C2 consensus.) Roadmap (N7) orders toward this bar. | N7 | maintainer |
 | ~~**D-NAMING**~~ ✅ | **Resolved:** role-prefix filenames (`spec_`/`ref_`/`guide_`/`plan_`/`prop_`/`log_`/`pub_`/`research_`) + mutable status in banners; transient inline refs tagged `*(pending — #NN)*`. Recorded in `documentation-standards.md`. **New docs adopt it immediately; renaming the existing docs to the scheme is its own wave** (link updates + `git mv`). | all new/renamed docs | maintainer |
 

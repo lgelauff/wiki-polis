@@ -23,9 +23,8 @@ operational hardening:
 - Monitoring / alerting — deferred (D-MON,
   [#49](https://github.com/lgelauff/wiki-polis/issues/49)).
 
-(Stack how-to: [`guide_deployment.md`](guide_deployment.md). Note: the repo-root `plan.md`
-current-state table is **stale** — it predates go-live and still lists the VPS/tool as
-not created — and should be corrected or archived.)
+(Stack how-to: [`guide_deployment.md`](guide_deployment.md). The pre-launch deployment
+plan has been retired to the local-only `archive/`.)
 
 ## 2. Documentation
 
@@ -46,6 +45,10 @@ retention commitment (decision D-PRIV), pending legal/comms review.
   `.claude/testing-strategy-recommendations.md`. Leaning toward a CI gate on PRs plus
   coverage for the untested risky paths (proxy, reveal nullification, Polis-Postgres
   SQL, statement-quota race).
+- **Pre-launch hardening review** (from the archived `plan.md`) — confirm whether these
+  are still open and fix if so: `argument_unvote` cross-conversation join, restricting
+  proxy `DELETE` to mods/admins, and backup-cron error handling. (Other pre-launch items
+  — the `_is_emailable` login timeout, argument moderation — are already done.)
 
 ## 4. Product / UX
 

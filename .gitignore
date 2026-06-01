@@ -59,6 +59,7 @@ htmlcov/
 v2/cache/
 v2/tmp/
 v2/archive/
+archive/
 nosetests.xml
 coverage.xml
 *.cover

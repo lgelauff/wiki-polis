@@ -52,8 +52,10 @@ prefix, names are lowercase with hyphens.
 - **Role change = deliberate rename.** When a proposal is adopted, `prop_` → `spec_`
   is an intentional rename that signals the transition; update inbound links in the
   same change.
-- **Retirement = move, not rename.** Send superseded docs to `archive/` rather than
-  renaming them in place — location carries the terminal status.
+- **Retirement = move to the git-ignored `archive/`.** Superseded docs go to `archive/`
+  (which is **git-ignored — local-only**), not deleted in place and not renamed. They
+  leave the tracked repo so they don't clutter it or distract readers, while staying on
+  disk for whoever keeps the local copy (and in git history up to removal).
 - **Directory-grouped sets keep the directory as their role marker.** `reference/` and
   `docs/research/` are classified by folder, so files inside them aren't individually
   prefixed (e.g. `reference/particiapi-api.md`, `docs/research/02-…`).
