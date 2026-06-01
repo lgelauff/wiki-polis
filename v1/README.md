@@ -61,6 +61,8 @@ Local SQLite at `instance/dev.db` — created automatically on first run.
 
 ## Deployment (Toolforge)
 
+> **⚠️ Retired — do not follow.** These instructions deploy v1 (hosted pol.is embed), which is no longer the live app. For the current deployment runbook see [`v2/deployment.md`](../v2/deployment.md).
+
 ### 1. Register the tool
 
 Register at https://toolsadmin.wikimedia.org with tool name `wiki-polis`.
