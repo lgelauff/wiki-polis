@@ -4,7 +4,7 @@
 > agreed design for the current version. Where the implementation diverges, that's a
 > tracked bug/gap (flagged inline with a `pending` marker), not a change to this spec.
 > Forward-looking ideas still under discussion (e.g. the six-phase model) live in
-> [`phase_model_extension.md`](phase_model_extension.md) and are **not** described here
+> [`prop_phase-model.md`](prop_phase-model.md) and are **not** described here
 > until adopted.
 
 A deliberation tool for the Wikimedia community. Participants vote on atomic statements, clusters of opinion emerge, and curated debate layers can be added on top.

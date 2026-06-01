@@ -2,10 +2,10 @@
 
 > **Status — proposal, under discussion. Not yet adopted or implemented.** This does
 > **not** describe current behaviour; for what wiki-polis does today see
-> [`functional_design.md`](functional_design.md). Do not implement from this document
+> [`spec_functional-design.md`](spec_functional-design.md). Do not implement from this document
 > until consensus is reached.
 
-This document extends the functional design (`functional_design.md`) to formalise the deliberation process as a set of composable phases. It replaces the four-toggle description in the Results section with a richer model that includes a sixth phase: informed voting.
+This document extends the functional design (`spec_functional-design.md`) to formalise the deliberation process as a set of composable phases. It replaces the four-toggle description in the Results section with a richer model that includes a sixth phase: informed voting.
 
 ---
 

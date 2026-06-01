@@ -3,7 +3,7 @@
 > **Forward-looking plan** — what's next, ordered roughly by dependency. Reflects
 > intent and priorities, not commitments, and changes often. For what's already been
 > built, see [`log_changelog.md`](log_changelog.md); for how the app is meant to work,
-> see [`functional_design.md`](functional_design.md). Items link their GitHub issues.
+> see [`spec_functional-design.md`](spec_functional-design.md). Items link their GitHub issues.
 
 The launch bar (decision **D-GA**) is **feature-complete + hardened**: the agreed
 feature set shipped, the blueprint refactor done, CI/tests in place, monitoring set up,
@@ -23,14 +23,14 @@ operational hardening:
 - Monitoring / alerting — deferred (D-MON,
   [#49](https://github.com/lgelauff/wiki-polis/issues/49)).
 
-(Stack how-to: [`deployment.md`](deployment.md). Note: the repo-root `plan.md`
+(Stack how-to: [`guide_deployment.md`](guide_deployment.md). Note: the repo-root `plan.md`
 current-state table is **stale** — it predates go-live and still lists the VPS/tool as
 not created — and should be corrected or archived.)
 
 ## 2. Documentation
 
 This documentation effort — see
-[`docs/doc-improvement-plan.md`](docs/doc-improvement-plan.md) for the wave plan.
+[`docs/plan_doc-improvement.md`](docs/plan_doc-improvement.md) for the wave plan.
 Launch-blocking item: the **privacy statement (N2)**, drafted toward the 180-day
 retention commitment (decision D-PRIV), pending legal/comms review.
 
@@ -73,12 +73,12 @@ retention commitment (decision D-PRIV), pending legal/comms review.
   voluntary reveal is permanent; only the *internal* account↔pseudonym link is removed
   (≤180 days). The current code nullifies revealed links at the retention window —
   change `_nullify_expired_reveals` to stop touching reveals. *(pending — reconcile
-  `functional_design.md` to the model first)*
+  `spec_functional-design.md` to the model first)*
 
 ## 5. Deferred / later
 
 - **Phase 6 — informed voting** — proposal under discussion (see
-  [`phase_model_extension.md`](phase_model_extension.md)); not adopted.
+  [`prop_phase-model.md`](prop_phase-model.md)); not adopted.
   [#78](https://github.com/lgelauff/wiki-polis/issues/78),
   [#83](https://github.com/lgelauff/wiki-polis/issues/83).
 - **Return engagement** — notifications (talk page / email), "new since last visit".

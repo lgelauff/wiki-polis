@@ -4,16 +4,16 @@
 > backend up). This is the day-2 operations guide — people follow it to actually run
 > things, so anything **not yet live or unverified in production is flagged inline with
 > ⚠️ not live yet**. Unmarked procedures are live. First-time provisioning lives in
-> [`deployment.md`](deployment.md); env vars are in its Environment variables reference.
+> [`guide_deployment.md`](guide_deployment.md); env vars are in its Environment variables reference.
 
 ## Routine procedures
 
 These already live in the deployment guide; this runbook is the day-2 entry point to
 them:
 
-- **Deploy a new version** → [Ongoing deploys](deployment.md#ongoing-deploys) (or `bash ~/wiki-polis/deploy.sh`).
-- **Run a database migration** → [Database migrations](deployment.md#database-migrations) (must run inside the webservice shell).
-- **Toolforge quirks** → [Toolforge gotchas](deployment.md#toolforge-gotchas).
+- **Deploy a new version** → [Ongoing deploys](guide_deployment.md#ongoing-deploys) (or `bash ~/wiki-polis/deploy.sh`).
+- **Run a database migration** → [Database migrations](guide_deployment.md#database-migrations) (must run inside the webservice shell).
+- **Toolforge quirks** → [Toolforge gotchas](guide_deployment.md#toolforge-gotchas).
 
 ## Monitoring & health
 
@@ -38,7 +38,7 @@ them:
 
 - **Backups:** a nightly `pg_dump` of the Polis Postgres DB → offsite. **⚠️ not live
   yet — not confirmed running in production.** For a live service this is the top
-  hardening priority: set it up (see `deployment.md`), confirm it produces a recent,
+  hardening priority: set it up (see `guide_deployment.md`), confirm it produces a recent,
   non-empty dump, then rehearse the restore below. A backup you've never checked is a
   hope, not a backup.
 - **Restore drill** (rehearse before you need it) — **⚠️ not live yet: never rehearsed

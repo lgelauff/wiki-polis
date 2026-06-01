@@ -10,7 +10,7 @@
 This guide is for **organizers**: you set up and run a consultation on wiki-polis from
 start to finish. It describes the platform as it works **today** (the four phase
 toggles); forward-looking ideas live in
-[`phase_model_extension.md`](phase_model_extension.md).
+[`prop_phase-model.md`](prop_phase-model.md).
 
 ---
 
@@ -42,7 +42,7 @@ Today there are **four toggles**:
 4. **Full public results** — opens the complete opinion map to everyone, including visitors.
 
 > **TODO — insert Phase 5 and Phase 6.** The six-phase proposal
-> ([`phase_model_extension.md`](phase_model_extension.md)) would add **Phase 5 — argument
+> ([`prop_phase-model.md`](prop_phase-model.md)) would add **Phase 5 — argument
 > mapping** and **Phase 6 — informed voting** as explicit phases. We keep the four-toggle
 > framing until that model is actually adopted, then fill these in. *(pending — phases 5 & 6.)*
 
@@ -67,7 +67,7 @@ Before writing any statements, create the conversation: give it a **title**, an
 **intro** (what the topic is and why you're asking), an optional **outro** (shown after
 a participant has voted on everything), and an **access policy** — public (any Wikimedia
 account) or invite-only (named usernames), with invites if needed. See
-[`functional_design.md`](functional_design.md).
+[`spec_functional-design.md`](spec_functional-design.md).
 
 ## 3. Writing good statements
 
@@ -160,7 +160,7 @@ arguments. Keep the set small (≈8–12) — curation quality drives the argume
 participant may *voluntarily and permanently* attach their Wikimedia username to their
 pseudonym; that reveal is never undone. The internal link between an account and its
 pseudonym is removed within 180 days for participants who did **not** reveal. See the
-identity model in [`functional_design.md`](functional_design.md) and the
+identity model in [`spec_functional-design.md`](spec_functional-design.md) and the
 [privacy statement](pub_privacy.md).
 
 ---

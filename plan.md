@@ -29,10 +29,10 @@ All three agents cross-reviewed. Items marked ⚠️ had disagreements — note 
 - [ ] **`_is_emailable()` blocks login** — synchronous `requests.get` with 5s timeout called on every OAuth callback. A slow Meta-wiki stalls the entire uWSGI worker (single-process). Wrap in try/except with immediate fallback to `False` rather than waiting for timeout. ⚠️ _DevOps/Security: PRE; Senior dev: POST. Promoted to PRE — a hanging login page is a bad first impression._
 - [ ] **Issue #5 (argument moderation) blocks launch** — `moderate()` in `polis_admin.py` unconditionally raises `PolisAdminError`; there is no way to hide an abusive argument. Either implement a workaround or remove the moderation button from the admin UI with a clear note. ⚠️ _Conditional: if real community members participate on day one this must land; if first deploy is internal/testing only it can wait one sprint._
 
-### Runbook fixes (deployment.md + plan.md)
+### Runbook fixes (guide_deployment.md + plan.md)
 
-- [ ] **Fix bind address contradiction** — `deployment.md` binds Particiapi to `127.0.0.1:8000`; `plan.md` says bind to the private IP. These contradict. Correct `deployment.md`: bind to `0.0.0.0:8000` (or the private IP) and rely on the security group to restrict access.
-- [ ] **ToolsDB charset** — `deployment.md` uses `CHARACTER SET utf8`; `plan.md` says `utf8mb4`. Use `utf8mb4 COLLATE utf8mb4_unicode_ci` everywhere — emoji and non-Latin scripts are common in Wikimedia contexts. Migrating after creation is painful.
+- [ ] **Fix bind address contradiction** — `guide_deployment.md` binds Particiapi to `127.0.0.1:8000`; `plan.md` says bind to the private IP. These contradict. Correct `guide_deployment.md`: bind to `0.0.0.0:8000` (or the private IP) and rely on the security group to restrict access.
+- [ ] **ToolsDB charset** — `guide_deployment.md` uses `CHARACTER SET utf8`; `plan.md` says `utf8mb4`. Use `utf8mb4 COLLATE utf8mb4_unicode_ci` everywhere — emoji and non-Latin scripts are common in Wikimedia contexts. Migrating after creation is painful.
 - [ ] **Swap `flask init-db` / `webservice start` order** — Stage 3 currently starts the webservice before `init-db`. Any request hitting the app before tables exist = 500. Run `init-db` first.
 - [ ] **Add `ADMIN_USERS` envvar to Stage 3 runbook** — `_read_secret('admin-users')` is the only source; if absent, no one can reach `/admin` on first deploy. Add `toolforge envvars create admin-users '<username>'` as an explicit step.
 - [ ] **Add pre-launch checklist step** — confirm `DEV_LOGIN_USER` and `FLASK_DEBUG` are absent from `toolforge envvars list` before starting the webservice.
@@ -71,7 +71,7 @@ All three agents cross-reviewed. Items marked ⚠️ had disagreements — note 
 - [ ] `docker compose up -d` — verify `curl http://localhost:8000/api/conversations/` returns `[]`
 - [ ] **Resolve issue #35**: find Toolforge pod CIDR, add TCP ingress rule for port 8000 in Horizon security groups
 - [ ] Verify from Toolforge webservice shell: `curl http://<vps-private-ip>:8000/api/conversations/`
-- [ ] Set up nightly backup cron (pg_dump → B2 or similar; see `v2/deployment.md`)
+- [ ] Set up nightly backup cron (pg_dump → B2 or similar; see `v2/guide_deployment.md`)
 
 ---
 
@@ -81,7 +81,7 @@ All three agents cross-reviewed. Items marked ⚠️ had disagreements — note 
 - [ ] SSH to `login.toolforge.org`, `become wiki-polis`
 - [ ] Clone repo: `git clone https://github.com/lgelauff/wiki-polis.git ~/wiki-polis`
 - [ ] `mkdir -p ~/www/python && ln -s ~/wiki-polis/v2 ~/www/python/src`
-- [ ] Install venv inside webservice shell (see `v2/deployment.md`)
+- [ ] Install venv inside webservice shell (see `v2/guide_deployment.md`)
 - [ ] Create ToolsDB database: `sql tools` → `CREATE DATABASE s_wiki_polis__main CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
 - [ ] Set envvars (SECRET_KEY, PARTICIAPI_BASE_URL, DATABASE_URL, POLIS_DATABASE_URL, admin-users)
 - [ ] **Run `flask init-db` BEFORE starting webservice**
@@ -122,7 +122,7 @@ _Register in parallel with Stage 2–3; approval takes several days._
 | PR #22 | Merge before deploying |
 | #35 | Toolforge → VPS connectivity required |
 | #14 | VPS deployment itself |
-| (new) Bind address fix in deployment.md | Silently breaks all connectivity if not fixed |
+| (new) Bind address fix in guide_deployment.md | Silently breaks all connectivity if not fixed |
 | (new) ADMIN_USERS in runbook | First deploy has zero admins |
 | (new) `argument_unvote` cross-conv | Data integrity bug |
 
@@ -169,6 +169,6 @@ _Register in parallel with Stage 2–3; approval takes several days._
 
 ## Reference
 
-- `v2/deployment.md` — full deployment runbook (fix bind address before using)
+- `v2/guide_deployment.md` — full deployment runbook (fix bind address before using)
 - `v2/cache/cloud-vps.md` — Wikimedia Cloud VPS reference
 - `v2/next_steps.md` — detailed build history

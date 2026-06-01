@@ -6,13 +6,13 @@ The live wiki-polis app. Replaces the v1 hosted pol.is embed with a self-hosted 
 
 | File | Purpose |
 |---|---|
-| `functional_design.md` | Full product specification — what the platform does, from the user's perspective |
-| `architecture.md` | Technical architecture, data model, and phase plan |
-| `design_principles.md` | Stable design rules — not to be re-debated per feature |
+| `spec_functional-design.md` | Full product specification — what the platform does, from the user's perspective |
+| `spec_architecture.md` | Technical architecture, data model, and phase plan |
+| `spec_design-principles.md` | Stable design rules — not to be re-debated per feature |
 | `plan_roadmap.md` | What's planned next (forward-looking) |
 | `log_changelog.md` | Append-only build log — what was built, and when |
-| `local-dev.md` | Local development setup (Flask + Docker backend) |
-| `deployment.md` | Step-by-step deployment guide (Toolforge + Cloud VPS) |
+| `guide_local-dev.md` | Local development setup (Flask + Docker backend) |
+| `guide_deployment.md` | Step-by-step deployment guide (Toolforge + Cloud VPS) |
 | `guide_runbook.md` | Operator runbook — day-2 operations |
 | `pub_privacy.md` | Privacy & data-handling statement (draft, pre-publication) |
 | `guide_organizer.md` | How to run a consultation (AI draft, unreviewed) |

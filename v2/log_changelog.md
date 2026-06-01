@@ -3,7 +3,7 @@
 > **Append-only history** of what has been built, in roughly the order it happened.
 > Entries are a record — not edited retroactively. For what's *next*, see
 > [`plan_roadmap.md`](plan_roadmap.md); for how the app is *meant to work*, see
-> [`functional_design.md`](functional_design.md).
+> [`spec_functional-design.md`](spec_functional-design.md).
 
 ---
 
@@ -118,7 +118,7 @@ Web component integration bugs found and fixed during browser testing:
 
 **Voting flow — remaining from design handoff**
 - [x] **Progress row not populated**: Fixed in PR #21. Listens to `particiappstatementschange` (poll cycles) and `particiappstatechange` `'loaded'` (initial load via `conv.client.statements`); builds `.vote-seg` elements and shows done/total counts.
-- [x] **Statement number removed**: `STATEMENT · #N` was dropped — statement order is session-specific and random (Fisher-Yates shuffle in `particiapp-web-client.js` → `#fetchStatements`, then re-sorted meta → seed → user-submitted), so a sequence number is meaningless across users. Label stays as plain `STATEMENT`. No information-gain routing is implemented yet (described aspirationally in `functional_design.md`).
+- [x] **Statement number removed**: `STATEMENT · #N` was dropped — statement order is session-specific and random (Fisher-Yates shuffle in `particiapp-web-client.js` → `#fetchStatements`, then re-sorted meta → seed → user-submitted), so a sequence number is meaningless across users. Label stays as plain `STATEMENT`. No information-gain routing is implemented yet (described aspirationally in `spec_functional-design.md`).
 
 **Accept / join page**
 - [x] Rewritten as plain-English "how it works" intro — less legalistic
@@ -157,7 +157,7 @@ Web component integration bugs found and fixed during browser testing:
 - [x] Featured statements admin: confirmed table now shows statement text (fetched from Particiapi on add/confirm; backfilled on page load for older rows) (#8)
 
 **Local dev setup (PR #20)**
-- [x] `v2/local-dev.md`: full setup guide for native Flask + Docker backend
+- [x] `v2/guide_local-dev.md`: full setup guide for native Flask + Docker backend
 - [x] `particiapp-docker/docker-compose.local.yaml` (gitignored): exposes postgres to host on configurable port (`POSTGRES_HOST_PORT`)
 - [x] `POLIS_DATABASE_URL` set in `v2/.env`; system suggestions and Polis stats now work locally (#9 / #19)
 - [x] SQL scope bug in `get_featured_candidates` fixed (mixed comma + explicit JOIN) (#19)

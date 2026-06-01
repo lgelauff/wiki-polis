@@ -18,11 +18,11 @@ banner at the top.
 | Class | Changes… | Trigger to update | Trust rule | Examples |
 |---|---|---|---|---|
 | **Tracks-code reference** | whenever the code does | schema / API / dependency change | only trust with a current "verified against `<ref>`" stamp | data-model reference, `reference/particiapi-api.md`, `reference/web-components.md` |
-| **Deliberate spec** | rarely, on purpose | a decision to change the product | authoritative for how the system is *meant to work*; divergences are bugs/gaps tracked elsewhere | `functional_design.md`, `architecture.md`, `design_principles.md` |
-| **Proposal (under discussion)** | during discussion | consensus reached → adopted or rejected | **not** describing what's built; do not implement from it | `phase_model_extension.md` |
+| **Deliberate spec** | rarely, on purpose | a decision to change the product | authoritative for how the system is *meant to work*; divergences are bugs/gaps tracked elsewhere | `spec_functional-design.md`, `spec_architecture.md`, `spec_design-principles.md` |
+| **Proposal (under discussion)** | during discussion | consensus reached → adopted or rejected | **not** describing what's built; do not implement from it | `prop_phase-model.md` |
 | **Forward plan** | often (weekly-ish) | priorities shift | reflects intent, not commitments | roadmap |
 | **Append-only history** | never edited retroactively | a release / merge happens | a faithful record; old entries stay as written | changelog / build log |
-| **Operational** | when infra changes | provisioning / monitoring / backup changes | must match the live deployment | `deployment.md`, runbook |
+| **Operational** | when infra changes | provisioning / monitoring / backup changes | must match the live deployment | `guide_deployment.md`, runbook |
 | **Public-facing** | rarely, with review | product or policy change | nothing ships without human/comms (and for privacy, legal) review | privacy statement, participant help pages |
 | **Draft research** | until verified | a fact-check pass | carries a "not fact-checked" banner until cleared | `docs/research/01–06` |
 
@@ -54,6 +54,9 @@ prefix, names are lowercase with hyphens.
   same change.
 - **Retirement = move, not rename.** Send superseded docs to `archive/` rather than
   renaming them in place — location carries the terminal status.
+- **Directory-grouped sets keep the directory as their role marker.** `reference/` and
+  `docs/research/` are classified by folder, so files inside them aren't individually
+  prefixed (e.g. `reference/particiapi-api.md`, `docs/research/02-…`).
 
 ---
 
@@ -77,8 +80,8 @@ prefix, names are lowercase with hyphens.
   hand-copied data model drifted within weeks. Where generation isn't practical, stamp
   the doc with the exact code ref it was verified against and a date.
 - **One source per concept.** Each concept has exactly one canonical doc; everything
-  else *links* to it instead of restating it. (Product behaviour → `functional_design.md`;
-  system shape → `architecture.md`; schema → the data-model reference; what changed →
+  else *links* to it instead of restating it. (Product behaviour → `spec_functional-design.md`;
+  system shape → `spec_architecture.md`; schema → the data-model reference; what changed →
   the changelog; what's next → the roadmap.) Restatement is how two docs come to
   disagree.
 - **Decisions get an ADR, not just a commit message.** The expensive question a future
@@ -108,15 +111,15 @@ The one doc to trust for each concept (others should link here, not restate):
 
 | Concept | Canonical source |
 |---|---|
-| What the app does today (product behaviour) | `functional_design.md` |
-| Where the product might go next (not built) | `phase_model_extension.md` (proposal) |
-| System shape, components, data flow | `architecture.md` |
+| What the app does today (product behaviour) | `spec_functional-design.md` |
+| Where the product might go next (not built) | `prop_phase-model.md` (proposal) |
+| System shape, components, data flow | `spec_architecture.md` |
 | Database schema & data ownership | data-model reference (to be generated from `db.py`) |
-| Stable design rules | `design_principles.md` |
+| Stable design rules | `spec_design-principles.md` |
 | What changed and when | changelog / build-log (to be created) |
 | What's planned next | roadmap (to be created) |
-| How to run it in production | `deployment.md` + runbook (to be created) |
-| How to develop locally | `local-dev.md` |
+| How to run it in production | `guide_deployment.md` + runbook (to be created) |
+| How to develop locally | `guide_local-dev.md` |
 | Particiapi / web-component externals | `reference/*` (with version stamp) |
 
 This map is itself maintained — when a canonical doc is created or moves, update the

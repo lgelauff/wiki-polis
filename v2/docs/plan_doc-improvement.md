@@ -26,7 +26,7 @@ mental model:
    `.gitignore`). **Resolved (D-AUDIT):** merge PR #94 to keep the audits in version
    control, but treat them as a *point-in-time* record — archive or delete once
    obsolete — and migrate their durable findings into the maintained docs. See N1.
-2. **The "three open questions" are in `functional_design.md` itself**, not in the
+2. **The "three open questions" are in `spec_functional-design.md` itself**, not in the
    audit. They are the §"Open questions (not yet decided)" under the voting state
    machine: (a) should "change vote" reopen voting or silently allow Polis re-vote;
    (b) should "Submitted" auto-advance; (c) is a required "Move on" click the right
@@ -43,13 +43,13 @@ the user-facing and architecture docs must be reconciled against.
 |---|---|---|---|
 | `README.md` (root) | newcomer / contributor | yes | **Stale** — still frames v1 as "live" and v2 as "in development"; see §2 |
 | `v2/README.md` | contributor | yes | OK as a doc index; minor drift (references archived dirs) |
-| `v2/architecture.md` | engineer / operator | yes | **Partly stale** — data model out of date (C3); "phase plan" reads as a roadmap though the build is done. Documents *current* toggles only (6-phase model stays in the proposal, per D-PHASE) |
-| `v2/functional_design.md` | product / organizer / maintainer | yes | Mostly current; the 3 open questions are now resolved (D-VOTE); still carries a dual (old + current) voting spec to collapse |
-| `v2/design_principles.md` | everyone | yes | Stable & good; one gap (informed voting / deliberation depth) |
+| `v2/spec_architecture.md` | engineer / operator | yes | **Partly stale** — data model out of date (C3); "phase plan" reads as a roadmap though the build is done. Documents *current* toggles only (6-phase model stays in the proposal, per D-PHASE) |
+| `v2/spec_functional-design.md` | product / organizer / maintainer | yes | Mostly current; the 3 open questions are now resolved (D-VOTE); still carries a dual (old + current) voting spec to collapse |
+| `v2/spec_design-principles.md` | everyone | yes | Stable & good; one gap (informed voting / deliberation depth) |
 | `v2/next_steps.md` | engineer | yes | **Conflated** — half roadmap, half changelog; step numbering broken (no Step 3); contains resolved TODOs |
-| `v2/phase_model_extension.md` | product / engineer | **no (untracked)** | Forward-looking proposal, under discussion (D-PHASE) — kept *separate* from current-truth specs; needs a status banner + tracking |
-| `v2/deployment.md` | operator | yes | Strong & detailed; missing the staging tool, monitoring/runbook, secrets rotation |
-| `v2/local-dev.md` | contributor | yes | Current and good |
+| `v2/prop_phase-model.md` | product / engineer | **no (untracked)** | Forward-looking proposal, under discussion (D-PHASE) — kept *separate* from current-truth specs; needs a status banner + tracking |
+| `v2/guide_deployment.md` | operator | yes | Strong & detailed; missing the staging tool, monitoring/runbook, secrets rotation |
+| `v2/guide_local-dev.md` | contributor | yes | Current and good |
 | `v2/reference/particiapi-api.md` | engineer | yes | Reference snapshot (2026-05-11); needs a "verified against version X" stamp |
 | `v2/reference/web-components.md` | engineer | yes | Same as above |
 | `plan.md` (root) | maintainer | yes | Deployment plan w/ a "current state" table that goes stale fast; overlaps next_steps + deployment |
@@ -75,17 +75,17 @@ These affect multiple docs and should be resolved before fine-grained editing.
 - **C1 — v1/v2 "live" drift (decided: see D-V1).** Despite merged PR #87 ("correct
   stale v1/v2 labelling"), the root `README.md` Project-structure block on `main`
   still labels root `app.py` as "Flask app (v1, live)" and `v1/` as "Current live
-  deployment," while `wsgi.py` / `deploy.sh` / `v2/deployment.md` all deploy **v2**.
+  deployment," while `wsgi.py` / `deploy.sh` / `v2/guide_deployment.md` all deploy **v2**.
   **Resolution (per maintainer):** v1 is a historical **archive** only — not expected
   to be used or maintained; **v2 is where the app lives** and where design happens; a
   **v3 may follow** someday. The README needs a **full review** so it reflects this
   plainly, but v1's archive status should be a brief footnote, not a prominent theme.
   This is the single most misleading sentence in the docs and is cheap to fix.
 - **C2 — Two phase docs, intentionally separate (decided: see D-PHASE).**
-  `functional_design.md` (4 toggles) and `phase_model_extension.md` (6 phases incl.
+  `spec_functional-design.md` (4 toggles) and `prop_phase-model.md` (6 phases incl.
   informed voting) are **not** rival drafts to be merged. **Resolution (per
-  maintainer):** `functional_design.md` is the **source of truth for the current,
-  implemented version**; `phase_model_extension.md` is a **forward-looking proposal,
+  maintainer):** `spec_functional-design.md` is the **source of truth for the current,
+  implemented version**; `prop_phase-model.md` is a **forward-looking proposal,
   currently under discussion with colleagues** and seeking consensus before any
   implementation. The fix is therefore **labelling, not merging**: each doc must state
   its status up front (current-truth vs proposal-under-discussion), and current-truth
@@ -93,7 +93,7 @@ These affect multiple docs and should be resolved before fine-grained editing.
   *forward* track and should be tagged as not-yet-adopted so they don't read as
   committed work.
 - **C3 — Data model documented in prose has drifted from `db.py`.**
-  `architecture.md` lists a data model missing `paused`, `closed_at`,
+  `spec_architecture.md` lists a data model missing `paused`, `closed_at`,
   `public_username`, `revealed_at`, `argument_vote_method`, `argument_vote_data`,
   `ArgumentSideState`, and the proposed `phase6_*` fields. Prose data models rot;
   this one already has. The fix is structural (see N3), not a one-time edit.
@@ -132,7 +132,7 @@ These affect multiple docs and should be resolved before fine-grained editing.
 - **Scope:** small — extend the index after the new docs exist; or fold into the
   top-level doc home (C5 / N0).
 
-### `v2/architecture.md`
+### `v2/spec_architecture.md`
 - **Gaps/stale:** describes the **current** system, so it documents the 4 implemented
   toggles only (the 6-phase model stays in the proposal, per D-PHASE — at most a
   forward pointer); C3 (data model out of date); "Phase plan" §135–164 reads as a
@@ -149,10 +149,10 @@ These affect multiple docs and should be resolved before fine-grained editing.
   "phase plan as roadmap" framing in favour of "architecture as built" + a pointer to
   the roadmap (N7).
 
-### `v2/functional_design.md`
+### `v2/spec_functional-design.md`
 - **Role (decided):** this is the **source of truth for the current, implemented
   version**. It should describe what the app does *today* and must not absorb the
-  forward-looking phase model (that stays in `phase_model_extension.md`). Add a short
+  forward-looking phase model (that stays in `prop_phase-model.md`). Add a short
   status banner saying exactly this, with a pointer to the proposal for "where this may
   go next."
 - **Gaps:** the §Voting section keeps both the superseded original spec and the
@@ -166,7 +166,7 @@ These affect multiple docs and should be resolved before fine-grained editing.
   defer each open question, collapse the dual voting spec to one, and add the
   status/pointer banner. Audience: product + organizer + maintainer.
 
-### `v2/design_principles.md`
+### `v2/spec_design-principles.md`
 - **Gaps:** very minor — it predates informed voting / "deliberation depth" as a
   principle. Otherwise stable and should stay deliberately terse.
 - **Scope:** tiny — and only **if/when** the phase-model proposal is adopted (D-PHASE):
@@ -179,18 +179,18 @@ These affect multiple docs and should be resolved before fine-grained editing.
 - **Scope:** split. Migrate "done" content into the build log / CHANGELOG (N8);
   migrate live forward items into the roadmap (N7); then retire or archive the file.
 
-### `v2/phase_model_extension.md`
+### `v2/prop_phase-model.md`
 - **Status (decided):** this is the **forward-looking proposal**, under active
   discussion with colleagues and seeking consensus before implementation. It stays a
   separate document — do **not** fold it into the current-truth specs. Track it (it is
   currently untracked) so the discussion has a stable reference, and add a banner:
   "Proposal — under discussion, not yet adopted or implemented."
 - **Scope:** small. Add the status banner; track the file; cross-link from
-  `functional_design.md` as "where this may go next." Once (if) consensus lands and
+  `spec_functional-design.md` as "where this may go next." Once (if) consensus lands and
   it's implemented, *that* is the moment its content migrates into the current-truth
   specs and an ADR (N6) records the decision — not before.
 
-### `v2/deployment.md`
+### `v2/guide_deployment.md`
 - **Gaps:** excellent for first-time provisioning, but missing: the **staging tool**
   (`wiki-polis-dev.toolforge.org`, used in the audits) and how prod/staging differ;
   **monitoring/alerting** (issue #49 wants log aggregation; `/health` exists per PR
@@ -202,7 +202,7 @@ These affect multiple docs and should be resolved before fine-grained editing.
 - **Scope:** medium add-ons. Split the one-time "provision" content from the recurring
   "operate" content (the latter seeds the runbook, N5).
 
-### `v2/local-dev.md`
+### `v2/guide_local-dev.md`
 - **Gaps:** current and good. Only add a pointer to the testing guide (N9) and note
   the `/dev-login` live `meta.wikimedia.org` call (runtime audit §4) so contributors
   aren't surprised that "local" login isn't offline.
@@ -216,7 +216,7 @@ These affect multiple docs and should be resolved before fine-grained editing.
 
 ### `plan.md` & `notes.md` (root)
 - `plan.md`: its "current state" table is already partly outdated (e.g. PRs since #22)
-  and overlaps `next_steps.md` + `deployment.md`. **Recommend folding** its live
+  and overlaps `next_steps.md` + `guide_deployment.md`. **Recommend folding** its live
   content into the roadmap (N7) and deployment runbook (N5), then archiving.
 - `notes.md`: early research, superseded by `docs/research/`. Archive with a pointer.
 
@@ -249,10 +249,10 @@ decisions-first · scope.**
   lasting value has to move into the maintained docs before that happens.
 - **What:** (1) merge PR #94 so the audits are committed; (2) fold the durable
   findings into the docs that *are* maintained — data-ownership map + N+1 + dead-code
-  notes → `architecture.md` and the data-model reference (N3); (3) when the audits no
+  notes → `spec_architecture.md` and the data-model reference (N3); (3) when the audits no
   longer match reality, archive or delete them rather than maintaining them in place.
 - **Audience:** engineers, future maintainers.
-- **Scope:** S to land + M to migrate findings (overlaps the `architecture.md` rewrite
+- **Scope:** S to land + M to migrate findings (overlaps the `spec_architecture.md` rewrite
   and N3, so do it as part of those).
 
 ### N2 — Privacy policy / data-handling statement  ⭐ launch blocker
@@ -275,7 +275,7 @@ decisions-first · scope.**
   `ArgumentVote.value`/"ranking" dead field, the proposed `phase6_*` fields).
 - **Audience:** engineers. **Decisions:** generated vs hand-maintained; include the
   data-ownership map (which store is authoritative per concept) from the runtime audit.
-- **Scope:** M. Replaces the data-model prose in `architecture.md` with a link.
+- **Scope:** M. Replaces the data-model prose in `spec_architecture.md` with a link.
 
 ### N4 — Participant help pages ("How voting works", "Writing good statements/arguments")
 - **Why:** issue #57 asks for these; `05-website-copy.md` + `02` + `04` are the draft
@@ -286,17 +286,17 @@ decisions-first · scope.**
 - **Scope:** M. Depends on the research verification pass and N2 (privacy links).
 
 ### N5 — Operator runbook (day-2 operations)
-- **Why:** `deployment.md` covers *provisioning*; nothing covers *running it* —
+- **Why:** `guide_deployment.md` covers *provisioning*; nothing covers *running it* —
   backup **restore** drill, responding to a down VPS/Particiapi, the `/health`
   caveat, log locations (Toolforge `uwsgi.log` + VPS docker logs), updating the Polis
   stack, rotating secrets, the nightly `pg_dump` verification.
 - **Audience:** operator/maintainer. **Decisions:** monitoring stack (issue #49);
   on-call expectations (likely "best effort, single maintainer").
-- **Scope:** M. Seeded by splitting the recurring half out of `deployment.md`.
+- **Scope:** M. Seeded by splitting the recurring half out of `guide_deployment.md`.
 
 ### N6 — Architecture Decision Records (ADR) trail
 - **Why:** many hard decisions are buried in commit messages, review files in
-  `.claude/`, and `design_principles.md`. New maintainers need the *why*: why
+  `.claude/`, and `spec_design-principles.md`. New maintainers need the *why*: why
   self-host vs hosted pol.is, why auth-disabled Particiapi behind a proxy, why xid,
   why per-conversation pseudonyms, why the 403→200 `/results/` rewrite, why
   refactor-not-rewrite (refactor-plan.md already states this), the phase-model decision
@@ -305,7 +305,7 @@ decisions-first · scope.**
   decision, ~1 page); seed set to backfill.
 - **Scope:** M as a backfill, then S per future decision. Note: the phase-model ADR
   is written **if/when** the proposal is adopted and implemented — until then
-  `phase_model_extension.md` stays a live proposal, not a recorded decision.
+  `prop_phase-model.md` stays a live proposal, not a recorded decision.
 
 ### N7 — Roadmap (forward-looking only)
 - **Why:** C4 — extract the still-live "what next" from `next_steps.md` and `plan.md`
@@ -368,13 +368,13 @@ decisions-first · scope.**
 
 | ID | Decision | Blocks | Owner |
 |---|---|---|---|
-| ~~**C2 / D-PHASE**~~ ✅ | **Resolved:** keep both docs separate. `functional_design.md` = current truth; `phase_model_extension.md` = forward proposal under discussion, not yet adopted. Label each by status; do not merge. | (unblocked) | product |
+| ~~**C2 / D-PHASE**~~ ✅ | **Resolved:** keep both docs separate. `spec_functional-design.md` = current truth; `prop_phase-model.md` = forward proposal under discussion, not yet adopted. Label each by status; do not merge. | (unblocked) | product |
 | ~~**D-V1**~~ ✅ | **Resolved:** keep v1 as a historical archive (not deleted, not maintained). v2 is live; v3 possible later but not a doc concern now. **v1/ may be restructured or relocated** (e.g. into an archive area) as part of cleanup — it need not stay where it is. | (unblocked) | maintainer |
 | ~~**C4**~~ ✅ | **Resolved:** split next_steps into a forward roadmap (N7) + a historical record / changelog (N8) so outdated work can't accidentally drive future decisions. | (unblocked) | maintainer |
 | ~~**D-VOTE**~~ ✅ | **Resolved:** (1) "change vote" **reopens the statement and resubmits** the new vote to Polis (fixes #69); (2) after a **proposal submission**, auto-advance to the next statement after a brief pause — make that pause **a bit longer** than a default; (3) after a **plain vote**, keep the **explicit "Move on"** click. (Implementation note: #69 needs a code change, not just docs.) | (unblocked) | product |
-| ~~**D-PRIV**~~ ✅ | **Resolved (clarified).** A participant's voluntary public reveal of their username↔pseudonym is **permanent and irreversible — never nullified.** Separately, the **internal** account↔pseudonym link (held by platform managers, for technical/dedup purposes) is removed within **180 days** of close (internal target sooner). ⚠️ `functional_design.md` and the current code still *nullify reveals* — both need reconciling to this model (spec edit + a code change to `_nullify_expired_reveals`). N2 drafts toward it; not publishable until legal/comms review. | N2, functional_design, code | maintainer + review |
-| ~~**D-AUDIT**~~ ✅ | **Resolved:** merge PR #94 to keep the audits in version control, but treat them as a **point-in-time record** — archive or delete once obsolete. Durable findings must be folded into `architecture.md` / the data-model reference so their value survives the audits' eventual removal. | (unblocked) | maintainer |
-| ~~**D-STORE**~~ ✅ | **Resolved: intended design.** It's effectively the only workable split — admins need moderation state + vote counts that only Polis Postgres exposes; participants get the live Particiapi HTTP view. Document the data-ownership in `architecture.md` as intended; note the inconsistent dict shapes as a minor cleanup, not a redesign. | (unblocked) | engineer |
+| ~~**D-PRIV**~~ ✅ | **Resolved (clarified).** A participant's voluntary public reveal of their username↔pseudonym is **permanent and irreversible — never nullified.** Separately, the **internal** account↔pseudonym link (held by platform managers, for technical/dedup purposes) is removed within **180 days** of close (internal target sooner). ⚠️ `spec_functional-design.md` and the current code still *nullify reveals* — both need reconciling to this model (spec edit + a code change to `_nullify_expired_reveals`). N2 drafts toward it; not publishable until legal/comms review. | N2, functional_design, code | maintainer + review |
+| ~~**D-AUDIT**~~ ✅ | **Resolved:** merge PR #94 to keep the audits in version control, but treat them as a **point-in-time record** — archive or delete once obsolete. Durable findings must be folded into `spec_architecture.md` / the data-model reference so their value survives the audits' eventual removal. | (unblocked) | maintainer |
+| ~~**D-STORE**~~ ✅ | **Resolved: intended design.** It's effectively the only workable split — admins need moderation state + vote counts that only Polis Postgres exposes; participants get the live Particiapi HTTP view. Document the data-ownership in `spec_architecture.md` as intended; note the inconsistent dict shapes as a minor cleanup, not a redesign. | (unblocked) | engineer |
 | ~~**D-MON**~~ ✅ | **Resolved (split):** monitoring/log-aggregation (#49) is **deferred** — runbook keeps a monitoring TODO until the production VPS is provisioned; document `/health` and its reachability-only limitation in the meantime. **Staging is permanent** — document `wiki-polis-dev` as a standing environment incl. prod-vs-staging differences (dev-login, separate DB). | deployment, N5 | operator |
 | ~~**D-RESEARCH**~~ ✅ | **Resolved:** Claude runs the verification pass — re-check each claim against primary sources (web + MediaWiki API), mark verified/uncertain — then **human sign-off** before any public use. | N4, N10 | product (sign-off) |
 | **D-TEST** 🟡 | **Leaning CI gate, pending colleague discussion.** Recommendations written up in `.claude/testing-strategy-recommendations.md` (phased: CI-on-PR → hermetic suite → backfill risky paths). Finalise after that discussion; then N9 documents the agreed approach. | N9 | maintainer + engineer |
@@ -390,18 +390,18 @@ Dependencies drive this. Each wave is independently shippable.
 **Wave 0 — Unblock & de-confuse (do first, cheap, high-value)**
 1. Fix C1 (README v1/v2 labels) — verify against PR #87, finish it; v1 → archive
    footnote per D-V1.
-2. Add status banners: `functional_design.md` = "current truth," and track +
-   banner `phase_model_extension.md` = "proposal under discussion" (C2 is decided —
+2. Add status banners: `spec_functional-design.md` = "current truth," and track +
+   banner `prop_phase-model.md` = "proposal under discussion" (C2 is decided —
    this is labelling, not a debate).
-3. Merge PR #94 (N1); plan to migrate the durable findings into `architecture.md` /
+3. Merge PR #94 (N1); plan to migrate the durable findings into `spec_architecture.md` /
    N3 (D-AUDIT: audits are point-in-time, archive/delete later).
 4. Stub **N0** (doc home) so new docs have a place to be linked.
 
 **Wave 1 — Make the core specs true again**
-5. Bring `functional_design.md` up to date as the *current* spec; resolve **D-VOTE**;
+5. Bring `spec_functional-design.md` up to date as the *current* spec; resolve **D-VOTE**;
    collapse the dual voting spec. (Do **not** import the 6-phase model — it stays in
    the proposal until consensus + implementation.)
-6. Generate **N3** (data-model reference) and link it from `architecture.md`; resolve
+6. Generate **N3** (data-model reference) and link it from `spec_architecture.md`; resolve
    **D-STORE**; add the data-ownership section.
 
 **Wave 2 — Separate history from plan**
@@ -410,7 +410,7 @@ Dependencies drive this. Each wave is independently shippable.
 8. Write **N9** (CONTRIBUTING + testing) — unblocks outside contributors.
 
 **Wave 3 — Operate & launch-readiness**
-9. Split `deployment.md` recurring content → **N5** (runbook); add staging,
+9. Split `guide_deployment.md` recurring content → **N5** (runbook); add staging,
    monitoring (D-MON), restore drill.
 10. Write **N2** (privacy) — **launch blocker**; needs **D-PRIV** + review.
 11. ⏸ **N11** (security/threat model) — tracked by colleague in parallel; not part of
@@ -427,7 +427,7 @@ Dependencies drive this. Each wave is independently shippable.
 Not every doc needs the same scrutiny. Proposed gate by stake:
 
 - **Review-gated (you approve an outline/redline before I write the full thing):**
-  the README rewrite, any `functional_design.md` change, **N2 (privacy)**, and
+  the README rewrite, any `spec_functional-design.md` change, **N2 (privacy)**, and
   **N10 (organizer guide)**. These are either public-facing or define the product —
   cheap to course-correct at outline stage, expensive after a full draft.
 - **Decision-gated (you settle the linked decision, then I proceed):** all are now
