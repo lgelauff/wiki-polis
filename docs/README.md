@@ -6,7 +6,7 @@
 
 ## Start here — by who you are
 
-- **Organizer** — you run a consultation on the platform: create conversations, seed statements, sequence the phases, read the results. _Organizer guide coming (N10)_; background research in [`research/`](research/).
+- **Organizer** — you run a consultation on the platform: create conversations, seed statements, sequence the phases, read the results. [Organizer guide](../v2/guide_organizer.md) (AI draft); background research in [`research/`](research/).
 - **Maintainer** — the technical role: you build, deploy, *and* operate wiki-polis. _(For this project "developer," "contributor," "engineer," and "operator" are the same person — there is no separate ops team.)_ [local development](../v2/local-dev.md) · [architecture](../v2/architecture.md) · [functional design](../v2/functional_design.md) · [deployment](../v2/deployment.md) · [operator runbook](../v2/guide_runbook.md) · [roadmap](../v2/plan_roadmap.md) · [build log](../v2/log_changelog.md) · [doc plan](../v2/docs/doc-improvement-plan.md) · [standards](../v2/docs/documentation-standards.md). _Coming: data-model reference (N3), CONTRIBUTING + testing (N9)._
 
 ## Participant-facing material

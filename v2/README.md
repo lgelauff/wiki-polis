@@ -15,6 +15,7 @@ Planning documents for the second version of wiki-polis. v2 replaces the hosted 
 | `deployment.md` | Step-by-step deployment guide (Toolforge + Cloud VPS) |
 | `guide_runbook.md` | Operator runbook — day-2 operations |
 | `pub_privacy.md` | Privacy & data-handling statement (draft, pre-publication) |
+| `guide_organizer.md` | How to run a consultation (AI draft, unreviewed) |
 
 ## Directories
 
