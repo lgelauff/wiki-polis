@@ -23,10 +23,9 @@ mental model:
    `v2/audit/codebase-audit.md` or `v2/audit/refactor-plan.md` in the working tree.
    They live on branch `docs/audit-and-refactor-plan` in **open PR #94**, alongside
    `runtime-audit.md`. The whole `v2/audit/` directory is **git-ignored** (see
-   `.gitignore`), so even after PR #94 merges these will not be tracked unless the
-   ignore rule is changed. **Decision needed:** do the audits become tracked project
-   docs, or remain local-only scratch? This plan assumes they should be tracked (they
-   are the most accurate description of the system that exists) — see New Doc N1.
+   `.gitignore`). **Resolved (D-AUDIT):** merge PR #94 to keep the audits in version
+   control, but treat them as a *point-in-time* record — archive or delete once
+   obsolete — and migrate their durable findings into the maintained docs. See N1.
 2. **The "three open questions" are in `functional_design.md` itself**, not in the
    audit. They are the §"Open questions (not yet decided)" under the voting state
    machine: (a) should "change vote" reopen voting or silently allow Polis re-vote;
@@ -44,11 +43,11 @@ the user-facing and architecture docs must be reconciled against.
 |---|---|---|---|
 | `README.md` (root) | newcomer / contributor | yes | **Stale** — still frames v1 as "live" and v2 as "in development"; see §2 |
 | `v2/README.md` | contributor | yes | OK as a doc index; minor drift (references archived dirs) |
-| `v2/architecture.md` | engineer / operator | yes | **Partly stale** — predates the 6-phase model and the current data model |
-| `v2/functional_design.md` | product / facilitator / engineer | yes | Mostly current; carries 3 open questions and a dual (old + current) voting spec |
+| `v2/architecture.md` | engineer / operator | yes | **Partly stale** — data model out of date (C3); "phase plan" reads as a roadmap though the build is done. Documents *current* toggles only (6-phase model stays in the proposal, per D-PHASE) |
+| `v2/functional_design.md` | product / facilitator / engineer | yes | Mostly current; the 3 open questions are now resolved (D-VOTE); still carries a dual (old + current) voting spec to collapse |
 | `v2/design_principles.md` | everyone | yes | Stable & good; one gap (informed voting / deliberation depth) |
 | `v2/next_steps.md` | engineer | yes | **Conflated** — half roadmap, half changelog; step numbering broken (no Step 3); contains resolved TODOs |
-| `v2/phase_model_extension.md` | product / engineer | **no (untracked)** | Proposal that supersedes the functional-design Results section; not yet reconciled |
+| `v2/phase_model_extension.md` | product / engineer | **no (untracked)** | Forward-looking proposal, under discussion (D-PHASE) — kept *separate* from current-truth specs; needs a status banner + tracking |
 | `v2/deployment.md` | operator | yes | Strong & detailed; missing the staging tool, monitoring/runbook, secrets rotation |
 | `v2/local-dev.md` | contributor | yes | Current and good |
 | `v2/reference/particiapi-api.md` | engineer | yes | Reference snapshot (2026-05-11); needs a "verified against version X" stamp |
@@ -170,8 +169,8 @@ These affect multiple docs and should be resolved before fine-grained editing.
 ### `v2/design_principles.md`
 - **Gaps:** very minor — it predates informed voting / "deliberation depth" as a
   principle. Otherwise stable and should stay deliberately terse.
-- **Scope:** tiny — one optional principle on argument-informed re-voting if C2 lands
-  on keeping Phase 6.
+- **Scope:** tiny — and only **if/when** the phase-model proposal is adopted (D-PHASE):
+  one optional principle on argument-informed re-voting. Not before.
 
 ### `v2/next_steps.md`
 - **Gaps:** C4; broken step numbering (1, 2, 4, 4b–4f, 5 — no 3); contains completed
@@ -262,12 +261,12 @@ decisions-first · scope.**
   identity-reveal timeline, pseudonym uniqueness, xid-is-not-anonymous caveat, and
   operator data retention all need a public, plain-language commitment.
 - **Audience:** participants (public), with an internal annex for operators.
-- **Decisions (blocking):** the public retention commitment — `functional_design.md`
-  says "more conservative than the internal target — likely 60–180 days"; a single
-  number/range must be chosen and stated. Also: what is logged, who can see raw
-  identity links, lawful basis / Wikimedia-aligned framing.
+- **Decisions:** retention commitment **settled (D-PRIV): 180 days** (internal
+  nullification target stays at day 60). Still to draft within N2 and bring back for
+  review: what is logged, who can see raw identity links, lawful basis /
+  Wikimedia-aligned framing.
 - **Scope:** M. Drives real participant-facing copy + the accept-page text. Highest
-  external-risk doc — needs human/legal review.
+  external-risk doc — **not publishable until human/legal review.**
 
 ### N3 — Data model & schema reference (generated from `db.py`)
 - **Why:** C3 — prose data models have already drifted. Make `db.py` the single
@@ -312,9 +311,9 @@ decisions-first · scope.**
 - **Why:** C4 — extract the still-live "what next" from `next_steps.md` and `plan.md`
   into one ordered, dependency-aware roadmap, cross-linked to the open issues
   (#11–#94) and the refactor steps (#89–93).
-- **Audience:** maintainer/contributor. **Decisions:** milestone definition (what is
-  "v2 GA" / "public launch"); ordering of refactor (#89–93) vs feature work vs the
-  launch-blocking docs (N2).
+- **Audience:** maintainer/contributor. **Decisions:** milestone **settled (D-GA):
+  feature-complete + hardened** (agreed scope + refactor #89–93 + CI/tests + monitoring).
+  Still to sequence: refactor (#89–93) vs feature work vs the launch-blocking docs (N2).
 - **Scope:** M.
 
 ### N8 — CHANGELOG / build log
@@ -430,9 +429,9 @@ Not every doc needs the same scrutiny. Proposed gate by stake:
   the README rewrite, any `functional_design.md` change, **N2 (privacy)**, and
   **N10 (facilitator guide)**. These are either public-facing or define the product —
   cheap to course-correct at outline stage, expensive after a full draft.
-- **Decision-gated (you settle the linked decision, then I proceed):** anything
-  blocked by an open decision (D-VOTE, D-STORE, D-MON, D-RESEARCH, D-TEST, D-GA).
-  I bring the decision first (see below), then draft.
+- **Decision-gated (you settle the linked decision, then I proceed):** all are now
+  resolved except **D-TEST** (leaning CI gate, pending your colleague discussion).
+  For any future decision I'll bring it first with context, then draft.
 - **Draft-then-review (I write, you skim the result):** mechanical or low-stakes work
   — N3 (generated reference), N8 (changelog migration), the reference-doc version
   stamps, status banners. Fast to verify after the fact.
