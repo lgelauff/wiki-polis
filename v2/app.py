@@ -415,6 +415,22 @@ def _get_or_create_side_state(participant_id, fs_id, side, current_args):
         db.session.commit()
     return state
 
+def _statement_text_map(conv_polis_id: str) -> dict[int, str]:
+    """Map Polis tid -> approved-statement text for a conversation.
+
+    Single source for the three call sites that fetch statement text. Unified key
+    rule: prefer the 'text' field, fall back to 'txt'. Does not catch fetch errors —
+    callers decide how to degrade (PolisParticipantError propagates).
+
+    Note on the key rule: PolisParticipantClient.get_statements returns both 'text'
+    and 'txt' set to the same value, so the choice is a no-op there. The 'txt'
+    fallback is load-bearing only for admin-client-shaped payloads (PolisAdminClient
+    emits 'txt' without 'text') — keep it if this helper is ever pointed at that path.
+    """
+    client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
+    _, approved, _ = client.get_statements(conv_polis_id)
+    return {s['tid']: (s.get('text') or s.get('txt', '')) for s in approved}
+
 def _build_featured_data(conv, participation, can_mod=False):
     """Return list of dicts for the argument tab, one per confirmed FS.
 
@@ -434,9 +450,7 @@ def _build_featured_data(conv, participation, can_mod=False):
 
     stmt_texts = {}
     try:
-        client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
-        _, approved, _ = client.get_statements(conv.polis_id)
-        stmt_texts = {s['tid']: s.get('txt', '') for s in approved}
+        stmt_texts = _statement_text_map(conv.polis_id)
     except Exception:
         pass
 
@@ -522,10 +536,8 @@ def _backfill_statement_texts(conv, confirmed: list) -> bool:
     missing = [fs for fs in confirmed if not fs.statement_text]
     if not missing:
         return False
-    client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
     try:
-        _, approved, _ = client.get_statements(conv.polis_id)
-        text_by_tid = {s['tid']: (s.get('text') or s.get('txt', '')) for s in approved}
+        text_by_tid = _statement_text_map(conv.polis_id)
     except PolisParticipantError:
         return False
     changed = False
@@ -539,15 +551,10 @@ def _backfill_statement_texts(conv, confirmed: list) -> bool:
     return changed
 
 def _fetch_statement_text(conv_polis_id: str, tid: int) -> str:
-    client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
     try:
-        _, approved, _ = client.get_statements(conv_polis_id)
-        for s in approved:
-            if s.get('tid') == tid:
-                return s.get('text') or s.get('txt', '')
+        return _statement_text_map(conv_polis_id).get(tid, '')
     except PolisParticipantError:
-        pass
-    return ''
+        return ''
 
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)

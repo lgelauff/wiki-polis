@@ -9,10 +9,31 @@ exists) and the paused / phase-off authorization branches of the participation g
 import pytest
 from werkzeug.exceptions import Forbidden
 
-from app import (_build_featured_data, _get_or_create_side_state,
-                 _require_arg_participation)
+from app import (_backfill_statement_texts, _build_featured_data,
+                 _fetch_statement_text, _get_or_create_side_state,
+                 _require_arg_participation, _statement_text_map)
 from db import (Argument, ArgumentSideState, ArgumentVote, Conversation,
                 FeaturedStatement, Participation, db)
+from polis_admin import PolisParticipantError
+
+
+def _fake_statements_client(approved):
+    """Build a PolisParticipantClient stand-in returning a fixed approved list."""
+    class FakeClient:
+        def __init__(self, base):
+            pass
+
+        def get_statements(self, conv_polis_id):
+            return (None, approved, None)
+    return FakeClient
+
+
+class _FailingClient:
+    def __init__(self, base):
+        pass
+
+    def get_statements(self, conv_polis_id):
+        raise PolisParticipantError('backend down')
 
 
 @pytest.fixture
@@ -188,3 +209,67 @@ def test_require_arg_participation_gate_branches(app, participant, conv, part):
         session['username'] = participant.mw_username
         with pytest.raises(Forbidden):
             _require_arg_participation(conv.slug)
+
+
+# ── _statement_text_map (#89 — unified tid -> text source) ──────────────────────
+
+def test_statement_text_map_key_conventions(app, monkeypatch):
+    """Unified key rule across the three former call sites: prefer 'text', fall back
+    to 'txt'. Asserts both single-key conventions resolve, plus precedence/fallback."""
+    approved = [
+        {'tid': 1, 'txt': 'only-txt'},                       # txt-only payload
+        {'tid': 2, 'text': 'only-text'},                     # text-only payload
+        {'tid': 3, 'text': 'both-text', 'txt': 'both-txt'},  # text wins when both set
+        {'tid': 4, 'text': '', 'txt': 'fallback'},           # empty text -> txt
+        {'tid': 5},                                          # neither -> ''
+    ]
+
+    monkeypatch.setattr('app.PolisParticipantClient', _fake_statements_client(approved))
+    m = _statement_text_map('conv-1')
+
+    assert m[1] == 'only-txt'
+    assert m[2] == 'only-text'
+    assert m[3] == 'both-text'
+    assert m[4] == 'fallback'
+    assert m[5] == ''
+
+
+def test_statement_text_map_propagates_fetch_error(app, monkeypatch):
+    """Contract: the helper does NOT swallow fetch errors — callers decide to degrade."""
+    monkeypatch.setattr('app.PolisParticipantClient', _FailingClient)
+    with pytest.raises(PolisParticipantError):
+        _statement_text_map('conv-1')
+
+
+def test_fetch_statement_text_hit_miss_error(app, monkeypatch):
+    """_fetch_statement_text: matching tid -> text; missing tid -> ''; fetch error -> ''."""
+    monkeypatch.setattr('app.PolisParticipantClient',
+                        _fake_statements_client([{'tid': 7, 'text': 'lucky'}]))
+    assert _fetch_statement_text('c', 7) == 'lucky'      # hit
+    assert _fetch_statement_text('c', 999) == ''         # miss
+
+    monkeypatch.setattr('app.PolisParticipantClient', _FailingClient)
+    assert _fetch_statement_text('c', 7) == ''           # error degrades to ''
+
+
+def test_backfill_statement_texts_fills_missing_and_noops(app, monkeypatch, conv):
+    """_backfill fills only FSs lacking statement_text, commits, and returns whether
+    it changed anything; a fetch error degrades to False without raising."""
+    fs_missing = FeaturedStatement(conversation_id=conv.id, polis_statement_id=7,
+                                   statement_text='', confirmed_by_admin=True)
+    db.session.add(fs_missing)
+    db.session.commit()
+
+    monkeypatch.setattr('app.PolisParticipantClient',
+                        _fake_statements_client([{'tid': 7, 'text': 'filled-in'}]))
+    assert _backfill_statement_texts(conv, [fs_missing]) is True
+    assert fs_missing.statement_text == 'filled-in'
+
+    # Already populated → nothing missing → no fetch, returns False.
+    assert _backfill_statement_texts(conv, [fs_missing]) is False
+
+    # Fetch error on a genuinely-missing FS degrades to False (no raise).
+    fs_missing.statement_text = ''
+    db.session.commit()
+    monkeypatch.setattr('app.PolisParticipantClient', _FailingClient)
+    assert _backfill_statement_texts(conv, [fs_missing]) is False
