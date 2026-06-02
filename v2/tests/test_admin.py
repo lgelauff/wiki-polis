@@ -207,3 +207,26 @@ def test_remove_invite(admin_client, conv):
         f'/admin/conversations/{conv.id}/invites/{inv.id}/remove')
     assert resp.status_code == 302
     assert db.session.get(ConversationInvite, inv.id) is None
+
+
+# ── Template-render smoke test (#92 blueprint extraction) ───────────────────────
+# The admin routes moved onto Blueprint('admin'), so every `url_for('admin…')` in the
+# admin templates was requalified to `url_for('admin.admin…')`. The rest of this suite
+# hits admin routes by URL path, which only catches a broken template url_for if that
+# template is GET-rendered — and admin_conversation.html (13 url_for calls),
+# admin_invites.html, and admin_statements.html are NOT otherwise rendered here. This
+# guards them (and future renames) by GET-rendering all three end to end.
+def test_admin_template_pages_render(admin_client, conv):
+    # Pure-DB pages — no backend needed.
+    assert admin_client.get(f'/admin/conversations/{conv.id}').status_code == 200
+    assert admin_client.get(f'/admin/conversations/{conv.id}/invites').status_code == 200
+
+    # Statements page pulls from Polis; stub both clients so it renders offline.
+    from unittest.mock import MagicMock
+    server = MagicMock()
+    server.get_statements.return_value = ([], [], [])
+    with patch('app._polis_server_client', return_value=server), \
+         patch('app.PolisParticipantClient') as ppc:
+        ppc.return_value.get_settings.return_value = {}
+        resp = admin_client.get(f'/admin/conversations/{conv.id}/statements')
+    assert resp.status_code == 200
