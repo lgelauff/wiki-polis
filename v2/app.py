@@ -375,6 +375,180 @@ def _git_version() -> str:
 _GIT_VERSION = _git_version()
 
 
+# ── Route helpers (lifted from _register_routes; issue #90) ─────────────────
+
+def _get_or_create_side_state(participant_id, fs_id, side, current_args):
+    """Return ArgumentSideState, creating it on first view.
+
+    On creation: randomise argument_order from current_args.
+    On subsequent views: append any new arguments at a random position.
+    Commits to DB if any change is made.
+    """
+    state = ArgumentSideState.query.filter_by(
+        participant_id=participant_id,
+        featured_statement_id=fs_id,
+        side=side,
+    ).first()
+    changed = False
+    if state is None:
+        order = [a.id for a in current_args]
+        random.shuffle(order)
+        state = ArgumentSideState(
+            participant_id=participant_id,
+            featured_statement_id=fs_id,
+            side=side,
+            argument_order=order,
+        )
+        db.session.add(state)
+        changed = True
+    else:
+        known = set(state.argument_order)
+        new_ids = [a.id for a in current_args if a.id not in known]
+        if new_ids:
+            order = list(state.argument_order)
+            for aid in new_ids:
+                pos = random.randint(0, len(order))
+                order.insert(pos, aid)
+            state.argument_order = order
+            changed = True
+    if changed:
+        db.session.commit()
+    return state
+
+def _build_featured_data(conv, participation, can_mod=False):
+    """Return list of dicts for the argument tab, one per confirmed FS.
+
+    Each dict: {fs, text, short_title, pro_args, con_args, pro_state,
+                con_state, voted_ids, pro_gate, con_gate}
+    Creates/updates ArgumentSideState records as a side effect.
+    Moderators see hidden arguments (marked); participants never see them.
+    Order is deterministically randomised per participant.
+    """
+    fss = (FeaturedStatement.query
+           .filter_by(conversation_id=conv.id, confirmed_by_admin=True)
+           .options(joinedload(FeaturedStatement.arguments))
+           .order_by(FeaturedStatement.created_at)
+           .all())
+    if not fss:
+        return []
+
+    stmt_texts = {}
+    try:
+        client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
+        _, approved, _ = client.get_statements(conv.polis_id)
+        stmt_texts = {s['tid']: s.get('txt', '') for s in approved}
+    except Exception:
+        pass
+
+    pid = participation.participant_id
+    voted_ids = {av.argument_id for av in
+                 ArgumentVote.query.filter_by(participant_id=pid).all()}
+
+    # Proposer pseudonyms: one query for all proposers across all FSs.
+    all_proposer_ids = {a.proposer_id for fs in fss for a in fs.arguments
+                        if a.proposer_id is not None}
+    if all_proposer_ids:
+        proposer_parts = Participation.query.filter(
+            Participation.participant_id.in_(all_proposer_ids),
+            Participation.conversation_id == conv.id,
+        ).all()
+        proposer_pseudonym_map = {p.participant_id: p.pseudonym for p in proposer_parts}
+    else:
+        proposer_pseudonym_map = {}
+
+    result = []
+    for fs in fss:
+        pro_args = [a for a in fs.arguments if a.side == 'pro' and (can_mod or not a.hidden)]
+        con_args = [a for a in fs.arguments if a.side == 'con' and (can_mod or not a.hidden)]
+
+        pro_state = _get_or_create_side_state(pid, fs.id, 'pro', pro_args)
+        con_state = _get_or_create_side_state(pid, fs.id, 'con', con_args)
+
+        def _ordered(args, state):
+            arg_map = {a.id: a for a in args}
+            return [arg_map[aid] for aid in state.argument_order if aid in arg_map]
+
+        pro_proposed = Argument.query.filter_by(
+            proposer_id=pid, featured_statement_id=fs.id, side='pro').first()
+        con_proposed = Argument.query.filter_by(
+            proposer_id=pid, featured_statement_id=fs.id, side='con').first()
+
+        ordered_pro = _ordered(pro_args, pro_state)
+        ordered_con = _ordered(con_args, con_state)
+        pro_voted_count = sum(1 for a in ordered_pro if a.id in voted_ids)
+        con_voted_count = sum(1 for a in ordered_con if a.id in voted_ids)
+
+        text_value = (stmt_texts.get(fs.polis_statement_id)
+                      or fs.statement_text
+                      or f'Statement #{fs.polis_statement_id}')
+        result.append({
+            'fs':          fs,
+            'text':        text_value,
+            'short_title': _short_title(text_value),
+            'pro_args':  ordered_pro,
+            'con_args':  ordered_con,
+            'pro_state': pro_state,
+            'con_state': con_state,
+            'voted_ids': voted_ids,
+            'pro_gate':  bool(pro_proposed or pro_state.skipped),
+            'con_gate':  bool(con_proposed or con_state.skipped),
+            'pro_proposed': pro_proposed,
+            'con_proposed': con_proposed,
+            'k': conv.argument_vote_data.get('K', 2),
+            'pro_voted_count': pro_voted_count,
+            'con_voted_count': con_voted_count,
+            'proposer_pseudonyms': proposer_pseudonym_map,
+        })
+
+    random.Random(pid).shuffle(result)
+    return result
+
+def _require_arg_participation(slug):
+    """Return (conv, participation) or abort. Checks active + argument phase."""
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    if not conv.active or conv.paused or not conv.phase_argument_mapping:
+        abort(403)
+    participant = _current_participant()
+    if not participant:
+        abort(403)
+    part = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first_or_404()
+    return conv, part
+
+def _backfill_statement_texts(conv, confirmed: list) -> bool:
+    """Fetch and store statement_text for any confirmed FS that is missing it."""
+    missing = [fs for fs in confirmed if not fs.statement_text]
+    if not missing:
+        return False
+    client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
+    try:
+        _, approved, _ = client.get_statements(conv.polis_id)
+        text_by_tid = {s['tid']: (s.get('text') or s.get('txt', '')) for s in approved}
+    except PolisParticipantError:
+        return False
+    changed = False
+    for fs in missing:
+        text = text_by_tid.get(fs.polis_statement_id, '')
+        if text:
+            fs.statement_text = text
+            changed = True
+    if changed:
+        db.session.commit()
+    return changed
+
+def _fetch_statement_text(conv_polis_id: str, tid: int) -> str:
+    client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
+    try:
+        _, approved, _ = client.get_statements(conv_polis_id)
+        for s in approved:
+            if s.get('tid') == tid:
+                return s.get('text') or s.get('txt', '')
+    except PolisParticipantError:
+        pass
+    return ''
+
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
 
@@ -769,132 +943,6 @@ def _register_routes(app: Flask) -> None:
 
     # ── Argument helpers ──────────────────────────────────────────────────────
 
-    def _get_or_create_side_state(participant_id, fs_id, side, current_args):
-        """Return ArgumentSideState, creating it on first view.
-
-        On creation: randomise argument_order from current_args.
-        On subsequent views: append any new arguments at a random position.
-        Commits to DB if any change is made.
-        """
-        state = ArgumentSideState.query.filter_by(
-            participant_id=participant_id,
-            featured_statement_id=fs_id,
-            side=side,
-        ).first()
-        changed = False
-        if state is None:
-            order = [a.id for a in current_args]
-            random.shuffle(order)
-            state = ArgumentSideState(
-                participant_id=participant_id,
-                featured_statement_id=fs_id,
-                side=side,
-                argument_order=order,
-            )
-            db.session.add(state)
-            changed = True
-        else:
-            known = set(state.argument_order)
-            new_ids = [a.id for a in current_args if a.id not in known]
-            if new_ids:
-                order = list(state.argument_order)
-                for aid in new_ids:
-                    pos = random.randint(0, len(order))
-                    order.insert(pos, aid)
-                state.argument_order = order
-                changed = True
-        if changed:
-            db.session.commit()
-        return state
-
-    def _build_featured_data(conv, participation, can_mod=False):
-        """Return list of dicts for the argument tab, one per confirmed FS.
-
-        Each dict: {fs, text, short_title, pro_args, con_args, pro_state,
-                    con_state, voted_ids, pro_gate, con_gate}
-        Creates/updates ArgumentSideState records as a side effect.
-        Moderators see hidden arguments (marked); participants never see them.
-        Order is deterministically randomised per participant.
-        """
-        fss = (FeaturedStatement.query
-               .filter_by(conversation_id=conv.id, confirmed_by_admin=True)
-               .options(joinedload(FeaturedStatement.arguments))
-               .order_by(FeaturedStatement.created_at)
-               .all())
-        if not fss:
-            return []
-
-        stmt_texts = {}
-        try:
-            client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
-            _, approved, _ = client.get_statements(conv.polis_id)
-            stmt_texts = {s['tid']: s.get('txt', '') for s in approved}
-        except Exception:
-            pass
-
-        pid = participation.participant_id
-        voted_ids = {av.argument_id for av in
-                     ArgumentVote.query.filter_by(participant_id=pid).all()}
-
-        # Proposer pseudonyms: one query for all proposers across all FSs.
-        all_proposer_ids = {a.proposer_id for fs in fss for a in fs.arguments
-                            if a.proposer_id is not None}
-        if all_proposer_ids:
-            proposer_parts = Participation.query.filter(
-                Participation.participant_id.in_(all_proposer_ids),
-                Participation.conversation_id == conv.id,
-            ).all()
-            proposer_pseudonym_map = {p.participant_id: p.pseudonym for p in proposer_parts}
-        else:
-            proposer_pseudonym_map = {}
-
-        result = []
-        for fs in fss:
-            pro_args = [a for a in fs.arguments if a.side == 'pro' and (can_mod or not a.hidden)]
-            con_args = [a for a in fs.arguments if a.side == 'con' and (can_mod or not a.hidden)]
-
-            pro_state = _get_or_create_side_state(pid, fs.id, 'pro', pro_args)
-            con_state = _get_or_create_side_state(pid, fs.id, 'con', con_args)
-
-            def _ordered(args, state):
-                arg_map = {a.id: a for a in args}
-                return [arg_map[aid] for aid in state.argument_order if aid in arg_map]
-
-            pro_proposed = Argument.query.filter_by(
-                proposer_id=pid, featured_statement_id=fs.id, side='pro').first()
-            con_proposed = Argument.query.filter_by(
-                proposer_id=pid, featured_statement_id=fs.id, side='con').first()
-
-            ordered_pro = _ordered(pro_args, pro_state)
-            ordered_con = _ordered(con_args, con_state)
-            pro_voted_count = sum(1 for a in ordered_pro if a.id in voted_ids)
-            con_voted_count = sum(1 for a in ordered_con if a.id in voted_ids)
-
-            text_value = (stmt_texts.get(fs.polis_statement_id)
-                          or fs.statement_text
-                          or f'Statement #{fs.polis_statement_id}')
-            result.append({
-                'fs':          fs,
-                'text':        text_value,
-                'short_title': _short_title(text_value),
-                'pro_args':  ordered_pro,
-                'con_args':  ordered_con,
-                'pro_state': pro_state,
-                'con_state': con_state,
-                'voted_ids': voted_ids,
-                'pro_gate':  bool(pro_proposed or pro_state.skipped),
-                'con_gate':  bool(con_proposed or con_state.skipped),
-                'pro_proposed': pro_proposed,
-                'con_proposed': con_proposed,
-                'k': conv.argument_vote_data.get('K', 2),
-                'pro_voted_count': pro_voted_count,
-                'con_voted_count': con_voted_count,
-                'proposer_pseudonyms': proposer_pseudonym_map,
-            })
-
-        random.Random(pid).shuffle(result)
-        return result
-
     # ── Conversation ─────────────────────────────────────────────────────────
 
     @app.get('/c/<slug>')
@@ -962,20 +1010,6 @@ def _register_routes(app: Flask) -> None:
                                new_stmt_ids=participation.new_stmt_ids if participation else [])
 
     # ── Arguments ────────────────────────────────────────────────────────────
-
-    def _require_arg_participation(slug):
-        """Return (conv, participation) or abort. Checks active + argument phase."""
-        conv = Conversation.query.filter_by(slug=slug).first_or_404()
-        if not conv.active or conv.paused or not conv.phase_argument_mapping:
-            abort(403)
-        participant = _current_participant()
-        if not participant:
-            abort(403)
-        part = Participation.query.filter_by(
-            participant_id=participant.id,
-            conversation_id=conv.id,
-        ).first_or_404()
-        return conv, part
 
     @app.post('/c/<slug>/arguments/<int:fs_id>/submit')
     @login_required
@@ -1728,27 +1762,6 @@ def _register_routes(app: Flask) -> None:
 
     # ── Featured statements ───────────────────────────────────────────────────
 
-    def _backfill_statement_texts(conv, confirmed: list) -> bool:
-        """Fetch and store statement_text for any confirmed FS that is missing it."""
-        missing = [fs for fs in confirmed if not fs.statement_text]
-        if not missing:
-            return False
-        client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
-        try:
-            _, approved, _ = client.get_statements(conv.polis_id)
-            text_by_tid = {s['tid']: (s.get('text') or s.get('txt', '')) for s in approved}
-        except PolisParticipantError:
-            return False
-        changed = False
-        for fs in missing:
-            text = text_by_tid.get(fs.polis_statement_id, '')
-            if text:
-                fs.statement_text = text
-                changed = True
-        if changed:
-            db.session.commit()
-        return changed
-
     @app.get('/admin/conversations/<int:conv_id>/featured')
     @login_required
     def admin_conversation_featured(conv_id):
@@ -1768,17 +1781,6 @@ def _register_routes(app: Flask) -> None:
                                conversation=conv,
                                confirmed=confirmed,
                                candidates=candidates)
-
-    def _fetch_statement_text(conv_polis_id: str, tid: int) -> str:
-        client = PolisParticipantClient(current_app.config['PARTICIAPI_BASE'])
-        try:
-            _, approved, _ = client.get_statements(conv_polis_id)
-            for s in approved:
-                if s.get('tid') == tid:
-                    return s.get('text') or s.get('txt', '')
-        except PolisParticipantError:
-            pass
-        return ''
 
     @app.post('/admin/conversations/<int:conv_id>/featured/confirm')
     @login_required
