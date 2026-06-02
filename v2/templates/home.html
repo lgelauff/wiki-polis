@@ -47,7 +47,7 @@
         <span class="home-section-count" aria-hidden="true">{{ public_conversations | length }} total</span>
       </div>
       {% for c in public_conversations %}
-      <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
+      <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card"
          aria-label="{{ c.title }} — join consultation">
         <div class="conv-card-left">
           <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
@@ -71,7 +71,7 @@
       </div>
       {% for c in active_joined %}
       {% set part = pseudonym_map.get(c.id) %}
-      <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
+      <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card"
          aria-label="{{ c.title }}{% if part %} — {{ part.pseudonym }}{% endif %} — {{ 'temporarily paused' if c.paused else 'voting open' }} — continue">
         <div class="conv-card-left">
           <span class="conv-dot conv-dot--active" aria-hidden="true"></span>
@@ -100,7 +100,7 @@
         <span class="home-section-count" aria-hidden="true">{{ available | length }} consultation{{ 's' if available | length != 1 }}</span>
       </div>
       {% for c in available %}
-      <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
+      <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card"
          aria-label="{{ c.title }} — join consultation">
         <div class="conv-card-left">
           <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
@@ -124,7 +124,7 @@
       </div>
       {% for c in archived_joined %}
       {% set part = pseudonym_map.get(c.id) %}
-      <a href="{{ url_for('conversation', slug=c.slug) }}" class="conv-card"
+      <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card"
          aria-label="{{ c.title }}{% if part %} — {{ part.pseudonym }}{% endif %} — closed{% if c.closed_at %} {{ c.closed_at.strftime('%B %Y') }}{% endif %}">
         <div class="conv-card-left">
           <span class="conv-dot conv-dot--closed" aria-hidden="true"></span>
@@ -156,7 +156,7 @@
       <div class="conv-card conv-card--split">
         <span class="conv-card-left">
           <span class="conv-dot {{ 'conv-dot--active' if c.active else 'conv-dot--closed' }}" aria-hidden="true"></span>
-          <a href="{{ url_for('conversation', slug=c.slug) }}"
+          <a href="{{ url_for('participant.conversation', slug=c.slug) }}"
              class="conv-card-title">{{ c.title }}</a>
           {% if not c.active %}<span class="conv-card-badge">closed</span>{% endif %}
         </span>
