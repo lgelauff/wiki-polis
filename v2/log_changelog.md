@@ -213,3 +213,30 @@ gate_passed = bool(
 - [x] Moderator delete of arguments
 - [x] Hash-aware tab restore (`#tab-arguments` after all argument form redirects)
 - [x] Phrasing settled: **"most important"** (matches Citizens' Assembly practice)
+
+---
+
+## Codebase refactor — blueprint decomposition ✓ (2026-06-02)
+
+Decomposed the ~1,300-line `_register_routes` closure in `app.py` into Flask blueprints,
+per the audit's refactor plan (#94). Steps 1–4 landed earlier (PR #88); steps 5–9 completed
+here. Every step was a **behavior-preserving** relocation — handler bodies verified
+byte-identical (AST), zero test-assertion changes. `_register_routes` cyclomatic complexity
+**177 → 33**.
+
+- **#90 / #89** (PR #97) — lifted 5 non-route helpers to module level; deduped the three
+  statement-text fetch blocks into one `_statement_text_map()`.
+- **#91** (PR #98) — extracted the Particiapi proxy + statement-submit into `proxy_bp`
+  (the `@csrf.exempt` + `_validate_same_origin` compensating control preserved). Also added
+  `synthetic_traffic.py` (a proxy soak/load harness driving a deployed instance through the
+  real Flask stack) and a runbook section documenting staging topology + a 5xx-investigation
+  playbook.
+- **#92** (PR #99) — extracted the ~23 `/admin/…` routes into `admin_bp` (both auth
+  conventions — `@admin_required` vs `_require_mod_for_conv` — kept distinct; CSRF retained).
+- **#93** (PR #100) — extracted the participant accept / conversation / argument / reveal
+  routes into `participant_bp`. Auth / OAuth / index / logout / health / dev-login stay in
+  `_register_routes` (they close over its locals).
+
+Each step shipped alone with a senior + security review (cross-reviewed); #91 was soak-tested
+and #91/#92/#93 staging-verified. Test suite grew 120 → 134 (promoted helper-characterization
+tests + an admin-template smoke test).

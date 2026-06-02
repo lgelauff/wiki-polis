@@ -35,12 +35,13 @@ retention commitment (decision D-PRIV), pending legal/comms review.
 
 ## 3. Code health
 
-- **Blueprint refactor** — decompose `app.py` into blueprints, steps 5–9:
-  [#90](https://github.com/lgelauff/wiki-polis/issues/90),
-  [#89](https://github.com/lgelauff/wiki-polis/issues/89),
-  [#91](https://github.com/lgelauff/wiki-polis/issues/91),
-  [#92](https://github.com/lgelauff/wiki-polis/issues/92),
-  [#93](https://github.com/lgelauff/wiki-polis/issues/93). (Steps 1–4 landed in PR #88.)
+- **Blueprint refactor** — ✅ **done.** `app.py` decomposed into `proxy_bp` / `admin_bp` /
+  `participant_bp`; `_register_routes` complexity 177→33. Steps 1–4 (PR #88), 5–6 (#97),
+  7 (#98), 8 (#99), 9 (#100); issues #89–93 closed. See
+  [`log_changelog.md`](log_changelog.md).
+- **Soak harness follow-up** — `synthetic_traffic.py` soaks the proxy/vote path; its
+  accept step doesn't yet establish a Participation, so `statements/new` returns 401 and is
+  not exercised. Fix the accept step so statement-submit gets soak coverage too.
 - **Testing strategy / CI** — decision pending (D-TEST); recommendation in
   `.claude/testing-strategy-recommendations.md`. Leaning toward a CI gate on PRs plus
   coverage for the untested risky paths (proxy, reveal nullification, Polis-Postgres
