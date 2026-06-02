@@ -650,6 +650,397 @@ def conversation_statement_new(slug):
 def proxy_particiapi(pa_path):
     return _proxy_to_particiapi(pa_path)
 
+admin_bp = Blueprint('admin', __name__)
+
+# ── Admin ─────────────────────────────────────────────────────────────────
+
+@admin_bp.get('/admin')
+@login_required
+@admin_required
+def admin():
+    conversations  = (Conversation.query
+                      .order_by(Conversation.created_at.desc()).all())
+    participants   = (Participant.query
+                      .order_by(Participant.mw_username).all())
+    global_admins  = (Participant.query
+                      .filter_by(is_global_admin=True)
+                      .order_by(Participant.mw_username).all())
+    return render_template('admin.html',
+                           conversations=conversations,
+                           participants=participants,
+                           global_admins=global_admins,
+                           )
+
+@admin_bp.get('/admin/conversations/<int:conv_id>')
+@login_required
+def admin_conversation_detail(conv_id):
+    conv       = _require_mod_for_conv(conv_id)
+    conv_roles = (AdminRole.query
+                   .filter_by(conversation_id=conv_id)
+                   .all())
+    participants      = Participant.query.order_by(Participant.mw_username).all()
+    invite_count      = ConversationInvite.query.filter_by(conversation_id=conv_id).count()
+    participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
+    polis_stats       = _polis_server_client().get_polis_stats(conv.polis_id)
+    return render_template('admin_conversation.html',
+                           conversation=conv,
+                           conv_roles=conv_roles,
+                           participants=participants,
+                           invite_count=invite_count,
+                           participant_count=participant_count,
+                           polis_stats=polis_stats,
+                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''),
+                           admin_roles=ADMIN_ROLES)
+
+@admin_bp.post('/admin/conversations/new')
+@login_required
+@admin_required
+def admin_conversation_new():
+    slug   = request.form.get('slug', '').strip().lower()
+    fields = _parse_conversation_form()
+
+    if not fields['title'] or not _valid_slug(slug):
+        abort(400)
+
+    polis_configured = all(current_app.config.get(k) for k in (
+        'POLIS_SERVER_URL', 'POLIS_ADMIN_EMAIL', 'POLIS_ADMIN_PASSWORD'))
+    if polis_configured:
+        try:
+            polis_id = _polis_server_client().create_conversation(fields['title'], strict_moderation=True)
+        except PolisServerError:
+            current_app.logger.exception('Polis conversation creation failed')
+            flash('Could not create the Polis conversation. Check server logs for details.', 'error')
+            return redirect(url_for('admin.admin'))
+    else:
+        # Fallback: accept manually supplied polis_id (local dev / misconfigured prod)
+        polis_id = request.form.get('polis_id', '').strip()
+        if not _valid_polis_id(polis_id):
+            return redirect(url_for('admin.admin', error=(
+                'POLIS_SERVER_URL / POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD not configured. '
+                'Pass a polis_id manually or set the env vars.'
+            )))
+
+    db.session.add(Conversation(slug=slug, active=True, polis_id=polis_id, **fields))
+    db.session.commit()
+    return redirect(url_for('admin.admin'))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/edit')
+@login_required
+@admin_required
+def admin_conversation_edit(conv_id):
+    conv   = Conversation.query.get_or_404(conv_id)
+    fields = _parse_conversation_form()
+
+    if not fields['title']:
+        abort(400)
+
+    conv.title         = fields['title']
+    conv.intro_text    = fields['intro_text']
+    conv.outro_text    = fields['outro_text']
+    conv.access_policy = fields['access_policy']
+    db.session.commit()
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/pause')
+@login_required
+@admin_required
+def admin_conversation_pause(conv_id):
+    conv = Conversation.query.get_or_404(conv_id)
+    if not conv.active:
+        abort(400)
+    conv.paused = not conv.paused
+    db.session.commit()
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/close')
+@login_required
+@admin_required
+def admin_conversation_close(conv_id):
+    conv = Conversation.query.get_or_404(conv_id)
+    if not conv.active:
+        abort(400)
+    conv.active    = False
+    conv.paused    = False
+    conv.closed_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/phases')
+@login_required
+@admin_required
+def admin_conversation_phases(conv_id):
+    conv = Conversation.query.get_or_404(conv_id)
+    conv.phase_submission       = bool(request.form.get('phase_submission'))
+    conv.phase_personal_results = bool(request.form.get('phase_personal_results'))
+    conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
+    conv.phase_public_results   = bool(request.form.get('phase_public_results'))
+    db.session.commit()
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+@admin_bp.post('/admin/global-admins/add')
+@login_required
+@admin_required
+def admin_global_admin_add():
+    mw_username = (request.form.get('mw_username') or '').strip()
+    if not mw_username:
+        flash('Enter a Wikimedia username.', 'error')
+        return redirect(url_for('admin.admin'))
+    p = Participant.query.filter_by(mw_username=mw_username).first()
+    if not p:
+        flash(f'No account found for "{mw_username}". They must log in at least once first.', 'error')
+        return redirect(url_for('admin.admin'))
+    p.is_global_admin = True
+    db.session.commit()
+    return redirect(url_for('admin.admin'))
+
+@admin_bp.post('/admin/global-admins/<int:participant_id>/remove')
+@login_required
+@admin_required
+def admin_global_admin_remove(participant_id):
+    p = Participant.query.get_or_404(participant_id)
+    p.is_global_admin = False
+    db.session.commit()
+    return redirect(url_for('admin.admin'))
+
+@admin_bp.post('/admin/roles/add')
+@login_required
+@admin_required
+def admin_role_add():
+    participant_id  = request.form.get('participant_id', type=int)
+    conversation_id = request.form.get('conversation_id', type=int)
+    role            = request.form.get('role', '').strip()
+
+    if role not in ADMIN_ROLES or not conversation_id:
+        abort(400)
+    Participant.query.get_or_404(participant_id)
+    Conversation.query.get_or_404(conversation_id)
+
+    existing = AdminRole.query.filter_by(
+        participant_id=participant_id,
+        conversation_id=conversation_id,
+        role=role,
+    ).first()
+    if not existing:
+        grantor = _current_participant()
+        db.session.add(AdminRole(
+            participant_id=participant_id,
+            conversation_id=conversation_id,
+            role=role,
+            granted_by=grantor.id if grantor else None,
+        ))
+        db.session.commit()
+    return redirect(_safe_redirect(request.form.get('redirect_to', ''), url_for('admin.admin')))
+
+@admin_bp.post('/admin/roles/<int:role_id>/remove')
+@login_required
+@admin_required
+def admin_role_remove(role_id):
+    role = AdminRole.query.get_or_404(role_id)
+    db.session.delete(role)
+    db.session.commit()
+    return redirect(_safe_redirect(request.form.get('redirect_to', ''), url_for('admin.admin')))
+
+@admin_bp.get('/admin/conversations/<int:conv_id>/invites')
+@login_required
+def admin_conversation_invites(conv_id):
+    conv    = _require_mod_for_conv(conv_id)
+    invites = (ConversationInvite.query
+               .filter_by(conversation_id=conv_id)
+               .order_by(ConversationInvite.mw_username)
+               .all())
+    return render_template('admin_invites.html',
+                           conversation=conv, invites=invites)
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/invites/add')
+@login_required
+def admin_invite_add(conv_id):
+    _require_mod_for_conv(conv_id)
+    raw = [l.strip() for l in
+           request.form.get('mw_usernames', '').splitlines() if l.strip()]
+    usernames = [u for u in raw if 1 <= len(u) <= 255]
+    if not usernames:
+        return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
+    existing = {inv.mw_username for inv in
+                ConversationInvite.query.filter_by(conversation_id=conv_id).all()}
+    for username in usernames:
+        if username not in existing:
+            db.session.add(ConversationInvite(
+                conversation_id=conv_id, mw_username=username))
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/invites/<int:invite_id>/remove')
+@login_required
+def admin_invite_remove(conv_id, invite_id):
+    _require_mod_for_conv(conv_id)
+    invite = ConversationInvite.query.filter_by(
+        id=invite_id, conversation_id=conv_id).first_or_404()
+    db.session.delete(invite)
+    db.session.commit()
+    return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
+
+# ── Admin: Polis statement moderation ─────────────────────────────────────
+
+@admin_bp.get('/admin/conversations/<int:conv_id>/statements')
+@login_required
+def admin_conversation_statements(conv_id):
+    conv     = _require_mod_for_conv(conv_id)
+    pending = approved = hidden = []
+    settings = {}
+    # Prefer Postgres for accurate mod state; fall back to Particiapi when unavailable.
+    result = _polis_server_client().get_statements(conv.polis_id)
+    if result is not None:
+        pending, approved, hidden = result
+    else:
+        try:
+            pending, approved, hidden = PolisParticipantClient(
+                current_app.config['PARTICIAPI_BASE']
+            ).get_statements(conv.polis_id)
+        except PolisParticipantError:
+            current_app.logger.exception('get_statements failed')
+            flash('Could not load statements. Check server logs.', 'error')
+    try:
+        settings = PolisParticipantClient(
+            current_app.config['PARTICIAPI_BASE']
+        ).get_settings(conv.polis_id)
+    except PolisParticipantError:
+        pass
+    return render_template('admin_statements.html',
+                           conversation=conv,
+                           pending=pending,
+                           approved=approved,
+                           hidden=hidden,
+                           settings=settings,
+                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is')
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
+@login_required
+def admin_statement_moderate(conv_id, tid):
+    conv = _require_mod_for_conv(conv_id)
+    mod  = request.form.get('mod', type=int)
+    if mod not in (-1, 0, 1):
+        abort(400)
+    try:
+        _polis_server_client().moderate(conv.polis_id, tid, mod)
+    except PolisServerError:
+        current_app.logger.exception('moderate failed')
+        flash('Moderation action failed. Check server logs for details.', 'error')
+        return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
+    return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed')
+@login_required
+def admin_statement_seed(conv_id):
+    conv = _require_mod_for_conv(conv_id)
+    text = request.form.get('txt', '').strip()
+    text = nh3.clean(text, tags=frozenset())
+    if not text or len(text) > 280:
+        abort(400)
+    try:
+        _polis_server_client().add_seed(conv.polis_id, text)
+        flash('Seed statement added.', 'success')
+    except PolisServerError:
+        current_app.logger.exception('add_seed failed')
+        flash('Could not add seed statement. Check server logs for details.', 'error')
+    return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/strict-moderation')
+@login_required
+def admin_conversation_strict_moderation(conv_id):
+    conv    = _require_mod_for_conv(conv_id)
+    enabled = request.form.get('strict_moderation') == '1'
+    try:
+        _polis_server_client().set_strict_moderation(conv.polis_id, enabled)
+    except PolisServerError:
+        current_app.logger.exception('set_strict_moderation failed')
+        flash('Could not update moderation settings. Check server logs for details.', 'error')
+    return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
+
+# ── Featured statements ───────────────────────────────────────────────────
+
+@admin_bp.get('/admin/conversations/<int:conv_id>/featured')
+@login_required
+def admin_conversation_featured(conv_id):
+    conv        = _require_mod_for_conv(conv_id)
+    confirmed   = (FeaturedStatement.query
+                   .filter_by(conversation_id=conv_id)
+                   .options(joinedload(FeaturedStatement.arguments))
+                   .order_by(FeaturedStatement.created_at).all())
+    for fs in confirmed:
+        fs.arguments.sort(key=lambda a: a.side if isinstance(a.side, str) else a.side.value or '')
+    _backfill_statement_texts(conv, confirmed)
+    confirmed_tids = {fs.polis_statement_id for fs in confirmed}
+    candidates   = _polis_server_client().get_featured_candidates(conv.polis_id)
+    if candidates is not None:
+        candidates = [c for c in candidates if c['tid'] not in confirmed_tids]
+    return render_template('admin_featured.html',
+                           conversation=conv,
+                           confirmed=confirmed,
+                           candidates=candidates)
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/featured/confirm')
+@login_required
+def admin_featured_confirm(conv_id):
+    conv = _require_mod_for_conv(conv_id)
+    tid  = request.form.get('tid', type=int)
+    if tid is None:
+        abort(400)
+    if not FeaturedStatement.query.filter_by(
+            conversation_id=conv_id, polis_statement_id=tid).first():
+        db.session.add(FeaturedStatement(
+            conversation_id=conv_id,
+            polis_statement_id=tid,
+            statement_text=_fetch_statement_text(conv.polis_id, tid),
+            suggested_by_system=request.form.get('system_suggested') == '1',
+            confirmed_by_admin=True,
+        ))
+        db.session.commit()
+    return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/featured/add')
+@login_required
+def admin_featured_add(conv_id):
+    conv = _require_mod_for_conv(conv_id)
+    tid  = request.form.get('tid', type=int)
+    if tid is None or tid < 0:
+        abort(400)
+    if not FeaturedStatement.query.filter_by(
+            conversation_id=conv_id, polis_statement_id=tid).first():
+        db.session.add(FeaturedStatement(
+            conversation_id=conv_id,
+            polis_statement_id=tid,
+            statement_text=_fetch_statement_text(conv.polis_id, tid),
+            suggested_by_system=False,
+            confirmed_by_admin=True,
+        ))
+        db.session.commit()
+    return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/featured/<int:fs_id>/remove')
+@login_required
+def admin_featured_remove(conv_id, fs_id):
+    _require_mod_for_conv(conv_id)
+    fs = FeaturedStatement.query.filter_by(
+        id=fs_id, conversation_id=conv_id).first_or_404()
+    db.session.delete(fs)
+    db.session.commit()
+    return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/arguments/<int:arg_id>/delete')
+@login_required
+def admin_argument_delete(conv_id, arg_id):
+    conv = _require_mod_for_conv(conv_id)
+    arg  = Argument.query.filter_by(id=arg_id).first_or_404()
+    FeaturedStatement.query.filter_by(
+        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+    db.session.delete(arg)
+    db.session.commit()
+    return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
+
+
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
 
@@ -818,6 +1209,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     # _validate_same_origin() as the compensating control; exempt the whole
     # blueprint explicitly rather than per-route.
     app.register_blueprint(proxy_bp)
+    app.register_blueprint(admin_bp)
     csrf.exempt(proxy_bp)
 
     return app
@@ -1470,394 +1862,6 @@ def _register_routes(app: Flask) -> None:
     def logout():
         session.clear()
         return redirect(url_for('index'))
-
-    # ── Admin ─────────────────────────────────────────────────────────────────
-
-    @app.get('/admin')
-    @login_required
-    @admin_required
-    def admin():
-        conversations  = (Conversation.query
-                          .order_by(Conversation.created_at.desc()).all())
-        participants   = (Participant.query
-                          .order_by(Participant.mw_username).all())
-        global_admins  = (Participant.query
-                          .filter_by(is_global_admin=True)
-                          .order_by(Participant.mw_username).all())
-        return render_template('admin.html',
-                               conversations=conversations,
-                               participants=participants,
-                               global_admins=global_admins,
-                               )
-
-    @app.get('/admin/conversations/<int:conv_id>')
-    @login_required
-    def admin_conversation_detail(conv_id):
-        conv       = _require_mod_for_conv(conv_id)
-        conv_roles = (AdminRole.query
-                       .filter_by(conversation_id=conv_id)
-                       .all())
-        participants      = Participant.query.order_by(Participant.mw_username).all()
-        invite_count      = ConversationInvite.query.filter_by(conversation_id=conv_id).count()
-        participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
-        polis_stats       = _polis_server_client().get_polis_stats(conv.polis_id)
-        return render_template('admin_conversation.html',
-                               conversation=conv,
-                               conv_roles=conv_roles,
-                               participants=participants,
-                               invite_count=invite_count,
-                               participant_count=participant_count,
-                               polis_stats=polis_stats,
-                               polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''),
-                               admin_roles=ADMIN_ROLES)
-
-    @app.post('/admin/conversations/new')
-    @login_required
-    @admin_required
-    def admin_conversation_new():
-        slug   = request.form.get('slug', '').strip().lower()
-        fields = _parse_conversation_form()
-
-        if not fields['title'] or not _valid_slug(slug):
-            abort(400)
-
-        polis_configured = all(current_app.config.get(k) for k in (
-            'POLIS_SERVER_URL', 'POLIS_ADMIN_EMAIL', 'POLIS_ADMIN_PASSWORD'))
-        if polis_configured:
-            try:
-                polis_id = _polis_server_client().create_conversation(fields['title'], strict_moderation=True)
-            except PolisServerError:
-                current_app.logger.exception('Polis conversation creation failed')
-                flash('Could not create the Polis conversation. Check server logs for details.', 'error')
-                return redirect(url_for('admin'))
-        else:
-            # Fallback: accept manually supplied polis_id (local dev / misconfigured prod)
-            polis_id = request.form.get('polis_id', '').strip()
-            if not _valid_polis_id(polis_id):
-                return redirect(url_for('admin', error=(
-                    'POLIS_SERVER_URL / POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD not configured. '
-                    'Pass a polis_id manually or set the env vars.'
-                )))
-
-        db.session.add(Conversation(slug=slug, active=True, polis_id=polis_id, **fields))
-        db.session.commit()
-        return redirect(url_for('admin'))
-
-    @app.post('/admin/conversations/<int:conv_id>/edit')
-    @login_required
-    @admin_required
-    def admin_conversation_edit(conv_id):
-        conv   = Conversation.query.get_or_404(conv_id)
-        fields = _parse_conversation_form()
-
-        if not fields['title']:
-            abort(400)
-
-        conv.title         = fields['title']
-        conv.intro_text    = fields['intro_text']
-        conv.outro_text    = fields['outro_text']
-        conv.access_policy = fields['access_policy']
-        db.session.commit()
-        return redirect(url_for('admin_conversation_detail', conv_id=conv_id))
-
-    @app.post('/admin/conversations/<int:conv_id>/pause')
-    @login_required
-    @admin_required
-    def admin_conversation_pause(conv_id):
-        conv = Conversation.query.get_or_404(conv_id)
-        if not conv.active:
-            abort(400)
-        conv.paused = not conv.paused
-        db.session.commit()
-        return redirect(url_for('admin_conversation_detail', conv_id=conv_id))
-
-    @app.post('/admin/conversations/<int:conv_id>/close')
-    @login_required
-    @admin_required
-    def admin_conversation_close(conv_id):
-        conv = Conversation.query.get_or_404(conv_id)
-        if not conv.active:
-            abort(400)
-        conv.active    = False
-        conv.paused    = False
-        conv.closed_at = datetime.now(timezone.utc)
-        db.session.commit()
-        return redirect(url_for('admin_conversation_detail', conv_id=conv_id))
-
-    @app.post('/admin/conversations/<int:conv_id>/phases')
-    @login_required
-    @admin_required
-    def admin_conversation_phases(conv_id):
-        conv = Conversation.query.get_or_404(conv_id)
-        conv.phase_submission       = bool(request.form.get('phase_submission'))
-        conv.phase_personal_results = bool(request.form.get('phase_personal_results'))
-        conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
-        conv.phase_public_results   = bool(request.form.get('phase_public_results'))
-        db.session.commit()
-        return redirect(url_for('admin_conversation_detail', conv_id=conv_id))
-
-    @app.post('/admin/global-admins/add')
-    @login_required
-    @admin_required
-    def admin_global_admin_add():
-        mw_username = (request.form.get('mw_username') or '').strip()
-        if not mw_username:
-            flash('Enter a Wikimedia username.', 'error')
-            return redirect(url_for('admin'))
-        p = Participant.query.filter_by(mw_username=mw_username).first()
-        if not p:
-            flash(f'No account found for "{mw_username}". They must log in at least once first.', 'error')
-            return redirect(url_for('admin'))
-        p.is_global_admin = True
-        db.session.commit()
-        return redirect(url_for('admin'))
-
-    @app.post('/admin/global-admins/<int:participant_id>/remove')
-    @login_required
-    @admin_required
-    def admin_global_admin_remove(participant_id):
-        p = Participant.query.get_or_404(participant_id)
-        p.is_global_admin = False
-        db.session.commit()
-        return redirect(url_for('admin'))
-
-    @app.post('/admin/roles/add')
-    @login_required
-    @admin_required
-    def admin_role_add():
-        participant_id  = request.form.get('participant_id', type=int)
-        conversation_id = request.form.get('conversation_id', type=int)
-        role            = request.form.get('role', '').strip()
-
-        if role not in ADMIN_ROLES or not conversation_id:
-            abort(400)
-        Participant.query.get_or_404(participant_id)
-        Conversation.query.get_or_404(conversation_id)
-
-        existing = AdminRole.query.filter_by(
-            participant_id=participant_id,
-            conversation_id=conversation_id,
-            role=role,
-        ).first()
-        if not existing:
-            grantor = _current_participant()
-            db.session.add(AdminRole(
-                participant_id=participant_id,
-                conversation_id=conversation_id,
-                role=role,
-                granted_by=grantor.id if grantor else None,
-            ))
-            db.session.commit()
-        return redirect(_safe_redirect(request.form.get('redirect_to', ''), url_for('admin')))
-
-    @app.post('/admin/roles/<int:role_id>/remove')
-    @login_required
-    @admin_required
-    def admin_role_remove(role_id):
-        role = AdminRole.query.get_or_404(role_id)
-        db.session.delete(role)
-        db.session.commit()
-        return redirect(_safe_redirect(request.form.get('redirect_to', ''), url_for('admin')))
-
-    @app.get('/admin/conversations/<int:conv_id>/invites')
-    @login_required
-    def admin_conversation_invites(conv_id):
-        conv    = _require_mod_for_conv(conv_id)
-        invites = (ConversationInvite.query
-                   .filter_by(conversation_id=conv_id)
-                   .order_by(ConversationInvite.mw_username)
-                   .all())
-        return render_template('admin_invites.html',
-                               conversation=conv, invites=invites)
-
-    @app.post('/admin/conversations/<int:conv_id>/invites/add')
-    @login_required
-    def admin_invite_add(conv_id):
-        _require_mod_for_conv(conv_id)
-        raw = [l.strip() for l in
-               request.form.get('mw_usernames', '').splitlines() if l.strip()]
-        usernames = [u for u in raw if 1 <= len(u) <= 255]
-        if not usernames:
-            return redirect(url_for('admin_conversation_invites', conv_id=conv_id))
-        existing = {inv.mw_username for inv in
-                    ConversationInvite.query.filter_by(conversation_id=conv_id).all()}
-        for username in usernames:
-            if username not in existing:
-                db.session.add(ConversationInvite(
-                    conversation_id=conv_id, mw_username=username))
-        try:
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-        return redirect(url_for('admin_conversation_invites', conv_id=conv_id))
-
-    @app.post('/admin/conversations/<int:conv_id>/invites/<int:invite_id>/remove')
-    @login_required
-    def admin_invite_remove(conv_id, invite_id):
-        _require_mod_for_conv(conv_id)
-        invite = ConversationInvite.query.filter_by(
-            id=invite_id, conversation_id=conv_id).first_or_404()
-        db.session.delete(invite)
-        db.session.commit()
-        return redirect(url_for('admin_conversation_invites', conv_id=conv_id))
-
-    # ── Admin: Polis statement moderation ─────────────────────────────────────
-
-    @app.get('/admin/conversations/<int:conv_id>/statements')
-    @login_required
-    def admin_conversation_statements(conv_id):
-        conv     = _require_mod_for_conv(conv_id)
-        pending = approved = hidden = []
-        settings = {}
-        # Prefer Postgres for accurate mod state; fall back to Particiapi when unavailable.
-        result = _polis_server_client().get_statements(conv.polis_id)
-        if result is not None:
-            pending, approved, hidden = result
-        else:
-            try:
-                pending, approved, hidden = PolisParticipantClient(
-                    current_app.config['PARTICIAPI_BASE']
-                ).get_statements(conv.polis_id)
-            except PolisParticipantError:
-                current_app.logger.exception('get_statements failed')
-                flash('Could not load statements. Check server logs.', 'error')
-        try:
-            settings = PolisParticipantClient(
-                current_app.config['PARTICIAPI_BASE']
-            ).get_settings(conv.polis_id)
-        except PolisParticipantError:
-            pass
-        return render_template('admin_statements.html',
-                               conversation=conv,
-                               pending=pending,
-                               approved=approved,
-                               hidden=hidden,
-                               settings=settings,
-                               polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is')
-
-    @app.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
-    @login_required
-    def admin_statement_moderate(conv_id, tid):
-        conv = _require_mod_for_conv(conv_id)
-        mod  = request.form.get('mod', type=int)
-        if mod not in (-1, 0, 1):
-            abort(400)
-        try:
-            _polis_server_client().moderate(conv.polis_id, tid, mod)
-        except PolisServerError:
-            current_app.logger.exception('moderate failed')
-            flash('Moderation action failed. Check server logs for details.', 'error')
-            return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
-        return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
-
-    @app.post('/admin/conversations/<int:conv_id>/statements/seed')
-    @login_required
-    def admin_statement_seed(conv_id):
-        conv = _require_mod_for_conv(conv_id)
-        text = request.form.get('txt', '').strip()
-        text = nh3.clean(text, tags=frozenset())
-        if not text or len(text) > 280:
-            abort(400)
-        try:
-            _polis_server_client().add_seed(conv.polis_id, text)
-            flash('Seed statement added.', 'success')
-        except PolisServerError:
-            current_app.logger.exception('add_seed failed')
-            flash('Could not add seed statement. Check server logs for details.', 'error')
-        return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
-
-    @app.post('/admin/conversations/<int:conv_id>/strict-moderation')
-    @login_required
-    def admin_conversation_strict_moderation(conv_id):
-        conv    = _require_mod_for_conv(conv_id)
-        enabled = request.form.get('strict_moderation') == '1'
-        try:
-            _polis_server_client().set_strict_moderation(conv.polis_id, enabled)
-        except PolisServerError:
-            current_app.logger.exception('set_strict_moderation failed')
-            flash('Could not update moderation settings. Check server logs for details.', 'error')
-        return redirect(url_for('admin_conversation_statements', conv_id=conv_id))
-
-    # ── Featured statements ───────────────────────────────────────────────────
-
-    @app.get('/admin/conversations/<int:conv_id>/featured')
-    @login_required
-    def admin_conversation_featured(conv_id):
-        conv        = _require_mod_for_conv(conv_id)
-        confirmed   = (FeaturedStatement.query
-                       .filter_by(conversation_id=conv_id)
-                       .options(joinedload(FeaturedStatement.arguments))
-                       .order_by(FeaturedStatement.created_at).all())
-        for fs in confirmed:
-            fs.arguments.sort(key=lambda a: a.side if isinstance(a.side, str) else a.side.value or '')
-        _backfill_statement_texts(conv, confirmed)
-        confirmed_tids = {fs.polis_statement_id for fs in confirmed}
-        candidates   = _polis_server_client().get_featured_candidates(conv.polis_id)
-        if candidates is not None:
-            candidates = [c for c in candidates if c['tid'] not in confirmed_tids]
-        return render_template('admin_featured.html',
-                               conversation=conv,
-                               confirmed=confirmed,
-                               candidates=candidates)
-
-    @app.post('/admin/conversations/<int:conv_id>/featured/confirm')
-    @login_required
-    def admin_featured_confirm(conv_id):
-        conv = _require_mod_for_conv(conv_id)
-        tid  = request.form.get('tid', type=int)
-        if tid is None:
-            abort(400)
-        if not FeaturedStatement.query.filter_by(
-                conversation_id=conv_id, polis_statement_id=tid).first():
-            db.session.add(FeaturedStatement(
-                conversation_id=conv_id,
-                polis_statement_id=tid,
-                statement_text=_fetch_statement_text(conv.polis_id, tid),
-                suggested_by_system=request.form.get('system_suggested') == '1',
-                confirmed_by_admin=True,
-            ))
-            db.session.commit()
-        return redirect(url_for('admin_conversation_featured', conv_id=conv_id))
-
-    @app.post('/admin/conversations/<int:conv_id>/featured/add')
-    @login_required
-    def admin_featured_add(conv_id):
-        conv = _require_mod_for_conv(conv_id)
-        tid  = request.form.get('tid', type=int)
-        if tid is None or tid < 0:
-            abort(400)
-        if not FeaturedStatement.query.filter_by(
-                conversation_id=conv_id, polis_statement_id=tid).first():
-            db.session.add(FeaturedStatement(
-                conversation_id=conv_id,
-                polis_statement_id=tid,
-                statement_text=_fetch_statement_text(conv.polis_id, tid),
-                suggested_by_system=False,
-                confirmed_by_admin=True,
-            ))
-            db.session.commit()
-        return redirect(url_for('admin_conversation_featured', conv_id=conv_id))
-
-    @app.post('/admin/conversations/<int:conv_id>/featured/<int:fs_id>/remove')
-    @login_required
-    def admin_featured_remove(conv_id, fs_id):
-        _require_mod_for_conv(conv_id)
-        fs = FeaturedStatement.query.filter_by(
-            id=fs_id, conversation_id=conv_id).first_or_404()
-        db.session.delete(fs)
-        db.session.commit()
-        return redirect(url_for('admin_conversation_featured', conv_id=conv_id))
-
-    @app.post('/admin/conversations/<int:conv_id>/arguments/<int:arg_id>/delete')
-    @login_required
-    def admin_argument_delete(conv_id, arg_id):
-        conv = _require_mod_for_conv(conv_id)
-        arg  = Argument.query.filter_by(id=arg_id).first_or_404()
-        FeaturedStatement.query.filter_by(
-            id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-        db.session.delete(arg)
-        db.session.commit()
-        return redirect(url_for('admin_conversation_featured', conv_id=conv_id))
 
     # ── Health ────────────────────────────────────────────────────────────────
 

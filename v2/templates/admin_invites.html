@@ -9,7 +9,7 @@
   <p class="muted" style="margin-bottom: 1.25rem;">
     Access policy: <strong>{{ conversation.access_policy }}</strong>
     &nbsp;·&nbsp;
-    <a href="{{ url_for('admin') }}">← back to admin</a>
+    <a href="{{ url_for('admin.admin') }}">← back to admin</a>
   </p>
 
   {% if conversation.access_policy != 'invite_only' %}
@@ -24,7 +24,7 @@
   <div class="edit-form">
     <h3>Add invites</h3>
     <form method="post"
-          action="{{ url_for('admin_invite_add', conv_id=conversation.id) }}">
+          action="{{ url_for('admin.admin_invite_add', conv_id=conversation.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Wikimedia usernames (one per line)
         <textarea name="mw_usernames" rows="6"
@@ -49,7 +49,7 @@
         <td class="muted">{{ inv.created_at.strftime('%Y-%m-%d') }}</td>
         <td>
           <form method="post"
-                action="{{ url_for('admin_invite_remove', conv_id=conversation.id, invite_id=inv.id) }}"
+                action="{{ url_for('admin.admin_invite_remove', conv_id=conversation.id, invite_id=inv.id) }}"
                 style="display:inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn-small btn-danger">remove</button>

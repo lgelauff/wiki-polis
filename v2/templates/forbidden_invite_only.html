@@ -18,7 +18,7 @@
   <div style="background:#f0f4ff;border:1px solid #c7d3f5;border-radius:8px;padding:1rem 1.25rem;font-size:14px;color:var(--ink);line-height:1.6;margin-bottom:1.5rem">
     <strong>You can moderate this consultation.</strong>
     To participate as a voter, add yourself to the invite list first:
-    <a href="{{ url_for('admin_conversation_invites', conv_id=conversation.id) }}"
+    <a href="{{ url_for('admin.admin_conversation_invites', conv_id=conversation.id) }}"
        style="color:var(--accent)">Manage invites →</a>
   </div>
   {% endif %}

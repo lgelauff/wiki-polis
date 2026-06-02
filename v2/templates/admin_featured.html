@@ -6,7 +6,7 @@
 
   <h2>Featured statements — {{ conversation.title }}</h2>
   <p class="muted" style="margin-bottom:1.5rem">
-    <a href="{{ url_for('admin_conversation_detail', conv_id=conversation.id) }}">← conversation</a>
+    <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">← conversation</a>
   </p>
 
   <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
@@ -42,7 +42,7 @@
               <span style="color:var(--muted);white-space:nowrap">{{ arg.proposer.mw_username if arg.proposer else '—' }}</span>
               <span style="color:var(--muted);white-space:nowrap">{{ arg.created_at.strftime('%Y-%m-%d') if arg.created_at else '' }}</span>
               <form method="post"
-                    action="{{ url_for('admin_argument_delete', conv_id=conversation.id, arg_id=arg.id) }}"
+                    action="{{ url_for('admin.admin_argument_delete', conv_id=conversation.id, arg_id=arg.id) }}"
                     style="display:inline;flex-shrink:0">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn-small btn-danger"
@@ -57,7 +57,7 @@
         </td>
         <td style="vertical-align:top">
           <form method="post"
-                action="{{ url_for('admin_featured_remove', conv_id=conversation.id, fs_id=fs.id) }}"
+                action="{{ url_for('admin.admin_featured_remove', conv_id=conversation.id, fs_id=fs.id) }}"
                 style="display:inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn-small btn-danger"
@@ -109,7 +109,7 @@
         <td>{{ c.n_votes }}</td>
         <td>
           <form method="post"
-                action="{{ url_for('admin_featured_confirm', conv_id=conversation.id) }}"
+                action="{{ url_for('admin.admin_featured_confirm', conv_id=conversation.id) }}"
                 style="display:inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="tid" value="{{ c.tid }}">
@@ -129,7 +129,7 @@
     <p class="muted" style="font-size:13px;margin-bottom:.75rem">
       Enter the Polis statement ID (TID) to feature it directly.
     </p>
-    <form method="post" action="{{ url_for('admin_featured_add', conv_id=conversation.id) }}">
+    <form method="post" action="{{ url_for('admin.admin_featured_add', conv_id=conversation.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="edit-row-fields">
         <label>Statement TID
