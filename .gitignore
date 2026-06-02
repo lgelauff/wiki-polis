@@ -163,6 +163,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Flask-Session filesystem/sqlalchemy session store (runtime artifact)
+flask_session/
+
 # Spyder project settings
 .spyderproject
 .spyproject

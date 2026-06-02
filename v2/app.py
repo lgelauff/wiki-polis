@@ -17,8 +17,9 @@ import coolname
 import nh3
 import requests
 from dotenv import load_dotenv
-from flask import (Flask, abort, current_app, flash, g, jsonify, make_response,
-                   redirect, render_template, request, session, url_for)
+from flask import (Blueprint, Flask, abort, current_app, flash, g, jsonify,
+                   make_response, redirect, render_template, request, session,
+                   url_for)
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
@@ -556,6 +557,99 @@ def _fetch_statement_text(conv_polis_id: str, tid: int) -> str:
     except PolisParticipantError:
         return ''
 
+
+# ── Proxy + statement-submit blueprint (issue #91, step 7) ──────────────────
+# The security-sensitive cluster: both routes are CSRF-exempt with
+# _validate_same_origin() as the compensating control, and both bridge the
+# browser's renamed 'pa_session' cookie to Particiapi's 'session'. They live on a
+# blueprint (CSRF-exempted in create_app via csrf.exempt(proxy_bp)) instead of the
+# _register_routes closure. Behaviour is byte-identical to the prior inline routes.
+proxy_bp = Blueprint('proxy', __name__)
+
+@proxy_bp.post('/c/<slug>/statements/new')
+@login_required
+def conversation_statement_new(slug):
+    """Submit an entirely new statement; enforces per-participant quota and
+    records the Polis statement ID for novelty tracking."""
+    # Origin validation (same compensating control as the proxy).
+    _validate_same_origin()
+
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    if not conv.active or conv.paused or not conv.phase_submission:
+        abort(403)
+    participant = _current_participant()
+    if not participant:
+        abort(401)
+
+    # Lock the participation row for the duration of this transaction to
+    # prevent two concurrent requests from both passing the quota check.
+    part = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=conv.id,
+    ).with_for_update().first_or_404()
+
+    new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
+    if len(part.new_stmt_ids or []) >= new_stmt_max:
+        return jsonify({'error': 'quota_exceeded'}), 403
+
+    body = request.get_json(silent=True) or {}
+    text = (body.get('text') or '').strip()
+    if not text or len(text) > 280:
+        abort(400)
+
+    # Get CSRF token for this Particiapi session, then submit the statement.
+    pa_cookie = request.cookies.get('pa_session')
+    forwarded = {'session': pa_cookie} if pa_cookie else {}
+    base = current_app.config['PARTICIAPI_BASE']
+
+    try:
+        sess_resp = requests.post(
+            f'{base}/api/session',
+            cookies=forwarded,
+            params={'create': 'true'},
+            timeout=5,
+        )
+        if not sess_resp.ok:
+            current_app.logger.error('Particiapi session error: %s', sess_resp.status_code)
+            abort(502)
+        csrf_token = sess_resp.json().get('csrf_token', '')
+        new_pa_cookie = sess_resp.cookies.get('session')
+        submit_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
+
+        stmt_resp = requests.post(
+            f'{base}/api/conversations/{conv.polis_id}/statements/',
+            json={'text': text},
+            cookies=submit_cookies,
+            headers={'X-CSRF-Token': csrf_token},
+            timeout=10,
+        )
+    except requests.RequestException:
+        current_app.logger.exception('Particiapi error in conversation_statement_new')
+        abort(502)
+
+    if stmt_resp.status_code == 201:
+        stmt_id = stmt_resp.json().get('id')
+        if stmt_id is not None:
+            ids = list(part.new_stmt_ids or [])
+            ids.append(stmt_id)
+            part.new_stmt_ids = ids
+            db.session.commit()
+        flask_resp = make_response(stmt_resp.content, 201)
+        flask_resp.headers['Content-Type'] = 'application/json'
+    else:
+        current_app.logger.error('Particiapi statement error: %s', stmt_resp.status_code)
+        flask_resp = make_response(jsonify({'error': 'upstream_error'}), 502)
+
+    if new_pa_cookie:
+        flask_resp.set_cookie('pa_session', new_pa_cookie, httponly=True,
+                              samesite='Lax', secure=not current_app.debug)
+    return flask_resp
+
+@proxy_bp.route('/proxy/particiapi/<path:pa_path>',
+                methods=['GET', 'POST', 'PUT'])
+@login_required
+def proxy_particiapi(pa_path):
+    return _proxy_to_particiapi(pa_path)
+
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
 
@@ -719,6 +813,13 @@ def create_app(test_config: dict | None = None) -> Flask:
         return response
 
     _register_routes(app)
+
+    # Proxy + statement-submit blueprint (#91). Both routes are CSRF-exempt with
+    # _validate_same_origin() as the compensating control; exempt the whole
+    # blueprint explicitly rather than per-route.
+    app.register_blueprint(proxy_bp)
+    csrf.exempt(proxy_bp)
+
     return app
 
 
@@ -1209,96 +1310,6 @@ def _register_routes(app: Flask) -> None:
         arg.hidden = False
         db.session.commit()
         return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
-
-    # ── New statement submission (quota-tracked) ──────────────────────────────
-
-    @app.post('/c/<slug>/statements/new')
-    @login_required
-    @csrf.exempt
-    def conversation_statement_new(slug):
-        """Submit an entirely new statement; enforces per-participant quota and
-        records the Polis statement ID for novelty tracking."""
-        # Origin validation (same compensating control as the proxy).
-        _validate_same_origin()
-
-        conv = Conversation.query.filter_by(slug=slug).first_or_404()
-        if not conv.active or conv.paused or not conv.phase_submission:
-            abort(403)
-        participant = _current_participant()
-        if not participant:
-            abort(401)
-
-        # Lock the participation row for the duration of this transaction to
-        # prevent two concurrent requests from both passing the quota check.
-        part = Participation.query.filter_by(
-            participant_id=participant.id, conversation_id=conv.id,
-        ).with_for_update().first_or_404()
-
-        new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
-        if len(part.new_stmt_ids or []) >= new_stmt_max:
-            return jsonify({'error': 'quota_exceeded'}), 403
-
-        body = request.get_json(silent=True) or {}
-        text = (body.get('text') or '').strip()
-        if not text or len(text) > 280:
-            abort(400)
-
-        # Get CSRF token for this Particiapi session, then submit the statement.
-        pa_cookie = request.cookies.get('pa_session')
-        forwarded = {'session': pa_cookie} if pa_cookie else {}
-        base = current_app.config['PARTICIAPI_BASE']
-
-        try:
-            sess_resp = requests.post(
-                f'{base}/api/session',
-                cookies=forwarded,
-                params={'create': 'true'},
-                timeout=5,
-            )
-            if not sess_resp.ok:
-                current_app.logger.error('Particiapi session error: %s', sess_resp.status_code)
-                abort(502)
-            csrf_token = sess_resp.json().get('csrf_token', '')
-            new_pa_cookie = sess_resp.cookies.get('session')
-            submit_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
-
-            stmt_resp = requests.post(
-                f'{base}/api/conversations/{conv.polis_id}/statements/',
-                json={'text': text},
-                cookies=submit_cookies,
-                headers={'X-CSRF-Token': csrf_token},
-                timeout=10,
-            )
-        except requests.RequestException:
-            current_app.logger.exception('Particiapi error in conversation_statement_new')
-            abort(502)
-
-        if stmt_resp.status_code == 201:
-            stmt_id = stmt_resp.json().get('id')
-            if stmt_id is not None:
-                ids = list(part.new_stmt_ids or [])
-                ids.append(stmt_id)
-                part.new_stmt_ids = ids
-                db.session.commit()
-            flask_resp = make_response(stmt_resp.content, 201)
-            flask_resp.headers['Content-Type'] = 'application/json'
-        else:
-            current_app.logger.error('Particiapi statement error: %s', stmt_resp.status_code)
-            flask_resp = make_response(jsonify({'error': 'upstream_error'}), 502)
-
-        if new_pa_cookie:
-            flask_resp.set_cookie('pa_session', new_pa_cookie, httponly=True,
-                                  samesite='Lax', secure=not current_app.debug)
-        return flask_resp
-
-    # ── Particiapi proxy ──────────────────────────────────────────────────────
-
-    @app.route('/proxy/particiapi/<path:pa_path>',
-               methods=['GET', 'POST', 'PUT'])
-    @login_required
-    @csrf.exempt
-    def proxy_particiapi(pa_path):
-        return _proxy_to_particiapi(pa_path)
 
     # ── Identity reveal ───────────────────────────────────────────────────────
 
