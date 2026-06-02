@@ -1040,7 +1040,7 @@
     var text = newstmtInput.value.trim();
     if (!text) return;
     newstmtSubmit.disabled = true;
-    fetch('{{ url_for("conversation_statement_new", slug=conversation.slug) }}', {
+    fetch('{{ url_for("proxy.conversation_statement_new", slug=conversation.slug) }}', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({ text: text }),
