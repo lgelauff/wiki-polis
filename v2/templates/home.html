@@ -162,7 +162,7 @@
         </span>
         <span class="conv-card-divider" aria-hidden="true"></span>
         {# → aria-hidden on "Admin →" not needed — the aria-label overrides the text content #}
-        <a href="{{ url_for('admin_conversation_detail', conv_id=c.id) }}"
+        <a href="{{ url_for('admin.admin_conversation_detail', conv_id=c.id) }}"
            class="admin-action-btn"
            aria-label="Open admin panel for {{ c.title }}">Admin →</a>
       </div>

@@ -4,7 +4,7 @@
 <div class="container">
 
   <p class="muted" style="margin-bottom:1.5rem">
-    <a href="{{ url_for('admin') }}">← admin panel</a>
+    <a href="{{ url_for('admin.admin') }}">← admin panel</a>
   </p>
 
   <div style="display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;margin-bottom:.25rem">
@@ -59,7 +59,7 @@
   <div class="edit-form">
     {% if is_admin %}
     <form method="post"
-          action="{{ url_for('admin_conversation_phases', conv_id=conversation.id) }}"
+          action="{{ url_for('admin.admin_conversation_phases', conv_id=conversation.id) }}"
           class="phases-form" style="flex-wrap:wrap;gap:.75rem">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label title="Submission open">
@@ -101,13 +101,13 @@
   <h3 class="section-heading">Content &amp; access</h3>
   <div class="conv-action-grid">
 
-    <a href="{{ url_for('admin_conversation_statements', conv_id=conversation.id) }}"
+    <a href="{{ url_for('admin.admin_conversation_statements', conv_id=conversation.id) }}"
        class="conv-action-card">
       <div class="conv-action-title">Statements</div>
       <div class="conv-action-desc">Review, approve or hide participant statements; add seed statements</div>
     </a>
 
-    <a href="{{ url_for('admin_conversation_invites', conv_id=conversation.id) }}"
+    <a href="{{ url_for('admin.admin_conversation_invites', conv_id=conversation.id) }}"
        class="conv-action-card">
       <div class="conv-action-title">Invites</div>
       <div class="conv-action-desc">
@@ -115,7 +115,7 @@
       </div>
     </a>
 
-    <a href="{{ url_for('admin_conversation_featured', conv_id=conversation.id) }}"
+    <a href="{{ url_for('admin.admin_conversation_featured', conv_id=conversation.id) }}"
        class="conv-action-card">
       <div class="conv-action-title">Featured statements</div>
       <div class="conv-action-desc">
@@ -142,7 +142,7 @@
     <!-- Pause / Resume -->
     <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
       <form method="post"
-            action="{{ url_for('admin_conversation_pause', conv_id=conversation.id) }}"
+            action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}"
             style="display:inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit"
@@ -169,7 +169,7 @@
         consultation.
       </p>
       <form id="close-permanently-form" method="post"
-            action="{{ url_for('admin_conversation_close', conv_id=conversation.id) }}"
+            action="{{ url_for('admin.admin_conversation_close', conv_id=conversation.id) }}"
             style="display:inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn-small btn-danger">Close permanently</button>
@@ -191,7 +191,7 @@
   <h3 class="section-heading">Settings</h3>
   <div class="edit-form">
     <form method="post"
-          action="{{ url_for('admin_conversation_edit', conv_id=conversation.id) }}">
+          action="{{ url_for('admin.admin_conversation_edit', conv_id=conversation.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="edit-row-fields">
         <label>Title
@@ -239,11 +239,11 @@
         <td>{{ role.role }}</td>
         <td>
           <form method="post"
-                action="{{ url_for('admin_role_remove', role_id=role.id) }}"
+                action="{{ url_for('admin.admin_role_remove', role_id=role.id) }}"
                 style="display:inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="redirect_to"
-                   value="{{ url_for('admin_conversation_detail', conv_id=conversation.id) }}">
+                   value="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">
             <button type="submit" class="btn-small btn-danger">remove</button>
           </form>
         </td>
@@ -257,11 +257,11 @@
 
   <div class="edit-form">
     <h3>Add moderator</h3>
-    <form method="post" action="{{ url_for('admin_role_add') }}">
+    <form method="post" action="{{ url_for('admin.admin_role_add') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="conversation_id" value="{{ conversation.id }}">
       <input type="hidden" name="redirect_to"
-             value="{{ url_for('admin_conversation_detail', conv_id=conversation.id) }}">
+             value="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">
       <div class="edit-row-fields">
         <label>Participant
           <select name="participant_id" required>

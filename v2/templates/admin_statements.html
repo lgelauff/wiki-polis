@@ -5,7 +5,7 @@
 
   <h2>Statements — {{ conversation.title }}</h2>
   <p class="muted" style="margin-bottom:1.5rem">
-    <a href="{{ url_for('admin') }}">← admin</a>
+    <a href="{{ url_for('admin.admin') }}">← admin</a>
   </p>
 
   {% if polis_public_url %}
@@ -23,7 +23,7 @@
       Adds a statement that immediately appears in the vote view for all participants.
       Statements added here appear as regular participant statements (not seed-marked).
     </p>
-    <form method="post" action="{{ url_for('admin_statement_seed', conv_id=conversation.id) }}">
+    <form method="post" action="{{ url_for('admin.admin_statement_seed', conv_id=conversation.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Statement text (max 280 characters)
         <textarea name="txt" rows="3" maxlength="280" id="seed-txt" required
@@ -40,7 +40,7 @@
   <h3 class="section-heading">Moderation settings</h3>
   <div class="edit-form" style="margin-bottom:2rem">
     <form method="post"
-          action="{{ url_for('admin_conversation_strict_moderation', conv_id=conversation.id) }}">
+          action="{{ url_for('admin.admin_conversation_strict_moderation', conv_id=conversation.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label class="checkbox-label" style="font-weight:normal;color:var(--text)">
         <input type="checkbox" name="strict_moderation" value="1"
@@ -83,13 +83,13 @@
         </td>
         <td class="stmt-actions">
           <form method="post" style="display:inline"
-                action="{{ url_for('admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
+                action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="1">
             <button type="submit" class="btn-small btn-approve">approve</button>
           </form>
           <form method="post" style="display:inline"
-                action="{{ url_for('admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
+                action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="-1">
             <button type="submit" class="btn-small btn-danger">hide</button>
@@ -131,13 +131,13 @@
         </td>
         <td class="stmt-actions">
           <form method="post" style="display:inline"
-                action="{{ url_for('admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
+                action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="-1">
             <button type="submit" class="btn-small btn-danger">hide</button>
           </form>
           <form method="post" style="display:inline"
-                action="{{ url_for('admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
+                action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="0">
             <button type="submit" class="btn-small">pending</button>
@@ -179,13 +179,13 @@
         </td>
         <td class="stmt-actions">
           <form method="post" style="display:inline"
-                action="{{ url_for('admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
+                action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="1">
             <button type="submit" class="btn-small btn-approve">approve</button>
           </form>
           <form method="post" style="display:inline"
-                action="{{ url_for('admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
+                action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="0">
             <button type="submit" class="btn-small">pending</button>

@@ -37,7 +37,7 @@
             <button type="submit" class="header-logout">log out</button>
           </form>
           {% if is_admin %}
-            <a href="{{ url_for('admin') }}" class="header-admin-link">admin</a>
+            <a href="{{ url_for('admin.admin') }}" class="header-admin-link">admin</a>
           {% endif %}
         {% else %}
           <a href="{{ url_for('login') }}" style="color:var(--muted);font-size:13px;text-decoration:none">log in</a>

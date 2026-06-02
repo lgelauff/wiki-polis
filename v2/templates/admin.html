@@ -34,7 +34,7 @@
           {% endif %}
         </td>
         <td>
-          <a href="{{ url_for('admin_conversation_detail', conv_id=c.id) }}"
+          <a href="{{ url_for('admin.admin_conversation_detail', conv_id=c.id) }}"
              class="btn-small">manage</a>
         </td>
       </tr>
@@ -45,7 +45,7 @@
   <!-- ── New conversation ──────────────────────────── -->
   <div class="edit-form">
     <h3>New conversation</h3>
-    <form method="post" action="{{ url_for('admin_conversation_new') }}">
+    <form method="post" action="{{ url_for('admin.admin_conversation_new') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="edit-row-fields">
         <label>Slug (URL-safe, immutable)
@@ -96,7 +96,7 @@
         <td>{{ p.mw_username }}</td>
         <td>
           <form method="post"
-                action="{{ url_for('admin_global_admin_remove', participant_id=p.id) }}"
+                action="{{ url_for('admin.admin_global_admin_remove', participant_id=p.id) }}"
                 style="display:inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn-small btn-danger">remove</button>
@@ -112,7 +112,7 @@
 
   <div class="edit-form">
     <h3>Grant global admin</h3>
-    <form method="post" action="{{ url_for('admin_global_admin_add') }}">
+    <form method="post" action="{{ url_for('admin.admin_global_admin_add') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="edit-row-fields">
         <label>Wikimedia username
