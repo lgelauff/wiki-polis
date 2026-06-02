@@ -38,7 +38,7 @@
     {% elif reveal_state == 'open' %}
     <p style="margin-top:.75rem;font-size:13px">
       The identity reveal window is open.
-      <a href="{{ url_for('reveal_identity', slug=conversation.slug) }}">Optionally link your username →</a>
+      <a href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">Optionally link your username →</a>
     </p>
 
     {% elif reveal_state == 'pending' %}
@@ -490,8 +490,8 @@
                data-state="{{ 'submitted' if item.pro_proposed else ('skipped' if item.pro_gate else 'idle') }}"
                data-side="pro"
                data-fs="{{ fs.id }}"
-               data-submit-url="{{ url_for('argument_submit', slug=conversation.slug, fs_id=fs.id) }}"
-               data-skip-url="{{ url_for('argument_skip', slug=conversation.slug, fs_id=fs.id, side='pro') }}"
+               data-submit-url="{{ url_for('participant.argument_submit', slug=conversation.slug, fs_id=fs.id) }}"
+               data-skip-url="{{ url_for('participant.argument_skip', slug=conversation.slug, fs_id=fs.id, side='pro') }}"
                data-csrf="{{ csrf_token() }}"
                data-k="{{ item.k }}"
                data-my-pseudonym="{{ participation.pseudonym }}">
@@ -540,8 +540,8 @@
                data-can-vote="{{ 'true' if pro_can_vote else 'false' }}"
                data-limit-reached="{{ 'true' if pro_limit_reached else 'false' }}"
                data-hidden="{{ 'true' if arg.hidden else 'false' }}"
-               data-vote-url="{{ url_for('argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
-               data-unvote-url="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
+               data-vote-url="{{ url_for('participant.argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
+               data-unvote-url="{{ url_for('participant.argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
                data-csrf="{{ csrf_token() }}">
             <button class="argument-checkbox" aria-label="Mark as most important"
                     tabindex="{{ '0' if pro_can_vote else '-1' }}">
@@ -567,12 +567,12 @@
                 {% if can_moderate %}
                 <span style="display:inline-flex;gap:4px;margin-left:auto">
                   {% if arg.hidden %}
-                  <form method="post" action="{{ url_for('argument_unhide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                  <form method="post" action="{{ url_for('participant.argument_unhide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn-small">unhide</button>
                   </form>
                   {% else %}
-                  <form method="post" action="{{ url_for('argument_hide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                  <form method="post" action="{{ url_for('participant.argument_hide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn-small btn-warn">hide</button>
                   </form>
@@ -602,8 +602,8 @@
                data-state="{{ 'submitted' if item.con_proposed else ('skipped' if item.con_gate else 'idle') }}"
                data-side="con"
                data-fs="{{ fs.id }}"
-               data-submit-url="{{ url_for('argument_submit', slug=conversation.slug, fs_id=fs.id) }}"
-               data-skip-url="{{ url_for('argument_skip', slug=conversation.slug, fs_id=fs.id, side='con') }}"
+               data-submit-url="{{ url_for('participant.argument_submit', slug=conversation.slug, fs_id=fs.id) }}"
+               data-skip-url="{{ url_for('participant.argument_skip', slug=conversation.slug, fs_id=fs.id, side='con') }}"
                data-csrf="{{ csrf_token() }}"
                data-k="{{ item.k }}"
                data-my-pseudonym="{{ participation.pseudonym }}">
@@ -652,8 +652,8 @@
                data-can-vote="{{ 'true' if con_can_vote else 'false' }}"
                data-limit-reached="{{ 'true' if con_limit_reached else 'false' }}"
                data-hidden="{{ 'true' if arg.hidden else 'false' }}"
-               data-vote-url="{{ url_for('argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
-               data-unvote-url="{{ url_for('argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
+               data-vote-url="{{ url_for('participant.argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
+               data-unvote-url="{{ url_for('participant.argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
                data-csrf="{{ csrf_token() }}">
             <button class="argument-checkbox" aria-label="Mark as most important"
                     tabindex="{{ '0' if con_can_vote else '-1' }}">
@@ -679,12 +679,12 @@
                 {% if can_moderate %}
                 <span style="display:inline-flex;gap:4px;margin-left:auto">
                   {% if arg.hidden %}
-                  <form method="post" action="{{ url_for('argument_unhide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                  <form method="post" action="{{ url_for('participant.argument_unhide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn-small">unhide</button>
                   </form>
                   {% else %}
-                  <form method="post" action="{{ url_for('argument_hide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
+                  <form method="post" action="{{ url_for('participant.argument_hide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn-small btn-warn">hide</button>
                   </form>

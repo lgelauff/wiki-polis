@@ -14,7 +14,7 @@
 <div class="container" style="max-width:660px">
 
   <p style="margin-bottom:1.25rem">
-    <a href="{{ url_for('conversation', slug=conversation.slug) }}"
+    <a href="{{ url_for('participant.conversation', slug=conversation.slug) }}"
        style="font-size:13px;color:var(--muted);text-decoration:none">← {{ conversation.title }}</a>
   </p>
 
@@ -129,7 +129,7 @@
     </div>
   </div>
 
-  <form method="post" action="{{ url_for('reveal_identity_post', slug=conversation.slug) }}" style="margin-top:22px">
+  <form method="post" action="{{ url_for('participant.reveal_identity_post', slug=conversation.slug) }}" style="margin-top:22px">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label class="checkbox-label" style="margin-bottom:16px">
       <input type="checkbox" name="confirm" value="1" required>
@@ -139,7 +139,7 @@
     </label>
     <div style="display:flex;align-items:center;gap:16px">
       <button type="submit" class="participate-btn" style="background:var(--ink)">Yes, link my identity</button>
-      <a href="{{ url_for('conversation', slug=conversation.slug) }}"
+      <a href="{{ url_for('participant.conversation', slug=conversation.slug) }}"
          style="color:var(--muted);font-size:13px;text-decoration:none">Cancel</a>
     </div>
   </form>

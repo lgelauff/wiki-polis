@@ -4,7 +4,7 @@
 <div class="container">
 
   <h2>
-    Invites — <a href="{{ url_for('conversation', slug=conversation.slug) }}">{{ conversation.title }}</a>
+    Invites — <a href="{{ url_for('participant.conversation', slug=conversation.slug) }}">{{ conversation.title }}</a>
   </h2>
   <p class="muted" style="margin-bottom: 1.25rem;">
     Access policy: <strong>{{ conversation.access_policy }}</strong>

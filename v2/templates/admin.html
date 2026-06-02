@@ -21,7 +21,7 @@
     <tbody>
       {% for c in conversations %}
       <tr>
-        <td><a href="{{ url_for('conversation', slug=c.slug) }}">{{ c.title }}</a></td>
+        <td><a href="{{ url_for('participant.conversation', slug=c.slug) }}">{{ c.title }}</a></td>
         <td><code>{{ c.slug }}</code></td>
         <td>{{ c.access_policy }}</td>
         <td>

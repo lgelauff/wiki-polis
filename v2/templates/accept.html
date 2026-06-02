@@ -37,7 +37,7 @@
   </p>
 
   <form method="post"
-        action="{{ url_for('accept_post', slug=conversation.slug) }}"
+        action="{{ url_for('participant.accept_post', slug=conversation.slug) }}"
         id="accept-form"
         aria-labelledby="accept-title"
         aria-describedby="accept-privacy-summary-copy{% if error %} accept-error{% endif %}">
@@ -232,7 +232,7 @@
     container.setAttribute('aria-busy', 'true');
     if (statusEl) statusEl.textContent = 'Generating new pseudonym options.';
     btn.textContent = '↻ loading…';
-    fetch('{{ url_for("accept_pseudonyms", slug=conversation.slug) }}')
+    fetch('{{ url_for("participant.accept_pseudonyms", slug=conversation.slug) }}')
       .then(function (r) { return r.json(); })
       .then(function (data) {
         buildOptions(data.pseudonyms);

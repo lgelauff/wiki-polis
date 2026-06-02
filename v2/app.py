@@ -651,6 +651,7 @@ def proxy_particiapi(pa_path):
     return _proxy_to_particiapi(pa_path)
 
 admin_bp = Blueprint('admin', __name__)
+participant_bp = Blueprint('participant', __name__)
 
 # ── Admin ─────────────────────────────────────────────────────────────────
 
@@ -1041,6 +1042,393 @@ def admin_argument_delete(conv_id, arg_id):
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
 
 
+# ── Accept ───────────────────────────────────────────────────────────────
+
+@participant_bp.get('/accept/<slug>')
+@login_required
+def accept(slug):
+    conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    _check_conversation_access(conv, participant)
+    if participant and Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conv.id).first():
+        return redirect(url_for('participant.conversation', slug=slug))
+    pseudonyms = _generate_pseudonyms(5)
+    emailable  = session.get('emailable', False)
+    return render_template('accept.html', conversation=conv,
+                           emailable=emailable, pseudonyms=pseudonyms,
+                           reveal_cooldown=_REVEAL_COOLDOWN_DAYS,
+                           reveal_window_end=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS,
+                           retention_public_days=120)
+
+@participant_bp.post('/accept/<slug>')
+@login_required
+@limiter.limit('10 per minute')
+def accept_post(slug):
+    conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(404)
+    _check_conversation_access(conv, participant)
+
+    if Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conv.id).first():
+        return redirect(url_for('participant.conversation', slug=slug))
+
+    pseudonym = request.form.get('pseudonym', '').strip()
+    emailable = session.get('emailable', False)
+
+    if not _PSEUDONYM_RE.match(pseudonym):
+        abort(400)
+
+    db.session.add(Participation(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        pseudonym=pseudonym,
+        notify_email=bool(request.form.get('notify_email')) and emailable,
+        notify_talk_page=bool(request.form.get('notify_talk_page')),
+    ))
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        pseudonyms = _generate_pseudonyms(5)
+        return render_template('accept.html', conversation=conv,
+                               emailable=emailable, pseudonyms=pseudonyms,
+                               error='That pseudonym was just taken — please choose another.')
+    return redirect(url_for('participant.conversation', slug=slug))
+
+@participant_bp.get('/accept/<slug>/pseudonyms')
+@login_required
+@limiter.limit('30 per minute')
+def accept_pseudonyms(slug):
+    Conversation.query.filter_by(slug=slug).first_or_404()
+    return jsonify({'pseudonyms': _generate_pseudonyms(5)})
+
+# ── Argument helpers ──────────────────────────────────────────────────────
+
+# ── Conversation ─────────────────────────────────────────────────────────
+
+@participant_bp.get('/c/<slug>')
+@login_required
+def conversation(slug):
+    conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    _check_conversation_access(conv, participant)
+
+    participation = None
+    if participant:
+        participation = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+        ).first()
+
+    if participation is None:
+        return redirect(url_for('participant.accept', slug=slug))
+
+    # Lazy nullification: clear identity links past the internal retention deadline.
+    if conv.closed_at:
+        _nullify_expired_reveals(conv)
+        db.session.refresh(participation)
+
+    can_mod = _can_moderate(conv, participant)
+
+    results     = None
+    polis_stats = None
+    if conv.phase_public_results:
+        results      = PolisParticipantClient(
+            current_app.config['PARTICIAPI_BASE']).get_results(conv.polis_id)
+        polis_stats = _polis_server_client().get_polis_stats(conv.polis_id)
+
+    # Reveal window state for closed conversations.
+    reveal_state    = None
+    reveal_opens_at = None
+    if conv.closed_at:
+        age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
+        reveal_opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
+        if participation.public_username:
+            reveal_state = 'revealed'
+        elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
+            reveal_state = 'expired'
+        elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
+            reveal_state = 'open'
+        else:
+            reveal_state = 'pending'
+
+    featured_data = []
+    if conv.phase_argument_mapping and participation:
+        featured_data = _build_featured_data(conv, participation, can_mod=can_mod)
+
+    return render_template('conversation.html',
+                           conversation=conv,
+                           participation=participation,
+                           can_moderate=can_mod,
+                           results=results,
+                           polis_stats=polis_stats,
+                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''),
+                           reveal_state=reveal_state,
+                           reveal_opens_at=reveal_opens_at,
+                           featured_data=featured_data,
+                           new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10,
+                           new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
+                           new_stmt_ids=participation.new_stmt_ids if participation else [])
+
+# ── Arguments ────────────────────────────────────────────────────────────
+
+@participant_bp.post('/c/<slug>/arguments/<int:fs_id>/submit')
+@login_required
+def argument_submit(slug, fs_id):
+    conv, part = _require_arg_participation(slug)
+    FeaturedStatement.query.filter_by(
+        id=fs_id, conversation_id=conv.id).first_or_404()
+    side = request.form.get('side', '').strip()
+    body = nh3.clean(request.form.get('body', '').strip(), tags=frozenset())
+    if side not in ('pro', 'con') or not body or len(body) > 280:
+        abort(400)
+
+    existing = Argument.query.filter_by(
+        proposer_id=part.participant_id,
+        featured_statement_id=fs_id,
+        side=side,
+    ).first()
+    if existing:
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({'ok': True, 'id': existing.id, 'body': existing.body})
+        return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+
+    arg = Argument(
+        featured_statement_id=fs_id,
+        proposer_id=part.participant_id,
+        body=body,
+        side=side,
+    )
+    db.session.add(arg)
+    db.session.flush()   # get arg.id before commit
+
+    # Insert new argument at a random position in this participant's display order.
+    # Create ArgumentSideState now if the participant hasn't visited the page yet.
+    state = ArgumentSideState.query.filter_by(
+        participant_id=part.participant_id,
+        featured_statement_id=fs_id,
+        side=side,
+    ).first()
+    if state is None:
+        state = ArgumentSideState(
+            participant_id=part.participant_id,
+            featured_statement_id=fs_id,
+            side=side,
+            argument_order=[],
+        )
+        db.session.add(state)
+        db.session.flush()
+    order = list(state.argument_order)
+    order.insert(random.randint(0, len(order)), arg.id)
+    state.argument_order = order
+
+    db.session.commit()
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True, 'id': arg.id, 'body': body})
+    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+
+@participant_bp.post('/c/<slug>/arguments/<int:fs_id>/<side>/skip')
+@login_required
+def argument_skip(slug, fs_id, side):
+    conv, part = _require_arg_participation(slug)
+    FeaturedStatement.query.filter_by(
+        id=fs_id, conversation_id=conv.id).first_or_404()
+    if side not in ('pro', 'con'):
+        abort(400)
+
+    state = ArgumentSideState.query.filter_by(
+        participant_id=part.participant_id,
+        featured_statement_id=fs_id,
+        side=side,
+    ).first()
+    if state is None:
+        state = ArgumentSideState(
+            participant_id=part.participant_id,
+            featured_statement_id=fs_id,
+            side=side,
+            skipped=True,
+        )
+        db.session.add(state)
+        db.session.commit()
+    elif not state.skipped:
+        state.skipped = True
+        db.session.commit()
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True})
+    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+
+@participant_bp.post('/c/<slug>/arguments/<int:arg_id>/vote')
+@login_required
+def argument_vote(slug, arg_id):
+    conv, part = _require_arg_participation(slug)
+    arg = Argument.query.filter_by(id=arg_id).first_or_404()
+    fs  = FeaturedStatement.query.filter_by(
+        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+
+    # Gate: participant must have proposed or skipped both sides.
+    pro_state = ArgumentSideState.query.filter_by(
+        participant_id=part.participant_id,
+        featured_statement_id=fs.id, side='pro').first()
+    con_state = ArgumentSideState.query.filter_by(
+        participant_id=part.participant_id,
+        featured_statement_id=fs.id, side='con').first()
+    pro_proposed = Argument.query.filter_by(
+        proposer_id=part.participant_id,
+        featured_statement_id=fs.id, side='pro').first()
+    con_proposed = Argument.query.filter_by(
+        proposer_id=part.participant_id,
+        featured_statement_id=fs.id, side='con').first()
+    pro_gate = bool(pro_proposed or (pro_state and pro_state.skipped))
+    con_gate = bool(con_proposed or (con_state and con_state.skipped))
+    is_ajax = request.headers.get('X-Requested-With') == 'fetch'
+    if not (pro_gate and con_gate):
+        if is_ajax:
+            return jsonify({'ok': False, 'reason': 'gate'}), 403
+        abort(403)
+
+    # K-approval cap: count existing votes for this side.
+    k = conv.argument_vote_data.get('K', 2)
+    side_arg_ids = [a.id for a in
+                    Argument.query.filter_by(
+                        featured_statement_id=fs.id, side=arg.side).all()]
+    existing_votes = ArgumentVote.query.filter(
+        ArgumentVote.participant_id == part.participant_id,
+        ArgumentVote.argument_id.in_(side_arg_ids),
+    ).count()
+    if existing_votes >= k:
+        if is_ajax:
+            return jsonify({'ok': False, 'reason': 'cap'}), 409
+        abort(409)   # cap reached
+
+    # Can't vote on hidden or own argument.
+    if arg.hidden:
+        if is_ajax:
+            return jsonify({'ok': False, 'reason': 'hidden'}), 403
+        abort(403)
+    if arg.proposer_id == part.participant_id:
+        if is_ajax:
+            return jsonify({'ok': False, 'reason': 'own'}), 403
+        abort(403)
+
+    existing = ArgumentVote.query.filter_by(
+        participant_id=part.participant_id, argument_id=arg_id).first()
+    if not existing:
+        db.session.add(ArgumentVote(
+            argument_id=arg_id,
+            participant_id=part.participant_id,
+        ))
+        db.session.commit()
+    if is_ajax:
+        return jsonify({'ok': True})
+    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+
+@participant_bp.post('/c/<slug>/arguments/<int:arg_id>/unvote')
+@login_required
+def argument_unvote(slug, arg_id):
+    conv, part = _require_arg_participation(slug)
+    arg = Argument.query.filter_by(id=arg_id).first_or_404()
+    FeaturedStatement.query.filter_by(
+        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+    existing = ArgumentVote.query.filter_by(
+        participant_id=part.participant_id, argument_id=arg_id).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True})
+    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+
+@participant_bp.post('/c/<slug>/arguments/<int:arg_id>/hide')
+@login_required
+def argument_hide(slug, arg_id):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    if not _can_moderate(conv):
+        abort(403)
+    arg = Argument.query.filter_by(id=arg_id).first_or_404()
+    FeaturedStatement.query.filter_by(
+        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+    arg.hidden = True
+    db.session.commit()
+    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+
+@participant_bp.post('/c/<slug>/arguments/<int:arg_id>/unhide')
+@login_required
+def argument_unhide(slug, arg_id):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    if not _can_moderate(conv):
+        abort(403)
+    arg = Argument.query.filter_by(id=arg_id).first_or_404()
+    FeaturedStatement.query.filter_by(
+        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+    arg.hidden = False
+    db.session.commit()
+    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+
+# ── Identity reveal ───────────────────────────────────────────────────────
+
+@participant_bp.get('/c/<slug>/reveal')
+@login_required
+def reveal_identity(slug):
+    conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(404)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first_or_404()
+    if not conv.closed_at:
+        abort(404)
+
+    _nullify_expired_reveals(conv)
+    db.session.refresh(participation)
+
+    age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
+    opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
+    return render_template('reveal.html',
+                           conversation=conv,
+                           participation=participation,
+                           window_open=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS),
+                           window_closed=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS),
+                           opens_at=opens_at)
+
+@participant_bp.post('/c/<slug>/reveal')
+@login_required
+@limiter.limit('5 per minute')
+def reveal_identity_post(slug):
+    conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(404)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first_or_404()
+
+    if not conv.closed_at:
+        abort(400)
+
+    age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
+    if age < timedelta(days=_REVEAL_COOLDOWN_DAYS):
+        abort(400)
+    if age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
+        abort(400)
+    if participation.public_username is not None:
+        abort(400)
+    if request.form.get('confirm') != '1':
+        return redirect(url_for('participant.reveal_identity', slug=slug))
+
+    participation.public_username = participant.mw_username
+    participation.revealed_at     = datetime.now(timezone.utc)
+    db.session.commit()
+    return redirect(url_for('participant.conversation', slug=slug))
+
+
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
 
@@ -1210,6 +1598,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     # blueprint explicitly rather than per-route.
     app.register_blueprint(proxy_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(participant_bp)
     csrf.exempt(proxy_bp)
 
     return app
@@ -1375,392 +1764,6 @@ def _register_routes(app: Flask) -> None:
                                moderating=moderating,
                                pseudonym_map=pseudonym_map,
                                dev_test_users=dev_test_users)
-
-    # ── Accept ───────────────────────────────────────────────────────────────
-
-    @app.get('/accept/<slug>')
-    @login_required
-    def accept(slug):
-        conv        = Conversation.query.filter_by(slug=slug).first_or_404()
-        participant = _current_participant()
-        _check_conversation_access(conv, participant)
-        if participant and Participation.query.filter_by(
-                participant_id=participant.id,
-                conversation_id=conv.id).first():
-            return redirect(url_for('conversation', slug=slug))
-        pseudonyms = _generate_pseudonyms(5)
-        emailable  = session.get('emailable', False)
-        return render_template('accept.html', conversation=conv,
-                               emailable=emailable, pseudonyms=pseudonyms,
-                               reveal_cooldown=_REVEAL_COOLDOWN_DAYS,
-                               reveal_window_end=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS,
-                               retention_public_days=120)
-
-    @app.post('/accept/<slug>')
-    @login_required
-    @limiter.limit('10 per minute')
-    def accept_post(slug):
-        conv        = Conversation.query.filter_by(slug=slug).first_or_404()
-        participant = _current_participant()
-        if participant is None:
-            abort(404)
-        _check_conversation_access(conv, participant)
-
-        if Participation.query.filter_by(
-                participant_id=participant.id,
-                conversation_id=conv.id).first():
-            return redirect(url_for('conversation', slug=slug))
-
-        pseudonym = request.form.get('pseudonym', '').strip()
-        emailable = session.get('emailable', False)
-
-        if not _PSEUDONYM_RE.match(pseudonym):
-            abort(400)
-
-        db.session.add(Participation(
-            participant_id=participant.id,
-            conversation_id=conv.id,
-            pseudonym=pseudonym,
-            notify_email=bool(request.form.get('notify_email')) and emailable,
-            notify_talk_page=bool(request.form.get('notify_talk_page')),
-        ))
-        try:
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
-            pseudonyms = _generate_pseudonyms(5)
-            return render_template('accept.html', conversation=conv,
-                                   emailable=emailable, pseudonyms=pseudonyms,
-                                   error='That pseudonym was just taken — please choose another.')
-        return redirect(url_for('conversation', slug=slug))
-
-    @app.get('/accept/<slug>/pseudonyms')
-    @login_required
-    @limiter.limit('30 per minute')
-    def accept_pseudonyms(slug):
-        Conversation.query.filter_by(slug=slug).first_or_404()
-        return jsonify({'pseudonyms': _generate_pseudonyms(5)})
-
-    # ── Argument helpers ──────────────────────────────────────────────────────
-
-    # ── Conversation ─────────────────────────────────────────────────────────
-
-    @app.get('/c/<slug>')
-    @login_required
-    def conversation(slug):
-        conv        = Conversation.query.filter_by(slug=slug).first_or_404()
-        participant = _current_participant()
-        _check_conversation_access(conv, participant)
-
-        participation = None
-        if participant:
-            participation = Participation.query.filter_by(
-                participant_id=participant.id,
-                conversation_id=conv.id,
-            ).first()
-
-        if participation is None:
-            return redirect(url_for('accept', slug=slug))
-
-        # Lazy nullification: clear identity links past the internal retention deadline.
-        if conv.closed_at:
-            _nullify_expired_reveals(conv)
-            db.session.refresh(participation)
-
-        can_mod = _can_moderate(conv, participant)
-
-        results     = None
-        polis_stats = None
-        if conv.phase_public_results:
-            results      = PolisParticipantClient(
-                current_app.config['PARTICIAPI_BASE']).get_results(conv.polis_id)
-            polis_stats = _polis_server_client().get_polis_stats(conv.polis_id)
-
-        # Reveal window state for closed conversations.
-        reveal_state    = None
-        reveal_opens_at = None
-        if conv.closed_at:
-            age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-            reveal_opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
-            if participation.public_username:
-                reveal_state = 'revealed'
-            elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
-                reveal_state = 'expired'
-            elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
-                reveal_state = 'open'
-            else:
-                reveal_state = 'pending'
-
-        featured_data = []
-        if conv.phase_argument_mapping and participation:
-            featured_data = _build_featured_data(conv, participation, can_mod=can_mod)
-
-        return render_template('conversation.html',
-                               conversation=conv,
-                               participation=participation,
-                               can_moderate=can_mod,
-                               results=results,
-                               polis_stats=polis_stats,
-                               polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''),
-                               reveal_state=reveal_state,
-                               reveal_opens_at=reveal_opens_at,
-                               featured_data=featured_data,
-                               new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10,
-                               new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
-                               new_stmt_ids=participation.new_stmt_ids if participation else [])
-
-    # ── Arguments ────────────────────────────────────────────────────────────
-
-    @app.post('/c/<slug>/arguments/<int:fs_id>/submit')
-    @login_required
-    def argument_submit(slug, fs_id):
-        conv, part = _require_arg_participation(slug)
-        FeaturedStatement.query.filter_by(
-            id=fs_id, conversation_id=conv.id).first_or_404()
-        side = request.form.get('side', '').strip()
-        body = nh3.clean(request.form.get('body', '').strip(), tags=frozenset())
-        if side not in ('pro', 'con') or not body or len(body) > 280:
-            abort(400)
-
-        existing = Argument.query.filter_by(
-            proposer_id=part.participant_id,
-            featured_statement_id=fs_id,
-            side=side,
-        ).first()
-        if existing:
-            if request.headers.get('X-Requested-With') == 'fetch':
-                return jsonify({'ok': True, 'id': existing.id, 'body': existing.body})
-            return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
-
-        arg = Argument(
-            featured_statement_id=fs_id,
-            proposer_id=part.participant_id,
-            body=body,
-            side=side,
-        )
-        db.session.add(arg)
-        db.session.flush()   # get arg.id before commit
-
-        # Insert new argument at a random position in this participant's display order.
-        # Create ArgumentSideState now if the participant hasn't visited the page yet.
-        state = ArgumentSideState.query.filter_by(
-            participant_id=part.participant_id,
-            featured_statement_id=fs_id,
-            side=side,
-        ).first()
-        if state is None:
-            state = ArgumentSideState(
-                participant_id=part.participant_id,
-                featured_statement_id=fs_id,
-                side=side,
-                argument_order=[],
-            )
-            db.session.add(state)
-            db.session.flush()
-        order = list(state.argument_order)
-        order.insert(random.randint(0, len(order)), arg.id)
-        state.argument_order = order
-
-        db.session.commit()
-        if request.headers.get('X-Requested-With') == 'fetch':
-            return jsonify({'ok': True, 'id': arg.id, 'body': body})
-        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
-
-    @app.post('/c/<slug>/arguments/<int:fs_id>/<side>/skip')
-    @login_required
-    def argument_skip(slug, fs_id, side):
-        conv, part = _require_arg_participation(slug)
-        FeaturedStatement.query.filter_by(
-            id=fs_id, conversation_id=conv.id).first_or_404()
-        if side not in ('pro', 'con'):
-            abort(400)
-
-        state = ArgumentSideState.query.filter_by(
-            participant_id=part.participant_id,
-            featured_statement_id=fs_id,
-            side=side,
-        ).first()
-        if state is None:
-            state = ArgumentSideState(
-                participant_id=part.participant_id,
-                featured_statement_id=fs_id,
-                side=side,
-                skipped=True,
-            )
-            db.session.add(state)
-            db.session.commit()
-        elif not state.skipped:
-            state.skipped = True
-            db.session.commit()
-        if request.headers.get('X-Requested-With') == 'fetch':
-            return jsonify({'ok': True})
-        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
-
-    @app.post('/c/<slug>/arguments/<int:arg_id>/vote')
-    @login_required
-    def argument_vote(slug, arg_id):
-        conv, part = _require_arg_participation(slug)
-        arg = Argument.query.filter_by(id=arg_id).first_or_404()
-        fs  = FeaturedStatement.query.filter_by(
-            id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-
-        # Gate: participant must have proposed or skipped both sides.
-        pro_state = ArgumentSideState.query.filter_by(
-            participant_id=part.participant_id,
-            featured_statement_id=fs.id, side='pro').first()
-        con_state = ArgumentSideState.query.filter_by(
-            participant_id=part.participant_id,
-            featured_statement_id=fs.id, side='con').first()
-        pro_proposed = Argument.query.filter_by(
-            proposer_id=part.participant_id,
-            featured_statement_id=fs.id, side='pro').first()
-        con_proposed = Argument.query.filter_by(
-            proposer_id=part.participant_id,
-            featured_statement_id=fs.id, side='con').first()
-        pro_gate = bool(pro_proposed or (pro_state and pro_state.skipped))
-        con_gate = bool(con_proposed or (con_state and con_state.skipped))
-        is_ajax = request.headers.get('X-Requested-With') == 'fetch'
-        if not (pro_gate and con_gate):
-            if is_ajax:
-                return jsonify({'ok': False, 'reason': 'gate'}), 403
-            abort(403)
-
-        # K-approval cap: count existing votes for this side.
-        k = conv.argument_vote_data.get('K', 2)
-        side_arg_ids = [a.id for a in
-                        Argument.query.filter_by(
-                            featured_statement_id=fs.id, side=arg.side).all()]
-        existing_votes = ArgumentVote.query.filter(
-            ArgumentVote.participant_id == part.participant_id,
-            ArgumentVote.argument_id.in_(side_arg_ids),
-        ).count()
-        if existing_votes >= k:
-            if is_ajax:
-                return jsonify({'ok': False, 'reason': 'cap'}), 409
-            abort(409)   # cap reached
-
-        # Can't vote on hidden or own argument.
-        if arg.hidden:
-            if is_ajax:
-                return jsonify({'ok': False, 'reason': 'hidden'}), 403
-            abort(403)
-        if arg.proposer_id == part.participant_id:
-            if is_ajax:
-                return jsonify({'ok': False, 'reason': 'own'}), 403
-            abort(403)
-
-        existing = ArgumentVote.query.filter_by(
-            participant_id=part.participant_id, argument_id=arg_id).first()
-        if not existing:
-            db.session.add(ArgumentVote(
-                argument_id=arg_id,
-                participant_id=part.participant_id,
-            ))
-            db.session.commit()
-        if is_ajax:
-            return jsonify({'ok': True})
-        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
-
-    @app.post('/c/<slug>/arguments/<int:arg_id>/unvote')
-    @login_required
-    def argument_unvote(slug, arg_id):
-        conv, part = _require_arg_participation(slug)
-        arg = Argument.query.filter_by(id=arg_id).first_or_404()
-        FeaturedStatement.query.filter_by(
-            id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-        existing = ArgumentVote.query.filter_by(
-            participant_id=part.participant_id, argument_id=arg_id).first()
-        if existing:
-            db.session.delete(existing)
-            db.session.commit()
-        if request.headers.get('X-Requested-With') == 'fetch':
-            return jsonify({'ok': True})
-        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
-
-    @app.post('/c/<slug>/arguments/<int:arg_id>/hide')
-    @login_required
-    def argument_hide(slug, arg_id):
-        conv = Conversation.query.filter_by(slug=slug).first_or_404()
-        if not _can_moderate(conv):
-            abort(403)
-        arg = Argument.query.filter_by(id=arg_id).first_or_404()
-        FeaturedStatement.query.filter_by(
-            id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-        arg.hidden = True
-        db.session.commit()
-        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
-
-    @app.post('/c/<slug>/arguments/<int:arg_id>/unhide')
-    @login_required
-    def argument_unhide(slug, arg_id):
-        conv = Conversation.query.filter_by(slug=slug).first_or_404()
-        if not _can_moderate(conv):
-            abort(403)
-        arg = Argument.query.filter_by(id=arg_id).first_or_404()
-        FeaturedStatement.query.filter_by(
-            id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-        arg.hidden = False
-        db.session.commit()
-        return redirect(url_for('conversation', slug=slug) + '#tab-arguments')
-
-    # ── Identity reveal ───────────────────────────────────────────────────────
-
-    @app.get('/c/<slug>/reveal')
-    @login_required
-    def reveal_identity(slug):
-        conv        = Conversation.query.filter_by(slug=slug).first_or_404()
-        participant = _current_participant()
-        if participant is None:
-            abort(404)
-        participation = Participation.query.filter_by(
-            participant_id=participant.id,
-            conversation_id=conv.id,
-        ).first_or_404()
-        if not conv.closed_at:
-            abort(404)
-
-        _nullify_expired_reveals(conv)
-        db.session.refresh(participation)
-
-        age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-        opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
-        return render_template('reveal.html',
-                               conversation=conv,
-                               participation=participation,
-                               window_open=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS),
-                               window_closed=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS),
-                               opens_at=opens_at)
-
-    @app.post('/c/<slug>/reveal')
-    @login_required
-    @limiter.limit('5 per minute')
-    def reveal_identity_post(slug):
-        conv        = Conversation.query.filter_by(slug=slug).first_or_404()
-        participant = _current_participant()
-        if participant is None:
-            abort(404)
-        participation = Participation.query.filter_by(
-            participant_id=participant.id,
-            conversation_id=conv.id,
-        ).first_or_404()
-
-        if not conv.closed_at:
-            abort(400)
-
-        age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-        if age < timedelta(days=_REVEAL_COOLDOWN_DAYS):
-            abort(400)
-        if age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
-            abort(400)
-        if participation.public_username is not None:
-            abort(400)
-        if request.form.get('confirm') != '1':
-            return redirect(url_for('reveal_identity', slug=slug))
-
-        participation.public_username = participant.mw_username
-        participation.revealed_at     = datetime.now(timezone.utc)
-        db.session.commit()
-        return redirect(url_for('conversation', slug=slug))
 
     # ── OAuth ─────────────────────────────────────────────────────────────────
 
