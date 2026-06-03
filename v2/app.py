@@ -56,6 +56,10 @@ def _read_secret(name: str) -> str:
     return os.environ.get(name.upper().replace('-', '_'), '')
 
 
+def _split_csv(value: str) -> list[str]:
+    return [v.strip() for v in (value or '').split(',') if v.strip()]
+
+
 ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.strip()]
 
 _REVEAL_COOLDOWN_DAYS = 30   # days after close before reveal window opens
@@ -1763,6 +1767,19 @@ def create_app(test_config: dict | None = None) -> Flask:
     # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
     if test_config is not None:
         app.config.update(test_config)
+
+    _trusted_hosts = app.config.get('TRUSTED_HOSTS')
+    if _trusted_hosts is None:
+        _trusted_hosts = _split_csv(_read_secret('trusted-hosts'))
+    elif isinstance(_trusted_hosts, str):
+        _trusted_hosts = _split_csv(_trusted_hosts)
+    if _trusted_hosts:
+        app.config['TRUSTED_HOSTS'] = _trusted_hosts
+    elif not app.debug and not app.testing:
+        raise RuntimeError(
+            'TRUSTED_HOSTS is not set. Configure comma-separated allowed hostnames '
+            'such as wiki-polis.toolforge.org before starting production.'
+        )
 
     _ratelimit_storage_uri = (
         app.config.get('RATELIMIT_STORAGE_URI')

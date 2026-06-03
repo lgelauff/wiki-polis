@@ -41,6 +41,40 @@ def test_safe_redirect_allows_relative_paths(app):
         assert _safe_redirect('/accept/foo', '/') == '/accept/foo'
 
 
+def test_trusted_hosts_rejects_unexpected_host(tmp_path):
+    """Flask rejects requests whose Host header is outside TRUSTED_HOSTS."""
+    session_dir = tmp_path / 'sessions-trusted-hosts'
+    session_dir.mkdir()
+    from app import create_app
+    a = create_app({
+        'TESTING': True,
+        'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/trusted-hosts.db',
+        'SECRET_KEY': 'test-secret',
+        'SESSION_TYPE': 'cachelib',
+        'SESSION_CACHELIB': FileSystemCache(str(session_dir)),
+        'TRUSTED_HOSTS': ['wiki-polis.test'],
+    })
+    with a.app_context():
+        db.create_all()
+    client = a.test_client()
+
+    assert client.get('/', headers={'Host': 'wiki-polis.test'}).status_code == 200
+    assert client.get('/', headers={'Host': 'evil.test'}).status_code == 400
+
+
+def test_production_requires_trusted_hosts(tmp_path):
+    """Production must declare the expected hostnames before startup."""
+    with patch.dict(os.environ, {'FLASK_DEBUG': '0', 'TRUSTED_HOSTS': ''}, clear=False):
+        from app import create_app
+        with pytest.raises(RuntimeError, match='TRUSTED_HOSTS is not set'):
+            create_app({
+                'TESTING': False,
+                'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/prod-missing-hosts.db',
+                'SECRET_KEY': 'test-secret',
+                'RATELIMIT_STORAGE_URI': 'redis://localhost:6379/0',
+            })
+
+
 def test_admin_role_redirect_to_cannot_escape(app, admin_client, admin_participant, participant):
     """redirect_to field in role forms is sanitised through _safe_redirect."""
     conv = Conversation(slug='sec-conv', polis_id='sec1234567',
@@ -141,6 +175,7 @@ def test_production_requires_ratelimit_storage_uri(tmp_path):
                 'TESTING': False,
                 'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/prod-missing-rate.db',
                 'SECRET_KEY': 'test-secret',
+                'TRUSTED_HOSTS': ['wiki-polis.test'],
             })
 
 
@@ -154,6 +189,7 @@ def test_production_rejects_local_ratelimit_storage_uri(tmp_path):
                 'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/prod-local-rate.db',
                 'SECRET_KEY': 'test-secret',
                 'RATELIMIT_STORAGE_URI': 'memory://',
+                'TRUSTED_HOSTS': ['wiki-polis.test'],
             })
 
 

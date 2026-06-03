@@ -320,6 +320,7 @@ Non-secret values can be passed as arguments:
 ```bash
 toolforge envvars create OAUTH_REDIRECT_URI 'https://wiki-polis.toolforge.org/oauth-callback'
 toolforge envvars create RATELIMIT_STORAGE_URI 'redis://<rate-limit-host>:6379/0'
+toolforge envvars create TRUSTED_HOSTS 'wiki-polis.toolforge.org'
 ```
 
 Values to enter at the prompts:
@@ -333,6 +334,7 @@ Values to enter at the prompts:
 - `POLIS_ADMIN_PASSWORD` — password of the Polis system account
 - `POLIS_DATABASE_URL` — `postgresql://wiki_polis_ro:<password>@<vps-private-ip>:5432/polis` — use the password set when creating the `wiki_polis_ro` role (see Security hardening step above); do not use the `polis` superuser here
 - `RATELIMIT_STORAGE_URI` — distributed Flask-Limiter storage, for example `redis://<rate-limit-host>:6379/0`; production startup fails if this is missing or set to a local backend
+- `TRUSTED_HOSTS` — comma-separated allowed request hostnames, for example `wiki-polis.toolforge.org`; add explicit staging hostnames on staging deployments
 
 > `toolforge envvars list` shows names only, not values. Keep a local record.
 
@@ -541,6 +543,7 @@ export SECRET_KEY=$(toolforge envvars show SECRET_KEY | tail -1 | awk '{print $N
 | `POLIS_ADMIN_PASSWORD` | yes | Password of the Polis system account |
 | `POLIS_DATABASE_URL` | no | Direct Postgres connection for admin stats panel; leave blank to disable |
 | `RATELIMIT_STORAGE_URI` | yes (prod) | Distributed Flask-Limiter backend, for example `redis://<host>:6379/0` |
+| `TRUSTED_HOSTS` | yes (prod) | Comma-separated allowed request hostnames, for example `wiki-polis.toolforge.org` |
 | `DEV_LOGIN_USER` | dev only | Bypasses OAuth in local dev; never set in production |
 | `DEV_FAKE_LOGIN` | dev only | Set to `1` to show hardcoded test-user badges on the home page; never set in production |
 | `FLASK_DEBUG` | dev only | Enables debug mode; never set in production |
