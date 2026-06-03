@@ -1686,6 +1686,14 @@ def _register_routes(app: Flask) -> None:
                 )
                 db.session.add(participant)
                 db.session.commit()
+            elif participant.mw_username != username or participant.xid != xid:
+                # Reused dev row: keep it consistent with the username we authenticate as.
+                # _current_participant() looks up by mw_username, so a drifted row (e.g. a
+                # pre-existing dev participant from an older username/xid scheme) would make
+                # it return None and 404 participant-gated routes like /accept and /reveal.
+                participant.mw_username = username
+                participant.xid         = xid
+                db.session.commit()
             session['username']  = username
             session['xid']       = xid
             session['emailable'] = False
