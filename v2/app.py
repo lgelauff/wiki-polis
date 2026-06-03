@@ -132,10 +132,16 @@ def _parse_conversation_form() -> dict:
 def _current_participant() -> 'Participant | None':
     if 'participant' in g:
         return g.participant
+    xid = session.get('xid')
+    if xid:
+        g.participant = Participant.query.filter_by(xid=xid).first()
+        return g.participant
     username = session.get('username')
     if not username:
         g.participant = None
         return None
+    # Temporary compatibility for old server-side sessions created before xid
+    # was stored. New sessions resolve by the stable Wikimedia user-id hash.
     g.participant = Participant.query.filter_by(mw_username=username).first()
     return g.participant
 
@@ -1898,7 +1904,9 @@ def _register_routes(app: Flask) -> None:
                     xid=xid,
                 )
                 db.session.add(participant)
-                db.session.commit()
+            else:
+                participant.xid = xid
+            db.session.commit()
             session['username']  = username
             session['xid']       = xid
             session['emailable'] = _is_emailable(username)
@@ -1940,15 +1948,10 @@ def _register_routes(app: Flask) -> None:
                     xid=xid,
                 )
                 db.session.add(participant)
-                db.session.commit()
-            elif participant.mw_username != username or participant.xid != xid:
-                # Reused dev row: keep it consistent with the username we authenticate as.
-                # _current_participant() looks up by mw_username, so a drifted row (e.g. a
-                # pre-existing dev participant from an older username/xid scheme) would make
-                # it return None and 404 participant-gated routes like /accept and /reveal.
+            else:
                 participant.mw_username = username
-                participant.xid         = xid
-                db.session.commit()
+                participant.xid = xid
+            db.session.commit()
             session['username']  = username
             session['xid']       = xid
             session['emailable'] = False
@@ -2113,6 +2116,8 @@ def _register_routes(app: Flask) -> None:
             db.session.add(participant)
         elif participant.mw_username != username:
             participant.mw_username = username
+        if participant.xid != xid:
+            participant.xid = xid
         db.session.commit()
 
         next_url = session.pop('next', None)

@@ -84,7 +84,8 @@ def conversation(app):
 # ── Session helpers ───────────────────────────────────────────────────────────
 
 def login(client, username: str, emailable: bool = True) -> None:
-    xid = hashlib.sha256(username.encode()).hexdigest()
+    participant = Participant.query.filter_by(mw_username=username).first()
+    xid = participant.xid if participant else hashlib.sha256(username.encode()).hexdigest()
     with client.session_transaction() as sess:
         sess['username'] = username
         sess['xid'] = xid

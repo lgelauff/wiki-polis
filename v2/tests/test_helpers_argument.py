@@ -189,6 +189,7 @@ def test_require_arg_participation_gate_branches(app, participant, conv, part):
     # Active + in the argument phase + participating → returns the pair.
     with app.test_request_context():
         session['username'] = participant.mw_username
+        session['xid'] = participant.xid
         got_conv, got_part = _require_arg_participation(conv.slug)
         assert got_conv.id == conv.id
         assert got_part.participant_id == participant.id
@@ -198,6 +199,7 @@ def test_require_arg_participation_gate_branches(app, participant, conv, part):
     db.session.commit()
     with app.test_request_context():
         session['username'] = participant.mw_username
+        session['xid'] = participant.xid
         with pytest.raises(Forbidden):
             _require_arg_participation(conv.slug)
 
@@ -207,6 +209,7 @@ def test_require_arg_participation_gate_branches(app, participant, conv, part):
     db.session.commit()
     with app.test_request_context():
         session['username'] = participant.mw_username
+        session['xid'] = participant.xid
         with pytest.raises(Forbidden):
             _require_arg_participation(conv.slug)
 
