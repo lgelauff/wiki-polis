@@ -68,6 +68,47 @@ When a 5xx is reported (by a soak run, monitoring, or a user), work outside-in:
 4. **Reproduce.** `v2/synthetic_traffic.py` drives the real proxy under load and exits
    non-zero on any 5xx — use it to confirm a fix or to decide a one-off 5xx was noise.
 
+## Inspecting Polis data (votes & statements)
+
+**Statement votes live only in the Polis Postgres on the VPS — never in the wiki-polis
+Flask DB.** (The Flask ToolsDB holds `participation`/pseudonyms and *argument* votes
+(`argument_vote`); a statement vote goes browser → proxy → Particiapi → Polis PG.) So to
+verify a vote, query Polis PG directly. Connect with `docker exec` (no password needed)
+— note the role/db is **`polis`**, *not* `postgres`:
+
+```bash
+CID=wiki-polis-staging_postgres_1        # prod: particiapp-docker_postgres_1
+docker exec -it $CID psql -U polis -d polis -c '\d votes'
+```
+
+Key tables (Polis schema):
+- `zinvites(zinvite, zid)` — maps the conversation's zinvite string (the `polis_id` shown
+  on the admin page) to the numeric `zid`.
+- `comments(zid, tid, txt, mod, active)` — the statements (`tid` = statement id).
+- `votes(zid, pid, tid, vote, created, …)` — **append-only** vote history. `vote` is
+  **−1 = agree, 0 = pass, 1 = disagree**; `created` is **epoch-millis** (`to_timestamp(created/1000.0)`
+  to read it). There is **no `modified` column** here.
+- `votes_latest_unique(zid, pid, tid, vote, modified)` — **the authoritative current vote**
+  per (participant, statement). An INSERT rule on `votes` upserts this table on every vote,
+  so a re-vote flips `vote` and bumps `modified` here while leaving a second history row in
+  `votes`.
+
+```bash
+# Current (authoritative) vote per participant+statement in a conversation:
+docker exec -it $CID psql -U polis -d polis -c \
+  "SELECT pid, tid, vote, to_timestamp(modified/1000.0) AS modified_at
+     FROM votes_latest_unique
+    WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<ZINVITE>')
+    ORDER BY modified DESC LIMIT 20;"
+
+# Full vote history (a vote *change* shows as two rows for the same pid+tid):
+docker exec -it $CID psql -U polis -d polis -c \
+  "SELECT pid, tid, vote, to_timestamp(created/1000.0) AS voted_at
+     FROM votes
+    WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<ZINVITE>')
+    ORDER BY created DESC LIMIT 20;"
+```
+
 ## Backups & restore
 
 - **Backups:** a nightly `pg_dump` of the Polis Postgres DB → offsite. **⚠️ not live
