@@ -3,8 +3,9 @@ from unittest.mock import patch
 
 import pytest
 
-from db import AdminRole, Conversation, ConversationInvite, db
+from db import AdminRole, Conversation, ConversationInvite, Participant, db
 from polis_admin import PolisServerError
+from tests.conftest import login
 
 
 @pytest.fixture
@@ -183,6 +184,23 @@ def test_remove_role(admin_client, admin_participant, conv, participant):
     resp = admin_client.post(f'/admin/roles/{role.id}/remove')
     assert resp.status_code == 302
     assert db.session.get(AdminRole, role.id) is None
+
+
+def test_scoped_moderator_cannot_see_global_role_controls(client, conv, participant):
+    other = Participant(mw_user_id=33333, mw_username='otheruser', xid='t' * 64)
+    db.session.add(other)
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='moderator'))
+    db.session.commit()
+    login(client, 'testuser')
+
+    resp = client.get(f'/admin/conversations/{conv.id}')
+
+    assert resp.status_code == 200
+    assert b'testuser' in resp.data
+    assert b'otheruser' not in resp.data
+    assert b'Add moderator' not in resp.data
+    assert b'class="btn-small btn-danger">remove</button>' not in resp.data
 
 
 # ── Invites ───────────────────────────────────────────────────────────────────

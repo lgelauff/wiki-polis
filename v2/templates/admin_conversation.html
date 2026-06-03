@@ -258,6 +258,8 @@
     </form>
   </div>
 
+  {% endif %}{# is_admin #}
+
   <!-- ── Moderators ─────────────────────────────────────── -->
   <h3 class="section-heading">Moderators</h3>
 
@@ -276,6 +278,7 @@
         <td>{{ role.participant.mw_username }}</td>
         <td>{{ role.role }}</td>
         <td>
+          {% if can_manage_roles %}
           <form method="post"
                 action="{{ url_for('admin.admin_role_remove', role_id=role.id) }}"
                 style="display:inline">
@@ -284,6 +287,7 @@
                    value="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">
             <button type="submit" class="btn-small btn-danger">remove</button>
           </form>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -293,6 +297,7 @@
   <p class="muted" style="margin-bottom:1rem;font-size:14px">No moderators assigned.</p>
   {% endif %}
 
+  {% if can_manage_roles %}
   <div class="edit-form">
     <h3>Add moderator</h3>
     <form method="post" action="{{ url_for('admin.admin_role_add') }}">
@@ -320,8 +325,7 @@
       <button type="submit">Add</button>
     </form>
   </div>
-
-  {% endif %}{# is_admin #}
+  {% endif %}
 
 </div>
 
