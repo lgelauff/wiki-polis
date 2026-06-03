@@ -560,6 +560,11 @@ pa-conversation:state(loading) { opacity: 0.5; }
 .statement-card--voted .vote-choice-row { display: none !important; }
 .statement-card--voted .stmt-meta-right { visibility: hidden; }
 
+/* Re-vote (#69): while changing a recorded vote, reveal the choice buttons over the
+   voted card (original statement text + badge stay visible for context). Declared after
+   the --voted hide, and !important, so it also beats the no-statement sibling rule. */
+.statement-card--revoting .vote-choice-row { display: flex !important; }
+
 .propose-stmt-display {
   margin: 0;
   font-size: 15px;
