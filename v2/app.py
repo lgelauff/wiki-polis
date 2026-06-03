@@ -1906,8 +1906,8 @@ def _register_routes(app: Flask) -> None:
 
     # ── Dev test users (DEV_FAKE_LOGIN=1) ────────────────────────────────────
     # Hardcoded test accounts with negative mw_user_ids so they can never
-    # collide with real Wikimedia accounts. Only active when DEV_FAKE_LOGIN=1
-    # is set in the environment — never enable this on production.
+    # collide with real Wikimedia accounts. Only active for local debug runs;
+    # never register this bypass on Toolforge or other non-debug deployments.
 
     _DEV_TEST_USERS = [
         {'username': 'dev-user-1', 'mw_user_id': -1},
@@ -1915,7 +1915,12 @@ def _register_routes(app: Flask) -> None:
         {'username': 'dev-user-3', 'mw_user_id': -3},
     ]
 
-    _fake_login_enabled = os.environ.get('DEV_FAKE_LOGIN', '').strip() == '1'
+    _fake_login_requested = os.environ.get('DEV_FAKE_LOGIN', '').strip() == '1'
+    _fake_login_enabled = bool(app.debug and _fake_login_requested and not _on_toolforge)
+    if _fake_login_requested and not _fake_login_enabled:
+        app.logger.warning(
+            'DEV_FAKE_LOGIN ignored because fake login is only allowed in local debug mode'
+        )
     app.config['DEV_FAKE_LOGIN'] = _fake_login_enabled
     app.config['DEV_TEST_USERS'] = _DEV_TEST_USERS if _fake_login_enabled else []
 

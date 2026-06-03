@@ -2,6 +2,9 @@
 import os
 from unittest.mock import patch
 
+from cachelib.file import FileSystemCache
+import pytest
+
 from db import Conversation, db
 
 
@@ -63,7 +66,6 @@ def test_dev_db_isolation_refuses_non_sqlite(tmp_path):
         # Make sure we don't collide with real secrets
         'SECRET_KEY': 'test',
     }
-    import pytest
     with patch.dict(os.environ, env, clear=False):
         from app import create_app
         with pytest.raises(RuntimeError, match='sqlite'):
@@ -83,6 +85,51 @@ def test_dev_db_isolation_skipped_without_dev_login_user(tmp_path):
             'SESSION_FILE_DIR': str(tmp_path),
         })
         assert a is not None
+
+
+def test_fake_login_ignored_on_toolforge(tmp_path):
+    """DEV_FAKE_LOGIN must not register auth-bypass routes on Toolforge."""
+    session_dir = tmp_path / 'sessions-toolforge'
+    session_dir.mkdir()
+    env = {
+        'DEV_FAKE_LOGIN': '1',
+        'FLASK_DEBUG': '1',
+        'TOOL_TOOLFORGE_API_URL': 'https://api.svc.tools.eqiad1.wikimedia.cloud',
+        'SECRET_KEY': 'test',
+    }
+    with patch.dict(os.environ, env, clear=False):
+        from app import create_app
+        a = create_app({
+            'TESTING': True,
+            'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/fake-toolforge.db',
+            'SESSION_TYPE': 'cachelib',
+            'SESSION_CACHELIB': FileSystemCache(str(session_dir)),
+        })
+    assert a.config['DEV_FAKE_LOGIN'] is False
+    assert a.config['DEV_TEST_USERS'] == []
+    assert a.test_client().get('/dev/login/dev-user-1').status_code == 404
+
+
+def test_fake_login_ignored_when_not_debug(tmp_path):
+    """DEV_FAKE_LOGIN must not register auth-bypass routes in production mode."""
+    session_dir = tmp_path / 'sessions-prod'
+    session_dir.mkdir()
+    env = {
+        'DEV_FAKE_LOGIN': '1',
+        'FLASK_DEBUG': '0',
+        'TOOL_TOOLFORGE_API_URL': '',
+        'SECRET_KEY': 'test',
+    }
+    with patch.dict(os.environ, env, clear=False):
+        from app import create_app
+        a = create_app({
+            'TESTING': True,
+            'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/fake-prod.db',
+            'SESSION_TYPE': 'cachelib',
+            'SESSION_CACHELIB': FileSystemCache(str(session_dir)),
+        })
+    assert a.config['DEV_FAKE_LOGIN'] is False
+    assert a.test_client().get('/dev/login/dev-user-1').status_code == 404
 
 
 def test_proxy_delete_method_not_allowed(auth_client):
