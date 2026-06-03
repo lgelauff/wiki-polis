@@ -954,19 +954,70 @@
   }
 
   // ── Vote buttons ──────────────────────────────────────────────────────────────
+  // tid of a recorded vote the participant is currently changing (#69); null = normal vote.
+  var revoteTid = null;
+
   choiceRow.addEventListener('click', function (e) {
     var btn = e.target.closest('.vote-choice');
     if (!btn) return;
-    var type    = btn.dataset.type;
+    var type = btn.dataset.type;
+
+    if (revoteTid != null) {
+      // ── Re-vote: change an already-recorded vote (#69 / D-VOTE). ──
+      // submitVote(value, tid) re-PUTs to Polis (upsert on participant+tid) using the
+      // component's own session + CSRF, and targets the *original* statement — the visible
+      // queue has already advanced past it. It does NOT dispatch particiappvotesubmit, so
+      // lastVoteStmtId is preserved and the same statement can be changed again.
+      var keepText = originalStmtText;
+      var finish = function (ok) {
+        conv.removeEventListener('particiappvotesubmitsuccess', onOk);
+        conv.removeEventListener('particiappvotesubmiterror',  onErr);
+        stmtCard.classList.remove('statement-card--revoting');
+        revoteTid = null;
+        enterVoted(type, keepText);                 // badge now reflects the new vote
+        if (ok) {
+          convError.hidden = true;                  // clear any stale error from a prior attempt
+        } else {
+          convError.hidden = false;
+          convErrorMsg.textContent = 'Could not change your vote. Please try again.';
+        }
+      };
+      var onOk  = function () { finish(true); };
+      var onErr = function () { finish(false); };
+      conv.addEventListener('particiappvotesubmitsuccess', onOk, { once: true });
+      conv.addEventListener('particiappvotesubmiterror',  onErr, { once: true });
+      conv.submitVote(type, revoteTid);
+      return;
+    }
+
+    // ── Normal first vote (optimistic UI). ──
+    // KNOWN LIMITATION: we enter the "voted" state immediately, before the async PUT
+    // resolves. If the connection drops in the sub-second window before the vote lands,
+    // the UI shows "voted" while Polis may not have recorded it. Detectable failures are
+    // caught by the particiappvotesubmiterror handler, which marks the statement voted in
+    // the client and returns to the idle vote view. Acceptable for a prototype; to harden,
+    // await particiappvotesubmitsuccess before calling enterVoted.
     var stmt    = liveStmt();
     var stmtTxt = stmt ? (stmt.text || '').trim() : '';
+    // Record which statement this vote is for, so "change" (#69) can re-target it. The
+    // particiappvotesubmit event carries only `value` (never statementID), and the
+    // component advances pa-statement on vote — so capture it now, from the same source
+    // submitVote() reads (conv.statement), before the click advances the queue.
+    lastVoteStmtId = (conv.statement && conv.statement.id != null) ? conv.statement.id : null;
     pvb[type].click();
     enterVoted(type, stmtTxt);
   });
 
-  // ── Change vote ───────────────────────────────────────────────────────────────
+  // ── Change vote (#69) ─────────────────────────────────────────────────────────
+  // Reveal the vote buttons over the voted card and target the just-voted statement —
+  // the live <pa-statement> has already advanced to the next one, so we can't rely on it.
   document.getElementById('change-vote-btn').addEventListener('click', function () {
-    enterIdle(choiceRow.querySelector('.vote-choice'));
+    if (lastVoteStmtId == null) return;          // nothing recorded to change
+    revoteTid = lastVoteStmtId;
+    stmtCard.classList.add('statement-card--revoting');
+    triad.hidden = true;
+    var first = choiceRow.querySelector('.vote-choice');
+    if (first) first.focus();
   });
 
   // ── Triad click guard (aria-disabled) ────────────────────────────────────────
@@ -1138,15 +1189,17 @@
   conv.addEventListener('particiappstatementschange', function (e) { updateProgress(e.statements); });
   conv.addEventListener('particiappvotesubmitsuccess', function ()  { updateProgress(conv.client.statements); });
 
-  // Track the last statement ID being voted on (statementID comes from pa-vote-button event).
+  // Statement id of the most recent vote — set at vote time in the click handler above.
+  // (It cannot be read from the particiappvotesubmit event: that event carries only
+  // `value`, never statementID.) Consumed by "change" (#69) and the error handler below.
   var lastVoteStmtId = null;
-  conv.addEventListener('particiappvotesubmit', function (e) {
-    lastVoteStmtId = e.statementID != null ? Number(e.statementID) : null;
-  });
 
   // On vote failure: mark the statement as voted in the web component so it advances,
   // then reset UI. Covers both own-statement 403s and any other transient failures.
   conv.addEventListener('particiappvotesubmiterror', function () {
+    // During a re-vote (#69) the local once-handler owns recovery (restores the voted
+    // card); skip this first-vote recovery so they don't fight and flash the idle view.
+    if (revoteTid != null) return;
     if (lastVoteStmtId != null) {
       try { conv.client.participant.votes.add(lastVoteStmtId); } catch (e) {}
     }
