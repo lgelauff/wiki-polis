@@ -132,6 +132,47 @@ def test_fake_login_ignored_when_not_debug(tmp_path):
     assert a.test_client().get('/dev/login/dev-user-1').status_code == 404
 
 
+def test_production_requires_ratelimit_storage_uri(tmp_path):
+    """Production must not silently fall back to per-worker limiter storage."""
+    with patch.dict(os.environ, {'FLASK_DEBUG': '0', 'RATELIMIT_STORAGE_URI': ''}, clear=False):
+        from app import create_app
+        with pytest.raises(RuntimeError, match='RATELIMIT_STORAGE_URI is not set'):
+            create_app({
+                'TESTING': False,
+                'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/prod-missing-rate.db',
+                'SECRET_KEY': 'test-secret',
+            })
+
+
+def test_production_rejects_local_ratelimit_storage_uri(tmp_path):
+    """Production limiter storage must be distributed, not a local memory backend."""
+    with patch.dict(os.environ, {'FLASK_DEBUG': '0'}, clear=False):
+        from app import create_app
+        with pytest.raises(RuntimeError, match='distributed backend'):
+            create_app({
+                'TESTING': False,
+                'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/prod-local-rate.db',
+                'SECRET_KEY': 'test-secret',
+                'RATELIMIT_STORAGE_URI': 'memory://',
+            })
+
+
+def test_test_config_may_disable_distributed_ratelimit_storage(tmp_path):
+    """Tests keep the lightweight in-memory limiter unless they opt into storage."""
+    session_dir = tmp_path / 'sessions-rate-test'
+    session_dir.mkdir()
+    with patch.dict(os.environ, {'FLASK_DEBUG': '0', 'RATELIMIT_STORAGE_URI': ''}, clear=False):
+        from app import create_app
+        a = create_app({
+            'TESTING': True,
+            'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/test-rate.db',
+            'SECRET_KEY': 'test-secret',
+            'SESSION_TYPE': 'cachelib',
+            'SESSION_CACHELIB': FileSystemCache(str(session_dir)),
+        })
+    assert 'RATELIMIT_STORAGE_URI' not in a.config
+
+
 def test_proxy_delete_method_not_allowed(auth_client):
     """DELETE is not in the allowed proxy methods."""
     resp = auth_client.delete('/proxy/particiapi/api/conversations/')

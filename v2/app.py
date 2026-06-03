@@ -44,6 +44,7 @@ _TEXT_ALLOWED_ATTRS = {'a': {'href', 'title'}}
 _POLIS_ID_RE     = re.compile(r'^[A-Za-z0-9]{6,20}$')
 _SLUG_RE         = re.compile(r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
 _PSEUDONYM_RE    = re.compile(r'^[a-z]{2,20}-[a-z]{2,20}$')
+_DISTRIBUTED_RATELIMIT_SCHEMES = ('redis://', 'rediss://', 'memcached://', 'mongodb://')
 
 
 def _read_secret(name: str) -> str:
@@ -1791,17 +1792,29 @@ def create_app(test_config: dict | None = None) -> Flask:
     if test_config is not None:
         app.config.update(test_config)
 
+    _ratelimit_storage_uri = (
+        app.config.get('RATELIMIT_STORAGE_URI')
+        or os.environ.get('RATELIMIT_STORAGE_URI', '').strip()
+    )
+    if _ratelimit_storage_uri:
+        if (not app.debug and not app.testing
+                and not _ratelimit_storage_uri.startswith(_DISTRIBUTED_RATELIMIT_SCHEMES)):
+            raise RuntimeError(
+                'RATELIMIT_STORAGE_URI must use a distributed backend in production '
+                '(for example redis://...).'
+            )
+        app.config['RATELIMIT_STORAGE_URI'] = _ratelimit_storage_uri
+    elif not app.debug and not app.testing:
+        raise RuntimeError(
+            'RATELIMIT_STORAGE_URI is not set. Configure a distributed Flask-Limiter '
+            'storage backend such as redis://... before starting production.'
+        )
+
     db.init_app(app)
     Migrate(app, db)
     Session(app)
     csrf.init_app(app)
     limiter.init_app(app)
-
-    if not app.debug and not os.environ.get('RATELIMIT_STORAGE_URI'):
-        app.logger.warning(
-            'RATELIMIT_STORAGE_URI not set — rate limits are per-worker and '
-            'ineffective on multi-replica deployments. Set RATELIMIT_STORAGE_URI=redis://...'
-        )
 
     @app.cli.command('init-db')
     def init_db_cmd():

@@ -11,6 +11,7 @@ dependencies = [
     "flask-session>=0.8",
     "flask-wtf>=1.2",           # CSRF protection
     "flask-limiter>=3.5",       # Rate limiting
+    "redis>=5.0",               # Distributed Flask-Limiter storage
 
     # Database
     "flask-migrate>=4.0",
