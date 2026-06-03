@@ -93,6 +93,17 @@ Key tables (Polis schema):
   so a re-vote flips `vote` and bumps `modified` here while leaving a second history row in
   `votes`.
 
+> ⚠️ **The raw vote sign is inverted vs the Polis CSV export — don't "correct" it.**
+> In these raw tables (and in our app's vote API) `vote = -1` is **agree**, `+1` is
+> **disagree**, `0` is pass — matching the web component's `Vote` enum (`Agree:-1,
+> Disagree:1`). Polis's **official `participants-votes` export flips the sign** to the
+> intuitive `agree = +1, disagree = -1`: it negates every vote in
+> `math/src/polismath/darwin/export.clj` (`get-corrected-conversation-votes` →
+> `(partial * -1)`), with the comment *"Flip the signs on the votes XXX (remove when we
+> switch)"*. So both are "right" at different layers: reading raw PG, **`-1` = agree**.
+> The flip is undocumented upstream and flagged as tech-debt, so it could change in a
+> future Polis bump — re-check after upgrades.
+
 ```bash
 # Current (authoritative) vote per participant+statement in a conversation:
 docker exec -it $CID psql -U polis -d polis -c \
