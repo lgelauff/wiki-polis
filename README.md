@@ -30,7 +30,6 @@ Hosted on [Toolforge](https://wikitech.wikimedia.org/wiki/Portal:Toolforge) at `
 | `v2/` | **The live application** — Flask app, models, templates, tests, and v2 docs |
 | `v2/reference/` | Reference notes on Particiapi API and web components |
 | `docs/research/` | Background research syntheses (Polis objectives, statement writing, terminology) |
-| `v1/` | Archived first version (hosted pol.is embed); superseded by v2, kept for reference |
 
 ---
 
@@ -41,7 +40,6 @@ wiki-polis/
   wsgi.py         — WSGI entry point (loads the v2 app)
   deploy.sh       — Toolforge deploy script (deploys v2)
   v2/             — the live application: Flask app, models, templates, tests, docs
-  v1/             — archived first version (hosted pol.is embed); not deployed
   docs/research/  — background research syntheses
-  app.py, db.py, templates/, static/  — legacy v1 app code, superseded by v2/ (not deployed)
+  app.py, db.py, templates/, static/  — legacy pre-v2 app code, superseded by v2/ (not deployed)
 ```

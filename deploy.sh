@@ -35,7 +35,7 @@ echo "    Last   : $LAST_HASH $LAST_MSG ($LAST_AGO)"
 echo "==> Syncing dependencies (v2)..."
 ~/www/python/venv/bin/pip install -e ~/wiki-polis/v2
 
-# All v1 secrets (secret-key, database-url, oauth-*, admin-users) are reused unchanged.
+# Existing Toolforge secrets (secret-key, database-url, oauth-*, admin-users) are reused unchanged.
 # Only new secret needed: particiapi-base-url
 #   toolforge secrets create wiki-polis-particiapi-base-url --from-literal=value=https://particiapi.example.com
 
