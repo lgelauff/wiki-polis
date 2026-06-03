@@ -975,7 +975,9 @@
         stmtCard.classList.remove('statement-card--revoting');
         revoteTid = null;
         enterVoted(type, keepText);                 // badge now reflects the new vote
-        if (!ok) {
+        if (ok) {
+          convError.hidden = true;                  // clear any stale error from a prior attempt
+        } else {
           convError.hidden = false;
           convErrorMsg.textContent = 'Could not change your vote. Please try again.';
         }
@@ -991,9 +993,10 @@
     // ── Normal first vote (optimistic UI). ──
     // KNOWN LIMITATION: we enter the "voted" state immediately, before the async PUT
     // resolves. If the connection drops in the sub-second window before the vote lands,
-    // the UI shows "voted" while Polis may not have recorded it (particiappvotesubmiterror
-    // handles detectable failures by marking voted + returning to idle). Acceptable for a
-    // prototype; to harden, await particiappvotesubmitsuccess before calling enterVoted.
+    // the UI shows "voted" while Polis may not have recorded it. Detectable failures are
+    // caught by the particiappvotesubmiterror handler, which marks the statement voted in
+    // the client and returns to the idle vote view. Acceptable for a prototype; to harden,
+    // await particiappvotesubmitsuccess before calling enterVoted.
     var stmt    = liveStmt();
     var stmtTxt = stmt ? (stmt.text || '').trim() : '';
     pvb[type].click();
@@ -1190,6 +1193,9 @@
   // On vote failure: mark the statement as voted in the web component so it advances,
   // then reset UI. Covers both own-statement 403s and any other transient failures.
   conv.addEventListener('particiappvotesubmiterror', function () {
+    // During a re-vote (#69) the local once-handler owns recovery (restores the voted
+    // card); skip this first-vote recovery so they don't fight and flash the idle view.
+    if (revoteTid != null) return;
     if (lastVoteStmtId != null) {
       try { conv.client.participant.votes.add(lastVoteStmtId); } catch (e) {}
     }
