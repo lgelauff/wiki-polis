@@ -1137,7 +1137,11 @@ def conversation(slug):
 
     results     = None
     polis_stats = None
-    if conv.phase_public_results:
+    # Fetch clustering results for either results phase. Personal results (Phase 3,
+    # logged-in only) and public results (Phase 4, everyone) currently render the same
+    # aggregate data; #81 part 2 will scope personal results to the participant's voted
+    # statements (anti-anchoring).
+    if conv.phase_public_results or conv.phase_personal_results:
         results      = PolisParticipantClient(
             current_app.config['PARTICIAPI_BASE']).get_results(conv.polis_id)
         polis_stats = _polis_server_client().get_polis_stats(conv.polis_id)

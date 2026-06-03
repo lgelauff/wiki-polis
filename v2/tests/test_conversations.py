@@ -128,6 +128,35 @@ def test_conversation_with_participation_renders(auth_client, conv, participatio
     assert b'Nothing is available yet' in resp.data
 
 
+def test_personal_results_renders_clustering_data(auth_client, conv, participation,
+                                                  monkeypatch):
+    """#81: with ONLY the Personal results toggle on, the Results tab must render the
+    clustering results — not fall through to the 'not published yet' message. Regression
+    guard for the bug where both the route fetch and the template render were gated on
+    phase_public_results only."""
+    import polis_admin
+    conv.phase_personal_results = True
+    conv.phase_public_results = False
+    db.session.commit()
+
+    fake_results = {
+        'majority': {
+            'agree': [{'statement_text': 'Cats make excellent companions', 'value': 0.82}],
+            'disagree': [],
+        },
+        'groups': [],
+    }
+    monkeypatch.setattr(polis_admin.PolisParticipantClient, 'get_results',
+                        lambda self, cid: fake_results)
+    monkeypatch.setattr(polis_admin.PolisServerClient, 'get_polis_stats',
+                        lambda self, cid: None)
+
+    resp = auth_client.get('/c/test-conv')
+    assert resp.status_code == 200
+    assert b'Cats make excellent companions' in resp.data           # results rendered
+    assert b"Results haven't been published yet" not in resp.data   # not the empty fallback
+
+
 # ── Access control ────────────────────────────────────────────────────────────
 
 def test_invite_only_blocks_uninvited(client, app, participant):
