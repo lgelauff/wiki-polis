@@ -1,6 +1,6 @@
 # Wiki-Polis v2
 
-The live wiki-polis app. Replaces the v1 hosted pol.is embed with a self-hosted Polis + Particiapi stack.
+The live wiki-polis app. Replaces the retired hosted pol.is embed with a self-hosted Polis + Particiapi stack.
 
 ## Documents
 

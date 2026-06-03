@@ -8,8 +8,6 @@ This runs the v2 wiki-polis stack locally:
 - Particiapi authentication is disabled locally; wiki-polis supplies identity
   through the Flask dev-login route.
 
-The v1 app embeds hosted `pol.is`. For a fully local stack, use v2.
-
 ## Prerequisites
 
 - Docker Desktop, Colima, or another Docker runtime.

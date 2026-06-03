@@ -72,15 +72,13 @@ home/index, and an ADR (decision record) trail.
 
 These affect multiple docs and should be resolved before fine-grained editing.
 
-- **C1 — v1/v2 "live" drift (decided: see D-V1).** Despite merged PR #87 ("correct
-  stale v1/v2 labelling"), the root `README.md` Project-structure block on `main`
-  still labels root `app.py` as "Flask app (v1, live)" and `v1/` as "Current live
-  deployment," while `wsgi.py` / `deploy.sh` / `v2/guide_deployment.md` all deploy **v2**.
-  **Resolution (per maintainer):** v1 is a historical **archive** only — not expected
-  to be used or maintained; **v2 is where the app lives** and where design happens; a
-  **v3 may follow** someday. The README needs a **full review** so it reflects this
-  plainly, but v1's archive status should be a brief footnote, not a prominent theme.
-  This is the single most misleading sentence in the docs and is cheap to fix.
+- **C1 — v1/v2 "live" drift (decided: see D-V1).** The root README and project tree
+  have drifted around how much first-version history to show, while `wsgi.py` /
+  `deploy.sh` / `v2/guide_deployment.md` all deploy **v2**.
+  **Resolution (per maintainer):** remove the `v1/` archive from the repository;
+  **v2 is where the app lives** and where design happens; a **v3 may follow** someday.
+  The README should reflect this plainly without presenting v1 as a maintained or
+  consultable code path.
 - **C2 — Two phase docs, intentionally separate (decided: see D-PHASE).**
   `spec_functional-design.md` (4 toggles) and `prop_phase-model.md` (6 phases incl.
   informed voting) are **not** rival drafts to be merged. **Resolution (per
@@ -369,7 +367,7 @@ decisions-first · scope.**
 | ID | Decision | Blocks | Owner |
 |---|---|---|---|
 | ~~**C2 / D-PHASE**~~ ✅ | **Resolved:** keep both docs separate. `spec_functional-design.md` = current truth; `prop_phase-model.md` = forward proposal under discussion, not yet adopted. Label each by status; do not merge. | (unblocked) | product |
-| ~~**D-V1**~~ ✅ | **Resolved:** keep v1 as a historical archive (not deleted, not maintained). v2 is live; v3 possible later but not a doc concern now. **v1/ may be restructured or relocated** (e.g. into an archive area) as part of cleanup — it need not stay where it is. | (unblocked) | maintainer |
+| ~~**D-V1**~~ ✅ | **Resolved:** remove the `v1/` archive from the repository. v2 is live; v3 possible later but not a doc concern now. | (unblocked) | maintainer |
 | ~~**C4**~~ ✅ | **Resolved:** split next_steps into a forward roadmap (N7) + a historical record / changelog (N8) so outdated work can't accidentally drive future decisions. | (unblocked) | maintainer |
 | ~~**D-VOTE**~~ ✅ | **Resolved:** (1) "change vote" **reopens the statement and resubmits** the new vote to Polis (fixes #69); (2) after a **proposal submission**, auto-advance to the next statement after a brief pause — make that pause **a bit longer** than a default; (3) after a **plain vote**, keep the **explicit "Move on"** click. (Implementation note: #69 needs a code change, not just docs.) | (unblocked) | product |
 | ~~**D-PRIV**~~ ✅ | **Resolved (clarified).** A participant's voluntary public reveal of their username↔pseudonym is **permanent and irreversible — never nullified.** Separately, the **internal** account↔pseudonym link (held by platform managers, for technical/dedup purposes) is removed within **180 days** of close (internal target sooner). ⚠️ `spec_functional-design.md` and the current code still *nullify reveals* — both need reconciling to this model (spec edit + a code change to `_nullify_expired_reveals`). N2 drafts toward it; not publishable until legal/comms review. | N2, functional_design, code | maintainer + review |
@@ -388,8 +386,8 @@ decisions-first · scope.**
 Dependencies drive this. Each wave is independently shippable.
 
 **Wave 0 — Unblock & de-confuse (do first, cheap, high-value)**
-1. Fix C1 (README v1/v2 labels) — verify against PR #87, finish it; v1 → archive
-   footnote per D-V1.
+1. Fix C1 (README v1/v2 labels) — verify against PR #87, finish it; remove the
+   `v1/` archive per D-V1.
 2. Add status banners: `spec_functional-design.md` = "current truth," and track +
    banner `prop_phase-model.md` = "proposal under discussion" (C2 is decided —
    this is labelling, not a debate).
