@@ -1235,9 +1235,14 @@
     var text = newstmtInput.value.trim();
     if (!text) return;
     newstmtSubmit.disabled = true;
+    var csrfToken = '{{ csrf_token() }}';
     fetch('{{ url_for("proxy.conversation_statement_new", slug=conversation.slug) }}', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'fetch',
+        'X-CSRFToken': csrfToken
+      },
       body: JSON.stringify({ text: text }),
     }).then(function (resp) {
       if (resp.ok) {

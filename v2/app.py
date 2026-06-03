@@ -24,10 +24,11 @@ from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, validate_csrf
 from sqlalchemy import text as _sa_text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
+from wtforms.validators import ValidationError
 
 from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideState,
                 ArgumentVote, Conversation, ConversationInvite, FeaturedStatement,
@@ -278,10 +279,26 @@ def _validate_same_origin():
     if sec_fetch:
         if sec_fetch != 'same-origin':
             abort(403)
-    else:
-        origin = request.headers.get('Origin')
-        if origin and urlparse(origin).netloc != urlparse(request.host_url).netloc:
+        return
+    origin = request.headers.get('Origin')
+    if origin:
+        if urlparse(origin).netloc != urlparse(request.host_url).netloc:
             abort(403)
+        return
+    abort(403)
+
+
+def _validate_fetch_csrf():
+    """Validate Flask-WTF CSRF for JSON/fetch routes on the exempt proxy blueprint."""
+    if not current_app.config.get('WTF_CSRF_ENABLED', True):
+        return
+    token = (request.headers.get('X-CSRFToken')
+             or request.headers.get('X-CSRF-Token')
+             or request.form.get('csrf_token'))
+    try:
+        validate_csrf(token)
+    except ValidationError:
+        abort(400)
 
 
 def _proxy_to_particiapi(pa_path: str):
@@ -579,7 +596,9 @@ proxy_bp = Blueprint('proxy', __name__)
 def conversation_statement_new(slug):
     """Submit an entirely new statement; enforces per-participant quota and
     records the Polis statement ID for novelty tracking."""
-    # Origin validation (same compensating control as the proxy).
+    # This route lives on the CSRF-exempt proxy blueprint for historical reasons,
+    # so validate Flask-WTF's token manually before same-origin checks.
+    _validate_fetch_csrf()
     _validate_same_origin()
 
     conv = Conversation.query.filter_by(slug=slug).first_or_404()

@@ -3,22 +3,23 @@
 These cover the security-critical behaviours the main suite does NOT exercise. The
 shared `app` fixture runs with `WTF_CSRF_ENABLED=False`, so it cannot catch a broken
 `csrf.exempt(proxy_bp)` — yet CSRF exemption (with same-origin as the compensating
-control) is the whole security posture of these two routes. The extraction onto a
-blueprint must keep all of this byte-identical to the prior inline routes:
+control) is the core proxy security posture. These tests lock the expected boundary:
 
-- CSRF exemption is active on the blueprint;
-- the same-origin check still gates state-changing requests;
+- CSRF exemption is active on the blueprint, with manual CSRF on the
+  first-party statement-submit route;
+- the same-origin check still gates state-changing requests and fails closed
+  when browser provenance headers are missing;
 - the pa_session <-> session cookie rename is preserved in both directions;
 - the 403->200 rewrite on /results/ that keeps the web component usable.
 """
-import tempfile
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
 from cachelib.file import FileSystemCache
 
 from app import create_app
-from db import Conversation, Participation, db
+from db import Conversation, Participant, Participation, db
 
 
 def _fake_upstream(status_code=200, content=b'{}', cookies=None,
@@ -35,7 +36,7 @@ def _fake_upstream(status_code=200, content=b'{}', cookies=None,
 # ── CSRF exemption — needs a CSRF-ENABLED app (the shared fixture disables it) ────
 
 @pytest.fixture
-def csrf_client(tmp_path):
+def csrf_enabled_app(tmp_path):
     session_dir = tmp_path / 'sessions'
     session_dir.mkdir()
     app = create_app({
@@ -49,8 +50,13 @@ def csrf_client(tmp_path):
     })
     with app.app_context():
         db.create_all()
-        yield app.test_client()
+        yield app
         db.session.remove()
+
+
+@pytest.fixture
+def csrf_client(csrf_enabled_app):
+    return csrf_enabled_app.test_client()
 
 
 @pytest.mark.parametrize('path', ['/proxy/particiapi/api/foo',
@@ -113,6 +119,11 @@ def test_proxy_post_blocks_cross_origin(auth_client):
     assert resp.status_code == 403
 
 
+def test_proxy_post_blocks_missing_provenance_headers(auth_client):
+    resp = auth_client.post('/proxy/particiapi/api/foo', json={})
+    assert resp.status_code == 403
+
+
 def test_proxy_post_allows_same_origin(auth_client):
     up = _fake_upstream()
     with patch('app.requests.request', return_value=up):
@@ -166,6 +177,11 @@ def test_statement_new_blocks_cross_origin(auth_client):
     assert resp.status_code == 403
 
 
+def test_statement_new_blocks_missing_provenance_headers(auth_client):
+    resp = auth_client.post('/c/any/statements/new', json={'text': 'hi'})
+    assert resp.status_code == 403
+
+
 def test_statement_new_happy_path_records_polis_id(auth_client, participant):
     conv = Conversation(slug='sub', polis_id='subxxxxxxx', title='Sub', active=True,
                         access_policy='public', phase_submission=True,
@@ -192,3 +208,65 @@ def test_statement_new_happy_path_records_polis_id(auth_client, participant):
     assert 555 in (part.new_stmt_ids or [])  # Polis id recorded for novelty tracking
     assert any(c.startswith('pa_session=NEWPA')
                for c in resp.headers.getlist('Set-Cookie'))
+
+
+def test_statement_new_requires_manual_csrf_when_csrf_enabled(csrf_enabled_app):
+    client = csrf_enabled_app.test_client()
+    p = Participant(mw_user_id=10101, mw_username='csrfuser', xid='c' * 64)
+    conv = Conversation(slug='csrf-sub', polis_id='csrfxxxxxx', title='CSRF',
+                        active=True, access_policy='public', phase_submission=True)
+    db.session.add_all([p, conv])
+    db.session.commit()
+    db.session.add(Participation(participant_id=p.id,
+                                 conversation_id=conv.id,
+                                 pseudonym='csrf-user'))
+    db.session.commit()
+    with client.session_transaction() as sess:
+        sess['username'] = p.mw_username
+        sess['xid'] = p.xid
+
+    with patch('app.requests.post') as post:
+        resp = client.post('/c/csrf-sub/statements/new',
+                           headers={'Sec-Fetch-Site': 'same-origin'},
+                           json={'text': 'Needs a token'})
+
+    assert resp.status_code == 400
+    post.assert_not_called()
+
+
+def test_statement_new_accepts_valid_manual_csrf_when_csrf_enabled(csrf_enabled_app):
+    client = csrf_enabled_app.test_client()
+    p = Participant(mw_user_id=20202, mw_username='csrfok', xid='d' * 64)
+    conv = Conversation(slug='csrf-ok', polis_id='csrfokxxxx', title='CSRF OK',
+                        active=True, access_policy='public', phase_submission=True,
+                        argument_vote_data={'new_stmt_max': 3})
+    db.session.add_all([p, conv])
+    db.session.commit()
+    db.session.add(Participation(participant_id=p.id,
+                                 conversation_id=conv.id,
+                                 pseudonym='csrf-ok'))
+    db.session.commit()
+    with client.session_transaction() as sess:
+        sess['username'] = p.mw_username
+        sess['xid'] = p.xid
+
+    page = client.get('/c/csrf-ok')
+    token_match = re.search(rb"var csrfToken = '([^']+)'", page.data)
+    assert token_match is not None
+    csrf_token = token_match.group(1).decode()
+
+    sess_resp = _fake_upstream(cookies={'session': 'NEWPA'})
+    sess_resp.ok = True
+    sess_resp.json = lambda: {'csrf_token': 'TOK'}
+    stmt_resp = _fake_upstream(status_code=201, content=b'{"id":556}')
+    stmt_resp.json = lambda: {'id': 556}
+
+    with patch('app.requests.post', side_effect=[sess_resp, stmt_resp]):
+        resp = client.post('/c/csrf-ok/statements/new',
+                           headers={
+                               'Sec-Fetch-Site': 'same-origin',
+                               'X-CSRFToken': csrf_token,
+                           },
+                           json={'text': 'A token-backed idea'})
+
+    assert resp.status_code == 201
