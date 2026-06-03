@@ -48,9 +48,8 @@ bool=F · `notify_talk_page` bool=F · `public_username` (nullable) · `revealed
 (nullable) · `new_stmt_ids` JSON=[].
 - **Constraints:** unique `(participant_id, conversation_id)`; unique `pseudonym`
   (platform-wide, never reused/deleted); check `pseudonym = LOWER(pseudonym)`.
-- `public_username` / `revealed_at` record the opt-in reveal. **⚠ `(pending — D-PRIV)`:**
-  the code currently nullifies them ~60 days after close; per the clarified D-PRIV
-  decision a reveal is **permanent** — this nullification must change.
+- `public_username` / `revealed_at` record the opt-in reveal. Per D-PRIV, a reveal is
+  **permanent** and is not nullified by the app.
 - `new_stmt_ids` = Polis statement IDs of new statements this participant submitted;
   quota used = `len(new_stmt_ids)`, slots consumed at submit time and never returned.
 
@@ -112,7 +111,9 @@ proposer_id)`, `argument_votes(argument_id, participant_id)`,
   (lowercase) but the column default and all readers use `{'K': 2}`. *(pending — fix the comment.)*
 - **`ArgumentVote.value` / ranking.** Documented for a ranking method that isn't built;
   only kApproval (row-presence) is implemented. *(pending — implement or remove.)*
-- **Reveal nullification vs D-PRIV.** See `participations` above. *(pending — D-PRIV.)*
+- **Internal-link removal after retention.** Voluntary reveals are permanent; a separate
+  workflow is still needed to remove internal account↔pseudonym links for non-revealed
+  participations by the retention commitment.
 
 > The proposal's `phase6_*` fields (from [`prop_phase-model.md`](prop_phase-model.md)) are
 > **not** in `db.py` — they exist only in the proposal.

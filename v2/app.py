@@ -59,28 +59,9 @@ def _read_secret(name: str) -> str:
 ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.strip()]
 
 _REVEAL_COOLDOWN_DAYS = 30   # days after close before reveal window opens
-_REVEAL_NULLIFY_DAYS  = 30   # days after window opens before nullification (total = cooldown + nullify)
+_REVEAL_WINDOW_DAYS   = 30   # days participants may opt in once the window opens
 _MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
-
-
-def _nullify_expired_reveals(conv: 'Conversation') -> None:
-    """Clear public_username / revealed_at for all participations once past internal deadline."""
-    if not conv.closed_at:
-        return
-    # closed_at is stored as naive UTC
-    age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-    if age < timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
-        return
-    stale = (Participation.query
-             .filter_by(conversation_id=conv.id)
-             .filter(Participation.public_username.isnot(None))
-             .all())
-    for p in stale:
-        p.public_username = None
-        p.revealed_at     = None
-    if stale:
-        db.session.commit()
 
 
 csrf    = CSRFProtect()
@@ -1202,8 +1183,7 @@ def accept(slug):
     return render_template('accept.html', conversation=conv,
                            emailable=emailable, pseudonyms=pseudonyms,
                            reveal_cooldown=_REVEAL_COOLDOWN_DAYS,
-                           reveal_window_end=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS,
-                           retention_public_days=120)
+                           reveal_window_end=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS)
 
 @participant_bp.post('/accept/<slug>')
 @login_required
@@ -1271,11 +1251,6 @@ def conversation(slug):
     if participation is None:
         return redirect(url_for('participant.accept', slug=slug))
 
-    # Lazy nullification: clear identity links past the internal retention deadline.
-    if conv.closed_at:
-        _nullify_expired_reveals(conv)
-        db.session.refresh(participation)
-
     can_mod = _can_moderate(conv, participant)
 
     results     = None
@@ -1307,7 +1282,7 @@ def conversation(slug):
         reveal_opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
         if participation.public_username:
             reveal_state = 'revealed'
-        elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
+        elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
             reveal_state = 'expired'
         elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
             reveal_state = 'open'
@@ -1572,16 +1547,13 @@ def reveal_identity(slug):
     if not conv.closed_at:
         abort(404)
 
-    _nullify_expired_reveals(conv)
-    db.session.refresh(participation)
-
     age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
     opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
     return render_template('reveal.html',
                            conversation=conv,
                            participation=participation,
                            window_open=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS),
-                           window_closed=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS),
+                           window_closed=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS),
                            opens_at=opens_at)
 
 @participant_bp.post('/c/<slug>/reveal')
@@ -1603,7 +1575,7 @@ def reveal_identity_post(slug):
     age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
     if age < timedelta(days=_REVEAL_COOLDOWN_DAYS):
         abort(400)
-    if age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
+    if age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
         abort(400)
     if participation.public_username is not None:
         abort(400)

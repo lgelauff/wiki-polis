@@ -44,7 +44,7 @@ retention commitment (decision D-PRIV), pending legal/comms review.
   not exercised. Fix the accept step so statement-submit gets soak coverage too.
 - **Testing strategy / CI** — decision pending (D-TEST); recommendation in
   `.claude/testing-strategy-recommendations.md`. Leaning toward a CI gate on PRs plus
-  coverage for the untested risky paths (proxy, reveal nullification, Polis-Postgres
+  coverage for the untested risky paths (proxy, reveal-window timing, Polis-Postgres
   SQL, statement-quota race).
 - **Pre-launch hardening review** (from the archived `plan.md`) — confirm whether these
   are still open and fix if so: `argument_unvote` cross-conversation join, restricting
@@ -73,11 +73,10 @@ retention commitment (decision D-PRIV), pending legal/comms review.
   selection screen ([#82](https://github.com/lgelauff/wiki-polis/issues/82)); show the
   reveal-window end date on closed conversations
   ([#70](https://github.com/lgelauff/wiki-polis/issues/70)).
-- **Identity reveal must be permanent (not nullified).** Per D-PRIV (clarified), a
-  voluntary reveal is permanent; only the *internal* account↔pseudonym link is removed
-  (≤180 days). The current code nullifies revealed links at the retention window —
-  change `_nullify_expired_reveals` to stop touching reveals. *(pending — reconcile
-  `spec_functional-design.md` to the model first)*
+- **Internal-link removal still needed.** Per D-PRIV (clarified), a voluntary reveal is
+  permanent and is no longer nullified by the app. The remaining work is a separate
+  data-minimisation mechanism that removes the *internal* account↔pseudonym link for
+  non-revealed participations by the 180-day commitment.
 - **xid is reversible — weak anonymisation.** `xid = sha256(mw_user_id)` and MW user IDs
   are sequential, so the xid can be brute-forced back to an account. Removing the
   internal link at the retention window does **not** anonymise the Polis vote data,

@@ -69,9 +69,8 @@ you never choose this, no such public connection is ever made.
 
 > `pending` — confirm this model before publishing. As written, a voluntary reveal is
 > *permanent* and the 180-day limit applies only to the *internal* account↔pseudonym
-> link. This differs from both `spec_functional-design.md` and the current code, which
-> *nullify* revealed links at the retention window. The spec, decision D-PRIV's wording,
-> and the code must be reconciled to one model first.
+> link. The app no longer nullifies voluntary public reveals; a separate internal-link
+> removal workflow is still needed for the 180-day data-minimisation commitment.
 
 ## Your choices
 
