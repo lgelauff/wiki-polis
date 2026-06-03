@@ -999,6 +999,11 @@
     // await particiappvotesubmitsuccess before calling enterVoted.
     var stmt    = liveStmt();
     var stmtTxt = stmt ? (stmt.text || '').trim() : '';
+    // Record which statement this vote is for, so "change" (#69) can re-target it. The
+    // particiappvotesubmit event carries only `value` (never statementID), and the
+    // component advances pa-statement on vote — so capture it now, from the same source
+    // submitVote() reads (conv.statement), before the click advances the queue.
+    lastVoteStmtId = (conv.statement && conv.statement.id != null) ? conv.statement.id : null;
     pvb[type].click();
     enterVoted(type, stmtTxt);
   });
@@ -1184,11 +1189,10 @@
   conv.addEventListener('particiappstatementschange', function (e) { updateProgress(e.statements); });
   conv.addEventListener('particiappvotesubmitsuccess', function ()  { updateProgress(conv.client.statements); });
 
-  // Track the last statement ID being voted on (statementID comes from pa-vote-button event).
+  // Statement id of the most recent vote — set at vote time in the click handler above.
+  // (It cannot be read from the particiappvotesubmit event: that event carries only
+  // `value`, never statementID.) Consumed by "change" (#69) and the error handler below.
   var lastVoteStmtId = null;
-  conv.addEventListener('particiappvotesubmit', function (e) {
-    lastVoteStmtId = e.statementID != null ? Number(e.statementID) : null;
-  });
 
   // On vote failure: mark the statement as voted in the web component so it advances,
   // then reset UI. Covers both own-statement 403s and any other transient failures.
