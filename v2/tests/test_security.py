@@ -1,5 +1,6 @@
 """Tests for security headers, redirect safety, and dev DB isolation."""
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 from cachelib.file import FileSystemCache
@@ -17,6 +18,14 @@ def test_security_headers_on_every_response(client):
     csp = resp.headers.get('Content-Security-Policy', '')
     assert "default-src 'self'" in csp
     assert "frame-ancestors 'none'" in csp
+
+
+def test_flash_toasts_do_not_inject_messages_with_innerhtml():
+    base_template = Path(__file__).resolve().parents[1] / 'templates' / 'base.html'
+    source = base_template.read_text()
+
+    assert 'el.innerHTML' not in source
+    assert 'msg.textContent = message' in source
 
 
 def test_safe_redirect_blocks_absolute_external(app):

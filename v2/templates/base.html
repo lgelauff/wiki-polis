@@ -68,10 +68,16 @@
       var el = document.createElement('div');
       el.className = 'toast toast--' + category;
       el.setAttribute('role', 'alert');
-      el.innerHTML =
-        '<span class="toast__msg">' + message + '</span>' +
-        '<button class="toast__close" aria-label="Dismiss">&times;</button>';
-      el.querySelector('.toast__close').addEventListener('click', function () { dismiss(el); });
+      var msg = document.createElement('span');
+      msg.className = 'toast__msg';
+      msg.textContent = message;
+      var close = document.createElement('button');
+      close.className = 'toast__close';
+      close.setAttribute('aria-label', 'Dismiss');
+      close.textContent = '\u00d7';
+      el.appendChild(msg);
+      el.appendChild(close);
+      close.addEventListener('click', function () { dismiss(el); });
       container.appendChild(el);
       console.error('[wiki-polis] ' + category + ': ' + message);
       var t = setTimeout(function () { dismiss(el); }, DURATIONS[category] || 6000);
