@@ -859,6 +859,10 @@ def admin_phase6_init(conv_id):
     # Allows conversation moderators (not just global admins) to initialise Phase 6.
     conv = _require_mod_for_conv(conv_id)
 
+    if not conv.active or conv.paused:
+        flash('Cannot initialise Phase 6 on a closed or paused conversation.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
     if not conv.phase_informed_voting:
         flash('Enable the Informed voting toggle first, then initialise.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
