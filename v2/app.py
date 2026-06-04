@@ -1305,9 +1305,12 @@ def conversation(slug):
             if not text:
                 continue
             visible_args = [a for a in fs.arguments if not a.hidden]
-            visible_args.sort(key=lambda a: len(a.votes), reverse=True)
-            pro = [a for a in visible_args if a.side == 'pro'][:10]
-            con = [a for a in visible_args if a.side == 'con'][:10]
+            pro = sorted(
+                [a for a in visible_args if a.side == 'pro'],
+                key=lambda a: len(a.votes), reverse=True)[:10]
+            con = sorted(
+                [a for a in visible_args if a.side == 'con'],
+                key=lambda a: len(a.votes), reverse=True)[:10]
             phase6_data.append({
                 'fs': fs,
                 'text': text,
@@ -1633,12 +1636,30 @@ def phase6_vote(slug):
     pid = conv.phase6_polis_conversation_id
     tid = fs.phase6_polis_statement_id
 
-    # Forward to Particiapi using the same pa_session → session cookie rename.
+    # Ensure a stable Polis session exists before voting. Without this, a participant
+    # with no or expired pa_session cookie would get a fresh anonymous Polis identity,
+    # allowing duplicate votes from the same Wikimedia account. Mirrors the session
+    # bootstrap in conversation_statement_new.
     pa_cookie = request.cookies.get('pa_session')
+    base = current_app.config['PARTICIAPI_BASE']
+    new_pa_cookie = None
+    if not pa_cookie:
+        try:
+            sess_resp = requests.post(
+                f'{base}/api/session',
+                params={'create': 'true'},
+                timeout=10,
+            )
+            new_pa_cookie = sess_resp.cookies.get('session')
+            pa_cookie = new_pa_cookie
+        except requests.RequestException:
+            current_app.logger.exception('Particiapi session bootstrap failed in phase6_vote')
+            abort(502)
+
     forwarded_cookies = {'session': pa_cookie} if pa_cookie else {}
     try:
         upstream = requests.post(
-            f"{current_app.config['PARTICIAPI_BASE']}/api/votes",
+            f'{base}/api/votes',
             json={'pid': pid, 'tid': tid, 'vote': vote},
             cookies=forwarded_cookies,
             timeout=10,
@@ -1648,7 +1669,7 @@ def phase6_vote(slug):
         abort(502)
 
     resp = make_response('', upstream.status_code)
-    new_pa = upstream.cookies.get('session')
+    new_pa = upstream.cookies.get('session') or new_pa_cookie
     if new_pa:
         resp.set_cookie('pa_session', new_pa, httponly=True,
                         samesite='Lax', secure=not current_app.debug)
@@ -1718,7 +1739,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['PARTICIAPI_BASE']     = (_read_secret('particiapi-base-url')
                                          or os.environ.get('PARTICIAPI_BASE_URL', 'http://localhost:8000'))
     _polis_public_url = (_read_secret('polis-public-url')
-                         or os.environ.get('POLIS_PUBLIC_URL', 'https://pol.is'))
+                         or os.environ.get('POLIS_PUBLIC_URL', ''))
     if _polis_public_url and not _polis_public_url.startswith('https://'):
         app.logger.warning('POLIS_PUBLIC_URL is not https:// — ignoring')
         _polis_public_url = ''

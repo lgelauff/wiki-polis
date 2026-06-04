@@ -346,10 +346,15 @@ class PolisServerClient:
 
     def add_seed_return_id(self, conversation_id: str, text: str) -> int:
         """Add a seed statement and return the Polis statement ID (tid).
-        Raises PolisServerError if the response does not include a tid."""
+        Raises PolisServerError if the response is not JSON or does not include a tid."""
         sess, auth_headers = self._login()
         resp = self._post_seed(sess, {**self._HEADERS, **auth_headers}, conversation_id, text)
-        tid = resp.json().get('tid')
+        try:
+            tid = resp.json().get('tid')
+        except ValueError:
+            raise PolisServerError(
+                f'Polis returned non-JSON response: {resp.text[:100]}'
+            )
         if tid is None:
             raise PolisServerError('Polis returned no tid for seed statement.')
         return int(tid)

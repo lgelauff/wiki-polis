@@ -115,7 +115,7 @@
     <p style="font-size:14px">
       Phase 6 Polis conversation: <code>{{ conversation.phase6_polis_conversation_id }}</code>
       &nbsp;·&nbsp;
-      {{ conversation.featured_statements | selectattr('confirmed_by_admin') | selectattr('phase6_polis_statement_id') | list | length }}
+      {{ conversation.featured_statements | selectattr('confirmed_by_admin') | selectattr('phase6_polis_statement_id', 'ne', none) | list | length }}
       of
       {{ conversation.featured_statements | selectattr('confirmed_by_admin') | list | length }}
       statements seeded.
