@@ -313,13 +313,14 @@ toolforge envvars create POLIS_SERVER_URL
 toolforge envvars create POLIS_ADMIN_EMAIL
 toolforge envvars create POLIS_ADMIN_PASSWORD
 toolforge envvars create POLIS_DATABASE_URL
+toolforge envvars create RATELIMIT_KEY_PREFIX
+toolforge envvars create RATELIMIT_IDENTITY_SECRET
 ```
 
 Non-secret values can be passed as arguments:
 
 ```bash
 toolforge envvars create OAUTH_REDIRECT_URI 'https://wiki-polis.toolforge.org/oauth-callback'
-toolforge envvars create RATELIMIT_STORAGE_URI 'redis://<rate-limit-host>:6379/0'
 toolforge envvars create TRUSTED_HOSTS 'wiki-polis.toolforge.org'
 ```
 
@@ -333,8 +334,11 @@ Values to enter at the prompts:
 - `POLIS_ADMIN_EMAIL` — email of the Polis system account (see Polis system account step below)
 - `POLIS_ADMIN_PASSWORD` — password of the Polis system account
 - `POLIS_DATABASE_URL` — `postgresql://wiki_polis_ro:<password>@<vps-private-ip>:5432/polis` — use the password set when creating the `wiki_polis_ro` role (see Security hardening step above); do not use the `polis` superuser here
-- `RATELIMIT_STORAGE_URI` — distributed Flask-Limiter storage, for example `redis://<rate-limit-host>:6379/0`; production startup fails if this is missing or set to a local backend
+- `RATELIMIT_KEY_PREFIX` — unique Redis key namespace for this deployment; generate a random value such as `wiki-polis:prod:<random>:` for production and a different one for staging
+- `RATELIMIT_IDENTITY_SECRET` — strong random HMAC key used to hash client identities before Flask-Limiter writes Redis keys
 - `TRUSTED_HOSTS` — comma-separated allowed request hostnames, for example `wiki-polis.toolforge.org`; add explicit staging hostnames on staging deployments
+
+Toolforge exposes shared Redis through the global `TOOL_REDIS_URI` environment variable, so production does not normally need a `RATELIMIT_STORAGE_URI` envvar. If running the Flask frontend directly on a Wikimedia VPS or overriding Toolforge Redis, set `RATELIMIT_STORAGE_URI` to a Redis URL such as `redis://<vps-private-ip>:6379/0`; production startup rejects local limiter backends such as `memory://`. Toolforge proxy headers are trusted automatically. On a Wikimedia VPS, set `TRUST_PROXY_HEADERS=1` only when the Flask app is behind a reverse proxy that overwrites incoming forwarding headers.
 
 > `toolforge envvars list` shows names only, not values. Keep a local record.
 
@@ -542,7 +546,11 @@ export SECRET_KEY=$(toolforge envvars show SECRET_KEY | tail -1 | awk '{print $N
 | `POLIS_ADMIN_EMAIL` | yes | Email of the Polis system account (created once on VPS) |
 | `POLIS_ADMIN_PASSWORD` | yes | Password of the Polis system account |
 | `POLIS_DATABASE_URL` | no | Direct Postgres connection for admin stats panel; leave blank to disable |
-| `RATELIMIT_STORAGE_URI` | yes (prod) | Distributed Flask-Limiter backend, for example `redis://<host>:6379/0` |
+| `TOOL_REDIS_URI` | provided by Toolforge | Shared Toolforge Redis URL; used automatically for Flask-Limiter when `RATELIMIT_STORAGE_URI` is unset |
+| `RATELIMIT_STORAGE_URI` | VPS/override only | Explicit Redis backend, for example `redis://<host>:6379/0`; production rejects non-Redis limiter storage |
+| `RATELIMIT_KEY_PREFIX` | yes (prod) | Unique random Redis key namespace for this deployment, for example `wiki-polis:prod:<random>:` |
+| `RATELIMIT_IDENTITY_SECRET` | yes (prod) | Random HMAC secret used to avoid storing raw client identities in shared Redis keys |
+| `TRUST_PROXY_HEADERS` | VPS reverse proxy only | Set to `1` only when a Wikimedia VPS reverse proxy overwrites forwarding headers; Toolforge is detected automatically |
 | `TRUSTED_HOSTS` | yes (prod) | Comma-separated allowed request hostnames, for example `wiki-polis.toolforge.org` |
 | `DEV_LOGIN_USER` | dev only | Bypasses OAuth in local dev; never set in production |
 | `DEV_FAKE_LOGIN` | dev only | Set to `1` to show hardcoded test-user badges on the home page; never set in production |

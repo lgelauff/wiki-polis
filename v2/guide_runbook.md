@@ -231,8 +231,8 @@ is expected.
 `toolforge envvars delete <NAME>` then `toolforge envvars create <NAME>` (use the
 interactive prompt; never pass a secret as a CLI argument). Restart the webservice
 afterward. Candidates to rotate on a schedule or on suspected compromise: `SECRET_KEY`,
-`OAUTH_CLIENT_SECRET`, `POLIS_ADMIN_PASSWORD`, and the `wiki_polis_ro` Postgres
-password. *(pending — rotation cadence)*
+`OAUTH_CLIENT_SECRET`, `RATELIMIT_IDENTITY_SECRET`, `POLIS_ADMIN_PASSWORD`, and the
+`wiki_polis_ro` Postgres password. *(pending — rotation cadence)*
 
 ## Responding to an outage
 

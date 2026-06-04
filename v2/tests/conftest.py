@@ -6,7 +6,7 @@ import pytest
 from cachelib.file import FileSystemCache
 
 from app import create_app
-from db import Conversation, Participant, Participation, db
+from db import Conversation, Participant, db
 
 
 @pytest.fixture
@@ -20,7 +20,16 @@ def app(tmp_path):
     session_dir = tmp_path / 'sessions'
     session_dir.mkdir()
 
-    env_overrides = {'FLASK_DEBUG': '0', 'DEV_LOGIN_USER': ''}
+    env_overrides = {
+        'FLASK_DEBUG': '0',
+        'DEV_LOGIN_USER': '',
+        'RATELIMIT_STORAGE_URI': '',
+        'RATELIMIT_KEY_PREFIX': '',
+        'RATELIMIT_IDENTITY_SECRET': '',
+        'TRUST_PROXY_HEADERS': '',
+        'TOOL_TOOLFORGE_API_URL': '',
+        'TOOL_REDIS_URI': '',
+    }
     with patch.dict(os.environ, env_overrides, clear=False):
         a = create_app({
             'TESTING': True,

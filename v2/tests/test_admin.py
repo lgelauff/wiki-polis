@@ -33,7 +33,12 @@ def test_admin_index_accessible_to_global_admin(admin_client):
 
 # ── Conversation CRUD ─────────────────────────────────────────────────────────
 
-def test_create_conversation(admin_client):
+def test_create_conversation(app, admin_client):
+    app.config.update({
+        'POLIS_SERVER_URL': 'http://polis.test',
+        'POLIS_ADMIN_EMAIL': 'admin@example.org',
+        'POLIS_ADMIN_PASSWORD': 'test-password',
+    })
     with patch('app.PolisServerClient.create_conversation',
                return_value='newpolis12'):
         resp = admin_client.post('/admin/conversations/new', data={
@@ -59,8 +64,13 @@ def test_create_conversation_invalid_slug_rejected(admin_client):
     assert resp.status_code == 400
 
 
-def test_create_conversation_polis_failure_redirects(admin_client):
+def test_create_conversation_polis_failure_redirects(app, admin_client):
     """Polis server error on creation → redirect to admin with flash, no conv written."""
+    app.config.update({
+        'POLIS_SERVER_URL': 'http://polis.test',
+        'POLIS_ADMIN_EMAIL': 'admin@example.org',
+        'POLIS_ADMIN_PASSWORD': 'test-password',
+    })
     with patch('app.PolisServerClient.create_conversation',
                side_effect=PolisServerError('test error')):
         resp = admin_client.post('/admin/conversations/new', data={

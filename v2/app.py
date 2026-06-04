@@ -6,6 +6,7 @@ import base64
 import click
 import functools
 import hashlib
+import hmac
 import os
 import random
 import re
@@ -44,7 +45,8 @@ _TEXT_ALLOWED_ATTRS = {'a': {'href', 'title'}}
 _POLIS_ID_RE     = re.compile(r'^[A-Za-z0-9]{6,20}$')
 _SLUG_RE         = re.compile(r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
 _PSEUDONYM_RE    = re.compile(r'^[a-z]{2,20}-[a-z]{2,20}$')
-_DISTRIBUTED_RATELIMIT_SCHEMES = ('redis://', 'rediss://', 'memcached://', 'mongodb://')
+_REDIS_RATELIMIT_SCHEMES = ('redis://', 'rediss://')
+_MIN_RATELIMIT_IDENTITY_SECRET_LEN = 32
 
 
 def _read_secret(name: str) -> str:
@@ -60,6 +62,12 @@ def _split_csv(value: str) -> list[str]:
     return [v.strip() for v in (value or '').split(',') if v.strip()]
 
 
+def _truthy(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.strip()]
 
 _REVEAL_COOLDOWN_DAYS = 30   # days after close before reveal window opens
@@ -70,8 +78,28 @@ _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
 csrf    = CSRFProtect()
 # No global default — limits applied per endpoint only.
-# On multi-worker deployments configure RATELIMIT_STORAGE_URI=redis://... in env.
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+# Toolforge provides TOOL_REDIS_URI; production startup validates Redis isolation.
+def _ratelimit_identity_key() -> str:
+    """Return a stable, non-reversible client identity for Flask-Limiter."""
+    trust_proxy_headers = (
+        _truthy(current_app.config.get('TRUST_PROXY_HEADERS'))
+        or bool(os.environ.get('TOOL_TOOLFORGE_API_URL'))
+    )
+    if trust_proxy_headers:
+        access_route = [addr.strip() for addr in request.access_route if addr.strip()]
+        client_identity = access_route[0] if access_route else get_remote_address()
+    else:
+        client_identity = get_remote_address()
+    identity_secret = current_app.config.get('RATELIMIT_IDENTITY_SECRET', '')
+    if not identity_secret:
+        return client_identity
+    digest = hmac.new(str(identity_secret).encode('utf-8'),
+                      client_identity.encode('utf-8'),
+                      hashlib.sha256).hexdigest()
+    return f'ip:{digest}'
+
+
+limiter = Limiter(key_func=_ratelimit_identity_key, default_limits=[])
 
 
 def _short_title(text: str, max_len: int = 80) -> str:
@@ -985,8 +1013,8 @@ def admin_conversation_invites(conv_id):
 @login_required
 def admin_invite_add(conv_id):
     _require_mod_for_conv(conv_id)
-    raw = [l.strip() for l in
-           request.form.get('mw_usernames', '').splitlines() if l.strip()]
+    raw = [line.strip() for line in
+           request.form.get('mw_usernames', '').splitlines() if line.strip()]
     usernames = [u for u in raw if 1 <= len(u) <= 255]
     if not usernames:
         return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
@@ -1768,6 +1796,13 @@ def create_app(test_config: dict | None = None) -> Flask:
     if test_config is not None:
         app.config.update(test_config)
 
+    _trust_proxy_headers = app.config.get('TRUST_PROXY_HEADERS')
+    if _trust_proxy_headers is None:
+        _trust_proxy_headers = _read_secret('trust-proxy-headers')
+    app.config['TRUST_PROXY_HEADERS'] = (
+        _truthy(_trust_proxy_headers) or bool(os.environ.get('TOOL_TOOLFORGE_API_URL'))
+    )
+
     _trusted_hosts = app.config.get('TRUSTED_HOSTS')
     if _trusted_hosts is None:
         _trusted_hosts = _split_csv(_read_secret('trusted-hosts'))
@@ -1783,20 +1818,52 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     _ratelimit_storage_uri = (
         app.config.get('RATELIMIT_STORAGE_URI')
-        or os.environ.get('RATELIMIT_STORAGE_URI', '').strip()
+        or _read_secret('ratelimit-storage-uri')
+        or os.environ.get('TOOL_REDIS_URI', '').strip()
     )
     if _ratelimit_storage_uri:
         if (not app.debug and not app.testing
-                and not _ratelimit_storage_uri.startswith(_DISTRIBUTED_RATELIMIT_SCHEMES)):
+                and not _ratelimit_storage_uri.startswith(_REDIS_RATELIMIT_SCHEMES)):
             raise RuntimeError(
-                'RATELIMIT_STORAGE_URI must use a distributed backend in production '
-                '(for example redis://...).'
+                'RATELIMIT_STORAGE_URI must use a Redis backend in production '
+                '(for example Toolforge TOOL_REDIS_URI or redis://...).'
             )
         app.config['RATELIMIT_STORAGE_URI'] = _ratelimit_storage_uri
     elif not app.debug and not app.testing:
         raise RuntimeError(
-            'RATELIMIT_STORAGE_URI is not set. Configure a distributed Flask-Limiter '
-            'storage backend such as redis://... before starting production.'
+            'RATELIMIT_STORAGE_URI is not set and Toolforge TOOL_REDIS_URI is unavailable. '
+            'Configure Redis-backed Flask-Limiter storage before starting production.'
+        )
+
+    _ratelimit_key_prefix = app.config.get('RATELIMIT_KEY_PREFIX')
+    if _ratelimit_key_prefix is None:
+        _ratelimit_key_prefix = _read_secret('ratelimit-key-prefix')
+    _ratelimit_key_prefix = str(_ratelimit_key_prefix).strip() if _ratelimit_key_prefix else ''
+    if _ratelimit_key_prefix:
+        app.config['RATELIMIT_KEY_PREFIX'] = _ratelimit_key_prefix
+    elif not app.debug and not app.testing:
+        raise RuntimeError(
+            'RATELIMIT_KEY_PREFIX is not set. Configure a unique Toolforge Redis key '
+            'prefix such as wiki-polis:<random>: before starting production.'
+        )
+
+    _ratelimit_identity_secret = app.config.get('RATELIMIT_IDENTITY_SECRET')
+    if _ratelimit_identity_secret is None:
+        _ratelimit_identity_secret = _read_secret('ratelimit-identity-secret')
+    _ratelimit_identity_secret = (
+        str(_ratelimit_identity_secret).strip() if _ratelimit_identity_secret else ''
+    )
+    if _ratelimit_identity_secret:
+        if (not app.debug and not app.testing
+                and len(_ratelimit_identity_secret) < _MIN_RATELIMIT_IDENTITY_SECRET_LEN):
+            raise RuntimeError(
+                'RATELIMIT_IDENTITY_SECRET must be at least 32 characters in production.'
+            )
+        app.config['RATELIMIT_IDENTITY_SECRET'] = _ratelimit_identity_secret
+    elif not app.debug and not app.testing:
+        raise RuntimeError(
+            'RATELIMIT_IDENTITY_SECRET is not set. Configure a random secret so '
+            'rate-limit keys do not expose raw client identities in shared Redis.'
         )
 
     db.init_app(app)

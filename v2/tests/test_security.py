@@ -1,4 +1,6 @@
 """Tests for security headers, redirect safety, and dev DB isolation."""
+import hashlib
+import hmac
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -177,7 +179,11 @@ def test_fake_login_ignored_when_not_debug(tmp_path):
 
 def test_production_requires_ratelimit_storage_uri(tmp_path):
     """Production must not silently fall back to per-worker limiter storage."""
-    with patch.dict(os.environ, {'FLASK_DEBUG': '0', 'RATELIMIT_STORAGE_URI': ''}, clear=False):
+    with patch.dict(os.environ, {
+        'FLASK_DEBUG': '0',
+        'RATELIMIT_STORAGE_URI': '',
+        'TOOL_REDIS_URI': '',
+    }, clear=False):
         from app import create_app
         with pytest.raises(RuntimeError, match='RATELIMIT_STORAGE_URI is not set'):
             create_app({
@@ -189,10 +195,10 @@ def test_production_requires_ratelimit_storage_uri(tmp_path):
 
 
 def test_production_rejects_local_ratelimit_storage_uri(tmp_path):
-    """Production limiter storage must be distributed, not a local memory backend."""
+    """Production limiter storage must use Redis, not a local memory backend."""
     with patch.dict(os.environ, {'FLASK_DEBUG': '0'}, clear=False):
         from app import create_app
-        with pytest.raises(RuntimeError, match='distributed backend'):
+        with pytest.raises(RuntimeError, match='Redis backend'):
             create_app({
                 'TESTING': False,
                 'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/prod-local-rate.db',
@@ -202,11 +208,118 @@ def test_production_rejects_local_ratelimit_storage_uri(tmp_path):
             })
 
 
+def test_production_uses_toolforge_redis_uri(tmp_path):
+    """Toolforge's global Redis URI is the production default."""
+    session_dir = tmp_path / 'sessions-toolforge-redis'
+    session_dir.mkdir()
+    toolforge_redis = 'redis://redis.svc.tools.eqiad1.wikimedia.cloud:6379'
+    with patch.dict(os.environ, {
+        'FLASK_DEBUG': '0',
+        'RATELIMIT_STORAGE_URI': '',
+        'TOOL_TOOLFORGE_API_URL': 'https://api.svc.tools.eqiad1.wikimedia.cloud',
+        'TOOL_REDIS_URI': toolforge_redis,
+    }, clear=False):
+        from app import create_app
+        a = create_app({
+            'TESTING': False,
+            'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/prod-toolforge-redis.db',
+            'SECRET_KEY': 'test-secret',
+            'RATELIMIT_KEY_PREFIX': 'wiki-polis-test:prefix:',
+            'RATELIMIT_IDENTITY_SECRET': 'x' * 32,
+            'TRUSTED_HOSTS': ['wiki-polis.test'],
+            'SESSION_TYPE': 'cachelib',
+            'SESSION_CACHELIB': FileSystemCache(str(session_dir)),
+        })
+    assert a.config['RATELIMIT_STORAGE_URI'] == toolforge_redis
+    assert a.config['TRUST_PROXY_HEADERS'] is True
+
+
+def test_production_requires_ratelimit_key_prefix(tmp_path):
+    """Shared Toolforge Redis keys must be namespaced per deployment."""
+    with patch.dict(os.environ, {
+        'FLASK_DEBUG': '0',
+        'RATELIMIT_KEY_PREFIX': '',
+        'RATELIMIT_IDENTITY_SECRET': 'x' * 32,
+    }, clear=False):
+        from app import create_app
+        with pytest.raises(RuntimeError, match='RATELIMIT_KEY_PREFIX is not set'):
+            create_app({
+                'TESTING': False,
+                'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/prod-missing-prefix.db',
+                'SECRET_KEY': 'test-secret',
+                'RATELIMIT_STORAGE_URI': 'redis://localhost:6379/0',
+                'TRUSTED_HOSTS': ['wiki-polis.test'],
+            })
+
+
+def test_production_requires_ratelimit_identity_secret(tmp_path):
+    """Production limiter keys must not expose raw client identity values."""
+    with patch.dict(os.environ, {
+        'FLASK_DEBUG': '0',
+        'RATELIMIT_IDENTITY_SECRET': '',
+    }, clear=False):
+        from app import create_app
+        with pytest.raises(RuntimeError, match='RATELIMIT_IDENTITY_SECRET is not set'):
+            create_app({
+                'TESTING': False,
+                'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/prod-missing-identity.db',
+                'SECRET_KEY': 'test-secret',
+                'RATELIMIT_STORAGE_URI': 'redis://localhost:6379/0',
+                'RATELIMIT_KEY_PREFIX': 'wiki-polis-test:prefix:',
+                'TRUSTED_HOSTS': ['wiki-polis.test'],
+            })
+
+
+def test_ratelimit_identity_key_hashes_forwarded_client_identity(app):
+    """The limiter stores HMAC output, not the raw forwarded client address."""
+    from app import _ratelimit_identity_key
+    secret = 'x' * 32
+    app.config['RATELIMIT_IDENTITY_SECRET'] = secret
+    app.config['TRUST_PROXY_HEADERS'] = True
+    with app.test_request_context('/', headers={
+        'X-Forwarded-For': '203.0.113.10, 10.0.0.1',
+    }):
+        expected = 'ip:' + hmac.new(
+            secret.encode('utf-8'),
+            b'203.0.113.10',
+            hashlib.sha256,
+        ).hexdigest()
+        actual = _ratelimit_identity_key()
+
+    assert actual == expected
+    assert '203.0.113.10' not in actual
+
+
+def test_ratelimit_identity_key_ignores_untrusted_forwarded_client(app):
+    """Direct VPS requests cannot spoof rate-limit identity through X-Forwarded-For."""
+    from app import _ratelimit_identity_key
+    secret = 'x' * 32
+    app.config['RATELIMIT_IDENTITY_SECRET'] = secret
+    app.config['TRUST_PROXY_HEADERS'] = False
+    with app.test_request_context('/', headers={
+        'X-Forwarded-For': '203.0.113.10',
+    }, environ_base={'REMOTE_ADDR': '198.51.100.20'}):
+        expected = 'ip:' + hmac.new(
+            secret.encode('utf-8'),
+            b'198.51.100.20',
+            hashlib.sha256,
+        ).hexdigest()
+        actual = _ratelimit_identity_key()
+
+    assert actual == expected
+    assert '203.0.113.10' not in actual
+    assert '198.51.100.20' not in actual
+
+
 def test_test_config_may_disable_distributed_ratelimit_storage(tmp_path):
     """Tests keep the lightweight in-memory limiter unless they opt into storage."""
     session_dir = tmp_path / 'sessions-rate-test'
     session_dir.mkdir()
-    with patch.dict(os.environ, {'FLASK_DEBUG': '0', 'RATELIMIT_STORAGE_URI': ''}, clear=False):
+    with patch.dict(os.environ, {
+        'FLASK_DEBUG': '0',
+        'RATELIMIT_STORAGE_URI': '',
+        'TOOL_REDIS_URI': '',
+    }, clear=False):
         from app import create_app
         a = create_app({
             'TESTING': True,
