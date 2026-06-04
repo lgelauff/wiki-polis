@@ -8,13 +8,6 @@
     <a href="{{ url_for('admin.admin') }}">← admin</a>
   </p>
 
-  {% if polis_public_url %}
-  <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
-    For advanced operations not available here, use the
-    <a href="{{ polis_public_url }}/m/{{ conversation.polis_id }}" target="_blank" rel="noopener">
-      Polis admin interface</a> (requires a Polis account).
-  </p>
-  {% endif %}
 
   <!-- ── Add seed statement ──────────────────────────── -->
   <h3 class="section-heading">Add seed statement</h3>
