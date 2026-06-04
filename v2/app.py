@@ -1632,14 +1632,13 @@ def phase6_vote(slug):
     if fs.phase6_polis_statement_id is None:
         abort(404)
 
-    # Resolve pid/tid server-side — never trust the client.
-    pid = conv.phase6_polis_conversation_id
-    tid = fs.phase6_polis_statement_id
+    # Resolve conversation/statement IDs server-side — never trust the client.
+    polis_conv_id = conv.phase6_polis_conversation_id
+    tid           = fs.phase6_polis_statement_id
 
     # Ensure a stable Polis session exists before voting. Without this, a participant
-    # with no or expired pa_session cookie would get a fresh anonymous Polis identity,
-    # allowing duplicate votes from the same Wikimedia account. Mirrors the session
-    # bootstrap in conversation_statement_new.
+    # with no or expired pa_session cookie would get a fresh anonymous Polis identity.
+    # Mirrors the session bootstrap in conversation_statement_new.
     pa_cookie = request.cookies.get('pa_session')
     base = current_app.config['PARTICIAPI_BASE']
     new_pa_cookie = None
@@ -1656,11 +1655,13 @@ def phase6_vote(slug):
             current_app.logger.exception('Particiapi session bootstrap failed in phase6_vote')
             abort(502)
 
+    # Particiapi vote endpoint: PUT /api/conversations/{id}/votes/{tid} with {value: N}
+    # (matches particiapp-web-client.js line 840-841)
     forwarded_cookies = {'session': pa_cookie} if pa_cookie else {}
     try:
-        upstream = requests.post(
-            f'{base}/api/votes',
-            json={'pid': pid, 'tid': tid, 'vote': vote},
+        upstream = requests.put(
+            f'{base}/api/conversations/{polis_conv_id}/votes/{tid}',
+            json={'value': vote},
             cookies=forwarded_cookies,
             timeout=10,
         )
