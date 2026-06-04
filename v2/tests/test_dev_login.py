@@ -1,9 +1,10 @@
-"""Tests for the DEV_FAKE_LOGIN staging login (`/dev/login/<username>`).
+"""Tests for the DEV_FAKE_LOGIN local-debug login (`/dev/login/<username>`).
 
 Regression for the bug where a reused dev Participant (matched by mw_user_id) kept a
-stale mw_username, so `_current_participant()` — which looks up by mw_username — returned
-None and participant-gated routes (/accept, /reveal) 404'd for dev users.
+stale mw_username/xid, so the authenticated local-debug session no longer matched the
+participant row used by participant-gated routes (/accept, /reveal).
 """
+import hashlib
 import os
 from unittest.mock import patch
 
@@ -16,10 +17,15 @@ from db import Participant, db
 
 @pytest.fixture
 def fake_login_app(tmp_path):
-    """App with DEV_FAKE_LOGIN=1 so `/dev/login/<username>` is registered."""
+    """Local-debug app with DEV_FAKE_LOGIN=1 so `/dev/login/<username>` is registered."""
     session_dir = tmp_path / 'sessions'
     session_dir.mkdir()
-    env = {'FLASK_DEBUG': '0', 'DEV_LOGIN_USER': '', 'DEV_FAKE_LOGIN': '1'}
+    env = {
+        'FLASK_DEBUG': '1',
+        'DEV_LOGIN_USER': '',
+        'DEV_FAKE_LOGIN': '1',
+        'TOOL_TOOLFORGE_API_URL': '',
+    }
     with patch.dict(os.environ, env, clear=False):
         a = create_app({
             'TESTING': True,
@@ -39,18 +45,18 @@ def fake_login_app(tmp_path):
 
 
 def test_dev_fake_login_creates_participant(fake_login_app):
-    """First login creates the dev Participant with matching mw_username."""
+    """First login creates the dev Participant with matching username and xid."""
     r = fake_login_app.test_client().get('/dev/login/dev-user-1')
     assert r.status_code == 302
     with fake_login_app.app_context():
         p = Participant.query.filter_by(mw_user_id=-1).first()
         assert p is not None
         assert p.mw_username == 'dev-user-1'
+        assert p.xid == hashlib.sha256(b'dev-fake-dev-user-1').hexdigest()
 
 
 def test_dev_fake_login_syncs_drifted_username(fake_login_app):
-    """A reused dev row whose mw_username drifted is corrected on login, so
-    _current_participant() (lookup by mw_username) resolves again."""
+    """A reused dev row whose username/xid drifted is corrected on login."""
     with fake_login_app.app_context():
         db.session.add(Participant(mw_user_id=-2, mw_username='stale-name', xid='x' * 64))
         db.session.commit()
@@ -63,7 +69,8 @@ def test_dev_fake_login_syncs_drifted_username(fake_login_app):
         rows = Participant.query.filter_by(mw_user_id=-2).all()
         assert len(rows) == 1
         assert rows[0].mw_username == 'dev-user-2'
-        # mw_username now matches what _current_participant() looks up by → no more 404.
+        assert rows[0].xid == hashlib.sha256(b'dev-fake-dev-user-2').hexdigest()
+        # The row now matches both legacy username checks and stable xid session lookup.
         assert Participant.query.filter_by(mw_username='dev-user-2').first() is not None
 
 

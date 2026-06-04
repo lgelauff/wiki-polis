@@ -5,8 +5,6 @@ from flask import session
 
 from db import Participant, db
 
-from tests.conftest import login
-
 
 def test_login_without_oauth_returns_503(client):
     resp = client.get('/login')
