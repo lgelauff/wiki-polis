@@ -162,6 +162,7 @@ def test_empty_polis_results_shows_not_enough_votes(auth_client, conv, participa
     """Particiapi returns all-empty arrays when there aren't enough votes for clustering.
     The Results tab must show the 'not enough votes' message rather than a blank panel."""
     import polis_admin
+    import app as app_module
     conv.phase_public_results = True
     db.session.commit()
 
@@ -169,6 +170,11 @@ def test_empty_polis_results_shows_not_enough_votes(auth_client, conv, participa
                         lambda self, cid: {'groups': [], 'majority': {'agree': [], 'disagree': []}})
     monkeypatch.setattr(polis_admin.PolisServerClient, 'get_polis_stats',
                         lambda self, cid: None)
+    monkeypatch.setattr(polis_admin.PolisServerClient, 'queue_math_recompute',
+                        lambda self, zinvite: False)
+    # Simulate a recent trigger so rate-limit suppresses recompute → shows "enough votes".
+    import time
+    monkeypatch.setitem(app_module._math_recompute_last, conv.id, time.monotonic())
 
     resp = auth_client.get('/c/test-conv')
     assert resp.status_code == 200
@@ -181,6 +187,7 @@ def test_none_polis_results_shows_not_enough_votes(auth_client, conv, participat
     """When Particiapi errors or returns None (e.g. math hasn't run), the Results tab
     must show the 'not enough votes' message rather than a blank panel."""
     import polis_admin
+    import app as app_module
     conv.phase_public_results = True
     db.session.commit()
 
@@ -188,11 +195,66 @@ def test_none_polis_results_shows_not_enough_votes(auth_client, conv, participat
                         lambda self, cid: None)
     monkeypatch.setattr(polis_admin.PolisServerClient, 'get_polis_stats',
                         lambda self, cid: None)
+    monkeypatch.setattr(polis_admin.PolisServerClient, 'queue_math_recompute',
+                        lambda self, zinvite: False)
+    import time
+    monkeypatch.setitem(app_module._math_recompute_last, conv.id, time.monotonic())
 
     resp = auth_client.get('/c/test-conv')
     assert resp.status_code == 200
     assert b'enough votes' in resp.data
     assert b"Results haven't been published yet" not in resp.data
+
+
+def test_empty_results_triggers_recompute_and_shows_computing_message(
+        auth_client, conv, participation, monkeypatch):
+    """When results are empty and POLIS_DATABASE_URL is set, queue_math_recompute is
+    called and the template shows 'being computed' instead of 'not enough votes'."""
+    import polis_admin
+    import app as app_module
+    conv.phase_public_results = True
+    db.session.commit()
+
+    monkeypatch.setattr(polis_admin.PolisParticipantClient, 'get_results',
+                        lambda self, cid: {'groups': [], 'majority': {'agree': [], 'disagree': []}})
+    monkeypatch.setattr(polis_admin.PolisServerClient, 'get_polis_stats',
+                        lambda self, cid: None)
+    recompute_called = []
+    monkeypatch.setattr(polis_admin.PolisServerClient, 'queue_math_recompute',
+                        lambda self, zinvite: recompute_called.append(zinvite) or True)
+    # Reset rate-limit state so the trigger fires.
+    monkeypatch.setitem(app_module._math_recompute_last, conv.id, 0)
+
+    resp = auth_client.get('/c/test-conv')
+    assert resp.status_code == 200
+    assert recompute_called == [conv.polis_id]
+    assert b'being computed' in resp.data
+    assert b'enough votes' not in resp.data
+
+
+def test_recompute_rate_limited_within_cooldown(auth_client, conv, participation,
+                                                monkeypatch):
+    """queue_math_recompute is NOT called again within the cooldown window."""
+    import time
+    import polis_admin
+    import app as app_module
+    conv.phase_public_results = True
+    db.session.commit()
+
+    monkeypatch.setattr(polis_admin.PolisParticipantClient, 'get_results',
+                        lambda self, cid: {'groups': [], 'majority': {'agree': [], 'disagree': []}})
+    monkeypatch.setattr(polis_admin.PolisServerClient, 'get_polis_stats',
+                        lambda self, cid: None)
+    recompute_called = []
+    monkeypatch.setattr(polis_admin.PolisServerClient, 'queue_math_recompute',
+                        lambda self, zinvite: recompute_called.append(zinvite) or True)
+    # Simulate a recent trigger (within cooldown).
+    monkeypatch.setitem(app_module._math_recompute_last, conv.id, time.monotonic())
+
+    resp = auth_client.get('/c/test-conv')
+    assert resp.status_code == 200
+    assert recompute_called == []
+    assert b'enough votes' in resp.data  # falls back to normal message
 
 
 # ── Access control ────────────────────────────────────────────────────────────

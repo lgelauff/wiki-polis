@@ -355,7 +355,11 @@
           {% endif %}
 
         {% else %}
+          {% if recomputing %}
+          <p class="muted">Results are being computed — check back in a moment.</p>
+          {% else %}
           <p class="muted">Results will appear here once enough votes have been cast.</p>
+          {% endif %}
         {% endif %}
 
 
