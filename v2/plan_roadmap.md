@@ -89,10 +89,10 @@ retention commitment (decision D-PRIV), pending legal/comms review.
 
 ## 5. Deferred / later
 
-- **Phase 6 — informed voting** — proposal under discussion (see
-  [`prop_phase-model.md`](prop_phase-model.md)); not adopted.
-  [#78](https://github.com/lgelauff/wiki-polis/issues/78),
-  [#83](https://github.com/lgelauff/wiki-polis/issues/83).
+- ~~**Phase 6 — informed voting**~~ ✅ Implemented (PR #115, 2026-06-04). Data model,
+  admin init, participant UI, vote route. See `log_changelog.md` for detail.
+  Follow-up: dedup table for repeat votes, 409 UX, tab on closed convs, admin
+  warning for un-seeded confirmed statements.
 - **Return engagement** — notifications (talk page / email), "new since last visit".
 - **Analytics export** — structured export of votes / clusters / arguments.
 - **Admin & ops** — seed CSV import

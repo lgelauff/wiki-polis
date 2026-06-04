@@ -38,13 +38,11 @@ Today there are **four toggles**:
 
 1. **Open submission** — participants vote on statements and propose their own (the data-collection phase).
 2. **Personal results** — each participant sees where they sit, but only for statements they voted on.
-3. **Argument mapping** — opens a pro/con argument layer on featured statements.
+3. **Argument mapping** — opens a pro/con argument layer on featured statements. Participants read, submit, and vote on short pro/con arguments for each featured statement.
 4. **Full public results** — opens the complete opinion map to everyone, including visitors.
+5. **Informed voting** — a second, independent voting round on the featured statements only. Arguments from Phase 3 are shown inline so participants deliberate before casting a clean Agree / Disagree / Pass vote. Participants who skipped Phase 1 can join here; the statement set is fixed.
 
-> **TODO — insert Phase 5 and Phase 6.** The six-phase proposal
-> ([`prop_phase-model.md`](prop_phase-model.md)) would add **Phase 5 — argument
-> mapping** and **Phase 6 — informed voting** as explicit phases. We keep the four-toggle
-> framing until that model is actually adopted, then fill these in. *(pending — phases 5 & 6.)*
+Phases 1–4 are independent toggles you can enable in any order. Informed voting (Phase 5) requires Phase 3 (argument mapping) to have produced substantive arguments first, and must be **initialised** from the admin panel before the tab appears for participants (see [Enabling informed voting](#enabling-informed-voting) below).
 
 ## What a statement is
 
@@ -180,6 +178,36 @@ after argument mapping = deliberation without a final vote). *(pending — later
 - Moderate for abuse; be cautious removing non-abusive statements.
 - Don't over-read small samples.
 - Be clear with participants: closing is permanent, revealing your name is optional and permanent.
+
+## Enabling informed voting
+
+Informed voting is a two-step admin action after argument mapping is complete.
+
+**Step 1 — Turn on the toggle**
+
+In the conversation admin panel → **Phases**, check **Informed voting** and save. The tab does not yet appear for participants.
+
+> ⚠️ If statement submission or argument mapping is still on, a warning appears. You don't have to disable them, but informed voting is most meaningful once argument mapping is substantively complete.
+
+**Step 2 — Initialise**
+
+A new **Informed voting — setup** section appears. Click **Initialise Phase 6**. The app will:
+1. Create a dedicated Polis conversation for the second vote round.
+2. Seed each confirmed featured statement into it.
+
+This takes a few seconds. On success you'll see the Polis conversation ID and how many statements were seeded. **Run this once.** Re-initialisation is blocked once it completes.
+
+After initialisation the **Informed voting** tab becomes visible to all participants who have joined the conversation. Participants who never took part in Phase 1 can also join and vote.
+
+**What participants see**
+
+Each featured statement is shown as a card with:
+- The statement text.
+- Up to 3 pro arguments visible; a "Show more" fold-out reveals up to 10 per side.
+- A placeholder if no arguments were submitted for a side.
+- Three vote buttons: **Agree**, **Disagree**, **Pass**.
+
+Participants vote independently of Phase 1 — the Phase 1 vote history is not shown, and the second-round votes go into a separate Polis conversation for clean analysis.
 
 ## References
 

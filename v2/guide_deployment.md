@@ -410,6 +410,12 @@ bash ~/wiki-polis/deploy.sh
 
 Alembic migrations must run inside `toolforge webservice python3.13 shell` — **not** on the bastion shell. The reason: `toolforge envvars` (including `DATABASE_URL`) are only injected into the webservice pod environment, not exported to regular bastion sessions. Running `flask db upgrade` on the bastion will fail with `RuntimeError: DATABASE_URL is not set`.
 
+### Migration history
+
+| Revision | Description |
+|---|---|
+| `3e86727dbcee` | Phase 6 — adds `phase_informed_voting`, `phase6_polis_conversation_id` to conversations; `phase6_polis_statement_id` to featured_statements; UNIQUE constraints and index. Required when deploying PR #115. |
+
 ### Check whether a migration is needed
 
 After `git pull`, check if the new commits added any migration files:
