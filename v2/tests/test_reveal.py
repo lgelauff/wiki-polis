@@ -1,8 +1,6 @@
 """Tests for the identity reveal window: state transitions and POST validation."""
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from db import Conversation, Participant, Participation, db
 
 
