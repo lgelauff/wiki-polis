@@ -42,7 +42,7 @@ Today there are **four toggles**:
 4. **Full public results** — opens the complete opinion map to everyone, including visitors.
 5. **Informed voting** — a second, independent voting round on the featured statements only. Arguments from Phase 3 are shown inline so participants deliberate before casting a clean Agree / Disagree / Pass vote. Participants who skipped Phase 1 can join here; the statement set is fixed.
 
-Phases 1–4 are independent toggles you can enable in any order. Informed voting (Phase 5) requires Phase 3 (argument mapping) to have produced substantive arguments first, and must be **initialised** from the admin panel before the tab appears for participants (see [Enabling informed voting](#enabling-informed-voting) below).
+Phases 1–5 are independent toggles you can enable in any order. Informed voting (Phase 5) requires Phase 3 (argument mapping) to have produced substantive arguments first, and must be **initialised** from the admin panel before the tab appears for participants (see [Enabling informed voting](#enabling-informed-voting) below).
 
 ## What a statement is
 

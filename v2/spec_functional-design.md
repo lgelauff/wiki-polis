@@ -3,9 +3,9 @@
 > **Status — current spec.** This specifies how wiki-polis is *meant to work* — the
 > agreed design for the current version. Where the implementation diverges, that's a
 > tracked bug/gap (flagged inline with a `pending` marker), not a change to this spec.
-> Forward-looking ideas still under discussion (e.g. the six-phase model) live in
-> [`prop_phase-model.md`](prop_phase-model.md) and are **not** described here
-> until adopted.
+> Phase 6 (informed voting) was adopted and implemented (PR #115, 2026-06-04) and is
+> described in the Results section below. [`prop_phase-model.md`](prop_phase-model.md)
+> contains the full six-phase narrative and is now partially current.
 
 A deliberation tool for the Wikimedia community. Participants vote on atomic statements, clusters of opinion emerge, and curated debate layers can be added on top.
 
@@ -129,7 +129,7 @@ The threshold for moving from "below" to "above" is `min(new_stmt_unlock_at, tot
 
 ## Results
 
-A conversation has three independent toggles that the admin can switch on or off at any time. They can be active simultaneously or sequenced — the admin decides.
+A conversation has five independent toggles that the admin can switch on or off at any time. They can be active simultaneously or sequenced — the admin decides.
 
 **Toggle 1 — Submission open**
 Participants can vote on statements and submit new ones. This is the data collection phase.
@@ -145,12 +145,16 @@ When the participant count for a conversation is below a minimum threshold (curr
 **Toggle 4 — Argument mapping**
 The pro/con argument layer becomes visible on featured statements. Participants can read, submit, and vote on short arguments. When this toggle is off, the argument tab is hidden entirely — the voting loop and results are unaffected.
 
-All four toggles default to off and are designed to be enabled in order — each phase building on the previous. The default sequence is:
+**Toggle 5 — Informed voting**
+A second, independent voting round on the featured statements only. Arguments from Toggle 4 are shown inline so participants deliberate before casting a clean Agree / Disagree / Pass vote. The slate is clean — Phase 1 votes have no effect here, and participants who did not take part in Phase 1 can enter. This toggle requires a one-time admin initialisation step (creates a dedicated Polis conversation and seeds the featured statements) before the tab becomes visible to participants. See the organizer guide for the initialisation flow.
+
+All five toggles default to off and are designed to be enabled in order — each phase building on the previous. The default sequence is:
 
 1. Open submission — collect votes and statements
 2. Enable personal results — reward participants with a view of how their engagement lands
 3. Enable argument mapping — invite deeper engagement on the most significant statements before opening to the public
 4. Enable full public results — open the findings to the wider community and visitors
+5. Enable informed voting — after argument mapping is substantive, open a second voting round on the featured statements with arguments visible
 
 The admin can deviate from this sequence, but successive activation is the intended default flow.
 
@@ -315,7 +319,7 @@ We must build these. Without them the platform cannot function as designed.
 - Access policies — public and invite-only enforcement
 - Per-conversation invite management
 - Per-conversation moderator roles; global admin roles
-- Four independent phase toggles per conversation: submission open, personal results, argument mapping, full public results
+- Five independent phase toggles per conversation: submission open, personal results, argument mapping, full public results, informed voting
 - Featured statement curation — system suggests candidates from cluster analysis; admin confirms
 - Argument layer — submission, voting, display; visibility controlled by conversation-level argument mapping toggle
 - Home page with active, archived, available, and moderating conversation sections

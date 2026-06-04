@@ -1,9 +1,10 @@
 # Wiki-Polis Phase Model — Extension Proposal
 
-> **Status — proposal, under discussion. Not yet adopted or implemented.** This does
-> **not** describe current behaviour; for what wiki-polis does today see
-> [`spec_functional-design.md`](spec_functional-design.md). Do not implement from this document
-> until consensus is reached.
+> **Status — partially implemented.** Phase 6 (informed voting) was adopted and
+> shipped in PR #115 (2026-06-04). Phases 1–5 describe the current production behaviour.
+> The data model section (second Polis conversation, mapping fields) reflects the
+> implementation. For authoritative current behaviour see
+> [`spec_functional-design.md`](spec_functional-design.md).
 
 This document extends the functional design (`spec_functional-design.md`) to formalise the deliberation process as a set of composable phases. It replaces the four-toggle description in the Results section with a richer model that includes a sixth phase: informed voting.
 
