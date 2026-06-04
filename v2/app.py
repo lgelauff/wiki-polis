@@ -776,6 +776,18 @@ def admin_conversation_phases(conv_id):
     conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
     conv.phase_public_results   = bool(request.form.get('phase_public_results'))
     db.session.commit()
+
+    # Mirror the results phase onto Polis's vis_type, which gates GET /results/ (off by
+    # default — otherwise the Results tab stays empty no matter how many votes are cast).
+    # Best-effort: a Polis failure must not lose the phase change we just saved.
+    if conv.polis_id:
+        results_on = conv.phase_public_results or conv.phase_personal_results
+        try:
+            _polis_server_client().set_vis_type(conv.polis_id, 1 if results_on else 0)
+        except PolisServerError as exc:
+            current_app.logger.warning('vis_type update failed for %s: %s', conv.slug, exc)
+            flash('Phases saved, but updating results visibility in Polis failed — '
+                  'results may not appear until you save phases again.', 'error')
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 @admin_bp.post('/admin/global-admins/add')
