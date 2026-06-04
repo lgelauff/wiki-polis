@@ -212,6 +212,8 @@ docker exec -it particiapp-docker_postgres_1 psql -U polis polis -c "CREATE ROLE
 
 Use this role in the `POLIS_DATABASE_URL` Toolforge envvar: `postgresql://wiki_polis_ro:<password>@<private-ip>:5432/polis`
 
+> **Use the numeric IP, not the hostname.** Toolforge pods cannot resolve the WMCS internal hostname (`*.wikimedia.cloud`) — the DSN must use the VPS's private IP address directly (e.g. `172.16.19.44`). For staging, use the same IP with port `5442`.
+
 ### Polis system account (one-time)
 
 The wiki-polis admin panel creates Polis conversations by calling the Polis API at port 8001. This requires a dedicated Polis user account. Create it once on the VPS:
