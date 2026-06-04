@@ -58,6 +58,8 @@ ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.st
 
 _REVEAL_COOLDOWN_DAYS = 30   # days after close before reveal window opens
 _REVEAL_NULLIFY_DAYS  = 30   # days after window opens before nullification (total = cooldown + nullify)
+_MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
+_math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
 
 def _nullify_expired_reveals(conv: 'Conversation') -> None:
@@ -1159,10 +1161,20 @@ def conversation(slug):
     # logged-in only) and public results (Phase 4, everyone) currently render the same
     # aggregate data; #81 part 2 will scope personal results to the participant's voted
     # statements (anti-anchoring).
+    recomputing = False
     if conv.phase_public_results or conv.phase_personal_results:
-        results      = PolisParticipantClient(
+        _r = PolisParticipantClient(
             current_app.config['PARTICIAPI_BASE']).get_results(conv.polis_id)
+        results = _r if (_r and (_r.get('groups') or _r.get('majority', {}).get('agree') or _r.get('majority', {}).get('disagree'))) else None
         polis_stats = _polis_server_client().get_polis_stats(conv.polis_id)
+        if results is None:
+            import time
+            _now = time.monotonic()
+            _last = _math_recompute_last.get(conv.id, 0)
+            if _now - _last > _MATH_RECOMPUTE_COOLDOWN:
+                if _polis_server_client().queue_math_recompute(conv.polis_id):
+                    _math_recompute_last[conv.id] = _now
+                    recomputing = True
 
     # Reveal window state for closed conversations.
     reveal_state    = None
@@ -1188,6 +1200,7 @@ def conversation(slug):
                            participation=participation,
                            can_moderate=can_mod,
                            results=results,
+                           recomputing=recomputing,
                            polis_stats=polis_stats,
                            polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''),
                            reveal_state=reveal_state,

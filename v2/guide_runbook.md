@@ -120,6 +120,39 @@ docker exec -it $CID psql -U polis -d polis -c \
     ORDER BY created DESC LIMIT 20;"
 ```
 
+## Diagnosing empty results
+
+The Results tab shows "Results will appear here once enough votes have been cast."
+when Particiapi returns all-empty arrays (`{"groups":[],"majority":{"agree":[],"disagree":[]}}`).
+This is normal Polis behaviour — clustering only runs once there is enough data.
+
+**Check the vote count for a conversation:**
+
+```bash
+# Staging
+CID=wiki-polis-staging_postgres_1
+# Production
+CID=particiapp-docker_postgres_1
+
+docker exec -it $CID psql -U polis -d polis -c \
+  "SELECT COUNT(*) FROM votes WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<ZINVITE>');"
+```
+
+Polis typically requires **≥ 7 participants** and a reasonable spread of votes before
+the math worker produces clusters. A conversation with only 2–4 participants will
+always return empty results.
+
+**Check `vis_type`** — Polis gates `/results/` on `vis_type <> 0`. If results are empty
+even with plenty of votes, `vis_type` may be 0 (not set). Fix: open the admin Phases
+form for that conversation and hit **Save** — this triggers `set_vis_type(1)`.
+
+```bash
+docker exec -it $CID psql -U polis -d polis -c \
+  "SELECT vis_type FROM conversations WHERE zinvite = '<ZINVITE>';"
+```
+
+Expected: `1`. If `0`, re-save Phases in the admin UI.
+
 ## Backups & restore
 
 - **Backups:** a nightly `pg_dump` of the Polis Postgres DB → offsite. **⚠️ not live

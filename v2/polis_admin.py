@@ -436,3 +436,38 @@ class PolisServerClient:
             }
         except (ValueError, IndexError):
             return None
+
+    def queue_math_recompute(self, zinvite: str) -> bool:
+        """Insert a worker_tasks row to trigger a polismath recompute for one conversation.
+
+        Polismath polls worker_tasks continuously (1 s interval) and processes the task
+        within seconds. Returns True if the task was queued, False if unavailable or failed.
+        No-op when db_url is absent.
+        """
+        if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
+            return False
+        sql = """
+            INSERT INTO worker_tasks (task_type, task_data, task_bucket, math_env)
+            SELECT 'update_math',
+                   jsonb_build_object('zid', zid),
+                   zid,
+                   'prod'
+            FROM zinvites WHERE zinvite = %s
+        """
+        try:
+            import psycopg2
+        except ImportError:
+            logger.exception('psycopg2 not available — queue_math_recompute unavailable')
+            return False
+        try:
+            conn = psycopg2.connect(self._db_url)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (zinvite,))
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            logger.exception('queue_math_recompute failed for %s', zinvite)
+            return False
+        return True
