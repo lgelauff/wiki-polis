@@ -780,6 +780,12 @@ def admin_conversation_phases(conv_id):
     # Mirror the results phase onto Polis's vis_type, which gates GET /results/ (off by
     # default — otherwise the Results tab stays empty no matter how many votes are cast).
     # Best-effort: a Polis failure must not lose the phase change we just saved.
+    #
+    # CAVEAT: vis_type is a single all-or-nothing Polis flag — it cannot distinguish
+    # public vs personal results. Enabling it for *personal* results makes the full
+    # aggregate /results/ fetchable by any logged-in participant through the proxy.
+    # Withholding/scoping the aggregate for personal results (the anti-anchoring intent)
+    # must be enforced app-side — tracked as #81 Part 2 — not via vis_type.
     if conv.polis_id:
         results_on = conv.phase_public_results or conv.phase_personal_results
         try:
