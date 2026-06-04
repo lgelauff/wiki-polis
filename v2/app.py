@@ -692,7 +692,6 @@ def admin_conversation_detail(conv_id):
                            invite_count=invite_count,
                            participant_count=participant_count,
                            polis_stats=polis_stats,
-                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''),
                            admin_roles=ADMIN_ROLES)
 
 @admin_bp.post('/admin/conversations/new')
@@ -777,6 +776,7 @@ def admin_conversation_phases(conv_id):
     conv.phase_personal_results = bool(request.form.get('phase_personal_results'))
     conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
     conv.phase_public_results   = bool(request.form.get('phase_public_results'))
+    conv.phase_informed_voting  = bool(request.form.get('phase_informed_voting'))
     db.session.commit()
 
     # Mirror the results phase onto Polis's vis_type, which gates GET /results/ (off by
@@ -797,6 +797,99 @@ def admin_conversation_phases(conv_id):
             flash('Phases saved, but updating results visibility in Polis failed — '
                   'results may not appear until you save phases again.', 'error')
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/phase6/init')
+@login_required
+def admin_phase6_init(conv_id):
+    """Initialise Phase 6: create a dedicated Polis conversation, seed all confirmed
+    featured statements into it, and store the resulting IDs atomically.
+
+    All-or-nothing: phase6_polis_conversation_id is only committed once every seed
+    succeeds. If any seed fails the Polis conversation is abandoned (logged for manual
+    cleanup) and the admin can retry from scratch.
+
+    The DB-level UNIQUE constraint on phase6_polis_conversation_id converts a
+    concurrent double-submit into a loud IntegrityError rather than a silent overwrite.
+    """
+    # Allows conversation moderators (not just global admins) to initialise Phase 6.
+    conv = _require_mod_for_conv(conv_id)
+
+    if not conv.phase_informed_voting:
+        flash('Enable the Informed voting toggle first, then initialise.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    if conv.phase6_polis_conversation_id:
+        flash('Phase 6 already initialised.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    statements = (FeaturedStatement.query
+                  .filter_by(conversation_id=conv_id, confirmed_by_admin=True)
+                  .all())
+    if not statements:
+        flash('No confirmed featured statements — confirm at least one before initialising Phase 6.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    client = _polis_server_client()
+    try:
+        p6_conv_id = client.create_conversation(
+            f'{conv.title} — Informed Voting',
+            strict_moderation=True,
+        )
+    except PolisServerError as exc:
+        current_app.logger.error('Phase 6 conversation creation failed: %s', exc)
+        flash(f'Could not create Phase 6 Polis conversation: {exc}', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    # Seed each confirmed featured statement and collect tids.
+    # All-or-nothing: if any seed fails, do not commit — log the orphaned Polis
+    # conversation ID for manual cleanup and let the admin retry cleanly.
+    seeded: list[tuple[FeaturedStatement, int]] = []
+    for fs in statements:
+        text = fs.statement_text or ''
+        if not text:
+            current_app.logger.error(
+                'Phase 6 init: fs %s has no cached text — skipping; '
+                'abandoning Polis conversation %s', fs.id, p6_conv_id)
+            flash(
+                f'Phase 6 init failed: statement {fs.id} has no cached text. '
+                f'The orphaned Polis conversation ID has been logged. '
+                f'Fix the statement text and retry.',
+                'error',
+            )
+            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+        try:
+            tid = client.add_seed_return_id(p6_conv_id, text)
+            seeded.append((fs, tid))
+        except PolisServerError as exc:
+            current_app.logger.error(
+                'Phase 6 init: seed failed for fs %s: %s; '
+                'abandoning Polis conversation %s', fs.id, exc, p6_conv_id)
+            flash(
+                f'Phase 6 init failed while seeding statement {fs.id}. '
+                f'The orphaned Polis conversation ID has been logged. '
+                f'Retry initialisation.',
+                'error',
+            )
+            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    # All seeds succeeded — write atomically.
+    for fs, tid in seeded:
+        fs.phase6_polis_statement_id = tid
+    conv.phase6_polis_conversation_id = p6_conv_id
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        flash('Phase 6 was already initialised by a concurrent request.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    flash(
+        f'Phase 6 initialised — {len(seeded)} statement(s) seeded.',
+        'success',
+    )
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
 
 @admin_bp.post('/admin/global-admins/add')
 @login_required
@@ -934,8 +1027,7 @@ def admin_conversation_statements(conv_id):
                            pending=pending,
                            approved=approved,
                            hidden=hidden,
-                           settings=settings,
-                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''))
+                           settings=settings)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
 @login_required
@@ -1195,6 +1287,35 @@ def conversation(slug):
     if conv.phase_argument_mapping and participation:
         featured_data = _build_featured_data(conv, participation, can_mod=can_mod)
 
+    # Phase 6 — build card data: each confirmed featured statement with its
+    # top-10 visible arguments per side, sorted by usefulness vote count.
+    # Eager-load arguments + votes to avoid N+1 queries.
+    phase6_data = []
+    if conv.phase_informed_voting and conv.phase6_polis_conversation_id and participation:
+        p6_stmts = (FeaturedStatement.query
+                    .filter_by(conversation_id=conv.id, confirmed_by_admin=True)
+                    .options(joinedload(FeaturedStatement.arguments)
+                             .joinedload(Argument.votes))
+                    .all())
+        for fs in p6_stmts:
+            text = fs.statement_text or ''
+            if not text:
+                continue
+            visible_args = [a for a in fs.arguments if not a.hidden]
+            pro = sorted(
+                [a for a in visible_args if a.side == 'pro'],
+                key=lambda a: len(a.votes), reverse=True)[:10]
+            con = sorted(
+                [a for a in visible_args if a.side == 'con'],
+                key=lambda a: len(a.votes), reverse=True)[:10]
+            phase6_data.append({
+                'fs': fs,
+                'text': text,
+                'pro': pro,
+                'con': con,
+                'phase6_stmt_id': fs.phase6_polis_statement_id,
+            })
+
     return render_template('conversation.html',
                            conversation=conv,
                            participation=participation,
@@ -1202,13 +1323,13 @@ def conversation(slug):
                            results=results,
                            recomputing=recomputing,
                            polis_stats=polis_stats,
-                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''),
                            reveal_state=reveal_state,
                            reveal_opens_at=reveal_opens_at,
                            featured_data=featured_data,
                            new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10,
                            new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
-                           new_stmt_ids=participation.new_stmt_ids if participation else [])
+                           new_stmt_ids=participation.new_stmt_ids if participation else [],
+                           phase6_data=phase6_data)
 
 # ── Arguments ────────────────────────────────────────────────────────────
 
@@ -1464,6 +1585,106 @@ def reveal_identity_post(slug):
     return redirect(url_for('participant.conversation', slug=slug))
 
 
+# ── Phase 6 vote ──────────────────────────────────────────────────────────────
+
+@participant_bp.post('/c/<slug>/phase6/vote')
+@login_required
+@limiter.limit('30 per minute')
+def phase6_vote(slug):
+    """Submit a Phase 6 (informed voting) vote for a featured statement.
+
+    The client sends {fs_id, vote} — never pid/tid. The server resolves the Polis
+    conversation ID and statement ID from the DB, verifies the participant is a member
+    of this conversation, and forwards the vote to Particiapi via the same cookie-rename
+    proxy pattern used by proxy_particiapi.
+
+    This route is on participant_bp (CSRF-enabled) so Flask-WTF validates X-CSRFToken.
+    """
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+
+    # Only accept votes on active, unpaused consultations.
+    if not conv.active or conv.paused:
+        abort(403)
+
+    participant = _current_participant()
+    if participant is None:
+        abort(403)
+
+    # Membership check — participant must have joined this conversation.
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if not participation:
+        abort(403)
+
+    if not conv.phase_informed_voting or not conv.phase6_polis_conversation_id:
+        abort(404)
+
+    data = request.get_json(silent=True) or {}
+    fs_id = data.get('fs_id')
+    vote  = data.get('vote')
+    # Validate types explicitly — non-integer fs_id causes an unhandled 500 in the DB query.
+    # isinstance check on vote prevents False/True (Python bool subclasses int, False==0).
+    if not isinstance(fs_id, int) or isinstance(vote, bool) or vote not in (1, -1, 0):
+        abort(400)
+
+    fs = FeaturedStatement.query.filter_by(
+        id=fs_id, conversation_id=conv.id, confirmed_by_admin=True,
+    ).first_or_404()
+    if fs.phase6_polis_statement_id is None:
+        abort(404)
+
+    # Resolve conversation/statement IDs server-side — never trust the client.
+    polis_conv_id = conv.phase6_polis_conversation_id
+    tid           = fs.phase6_polis_statement_id
+
+    # Ensure a stable Polis session and CSRF token before voting.
+    # Mirrors the exact pattern used in conversation_statement_new.
+    pa_cookie = request.cookies.get('pa_session')
+    base = current_app.config['PARTICIAPI_BASE']
+    forwarded = {'session': pa_cookie} if pa_cookie else {}
+    new_pa_cookie = None
+    try:
+        sess_resp = requests.post(
+            f'{base}/api/session',
+            cookies=forwarded,
+            params={'create': 'true'},
+            timeout=5,
+        )
+        if not sess_resp.ok:
+            current_app.logger.error('Particiapi session error in phase6_vote: %s',
+                                     sess_resp.status_code)
+            abort(502)
+        csrf_token    = sess_resp.json().get('csrf_token', '')
+        new_pa_cookie = sess_resp.cookies.get('session')
+    except requests.RequestException:
+        current_app.logger.exception('Particiapi session bootstrap failed in phase6_vote')
+        abort(502)
+
+    vote_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
+
+    # Particiapi vote endpoint: PUT /api/conversations/{id}/votes/{tid} with {value: N}
+    # (matches particiapp-web-client.js line 840-841)
+    try:
+        upstream = requests.put(
+            f'{base}/api/conversations/{polis_conv_id}/votes/{tid}',
+            json={'value': vote},
+            cookies=vote_cookies,
+            headers={'X-CSRF-Token': csrf_token},
+            timeout=10,
+        )
+    except requests.RequestException:
+        current_app.logger.exception('Particiapi error in phase6_vote')
+        abort(502)
+
+    resp = make_response('', upstream.status_code)
+    if new_pa_cookie:
+        resp.set_cookie('pa_session', new_pa_cookie, httponly=True,
+                        samesite='Lax', secure=not current_app.debug)
+    return resp
+
+
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
 
@@ -1526,12 +1747,6 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['OAUTH_REDIRECT_URI']  = _read_secret('oauth-redirect-uri')
     app.config['PARTICIAPI_BASE']     = (_read_secret('particiapi-base-url')
                                          or os.environ.get('PARTICIAPI_BASE_URL', 'http://localhost:8000'))
-    _polis_public_url = (_read_secret('polis-public-url')
-                         or os.environ.get('POLIS_PUBLIC_URL', 'https://pol.is'))
-    if _polis_public_url and not _polis_public_url.startswith('https://'):
-        app.logger.warning('POLIS_PUBLIC_URL is not https:// — ignoring')
-        _polis_public_url = ''
-    app.config['POLIS_PUBLIC_URL'] = _polis_public_url
     app.config['POLIS_DATABASE_URL'] = (_read_secret('polis-database-url')
                                         or os.environ.get('POLIS_DATABASE_URL', ''))
     app.config['POLIS_SERVER_URL']   = (_read_secret('polis-server-url')

@@ -63,6 +63,7 @@
   {% if conversation.phase_submission %}{% set _ = tabs.append('vote') %}{% endif %}
   {% if conversation.phase_personal_results or conversation.phase_public_results %}{% set _ = tabs.append('results') %}{% endif %}
   {% if conversation.phase_argument_mapping %}{% set _ = tabs.append('arguments') %}{% endif %}
+  {% if conversation.phase_informed_voting and conversation.phase6_polis_conversation_id %}{% set _ = tabs.append('informed-voting') %}{% endif %}
 
   {% if tabs | length == 0 %}
   <div class="landing-section">
@@ -87,6 +88,11 @@
     <button id="tab-btn-arguments" class="tab-btn{% if tabs[0] == 'arguments' %} tab-btn--active{% endif %}"
             role="tab" data-tab="tab-arguments"
             aria-selected="{{ 'true' if tabs[0] == 'arguments' else 'false' }}">Arguments</button>
+    {% endif %}
+    {% if 'informed-voting' in tabs %}
+    <button id="tab-btn-informed-voting" class="tab-btn{% if tabs[0] == 'informed-voting' %} tab-btn--active{% endif %}"
+            role="tab" data-tab="tab-informed-voting"
+            aria-selected="{{ 'true' if tabs[0] == 'informed-voting' else 'false' }}">Informed voting</button>
     {% endif %}
   </div>
   {% endif %}
@@ -708,6 +714,101 @@
   </div>
   {% endif %}
 
+  {# ── Phase 6 — Informed voting tab ──────────────────────────────────────── #}
+  {% if 'informed-voting' in tabs %}
+  <div id="tab-informed-voting"
+       class="tab-panel{% if tabs|length > 1 and tabs[0] != 'informed-voting' %} tab-panel--hidden{% endif %}"
+       role="tabpanel" aria-labelledby="tab-btn-informed-voting">
+
+    <div class="p6-intro" style="margin-bottom:1.5rem">
+      <p>Read the arguments, then cast your vote on each statement.</p>
+    </div>
+
+    {% if phase6_data | length == 0 %}
+    <div class="landing-section">
+      <p class="muted">No statements are available for informed voting yet.</p>
+    </div>
+    {% endif %}
+
+    {% for item in phase6_data %}
+    <div class="p6-card" style="border:1px solid var(--border);border-radius:8px;padding:1.25rem;margin-bottom:1.5rem">
+
+      {# Statement text #}
+      <p class="p6-statement" style="font-size:1.05rem;font-weight:600;margin-bottom:1rem;line-height:1.4">
+        {{ item.text }}
+      </p>
+
+      {# Pro / Con argument columns #}
+      <div class="p6-args" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem">
+
+        {# Pro arguments #}
+        <div class="p6-args-col">
+          <h4 style="font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-muted);margin-bottom:.5rem">For</h4>
+          {% if item.pro | length == 0 %}
+          <p class="muted" style="font-size:.875rem;font-style:italic">No arguments submitted yet.</p>
+          {% else %}
+          {% for arg in item.pro[:3] %}
+          <div class="p6-arg" style="font-size:.875rem;padding:.5rem 0;border-bottom:1px solid var(--border-light)">{{ arg.body }}</div>
+          {% endfor %}
+          {% if item.pro | length > 3 %}
+          <details class="p6-more" style="margin-top:.25rem">
+            <summary style="font-size:.8rem;color:var(--accent);cursor:pointer">Show {{ [item.pro | length - 3, 7] | min }} more</summary>
+            {% for arg in item.pro[3:10] %}
+            <div class="p6-arg" style="font-size:.875rem;padding:.5rem 0;border-bottom:1px solid var(--border-light)">{{ arg.body }}</div>
+            {% endfor %}
+          </details>
+          {% endif %}
+          {% endif %}
+        </div>
+
+        {# Con arguments #}
+        <div class="p6-args-col">
+          <h4 style="font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-muted);margin-bottom:.5rem">Against</h4>
+          {% if item.con | length == 0 %}
+          <p class="muted" style="font-size:.875rem;font-style:italic">No arguments submitted yet.</p>
+          {% else %}
+          {% for arg in item.con[:3] %}
+          <div class="p6-arg" style="font-size:.875rem;padding:.5rem 0;border-bottom:1px solid var(--border-light)">{{ arg.body }}</div>
+          {% endfor %}
+          {% if item.con | length > 3 %}
+          <details class="p6-more" style="margin-top:.25rem">
+            <summary style="font-size:.8rem;color:var(--accent);cursor:pointer">Show {{ [item.con | length - 3, 7] | min }} more</summary>
+            {% for arg in item.con[3:10] %}
+            <div class="p6-arg" style="font-size:.875rem;padding:.5rem 0;border-bottom:1px solid var(--border-light)">{{ arg.body }}</div>
+            {% endfor %}
+          </details>
+          {% endif %}
+          {% endif %}
+        </div>
+
+      </div>{# end p6-args grid #}
+
+      {# Vote buttons — tid=0 is a valid Polis statement ID; use 'is not none' not truthiness test #}
+      {% if item.phase6_stmt_id is not none %}
+      <div class="p6-vote-row" style="display:flex;gap:.75rem;align-items:center"
+           data-fs-id="{{ item.fs.id }}">
+        <button class="btn-p6-vote" data-vote="1"
+                style="padding:.4rem 1rem;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--surface)">
+          Agree
+        </button>
+        <button class="btn-p6-vote" data-vote="-1"
+                style="padding:.4rem 1rem;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--surface)">
+          Disagree
+        </button>
+        <button class="btn-p6-vote" data-vote="0"
+                style="padding:.4rem 1rem;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--surface);color:var(--ink-muted)">
+          Pass
+        </button>
+        <span class="p6-vote-status" style="font-size:.85rem;color:var(--ink-muted)"></span>
+      </div>
+      {% endif %}
+
+    </div>{# end p6-card #}
+    {% endfor %}
+
+  </div>{# end tab-informed-voting #}
+  {% endif %}
+
   {% if tabs | length > 1 %}
   <script nonce="{{ csp_nonce }}">
   (function () {
@@ -754,6 +855,50 @@
       var target = bar.querySelector('[data-tab="' + hash + '"]');
       if (target) activate(target);
     }
+  }());
+  </script>
+  {% endif %}
+
+  {# Phase 6 vote JS — sends agree/disagree/pass to the Phase 6 Polis conversation #}
+  {% if 'informed-voting' in tabs %}
+  <script nonce="{{ csp_nonce }}">
+  (function () {
+    var csrfToken = '{{ csrf_token() }}';
+    var voteUrl   = '{{ url_for("participant.phase6_vote", slug=conversation.slug) }}';
+    document.querySelectorAll('.p6-vote-row').forEach(function (row) {
+      var fsId   = row.dataset.fsId;
+      var status = row.querySelector('.p6-vote-status');
+      row.querySelectorAll('.btn-p6-vote').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var vote = parseInt(btn.dataset.vote, 10);
+          row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = true; });
+          // pid/tid are resolved server-side from fs_id — never sent by the client.
+          fetch(voteUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({ fs_id: parseInt(fsId, 10), vote: vote }),
+          }).then(function (resp) {
+            if (resp.ok) {
+              var label = vote === 1 ? 'Agreed' : vote === -1 ? 'Disagreed' : 'Passed';
+              status.textContent = '✓ ' + label;
+              row.querySelectorAll('.btn-p6-vote').forEach(function (b) {
+                b.style.opacity = b.dataset.vote === String(vote) ? '1' : '0.4';
+              });
+            } else {
+              status.textContent = 'Could not save — try again.';
+              row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = false; });
+            }
+          }).catch(function () {
+            // Network error: the vote may or may not have reached the server.
+            // Do not silently re-enable buttons — advise the participant to refresh.
+            status.textContent = 'Network error — refresh to check if your vote was saved.';
+          });
+        });
+      });
+    });
   }());
   </script>
   {% endif %}

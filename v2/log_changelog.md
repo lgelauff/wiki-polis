@@ -240,3 +240,37 @@ byte-identical (AST), zero test-assertion changes. `_register_routes` cyclomatic
 Each step shipped alone with a senior + security review (cross-reviewed); #91 was soak-tested
 and #91/#92/#93 staging-verified. Test suite grew 120 → 134 (promoted helper-characterization
 tests + an admin-template smoke test).
+
+---
+
+## Phase 6 — Informed voting ✓ (2026-06-04, PR #115)
+
+Second, independent voting round on the featured statements, shown with inline pro/con
+arguments so participants deliberate before casting a clean vote.
+
+**Data model**
+- [x] `Conversation.phase_informed_voting` toggle (Boolean, default False)
+- [x] `Conversation.phase6_polis_conversation_id` — dedicated Polis conversation for Phase 6 votes; UNIQUE constraint prevents double-init race
+- [x] `FeaturedStatement.phase6_polis_statement_id` — Polis statement ID within the Phase 6 conversation; UNIQUE per conversation; `is not none` guard in template (Polis assigns tid=0 to first statement)
+- [x] Alembic migration `3e86727dbcee` with indexes and constraints
+
+**Admin**
+- [x] `phase_informed_voting` checkbox in phase toggles form
+- [x] Concurrent-phase warning when Phase 2 or argument mapping still on
+- [x] "Informed voting — setup" section: "Initialise Phase 6" button creates dedicated Polis conversation and seeds all confirmed featured statements atomically (all-or-nothing; orphaned conv ID logged on failure)
+- [x] Seeded-count display once initialised
+
+**Participant UI**
+- [x] "Informed voting" tab on conversation page (only for joined participants; only after init)
+- [x] Cards per featured statement: statement text → top-3 pro arguments → top-3 con arguments → fold-out for arguments 4–10 → placeholder on empty side → Agree / Disagree / Pass
+- [x] Vote route: `POST /c/<slug>/phase6/vote` on `participant_bp` (CSRF-protected, rate-limited 30/min, membership-checked, active/paused-guarded); resolves Polis IDs server-side from `fs_id` only; bootstraps Particiapi session + CSRF token before forwarding `PUT /api/conversations/{id}/votes/{tid}`
+
+**Security (reviewed across 5 rounds by DB expert + security expert + senior engineer)**
+- [x] Ballot stuffing via arbitrary pid/tid: closed — client sends only `fs_id`
+- [x] Double-init race: UNIQUE constraint + IntegrityError handler
+- [x] Partial seed failure: all-or-nothing commit
+- [x] `add_seed` Phase 1 regression: restored independent implementation
+- [x] `vote=True` (bool/int bypass): `isinstance(vote, bool)` guard
+- [x] Wrong Polis vote endpoint: corrected to `PUT /api/conversations/{id}/votes/{tid}`
+- [x] Active/paused guard on vote route
+- [x] CSRF token forwarded to Particiapi on vote

@@ -79,8 +79,19 @@
                {% if conversation.phase_public_results %}checked{% endif %}>
         Public results
       </label>
+      <label title="Informed voting (Phase 6)">
+        <input type="checkbox" name="phase_informed_voting" value="1"
+               {% if conversation.phase_informed_voting %}checked{% endif %}>
+        Informed voting
+      </label>
       <button type="submit" class="btn-small">save</button>
     </form>
+    {% if conversation.phase_submission or conversation.phase_argument_mapping %}
+    <p class="muted" style="margin-top:.5rem;font-size:13px">
+      ⚠️ Informed voting is most meaningful after argument mapping is complete.
+      Statement submission and/or argument mapping are currently still on.
+    </p>
+    {% endif %}
     {% else %}
     <p style="font-size:14px">
       Submission: <strong>{{ 'on' if conversation.phase_submission else 'off' }}</strong>
@@ -90,9 +101,39 @@
       Argument mapping: <strong>{{ 'on' if conversation.phase_argument_mapping else 'off' }}</strong>
       &nbsp;·&nbsp;
       Public results: <strong>{{ 'on' if conversation.phase_public_results else 'off' }}</strong>
+      &nbsp;·&nbsp;
+      Informed voting: <strong>{{ 'on' if conversation.phase_informed_voting else 'off' }}</strong>
     </p>
     {% endif %}
   </div>
+
+  <!-- ── Phase 6 initialisation ────────────────────────── -->
+  {% if is_admin and conversation.phase_informed_voting %}
+  <h3 class="section-heading">Informed voting — setup</h3>
+  <div class="edit-form">
+    {% if conversation.phase6_polis_conversation_id %}
+    <p style="font-size:14px">
+      Phase 6 Polis conversation: <code>{{ conversation.phase6_polis_conversation_id }}</code>
+      &nbsp;·&nbsp;
+      {{ conversation.featured_statements | selectattr('confirmed_by_admin') | selectattr('phase6_polis_statement_id', 'ne', none) | list | length }}
+      of
+      {{ conversation.featured_statements | selectattr('confirmed_by_admin') | list | length }}
+      statements seeded.
+    </p>
+    {% else %}
+    <p style="font-size:14px;margin-bottom:.75rem">
+      Phase 6 is enabled but not yet initialised. Initialising creates a dedicated
+      Polis conversation and seeds all confirmed featured statements into it.
+      Run this once, after argument mapping is substantively complete.
+    </p>
+    <form method="post"
+          action="{{ url_for('admin.admin_phase6_init', conv_id=conversation.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn-small">Initialise Phase 6</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
 
   <!-- ── Content & access ─────────────────────────────── -->
   <h3 class="section-heading">Content &amp; access</h3>
