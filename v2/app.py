@@ -692,7 +692,6 @@ def admin_conversation_detail(conv_id):
                            invite_count=invite_count,
                            participant_count=participant_count,
                            polis_stats=polis_stats,
-                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''),
                            admin_roles=ADMIN_ROLES)
 
 @admin_bp.post('/admin/conversations/new')
@@ -854,8 +853,8 @@ def admin_phase6_init(conv_id):
                 'abandoning Polis conversation %s', fs.id, p6_conv_id)
             flash(
                 f'Phase 6 init failed: statement {fs.id} has no cached text. '
-                f'Orphaned Polis conversation: {p6_conv_id} (log for manual cleanup). '
-                f'Fix statement text and retry.',
+                f'The orphaned Polis conversation ID has been logged. '
+                f'Fix the statement text and retry.',
                 'error',
             )
             return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
@@ -867,8 +866,8 @@ def admin_phase6_init(conv_id):
                 'Phase 6 init: seed failed for fs %s: %s; '
                 'abandoning Polis conversation %s', fs.id, exc, p6_conv_id)
             flash(
-                f'Phase 6 init failed while seeding statement {fs.id}: {exc}. '
-                f'Orphaned Polis conversation: {p6_conv_id} (log for manual cleanup). '
+                f'Phase 6 init failed while seeding statement {fs.id}. '
+                f'The orphaned Polis conversation ID has been logged. '
                 f'Retry initialisation.',
                 'error',
             )
@@ -1028,8 +1027,7 @@ def admin_conversation_statements(conv_id):
                            pending=pending,
                            approved=approved,
                            hidden=hidden,
-                           settings=settings,
-                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''))
+                           settings=settings)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
 @login_required
@@ -1325,7 +1323,6 @@ def conversation(slug):
                            results=results,
                            recomputing=recomputing,
                            polis_stats=polis_stats,
-                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''),
                            reveal_state=reveal_state,
                            reveal_opens_at=reveal_opens_at,
                            featured_data=featured_data,
@@ -1628,7 +1625,8 @@ def phase6_vote(slug):
     fs_id = data.get('fs_id')
     vote  = data.get('vote')
     # Validate types explicitly — non-integer fs_id causes an unhandled 500 in the DB query.
-    if not isinstance(fs_id, int) or vote not in (1, -1, 0):
+    # isinstance check on vote prevents False/True (Python bool subclasses int, False==0).
+    if not isinstance(fs_id, int) or isinstance(vote, bool) or vote not in (1, -1, 0):
         abort(400)
 
     fs = FeaturedStatement.query.filter_by(
@@ -1749,12 +1747,6 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['OAUTH_REDIRECT_URI']  = _read_secret('oauth-redirect-uri')
     app.config['PARTICIAPI_BASE']     = (_read_secret('particiapi-base-url')
                                          or os.environ.get('PARTICIAPI_BASE_URL', 'http://localhost:8000'))
-    _polis_public_url = (_read_secret('polis-public-url')
-                         or os.environ.get('POLIS_PUBLIC_URL', ''))
-    if _polis_public_url and not _polis_public_url.startswith('https://'):
-        app.logger.warning('POLIS_PUBLIC_URL is not https:// — ignoring')
-        _polis_public_url = ''
-    app.config['POLIS_PUBLIC_URL'] = _polis_public_url
     app.config['POLIS_DATABASE_URL'] = (_read_secret('polis-database-url')
                                         or os.environ.get('POLIS_DATABASE_URL', ''))
     app.config['POLIS_SERVER_URL']   = (_read_secret('polis-server-url')
