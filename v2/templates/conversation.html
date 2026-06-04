@@ -358,12 +358,7 @@
           <p class="muted">Results will appear here once enough votes have been cast.</p>
         {% endif %}
 
-        {% if polis_public_url and conversation.phase_public_results %}
-        <p style="margin-top:1rem">
-          <a href="{{ polis_public_url }}/{{ conversation.polis_id }}"
-             target="_blank" rel="noopener">View full interactive results on Polis →</a>
-        </p>
-        {% endif %}
+
 
       {% else %}
         <p class="muted">Results haven't been published yet. Check back soon.</p>
