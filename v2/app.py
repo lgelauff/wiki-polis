@@ -1160,8 +1160,9 @@ def conversation(slug):
     # aggregate data; #81 part 2 will scope personal results to the participant's voted
     # statements (anti-anchoring).
     if conv.phase_public_results or conv.phase_personal_results:
-        results      = PolisParticipantClient(
+        _r = PolisParticipantClient(
             current_app.config['PARTICIAPI_BASE']).get_results(conv.polis_id)
+        results = _r if (_r and ((_r.get('groups') or _r.get('majority', {}).get('agree') or _r.get('majority', {}).get('disagree')))) else None
         polis_stats = _polis_server_client().get_polis_stats(conv.polis_id)
 
     # Reveal window state for closed conversations.
