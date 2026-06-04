@@ -802,7 +802,6 @@ def admin_conversation_phases(conv_id):
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/phase6/init')
 @login_required
-@admin_required
 def admin_phase6_init(conv_id):
     """Initialise Phase 6: create a dedicated Polis conversation, seed all confirmed
     featured statements into it, and store the resulting IDs atomically.
@@ -814,8 +813,8 @@ def admin_phase6_init(conv_id):
     The DB-level UNIQUE constraint on phase6_polis_conversation_id converts a
     concurrent double-submit into a loud IntegrityError rather than a silent overwrite.
     """
-    # Re-fetch inside the request to minimise the TOCTOU window before the external call.
-    conv = Conversation.query.get_or_404(conv_id)
+    # Allows conversation moderators (not just global admins) to initialise Phase 6.
+    conv = _require_mod_for_conv(conv_id)
 
     if not conv.phase_informed_voting:
         flash('Enable the Informed voting toggle first, then initialise.', 'error')
@@ -1605,6 +1604,11 @@ def phase6_vote(slug):
     This route is on participant_bp (CSRF-enabled) so Flask-WTF validates X-CSRFToken.
     """
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
+
+    # Only accept votes on active, unpaused consultations.
+    if not conv.active or conv.paused:
+        abort(403)
+
     participant = _current_participant()
     if participant is None:
         abort(403)
@@ -1623,7 +1627,8 @@ def phase6_vote(slug):
     data = request.get_json(silent=True) or {}
     fs_id = data.get('fs_id')
     vote  = data.get('vote')
-    if fs_id is None or vote not in (1, -1, 0):
+    # Validate types explicitly — non-integer fs_id causes an unhandled 500 in the DB query.
+    if not isinstance(fs_id, int) or vote not in (1, -1, 0):
         abort(400)
 
     fs = FeaturedStatement.query.filter_by(
@@ -1636,33 +1641,39 @@ def phase6_vote(slug):
     polis_conv_id = conv.phase6_polis_conversation_id
     tid           = fs.phase6_polis_statement_id
 
-    # Ensure a stable Polis session exists before voting. Without this, a participant
-    # with no or expired pa_session cookie would get a fresh anonymous Polis identity.
-    # Mirrors the session bootstrap in conversation_statement_new.
+    # Ensure a stable Polis session and CSRF token before voting.
+    # Mirrors the exact pattern used in conversation_statement_new.
     pa_cookie = request.cookies.get('pa_session')
     base = current_app.config['PARTICIAPI_BASE']
+    forwarded = {'session': pa_cookie} if pa_cookie else {}
     new_pa_cookie = None
-    if not pa_cookie:
-        try:
-            sess_resp = requests.post(
-                f'{base}/api/session',
-                params={'create': 'true'},
-                timeout=10,
-            )
-            new_pa_cookie = sess_resp.cookies.get('session')
-            pa_cookie = new_pa_cookie
-        except requests.RequestException:
-            current_app.logger.exception('Particiapi session bootstrap failed in phase6_vote')
+    try:
+        sess_resp = requests.post(
+            f'{base}/api/session',
+            cookies=forwarded,
+            params={'create': 'true'},
+            timeout=5,
+        )
+        if not sess_resp.ok:
+            current_app.logger.error('Particiapi session error in phase6_vote: %s',
+                                     sess_resp.status_code)
             abort(502)
+        csrf_token    = sess_resp.json().get('csrf_token', '')
+        new_pa_cookie = sess_resp.cookies.get('session')
+    except requests.RequestException:
+        current_app.logger.exception('Particiapi session bootstrap failed in phase6_vote')
+        abort(502)
+
+    vote_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
 
     # Particiapi vote endpoint: PUT /api/conversations/{id}/votes/{tid} with {value: N}
     # (matches particiapp-web-client.js line 840-841)
-    forwarded_cookies = {'session': pa_cookie} if pa_cookie else {}
     try:
         upstream = requests.put(
             f'{base}/api/conversations/{polis_conv_id}/votes/{tid}',
             json={'value': vote},
-            cookies=forwarded_cookies,
+            cookies=vote_cookies,
+            headers={'X-CSRF-Token': csrf_token},
             timeout=10,
         )
     except requests.RequestException:
@@ -1670,9 +1681,8 @@ def phase6_vote(slug):
         abort(502)
 
     resp = make_response('', upstream.status_code)
-    new_pa = upstream.cookies.get('session') or new_pa_cookie
-    if new_pa:
-        resp.set_cookie('pa_session', new_pa, httponly=True,
+    if new_pa_cookie:
+        resp.set_cookie('pa_session', new_pa_cookie, httponly=True,
                         samesite='Lax', secure=not current_app.debug)
     return resp
 
