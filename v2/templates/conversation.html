@@ -783,8 +783,8 @@
 
       </div>{# end p6-args grid #}
 
-      {# Vote buttons — post to the Phase 6 Polis conversation via proxy #}
-      {% if item.phase6_stmt_id %}
+      {# Vote buttons — tid=0 is a valid Polis statement ID; use 'is not none' not truthiness test #}
+      {% if item.phase6_stmt_id is not none %}
       <div class="p6-vote-row" style="display:flex;gap:.75rem;align-items:center"
            data-fs-id="{{ item.fs.id }}">
         <button class="btn-p6-vote" data-vote="1"
