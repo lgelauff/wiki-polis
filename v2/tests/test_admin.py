@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from db import AdminRole, Conversation, ConversationInvite, Participation, db
+from db import AdminRole, Conversation, ConversationInvite, db
 from polis_admin import PolisServerError
 
 
@@ -230,3 +230,31 @@ def test_admin_template_pages_render(admin_client, conv):
         ppc.return_value.get_settings.return_value = {}
         resp = admin_client.get(f'/admin/conversations/{conv.id}/statements')
     assert resp.status_code == 200
+
+
+def test_phases_toggle_mirrors_results_into_polis_vis_type(admin_client, conv):
+    """Enabling a results phase must flip Polis `vis_type` on (1); turning both results
+    phases off flips it back to 0 — otherwise GET /results/ stays empty regardless of votes."""
+    from unittest.mock import MagicMock
+
+    # Public results on → vis_type = 1
+    server = MagicMock()
+    with patch('app._polis_server_client', return_value=server):
+        r = admin_client.post(f'/admin/conversations/{conv.id}/phases',
+                              data={'phase_public_results': 'on'})
+    assert r.status_code == 302
+    server.set_vis_type.assert_called_once_with('adm1234567', 1)
+
+    # Personal results ALONE also enables it → vis_type = 1 (guards the `or` arm)
+    server_p = MagicMock()
+    with patch('app._polis_server_client', return_value=server_p):
+        admin_client.post(f'/admin/conversations/{conv.id}/phases',
+                          data={'phase_personal_results': 'on'})
+    server_p.set_vis_type.assert_called_once_with('adm1234567', 1)
+
+    # No results phase on → vis_type = 0
+    server2 = MagicMock()
+    with patch('app._polis_server_client', return_value=server2):
+        admin_client.post(f'/admin/conversations/{conv.id}/phases',
+                          data={'phase_submission': 'on'})
+    server2.set_vis_type.assert_called_once_with('adm1234567', 0)

@@ -776,6 +776,24 @@ def admin_conversation_phases(conv_id):
     conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
     conv.phase_public_results   = bool(request.form.get('phase_public_results'))
     db.session.commit()
+
+    # Mirror the results phase onto Polis's vis_type, which gates GET /results/ (off by
+    # default — otherwise the Results tab stays empty no matter how many votes are cast).
+    # Best-effort: a Polis failure must not lose the phase change we just saved.
+    #
+    # CAVEAT: vis_type is a single all-or-nothing Polis flag — it cannot distinguish
+    # public vs personal results. Enabling it for *personal* results makes the full
+    # aggregate /results/ fetchable by any logged-in participant through the proxy.
+    # Withholding/scoping the aggregate for personal results (the anti-anchoring intent)
+    # must be enforced app-side — tracked as #81 Part 2 — not via vis_type.
+    if conv.polis_id:
+        results_on = conv.phase_public_results or conv.phase_personal_results
+        try:
+            _polis_server_client().set_vis_type(conv.polis_id, 1 if results_on else 0)
+        except PolisServerError as exc:
+            current_app.logger.warning('vis_type update failed for %s: %s', conv.slug, exc)
+            flash('Phases saved, but updating results visibility in Polis failed — '
+                  'results may not appear until you save phases again.', 'error')
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 @admin_bp.post('/admin/global-admins/add')
@@ -1137,7 +1155,11 @@ def conversation(slug):
 
     results     = None
     polis_stats = None
-    if conv.phase_public_results:
+    # Fetch clustering results for either results phase. Personal results (Phase 3,
+    # logged-in only) and public results (Phase 4, everyone) currently render the same
+    # aggregate data; #81 part 2 will scope personal results to the participant's voted
+    # statements (anti-anchoring).
+    if conv.phase_public_results or conv.phase_personal_results:
         results      = PolisParticipantClient(
             current_app.config['PARTICIAPI_BASE']).get_results(conv.polis_id)
         polis_stats = _polis_server_client().get_polis_stats(conv.polis_id)
@@ -1685,6 +1707,14 @@ def _register_routes(app: Flask) -> None:
                     xid=xid,
                 )
                 db.session.add(participant)
+                db.session.commit()
+            elif participant.mw_username != username or participant.xid != xid:
+                # Reused dev row: keep it consistent with the username we authenticate as.
+                # _current_participant() looks up by mw_username, so a drifted row (e.g. a
+                # pre-existing dev participant from an older username/xid scheme) would make
+                # it return None and 404 participant-gated routes like /accept and /reveal.
+                participant.mw_username = username
+                participant.xid         = xid
                 db.session.commit()
             session['username']  = username
             session['xid']       = xid

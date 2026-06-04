@@ -262,6 +262,31 @@ class PolisServerClient:
                 f'{resp.text[:300]}'
             )
 
+    def set_vis_type(self, conversation_id: str, vis_type: int) -> None:
+        """Set the conversation's `vis_type` in Polis.
+
+        Polis gates `GET /api/conversations/<id>/results/` on `vis_type <> 0`
+        (surfaced as `results_available`), and defaults it to 0 — so results are
+        hidden until this is set. We mirror it onto the results-phase toggle: a
+        non-zero value makes the results visualisation available, 0 hides it.
+        """
+        sess, auth_headers = self._login()
+        headers = {**self._HEADERS, **auth_headers}
+        try:
+            resp = sess.put(
+                f'{self._base}/api/v3/conversations',
+                json={'conversation_id': conversation_id, 'vis_type': vis_type},
+                headers=headers,
+                timeout=10,
+            )
+        except requests.RequestException as exc:
+            raise PolisServerError(str(exc)) from exc
+        if not resp.ok:
+            raise PolisServerError(
+                f'Polis vis_type update failed (HTTP {resp.status_code}): '
+                f'{resp.text[:300]}'
+            )
+
     # ── Statements ────────────────────────────────────────────────────────────
 
     def moderate(self, conversation_id: str, tid: int, mod: int) -> None:
