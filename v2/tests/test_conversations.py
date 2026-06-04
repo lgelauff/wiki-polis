@@ -157,6 +157,44 @@ def test_personal_results_renders_clustering_data(auth_client, conv, participati
     assert b"Results haven't been published yet" not in resp.data   # not the empty fallback
 
 
+def test_empty_polis_results_shows_not_enough_votes(auth_client, conv, participation,
+                                                    monkeypatch):
+    """Particiapi returns all-empty arrays when there aren't enough votes for clustering.
+    The Results tab must show the 'not enough votes' message rather than a blank panel."""
+    import polis_admin
+    conv.phase_public_results = True
+    db.session.commit()
+
+    monkeypatch.setattr(polis_admin.PolisParticipantClient, 'get_results',
+                        lambda self, cid: {'groups': [], 'majority': {'agree': [], 'disagree': []}})
+    monkeypatch.setattr(polis_admin.PolisServerClient, 'get_polis_stats',
+                        lambda self, cid: None)
+
+    resp = auth_client.get('/c/test-conv')
+    assert resp.status_code == 200
+    assert b'enough votes' in resp.data
+    assert b"Results haven't been published yet" not in resp.data
+
+
+def test_none_polis_results_shows_not_enough_votes(auth_client, conv, participation,
+                                                   monkeypatch):
+    """When Particiapi errors or returns None (e.g. math hasn't run), the Results tab
+    must show the 'not enough votes' message rather than a blank panel."""
+    import polis_admin
+    conv.phase_public_results = True
+    db.session.commit()
+
+    monkeypatch.setattr(polis_admin.PolisParticipantClient, 'get_results',
+                        lambda self, cid: None)
+    monkeypatch.setattr(polis_admin.PolisServerClient, 'get_polis_stats',
+                        lambda self, cid: None)
+
+    resp = auth_client.get('/c/test-conv')
+    assert resp.status_code == 200
+    assert b'enough votes' in resp.data
+    assert b"Results haven't been published yet" not in resp.data
+
+
 # ── Access control ────────────────────────────────────────────────────────────
 
 def test_invite_only_blocks_uninvited(client, app, participant):
