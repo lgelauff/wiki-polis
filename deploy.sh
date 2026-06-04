@@ -37,7 +37,9 @@ echo "==> Syncing dependencies (v2)..."
 
 # Existing Toolforge secrets (secret-key, database-url, oauth-*, admin-users) are reused unchanged.
 # Only new secret needed: particiapi-base-url
-#   toolforge secrets create wiki-polis-particiapi-base-url --from-literal=value=https://particiapi.example.com
+#   read -rsp "particiapi-base-url: " V && printf '%s' "$V" | toolforge secrets create wiki-polis-particiapi-base-url --from-file=value=/dev/stdin
+# Set the public Polis URL so result links point to this deployment, not pol.is:
+#   toolforge envvars create POLIS_PUBLIC_URL 'https://wiki-polis.toolforge.org'
 
 echo "==> Checking particiapp-web-components.js..."
 WC_DST="$HOME/wiki-polis/v2/static/particiapp-web-components.js"

@@ -933,7 +933,7 @@ def admin_conversation_statements(conv_id):
                            approved=approved,
                            hidden=hidden,
                            settings=settings,
-                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is')
+                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL', ''))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
 @login_required
@@ -1514,7 +1514,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['PARTICIAPI_BASE']     = (_read_secret('particiapi-base-url')
                                          or os.environ.get('PARTICIAPI_BASE_URL', 'http://localhost:8000'))
     _polis_public_url = (_read_secret('polis-public-url')
-                         or os.environ.get('POLIS_PUBLIC_URL', ''))
+                         or os.environ.get('POLIS_PUBLIC_URL', 'https://pol.is'))
     if _polis_public_url and not _polis_public_url.startswith('https://'):
         app.logger.warning('POLIS_PUBLIC_URL is not https:// — ignoring')
         _polis_public_url = ''

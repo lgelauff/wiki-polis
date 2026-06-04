@@ -317,6 +317,7 @@ Non-secret values can be passed as arguments:
 
 ```bash
 toolforge envvars create OAUTH_REDIRECT_URI 'https://wiki-polis.toolforge.org/oauth-callback'
+toolforge envvars create POLIS_PUBLIC_URL 'https://wiki-polis.toolforge.org'
 ```
 
 Values to enter at the prompts:
@@ -530,7 +531,7 @@ export SECRET_KEY=$(toolforge envvars show SECRET_KEY | tail -1 | awk '{print $N
 | `POLIS_ADMIN_EMAIL` | yes | Email of the Polis system account (created once on VPS) |
 | `POLIS_ADMIN_PASSWORD` | yes | Password of the Polis system account |
 | `POLIS_DATABASE_URL` | no | Direct Postgres connection for admin stats panel; leave blank to disable |
-| `POLIS_PUBLIC_URL` | no | Public Polis URL for "view full results" links |
+| `POLIS_PUBLIC_URL` | no | Public Polis URL for "view full results" links; defaults to `https://pol.is` — set to your deployment domain (e.g. `https://wiki-polis.toolforge.org`) |
 | `DEV_LOGIN_USER` | dev only | Bypasses OAuth in local dev; never set in production |
 | `DEV_FAKE_LOGIN` | dev only | Set to `1` to show hardcoded test-user badges on the home page; never set in production |
 | `FLASK_DEBUG` | dev only | Enables debug mode; never set in production |
