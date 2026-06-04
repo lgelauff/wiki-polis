@@ -111,6 +111,10 @@ class Participation(db.Model):
     # Polis statement IDs of entirely new statements submitted by this participant.
     # Quota = len(new_stmt_ids). Slots consumed at submit time; never returned.
     new_stmt_ids      = db.Column(db.JSON, nullable=False, default=list)
+    # Phase 6 card display order: list of FeaturedStatement IDs in the order shown to
+    # this participant. Set once on first visit to the informed-voting tab; stable across
+    # reloads. Same pattern as ArgumentSideState.argument_order.
+    phase6_card_order = db.Column(db.JSON, nullable=True)
 
     participant  = db.relationship('Participant', back_populates='participations')
     conversation = db.relationship('Conversation', back_populates='participations')

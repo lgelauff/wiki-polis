@@ -2525,7 +2525,7 @@ a { color: var(--pass); }
   color: var(--muted);
 }
 
-/* ── Phase 6 — Informed voting cards ──────────────────────────────────────── */
+/* ── Phase 6 — Informed voting cards + skip + done ───────────────────────── */
 
 .p6-card {
   background: var(--surface);
@@ -2654,4 +2654,36 @@ a { color: var(--pass); }
   .p6-args-panel {
     order: -1;  /* arguments appear above statement on mobile */
   }
+}
+
+/* Skip affordance */
+.p6-skip-btn {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: .875rem;
+  text-align: center;
+  padding: 10px 0;
+  min-height: 44px;
+  cursor: pointer;
+  transition: color .1s;
+}
+.p6-skip-btn:hover { color: var(--ink); }
+
+/* Done state */
+.p6-done {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  padding: 28px 32px;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+.p6-done-text {
+  font-size: 1rem;
+  color: var(--muted);
+  margin: 0;
 }

@@ -823,10 +823,16 @@
           <span class="vote-dot vote-dot--disagree"></span>Disagree
         </button>
       </div>
+      <button class="p6-skip-btn" type="button">Skip for now →</button>
       {% endif %}
 
     </div>{# end p6-card #}
     {% endfor %}
+
+  {# Done placeholder — shown when all cards are voted or skipped #}
+  <div class="p6-done" hidden>
+    <p class="p6-done-text">You've completed informed voting. Thank you for participating.</p>
+  </div>
 
   </div>{# end tab-informed-voting #}
   {% endif %}
@@ -881,48 +887,88 @@
   </script>
   {% endif %}
 
-  {# Phase 6 vote JS — sends agree/disagree/pass to the Phase 6 Polis conversation #}
+  {# Phase 6 vote JS — vote, skip, auto-scroll, done state #}
   {% if 'informed-voting' in tabs %}
   <script nonce="{{ csp_nonce }}">
   (function () {
     var csrfToken = '{{ csrf_token() }}';
     var voteUrl   = '{{ url_for("participant.phase6_vote", slug=conversation.slug) }}';
+    var doneEl    = document.querySelector('.p6-done');
+
+    function scrollToNext(card) {
+      var cards = Array.prototype.slice.call(document.querySelectorAll('.p6-card'));
+      var idx   = cards.indexOf(card);
+      var next  = cards[idx + 1];
+      if (next) {
+        setTimeout(function () {
+          next.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 400);
+      }
+    }
+
+    function markTerminal(card) {
+      card.classList.add('p6-card--done');
+      // Check if all cards are now in a terminal state
+      var all   = document.querySelectorAll('.p6-card');
+      var done  = document.querySelectorAll('.p6-card--done');
+      if (done.length === all.length && doneEl) {
+        doneEl.removeAttribute('hidden');
+        setTimeout(function () {
+          doneEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 400);
+      }
+    }
+
     document.querySelectorAll('.p6-card').forEach(function (card) {
       var fsId  = card.dataset.fsId;
       var row   = card.querySelector('.p6-vote-row');
       var badge = card.querySelector('.p6-voted-badge');
+      var skip  = card.querySelector('.p6-skip-btn');
       if (!row) return;
+
+      // Skip button
+      if (skip) {
+        skip.addEventListener('click', function () {
+          skip.hidden = true;
+          badge.textContent = 'Skipped';
+          badge.className = 'p6-voted-badge';
+          badge.removeAttribute('hidden');
+          row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = true; b.classList.add('p6-voted'); });
+          card.classList.add('p6-card--voted');
+          markTerminal(card);
+          scrollToNext(card);
+        });
+      }
+
+      // Vote buttons
       row.querySelectorAll('.btn-p6-vote').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var vote = parseInt(btn.dataset.vote, 10);
           row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = true; });
+          if (skip) skip.hidden = true;
           // pid/tid are resolved server-side from fs_id — never sent by the client.
           fetch(voteUrl, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': csrfToken,
-            },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
             body: JSON.stringify({ fs_id: parseInt(fsId, 10), vote: vote }),
           }).then(function (resp) {
             if (resp.ok) {
               var label = vote === 1 ? 'Agreed' : vote === -1 ? 'Disagreed' : 'Passed';
               var cls   = vote === 1 ? 'agree' : vote === -1 ? 'disagree' : 'pass';
-              // Show voted badge in header
               badge.textContent = '✓ ' + label;
               badge.className = 'p6-voted-badge p6-voted-badge--' + cls;
               badge.removeAttribute('hidden');
-              // Dim non-voted buttons, mark voted one
               row.querySelectorAll('.btn-p6-vote').forEach(function (b) {
                 b.classList.toggle('p6-voted', b.dataset.vote === String(vote));
               });
               card.classList.add('p6-card--voted');
+              markTerminal(card);
+              scrollToNext(card);
             } else {
               row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = false; });
+              if (skip) skip.hidden = false;
             }
           }).catch(function () {
-            // Network error: the vote may or may not have reached the server.
-            // Do not silently re-enable buttons — advise the participant to refresh.
             badge.textContent = 'Network error — refresh to check';
             badge.removeAttribute('hidden');
           });
