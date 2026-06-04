@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+import sqlalchemy as sa
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -39,6 +40,11 @@ class Conversation(db.Model):
             '(closed_at IS NULL) OR (active = 0 AND paused = 0)',
             name='closed_conversation_inactive',
         ),
+        # One-to-one: each wiki-polis conversation maps to at most one Phase 6 Polis
+        # conversation. The UNIQUE constraint converts a double-init race into a loud
+        # IntegrityError rather than a silent overwrite.
+        db.UniqueConstraint('phase6_polis_conversation_id',
+                            name='uq_conversations_phase6_polis_conversation_id'),
     )
 
     id           = db.Column(db.Integer, primary_key=True)
@@ -63,10 +69,11 @@ class Conversation(db.Model):
     # Phase 6 — informed voting: a second, independent voting round on featured
     # statements only, with arguments shown inline. Enabling this toggle triggers
     # creation of a dedicated Polis conversation (see phase6_polis_conversation_id).
-    phase_informed_voting  = db.Column(db.Boolean, default=False, nullable=False)
+    phase_informed_voting  = db.Column(db.Boolean, default=False, nullable=False,
+                                       server_default=sa.false())
 
-    # Phase 6 Polis mapping — all nullable until Phase 6 is initialised by the admin.
-    # phase6_polis_conversation_id: the new Polis conversation created for Phase 6 votes.
+    # Phase 6 Polis mapping — nullable until Phase 6 is initialised by the admin.
+    # Uniqueness enforced by the table-level constraint above.
     phase6_polis_conversation_id = db.Column(db.String(50), nullable=True)
 
     # Argument vote method + method-specific config, e.g.:
@@ -104,10 +111,6 @@ class Participation(db.Model):
     # Polis statement IDs of entirely new statements submitted by this participant.
     # Quota = len(new_stmt_ids). Slots consumed at submit time; never returned.
     new_stmt_ids      = db.Column(db.JSON, nullable=False, default=list)
-    # Phase 6 mapping: XID used when registering this participant in the Phase 6
-    # Polis conversation. Expected to equal Participant.xid; stored explicitly for
-    # auditability. Null until participant first votes in Phase 6.
-    phase6_polis_xid  = db.Column(db.String(64), nullable=True)
 
     participant  = db.relationship('Participant', back_populates='participations')
     conversation = db.relationship('Conversation', back_populates='participations')
@@ -143,7 +146,14 @@ class AdminRole(db.Model):
 
 class FeaturedStatement(db.Model):
     __tablename__  = 'featured_statements'
-    __table_args__ = (db.UniqueConstraint('conversation_id', 'polis_statement_id'),)
+    __table_args__ = (
+        db.UniqueConstraint('conversation_id', 'polis_statement_id'),
+        # Phase 6: each featured statement maps to at most one Polis statement in the
+        # Phase 6 conversation. NULL values are excluded from the uniqueness check by
+        # SQL semantics (NULL != NULL), so un-seeded rows do not conflict.
+        db.UniqueConstraint('conversation_id', 'phase6_polis_statement_id',
+                            name='uq_featured_statements_phase6_polis_statement_id'),
+    )
 
     id                  = db.Column(db.Integer, primary_key=True)
     conversation_id     = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
@@ -239,3 +249,5 @@ db.Index('ix_argument_votes_participant_id', ArgumentVote.participant_id)
 db.Index('ix_argument_side_states_participant_id', ArgumentSideState.participant_id)
 db.Index('ix_argument_side_states_featured_statement_id', ArgumentSideState.featured_statement_id)
 db.Index('ix_featured_statements_conversation_id', FeaturedStatement.conversation_id)
+db.Index('ix_featured_statements_phase6_polis_statement_id',
+         FeaturedStatement.conversation_id, FeaturedStatement.phase6_polis_statement_id)

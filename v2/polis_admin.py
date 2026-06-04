@@ -314,14 +314,8 @@ class PolisServerClient:
                 f'Polis moderation failed (HTTP {resp.status_code}): {resp.text[:300]}'
             )
 
-    def add_seed(self, conversation_id: str, text: str) -> None:
-        """Add a seed statement via the Polis admin API, marked is_seed=True."""
-        self.add_seed_return_id(conversation_id, text)
-
-    def add_seed_return_id(self, conversation_id: str, text: str) -> int:
-        """Add a seed statement and return the Polis statement ID (tid)."""
-        sess, auth_headers = self._login()
-        headers = {**self._HEADERS, **auth_headers}
+    def _post_seed(self, sess, headers: dict, conversation_id: str, text: str) -> requests.Response:
+        """POST a single seed statement to Polis. Raises PolisServerError on failure."""
         try:
             resp = sess.post(
                 f'{self._base}/api/v3/comments',
@@ -341,6 +335,20 @@ class PolisServerClient:
                 f'Polis seed statement creation failed (HTTP {resp.status_code}): '
                 f'{resp.text[:300]}'
             )
+        return resp
+
+    def add_seed(self, conversation_id: str, text: str) -> None:
+        """Add a seed statement via the Polis admin API, marked is_seed=True.
+        Raises PolisServerError on non-2xx response or network failure.
+        Does not require a tid in the response (fire-and-record semantics)."""
+        sess, auth_headers = self._login()
+        self._post_seed(sess, {**self._HEADERS, **auth_headers}, conversation_id, text)
+
+    def add_seed_return_id(self, conversation_id: str, text: str) -> int:
+        """Add a seed statement and return the Polis statement ID (tid).
+        Raises PolisServerError if the response does not include a tid."""
+        sess, auth_headers = self._login()
+        resp = self._post_seed(sess, {**self._HEADERS, **auth_headers}, conversation_id, text)
         tid = resp.json().get('tid')
         if tid is None:
             raise PolisServerError('Polis returned no tid for seed statement.')
