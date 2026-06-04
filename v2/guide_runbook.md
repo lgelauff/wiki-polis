@@ -153,6 +153,21 @@ docker exec -it $CID psql -U polis -d polis -c \
 
 Expected: `1`. If `0`, re-save Phases in the admin UI.
 
+**Auto-recompute trigger** — when the Results tab shows "Results will appear here once enough votes have been cast." but votes clearly exist, the app automatically inserts a `worker_tasks` row to wake the polismath worker (rate-limited to once per 10 minutes per conversation). This requires `POLIS_DATABASE_URL` to be set correctly on the Toolforge tool. If the admin stats panel is blank, `POLIS_DATABASE_URL` is misconfigured — the most common cause is using the WMCS hostname instead of the numeric IP. Toolforge pods cannot resolve `*.wikimedia.cloud` hostnames; the DSN must use the private IP directly (e.g. `172.16.19.44`). For staging, same IP, port `5442`.
+
+Verify a recompute was queued:
+
+```bash
+CID=wiki-polis-staging_postgres_1   # or particiapp-docker_postgres_1 for prod
+docker exec -it $CID psql -U polis -d polis -c \
+  "SELECT task_type, task_data, created, finished_time, attempts
+   FROM worker_tasks
+   WHERE task_data->>'zid' = (SELECT zid::text FROM zinvites WHERE zinvite='<ZINVITE>')
+   ORDER BY created DESC LIMIT 5;"
+```
+
+If `finished_time` is set, the worker processed it. If rows are absent and the admin stats panel is blank, fix `POLIS_DATABASE_URL` first.
+
 ## Backups & restore
 
 - **Backups:** a nightly `pg_dump` of the Polis Postgres DB → offsite. **⚠️ not live
