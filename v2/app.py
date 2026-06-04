@@ -777,6 +777,7 @@ def admin_conversation_phases(conv_id):
     conv.phase_personal_results = bool(request.form.get('phase_personal_results'))
     conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
     conv.phase_public_results   = bool(request.form.get('phase_public_results'))
+    conv.phase_informed_voting  = bool(request.form.get('phase_informed_voting'))
     db.session.commit()
 
     # Mirror the results phase onto Polis's vis_type, which gates GET /results/ (off by
@@ -797,6 +798,77 @@ def admin_conversation_phases(conv_id):
             flash('Phases saved, but updating results visibility in Polis failed — '
                   'results may not appear until you save phases again.', 'error')
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/phase6/init')
+@login_required
+@admin_required
+def admin_phase6_init(conv_id):
+    """Initialise Phase 6: create a dedicated Polis conversation, seed the confirmed
+    featured statements into it, and store the resulting IDs on our records.
+
+    Idempotent — re-running overwrites existing IDs only if the conversation was
+    not yet created (phase6_polis_conversation_id is still null).
+    """
+    conv = Conversation.query.get_or_404(conv_id)
+    if not conv.phase_informed_voting:
+        flash('Enable the Informed voting toggle first, then initialise.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    statements = (FeaturedStatement.query
+                  .filter_by(conversation_id=conv_id, confirmed_by_admin=True)
+                  .all())
+    if not statements:
+        flash('No confirmed featured statements — confirm at least one before initialising Phase 6.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    if conv.phase6_polis_conversation_id:
+        flash('Phase 6 already initialised.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    client = _polis_server_client()
+    try:
+        p6_conv_id = client.create_conversation(
+            f'{conv.title} — Informed Voting',
+            strict_moderation=True,
+        )
+    except PolisServerError as exc:
+        current_app.logger.error('Phase 6 conversation creation failed: %s', exc)
+        flash(f'Could not create Phase 6 Polis conversation: {exc}', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    # Seed each confirmed featured statement; store the returned tid.
+    failed = []
+    for fs in statements:
+        text = fs.statement_text or ''
+        if not text:
+            failed.append(fs.id)
+            continue
+        try:
+            tid = client.add_seed_return_id(p6_conv_id, text)
+            fs.phase6_polis_statement_id = tid
+        except PolisServerError as exc:
+            current_app.logger.error(
+                'Phase 6 seed failed for fs %s: %s', fs.id, exc)
+            failed.append(fs.id)
+
+    conv.phase6_polis_conversation_id = p6_conv_id
+    db.session.commit()
+
+    if failed:
+        flash(
+            f'Phase 6 conversation created ({p6_conv_id}), but {len(failed)} statement(s) '
+            f'could not be seeded (IDs: {failed}). Check logs and retry seeding manually.',
+            'error',
+        )
+    else:
+        flash(
+            f'Phase 6 initialised — {len(statements)} statement(s) seeded into '
+            f'Polis conversation {p6_conv_id}.',
+            'success',
+        )
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
 
 @admin_bp.post('/admin/global-admins/add')
 @login_required
@@ -1195,6 +1267,30 @@ def conversation(slug):
     if conv.phase_argument_mapping and participation:
         featured_data = _build_featured_data(conv, participation, can_mod=can_mod)
 
+    # Phase 6 — build card data: each confirmed featured statement with its
+    # top-10 visible arguments per side, sorted by usefulness vote count.
+    phase6_data = []
+    if conv.phase_informed_voting and conv.phase6_polis_conversation_id and participation:
+        for fs in (FeaturedStatement.query
+                   .filter_by(conversation_id=conv.id, confirmed_by_admin=True)
+                   .all()):
+            text = fs.statement_text or ''
+            if not text:
+                continue
+            visible_args = [a for a in fs.arguments if not a.hidden]
+            def _vote_count(arg):
+                return len(arg.votes)
+            visible_args.sort(key=_vote_count, reverse=True)
+            pro = [a for a in visible_args if a.side == 'pro'][:10]
+            con = [a for a in visible_args if a.side == 'con'][:10]
+            phase6_data.append({
+                'fs': fs,
+                'text': text,
+                'pro': pro,
+                'con': con,
+                'phase6_stmt_id': fs.phase6_polis_statement_id,
+            })
+
     return render_template('conversation.html',
                            conversation=conv,
                            participation=participation,
@@ -1208,7 +1304,8 @@ def conversation(slug):
                            featured_data=featured_data,
                            new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10,
                            new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
-                           new_stmt_ids=participation.new_stmt_ids if participation else [])
+                           new_stmt_ids=participation.new_stmt_ids if participation else [],
+                           phase6_data=phase6_data)
 
 # ── Arguments ────────────────────────────────────────────────────────────
 

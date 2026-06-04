@@ -316,6 +316,10 @@ class PolisServerClient:
 
     def add_seed(self, conversation_id: str, text: str) -> None:
         """Add a seed statement via the Polis admin API, marked is_seed=True."""
+        self.add_seed_return_id(conversation_id, text)
+
+    def add_seed_return_id(self, conversation_id: str, text: str) -> int:
+        """Add a seed statement and return the Polis statement ID (tid)."""
         sess, auth_headers = self._login()
         headers = {**self._HEADERS, **auth_headers}
         try:
@@ -337,6 +341,10 @@ class PolisServerClient:
                 f'Polis seed statement creation failed (HTTP {resp.status_code}): '
                 f'{resp.text[:300]}'
             )
+        tid = resp.json().get('tid')
+        if tid is None:
+            raise PolisServerError('Polis returned no tid for seed statement.')
+        return int(tid)
 
     # ── Direct Postgres reads ─────────────────────────────────────────────────
 

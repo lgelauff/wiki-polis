@@ -60,6 +60,14 @@ class Conversation(db.Model):
     phase_personal_results = db.Column(db.Boolean, default=False, nullable=False)
     phase_argument_mapping = db.Column(db.Boolean, default=False, nullable=False)
     phase_public_results   = db.Column(db.Boolean, default=False, nullable=False)
+    # Phase 6 — informed voting: a second, independent voting round on featured
+    # statements only, with arguments shown inline. Enabling this toggle triggers
+    # creation of a dedicated Polis conversation (see phase6_polis_conversation_id).
+    phase_informed_voting  = db.Column(db.Boolean, default=False, nullable=False)
+
+    # Phase 6 Polis mapping — all nullable until Phase 6 is initialised by the admin.
+    # phase6_polis_conversation_id: the new Polis conversation created for Phase 6 votes.
+    phase6_polis_conversation_id = db.Column(db.String(50), nullable=True)
 
     # Argument vote method + method-specific config, e.g.:
     #   vote_method='kApproval', vote_data={'k': 2}
@@ -96,6 +104,10 @@ class Participation(db.Model):
     # Polis statement IDs of entirely new statements submitted by this participant.
     # Quota = len(new_stmt_ids). Slots consumed at submit time; never returned.
     new_stmt_ids      = db.Column(db.JSON, nullable=False, default=list)
+    # Phase 6 mapping: XID used when registering this participant in the Phase 6
+    # Polis conversation. Expected to equal Participant.xid; stored explicitly for
+    # auditability. Null until participant first votes in Phase 6.
+    phase6_polis_xid  = db.Column(db.String(64), nullable=True)
 
     participant  = db.relationship('Participant', back_populates='participations')
     conversation = db.relationship('Conversation', back_populates='participations')
@@ -140,6 +152,9 @@ class FeaturedStatement(db.Model):
     suggested_by_system = db.Column(db.Boolean, default=False, nullable=False)
     confirmed_by_admin  = db.Column(db.Boolean, default=False, nullable=False)
     created_at          = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # Phase 6 mapping: Polis statement ID within the Phase 6 conversation.
+    # Null until Phase 6 is initialised. Links to polis_statement_id via our record.
+    phase6_polis_statement_id = db.Column(db.Integer, nullable=True)
 
     conversation = db.relationship('Conversation', back_populates='featured_statements')
     arguments    = db.relationship('Argument', back_populates='featured_statement',
