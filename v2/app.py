@@ -1066,12 +1066,16 @@ def admin_conversation_statements(conv_id):
         ).get_settings(conv.polis_id)
     except PolisParticipantError:
         pass
+    from seed_csv import MAX_FILE_BYTES, MAX_ROWS
     return render_template('admin_statements.html',
                            conversation=conv,
                            pending=pending,
                            approved=approved,
                            hidden=hidden,
-                           settings=settings)
+                           settings=settings,
+                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is',
+                           max_import_rows=MAX_ROWS,
+                           max_import_kb=MAX_FILE_BYTES // 1024)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
 @login_required
@@ -1103,6 +1107,79 @@ def admin_statement_seed(conv_id):
         current_app.logger.exception('add_seed failed')
         flash('Could not add seed statement. Check server logs for details.', 'error')
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed/import')
+@login_required
+@limiter.limit('5 per minute')
+def admin_statement_seed_import(conv_id):
+    from seed_csv import MAX_FILE_BYTES, MAX_ROWS, parse_csv_bytes
+
+    conv = _require_mod_for_conv(conv_id)
+    redirect_target = url_for('admin.admin_conversation_statements', conv_id=conv_id)
+
+    f = request.files.get('csv_file')
+    if not f or not f.filename:
+        flash('No file selected.', 'error')
+        return redirect(redirect_target)
+
+    if not f.filename.lower().endswith('.csv'):
+        flash('Please upload a .csv file.', 'error')
+        return redirect(redirect_target)
+
+    raw = f.stream.read(MAX_FILE_BYTES + 1)
+    if len(raw) > MAX_FILE_BYTES:
+        flash(f'File too large — maximum is {MAX_FILE_BYTES // 1024} KB.', 'error')
+        return redirect(redirect_target)
+
+    try:
+        result = parse_csv_bytes(raw)
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect(redirect_target)
+
+    # Check for duplicates against statements already in Polis
+    existing_texts: set[str] = set()
+    try:
+        rows = _polis_server_client().get_statements(conv.polis_id)
+        if rows is not None:
+            pending, approved, hidden = rows
+            for stmt in pending + approved + hidden:
+                existing_texts.add(stmt['txt'].strip())
+    except Exception:
+        current_app.logger.exception('Could not fetch existing statements for dedup check')
+
+    dedup_errors = []
+    clean_texts  = []
+    for text in result.texts:
+        if text in existing_texts:
+            dedup_errors.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}" — already exists in this conversation')
+        else:
+            clean_texts.append(text)
+
+    successes    = 0
+    api_failures = []
+    for text in clean_texts:
+        sanitised = nh3.clean(text, tags=frozenset())
+        try:
+            _polis_server_client().add_seed(conv.polis_id, sanitised)
+            successes += 1
+        except PolisServerError:
+            current_app.logger.exception('add_seed failed for imported row')
+            api_failures.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
+
+    if successes:
+        flash(f'{successes} seed statement{"s" if successes != 1 else ""} imported successfully.', 'success')
+    if result.errors:
+        for err in result.errors:
+            flash(f'Row {err.row}: {err.reason}.', 'warning')
+    for msg in dedup_errors:
+        flash(f'Skipped — {msg}.', 'warning')
+    for msg in api_failures:
+        flash(f'Failed to send to Polis: {msg}.', 'error')
+    if not successes and not result.errors and not dedup_errors and not api_failures:
+        flash('No statements were imported — the file had no valid rows.', 'warning')
+
+    return redirect(redirect_target)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/strict-moderation')
 @login_required
@@ -2123,6 +2200,7 @@ def _register_routes(app: Flask) -> None:
                                moderating=moderating,
                                pseudonym_map=pseudonym_map,
                                dev_test_users=dev_test_users)
+
 
     # ── OAuth ─────────────────────────────────────────────────────────────────
 

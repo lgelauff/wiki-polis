@@ -29,6 +29,27 @@
     </form>
   </div>
 
+  <!-- ── Bulk CSV import ───────────────────────────────── -->
+  <h3 class="section-heading">Import seed statements from CSV</h3>
+  <div class="edit-form">
+    <p class="muted" style="margin-bottom:.75rem;font-size:13px">
+      Upload a UTF-8 CSV file with a <code>text</code> column header (required) and an optional <code>note</code>
+      column (ignored). Comma-delimited only. Maximum {{ max_import_rows }} rows and
+      {{ max_import_kb }} KB per upload. Statements already in this conversation are skipped automatically.
+    </p>
+    <form method="post"
+          action="{{ url_for('admin_statement_seed_import', conv_id=conversation.id) }}"
+          enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>CSV file
+        <input type="file" name="csv_file" accept=".csv,text/csv" required>
+      </label>
+      <div style="margin-top:.75rem">
+        <button type="submit">Import statements</button>
+      </div>
+    </form>
+  </div>
+
   <!-- ── Conversation settings ──────────────────────── -->
   <h3 class="section-heading">Moderation settings</h3>
   <div class="edit-form" style="margin-bottom:2rem">
