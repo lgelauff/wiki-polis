@@ -38,7 +38,7 @@
       {{ max_import_kb }} KB per upload. Statements already in this conversation are skipped automatically.
     </p>
     <form method="post"
-          action="{{ url_for('admin_statement_seed_import', conv_id=conversation.id) }}"
+          action="{{ url_for('admin.admin_statement_seed_import', conv_id=conversation.id) }}"
           enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>CSV file
