@@ -720,10 +720,6 @@
        class="tab-panel{% if tabs|length > 1 and tabs[0] != 'informed-voting' %} tab-panel--hidden{% endif %}"
        role="tabpanel" aria-labelledby="tab-btn-informed-voting">
 
-    <div class="p6-intro" style="margin-bottom:1.5rem">
-      <p>Read the arguments, then cast your vote on each statement.</p>
-    </div>
-
     {% if phase6_data | length == 0 %}
     <div class="landing-section">
       <p class="muted">No statements are available for informed voting yet.</p>
@@ -731,80 +727,112 @@
     {% endif %}
 
     {% for item in phase6_data %}
-    <div class="p6-card" style="border:1px solid var(--border);border-radius:8px;padding:1.25rem;margin-bottom:1.5rem">
+    <div class="p6-card" data-fs-id="{{ item.fs.id }}">
+
+      {# Card header: progress + post-vote badge #}
+      <div class="p6-card-header">
+        <span class="stmt-meta-left">
+          <span class="stmt-dot"></span>
+          INFORMED VOTE &middot; {{ loop.index }} of {{ phase6_data | length }}
+        </span>
+        <span class="p6-voted-badge" hidden></span>
+      </div>
 
       {# Statement text #}
-      <p class="p6-statement" style="font-size:1.05rem;font-weight:600;margin-bottom:1rem;line-height:1.4">
-        {{ item.text }}
-      </p>
+      <p class="p6-statement-text">{{ item.text }}</p>
 
-      {# Pro / Con argument columns #}
-      <div class="p6-args" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem">
+      {# Arguments — two-column layout matching Phase 5 argument tab #}
+      <div class="arg-columns" style="margin-top:1.25rem;margin-bottom:1rem">
 
-        {# Pro arguments #}
-        <div class="p6-args-col">
-          <h4 style="font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-muted);margin-bottom:.5rem">For</h4>
+        {# For #}
+        <div class="arg-col arg-col--pro">
+          <div class="arg-col-heading-row">
+            <span class="arg-col-sign">+</span>
+            <span class="arg-col-heading">For</span>
+            <span class="arg-col-count muted">({{ item.pro | length }})</span>
+          </div>
           {% if item.pro | length == 0 %}
-          <p class="muted" style="font-size:.875rem;font-style:italic">No arguments submitted yet.</p>
+          <p class="muted" style="font-size:.85rem;font-style:italic">No arguments yet.</p>
           {% else %}
           {% for arg in item.pro[:3] %}
-          <div class="p6-arg" style="font-size:.875rem;padding:.5rem 0;border-bottom:1px solid var(--border-light)">{{ arg.body }}</div>
+          <div class="argument-card" data-side="pro">
+            <div class="argument-body">
+              <p class="argument-text">{{ arg.body }}</p>
+            </div>
+          </div>
           {% endfor %}
           {% if item.pro | length > 3 %}
-          <details class="p6-more" style="margin-top:.25rem">
-            <summary style="font-size:.8rem;color:var(--accent);cursor:pointer">Show {{ [item.pro | length - 3, 7] | min }} more</summary>
-            {% for arg in item.pro[3:10] %}
-            <div class="p6-arg" style="font-size:.875rem;padding:.5rem 0;border-bottom:1px solid var(--border-light)">{{ arg.body }}</div>
+          <details class="p6-args-more">
+            <summary>Show {{ item.pro | length - 3 }} more</summary>
+            {% for arg in item.pro[3:] %}
+            <div class="argument-card" data-side="pro">
+              <div class="argument-body">
+                <p class="argument-text">{{ arg.body }}</p>
+              </div>
+            </div>
             {% endfor %}
           </details>
           {% endif %}
           {% endif %}
         </div>
 
-        {# Con arguments #}
-        <div class="p6-args-col">
-          <h4 style="font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-muted);margin-bottom:.5rem">Against</h4>
+        {# Against #}
+        <div class="arg-col arg-col--con">
+          <div class="arg-col-heading-row">
+            <span class="arg-col-sign">−</span>
+            <span class="arg-col-heading">Against</span>
+            <span class="arg-col-count muted">({{ item.con | length }})</span>
+          </div>
           {% if item.con | length == 0 %}
-          <p class="muted" style="font-size:.875rem;font-style:italic">No arguments submitted yet.</p>
+          <p class="muted" style="font-size:.85rem;font-style:italic">No arguments yet.</p>
           {% else %}
           {% for arg in item.con[:3] %}
-          <div class="p6-arg" style="font-size:.875rem;padding:.5rem 0;border-bottom:1px solid var(--border-light)">{{ arg.body }}</div>
+          <div class="argument-card" data-side="con">
+            <div class="argument-body">
+              <p class="argument-text">{{ arg.body }}</p>
+            </div>
+          </div>
           {% endfor %}
           {% if item.con | length > 3 %}
-          <details class="p6-more" style="margin-top:.25rem">
-            <summary style="font-size:.8rem;color:var(--accent);cursor:pointer">Show {{ [item.con | length - 3, 7] | min }} more</summary>
-            {% for arg in item.con[3:10] %}
-            <div class="p6-arg" style="font-size:.875rem;padding:.5rem 0;border-bottom:1px solid var(--border-light)">{{ arg.body }}</div>
+          <details class="p6-args-more">
+            <summary>Show {{ item.con | length - 3 }} more</summary>
+            {% for arg in item.con[3:] %}
+            <div class="argument-card" data-side="con">
+              <div class="argument-body">
+                <p class="argument-text">{{ arg.body }}</p>
+              </div>
+            </div>
             {% endfor %}
           </details>
           {% endif %}
           {% endif %}
         </div>
 
-      </div>{# end p6-args grid #}
+      </div>{# end arg-columns #}
 
-      {# Vote buttons — tid=0 is a valid Polis statement ID; use 'is not none' not truthiness test #}
+      {# Vote buttons — reuse Phase 1/2 .vote-choice-row and .vote-choice exactly #}
       {% if item.phase6_stmt_id is not none %}
-      <div class="p6-vote-row" style="display:flex;gap:.75rem;align-items:center"
-           data-fs-id="{{ item.fs.id }}">
-        <button class="btn-p6-vote" data-vote="1"
-                style="padding:.4rem 1rem;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--surface)">
-          Agree
+      <div class="vote-choice-row p6-vote-row">
+        <button class="vote-choice btn-p6-vote" data-vote="1">
+          <span class="vote-dot vote-dot--agree"></span>Agree
         </button>
-        <button class="btn-p6-vote" data-vote="-1"
-                style="padding:.4rem 1rem;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--surface)">
-          Disagree
+        <button class="vote-choice btn-p6-vote" data-vote="0">
+          <span class="vote-dot vote-dot--pass"></span>Pass
         </button>
-        <button class="btn-p6-vote" data-vote="0"
-                style="padding:.4rem 1rem;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--surface);color:var(--ink-muted)">
-          Pass
+        <button class="vote-choice btn-p6-vote" data-vote="-1">
+          <span class="vote-dot vote-dot--disagree"></span>Disagree
         </button>
-        <span class="p6-vote-status" style="font-size:.85rem;color:var(--ink-muted)"></span>
       </div>
+      <button class="p6-skip-btn" type="button">Skip for now →</button>
       {% endif %}
 
     </div>{# end p6-card #}
     {% endfor %}
+
+  {# Done placeholder — shown when all cards are voted or skipped #}
+  <div class="p6-done" hidden>
+    <p class="p6-done-text">You've completed informed voting. Thank you for participating.</p>
+  </div>
 
   </div>{# end tab-informed-voting #}
   {% endif %}
@@ -859,42 +887,90 @@
   </script>
   {% endif %}
 
-  {# Phase 6 vote JS — sends agree/disagree/pass to the Phase 6 Polis conversation #}
+  {# Phase 6 vote JS — vote, skip, auto-scroll, done state #}
   {% if 'informed-voting' in tabs %}
   <script nonce="{{ csp_nonce }}">
   (function () {
     var csrfToken = '{{ csrf_token() }}';
     var voteUrl   = '{{ url_for("participant.phase6_vote", slug=conversation.slug) }}';
-    document.querySelectorAll('.p6-vote-row').forEach(function (row) {
-      var fsId   = row.dataset.fsId;
-      var status = row.querySelector('.p6-vote-status');
+    var doneEl    = document.querySelector('.p6-done');
+
+    function scrollToNext(card) {
+      var cards = Array.prototype.slice.call(document.querySelectorAll('.p6-card'));
+      var idx   = cards.indexOf(card);
+      var next  = cards[idx + 1];
+      if (next) {
+        setTimeout(function () {
+          next.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 400);
+      }
+    }
+
+    function markTerminal(card) {
+      card.classList.add('p6-card--done');
+      // Check if all cards are now in a terminal state
+      var all   = document.querySelectorAll('.p6-card');
+      var done  = document.querySelectorAll('.p6-card--done');
+      if (done.length === all.length && doneEl) {
+        doneEl.removeAttribute('hidden');
+        setTimeout(function () {
+          doneEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 400);
+      }
+    }
+
+    document.querySelectorAll('.p6-card').forEach(function (card) {
+      var fsId  = card.dataset.fsId;
+      var row   = card.querySelector('.p6-vote-row');
+      var badge = card.querySelector('.p6-voted-badge');
+      var skip  = card.querySelector('.p6-skip-btn');
+      if (!row) return;
+
+      // Skip button
+      if (skip) {
+        skip.addEventListener('click', function () {
+          skip.hidden = true;
+          badge.textContent = 'Skipped';
+          badge.className = 'p6-voted-badge';
+          badge.removeAttribute('hidden');
+          row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = true; b.classList.add('p6-voted'); });
+          card.classList.add('p6-card--voted');
+          markTerminal(card);
+          scrollToNext(card);
+        });
+      }
+
+      // Vote buttons
       row.querySelectorAll('.btn-p6-vote').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var vote = parseInt(btn.dataset.vote, 10);
           row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = true; });
+          if (skip) skip.hidden = true;
           // pid/tid are resolved server-side from fs_id — never sent by the client.
           fetch(voteUrl, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': csrfToken,
-            },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
             body: JSON.stringify({ fs_id: parseInt(fsId, 10), vote: vote }),
           }).then(function (resp) {
             if (resp.ok) {
               var label = vote === 1 ? 'Agreed' : vote === -1 ? 'Disagreed' : 'Passed';
-              status.textContent = '✓ ' + label;
+              var cls   = vote === 1 ? 'agree' : vote === -1 ? 'disagree' : 'pass';
+              badge.textContent = '✓ ' + label;
+              badge.className = 'p6-voted-badge p6-voted-badge--' + cls;
+              badge.removeAttribute('hidden');
               row.querySelectorAll('.btn-p6-vote').forEach(function (b) {
-                b.style.opacity = b.dataset.vote === String(vote) ? '1' : '0.4';
+                b.classList.toggle('p6-voted', b.dataset.vote === String(vote));
               });
+              card.classList.add('p6-card--voted');
+              markTerminal(card);
+              scrollToNext(card);
             } else {
-              status.textContent = 'Could not save — try again.';
               row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = false; });
+              if (skip) skip.hidden = false;
             }
           }).catch(function () {
-            // Network error: the vote may or may not have reached the server.
-            // Do not silently re-enable buttons — advise the participant to refresh.
-            status.textContent = 'Network error — refresh to check if your vote was saved.';
+            badge.textContent = 'Network error — refresh to check';
+            badge.removeAttribute('hidden');
           });
         });
       });

@@ -57,9 +57,12 @@ if [ "$MIGRATE" -eq 1 ]; then
   export DATABASE_URL=$(_envvar DATABASE_URL)
   export SECRET_KEY=$(_envvar SECRET_KEY)
   export PARTICIAPI_BASE_URL=$(_envvar PARTICIAPI_BASE_URL)
+  export TRUSTED_HOSTS=$(_envvar TRUSTED_HOSTS)
+  export RATELIMIT_KEY_PREFIX=$(_envvar RATELIMIT_KEY_PREFIX)
+  export RATELIMIT_IDENTITY_SECRET=$(_envvar RATELIMIT_IDENTITY_SECRET)
   source ~/www/python/venv/bin/activate
   cd ~/wiki-polis/v2
-  flask --app app db upgrade
+  FLASK_DEBUG=1 flask --app app db upgrade  # FLASK_DEBUG bypasses production startup checks; set inline to override dotenv
   echo "    Migrations done."
 fi
 
