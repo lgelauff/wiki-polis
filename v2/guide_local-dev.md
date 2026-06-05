@@ -204,14 +204,9 @@ Three generic test accounts let you switch between user identities without going
 DEV_FAKE_LOGIN=1
 ```
 
-**Toolforge dev tool** — on the bastion:
-```bash
-toolforge envvars create DEV_FAKE_LOGIN 1
-```
+Restart Flask, then visit the home page. An amber badge strip appears below the login button with three accounts: `dev-user-1`, `dev-user-2`, `dev-user-3`. Clicking a badge logs you in immediately — the `Participant` record is created on first use. Use the accounts to simulate multiple participants interacting in the same consultation.
 
-Restart Flask (or the webservice), then visit the home page. An amber badge strip appears below the login button with three accounts: `dev-user-1`, `dev-user-2`, `dev-user-3`. Clicking a badge logs you in immediately — the `Participant` record is created on first use. Use the accounts to simulate multiple participants interacting in the same consultation.
-
-These accounts use negative `mw_user_id` values so they never collide with real Wikimedia accounts. Do not set `DEV_FAKE_LOGIN=1` in production.
+These accounts use negative `mw_user_id` values so they never collide with real Wikimedia accounts. The route only registers when Flask is running in local debug mode and not on Toolforge, even if `DEV_FAKE_LOGIN=1` is present.
 
 ## Stopping The Stack
 

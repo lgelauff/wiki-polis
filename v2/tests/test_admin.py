@@ -3,8 +3,9 @@ from unittest.mock import patch
 
 import pytest
 
-from db import AdminRole, Conversation, ConversationInvite, db
+from db import AdminRole, Conversation, ConversationInvite, Participant, db
 from polis_admin import PolisServerError
+from tests.conftest import login
 
 
 @pytest.fixture
@@ -32,7 +33,12 @@ def test_admin_index_accessible_to_global_admin(admin_client):
 
 # ── Conversation CRUD ─────────────────────────────────────────────────────────
 
-def test_create_conversation(admin_client):
+def test_create_conversation(app, admin_client):
+    app.config.update({
+        'POLIS_SERVER_URL': 'http://polis.test',
+        'POLIS_ADMIN_EMAIL': 'admin@example.org',
+        'POLIS_ADMIN_PASSWORD': 'test-password',
+    })
     with patch('app.PolisServerClient.create_conversation',
                return_value='newpolis12'):
         resp = admin_client.post('/admin/conversations/new', data={
@@ -58,8 +64,13 @@ def test_create_conversation_invalid_slug_rejected(admin_client):
     assert resp.status_code == 400
 
 
-def test_create_conversation_polis_failure_redirects(admin_client):
+def test_create_conversation_polis_failure_redirects(app, admin_client):
     """Polis server error on creation → redirect to admin with flash, no conv written."""
+    app.config.update({
+        'POLIS_SERVER_URL': 'http://polis.test',
+        'POLIS_ADMIN_EMAIL': 'admin@example.org',
+        'POLIS_ADMIN_PASSWORD': 'test-password',
+    })
     with patch('app.PolisServerClient.create_conversation',
                side_effect=PolisServerError('test error')):
         resp = admin_client.post('/admin/conversations/new', data={
@@ -183,6 +194,23 @@ def test_remove_role(admin_client, admin_participant, conv, participant):
     resp = admin_client.post(f'/admin/roles/{role.id}/remove')
     assert resp.status_code == 302
     assert db.session.get(AdminRole, role.id) is None
+
+
+def test_scoped_moderator_cannot_see_global_role_controls(client, conv, participant):
+    other = Participant(mw_user_id=33333, mw_username='otheruser', xid='t' * 64)
+    db.session.add(other)
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='moderator'))
+    db.session.commit()
+    login(client, 'testuser')
+
+    resp = client.get(f'/admin/conversations/{conv.id}')
+
+    assert resp.status_code == 200
+    assert b'testuser' in resp.data
+    assert b'otheruser' not in resp.data
+    assert b'Add moderator' not in resp.data
+    assert b'class="btn-small btn-danger">remove</button>' not in resp.data
 
 
 # ── Invites ───────────────────────────────────────────────────────────────────

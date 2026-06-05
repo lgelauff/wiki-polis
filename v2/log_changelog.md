@@ -72,8 +72,8 @@ Security, code quality, and computational social science reviews conducted (2026
 - [x] `link_based` access policy removed from code and UI
 - [x] Opt-in identity reveal: `Participation.public_username` + `revealed_at` columns (migration applied)
 - [x] `Conversation.closed_at` set on permanent close; drives reveal timeline
-- [x] Reveal routes (`GET/POST /c/<slug>/reveal`) with cooldown gate, nullification gate, irreversible-warning form
-- [x] Lazy nullification in conversation view: clears identity links at `cooldown + window` days post-close
+- [x] Reveal routes (`GET/POST /c/<slug>/reveal`) with cooldown gate, opt-in window gate, irreversible-warning form
+- [x] Voluntary public reveals are permanent; app no longer nullifies `public_username` / `revealed_at` after the opt-in window
 - [x] Minimum-N warning on results (< 25 participants): shown above public results, does not hide results
 - [x] Consent copy on accept page updated to reflect platform-wide pseudonym uniqueness and operator data retention
 - [ ] **TODO: open GitHub issue** — audit consistency of pseudonymity / vote privacy messaging across all user-facing surfaces (accept page, conversation view, results page, reveal flow). Ensure the platform's promises (votes are private, pseudonym is per-platform, identity reveal is opt-in post-close) are communicated clearly and consistently everywhere a participant might wonder.

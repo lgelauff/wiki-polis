@@ -1,9 +1,9 @@
 """Tests for login, OAuth callback, and logout flows."""
 from unittest.mock import MagicMock, patch
 
-from db import Participant
+from flask import session
 
-from tests.conftest import login
+from db import Participant, db
 
 
 def test_login_without_oauth_returns_503(client):
@@ -88,6 +88,30 @@ def test_oauth_callback_updates_username_if_changed(client, app, participant):
     from db import db
     db.session.refresh(participant)
     assert participant.mw_username == 'RenamedUser'
+
+
+def test_current_participant_resolves_stale_username_by_xid(app, participant):
+    """A renamed user keeps the same stable xid, so old session username is ignored."""
+    from app import _current_participant
+
+    old_username = participant.mw_username
+    participant.mw_username = 'RenamedUser'
+    db.session.commit()
+
+    with app.test_request_context('/'):
+        session['username'] = old_username
+        session['xid'] = participant.xid
+        assert _current_participant().id == participant.id
+
+
+def test_current_participant_rejects_invalid_xid_even_if_username_matches(app, participant):
+    """Once a session has xid, username is not accepted as a fallback identity key."""
+    from app import _current_participant
+
+    with app.test_request_context('/'):
+        session['username'] = participant.mw_username
+        session['xid'] = 'not-the-participant-xid'
+        assert _current_participant() is None
 
 
 def test_logout_clears_session(auth_client):

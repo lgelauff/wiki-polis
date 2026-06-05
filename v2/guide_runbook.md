@@ -209,13 +209,11 @@ flag (or `docker ps`, which always shows the truth — staging containers are
     docker-compose -p wiki-polis-staging logs --since 30m <service>
     # or export COMPOSE_PROJECT_NAME=wiki-polis-staging
 
-**Logging in to staging (headless or browser).** `DEV_FAKE_LOGIN=1` is set on the
-`wiki-polis-dev` tool, enabling `GET /dev/login/<username>` for three fixed identities —
-`dev-user-1`, `dev-user-2`, `dev-user-3` (distinct xids, negative user-ids that cannot
-collide with real accounts). This is how `synthetic_traffic.py` and headless tests
-authenticate. **This path is OFF on production** (`/dev/login/...` → 404 there) — never
-set `DEV_FAKE_LOGIN` on the `wiki-polis` tool. (The single-user `/dev-login` variant is
-local-only; it never registers on Toolforge.)
+**Logging in to staging (headless or browser).** Toolforge deployments do not register
+the fake-login routes, even on a dev tool. Browser checks should use Wikimedia OAuth.
+Headless checks such as `synthetic_traffic.py` must pass `--session-cookie` from an
+authenticated staging browser session. Both `/dev/login/<username>` and the single-user
+`/dev-login` variant are local-debug-only paths.
 
 **Deploying to staging.** `become wiki-polis-dev`, then
 `bash ~/wiki-polis/deploy.sh <branch>` (add `--migrate` only for schema changes). Confirm
@@ -233,8 +231,8 @@ is expected.
 `toolforge envvars delete <NAME>` then `toolforge envvars create <NAME>` (use the
 interactive prompt; never pass a secret as a CLI argument). Restart the webservice
 afterward. Candidates to rotate on a schedule or on suspected compromise: `SECRET_KEY`,
-`OAUTH_CLIENT_SECRET`, `POLIS_ADMIN_PASSWORD`, and the `wiki_polis_ro` Postgres
-password. *(pending — rotation cadence)*
+`OAUTH_CLIENT_SECRET`, `RATELIMIT_IDENTITY_SECRET`, `POLIS_ADMIN_PASSWORD`, and the
+`wiki_polis_ro` Postgres password. *(pending — rotation cadence)*
 
 ## Responding to an outage
 

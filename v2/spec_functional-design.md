@@ -261,7 +261,7 @@ Cross-conversation tracking via pseudonym is structurally impossible — each co
 Two separate things run after a conversation closes: a participant's *voluntary, permanent* reveal, and the *removal* of the internal account↔pseudonym link the platform holds.
 
 - **Cooldown** (`REVEAL_COOLDOWN_DAYS`, currently 30) — days after close before the reveal window opens. Gives time for any post-close review before participants attach their name.
-- **Internal-link retention** — the internal account↔pseudonym link is removed by at most **180 days** after close (the public commitment; the internal target is sooner). Removal applies to participants who did **not** reveal; once it happens, no further reveals are possible.
+- **Internal-link retention** — the internal account↔pseudonym link is removed by at most **180 days** after close (the public commitment; the internal target is sooner). Removal applies to participants who did **not** reveal; once it happens, no further reveals are possible. This internal-link removal is a separate data-minimisation workflow and is not the same as removing a voluntary public reveal.
 
 | Day (current defaults) | Event |
 |---|---|
@@ -272,7 +272,7 @@ Two separate things run after a conversation closes: a participant's *voluntary,
 
 A reveal is **permanent**: once a username is attached to a pseudonym it stays, and is never nullified. Removal at the retention deadline affects only the *internal* link of participants who did not reveal; the pseudonym itself remains (for export compatibility), but its connection to a Wikimedia account is dropped.
 
-*(pending — the current code nullifies revealed links at the retention window via `_nullify_expired_reveals`; that must change to match this model. See decision D-PRIV.)*
+The app no longer nullifies `public_username` / `revealed_at` after the reveal window. A separate internal-link removal workflow is still needed to implement the 180-day data-minimisation commitment for participants who did not reveal.
 
 **Privacy policy commitment:** the public guarantee for removing the internal link is **180 days** after close; the internal target is sooner. Voluntary reveals are permanent and sit outside this clock.
 

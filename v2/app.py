@@ -6,6 +6,7 @@ import base64
 import click
 import functools
 import hashlib
+import hmac
 import os
 import random
 import re
@@ -24,10 +25,11 @@ from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, validate_csrf
 from sqlalchemy import text as _sa_text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
+from wtforms.validators import ValidationError
 
 from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideState,
                 ArgumentVote, Conversation, ConversationInvite, FeaturedStatement,
@@ -43,6 +45,8 @@ _TEXT_ALLOWED_ATTRS = {'a': {'href', 'title'}}
 _POLIS_ID_RE     = re.compile(r'^[A-Za-z0-9]{6,20}$')
 _SLUG_RE         = re.compile(r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
 _PSEUDONYM_RE    = re.compile(r'^[a-z]{2,20}-[a-z]{2,20}$')
+_REDIS_RATELIMIT_SCHEMES = ('redis://', 'rediss://')
+_MIN_RATELIMIT_IDENTITY_SECRET_LEN = 32
 
 
 def _read_secret(name: str) -> str:
@@ -54,37 +58,48 @@ def _read_secret(name: str) -> str:
     return os.environ.get(name.upper().replace('-', '_'), '')
 
 
+def _split_csv(value: str) -> list[str]:
+    return [v.strip() for v in (value or '').split(',') if v.strip()]
+
+
+def _truthy(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.strip()]
 
 _REVEAL_COOLDOWN_DAYS = 30   # days after close before reveal window opens
-_REVEAL_NULLIFY_DAYS  = 30   # days after window opens before nullification (total = cooldown + nullify)
+_REVEAL_WINDOW_DAYS   = 30   # days participants may opt in once the window opens
 _MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
 
-def _nullify_expired_reveals(conv: 'Conversation') -> None:
-    """Clear public_username / revealed_at for all participations once past internal deadline."""
-    if not conv.closed_at:
-        return
-    # closed_at is stored as naive UTC
-    age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-    if age < timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
-        return
-    stale = (Participation.query
-             .filter_by(conversation_id=conv.id)
-             .filter(Participation.public_username.isnot(None))
-             .all())
-    for p in stale:
-        p.public_username = None
-        p.revealed_at     = None
-    if stale:
-        db.session.commit()
-
-
 csrf    = CSRFProtect()
 # No global default — limits applied per endpoint only.
-# On multi-worker deployments configure RATELIMIT_STORAGE_URI=redis://... in env.
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+# Toolforge provides TOOL_REDIS_URI; production startup validates Redis isolation.
+def _ratelimit_identity_key() -> str:
+    """Return a stable, non-reversible client identity for Flask-Limiter."""
+    trust_proxy_headers = (
+        _truthy(current_app.config.get('TRUST_PROXY_HEADERS'))
+        or bool(os.environ.get('TOOL_TOOLFORGE_API_URL'))
+    )
+    if trust_proxy_headers:
+        access_route = [addr.strip() for addr in request.access_route if addr.strip()]
+        client_identity = access_route[0] if access_route else get_remote_address()
+    else:
+        client_identity = get_remote_address()
+    identity_secret = current_app.config.get('RATELIMIT_IDENTITY_SECRET', '')
+    if not identity_secret:
+        return client_identity
+    digest = hmac.new(str(identity_secret).encode('utf-8'),
+                      client_identity.encode('utf-8'),
+                      hashlib.sha256).hexdigest()
+    return f'ip:{digest}'
+
+
+limiter = Limiter(key_func=_ratelimit_identity_key, default_limits=[])
 
 
 def _short_title(text: str, max_len: int = 80) -> str:
@@ -132,10 +147,16 @@ def _parse_conversation_form() -> dict:
 def _current_participant() -> 'Participant | None':
     if 'participant' in g:
         return g.participant
+    xid = session.get('xid')
+    if xid:
+        g.participant = Participant.query.filter_by(xid=xid).first()
+        return g.participant
     username = session.get('username')
     if not username:
         g.participant = None
         return None
+    # Temporary compatibility for old server-side sessions created before xid
+    # was stored. New sessions resolve by the stable Wikimedia user-id hash.
     g.participant = Participant.query.filter_by(mw_username=username).first()
     return g.participant
 
@@ -272,10 +293,26 @@ def _validate_same_origin():
     if sec_fetch:
         if sec_fetch != 'same-origin':
             abort(403)
-    else:
-        origin = request.headers.get('Origin')
-        if origin and urlparse(origin).netloc != urlparse(request.host_url).netloc:
+        return
+    origin = request.headers.get('Origin')
+    if origin:
+        if urlparse(origin).netloc != urlparse(request.host_url).netloc:
             abort(403)
+        return
+    abort(403)
+
+
+def _validate_fetch_csrf():
+    """Validate Flask-WTF CSRF for JSON/fetch routes on the exempt proxy blueprint."""
+    if not current_app.config.get('WTF_CSRF_ENABLED', True):
+        return
+    token = (request.headers.get('X-CSRFToken')
+             or request.headers.get('X-CSRF-Token')
+             or request.form.get('csrf_token'))
+    try:
+        validate_csrf(token)
+    except ValidationError:
+        abort(400)
 
 
 def _proxy_to_particiapi(pa_path: str):
@@ -573,7 +610,9 @@ proxy_bp = Blueprint('proxy', __name__)
 def conversation_statement_new(slug):
     """Submit an entirely new statement; enforces per-participant quota and
     records the Polis statement ID for novelty tracking."""
-    # Origin validation (same compensating control as the proxy).
+    # This route lives on the CSRF-exempt proxy blueprint for historical reasons,
+    # so validate Flask-WTF's token manually before same-origin checks.
+    _validate_fetch_csrf()
     _validate_same_origin()
 
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
@@ -681,7 +720,11 @@ def admin_conversation_detail(conv_id):
     conv_roles = (AdminRole.query
                    .filter_by(conversation_id=conv_id)
                    .all())
-    participants      = Participant.query.order_by(Participant.mw_username).all()
+    can_manage_roles  = _is_global_admin()
+    participants      = (
+        Participant.query.order_by(Participant.mw_username).all()
+        if can_manage_roles else []
+    )
     invite_count      = ConversationInvite.query.filter_by(conversation_id=conv_id).count()
     participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
     polis_stats       = _polis_server_client().get_polis_stats(conv.polis_id)
@@ -692,7 +735,8 @@ def admin_conversation_detail(conv_id):
                            invite_count=invite_count,
                            participant_count=participant_count,
                            polis_stats=polis_stats,
-                           admin_roles=ADMIN_ROLES)
+                           admin_roles=ADMIN_ROLES,
+                           can_manage_roles=can_manage_roles)
 
 @admin_bp.post('/admin/conversations/new')
 @login_required
@@ -969,8 +1013,8 @@ def admin_conversation_invites(conv_id):
 @login_required
 def admin_invite_add(conv_id):
     _require_mod_for_conv(conv_id)
-    raw = [l.strip() for l in
-           request.form.get('mw_usernames', '').splitlines() if l.strip()]
+    raw = [line.strip() for line in
+           request.form.get('mw_usernames', '').splitlines() if line.strip()]
     usernames = [u for u in raw if 1 <= len(u) <= 255]
     if not usernames:
         return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
@@ -1171,8 +1215,7 @@ def accept(slug):
     return render_template('accept.html', conversation=conv,
                            emailable=emailable, pseudonyms=pseudonyms,
                            reveal_cooldown=_REVEAL_COOLDOWN_DAYS,
-                           reveal_window_end=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS,
-                           retention_public_days=120)
+                           reveal_window_end=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS)
 
 @participant_bp.post('/accept/<slug>')
 @login_required
@@ -1240,11 +1283,6 @@ def conversation(slug):
     if participation is None:
         return redirect(url_for('participant.accept', slug=slug))
 
-    # Lazy nullification: clear identity links past the internal retention deadline.
-    if conv.closed_at:
-        _nullify_expired_reveals(conv)
-        db.session.refresh(participation)
-
     can_mod = _can_moderate(conv, participant)
 
     results     = None
@@ -1276,7 +1314,7 @@ def conversation(slug):
         reveal_opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
         if participation.public_username:
             reveal_state = 'revealed'
-        elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
+        elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
             reveal_state = 'expired'
         elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
             reveal_state = 'open'
@@ -1541,16 +1579,13 @@ def reveal_identity(slug):
     if not conv.closed_at:
         abort(404)
 
-    _nullify_expired_reveals(conv)
-    db.session.refresh(participation)
-
     age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
     opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
     return render_template('reveal.html',
                            conversation=conv,
                            participation=participation,
                            window_open=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS),
-                           window_closed=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS),
+                           window_closed=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS),
                            opens_at=opens_at)
 
 @participant_bp.post('/c/<slug>/reveal')
@@ -1572,7 +1607,7 @@ def reveal_identity_post(slug):
     age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
     if age < timedelta(days=_REVEAL_COOLDOWN_DAYS):
         abort(400)
-    if age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_NULLIFY_DAYS):
+    if age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
         abort(400)
     if participation.public_username is not None:
         abort(400)
@@ -1761,17 +1796,81 @@ def create_app(test_config: dict | None = None) -> Flask:
     if test_config is not None:
         app.config.update(test_config)
 
+    _trust_proxy_headers = app.config.get('TRUST_PROXY_HEADERS')
+    if _trust_proxy_headers is None:
+        _trust_proxy_headers = _read_secret('trust-proxy-headers')
+    app.config['TRUST_PROXY_HEADERS'] = (
+        _truthy(_trust_proxy_headers) or bool(os.environ.get('TOOL_TOOLFORGE_API_URL'))
+    )
+
+    _trusted_hosts = app.config.get('TRUSTED_HOSTS')
+    if _trusted_hosts is None:
+        _trusted_hosts = _split_csv(_read_secret('trusted-hosts'))
+    elif isinstance(_trusted_hosts, str):
+        _trusted_hosts = _split_csv(_trusted_hosts)
+    if _trusted_hosts:
+        app.config['TRUSTED_HOSTS'] = _trusted_hosts
+    elif not app.debug and not app.testing:
+        raise RuntimeError(
+            'TRUSTED_HOSTS is not set. Configure comma-separated allowed hostnames '
+            'such as wiki-polis.toolforge.org before starting production.'
+        )
+
+    _ratelimit_storage_uri = (
+        app.config.get('RATELIMIT_STORAGE_URI')
+        or _read_secret('ratelimit-storage-uri')
+        or os.environ.get('TOOL_REDIS_URI', '').strip()
+    )
+    if _ratelimit_storage_uri:
+        if (not app.debug and not app.testing
+                and not _ratelimit_storage_uri.startswith(_REDIS_RATELIMIT_SCHEMES)):
+            raise RuntimeError(
+                'RATELIMIT_STORAGE_URI must use a Redis backend in production '
+                '(for example Toolforge TOOL_REDIS_URI or redis://...).'
+            )
+        app.config['RATELIMIT_STORAGE_URI'] = _ratelimit_storage_uri
+    elif not app.debug and not app.testing:
+        raise RuntimeError(
+            'RATELIMIT_STORAGE_URI is not set and Toolforge TOOL_REDIS_URI is unavailable. '
+            'Configure Redis-backed Flask-Limiter storage before starting production.'
+        )
+
+    _ratelimit_key_prefix = app.config.get('RATELIMIT_KEY_PREFIX')
+    if _ratelimit_key_prefix is None:
+        _ratelimit_key_prefix = _read_secret('ratelimit-key-prefix')
+    _ratelimit_key_prefix = str(_ratelimit_key_prefix).strip() if _ratelimit_key_prefix else ''
+    if _ratelimit_key_prefix:
+        app.config['RATELIMIT_KEY_PREFIX'] = _ratelimit_key_prefix
+    elif not app.debug and not app.testing:
+        raise RuntimeError(
+            'RATELIMIT_KEY_PREFIX is not set. Configure a unique Toolforge Redis key '
+            'prefix such as wiki-polis:<random>: before starting production.'
+        )
+
+    _ratelimit_identity_secret = app.config.get('RATELIMIT_IDENTITY_SECRET')
+    if _ratelimit_identity_secret is None:
+        _ratelimit_identity_secret = _read_secret('ratelimit-identity-secret')
+    _ratelimit_identity_secret = (
+        str(_ratelimit_identity_secret).strip() if _ratelimit_identity_secret else ''
+    )
+    if _ratelimit_identity_secret:
+        if (not app.debug and not app.testing
+                and len(_ratelimit_identity_secret) < _MIN_RATELIMIT_IDENTITY_SECRET_LEN):
+            raise RuntimeError(
+                'RATELIMIT_IDENTITY_SECRET must be at least 32 characters in production.'
+            )
+        app.config['RATELIMIT_IDENTITY_SECRET'] = _ratelimit_identity_secret
+    elif not app.debug and not app.testing:
+        raise RuntimeError(
+            'RATELIMIT_IDENTITY_SECRET is not set. Configure a random secret so '
+            'rate-limit keys do not expose raw client identities in shared Redis.'
+        )
+
     db.init_app(app)
     Migrate(app, db)
     Session(app)
     csrf.init_app(app)
     limiter.init_app(app)
-
-    if not app.debug and not os.environ.get('RATELIMIT_STORAGE_URI'):
-        app.logger.warning(
-            'RATELIMIT_STORAGE_URI not set — rate limits are per-worker and '
-            'ineffective on multi-replica deployments. Set RATELIMIT_STORAGE_URI=redis://...'
-        )
 
     @app.cli.command('init-db')
     def init_db_cmd():
@@ -1898,7 +1997,9 @@ def _register_routes(app: Flask) -> None:
                     xid=xid,
                 )
                 db.session.add(participant)
-                db.session.commit()
+            else:
+                participant.xid = xid
+            db.session.commit()
             session['username']  = username
             session['xid']       = xid
             session['emailable'] = _is_emailable(username)
@@ -1906,8 +2007,8 @@ def _register_routes(app: Flask) -> None:
 
     # ── Dev test users (DEV_FAKE_LOGIN=1) ────────────────────────────────────
     # Hardcoded test accounts with negative mw_user_ids so they can never
-    # collide with real Wikimedia accounts. Only active when DEV_FAKE_LOGIN=1
-    # is set in the environment — never enable this on production.
+    # collide with real Wikimedia accounts. Only active for local debug runs;
+    # never register this bypass on Toolforge or other non-debug deployments.
 
     _DEV_TEST_USERS = [
         {'username': 'dev-user-1', 'mw_user_id': -1},
@@ -1915,7 +2016,12 @@ def _register_routes(app: Flask) -> None:
         {'username': 'dev-user-3', 'mw_user_id': -3},
     ]
 
-    _fake_login_enabled = os.environ.get('DEV_FAKE_LOGIN', '').strip() == '1'
+    _fake_login_requested = os.environ.get('DEV_FAKE_LOGIN', '').strip() == '1'
+    _fake_login_enabled = bool(app.debug and _fake_login_requested and not _on_toolforge)
+    if _fake_login_requested and not _fake_login_enabled:
+        app.logger.warning(
+            'DEV_FAKE_LOGIN ignored because fake login is only allowed in local debug mode'
+        )
     app.config['DEV_FAKE_LOGIN'] = _fake_login_enabled
     app.config['DEV_TEST_USERS'] = _DEV_TEST_USERS if _fake_login_enabled else []
 
@@ -1935,15 +2041,10 @@ def _register_routes(app: Flask) -> None:
                     xid=xid,
                 )
                 db.session.add(participant)
-                db.session.commit()
-            elif participant.mw_username != username or participant.xid != xid:
-                # Reused dev row: keep it consistent with the username we authenticate as.
-                # _current_participant() looks up by mw_username, so a drifted row (e.g. a
-                # pre-existing dev participant from an older username/xid scheme) would make
-                # it return None and 404 participant-gated routes like /accept and /reveal.
+            else:
                 participant.mw_username = username
-                participant.xid         = xid
-                db.session.commit()
+                participant.xid = xid
+            db.session.commit()
             session['username']  = username
             session['xid']       = xid
             session['emailable'] = False
@@ -2108,6 +2209,8 @@ def _register_routes(app: Flask) -> None:
             db.session.add(participant)
         elif participant.mw_username != username:
             participant.mw_username = username
+        if participant.xid != xid:
+            participant.xid = xid
         db.session.commit()
 
         next_url = session.pop('next', None)
@@ -2151,4 +2254,4 @@ def _register_routes(app: Flask) -> None:
 app = create_app()
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='127.0.0.1', debug=app.debug)

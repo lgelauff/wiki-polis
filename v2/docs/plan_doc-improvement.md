@@ -259,8 +259,8 @@ decisions-first · scope.**
   identity-reveal timeline, pseudonym uniqueness, xid-is-not-anonymous caveat, and
   operator data retention all need a public, plain-language commitment.
 - **Audience:** participants (public), with an internal annex for maintainers.
-- **Decisions:** retention commitment **settled (D-PRIV): 180 days** (internal
-  nullification target stays at day 60). Still to draft within N2 and bring back for
+- **Decisions:** retention commitment **settled (D-PRIV): 180 days** (internal-link
+  removal target is sooner). Still to draft within N2 and bring back for
   review: what is logged, who can see raw identity links, lawful basis /
   Wikimedia-aligned framing.
 - **Scope:** M. Drives real participant-facing copy + the accept-page text. Highest
@@ -325,8 +325,8 @@ decisions-first · scope.**
 - **Why:** bigger than a write-up. 107 tests exist but with real structural problems
   the audit surfaced (a whole module uncollectable §3a, drift §3b — fixed in PR #88 —
   and genuinely untested high-risk paths §5: the Polis-Postgres raw SQL, the proxy
-  cookie-rename / 403→200 rewrite, the quota row-lock race, time-based reveal
-  nullification). Documenting "how to run the tests" on top of that would paper over
+  cookie-rename / 403→200 rewrite, the quota row-lock race, time-based reveal-window
+  behavior). Documenting "how to run the tests" on top of that would paper over
   the real question: **how do we want to test this going forward?** So N9 is two
   things — a **test-strategy rethink** (a decision, D-TEST below) and *then* the
   CONTRIBUTING/testing guide that documents the agreed approach (run flow, what to
@@ -370,7 +370,7 @@ decisions-first · scope.**
 | ~~**D-V1**~~ ✅ | **Resolved:** remove the `v1/` archive from the repository. v2 is live; v3 possible later but not a doc concern now. | (unblocked) | maintainer |
 | ~~**C4**~~ ✅ | **Resolved:** split next_steps into a forward roadmap (N7) + a historical record / changelog (N8) so outdated work can't accidentally drive future decisions. | (unblocked) | maintainer |
 | ~~**D-VOTE**~~ ✅ | **Resolved:** (1) "change vote" **reopens the statement and resubmits** the new vote to Polis (fixes #69); (2) after a **proposal submission**, auto-advance to the next statement after a brief pause — make that pause **a bit longer** than a default; (3) after a **plain vote**, keep the **explicit "Move on"** click. (Implementation note: #69 needs a code change, not just docs.) | (unblocked) | product |
-| ~~**D-PRIV**~~ ✅ | **Resolved (clarified).** A participant's voluntary public reveal of their username↔pseudonym is **permanent and irreversible — never nullified.** Separately, the **internal** account↔pseudonym link (held by platform managers, for technical/dedup purposes) is removed within **180 days** of close (internal target sooner). ⚠️ `spec_functional-design.md` and the current code still *nullify reveals* — both need reconciling to this model (spec edit + a code change to `_nullify_expired_reveals`). N2 drafts toward it; not publishable until legal/comms review. | N2, functional_design, code | maintainer + review |
+| ~~**D-PRIV**~~ ✅ | **Resolved (clarified).** A participant's voluntary public reveal of their username↔pseudonym is **permanent and irreversible — never nullified.** Separately, the **internal** account↔pseudonym link (held by platform managers, for technical/dedup purposes) is removed within **180 days** of close (internal target sooner). Code and spec now keep voluntary public reveals permanent; internal-link removal remains separate follow-up work. N2 drafts toward the public privacy statement; not publishable until legal/comms review. | N2, internal-link removal | maintainer + review |
 | ~~**D-AUDIT**~~ ✅ | **Resolved:** merge PR #94 to keep the audits in version control, but treat them as a **point-in-time record** — archive or delete once obsolete. Durable findings must be folded into `spec_architecture.md` / the data-model reference so their value survives the audits' eventual removal. | (unblocked) | maintainer |
 | ~~**D-STORE**~~ ✅ | **Resolved: intended design.** The two read paths are **routes to the same store, not separate stores** — admins read Polis Postgres directly (moderation buckets + vote counts the participant API doesn't expose); participants get the live Particiapi-HTTP view of the same data. Documented in `spec_architecture.md`; the inconsistent client shapes are a minor cleanup, not a redesign. | (unblocked) | maintainer |
 | ~~**D-MON**~~ ✅ | **Resolved (split):** monitoring/log-aggregation (#49) is **deferred** — runbook keeps a monitoring TODO until the production VPS is provisioned; document `/health` and its reachability-only limitation in the meantime. **Staging is permanent** — document `wiki-polis-dev` as a standing environment incl. prod-vs-staging differences (dev-login, separate DB). | deployment, N5 | maintainer |

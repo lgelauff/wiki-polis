@@ -1,8 +1,6 @@
 """Tests for the identity reveal window: state transitions and POST validation."""
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from db import Conversation, Participant, Participation, db
 
 
@@ -133,12 +131,10 @@ def test_reveal_post_already_revealed_rejected(auth_client, app, participant):
     assert resp.status_code == 400
 
 
-# ── Nullification ─────────────────────────────────────────────────────────────
+# ── Reveal permanence ─────────────────────────────────────────────────────────
 
-def test_nullify_expired_reveals_clears_public_username(app):
-    """_nullify_expired_reveals removes identity data past the 60-day deadline."""
-    from app import _nullify_expired_reveals
-
+def test_revealed_identity_remains_after_window(auth_client, app):
+    """Voluntary public reveals remain visible after the opt-in window closes."""
     conv = _closed_conv(app, 'old-conv', 65, 'old1234567')
     p = Participant(mw_user_id=77777, mw_username='revealeduser', xid='r' * 64)
     db.session.add(p)
@@ -150,18 +146,21 @@ def test_nullify_expired_reveals_clears_public_username(app):
     )
     db.session.add(part)
     db.session.commit()
+    with auth_client.session_transaction() as sess:
+        sess['username'] = p.mw_username
+        sess['xid'] = p.xid
 
-    _nullify_expired_reveals(conv)
+    resp = auth_client.get('/c/old-conv')
     db.session.refresh(part)
-    assert part.public_username is None
-    assert part.revealed_at is None
+    assert resp.status_code == 200
+    assert b'linked your identity' in resp.data.lower()
+    assert part.public_username == 'revealeduser'
+    assert part.revealed_at is not None
 
 
-def test_nullify_does_not_clear_before_deadline(app):
-    """_nullify_expired_reveals is a no-op when the deadline hasn't passed."""
-    from app import _nullify_expired_reveals
-
-    conv = _closed_conv(app, 'recent-conv', 45, 'rec1234567')
+def test_reveal_page_keeps_existing_reveal_after_window(auth_client, app):
+    """The reveal detail page still shows an already-public reveal after day 60."""
+    conv = _closed_conv(app, 'recent-conv', 65, 'rec1234567')
     p = Participant(mw_user_id=66666, mw_username='recentuser', xid='s' * 64)
     db.session.add(p)
     db.session.commit()
@@ -172,7 +171,12 @@ def test_nullify_does_not_clear_before_deadline(app):
     )
     db.session.add(part)
     db.session.commit()
+    with auth_client.session_transaction() as sess:
+        sess['username'] = p.mw_username
+        sess['xid'] = p.xid
 
-    _nullify_expired_reveals(conv)
+    resp = auth_client.get('/c/recent-conv/reveal')
     db.session.refresh(part)
+    assert resp.status_code == 200
+    assert b'identity linked' in resp.data.lower()
     assert part.public_username == 'recentuser'

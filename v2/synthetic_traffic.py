@@ -36,8 +36,8 @@ Health invariants (any violation = recorded failure, non-zero exit)
 
 Prerequisites
 -------------
-  * The target must have DEV_FAKE_LOGIN=1 (local: in .env; staging: a Toolforge
-    envvar on the wiki-polis-dev tool). NEVER enable DEV_FAKE_LOGIN on production.
+  * Local targets may use DEV_FAKE_LOGIN=1 from v2/.env. Toolforge targets never
+    register fake-login routes; pass --session-cookie from an authenticated browser.
   * A votable conversation slug (default "test" — free to mutate on staging).
   * The vote/results actions need only login, so they soak the proxy on any deployed
     instance. Auto-discovery (slug→id) and the `submit` action additionally need a
@@ -50,10 +50,10 @@ Usage
   # Local smoke (one of each action, then stop)
   python synthetic_traffic.py --dry-run
 
-  # Staging soak: 3 identities, 10 minutes, ~2 req/s each
+  # Staging soak: authenticated browser session, 10 minutes, ~2 req/s
   python synthetic_traffic.py \
       --base-url https://wiki-polis-dev.toolforge.org \
-      --slug test --workers 3 --duration 600 --rate 2
+      --slug test --session-cookie '<cookie>' --duration 600 --rate 2
 
   # Bypass slug→id discovery (e.g. invite-only conv) by passing the Polis id
   python synthetic_traffic.py --conversation-id 9r7fkvxyjb ...
@@ -61,9 +61,9 @@ Usage
 Exit codes: 0 = clean; 1 = ran but a health invariant was violated; 2 = could not
 authenticate (dev fake-login disabled / no valid --session-cookie) so nothing was sent.
 
-If the dev fake-login path is ever disabled for security (DEV_FAKE_LOGIN turned off, or
-the route removed), the tool detects that in a preflight probe and exits 2 with
-instructions to restore access — rather than firing traffic that all bounces to /login.
+If the dev fake-login path is unavailable and no --session-cookie was supplied, the tool
+detects that in a preflight probe and exits 2 rather than firing traffic that all
+bounces to /login.
 """
 import argparse
 import os
@@ -381,9 +381,8 @@ def main(argv=None):
             f"  The login path needed to drive {args.base_url} is not available. This is\n"
             f"  expected if dev fake-login was disabled for security. To run the soak,\n"
             f"  restore access one of these ways:\n"
-            f"    • non-production target: enable fake-login — DEV_FAKE_LOGIN=1 (local .env,\n"
-            f"      or `toolforge envvars create DEV_FAKE_LOGIN 1` on wiki-polis-dev). Never on prod.\n"
-            f"    • any target: pass --session-cookie \"<cookie from an authenticated browser>\".\n",
+            f"    • local target: enable fake-login with DEV_FAKE_LOGIN=1 in v2/.env.\n"
+            f"    • Toolforge or any target: pass --session-cookie \"<cookie from an authenticated browser>\".\n",
             file=sys.stderr)
         return 2
 
