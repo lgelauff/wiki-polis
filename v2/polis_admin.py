@@ -360,8 +360,8 @@ class PolisServerClient:
             try:
                 self._post_seed(sess, headers, conversation_id, text)
                 successes += 1
-            except Exception as exc:
-                failures.append((text, PolisServerError(str(exc))))
+            except (requests.RequestException, PolisServerError) as exc:
+                failures.append((text, PolisServerError(str(exc)) if not isinstance(exc, PolisServerError) else exc))
         return successes, failures
 
     def add_seed_return_id(self, conversation_id: str, text: str) -> int:

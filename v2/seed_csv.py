@@ -24,7 +24,16 @@ _STRIP_CODEPOINTS = frozenset([
 ])
 
 # Characters that, when leading a cell, trigger spreadsheet formula injection.
-_FORMULA_PREFIXES = frozenset('=+-@\t\r')
+# Covers Excel/Sheets (=, +, -, @), LibreOffice Calc (| added), and tab/CR
+# which some parsers treat as formula starters.
+_FORMULA_PREFIXES = frozenset('=+-@|\t\r')
+
+
+def strip_formula_prefixes(text: str) -> str:
+    """Strip leading formula-injection characters from text."""
+    while text and text[0] in _FORMULA_PREFIXES:
+        text = text[1:]
+    return text
 
 
 @dataclass

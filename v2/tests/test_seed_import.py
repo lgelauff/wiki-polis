@@ -201,15 +201,15 @@ def test_skips_statements_already_in_polis(admin_client, conv):
     assert b'1 imported' in resp.data
 
 
-def test_dedup_is_case_sensitive(admin_client, conv):
+def test_dedup_is_case_insensitive(admin_client, conv):
     existing = [{'txt': 'Hello', 'mod': 1, 'is_seed': True,
                  'tid': 1, 'agree_count': 0, 'disagree_count': 0, 'pass_count': 0}]
     csv = b'text\nhello\nHello\nHELLO'
     with _mock_polis(existing_statements=([], existing, [])) as mock:
-        resp = _upload(admin_client, conv.id, csv)
-    # 'hello' and 'HELLO' are new; 'Hello' is a duplicate
-    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
-    assert len(texts_sent) == 2
+        _upload(admin_client, conv.id, csv)
+    # All three are case-fold duplicates of 'Hello' — none should be sent
+    assert mock.return_value.bulk_add_seeds.call_args is None or \
+           mock.return_value.bulk_add_seeds.call_args[0][1] == []
 
 
 def test_dedup_continues_when_polis_fetch_fails(admin_client, conv):
@@ -274,10 +274,10 @@ def test_html_entity_formula_injection_stripped(admin_client, conv):
     csv = 'text\n&equals;SUM(A1)'.encode('utf-8')
     with _mock_polis() as mock:
         resp = _upload(admin_client, conv.id, csv)
-    call_args = mock.return_value.bulk_add_seeds.call_args
-    if call_args:  # may be filtered as empty after stripping
-        texts_sent = call_args[0][1]
-        assert all(not t.startswith('=') for t in texts_sent)
+    # &equals; decodes to '=' via nh3; second-pass strip_formula_prefixes must remove it.
+    # The text becomes empty after stripping, so bulk_add_seeds must not be called at all.
+    assert mock.return_value.bulk_add_seeds.call_args is None or \
+           all(not t.startswith('=') for t in mock.return_value.bulk_add_seeds.call_args[0][1])
 
 
 def test_all_tags_csv_produces_empty_string_and_is_not_sent(admin_client, conv):
@@ -298,6 +298,6 @@ def test_nh3_induced_duplicate_sent_only_once(admin_client, conv):
     with _mock_polis() as mock:
         _upload(admin_client, conv.id, csv)
     call_args = mock.return_value.bulk_add_seeds.call_args
-    if call_args:
-        texts_sent = call_args[0][1]
-        assert texts_sent.count('Hello') == 1
+    assert call_args is not None, "bulk_add_seeds should have been called"
+    texts_sent = call_args[0][1]
+    assert texts_sent.count('Hello') == 1

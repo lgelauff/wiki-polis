@@ -36,7 +36,7 @@ from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideS
                 Participant, Participation, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
-from seed_csv import MAX_FILE_BYTES, MAX_ROWS, parse_csv_bytes, _FORMULA_PREFIXES
+from seed_csv import MAX_FILE_BYTES, MAX_ROWS, parse_csv_bytes, strip_formula_prefixes
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -693,6 +693,9 @@ def proxy_particiapi(pa_path):
     return _proxy_to_particiapi(pa_path)
 
 admin_bp = Blueprint('admin', __name__)
+
+# nh3 tag allowlist for CSV import sanitisation — no HTML tags permitted.
+_NH3_NO_TAGS: frozenset[str] = frozenset()
 participant_bp = Blueprint('participant', __name__)
 
 # ── Admin ─────────────────────────────────────────────────────────────────
@@ -1152,16 +1155,13 @@ def admin_statement_seed_import(conv_id):
     # Sanitize all texts with nh3 first, then re-strip formula prefixes that
     # HTML-entity encoding could have reintroduced (e.g. &equals; → =).
     # Filter empty strings that result from nh3 stripping all-tag content.
-    _EMPTY_TAGS = frozenset()
     seen_sanitised: set[str] = set()
     sanitised_texts: list[str] = []
     for raw_text in result.texts:
-        san = nh3.clean(raw_text, tags=_EMPTY_TAGS)
+        san = nh3.clean(raw_text, tags=_NH3_NO_TAGS)
         # Re-apply formula-prefix stripping: nh3 decodes HTML entities (e.g.
         # &equals; → =) which can reintroduce leading formula chars.
-        while san and san[0] in _FORMULA_PREFIXES:
-            san = san[1:]
-        san = san.strip()
+        san = strip_formula_prefixes(san).strip()
         if not san or san in seen_sanitised:
             continue  # drop empty-after-nh3 and nh3-induced within-batch dupes
         seen_sanitised.add(san)
@@ -1175,7 +1175,7 @@ def admin_statement_seed_import(conv_id):
         if rows is not None:
             pending, approved, hidden = rows
             for stmt in pending + approved + hidden:
-                existing_texts.add(stmt['txt'].strip())
+                existing_texts.add(stmt['txt'].strip().casefold())
     except Exception:
         current_app.logger.exception('Could not fetch existing statements for dedup check')
         dedup_check_failed = True
@@ -1183,7 +1183,7 @@ def admin_statement_seed_import(conv_id):
     dedup_errors = []
     clean_texts  = []
     for sanitised in sanitised_texts:
-        if sanitised in existing_texts:
+        if sanitised.casefold() in existing_texts:
             dedup_errors.append(f'"{sanitised[:60]}{"…" if len(sanitised) > 60 else ""}" — already exists in this conversation')
         else:
             clean_texts.append(sanitised)
@@ -1201,7 +1201,7 @@ def admin_statement_seed_import(conv_id):
             api_failures = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
 
     if dedup_check_failed:
-        flash('Could not check for existing statements — duplicates may have been inserted. Check server logs.', 'warning')
+        flash('Could not check for existing statements — some may be duplicates. Check server logs.', 'warning')
 
     # Only limit-skipped rows remain (parse errors were rejected above).
     limit_skipped = [e for e in result.errors if e.limit_skipped]
