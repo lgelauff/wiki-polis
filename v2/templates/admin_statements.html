@@ -64,6 +64,13 @@
         {% endif %}
         {% endwith %}
       </div>
+      {% with errors = get_flashed_messages(category_filter=['import_row_error']) %}
+      {% if errors %}
+      <ul style="margin-top:.5rem;padding-left:1.25rem;font-size:13px;color:var(--error,#b91c1c)">
+        {% for err in errors %}<li>{{ err }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% endwith %}
     </form>
   </div>
 
