@@ -58,8 +58,8 @@ if [ "$MIGRATE" -eq 1 ]; then
   echo "    Loading Toolforge envvars..."
   while IFS= read -r name; do
     [[ -z "$name" || "$name" == "name" ]] && continue
-    value=$(toolforge envvars show "$name" | tail -1 | awk '{print $NF}')
-    export "$name=$value"
+    value=$(toolforge envvars show "$name" 2>/dev/null | tail -1 | awk '{print $NF}')
+    [[ -n "$value" ]] && export "$name=$value"
   done < <(toolforge envvars list | awk 'NR>1 {print $1}')
   # MIGRATION_MODE=1 skips web-server-only startup checks (Redis, TRUSTED_HOSTS)
   # that require Kubernetes-injected vars unavailable on the bastion.
