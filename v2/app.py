@@ -1903,6 +1903,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     if test_config is not None:
         app.config.update(test_config)
 
+    # Migration mode: set by deploy.sh --migrate to skip web-server-only
+    # startup checks (rate limiting, trusted hosts) that require
+    # Kubernetes-injected vars unavailable on the Toolforge bastion.
+    # Has no effect on which code runs at request time.
+    _migration_mode = bool(os.environ.get('MIGRATION_MODE'))
+
     _trust_proxy_headers = app.config.get('TRUST_PROXY_HEADERS')
     if _trust_proxy_headers is None:
         _trust_proxy_headers = _read_secret('trust-proxy-headers')
@@ -1917,7 +1923,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         _trusted_hosts = _split_csv(_trusted_hosts)
     if _trusted_hosts:
         app.config['TRUSTED_HOSTS'] = _trusted_hosts
-    elif not app.debug and not app.testing:
+    elif not app.debug and not app.testing and not _migration_mode:
         raise RuntimeError(
             'TRUSTED_HOSTS is not set. Configure comma-separated allowed hostnames '
             'such as wiki-polis.toolforge.org before starting production.'
@@ -1929,14 +1935,14 @@ def create_app(test_config: dict | None = None) -> Flask:
         or os.environ.get('TOOL_REDIS_URI', '').strip()
     )
     if _ratelimit_storage_uri:
-        if (not app.debug and not app.testing
+        if (not app.debug and not app.testing and not _migration_mode
                 and not _ratelimit_storage_uri.startswith(_REDIS_RATELIMIT_SCHEMES)):
             raise RuntimeError(
                 'RATELIMIT_STORAGE_URI must use a Redis backend in production '
                 '(for example Toolforge TOOL_REDIS_URI or redis://...).'
             )
         app.config['RATELIMIT_STORAGE_URI'] = _ratelimit_storage_uri
-    elif not app.debug and not app.testing:
+    elif not app.debug and not app.testing and not _migration_mode:
         raise RuntimeError(
             'RATELIMIT_STORAGE_URI is not set and Toolforge TOOL_REDIS_URI is unavailable. '
             'Configure Redis-backed Flask-Limiter storage before starting production.'
@@ -1948,7 +1954,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     _ratelimit_key_prefix = str(_ratelimit_key_prefix).strip() if _ratelimit_key_prefix else ''
     if _ratelimit_key_prefix:
         app.config['RATELIMIT_KEY_PREFIX'] = _ratelimit_key_prefix
-    elif not app.debug and not app.testing:
+    elif not app.debug and not app.testing and not _migration_mode:
         raise RuntimeError(
             'RATELIMIT_KEY_PREFIX is not set. Configure a unique Toolforge Redis key '
             'prefix such as wiki-polis:<random>: before starting production.'
@@ -1961,13 +1967,13 @@ def create_app(test_config: dict | None = None) -> Flask:
         str(_ratelimit_identity_secret).strip() if _ratelimit_identity_secret else ''
     )
     if _ratelimit_identity_secret:
-        if (not app.debug and not app.testing
+        if (not app.debug and not app.testing and not _migration_mode
                 and len(_ratelimit_identity_secret) < _MIN_RATELIMIT_IDENTITY_SECRET_LEN):
             raise RuntimeError(
                 'RATELIMIT_IDENTITY_SECRET must be at least 32 characters in production.'
             )
         app.config['RATELIMIT_IDENTITY_SECRET'] = _ratelimit_identity_secret
-    elif not app.debug and not app.testing:
+    elif not app.debug and not app.testing and not _migration_mode:
         raise RuntimeError(
             'RATELIMIT_IDENTITY_SECRET is not set. Configure a random secret so '
             'rate-limit keys do not expose raw client identities in shared Redis.'

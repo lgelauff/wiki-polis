@@ -61,12 +61,12 @@ if [ "$MIGRATE" -eq 1 ]; then
     value=$(toolforge envvars show "$name" | tail -1 | awk '{print $NF}')
     export "$name=$value"
   done < <(toolforge envvars list | awk 'NR>1 {print $1}')
-  # FLASK_DEBUG=1 bypasses production-only startup checks (Redis, TRUSTED_HOSTS)
+  # MIGRATION_MODE=1 skips web-server-only startup checks (Redis, TRUSTED_HOSTS)
   # that require Kubernetes-injected vars unavailable on the bastion.
-  # Migrations only touch the DB — no rate limiting or host validation needed.
+  # Has no effect on which code runs — migrations only touch the DB.
   source ~/www/python/venv/bin/activate
   cd ~/wiki-polis/v2
-  FLASK_DEBUG=1 flask --app app db upgrade
+  MIGRATION_MODE=1 flask --app app db upgrade
   echo "    Migrations done."
 fi
 
