@@ -57,6 +57,7 @@ if [ "$MIGRATE" -eq 1 ]; then
   export DATABASE_URL=$(_envvar DATABASE_URL)
   export SECRET_KEY=$(_envvar SECRET_KEY)
   export PARTICIAPI_BASE_URL=$(_envvar PARTICIAPI_BASE_URL)
+  export TRUSTED_HOSTS=$(_envvar TRUSTED_HOSTS)
   source ~/www/python/venv/bin/activate
   cd ~/wiki-polis/v2
   flask --app app db upgrade
