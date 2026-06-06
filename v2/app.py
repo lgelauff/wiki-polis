@@ -860,6 +860,10 @@ def admin_phase6_init(conv_id):
     # Allows conversation moderators (not just global admins) to initialise Phase 6.
     conv = _require_mod_for_conv(conv_id)
 
+    if not conv.active or conv.paused:
+        flash('Cannot initialise Phase 6 on a closed or paused conversation.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
     if not conv.phase_informed_voting:
         flash('Enable the Informed voting toggle first, then initialise.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
@@ -1456,7 +1460,22 @@ def conversation(slug):
                     .options(joinedload(FeaturedStatement.arguments)
                              .joinedload(Argument.votes))
                     .all())
-        for fs in p6_stmts:
+
+        # Stable per-participant random order — set once on first visit.
+        # Same pattern as ArgumentSideState.argument_order.
+        fs_by_id = {fs.id: fs for fs in p6_stmts}
+        if participation.phase6_card_order is None:
+            order = [fs.id for fs in p6_stmts]
+            random.shuffle(order)
+            participation.phase6_card_order = order
+            db.session.commit()
+        ordered = [fs_by_id[fid] for fid in participation.phase6_card_order
+                   if fid in fs_by_id]
+        # Append any confirmed statements added after the order was set
+        ordered_ids = set(participation.phase6_card_order)
+        ordered += [fs for fs in p6_stmts if fs.id not in ordered_ids]
+
+        for fs in ordered:
             text = fs.statement_text or ''
             if not text:
                 continue

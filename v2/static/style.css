@@ -2535,3 +2535,166 @@ a { color: var(--pass); }
   font-size: 18px;
   color: var(--muted);
 }
+
+/* ── Phase 6 — Informed voting cards + skip + done ───────────────────────── */
+
+.p6-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  padding: 28px 32px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02), 0 14px 36px -18px rgba(0,0,0,0.08);
+}
+
+.p6-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+/* Two-column inner: statement+votes left, arguments right */
+.p6-card-inner {
+  display: grid;
+  grid-template-columns: 55fr 45fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.p6-statement-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.p6-statement-text {
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+
+/* Reuse .vote-choice-row and .vote-choice exactly — no overrides needed */
+
+/* Right column: FOR / AGAINST side by side */
+.p6-args-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.p6-args-side {
+  background: var(--surface2);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.p6-args-side-header {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.p6-args-side--pro  .p6-args-side-header { color: var(--agree); }
+.p6-args-side--con  .p6-args-side-header { color: var(--disagree); }
+
+.p6-arg-item {
+  font-size: 0.8125rem;  /* 13px */
+  line-height: 1.5;
+  color: var(--text);
+  padding: 5px 0;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+.p6-arg-item:last-child { border-bottom: none; }
+
+.p6-args-empty {
+  font-size: 0.8125rem;
+  font-style: italic;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+.p6-args-more summary {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 4px 0;
+  list-style: none;
+}
+.p6-args-more summary::-webkit-details-marker { display: none; }
+
+/* Post-vote badge — reuses voted-badge colour pattern */
+.p6-voted-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: var(--surface2);
+  color: var(--muted);
+}
+.p6-voted-badge--agree    { color: var(--agree);    background: rgba(31,138,91,0.08); }
+.p6-voted-badge--disagree { color: var(--disagree); background: rgba(196,74,74,0.08); }
+.p6-voted-badge--pass     { color: var(--pass);     background: rgba(61,109,186,0.08); }
+
+/* Voted state: dim statement text; voted button stays full opacity */
+.p6-card--voted .p6-statement-text { opacity: 0.6; }
+.p6-card--voted .vote-choice { opacity: 0.4; }
+.p6-card--voted .vote-choice.p6-voted { opacity: 1; }
+
+/* Mobile: stack columns vertically */
+@media (max-width: 640px) {
+  .p6-card-inner {
+    grid-template-columns: 1fr;
+  }
+  .p6-args-panel {
+    order: -1;  /* arguments appear above statement on mobile */
+  }
+}
+
+/* Skip affordance */
+.p6-skip-btn {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: .875rem;
+  text-align: center;
+  padding: 10px 0;
+  min-height: 44px;
+  cursor: pointer;
+  transition: color .1s;
+}
+.p6-skip-btn:hover { color: var(--ink); }
+
+/* Done state */
+.p6-done {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  padding: 28px 32px;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+.p6-done-text {
+  font-size: 1rem;
+  color: var(--muted);
+  margin: 0;
+}
