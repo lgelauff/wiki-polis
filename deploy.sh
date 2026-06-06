@@ -53,8 +53,7 @@ fi
 
 if [ "$MIGRATE" -eq 1 ]; then
   echo "==> Running database migrations..."
-  # Load every Toolforge envvar so the app can start regardless of which
-  # vars were added since the last deploy. Toolforge envvars are the single
+  # Load all Toolforge envvars so the app can start. Envvars are the single
   # source of truth — no manual list to maintain here.
   echo "    Loading Toolforge envvars..."
   while IFS= read -r name; do
@@ -62,9 +61,12 @@ if [ "$MIGRATE" -eq 1 ]; then
     value=$(toolforge envvars show "$name" | tail -1 | awk '{print $NF}')
     export "$name=$value"
   done < <(toolforge envvars list | awk 'NR>1 {print $1}')
+  # FLASK_DEBUG=1 bypasses production-only startup checks (Redis, TRUSTED_HOSTS)
+  # that require Kubernetes-injected vars unavailable on the bastion.
+  # Migrations only touch the DB — no rate limiting or host validation needed.
   source ~/www/python/venv/bin/activate
   cd ~/wiki-polis/v2
-  flask --app app db upgrade
+  FLASK_DEBUG=1 flask --app app db upgrade
   echo "    Migrations done."
 fi
 
