@@ -143,31 +143,37 @@ def test_header_only_no_data_rows(admin_client, conv):
 # ── Per-row error reporting ───────────────────────────────────────────────────
 
 def test_empty_rows_reported_with_line_number(admin_client, conv):
+    # Invalid row rejects the entire batch.
     csv = b'text\ngood\n\nalso good'
-    with _mock_polis():
+    with _mock_polis() as mock:
         resp = _upload(admin_client, conv.id, csv)
     assert b'Row 3' in resp.data
     assert b'empty' in resp.data.lower()
-    assert b'2 imported' in resp.data
+    assert b'rejected' in resp.data.lower()
+    assert mock.return_value.bulk_add_seeds.call_count == 0
 
 
 def test_too_long_row_reported_with_line_number(admin_client, conv):
+    # Invalid row rejects the entire batch.
     long_text = 'a' * 281
     csv = f'text\ngood\n{long_text}\nalso good'.encode('utf-8')
-    with _mock_polis():
+    with _mock_polis() as mock:
         resp = _upload(admin_client, conv.id, csv)
     assert b'Row 3' in resp.data
     assert b'too long' in resp.data.lower()
-    assert b'2 imported' in resp.data
+    assert b'rejected' in resp.data.lower()
+    assert mock.return_value.bulk_add_seeds.call_count == 0
 
 
 def test_duplicate_within_file_reported_with_line_number(admin_client, conv):
+    # Duplicate within the file rejects the entire batch.
     csv = b'text\nhello\nhello\nworld'
-    with _mock_polis():
+    with _mock_polis() as mock:
         resp = _upload(admin_client, conv.id, csv)
     assert b'Row 3' in resp.data
     assert b'duplicate' in resp.data.lower()
-    assert b'2 imported' in resp.data
+    assert b'rejected' in resp.data.lower()
+    assert mock.return_value.bulk_add_seeds.call_count == 0
 
 
 def test_max_rows_limit_enforced(admin_client, conv):

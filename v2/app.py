@@ -1133,6 +1133,21 @@ def admin_statement_seed_import(conv_id):
         result = parse_csv_bytes(raw)
     except ValueError as exc:
         flash(str(exc), 'error')
+        flash('✗ Import failed', 'import_result')
+        return redirect(redirect_target)
+
+    # Reject the entire batch if any row has a parse error — partial imports
+    # are confusing and hard to reconcile. Limit-skipped rows are not errors.
+    parse_errors = [e for e in result.errors if not e.limit_skipped]
+    if parse_errors:
+        for err in parse_errors:
+            flash(f'Row {err.row}: {err.reason}.', 'warning')
+        flash(
+            f'Import rejected — fix {len(parse_errors)} invalid '
+            f'row{"s" if len(parse_errors) != 1 else ""} and re-upload.',
+            'error',
+        )
+        flash('✗ Import rejected — fix errors and re-upload', 'import_result')
         return redirect(redirect_target)
 
     # Sanitize all texts with nh3 first, then re-strip formula prefixes that
@@ -1189,11 +1204,8 @@ def admin_statement_seed_import(conv_id):
     if dedup_check_failed:
         flash('Could not check for existing statements — duplicates may have been inserted. Check server logs.', 'warning')
 
-    # Split parse errors from limit-skipped rows (use the dedicated flag, not string matching).
-    parse_errors  = [e for e in result.errors if not e.limit_skipped]
+    # Only limit-skipped rows remain (parse errors were rejected above).
     limit_skipped = [e for e in result.errors if e.limit_skipped]
-    for err in parse_errors:
-        flash(f'Row {err.row}: {err.reason}.', 'warning')
     if limit_skipped:
         flash(
             f'{len(limit_skipped)} row{"s" if len(limit_skipped) != 1 else ""} skipped'
@@ -1208,7 +1220,7 @@ def admin_statement_seed_import(conv_id):
         flash('No statements were imported — the file had no valid rows.', 'warning')
 
     # Persistent inline result near the upload button.
-    n_skipped = len(dedup_errors) + len(api_failures) + len([e for e in result.errors if not e.limit_skipped])
+    n_skipped = len(dedup_errors) + len(api_failures)
     if successes and not n_skipped:
         flash(f'✓ {successes} statement{"s" if successes != 1 else ""} imported', 'import_result')
     elif successes:
