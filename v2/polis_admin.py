@@ -344,6 +344,26 @@ class PolisServerClient:
         sess, auth_headers = self._login()
         self._post_seed(sess, {**self._HEADERS, **auth_headers}, conversation_id, text)
 
+    def bulk_add_seeds(
+        self, conversation_id: str, texts: list[str]
+    ) -> tuple[int, list[tuple[str, PolisServerError]]]:
+        """Add multiple seed statements with a single login.
+
+        Returns (successes, failures) where failures is a list of (text, exc)
+        pairs. Raises PolisServerError only if login itself fails.
+        """
+        sess, auth_headers = self._login()
+        headers = {**self._HEADERS, **auth_headers}
+        successes = 0
+        failures: list[tuple[str, PolisServerError]] = []
+        for text in texts:
+            try:
+                self._post_seed(sess, headers, conversation_id, text)
+                successes += 1
+            except Exception as exc:
+                failures.append((text, PolisServerError(str(exc))))
+        return successes, failures
+
     def add_seed_return_id(self, conversation_id: str, text: str) -> int:
         """Add a seed statement and return the Polis statement ID (tid).
         Raises PolisServerError if the response is not JSON or does not include a tid."""

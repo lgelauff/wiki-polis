@@ -31,6 +31,7 @@ _FORMULA_PREFIXES = frozenset('=+-@\t\r')
 class RowError:
     row: int       # 1-based; row 1 is the header, data starts at row 2
     reason: str
+    limit_skipped: bool = False  # True when row was cut by MAX_ROWS limit
 
 
 @dataclass
@@ -122,6 +123,7 @@ def parse_csv_bytes(raw: bytes) -> ParseResult:
                 result.errors.append(RowError(
                     skipped_idx,
                     f'skipped — import limit of {MAX_ROWS} rows reached',
+                    limit_skipped=True,
                 ))
             break
 

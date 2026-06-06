@@ -36,6 +36,7 @@ from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideS
                 Participant, Participation, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
+from seed_csv import MAX_FILE_BYTES, MAX_ROWS, parse_csv_bytes, _FORMULA_PREFIXES
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -1066,7 +1067,6 @@ def admin_conversation_statements(conv_id):
         ).get_settings(conv.polis_id)
     except PolisParticipantError:
         pass
-    from seed_csv import MAX_FILE_BYTES, MAX_ROWS
     return render_template('admin_statements.html',
                            conversation=conv,
                            pending=pending,
@@ -1112,8 +1112,6 @@ def admin_statement_seed(conv_id):
 @login_required
 @limiter.limit('5 per minute')
 def admin_statement_seed_import(conv_id):
-    from seed_csv import MAX_FILE_BYTES, MAX_ROWS, parse_csv_bytes
-
     conv = _require_mod_for_conv(conv_id)
     redirect_target = url_for('admin.admin_conversation_statements', conv_id=conv_id)
 
@@ -1137,8 +1135,27 @@ def admin_statement_seed_import(conv_id):
         flash(str(exc), 'error')
         return redirect(redirect_target)
 
-    # Check for duplicates against statements already in Polis
+    # Sanitize all texts with nh3 first, then re-strip formula prefixes that
+    # HTML-entity encoding could have reintroduced (e.g. &equals; → =).
+    # Filter empty strings that result from nh3 stripping all-tag content.
+    _EMPTY_TAGS = frozenset()
+    seen_sanitised: set[str] = set()
+    sanitised_texts: list[str] = []
+    for raw_text in result.texts:
+        san = nh3.clean(raw_text, tags=_EMPTY_TAGS)
+        # Re-apply formula-prefix stripping: nh3 decodes HTML entities (e.g.
+        # &equals; → =) which can reintroduce leading formula chars.
+        while san and san[0] in _FORMULA_PREFIXES:
+            san = san[1:]
+        san = san.strip()
+        if not san or san in seen_sanitised:
+            continue  # drop empty-after-nh3 and nh3-induced within-batch dupes
+        seen_sanitised.add(san)
+        sanitised_texts.append(san)
+
+    # Check for duplicates against statements already in Polis.
     existing_texts: set[str] = set()
+    dedup_check_failed = False
     try:
         rows = _polis_server_client().get_statements(conv.polis_id)
         if rows is not None:
@@ -1147,31 +1164,44 @@ def admin_statement_seed_import(conv_id):
                 existing_texts.add(stmt['txt'].strip())
     except Exception:
         current_app.logger.exception('Could not fetch existing statements for dedup check')
+        dedup_check_failed = True
 
     dedup_errors = []
     clean_texts  = []
-    for text in result.texts:
-        if text in existing_texts:
-            dedup_errors.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}" — already exists in this conversation')
+    for sanitised in sanitised_texts:
+        if sanitised in existing_texts:
+            dedup_errors.append(f'"{sanitised[:60]}{"…" if len(sanitised) > 60 else ""}" — already exists in this conversation')
         else:
-            clean_texts.append(text)
+            clean_texts.append(sanitised)
 
     successes    = 0
     api_failures = []
-    for text in clean_texts:
-        sanitised = nh3.clean(text, tags=frozenset())
+    if clean_texts:
         try:
-            _polis_server_client().add_seed(conv.polis_id, sanitised)
-            successes += 1
+            successes, failures = _polis_server_client().bulk_add_seeds(conv.polis_id, clean_texts)
+            for text, exc in failures:
+                current_app.logger.error('add_seed failed for imported row: %s', exc)
+                api_failures.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
         except PolisServerError:
-            current_app.logger.exception('add_seed failed for imported row')
-            api_failures.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
+            current_app.logger.exception('Polis login failed during bulk import')
+            api_failures = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
 
     if successes:
         flash(f'{successes} seed statement{"s" if successes != 1 else ""} imported successfully.', 'success')
-    if result.errors:
-        for err in result.errors:
-            flash(f'Row {err.row}: {err.reason}.', 'warning')
+    if dedup_check_failed:
+        flash('Could not check for existing statements — duplicates may have been inserted. Check server logs.', 'warning')
+
+    # Split parse errors from limit-skipped rows (use the dedicated flag, not string matching).
+    parse_errors  = [e for e in result.errors if not e.limit_skipped]
+    limit_skipped = [e for e in result.errors if e.limit_skipped]
+    for err in parse_errors:
+        flash(f'Row {err.row}: {err.reason}.', 'warning')
+    if limit_skipped:
+        flash(
+            f'{len(limit_skipped)} row{"s" if len(limit_skipped) != 1 else ""} skipped'
+            f' — import limit of {MAX_ROWS} reached.',
+            'warning',
+        )
     for msg in dedup_errors:
         flash(f'Skipped — {msg}.', 'warning')
     for msg in api_failures:

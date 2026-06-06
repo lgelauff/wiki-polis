@@ -35,8 +35,25 @@ def _upload(client, conv_id, content: bytes, filename='statements.csv',
 def _mock_polis(add_seed_side_effect=None, existing_statements=None):
     """Return a context manager that patches _polis_server_client."""
     mock_client = MagicMock()
-    if add_seed_side_effect:
-        mock_client.add_seed.side_effect = add_seed_side_effect
+
+    # Simulate bulk_add_seeds: run add_seed_side_effect once per text.
+    def _bulk_add_seeds(conv_id, texts):
+        successes = 0
+        failures = []
+        for text in texts:
+            try:
+                if add_seed_side_effect is not None:
+                    if callable(add_seed_side_effect):
+                        add_seed_side_effect(conv_id, text)
+                    else:
+                        raise add_seed_side_effect
+                successes += 1
+            except PolisServerError as exc:
+                failures.append((text, exc))
+        return successes, failures
+
+    mock_client.bulk_add_seeds.side_effect = _bulk_add_seeds
+
     if existing_statements is not None:
         mock_client.get_statements.return_value = existing_statements
     else:
@@ -107,7 +124,8 @@ def test_valid_csv_imports_statements(admin_client, conv):
     with _mock_polis() as mock:
         resp = _upload(admin_client, conv.id, csv)
     assert b'2 seed statement' in resp.data
-    assert mock.return_value.add_seed.call_count == 2
+    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
+    assert len(texts_sent) == 2
 
 
 def test_single_statement_grammar(admin_client, conv):
@@ -158,7 +176,8 @@ def test_max_rows_limit_enforced(admin_client, conv):
     csv = f'text\n{rows}'.encode('utf-8')
     with _mock_polis() as mock:
         resp = _upload(admin_client, conv.id, csv)
-    assert mock.return_value.add_seed.call_count == MAX_ROWS
+    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
+    assert len(texts_sent) == MAX_ROWS
     assert b'limit' in resp.data.lower()
 
 
@@ -170,7 +189,8 @@ def test_skips_statements_already_in_polis(admin_client, conv):
     csv = b'text\nAlready there\nNew one'
     with _mock_polis(existing_statements=([], existing, [])) as mock:
         resp = _upload(admin_client, conv.id, csv)
-    assert mock.return_value.add_seed.call_count == 1
+    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
+    assert len(texts_sent) == 1
     assert b'already exists' in resp.data.lower()
     assert b'1 seed statement imported' in resp.data
 
@@ -182,11 +202,12 @@ def test_dedup_is_case_sensitive(admin_client, conv):
     with _mock_polis(existing_statements=([], existing, [])) as mock:
         resp = _upload(admin_client, conv.id, csv)
     # 'hello' and 'HELLO' are new; 'Hello' is a duplicate
-    assert mock.return_value.add_seed.call_count == 2
+    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
+    assert len(texts_sent) == 2
 
 
 def test_dedup_continues_when_polis_fetch_fails(admin_client, conv):
-    """If get_statements raises, import proceeds without dedup rather than failing."""
+    """If get_statements raises, import proceeds without dedup and shows a warning."""
     csv = b'text\nStatement one\nStatement two'
     # side_effect list: first call (import route) raises; second call (redirect view) succeeds
     with _mock_polis() as mock:
@@ -195,7 +216,9 @@ def test_dedup_continues_when_polis_fetch_fails(admin_client, conv):
             ([], [], []),
         ]
         resp = _upload(admin_client, conv.id, csv)
-    assert mock.return_value.add_seed.call_count == 2
+    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
+    assert len(texts_sent) == 2
+    assert b'Could not check for existing statements' in resp.data
 
 
 # ── Polis API failures ────────────────────────────────────────────────────────
@@ -235,7 +258,40 @@ def test_formula_injection_stripped_before_add_seed(admin_client, conv):
     csv = b'text\n=DANGEROUS'
     with _mock_polis() as mock:
         _upload(admin_client, conv.id, csv)
-    call_args = mock.return_value.add_seed.call_args
-    assert call_args is not None
-    submitted_text = call_args[0][1]
-    assert not submitted_text.startswith('=')
+    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
+    assert texts_sent and not texts_sent[0].startswith('=')
+
+
+def test_html_entity_formula_injection_stripped(admin_client, conv):
+    # &equals; is the HTML entity for '=' — nh3 decodes it, so we must
+    # re-strip formula prefixes after sanitisation.
+    csv = 'text\n&equals;SUM(A1)'.encode('utf-8')
+    with _mock_polis() as mock:
+        resp = _upload(admin_client, conv.id, csv)
+    call_args = mock.return_value.bulk_add_seeds.call_args
+    if call_args:  # may be filtered as empty after stripping
+        texts_sent = call_args[0][1]
+        assert all(not t.startswith('=') for t in texts_sent)
+
+
+def test_all_tags_csv_produces_empty_string_and_is_not_sent(admin_client, conv):
+    # A cell that is only HTML tags becomes '' after nh3.clean — must not be
+    # sent to Polis as an empty seed statement.
+    csv = b'text\n<b></b>'
+    with _mock_polis() as mock:
+        resp = _upload(admin_client, conv.id, csv)
+    call_args = mock.return_value.bulk_add_seeds.call_args
+    # Either not called at all, or called with no texts
+    assert call_args is None or call_args[0][1] == []
+
+
+def test_nh3_induced_duplicate_sent_only_once(admin_client, conv):
+    # '<b>Hello</b>' and 'Hello' both sanitize to 'Hello' — only one
+    # should reach Polis.
+    csv = b'text\n<b>Hello</b>\nHello'
+    with _mock_polis() as mock:
+        _upload(admin_client, conv.id, csv)
+    call_args = mock.return_value.bulk_add_seeds.call_args
+    if call_args:
+        texts_sent = call_args[0][1]
+        assert texts_sent.count('Hello') == 1
