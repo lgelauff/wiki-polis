@@ -58,6 +58,9 @@ if [ "$MIGRATE" -eq 1 ]; then
   export SECRET_KEY=$(_envvar SECRET_KEY)
   export PARTICIAPI_BASE_URL=$(_envvar PARTICIAPI_BASE_URL)
   export TRUSTED_HOSTS=$(_envvar TRUSTED_HOSTS)
+  export RATELIMIT_STORAGE_URI=$(_envvar RATELIMIT_STORAGE_URI)
+  export RATELIMIT_KEY_PREFIX=$(_envvar RATELIMIT_KEY_PREFIX)
+  export RATELIMIT_IDENTITY_SECRET=$(_envvar RATELIMIT_IDENTITY_SECRET)
   source ~/www/python/venv/bin/activate
   cd ~/wiki-polis/v2
   flask --app app db upgrade
