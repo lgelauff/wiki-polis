@@ -53,14 +53,15 @@ fi
 
 if [ "$MIGRATE" -eq 1 ]; then
   echo "==> Running database migrations..."
-  _envvar() { toolforge envvars show "$1" | tail -1 | awk '{print $NF}'; }
-  export DATABASE_URL=$(_envvar DATABASE_URL)
-  export SECRET_KEY=$(_envvar SECRET_KEY)
-  export PARTICIAPI_BASE_URL=$(_envvar PARTICIAPI_BASE_URL)
-  export TRUSTED_HOSTS=$(_envvar TRUSTED_HOSTS)
-  export RATELIMIT_STORAGE_URI=$(_envvar RATELIMIT_STORAGE_URI)
-  export RATELIMIT_KEY_PREFIX=$(_envvar RATELIMIT_KEY_PREFIX)
-  export RATELIMIT_IDENTITY_SECRET=$(_envvar RATELIMIT_IDENTITY_SECRET)
+  # Load every Toolforge envvar so the app can start regardless of which
+  # vars were added since the last deploy. Toolforge envvars are the single
+  # source of truth — no manual list to maintain here.
+  echo "    Loading Toolforge envvars..."
+  while IFS= read -r name; do
+    [[ -z "$name" || "$name" == "name" ]] && continue
+    value=$(toolforge envvars show "$name" | tail -1 | awk '{print $NF}')
+    export "$name=$value"
+  done < <(toolforge envvars list | awk 'NR>1 {print $1}')
   source ~/www/python/venv/bin/activate
   cd ~/wiki-polis/v2
   flask --app app db upgrade
