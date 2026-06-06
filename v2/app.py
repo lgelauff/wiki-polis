@@ -1066,12 +1066,18 @@ def admin_conversation_statements(conv_id):
         ).get_settings(conv.polis_id)
     except PolisParticipantError:
         pass
+    featured_tids = {
+        fs.polis_statement_id
+        for fs in FeaturedStatement.query.filter_by(conversation_id=conv_id).all()
+    }
     return render_template('admin_statements.html',
                            conversation=conv,
                            pending=pending,
                            approved=approved,
                            hidden=hidden,
-                           settings=settings)
+                           settings=settings,
+                           featured_tids=featured_tids,
+                           phase_active=conv.phase_argument_mapping)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
 @login_required
@@ -1080,6 +1086,18 @@ def admin_statement_moderate(conv_id, tid):
     mod  = request.form.get('mod', type=int)
     if mod not in (-1, 0, 1):
         abort(400)
+    if mod in (-1, 0):
+        is_featured = FeaturedStatement.query.filter_by(
+            conversation_id=conv_id, polis_statement_id=tid).first() is not None
+        if is_featured and conv.phase_argument_mapping:
+            featured_count = FeaturedStatement.query.filter_by(
+                conversation_id=conv_id).count()
+            if featured_count <= 1:
+                flash(
+                    'Cannot hide the last featured statement while argument mapping is active. Disable the argument mapping phase first.',
+                    'error'
+                )
+                return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
     try:
         _polis_server_client().moderate(conv.polis_id, tid, mod)
     except PolisServerError:
@@ -1136,7 +1154,8 @@ def admin_conversation_featured(conv_id):
     return render_template('admin_featured.html',
                            conversation=conv,
                            confirmed=confirmed,
-                           candidates=candidates)
+                           candidates=candidates,
+                           phase_active=conv.phase_argument_mapping)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/featured/confirm')
 @login_required
@@ -1179,9 +1198,14 @@ def admin_featured_add(conv_id):
 @admin_bp.post('/admin/conversations/<int:conv_id>/featured/<int:fs_id>/remove')
 @login_required
 def admin_featured_remove(conv_id, fs_id):
-    _require_mod_for_conv(conv_id)
+    conv = _require_mod_for_conv(conv_id)
     fs = FeaturedStatement.query.filter_by(
         id=fs_id, conversation_id=conv_id).first_or_404()
+    if conv.phase_argument_mapping:
+        remaining = FeaturedStatement.query.filter_by(conversation_id=conv_id).count()
+        if remaining <= 1:
+            flash('Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first.', 'error')
+            return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
     db.session.delete(fs)
     db.session.commit()
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))

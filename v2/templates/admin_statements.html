@@ -9,6 +9,14 @@
   </p>
 
 
+  {% if phase_active and featured_tids %}
+  <div style="background:#fffbeb;border:1px solid #fcd34d;color:#78350f;padding:.75rem 1rem;border-radius:6px;font-size:13px;margin-bottom:1.5rem">
+    <strong>Argument mapping phase is active.</strong>
+    {{ featured_tids | length }} statement(s) are featured for argument mapping (marked ★ below).
+    Hiding or moving a featured statement to pending will remove it from participants' view.
+  </div>
+  {% endif %}
+
   <!-- ── Add seed statement ──────────────────────────── -->
   <h3 class="section-heading">Add seed statement</h3>
   <div class="edit-form">
@@ -66,8 +74,10 @@
     </thead>
     <tbody>
       {% for s in pending %}
+      {% set is_featured = s.tid in featured_tids %}
+      {% set is_last_featured = is_featured and (featured_tids | length == 1) %}
       <tr>
-        <td class="muted">{{ s.tid }}</td>
+        <td class="muted">{{ s.tid }}{% if is_featured %} ★{% endif %}</td>
         <td class="stmt-text">{{ s.txt }}</td>
         <td class="stmt-votes muted">
           +{{ s.agree_count or 0 }}
@@ -85,7 +95,15 @@
                 action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="-1">
+            {% if is_last_featured and phase_active %}
+            <button type="button" class="btn-small btn-danger" disabled
+                    title="Cannot hide the last featured statement while argument mapping is active — disable the phase first.">hide</button>
+            {% elif is_featured and phase_active %}
+            <button type="submit" class="btn-small btn-danger"
+                    onclick="return confirm(‘This is a featured statement and argument mapping is active. Hiding it will remove it from the argument view for participants. Continue?’)">hide</button>
+            {% else %}
             <button type="submit" class="btn-small btn-danger">hide</button>
+            {% endif %}
           </form>
         </td>
       </tr>
@@ -114,8 +132,10 @@
     </thead>
     <tbody>
       {% for s in approved %}
+      {% set is_featured = s.tid in featured_tids %}
+      {% set is_last_featured = is_featured and (featured_tids | length == 1) %}
       <tr>
-        <td class="muted">{{ s.tid }}</td>
+        <td class="muted">{{ s.tid }}{% if is_featured %} ★{% endif %}</td>
         <td class="stmt-text">{{ s.txt }}</td>
         <td class="stmt-votes muted">
           +{{ s.agree_count or 0 }}
@@ -127,13 +147,29 @@
                 action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="-1">
+            {% if is_last_featured and phase_active %}
+            <button type="button" class="btn-small btn-danger" disabled
+                    title="Cannot hide the last featured statement while argument mapping is active — disable the phase first.">hide</button>
+            {% elif is_featured and phase_active %}
+            <button type="submit" class="btn-small btn-danger"
+                    onclick="return confirm(‘This is a featured statement and argument mapping is active. Hiding it will remove it from the argument view for participants. Continue?’)">hide</button>
+            {% else %}
             <button type="submit" class="btn-small btn-danger">hide</button>
+            {% endif %}
           </form>
           <form method="post" style="display:inline"
                 action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="0">
+            {% if is_last_featured and phase_active %}
+            <button type="button" class="btn-small" disabled
+                    title="Cannot move the last featured statement to pending while argument mapping is active — disable the phase first.">pending</button>
+            {% elif is_featured and phase_active %}
+            <button type="submit" class="btn-small"
+                    onclick="return confirm(‘This is a featured statement and argument mapping is active. Moving it to pending will remove it from the argument view for participants. Continue?’)">pending</button>
+            {% else %}
             <button type="submit" class="btn-small">pending</button>
+            {% endif %}
           </form>
         </td>
       </tr>
