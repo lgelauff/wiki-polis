@@ -52,8 +52,17 @@
       <label>CSV file
         <input type="file" name="csv_file" accept=".csv,text/csv" required>
       </label>
-      <div style="margin-top:.75rem">
+      <div style="margin-top:.75rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
         <button type="submit">Import statements</button>
+        {% with result = get_flashed_messages(category_filter=['import_result']) %}
+        {% if result %}
+          {% set msg = result[0] %}
+          {% set ok = msg.startswith('✓') %}
+          <span style="font-size:13px;font-weight:600;color:{{ 'var(--success, #2a7a2a)' if ok else 'var(--error, #b91c1c)' }}">
+            {{ msg }}
+          </span>
+        {% endif %}
+        {% endwith %}
       </div>
     </form>
   </div>

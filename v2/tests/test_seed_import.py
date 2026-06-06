@@ -123,7 +123,7 @@ def test_valid_csv_imports_statements(admin_client, conv):
     csv = b'text\nStatement one\nStatement two'
     with _mock_polis() as mock:
         resp = _upload(admin_client, conv.id, csv)
-    assert b'2 seed statement' in resp.data
+    assert b'2 statements imported' in resp.data
     texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
     assert len(texts_sent) == 2
 
@@ -131,7 +131,7 @@ def test_valid_csv_imports_statements(admin_client, conv):
 def test_single_statement_grammar(admin_client, conv):
     with _mock_polis():
         resp = _upload(admin_client, conv.id, b'text\nOnly one')
-    assert b'1 seed statement imported' in resp.data
+    assert b'1 statement imported' in resp.data
 
 
 def test_header_only_no_data_rows(admin_client, conv):
@@ -148,7 +148,7 @@ def test_empty_rows_reported_with_line_number(admin_client, conv):
         resp = _upload(admin_client, conv.id, csv)
     assert b'Row 3' in resp.data
     assert b'empty' in resp.data.lower()
-    assert b'2 seed statement' in resp.data
+    assert b'2 imported' in resp.data
 
 
 def test_too_long_row_reported_with_line_number(admin_client, conv):
@@ -158,7 +158,7 @@ def test_too_long_row_reported_with_line_number(admin_client, conv):
         resp = _upload(admin_client, conv.id, csv)
     assert b'Row 3' in resp.data
     assert b'too long' in resp.data.lower()
-    assert b'2 seed statement' in resp.data
+    assert b'2 imported' in resp.data
 
 
 def test_duplicate_within_file_reported_with_line_number(admin_client, conv):
@@ -167,7 +167,7 @@ def test_duplicate_within_file_reported_with_line_number(admin_client, conv):
         resp = _upload(admin_client, conv.id, csv)
     assert b'Row 3' in resp.data
     assert b'duplicate' in resp.data.lower()
-    assert b'2 seed statement' in resp.data
+    assert b'2 imported' in resp.data
 
 
 def test_max_rows_limit_enforced(admin_client, conv):
@@ -192,7 +192,7 @@ def test_skips_statements_already_in_polis(admin_client, conv):
     texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
     assert len(texts_sent) == 1
     assert b'already exists' in resp.data.lower()
-    assert b'1 seed statement imported' in resp.data
+    assert b'1 imported' in resp.data
 
 
 def test_dedup_is_case_sensitive(admin_client, conv):
@@ -241,7 +241,7 @@ def test_partial_polis_failure_still_imports_others(admin_client, conv):
     csv = b'text\nGood one\nBad one'
     with _mock_polis(add_seed_side_effect=side_effect):
         resp = _upload(admin_client, conv.id, csv)
-    assert b'1 seed statement imported' in resp.data
+    assert b'1 imported' in resp.data
     assert b'Failed to send to Polis' in resp.data
 
 

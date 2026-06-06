@@ -1186,8 +1186,6 @@ def admin_statement_seed_import(conv_id):
             current_app.logger.exception('Polis login failed during bulk import')
             api_failures = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
 
-    if successes:
-        flash(f'{successes} seed statement{"s" if successes != 1 else ""} imported successfully.', 'success')
     if dedup_check_failed:
         flash('Could not check for existing statements — duplicates may have been inserted. Check server logs.', 'warning')
 
@@ -1208,6 +1206,15 @@ def admin_statement_seed_import(conv_id):
         flash(f'Failed to send to Polis: {msg}.', 'error')
     if not successes and not result.errors and not dedup_errors and not api_failures:
         flash('No statements were imported — the file had no valid rows.', 'warning')
+
+    # Persistent inline result near the upload button.
+    n_skipped = len(dedup_errors) + len(api_failures) + len([e for e in result.errors if not e.limit_skipped])
+    if successes and not n_skipped:
+        flash(f'✓ {successes} statement{"s" if successes != 1 else ""} imported', 'import_result')
+    elif successes:
+        flash(f'✓ {successes} imported — ⚠ {n_skipped} skipped', 'import_result')
+    else:
+        flash('✗ Import failed — see details below', 'import_result')
 
     return redirect(redirect_target)
 
