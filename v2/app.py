@@ -1132,7 +1132,7 @@ def admin_statement_seed_import(conv_id):
     try:
         result = parse_csv_bytes(raw)
     except ValueError as exc:
-        flash(str(exc), 'import_row_error')
+        flash(str(exc), 'sticky')
         flash('✗ Import failed', 'import_result')
         return redirect(redirect_target)
 
@@ -1141,7 +1141,7 @@ def admin_statement_seed_import(conv_id):
     parse_errors = [e for e in result.errors if not e.limit_skipped]
     if parse_errors:
         for err in parse_errors:
-            flash(f'Row {err.row}: {err.reason}.', 'import_row_error')
+            flash(f'Row {err.row}: {err.reason}.', 'sticky')
         flash('✗ Import rejected — fix errors and re-upload', 'import_result')
         return redirect(redirect_target)
 

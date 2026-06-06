@@ -1480,6 +1480,7 @@ h3.section-heading {
 }
 .toast--error   { background: #fff0f0; border: 1px solid #fca5a5; color: #7f1d1d; }
 .toast--warning { background: #fffbeb; border: 1px solid #fcd34d; color: #78350f; }
+.toast--sticky  { background: #fff0f0; border: 1px solid #fca5a5; color: #7f1d1d; }
 .toast--success { background: #f0fdf4; border: 1px solid #86efac; color: #14532d; }
 .toast--info    { background: #f0f4ff; border: 1px solid #c7d3f5; color: #1e3a8a; }
 .toast__msg  { flex: 1; }
