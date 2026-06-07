@@ -121,7 +121,7 @@
           </span>
           <div class="vote-progress-bar-wrap">
             <div class="vote-progress-bar" id="vote-progress-bar"
-                 role="progressbar" aria-label="Statements voted" aria-valuemin="0"></div>
+                 role="progressbar" aria-label="Statements voted" aria-valuemin="0" aria-valuenow="0"></div>
           </div>
           <span class="vote-progress-queued" id="vote-progress-queued"></span>
         </div>
@@ -1901,12 +1901,23 @@
               txt.textContent = msgs[data.reason];
               strip.classList.add('arg-status-strip--error');
               // Mirror to the assertive alert region so screen readers hear it.
+              // Blank first, then set on the next frame, so a repeated identical
+              // reason still mutates the node and is re-announced. Track the clear
+              // timer per element so back-to-back messages don't blank each other early.
               var alertEl = document.getElementById('arg-alert');
-              if (alertEl) alertEl.textContent = msgs[data.reason];
+              if (alertEl) {
+                if (alertEl._clearTimer) clearTimeout(alertEl._clearTimer);
+                alertEl.textContent = '';
+                window.requestAnimationFrame(function () {
+                  alertEl.textContent = msgs[data.reason];
+                });
+                alertEl._clearTimer = setTimeout(function () {
+                  alertEl.textContent = '';
+                }, 3500);
+              }
               setTimeout(function () {
                 txt.textContent = prev;
                 strip.classList.remove('arg-status-strip--error');
-                if (alertEl) alertEl.textContent = '';
               }, 3500);
             }
           }).catch(function () {});
