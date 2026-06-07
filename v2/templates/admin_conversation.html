@@ -86,7 +86,7 @@
       </label>
       <button type="submit" class="btn-small">save</button>
     </form>
-    {% if conversation.phase_submission or conversation.phase_argument_mapping %}
+    {% if conversation.phase_informed_voting and (conversation.phase_submission or conversation.phase_argument_mapping) %}
     <p class="muted" style="margin-top:.5rem;font-size:13px">
       ⚠️ Informed voting is most meaningful after argument mapping is complete.
       Statement submission and/or argument mapping are currently still on.
