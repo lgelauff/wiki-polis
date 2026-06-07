@@ -1917,6 +1917,68 @@ a { color: var(--pass); }
 }
 .phase-advanced > summary:hover { color: var(--ink); }
 
+/* ── Guided "Move on" box (#156) ── */
+.phase-move-box {
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  margin-top: .5rem;
+  max-width: 640px;
+}
+
+.phase-move-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  margin-bottom: .6rem;
+}
+.phase-move-from { color: var(--muted); }
+.phase-move-arrow { color: var(--spot); }
+.phase-move-to { color: var(--ink); }
+
+.phase-move-consequences {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 .9rem;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.phase-move-warn { color: var(--disagree); }
+
+.phase-move-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 .9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.phase-move-checklist li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+}
+.phase-move-checklist label {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  cursor: pointer;
+  margin: 0;
+}
+.phase-move-checklist input { margin-top: 3px; flex-shrink: 0; }
+
+.phase-check-met   { color: var(--agree); font-weight: 600; }
+.phase-check-unmet { color: var(--disagree); font-weight: 600; font-size: 12px; }
+
+.phase-move-submit[disabled] { opacity: .5; cursor: not-allowed; }
+
+.phase-move-pause { margin-top: .75rem; }
+
 /* ── Stats grid ── */
 
 .stats-grid {

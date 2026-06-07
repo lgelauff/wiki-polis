@@ -74,34 +74,92 @@
       {% endfor %}
     </ol>
 
-    {% if linear_phase_state %}
-      {% if target_stage %}
-        {% if is_admin %}
-        <form method="post"
-              action="{{ url_for('admin.admin_conversation_advance', conv_id=conversation.id) }}"
-              onsubmit="return confirm(this.dataset.confirm);"
-              data-confirm="{{ advance_confirm }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn-small">Move to {{ target_stage.label }} →</button>
-        </form>
+    {% if transition %}
+      {% if is_admin %}
+      {# Guided 'Move on' box (#156): consequences + tick-each-precondition checklist;
+         the Move on button stays disabled until every box is ticked. #}
+      <div class="phase-move-box">
+        <div class="phase-move-head">
+          <span class="phase-move-from">{{ transition.source.label }}</span>
+          <span class="phase-move-arrow" aria-hidden="true">→</span>
+          <span class="phase-move-to">{{ transition.target.label }}</span>
+        </div>
+
+        <ul class="phase-move-consequences">
+          <li><strong>Opens:</strong> {{ transition.consequence.opens }}</li>
+          {% if transition.consequence.closes %}
+          <li><strong>Closes:</strong> {{ transition.consequence.closes }}</li>
+          {% endif %}
+          {% if transition.auto_close %}
+          <li class="phase-move-warn">⚠️ This <strong>permanently closes the consultation</strong> and starts the identity-reveal window.</li>
+          {% endif %}
+          <li class="muted">This cannot be undone here — only a site admin can reopen a phase via advanced controls.</li>
+        </ul>
+
         {% if not conversation.active %}
-        <p class="muted" style="margin-top:.4rem;font-size:12px">
-          This consultation is closed — the only move is to open public results.
+        <p class="muted" style="font-size:12px">This consultation is closed — the only move is to open public results.</p>
+        {% endif %}
+
+        <form method="post" class="phase-move-form"
+              action="{{ url_for('admin.admin_conversation_advance', conv_id=conversation.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <ul class="phase-move-checklist">
+            {% for p in transition.preconditions %}
+            <li>
+              <label>
+                <input type="checkbox" name="{{ p.id }}" class="phase-move-check">
+                <span>{{ p.label }}</span>
+              </label>
+              {% if p.met is not none %}
+                {% if p.met %}<span class="phase-check-met" title="Condition met">✓</span>
+                {% else %}<span class="phase-check-unmet" title="Condition not met yet">✗ not met</span>{% endif %}
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          <button type="submit" class="btn-small phase-move-submit" disabled>
+            Move on to {{ transition.target.label }} →
+          </button>
+        </form>
+
+        {% if transition.show_pause %}
+        <p class="phase-move-pause muted" style="font-size:12px">
+          Coordinating inviting people back? You can
+          <form method="post" style="display:inline"
+                action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="link-btn">{{ 'resume' if conversation.paused else 'pause the conversation' }}</button>
+          </form>
+          first.
         </p>
         {% endif %}
-        {% else %}
-        {# Moderator: same interface, but cannot act. #}
-        <button type="button" class="btn-small" disabled
-                title="Only a site admin can change phases">Move to {{ target_stage.label }} →</button>
-        {% endif %}
+      </div>
+      <script nonce="{{ csp_nonce }}">
+        (function () {
+          var box = document.querySelector('.phase-move-box');
+          if (!box) return;
+          var boxes  = box.querySelectorAll('.phase-move-check');
+          var submit = box.querySelector('.phase-move-submit');
+          function sync() {
+            var all = Array.prototype.every.call(boxes, function (c) { return c.checked; });
+            submit.disabled = !all;
+          }
+          box.addEventListener('change', sync);
+          sync();
+        }());
+      </script>
       {% else %}
-      <p class="muted" style="font-size:13px">Final phase reached — public results are open.</p>
+      {# Moderator: same stepper, read-only — cannot move phases. #}
+      <button type="button" class="btn-small" disabled
+              title="Only a site admin can change phases">Move on to {{ transition.target.label }} →</button>
       {% endif %}
-    {% else %}
+    {% elif not linear_phase_state %}
       <p class="muted" style="margin-top:.5rem;font-size:13px">
         ⚠️ Phases are in a custom state (more than one active).
         {% if is_admin %}Use advanced controls below to adjust.{% else %}A site admin can adjust this.{% endif %}
       </p>
+    {% else %}
+      <p class="muted" style="font-size:13px">Final phase reached — public results are open.</p>
     {% endif %}
 
     {# Advanced controls — global admin only: independent toggles, go backward,
