@@ -1113,7 +1113,7 @@ def admin_statement_moderate(conv_id, tid):
     mod  = request.form.get('mod', type=int)
     if mod not in (-1, 0, 1):
         abort(400)
-    if mod == -1:
+    if mod in (-1, 0):
         is_featured = FeaturedStatement.query.filter_by(
             conversation_id=conv_id, polis_statement_id=tid).first() is not None
         if is_featured and conv.phase_argument_mapping:
@@ -1125,7 +1125,7 @@ def admin_statement_moderate(conv_id, tid):
                 conversation_id=conv_id).count()
             if featured_count <= 1:
                 flash(
-                    'Cannot hide the last featured statement while argument mapping is active. Disable the argument mapping phase first.',
+                    'Cannot hide or move the last featured statement to pending while argument mapping is active. Disable the argument mapping phase first.',
                     'error'
                 )
                 return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
