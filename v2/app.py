@@ -1109,8 +1109,12 @@ def admin_statement_moderate(conv_id, tid):
         is_featured = FeaturedStatement.query.filter_by(
             conversation_id=conv_id, polis_statement_id=tid).first() is not None
         if is_featured and conv.phase_argument_mapping:
+            # Best-effort check: the mutation here is a Polis API call, not a
+            # DB write, so FOR UPDATE would be released before the call anyway.
+            # The strong DB-level invariant is enforced by admin_featured_remove,
+            # which does lock correctly before db.session.commit().
             featured_count = FeaturedStatement.query.filter_by(
-                conversation_id=conv_id).with_for_update().count()
+                conversation_id=conv_id).count()
             if featured_count <= 1:
                 flash(
                     'Cannot hide the last featured statement while argument mapping is active. Disable the argument mapping phase first.',
