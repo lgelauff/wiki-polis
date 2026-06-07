@@ -232,10 +232,21 @@ Production is unaffected as long as it receives regular traffic. There is no fix
 a keepalive cron job (`curl -s -o /dev/null https://wiki-polis-dev.toolforge.org/ ` every
 10 min from a Toolforge cron).
 
-**Static asset caching.** All `/static/` responses are served with
-`Cache-Control: public, max-age=31536000`. Static file URLs include a `?v=<git-sha>`
-query parameter so each deploy automatically busts the browser cache. Dynamic routes
-(API, proxy, cluster images) are unaffected and always served fresh.
+
+## Static asset caching
+
+All `/static/` responses are served with `Cache-Control: public, max-age=31536000`.
+Static file URLs include a `?v=<git-sha>` query parameter (baked in at pod startup) so
+each deploy automatically busts the browser cache — no manual invalidation needed.
+
+**What is cached:** fonts, CSS, JS (`style.css`, `fonts.css`, `particiapp-web-components.js`,
+`particiapp-web-client.js`).
+
+**What is not cached:** API responses (`/statements/`, `/results/`, etc.), proxy responses,
+dynamically generated cluster images, and HTML pages — all always served fresh.
+
+**On rollback:** if you roll back to a previous commit, the git SHA changes, so browsers
+will re-fetch all assets. No stale-asset risk.
 
 ## Secrets rotation
 
