@@ -857,9 +857,10 @@ pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
   margin: 0;
 }
 
-/* In all-done state, show only the Propose New card */
+/* In all-done state, show only the Propose New card, centred */
 .v2-triad--alldone .v2-option-card { display: none; }
 .v2-triad--alldone #triad-newstmt  { display: flex; }
+.v2-triad--alldone .v2-triad-grid  { justify-content: center; }
 
 .propose-submitted {
   display: flex;

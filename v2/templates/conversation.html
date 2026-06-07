@@ -273,8 +273,8 @@
 
         {# ── All done message ── #}
         <div id="all-done-msg" class="all-done-msg" hidden>
-          <p class="all-done-label">You've voted on all available statements.</p>
-          <p class="all-done-sub">New statements may appear when others propose them.</p>
+          <p class="all-done-label">For now, you have shared your opinion on all available statements. Please come back later for more!</p>
+          <p class="all-done-sub" id="all-done-propose-hint" hidden>If you can think of any statements that are missing from the current set, this is your chance to submit them.</p>
         </div>
 
         {# ── Hidden pa-* elements for API submission ── #}
@@ -1087,6 +1087,9 @@
     if (triad.classList.contains('v2-triad--active') || triad.classList.contains('v2-triad--alldone')) {
       setAriaDisabled(triadNewstmt, !active);
     }
+
+    var hint = document.getElementById('all-done-propose-hint');
+    if (hint) hint.hidden = !active;
   }
 
   // ── Mode: idle ────────────────────────────────────────────────────────────────
@@ -1340,7 +1343,7 @@
         NEW_STMT_USED++;
         updateNewstmtCard();
         if (newstmtOrigin === 'alldone') {
-          setTimeout(function () { proposeSubmitted.hidden = true; }, 1200);
+          setTimeout(enterAllDone, 1200);
         } else {
           setTimeout(enterIdle, 1200);
         }
