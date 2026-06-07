@@ -46,6 +46,16 @@ A statement is an atomic claim: one idea, one sentence. Examples: *"Wikipedia's 
 
 Anyone who has joined a conversation can submit a statement. Statements go into a moderation queue before appearing to other participants. Moderators (scoped to their conversation) and admins approve or hide them.
 
+Statement moderation maps to three Polis `mod` values:
+
+| `mod` | State | Visible to participants |
+|---|---|---|
+| `1` | Approved | Yes — appears in the vote queue |
+| `0` | Pending | No — back in the moderation queue (default for new statements) |
+| `-1` | Hidden | No — removed from view; effectively rejected |
+
+Moving an approved statement to **pending** (`mod=0`) or **hidden** (`mod=-1`) removes it from participants' vote queues. Both actions are equivalent from the argument mapping perspective — if the statement is the last featured statement and argument mapping is active, both are blocked.
+
 Statements are presented to participants one at a time, in an order chosen to maximise the information gained from each vote and reduce order effects. *(pending — routing not yet implemented)*
 
 ---
