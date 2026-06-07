@@ -2105,13 +2105,14 @@ def create_app(test_config: dict | None = None) -> Flask:
         # X-Frame-Options superseded by frame-ancestors in CSP above, but kept for old browsers
         response.headers['X-Frame-Options']         = 'DENY'
 
-        # Cache static assets (fonts, CSS, JS) for 1 year.
+        # Cache static assets (fonts, CSS, JS) for 1 week.
         # URLs include ?v=<git-sha> so each deploy busts the cache automatically.
+        # 1 week (not 1 year) limits blast radius if a bad asset slips through.
         # Note: .woff2 font files are referenced by relative URL from fonts.css (a static
         # file, not a template) so they cannot carry ?v= — treat them as immutable; rename
         # the files if fonts ever need to change.
         if request.path.startswith('/static/') and response.status_code == 200:
-            response.headers['Cache-Control'] = 'public, max-age=31536000'
+            response.headers['Cache-Control'] = 'public, max-age=604800'
         elif response.content_type.startswith('text/html'):
             # Prevent intermediary proxies from caching HTML pages; stale HTML pointing
             # to old ?v= URLs would cause users to load mismatched assets after a deploy.

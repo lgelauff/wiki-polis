@@ -129,7 +129,7 @@ a general upstream improvement; it is not a blocker for our deployment.)
 
 Static files (CSS, fonts, JS) are served directly by Flask from the `/static/` directory.
 
-**Caching strategy:** all `/static/` responses carry `Cache-Control: public, max-age=31536000`.
+**Caching strategy:** all `/static/` responses carry `Cache-Control: public, max-age=604800` (1 week).
 To prevent stale assets after a deploy, every static URL includes a `?v=<git-sha>` query
 parameter injected at pod startup via `_GIT_VERSION`. A new deploy produces a new SHA →
 new URLs → browser fetches fresh assets automatically. No CDN or manual cache invalidation
