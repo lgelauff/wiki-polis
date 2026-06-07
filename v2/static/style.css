@@ -7,17 +7,17 @@
   /* Cluster palette */
   --ink:           #0c0c0e;
   --body:          #3f3f43;
-  --muted:         #71717a;
+  --muted:         #5f5f68;  /* darkened for WCAG AA (4.5:1) on off-white panels */
   --bg:            #fafaf9;
   --surface:       #ffffff;
   --surface2:      #f4f4f3;
   --surface3:      #eeece6;
   --hairline:      #e5e5e6;
   --hairline-soft: #efefef;
-  --agree:         #1f8a5b;
+  --agree:         #15734a;  /* darkened for WCAG AA as text/badges (see --green for the brighter legacy tone) */
   --pass:          #3d6dba;
-  --disagree:      #c44a4a;
-  --spot:          #f59e0b;
+  --disagree:      #b23a3a;  /* darkened for WCAG AA as text/badges */
+  --spot:          #b45309;  /* deepened amber: was #f59e0b (2.15:1 as text); now AA as text and white-on-spot */
   --accent:        #2d2d31;
   /* Legacy aliases used by admin UI */
   --blue:          #3d6dba;
