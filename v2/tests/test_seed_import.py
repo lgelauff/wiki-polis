@@ -352,6 +352,24 @@ def test_no_extension_file_rejected(admin_client, conv):
     assert b'please upload a .csv' in resp.data.lower()
 
 
+def test_tsv_with_csv_extension_fails_parse(admin_client, conv):
+    """A TSV file mistakenly saved as .csv should fail at the CSV parse stage.
+
+    TSV uses tab delimiters; the CSV parser (comma-delimited) will see each row
+    as a single cell containing the whole tab-separated line.  That single cell
+    will not match the required 'text' column, so the import must be rejected.
+    """
+    tsv_content = b'text\tignored_col\nHello world\tsome value\nAnother row\tmore value\n'
+    with _mock_polis() as mock:
+        resp = _upload(admin_client, conv.id, tsv_content,
+                       filename='statements.csv', content_type='text/tab-separated-values')
+    # Extension check passes (.csv), but the tab-delimited content has no 'text' column
+    # when parsed as CSV (comma-delimited) — the whole first row becomes one cell.
+    assert b'imported' not in resp.data.lower()
+    assert b'import' in resp.data.lower()   # rejection message present
+    mock.return_value.bulk_add_seeds.assert_not_called()
+
+
 # ── Security ─────────────────────────────────────────────────────────────────
 
 def test_xss_in_statement_text_is_escaped(admin_client, conv):
