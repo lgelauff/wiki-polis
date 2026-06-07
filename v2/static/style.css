@@ -43,6 +43,18 @@
   outline-offset: 2px;
 }
 
+/* These composer textareas suppress the default outline for a borderless look
+   (border:0/outline:0 below). Restore a clear keyboard focus ring on
+   :focus-visible — higher specificity than the base rules, so it wins on
+   focus while leaving the resting/mouse appearance untouched. Inset offset so
+   the ring is never clipped by the surrounding composer frame. */
+.propose-textarea:focus-visible,
+.v2-composer-textarea:focus-visible,
+.contribute-textarea:focus-visible {
+  outline: 2px solid var(--pass);
+  outline-offset: -2px;
+}
+
 /* .conv-card is always an <a> element — this rule relies on that assumption */
 .conv-card:focus-visible {
   outline: 2px solid var(--accent);
