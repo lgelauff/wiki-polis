@@ -55,6 +55,29 @@
   outline-offset: -2px;
 }
 
+/* Skip-to-content link: off-screen until focused, then pinned top-left. */
+.skip-link {
+  position: absolute;
+  top: -48px;
+  left: 8px;
+  z-index: 1000;
+  padding: 8px 14px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  font-size: 13px;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+.skip-link:focus {
+  top: 8px;
+}
+/* Suppress the focus outline on the jump target itself (it is not a control). */
+#main:focus {
+  outline: none;
+}
+
 /* .conv-card is always an <a> element — this rule relies on that assumption */
 .conv-card:focus-visible {
   outline: 2px solid var(--accent);
