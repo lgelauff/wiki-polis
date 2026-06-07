@@ -2104,6 +2104,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         response.headers['Referrer-Policy']         = 'strict-origin-when-cross-origin'
         # X-Frame-Options superseded by frame-ancestors in CSP above, but kept for old browsers
         response.headers['X-Frame-Options']         = 'DENY'
+
+        # Cache static assets (fonts, CSS, JS, images) for 1 year.
+        # URLs include ?v=<git-sha> so each deploy busts the cache automatically.
+        if request.path.startswith('/static/'):
+            response.headers['Cache-Control'] = 'public, max-age=31536000'
+
         return response
 
     _register_routes(app)
