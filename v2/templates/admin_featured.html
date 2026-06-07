@@ -19,6 +19,7 @@
     <strong>Argument mapping phase is active.</strong>
     Participants may have already submitted arguments for these statements.
     Removing a statement will permanently delete all associated arguments and votes.
+    To remove the last featured statement, disable the argument mapping phase first.
   </div>
   {% endif %}
 
@@ -64,11 +65,11 @@
           </div>
         </td>
         <td style="vertical-align:top">
-          {% set is_last = (confirmed | length == 1) %}
           <form method="post"
                 action="{{ url_for('admin.admin_featured_remove', conv_id=conversation.id, fs_id=fs.id) }}"
                 style="display:inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% set is_last = (confirmed | length == 1) %}
             {% if phase_active and is_last %}
             <button type="button" class="btn-small btn-danger" disabled
                     title="Cannot remove the last featured statement while argument mapping is active — disable the phase first.">remove</button>

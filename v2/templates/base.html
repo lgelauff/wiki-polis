@@ -80,6 +80,8 @@
       close.addEventListener('click', function () { dismiss(el); });
       container.appendChild(el);
       console.error('[wiki-polis] ' + category + ': ' + message);
+      // 'sticky' category \u2014 stays until user dismisses; no auto-timeout.
+      if (category === 'sticky') { el._timer = null; return; }
       var t = setTimeout(function () { dismiss(el); }, DURATIONS[category] || 6000);
       el._timer = t;
     });

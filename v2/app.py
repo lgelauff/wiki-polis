@@ -36,6 +36,7 @@ from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideS
                 Participant, Participation, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
+from seed_csv import MAX_FILE_BYTES, MAX_ROWS, parse_csv_bytes, strip_formula_prefixes
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -692,6 +693,9 @@ def proxy_particiapi(pa_path):
     return _proxy_to_particiapi(pa_path)
 
 admin_bp = Blueprint('admin', __name__)
+
+# nh3 tag allowlist for CSV import sanitisation — no HTML tags permitted.
+_NH3_NO_TAGS: frozenset[str] = frozenset()
 participant_bp = Blueprint('participant', __name__)
 
 # ── Admin ─────────────────────────────────────────────────────────────────
@@ -858,6 +862,10 @@ def admin_phase6_init(conv_id):
     """
     # Allows conversation moderators (not just global admins) to initialise Phase 6.
     conv = _require_mod_for_conv(conv_id)
+
+    if not conv.active or conv.paused:
+        flash('Cannot initialise Phase 6 on a closed or paused conversation.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
     if not conv.phase_informed_voting:
         flash('Enable the Informed voting toggle first, then initialise.', 'error')
@@ -1077,7 +1085,10 @@ def admin_conversation_statements(conv_id):
                            hidden=hidden,
                            settings=settings,
                            featured_tids=featured_tids,
-                           phase_active=conv.phase_argument_mapping)
+                           phase_active=conv.phase_argument_mapping,
+                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is',
+                           max_import_rows=MAX_ROWS,
+                           max_import_kb=MAX_FILE_BYTES // 1024)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
 @login_required
@@ -1121,6 +1132,140 @@ def admin_statement_seed(conv_id):
         current_app.logger.exception('add_seed failed')
         flash('Could not add seed statement. Check server logs for details.', 'error')
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed/import')
+@login_required
+@limiter.limit('5 per minute')
+def admin_statement_seed_import(conv_id):
+    conv = _require_mod_for_conv(conv_id)
+    redirect_target = url_for('admin.admin_conversation_statements', conv_id=conv_id)
+
+    f = request.files.get('csv_file')
+    if not f or not f.filename:
+        flash('No file selected.', 'error')
+        return redirect(redirect_target)
+
+    if not f.filename.lower().endswith('.csv'):
+        flash('Please upload a .csv file.', 'error')
+        return redirect(redirect_target)
+
+    raw = f.stream.read(MAX_FILE_BYTES + 1)
+    if len(raw) > MAX_FILE_BYTES:
+        flash(f'File too large — maximum is {MAX_FILE_BYTES // 1024} KB.', 'error')
+        return redirect(redirect_target)
+
+    try:
+        result = parse_csv_bytes(raw)
+    except ValueError as exc:
+        flash(str(exc), 'import_row_error')
+        flash('✗ Import failed', 'import_result')
+        return redirect(redirect_target)
+
+    # Reject if the file exceeds the row limit — partial imports are confusing.
+    limit_skipped = [e for e in result.errors if e.limit_skipped]
+    if limit_skipped:
+        total_rows = len(result.texts) + len(result.errors)
+        current_app.logger.warning(
+            'CSV import rejected — row limit exceeded: %d rows, max %d (conv %s)',
+            total_rows, MAX_ROWS, conv.polis_id,
+        )
+        flash(
+            f'✗ Import rejected — file contains {total_rows} rows, maximum is {MAX_ROWS}. '
+            f'Reduce the file and re-upload. '
+            f'(Parse errors may also be present — fix both before re-uploading.)',
+            'import_result',
+        )
+        return redirect(redirect_target)
+
+    # Reject the entire batch if any row has a parse error — partial imports
+    # are confusing and hard to reconcile.
+    parse_errors = [e for e in result.errors if not e.limit_skipped]
+    if parse_errors:
+        for err in parse_errors:
+            flash(f'Row {err.row}: {err.reason}.', 'import_row_error')
+        flash('✗ Import rejected — fix errors and re-upload', 'import_result')
+        return redirect(redirect_target)
+
+    # Sanitize all texts with nh3 first, then re-strip formula prefixes that
+    # HTML-entity encoding could have reintroduced (e.g. &equals; → =).
+    # Filter empty strings that result from nh3 stripping all-tag content.
+    seen_sanitised: set[str] = set()
+    sanitised_texts: list[str] = []
+    for raw_text in result.texts:
+        san = nh3.clean(raw_text, tags=_NH3_NO_TAGS)
+        # Re-apply formula-prefix stripping: nh3 decodes HTML entities (e.g.
+        # &equals; → =) which can reintroduce leading formula chars.
+        san = strip_formula_prefixes(san).strip()
+        if not san or san in seen_sanitised:
+            continue  # drop empty-after-nh3 and nh3-induced within-batch dupes
+        seen_sanitised.add(san)
+        sanitised_texts.append(san)
+
+    # Check for duplicates against statements already in Polis.
+    existing_texts: set[str] = set()
+    dedup_check_failed = False
+    try:
+        rows = _polis_server_client().get_statements(conv.polis_id)
+        if rows is not None:
+            pending, approved, hidden = rows
+            for stmt in pending + approved + hidden:
+                existing_texts.add(stmt['txt'].strip().casefold())
+    except Exception:
+        current_app.logger.exception('Could not fetch existing statements for dedup check')
+        dedup_check_failed = True
+
+    dedup_errors = []
+    clean_texts  = []
+    for sanitised in sanitised_texts:
+        if sanitised.casefold() in existing_texts:
+            dedup_errors.append(f'"{sanitised[:60]}{"…" if len(sanitised) > 60 else ""}" — already exists in this conversation')
+        else:
+            clean_texts.append(sanitised)
+
+    successes     = 0
+    polis_skipped = []  # Polis rejected these — likely already exist
+    polis_errors  = []  # Polis login or unexpected failure
+    if clean_texts:
+        try:
+            successes, failures = _polis_server_client().bulk_add_seeds(conv.polis_id, clean_texts)
+            for text, exc in failures:
+                current_app.logger.warning('Polis rejected imported row (%s, may already exist): %s',
+                                           type(exc).__name__, exc)
+                polis_skipped.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
+        except PolisServerError:
+            current_app.logger.exception('Polis login failed during bulk import')
+            polis_errors = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
+
+    if dedup_check_failed:
+        flash('Could not check for existing statements — some may be duplicates. Check server logs.', 'warning')
+
+    for msg in dedup_errors:
+        flash(f'Skipped — {msg}.', 'warning')
+    for msg in polis_skipped:
+        flash(f'Already in Polis, skipped: {msg}.', 'warning')
+    for msg in polis_errors:
+        flash(f'Could not send to Polis: {msg}.', 'error')
+    if not successes and not result.errors and not dedup_errors and not polis_skipped and not polis_errors:
+        flash('No statements were imported — the file had no valid rows.', 'warning')
+
+    # Persistent inline result near the upload button.
+    n_skipped = len(dedup_errors) + len(polis_skipped)
+    n_errors   = len(polis_errors)
+    # Note: polis_errors is only set in the except-PolisServerError branch, which
+    # means successes == 0 whenever polis_errors is non-empty. The two cannot
+    # coexist; n_errors is checked last to keep the ladder exhaustive.
+    if successes and not n_skipped:
+        flash(f'✓ {successes} statement{"s" if successes != 1 else ""} imported', 'import_result')
+    elif successes:
+        flash(f'✓ {successes} imported — ⚠ {n_skipped} skipped', 'import_result')
+    elif n_errors:
+        flash('✗ Import failed — could not reach Polis. Check server logs.', 'import_result')
+    elif n_skipped:
+        flash(f'⚠ 0 imported — {n_skipped} already existed in Polis', 'import_result')
+    else:
+        flash('⚠ 0 imported — Polis returned no result', 'import_result')
+
+    return redirect(redirect_target)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/strict-moderation')
 @login_required
@@ -1359,7 +1504,22 @@ def conversation(slug):
                     .options(joinedload(FeaturedStatement.arguments)
                              .joinedload(Argument.votes))
                     .all())
-        for fs in p6_stmts:
+
+        # Stable per-participant random order — set once on first visit.
+        # Same pattern as ArgumentSideState.argument_order.
+        fs_by_id = {fs.id: fs for fs in p6_stmts}
+        if participation.phase6_card_order is None:
+            order = [fs.id for fs in p6_stmts]
+            random.shuffle(order)
+            participation.phase6_card_order = order
+            db.session.commit()
+        ordered = [fs_by_id[fid] for fid in participation.phase6_card_order
+                   if fid in fs_by_id]
+        # Append any confirmed statements added after the order was set
+        ordered_ids = set(participation.phase6_card_order)
+        ordered += [fs for fs in p6_stmts if fs.id not in ordered_ids]
+
+        for fs in ordered:
             text = fs.statement_text or ''
             if not text:
                 continue
@@ -1820,6 +1980,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     if test_config is not None:
         app.config.update(test_config)
 
+    # Migration mode: set by deploy.sh --migrate to skip web-server-only
+    # startup checks (rate limiting, trusted hosts) that require
+    # Kubernetes-injected vars unavailable on the Toolforge bastion.
+    # Has no effect on which code runs at request time.
+    _migration_mode = bool(os.environ.get('MIGRATION_MODE'))
+
     _trust_proxy_headers = app.config.get('TRUST_PROXY_HEADERS')
     if _trust_proxy_headers is None:
         _trust_proxy_headers = _read_secret('trust-proxy-headers')
@@ -1834,7 +2000,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         _trusted_hosts = _split_csv(_trusted_hosts)
     if _trusted_hosts:
         app.config['TRUSTED_HOSTS'] = _trusted_hosts
-    elif not app.debug and not app.testing:
+    elif not app.debug and not app.testing and not _migration_mode:
         raise RuntimeError(
             'TRUSTED_HOSTS is not set. Configure comma-separated allowed hostnames '
             'such as wiki-polis.toolforge.org before starting production.'
@@ -1846,14 +2012,14 @@ def create_app(test_config: dict | None = None) -> Flask:
         or os.environ.get('TOOL_REDIS_URI', '').strip()
     )
     if _ratelimit_storage_uri:
-        if (not app.debug and not app.testing
+        if (not app.debug and not app.testing and not _migration_mode
                 and not _ratelimit_storage_uri.startswith(_REDIS_RATELIMIT_SCHEMES)):
             raise RuntimeError(
                 'RATELIMIT_STORAGE_URI must use a Redis backend in production '
                 '(for example Toolforge TOOL_REDIS_URI or redis://...).'
             )
         app.config['RATELIMIT_STORAGE_URI'] = _ratelimit_storage_uri
-    elif not app.debug and not app.testing:
+    elif not app.debug and not app.testing and not _migration_mode:
         raise RuntimeError(
             'RATELIMIT_STORAGE_URI is not set and Toolforge TOOL_REDIS_URI is unavailable. '
             'Configure Redis-backed Flask-Limiter storage before starting production.'
@@ -1865,7 +2031,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     _ratelimit_key_prefix = str(_ratelimit_key_prefix).strip() if _ratelimit_key_prefix else ''
     if _ratelimit_key_prefix:
         app.config['RATELIMIT_KEY_PREFIX'] = _ratelimit_key_prefix
-    elif not app.debug and not app.testing:
+    elif not app.debug and not app.testing and not _migration_mode:
         raise RuntimeError(
             'RATELIMIT_KEY_PREFIX is not set. Configure a unique Toolforge Redis key '
             'prefix such as wiki-polis:<random>: before starting production.'
@@ -1878,13 +2044,13 @@ def create_app(test_config: dict | None = None) -> Flask:
         str(_ratelimit_identity_secret).strip() if _ratelimit_identity_secret else ''
     )
     if _ratelimit_identity_secret:
-        if (not app.debug and not app.testing
+        if (not app.debug and not app.testing and not _migration_mode
                 and len(_ratelimit_identity_secret) < _MIN_RATELIMIT_IDENTITY_SECRET_LEN):
             raise RuntimeError(
                 'RATELIMIT_IDENTITY_SECRET must be at least 32 characters in production.'
             )
         app.config['RATELIMIT_IDENTITY_SECRET'] = _ratelimit_identity_secret
-    elif not app.debug and not app.testing:
+    elif not app.debug and not app.testing and not _migration_mode:
         raise RuntimeError(
             'RATELIMIT_IDENTITY_SECRET is not set. Configure a random secret so '
             'rate-limit keys do not expose raw client identities in shared Redis.'
@@ -2147,6 +2313,7 @@ def _register_routes(app: Flask) -> None:
                                moderating=moderating,
                                pseudonym_map=pseudonym_map,
                                dev_test_users=dev_test_users)
+
 
     # ── OAuth ─────────────────────────────────────────────────────────────────
 
