@@ -372,7 +372,15 @@ header {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .conv-card { transition: none; }
+  /* Neutralise motion app-wide: make transitions/animations effectively
+     instant and disable CSS smooth scrolling. (JS scrollIntoView with
+     behavior:'smooth' ignores this; it is gated separately in the template.) */
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
   .conv-card:active { transform: none; }
   /* shadow change on :active is retained intentionally — not vestibular motion */
 }

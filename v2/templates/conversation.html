@@ -917,13 +917,19 @@
     var voteUrl   = '{{ url_for("participant.phase6_vote", slug=conversation.slug) }}';
     var doneEl    = document.querySelector('.p6-done');
 
+    // Respect prefers-reduced-motion: a smooth auto-scroll becomes an instant
+    // jump. Read at call time so a mid-session preference change is honoured.
+    function scrollBehavior() {
+      return (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth';
+    }
+
     function scrollToNext(card) {
       var cards = Array.prototype.slice.call(document.querySelectorAll('.p6-card'));
       var idx   = cards.indexOf(card);
       var next  = cards[idx + 1];
       if (next) {
         setTimeout(function () {
-          next.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          next.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
         }, 400);
       }
     }
@@ -936,7 +942,7 @@
       if (done.length === all.length && doneEl) {
         doneEl.removeAttribute('hidden');
         setTimeout(function () {
-          doneEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          doneEl.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
         }, 400);
       }
     }
