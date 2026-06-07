@@ -1204,36 +1204,44 @@ def admin_statement_seed_import(conv_id):
         else:
             clean_texts.append(sanitised)
 
-    successes    = 0
-    api_failures = []
+    successes     = 0
+    polis_skipped = []  # Polis rejected these — likely already exist
+    polis_errors  = []  # Polis login or unexpected failure
     if clean_texts:
         try:
             successes, failures = _polis_server_client().bulk_add_seeds(conv.polis_id, clean_texts)
             for text, exc in failures:
-                current_app.logger.error('add_seed failed for imported row: %s', exc)
-                api_failures.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
+                current_app.logger.warning('Polis rejected imported row (may already exist): %s', exc)
+                polis_skipped.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
         except PolisServerError:
             current_app.logger.exception('Polis login failed during bulk import')
-            api_failures = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
+            polis_errors = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
 
     if dedup_check_failed:
         flash('Could not check for existing statements — some may be duplicates. Check server logs.', 'warning')
 
     for msg in dedup_errors:
         flash(f'Skipped — {msg}.', 'warning')
-    for msg in api_failures:
-        flash(f'Failed to send to Polis: {msg}.', 'error')
-    if not successes and not result.errors and not dedup_errors and not api_failures:
+    for msg in polis_skipped:
+        flash(f'Already in Polis, skipped: {msg}.', 'warning')
+    for msg in polis_errors:
+        flash(f'Could not send to Polis: {msg}.', 'error')
+    if not successes and not result.errors and not dedup_errors and not polis_skipped and not polis_errors:
         flash('No statements were imported — the file had no valid rows.', 'warning')
 
     # Persistent inline result near the upload button.
-    n_skipped = len(dedup_errors) + len(api_failures)
-    if successes and not n_skipped:
+    n_skipped = len(dedup_errors) + len(polis_skipped)
+    n_errors   = len(polis_errors)
+    if successes and not n_skipped and not n_errors:
         flash(f'✓ {successes} statement{"s" if successes != 1 else ""} imported', 'import_result')
     elif successes:
         flash(f'✓ {successes} imported — ⚠ {n_skipped} skipped', 'import_result')
+    elif n_skipped and not n_errors:
+        flash(f'⚠ 0 imported — {n_skipped} already existed in Polis', 'import_result')
+    elif n_errors:
+        flash('✗ Import failed — could not reach Polis. Check server logs.', 'import_result')
     else:
-        flash('✗ Import failed — see details below', 'import_result')
+        flash('⚠ 0 imported — all statements were skipped', 'import_result')
 
     return redirect(redirect_target)
 

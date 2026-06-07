@@ -276,13 +276,16 @@ def test_dedup_continues_when_polis_fetch_fails(admin_client, conv):
 # ── Polis API failures ────────────────────────────────────────────────────────
 
 def test_polis_api_failure_reported(admin_client, conv):
+    """Per-statement Polis rejections (e.g. duplicates) show as 'Already in Polis, skipped'."""
     csv = b'text\nStatement one\nStatement two'
     with _mock_polis(add_seed_side_effect=PolisServerError('timeout')):
         resp = _upload(admin_client, conv.id, csv)
-    assert b'Failed to send to Polis' in resp.data
+    assert b'already in polis' in resp.data.lower()
+    assert b'0 imported' in resp.data.lower() or b'already existed' in resp.data.lower()
 
 
 def test_partial_polis_failure_still_imports_others(admin_client, conv):
+    """When some statements succeed and others are Polis-rejected, show partial success."""
     results = [None, PolisServerError('nope')]
 
     def side_effect(*a, **kw):
@@ -294,7 +297,7 @@ def test_partial_polis_failure_still_imports_others(admin_client, conv):
     with _mock_polis(add_seed_side_effect=side_effect):
         resp = _upload(admin_client, conv.id, csv)
     assert b'1 imported' in resp.data
-    assert b'Failed to send to Polis' in resp.data
+    assert b'already in polis' in resp.data.lower()
 
 
 # ── Security ─────────────────────────────────────────────────────────────────
