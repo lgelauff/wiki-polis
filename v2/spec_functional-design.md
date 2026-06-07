@@ -186,6 +186,77 @@ There are no replies to arguments. No threading. Arguments are sorted by usefuln
 
 Moderators can hide arguments that are off-topic, abusive, or redundant.
 
+### State machine — current implementation
+
+The argument phase has two independent per-side state machines (one for pro, one for con) that gate access to a shared voting layer.
+
+#### Per-side contribute states
+
+Each side (pro, con) tracks the participant's contribution independently.
+
+**States:**
+
+- **idle** — no action taken; contribute affordance visible. No DB record.
+- **composing** — textarea open. Client-only; no DB state. Navigating away returns to `idle`.
+- **submitted** — participant submitted an argument for this side. `Argument` row exists for this participant + featured statement + side.
+- **skipped** — participant declined to contribute. `ArgumentSideState.skipped = True`.
+
+**Transitions:**
+
+| From | Event | To |
+|---|---|---|
+| `idle` | click affordance | `composing` |
+| `composing` | cancel / close | `idle` |
+| `composing` | submit (valid body, ≤ 280 chars) | `submitted` |
+| `idle` | click "Nothing to add" | `skipped` |
+| `composing` | click "Nothing to add" | `skipped` |
+| `skipped` | click "change my mind" | `idle` (client-only — see note) |
+
+> **Bug:** "change my mind" resets the UI to `idle` client-side but there is no server route to clear `ArgumentSideState.skipped`. On page reload, the server re-renders the skipped state from the DB, undoing the client reset.
+
+#### Cross-side gate
+
+Voting only opens once the participant has reached a terminal state (`submitted` or `skipped`) on **both** sides.
+
+| Pro state | Con state | Gate |
+|---|---|---|
+| `idle` or `composing` | any | `one-side-open` — voting locked |
+| `submitted` or `skipped` | `idle` or `composing` | `one-side-open` — voting locked |
+| `submitted` or `skipped` | `submitted` or `skipped` | `both-gated` — voting unlocks (if enough arguments exist) |
+
+Voting also requires the argument pool on each side to exceed K (the configured importance-vote quota, default 2) before that side's checkboxes activate.
+
+#### Argument voting states
+
+Once `both-gated`, each argument card on each side is in one of three states. The state is driven by the live count of votes the participant has cast on that side relative to K.
+
+**States (per argument card, per side):**
+
+- **vote-eligible** — card can be voted on (not own, not hidden, count < K)
+- **vote-picked** — participant has voted for this argument; `ArgumentVote` row exists
+- **vote-cap-reached** — participant has cast K votes on this side; card is eligible but blocked
+
+**Transitions:**
+
+| From | Event | To | Side-effect on other cards |
+|---|---|---|---|
+| `vote-eligible` | vote | `vote-picked` | if this was the K-th vote: all remaining `vote-eligible` → `vote-cap-reached` |
+| `vote-picked` | unvote (count was < K) | `vote-eligible` | no change to others |
+| `vote-picked` | unvote (count was = K) | `vote-eligible` | all `vote-cap-reached` → `vote-eligible` |
+| `vote-cap-reached` | — | — | no direct action; unvoting a `vote-picked` card is required first |
+
+The dial for a given side therefore moves: `vote-eligible ↔ vote-picked ↔ vote-cap-reached`, where the cap boundary shifts every time a vote is cast or retracted.
+
+#### Navigation between featured statements
+
+Participants can move to any featured statement at any time, regardless of their contribute state on the current one. Navigation does not require completing or skipping either side first.
+
+**Intended design:** Each featured statement panel has a **Previous / Next** button pair at the bottom. Previous is disabled on the first statement; Next is disabled on the last. No statement counter is shown between the buttons. The TOC remains available for non-linear jumping but is not the primary navigation affordance.
+
+**Current implementation gap:** The only navigation affordance is the TOC at the top of the panel list. There are no prev/next buttons. Participants have no obvious way to move forward without scrolling back up to the TOC. This needs to be implemented.
+
+**Composing state across navigation:** Navigating away from a panel while in `composing` silently preserves the open composer and its text — the panel is hidden but not reset. On returning, the composer is still open. This behaviour is incidental; no warning or indicator is shown when leaving an unfinished composer.
+
 ---
 
 ## Admin panel
