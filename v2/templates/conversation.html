@@ -555,7 +555,9 @@
                data-vote-url="{{ url_for('participant.argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
                data-unvote-url="{{ url_for('participant.argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
                data-csrf="{{ csrf_token() }}">
-            <button class="argument-checkbox" aria-label="Mark as most important"
+            <button class="argument-checkbox"
+                    aria-pressed="{{ 'true' if is_picked else 'false' }}"
+                    aria-label="{{ 'Unmark as most important' if is_picked else 'Mark as most important' }}"
                     tabindex="{{ '0' if pro_can_vote else '-1' }}">
               {% if is_picked %}
               <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
@@ -572,6 +574,7 @@
                           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
                   <strong class="importance-count">{{ arg.votes | length }}</strong>
+                  <span class="sr-only"> importance votes</span>
                 </span>
                 <span class="argument-by">{{ item.proposer_pseudonyms.get(arg.proposer_id, 'admin') if arg.proposer_id else 'admin' }}</span>
                 {% if is_own %}<span class="argument-yours">YOURS</span>{% endif %}
@@ -667,7 +670,9 @@
                data-vote-url="{{ url_for('participant.argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
                data-unvote-url="{{ url_for('participant.argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
                data-csrf="{{ csrf_token() }}">
-            <button class="argument-checkbox" aria-label="Mark as most important"
+            <button class="argument-checkbox"
+                    aria-pressed="{{ 'true' if is_picked else 'false' }}"
+                    aria-label="{{ 'Unmark as most important' if is_picked else 'Mark as most important' }}"
                     tabindex="{{ '0' if con_can_vote else '-1' }}">
               {% if is_picked %}
               <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
@@ -684,6 +689,7 @@
                           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
                   <strong class="importance-count">{{ arg.votes | length }}</strong>
+                  <span class="sr-only"> importance votes</span>
                 </span>
                 <span class="argument-by">{{ item.proposer_pseudonyms.get(arg.proposer_id, 'admin') if arg.proposer_id else 'admin' }}</span>
                 {% if is_own %}<span class="argument-yours">YOURS</span>{% endif %}
@@ -1613,7 +1619,7 @@
     div.dataset.unvoteUrl = unvoteUrl;
     div.dataset.csrf = csrf;
     div.innerHTML =
-      '<button class="argument-checkbox" aria-label="Mark as most important" tabindex="-1"></button>' +
+      '<button class="argument-checkbox" aria-pressed="false" aria-label="Mark as most important" tabindex="-1"></button>' +
       '<div class="argument-body">' +
         '<p class="argument-text">' + escapeHtml(body) + '</p>' +
         '<div class="argument-meta">' +
@@ -1622,6 +1628,7 @@
               '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
             '</svg>' +
             '<strong class="importance-count">0</strong>' +
+            '<span class="sr-only"> importance votes</span>' +
           '</span>' +
           '<span class="argument-by">' + escapeHtml(pseudonym) + '</span>' +
           '<span class="argument-yours">YOURS</span>' +
@@ -1632,6 +1639,17 @@
 
   function escapeHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Reflect an argument's pick state on its checkbox: the visible checkmark
+  // plus the programmatic toggle state (aria-pressed) and the label a screen
+  // reader announces. Keeps the two in lock-step everywhere the state flips.
+  var PICK_SVG = '<svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  function setPicked(cb, picked) {
+    if (!cb) return;
+    cb.innerHTML = picked ? PICK_SVG : '';
+    cb.setAttribute('aria-pressed', picked ? 'true' : 'false');
+    cb.setAttribute('aria-label', picked ? 'Unmark as most important' : 'Mark as most important');
   }
 
   // ── Contribute wrapper state machine ─────────────────────────────────────────
@@ -1813,17 +1831,15 @@
       var fsId = getCardFsId(card);
 
       // Optimistic update
+      var cb  = card.querySelector('.argument-checkbox');
+      var cnt = card.querySelector('.importance-count');
       if (isPicked) {
         card.dataset.picked = 'false';
-        var cb = card.querySelector('.argument-checkbox');
-        if (cb) cb.innerHTML = '';
-        var cnt = card.querySelector('.importance-count');
+        setPicked(cb, false);
         if (cnt) cnt.textContent = Math.max(0, parseInt(cnt.textContent, 10) - 1);
       } else {
         card.dataset.picked = 'true';
-        var cb = card.querySelector('.argument-checkbox');
-        if (cb) cb.innerHTML = '<svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-        var cnt = card.querySelector('.importance-count');
+        setPicked(cb, true);
         if (cnt) cnt.textContent = parseInt(cnt.textContent, 10) + 1;
       }
 
@@ -1835,15 +1851,11 @@
           // Revert on error
           if (isPicked) {
             card.dataset.picked = 'true';
-            var cb = card.querySelector('.argument-checkbox');
-            if (cb) cb.innerHTML = '<svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-            var cnt = card.querySelector('.importance-count');
+            setPicked(cb, true);
             if (cnt) cnt.textContent = parseInt(cnt.textContent, 10) + 1;
           } else {
             card.dataset.picked = 'false';
-            var cb = card.querySelector('.argument-checkbox');
-            if (cb) cb.innerHTML = '';
-            var cnt = card.querySelector('.importance-count');
+            setPicked(cb, false);
             if (cnt) cnt.textContent = Math.max(0, parseInt(cnt.textContent, 10) - 1);
           }
           updateLimitReached(fsId, side);
