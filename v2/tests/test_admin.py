@@ -119,6 +119,117 @@ def test_phase_toggles_off(admin_client, conv):
     assert conv.phase_submission is False
 
 
+# ── Simple-mode phase advance (#140) ──────────────────────────────────────────
+
+from app import PHASE_SEQUENCE, _current_stage_index, _is_linear_phase_state
+
+
+def _advance(admin_client, conv):
+    """POST the advance route with set_vis_type stubbed; return the response."""
+    with patch('app.PolisServerClient.set_vis_type'):
+        return admin_client.post(f'/admin/conversations/{conv.id}/phase/advance')
+
+
+def test_advance_from_preparation_opens_submission(admin_client, conv):
+    resp = _advance(admin_client, conv)
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.phase_submission is True
+    assert conv.phase_personal_results is False
+    assert conv.phase_argument_mapping is False
+    assert conv.phase_informed_voting is False
+    assert conv.phase_public_results is False
+
+
+def test_advance_is_exclusive_through_full_sequence(admin_client, conv):
+    """Each advance turns the next flag on and the prior flag off — one active stage."""
+    flags = [s['flag'] for s in PHASE_SEQUENCE]   # [None, submission, ...]
+    for i in range(1, len(PHASE_SEQUENCE)):
+        _advance(admin_client, conv)
+        db.session.refresh(conv)
+        # Exactly one phase flag should be on: the i-th stage's flag.
+        on = [f for f in flags if f and getattr(conv, f)]
+        assert on == [flags[i]], f'stage {i}: expected only {flags[i]} on, got {on}'
+
+
+def test_advance_at_final_stage_is_noop(admin_client, conv):
+    conv.phase_public_results = True   # already at the final stage
+    db.session.commit()
+    resp = _advance(admin_client, conv)
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.phase_public_results is True
+    assert _current_stage_index(conv) == len(PHASE_SEQUENCE) - 1
+
+
+def test_advance_requires_global_admin(auth_client, conv):
+    """A non-global-admin (regular participant / moderator) cannot advance."""
+    resp = auth_client.post(f'/admin/conversations/{conv.id}/phase/advance')
+    assert resp.status_code == 403
+    db.session.refresh(conv)
+    assert conv.phase_submission is False
+
+
+def test_advance_to_informed_voting_does_not_init_phase6(admin_client, conv):
+    """Advancing to the informed-voting stage flips the flag but does not create
+    a Phase 6 Polis conversation — that stays an explicit separate action."""
+    conv.phase_argument_mapping = True   # at stage 4; next advance → informed voting
+    db.session.commit()
+    _advance(admin_client, conv)
+    db.session.refresh(conv)
+    assert conv.phase_informed_voting is True
+    assert conv.phase_argument_mapping is False
+    assert conv.phase6_polis_conversation_id is None
+
+
+def test_advance_syncs_vis_type(admin_client, conv):
+    """vis_type=1 when advancing into a results stage, 0 otherwise."""
+    # Preparation → submission: no results phase → vis_type 0.
+    with patch('app.PolisServerClient.set_vis_type') as m:
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance')
+    m.assert_called_once_with(conv.polis_id, 0)
+
+    # Submission → featured selection (personal results) → vis_type 1.
+    with patch('app.PolisServerClient.set_vis_type') as m:
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance')
+    m.assert_called_once_with(conv.polis_id, 1)
+
+    # Featured selection → argument mapping → vis_type 0.
+    with patch('app.PolisServerClient.set_vis_type') as m:
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance')
+    m.assert_called_once_with(conv.polis_id, 0)
+
+
+def test_current_stage_index_and_linearity():
+    c = Conversation(slug='x', polis_id='p', title='t', active=True,
+                     access_policy='public')
+    assert _current_stage_index(c) == 0          # all off → preparation
+    assert _is_linear_phase_state(c) is True
+    c.phase_argument_mapping = True
+    assert _current_stage_index(c) == 3
+    assert _is_linear_phase_state(c) is True
+    c.phase_submission = True                     # two flags on → non-linear
+    assert _is_linear_phase_state(c) is False
+    assert _current_stage_index(c) == 3           # still furthest-along
+
+
+def test_simple_panel_shows_advance_button(admin_client, conv):
+    resp = admin_client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'Advance to next phase' in resp.data
+    assert b'phase-stepper' in resp.data
+
+
+def test_non_linear_state_suppresses_advance_button(admin_client, conv):
+    conv.phase_submission = True
+    conv.phase_public_results = True              # non-linear
+    db.session.commit()
+    resp = admin_client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'custom state' in resp.data
+    assert b'Advance to next phase' not in resp.data
+
+
 # ── Pause / close ─────────────────────────────────────────────────────────────
 
 def test_pause_conversation(admin_client, conv):

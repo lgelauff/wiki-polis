@@ -1848,6 +1848,75 @@ a { color: var(--pass); }
   margin: 0;
 }
 
+/* ── Phase stepper (simple mode) ── */
+.phase-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.phase-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.phase-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surface2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.phase-step--done {
+  color: var(--body);
+  border-color: var(--agree);
+}
+.phase-step--done .phase-step-num {
+  background: var(--agree);
+  color: var(--white);
+}
+
+.phase-step--current {
+  color: var(--ink);
+  border-color: var(--spot);
+  background: rgba(245, 158, 11, 0.08);
+  font-weight: 600;
+}
+.phase-step--current .phase-step-num {
+  background: var(--spot);
+  color: var(--white);
+}
+
+.phase-advanced {
+  margin-top: 1rem;
+  border-top: 1px solid var(--hairline-soft);
+  padding-top: 0.5rem;
+}
+.phase-advanced > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.phase-advanced > summary:hover { color: var(--ink); }
+
 /* ── Stats grid ── */
 
 .stats-grid {

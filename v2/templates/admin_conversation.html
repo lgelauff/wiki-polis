@@ -55,43 +55,72 @@
   <h3 class="section-heading">Phases</h3>
   <div class="edit-form">
     {% if is_admin %}
-    <form method="post"
-          action="{{ url_for('admin.admin_conversation_phases', conv_id=conversation.id) }}"
-          class="phases-form" style="flex-wrap:wrap;gap:.75rem">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label title="Submission open">
-        <input type="checkbox" name="phase_submission" value="1"
-               {% if conversation.phase_submission %}checked{% endif %}>
-        Statement submission
-      </label>
-      <label title="Personal results">
-        <input type="checkbox" name="phase_personal_results" value="1"
-               {% if conversation.phase_personal_results %}checked{% endif %}>
-        Personal results
-      </label>
-      <label title="Argument mapping">
-        <input type="checkbox" name="phase_argument_mapping" value="1"
-               {% if conversation.phase_argument_mapping %}checked{% endif %}>
-        Argument mapping
-      </label>
-      <label title="Public results">
-        <input type="checkbox" name="phase_public_results" value="1"
-               {% if conversation.phase_public_results %}checked{% endif %}>
-        Public results
-      </label>
-      <label title="Informed voting (Phase 6)">
-        <input type="checkbox" name="phase_informed_voting" value="1"
-               {% if conversation.phase_informed_voting %}checked{% endif %}>
-        Informed voting
-      </label>
-      <button type="submit" class="btn-small">save</button>
-    </form>
-    {% if conversation.phase_submission or conversation.phase_argument_mapping %}
-    <p class="muted" style="margin-top:.5rem;font-size:13px">
-      ⚠️ Informed voting is most meaningful after argument mapping is complete.
-      Statement submission and/or argument mapping are currently still on.
-    </p>
+    {% set next_stage = phase_sequence[current_stage_index + 1] if current_stage_index + 1 < phase_sequence | length else none %}
+
+    {# Simple mode (default): linear stepper + single advance button. #}
+    <ol class="phase-stepper">
+      {% for stage in phase_sequence %}
+      <li class="phase-step
+                 {%- if loop.index0 == current_stage_index %} phase-step--current
+                 {%- elif loop.index0 < current_stage_index %} phase-step--done{% endif %}">
+        <span class="phase-step-num">{{ loop.index }}</span>
+        <span class="phase-step-label">{{ stage.label }}</span>
+      </li>
+      {% endfor %}
+    </ol>
+
+    {% if linear_phase_state %}
+      {% if next_stage %}
+      <form method="post"
+            action="{{ url_for('admin.admin_conversation_advance', conv_id=conversation.id) }}"
+            onsubmit="return confirm('Advance to “{{ next_stage.label }}”? This closes the current phase and cannot be undone in simple mode.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-small">Advance to next phase → {{ next_stage.label }}</button>
+      </form>
+      {% else %}
+      <p class="muted" style="font-size:13px">Final phase reached — public results are open.</p>
+      {% endif %}
+    {% else %}
+      <p class="muted" style="margin-top:.5rem;font-size:13px">
+        ⚠️ Phases are in a custom state (more than one active). Use advanced controls below to adjust.
+      </p>
     {% endif %}
+
+    {# Advanced mode: the original independent toggles, opt-in. #}
+    <details class="phase-advanced" {% if not linear_phase_state %}open{% endif %}>
+      <summary>Advanced phase controls</summary>
+      <form method="post"
+            action="{{ url_for('admin.admin_conversation_phases', conv_id=conversation.id) }}"
+            class="phases-form" style="flex-wrap:wrap;gap:.75rem;margin-top:.75rem">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label title="Submission open">
+          <input type="checkbox" name="phase_submission" value="1"
+                 {% if conversation.phase_submission %}checked{% endif %}>
+          Statement submission
+        </label>
+        <label title="Personal results">
+          <input type="checkbox" name="phase_personal_results" value="1"
+                 {% if conversation.phase_personal_results %}checked{% endif %}>
+          Personal results
+        </label>
+        <label title="Argument mapping">
+          <input type="checkbox" name="phase_argument_mapping" value="1"
+                 {% if conversation.phase_argument_mapping %}checked{% endif %}>
+          Argument mapping
+        </label>
+        <label title="Public results">
+          <input type="checkbox" name="phase_public_results" value="1"
+                 {% if conversation.phase_public_results %}checked{% endif %}>
+          Public results
+        </label>
+        <label title="Informed voting (Phase 6)">
+          <input type="checkbox" name="phase_informed_voting" value="1"
+                 {% if conversation.phase_informed_voting %}checked{% endif %}>
+          Informed voting
+        </label>
+        <button type="submit" class="btn-small">save</button>
+      </form>
+    </details>
     {% else %}
     <p style="font-size:14px">
       Submission: <strong>{{ 'on' if conversation.phase_submission else 'off' }}</strong>
