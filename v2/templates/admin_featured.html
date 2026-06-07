@@ -14,6 +14,15 @@
     argument for each, then vote on the most important arguments submitted by others.
   </p>
 
+  {% if phase_active %}
+  <div style="background:#fffbeb;border:1px solid #fcd34d;color:#78350f;padding:.75rem 1rem;border-radius:6px;font-size:13px;margin-bottom:1.5rem">
+    <strong>Argument mapping phase is active.</strong>
+    Participants may have already submitted arguments for these statements.
+    Removing a statement will permanently delete all associated arguments and votes.
+    To remove the last featured statement, disable the argument mapping phase first.
+  </div>
+  {% endif %}
+
   <!-- ── Confirmed ──────────────────────────────────────── -->
   <h3 class="section-heading">Confirmed ({{ confirmed | length }})</h3>
 
@@ -60,8 +69,17 @@
                 action="{{ url_for('admin.admin_featured_remove', conv_id=conversation.id, fs_id=fs.id) }}"
                 style="display:inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% set is_last = (confirmed | length == 1) %}
+            {% if phase_active and is_last %}
+            <button type="button" class="btn-small btn-danger" disabled
+                    title="Cannot remove the last featured statement while argument mapping is active — disable the phase first.">remove</button>
+            {% elif phase_active %}
+            <button type="submit" class="btn-small btn-danger"
+                    onclick="return confirm('The argument mapping phase is active. Removing this statement will permanently delete all its arguments and votes. Continue?')">remove</button>
+            {% else %}
             <button type="submit" class="btn-small btn-danger"
                     onclick="return confirm('Remove this featured statement? All arguments and votes for it will be deleted.')">remove</button>
+            {% endif %}
           </form>
         </td>
       </tr>

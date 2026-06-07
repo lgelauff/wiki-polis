@@ -53,16 +53,20 @@ fi
 
 if [ "$MIGRATE" -eq 1 ]; then
   echo "==> Running database migrations..."
-  _envvar() { toolforge envvars show "$1" | tail -1 | awk '{print $NF}'; }
-  export DATABASE_URL=$(_envvar DATABASE_URL)
-  export SECRET_KEY=$(_envvar SECRET_KEY)
-  export PARTICIAPI_BASE_URL=$(_envvar PARTICIAPI_BASE_URL)
-  export TRUSTED_HOSTS=$(_envvar TRUSTED_HOSTS)
-  export RATELIMIT_KEY_PREFIX=$(_envvar RATELIMIT_KEY_PREFIX)
-  export RATELIMIT_IDENTITY_SECRET=$(_envvar RATELIMIT_IDENTITY_SECRET)
+  # Load all Toolforge envvars so the app can start. Envvars are the single
+  # source of truth — no manual list to maintain here.
+  echo "    Loading Toolforge envvars..."
+  while IFS= read -r name; do
+    [[ -z "$name" || "$name" == "name" ]] && continue
+    value=$(toolforge envvars show "$name" 2>/dev/null | tail -1 | awk '{print $NF}')
+    [[ -n "$value" ]] && export "$name=$value"
+  done < <(toolforge envvars list | awk 'NR>1 {print $1}')
+  # MIGRATION_MODE=1 skips web-server-only startup checks (Redis, TRUSTED_HOSTS)
+  # that require Kubernetes-injected vars unavailable on the bastion.
+  # Has no effect on which code runs — migrations only touch the DB.
   source ~/www/python/venv/bin/activate
   cd ~/wiki-polis/v2
-  FLASK_DEBUG=1 flask --app app db upgrade  # FLASK_DEBUG bypasses production startup checks; set inline to override dotenv
+  MIGRATION_MODE=1 flask --app app db upgrade
   echo "    Migrations done."
 fi
 
