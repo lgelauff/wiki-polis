@@ -457,6 +457,24 @@ def test_admin_featured_add_deduplicates(admin_client, arg_conv, admin_participa
 
 
 def test_admin_featured_remove(admin_client, arg_conv, admin_participant, fs):
+    # arg_conv has phase_argument_mapping=True and fs is the only featured statement —
+    # the guard should block removal and leave the record intact.
+    resp = admin_client.post(
+        f'/admin/conversations/{arg_conv.id}/featured/{fs.id}/remove',
+    )
+    assert resp.status_code == 302
+    assert db.session.get(FeaturedStatement, fs.id) is not None
+
+
+def test_admin_featured_remove_allowed_when_multiple(app, admin_client, arg_conv, admin_participant, fs):
+    # Add a second featured statement so removing the first is allowed.
+    fs2 = FeaturedStatement(
+        conversation_id=arg_conv.id,
+        polis_statement_id=99,
+        confirmed_by_admin=True,
+    )
+    db.session.add(fs2)
+    db.session.commit()
     resp = admin_client.post(
         f'/admin/conversations/{arg_conv.id}/featured/{fs.id}/remove',
     )
