@@ -749,16 +749,8 @@ def admin_conversation_new():
     slug   = request.form.get('slug', '').strip().lower()
     fields = _parse_conversation_form()
 
-    if not fields['title']:
-        flash('Title is required.', 'error')
-        return redirect(url_for('admin.admin'))
-    if not _valid_slug(slug):
-        flash(
-            'Invalid slug — use lowercase letters, numbers, and hyphens only, '
-            'no spaces or special characters (e.g. climate-2026).',
-            'error',
-        )
-        return redirect(url_for('admin.admin'))
+    if not fields['title'] or not _valid_slug(slug):
+        abort(400)
 
     polis_configured = all(current_app.config.get(k) for k in (
         'POLIS_SERVER_URL', 'POLIS_ADMIN_EMAIL', 'POLIS_ADMIN_PASSWORD'))
@@ -1082,12 +1074,18 @@ def admin_conversation_statements(conv_id):
         ).get_settings(conv.polis_id)
     except PolisParticipantError:
         pass
+    featured_tids = {
+        fs.polis_statement_id
+        for fs in FeaturedStatement.query.filter_by(conversation_id=conv_id).all()
+    }
     return render_template('admin_statements.html',
                            conversation=conv,
                            pending=pending,
                            approved=approved,
                            hidden=hidden,
                            settings=settings,
+                           featured_tids=featured_tids,
+                           phase_active=conv.phase_argument_mapping,
                            polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is',
                            max_import_rows=MAX_ROWS,
                            max_import_kb=MAX_FILE_BYTES // 1024)
@@ -1099,6 +1097,18 @@ def admin_statement_moderate(conv_id, tid):
     mod  = request.form.get('mod', type=int)
     if mod not in (-1, 0, 1):
         abort(400)
+    if mod in (-1, 0):
+        is_featured = FeaturedStatement.query.filter_by(
+            conversation_id=conv_id, polis_statement_id=tid).first() is not None
+        if is_featured and conv.phase_argument_mapping:
+            featured_count = FeaturedStatement.query.filter_by(
+                conversation_id=conv_id).count()
+            if featured_count <= 1:
+                flash(
+                    'Cannot hide the last featured statement while argument mapping is active. Disable the argument mapping phase first.',
+                    'error'
+                )
+                return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
     try:
         _polis_server_client().moderate(conv.polis_id, tid, mod)
     except PolisServerError:
@@ -1289,7 +1299,8 @@ def admin_conversation_featured(conv_id):
     return render_template('admin_featured.html',
                            conversation=conv,
                            confirmed=confirmed,
-                           candidates=candidates)
+                           candidates=candidates,
+                           phase_active=conv.phase_argument_mapping)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/featured/confirm')
 @login_required
@@ -1332,9 +1343,14 @@ def admin_featured_add(conv_id):
 @admin_bp.post('/admin/conversations/<int:conv_id>/featured/<int:fs_id>/remove')
 @login_required
 def admin_featured_remove(conv_id, fs_id):
-    _require_mod_for_conv(conv_id)
+    conv = _require_mod_for_conv(conv_id)
     fs = FeaturedStatement.query.filter_by(
         id=fs_id, conversation_id=conv_id).first_or_404()
+    if conv.phase_argument_mapping:
+        remaining = FeaturedStatement.query.filter_by(conversation_id=conv_id).count()
+        if remaining <= 1:
+            flash('Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first.', 'error')
+            return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
     db.session.delete(fs)
     db.session.commit()
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
@@ -2112,6 +2128,20 @@ def create_app(test_config: dict | None = None) -> Flask:
         response.headers['Referrer-Policy']         = 'strict-origin-when-cross-origin'
         # X-Frame-Options superseded by frame-ancestors in CSP above, but kept for old browsers
         response.headers['X-Frame-Options']         = 'DENY'
+
+        # Cache static assets (fonts, CSS, JS) for 1 week.
+        # URLs include ?v=<git-sha> so each deploy busts the cache automatically.
+        # 1 week (not 1 year) limits blast radius if a bad asset slips through.
+        # Note: .woff2 font files are referenced by relative URL from fonts.css (a static
+        # file, not a template) so they cannot carry ?v= — treat them as immutable; rename
+        # the files if fonts ever need to change.
+        if request.path.startswith('/static/') and response.status_code == 200:
+            response.headers['Cache-Control'] = 'public, max-age=604800'
+        elif response.content_type.startswith('text/html'):
+            # Prevent intermediary proxies from caching HTML pages; stale HTML pointing
+            # to old ?v= URLs would cause users to load mismatched assets after a deploy.
+            response.headers.setdefault('Cache-Control', 'no-store')
+
         return response
 
     _register_routes(app)
