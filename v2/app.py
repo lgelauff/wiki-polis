@@ -1143,8 +1143,19 @@ def admin_statement_seed_import(conv_id):
         flash('✗ Import failed', 'import_result')
         return redirect(redirect_target)
 
+    # Reject if the file exceeds the row limit — partial imports are confusing.
+    limit_skipped = [e for e in result.errors if e.limit_skipped]
+    if limit_skipped:
+        total_rows = len(result.texts) + len(result.errors)
+        flash(
+            f'✗ Import rejected — file contains {total_rows} rows, '
+            f'maximum is {MAX_ROWS}. Reduce the file and re-upload.',
+            'import_result',
+        )
+        return redirect(redirect_target)
+
     # Reject the entire batch if any row has a parse error — partial imports
-    # are confusing and hard to reconcile. Limit-skipped rows are not errors.
+    # are confusing and hard to reconcile.
     parse_errors = [e for e in result.errors if not e.limit_skipped]
     if parse_errors:
         for err in parse_errors:
@@ -1203,14 +1214,6 @@ def admin_statement_seed_import(conv_id):
     if dedup_check_failed:
         flash('Could not check for existing statements — some may be duplicates. Check server logs.', 'warning')
 
-    # Only limit-skipped rows remain (parse errors were rejected above).
-    limit_skipped = [e for e in result.errors if e.limit_skipped]
-    if limit_skipped:
-        flash(
-            f'{len(limit_skipped)} row{"s" if len(limit_skipped) != 1 else ""} skipped'
-            f' — import limit of {MAX_ROWS} reached.',
-            'warning',
-        )
     for msg in dedup_errors:
         flash(f'Skipped — {msg}.', 'warning')
     for msg in api_failures:

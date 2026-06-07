@@ -176,15 +176,16 @@ def test_duplicate_within_file_reported_with_line_number(admin_client, conv):
     assert mock.return_value.bulk_add_seeds.call_count == 0
 
 
-def test_max_rows_limit_enforced(admin_client, conv):
+def test_max_rows_limit_rejects_entire_batch(admin_client, conv):
     from seed_csv import MAX_ROWS
     rows = '\n'.join(f'Statement {i}' for i in range(MAX_ROWS + 3))
     csv = f'text\n{rows}'.encode('utf-8')
     with _mock_polis() as mock:
         resp = _upload(admin_client, conv.id, csv)
-    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
-    assert len(texts_sent) == MAX_ROWS
-    assert b'limit' in resp.data.lower()
+    # Entire batch rejected — nothing sent to Polis
+    assert mock.return_value.bulk_add_seeds.call_args is None
+    assert b'rejected' in resp.data.lower()
+    assert b'maximum is' in resp.data.lower()
 
 
 # ── Deduplication against existing Polis statements ──────────────────────────
