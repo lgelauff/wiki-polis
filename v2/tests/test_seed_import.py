@@ -186,6 +186,51 @@ def test_max_rows_limit_rejects_entire_batch(admin_client, conv):
     assert mock.return_value.bulk_add_seeds.call_args is None
     assert b'rejected' in resp.data.lower()
     assert b'maximum is' in resp.data.lower()
+    # Flash should contain the actual row count
+    total = MAX_ROWS + 3
+    assert str(total).encode() in resp.data
+
+
+def test_exactly_max_rows_is_accepted(admin_client, conv):
+    """A file with exactly MAX_ROWS valid rows should import without rejection."""
+    from seed_csv import MAX_ROWS
+    rows = '\n'.join(f'Statement {i}' for i in range(MAX_ROWS))
+    csv = f'text\n{rows}'.encode('utf-8')
+    with _mock_polis() as mock:
+        resp = _upload(admin_client, conv.id, csv)
+    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
+    assert len(texts_sent) == MAX_ROWS
+    assert b'rejected' not in resp.data.lower()
+
+
+def test_max_rows_plus_one_is_rejected(admin_client, conv):
+    """A file with MAX_ROWS+1 valid rows should be rejected outright."""
+    from seed_csv import MAX_ROWS
+    rows = '\n'.join(f'Statement {i}' for i in range(MAX_ROWS + 1))
+    csv = f'text\n{rows}'.encode('utf-8')
+    with _mock_polis() as mock:
+        resp = _upload(admin_client, conv.id, csv)
+    assert mock.return_value.bulk_add_seeds.call_args is None
+    assert b'rejected' in resp.data.lower()
+    assert str(MAX_ROWS + 1).encode() in resp.data
+
+
+def test_mixed_parse_errors_and_row_limit_limit_fires_first(admin_client, conv):
+    """When a file exceeds MAX_ROWS AND has parse errors, the limit rejection fires
+    first. The flash should mention both issues so the user fixes everything at once."""
+    from seed_csv import MAX_ROWS
+    # First two rows are valid, then an empty row (parse error), then enough
+    # rows to hit the limit.
+    good_rows = '\n'.join(f'Statement {i}' for i in range(MAX_ROWS + 2))
+    csv = f'text\n{good_rows}\n'.encode('utf-8')  # trailing newline = empty row = parse error
+    with _mock_polis() as mock:
+        resp = _upload(admin_client, conv.id, csv)
+    # Limit check fires first — nothing sent to Polis
+    assert mock.return_value.bulk_add_seeds.call_args is None
+    assert b'rejected' in resp.data.lower()
+    assert b'maximum is' in resp.data.lower()
+    # Flash should hint that parse errors may also be present
+    assert b'parse error' in resp.data.lower()
 
 
 # ── Deduplication against existing Polis statements ──────────────────────────

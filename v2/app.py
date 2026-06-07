@@ -1147,9 +1147,14 @@ def admin_statement_seed_import(conv_id):
     limit_skipped = [e for e in result.errors if e.limit_skipped]
     if limit_skipped:
         total_rows = len(result.texts) + len(result.errors)
+        current_app.logger.warning(
+            'CSV import rejected — row limit exceeded: %d rows, max %d (conv %s)',
+            total_rows, MAX_ROWS, conv.polis_id,
+        )
         flash(
-            f'✗ Import rejected — file contains {total_rows} rows, '
-            f'maximum is {MAX_ROWS}. Reduce the file and re-upload.',
+            f'✗ Import rejected — file contains {total_rows} rows, maximum is {MAX_ROWS}. '
+            f'Reduce the file and re-upload. '
+            f'(Parse errors may also be present — fix both before re-uploading.)',
             'import_result',
         )
         return redirect(redirect_target)
