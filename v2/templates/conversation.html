@@ -230,12 +230,13 @@
         <div id="composer-suggest" class="v2-composer" hidden>
           <div class="v2-composer-header">
             <div>
-              <div class="v2-composer-title">Suggest different wording</div>
-              <div class="v2-composer-helper">Stays close to the same idea — just a clearer or fairer phrasing.</div>
+              <div class="v2-composer-title" id="composer-suggest-title">Suggest different wording</div>
+              <div class="v2-composer-helper" id="composer-suggest-helper">Stays close to the same idea — just a clearer or fairer phrasing.</div>
             </div>
             <span class="propose-charcount"><span id="suggest-len">0</span> / 280</span>
           </div>
           <textarea id="suggest-input" class="v2-composer-textarea" maxlength="280"
+                    aria-labelledby="composer-suggest-title" aria-describedby="composer-suggest-helper"
                     placeholder="Re-confirmation every five years would balance accountability against admin burnout…"></textarea>
           <div class="v2-composer-footer">
             <span class="v2-composer-hint">Goes into the pool with the original</span>
@@ -250,12 +251,13 @@
         <div id="composer-newstmt" class="v2-composer" hidden>
           <div class="v2-composer-header">
             <div>
-              <div class="v2-composer-title">Propose a new statement</div>
-              <div class="v2-composer-helper">A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool.</div>
+              <div class="v2-composer-title" id="composer-newstmt-title">Propose a new statement</div>
+              <div class="v2-composer-helper" id="composer-newstmt-helper">A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool.</div>
             </div>
             <span class="propose-charcount"><span id="newstmt-len">0</span> / 280</span>
           </div>
           <textarea id="newstmt-input" class="v2-composer-textarea" maxlength="280"
+                    aria-labelledby="composer-newstmt-title" aria-describedby="composer-newstmt-helper"
                     placeholder="A new angle on the topic…"></textarea>
           <div class="v2-composer-footer">
             <span class="v2-composer-hint">A separate statement — others will vote on it too</span>
@@ -515,10 +517,11 @@
             <div class="contribute-composer">
               <div class="contribute-composer-header">
                 <span class="contribute-glyph filled">+</span>
-                <span class="contribute-composer-label">Your for-argument · one sentence, one claim</span>
+                <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-pro">Your for-argument · one sentence, one claim</span>
                 <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
               </div>
               <textarea class="contribute-textarea" maxlength="280" rows="3"
+                        aria-labelledby="contribute-label-{{ fs.id }}-pro"
                         placeholder="Add a short for-argument (one sentence, max 280 characters)…"></textarea>
               <div class="contribute-actions">
                 <button type="button" class="btn-secondary contribute-skip-btn">Nothing to add</button>
@@ -630,10 +633,11 @@
             <div class="contribute-composer">
               <div class="contribute-composer-header">
                 <span class="contribute-glyph filled">−</span>
-                <span class="contribute-composer-label">Your against-argument · one sentence, one claim</span>
+                <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-con">Your against-argument · one sentence, one claim</span>
                 <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
               </div>
               <textarea class="contribute-textarea" maxlength="280" rows="3"
+                        aria-labelledby="contribute-label-{{ fs.id }}-con"
                         placeholder="Add a short against-argument (one sentence, max 280 characters)…"></textarea>
               <div class="contribute-actions">
                 <button type="button" class="btn-secondary contribute-skip-btn">Nothing to add</button>
