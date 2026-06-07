@@ -749,8 +749,16 @@ def admin_conversation_new():
     slug   = request.form.get('slug', '').strip().lower()
     fields = _parse_conversation_form()
 
-    if not fields['title'] or not _valid_slug(slug):
-        abort(400)
+    if not fields['title']:
+        flash('Title is required.', 'error')
+        return redirect(url_for('admin.admin'))
+    if not _valid_slug(slug):
+        flash(
+            'Invalid slug — use lowercase letters, numbers, and hyphens only, '
+            'no spaces or special characters (e.g. climate-2026).',
+            'error',
+        )
+        return redirect(url_for('admin.admin'))
 
     polis_configured = all(current_app.config.get(k) for k in (
         'POLIS_SERVER_URL', 'POLIS_ADMIN_EMAIL', 'POLIS_ADMIN_PASSWORD'))

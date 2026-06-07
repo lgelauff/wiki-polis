@@ -60,8 +60,9 @@ def test_create_conversation_invalid_slug_rejected(admin_client):
         'polis_id': 'abc1234567',
         'title': 'Test',
         'access_policy': 'public',
-    })
-    assert resp.status_code == 400
+    }, follow_redirects=True)
+    assert resp.status_code == 200
+    assert b'lowercase letters' in resp.data.lower() or b'invalid slug' in resp.data.lower()
 
 
 def test_create_conversation_polis_failure_redirects(app, admin_client):
