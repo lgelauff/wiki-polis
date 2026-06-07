@@ -12,7 +12,7 @@
 {% if not username %}
 
   <div class="landing-section">
-    <h2 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Where the community actually stands.</h2>
+    <h1 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Where the community actually stands.</h1>
     <p style="font-size:15px;line-height:1.6;color:var(--body);max-width:520px">
       Vote on short statements, watch opinion clusters emerge.
       No threads, no replies — just signal.
@@ -61,6 +61,8 @@
   {% endif %}
 
 {% else %}
+
+  <h1 class="sr-only">Your consultations</h1>
 
   {% if active_joined %}
   <section aria-label="Active consultations">

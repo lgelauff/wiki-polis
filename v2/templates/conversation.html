@@ -19,6 +19,8 @@
 
 <div class="container">
 
+  <h1 class="sr-only">{{ conversation.title }}</h1>
+
   {% if conversation.intro_text %}
   <div class="intro-text">
     {{ conversation.intro_text | safe }}
