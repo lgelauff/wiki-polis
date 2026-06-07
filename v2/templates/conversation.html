@@ -10,9 +10,9 @@
 {% block head %}
 {% if conversation.active and not conversation.paused and conversation.phase_submission %}
 <script type="importmap" nonce="{{ csp_nonce }}">
-{"imports": {"@particiapp/particiapp-web-client": "{{ url_for('static', filename='particiapp-web-client.js') }}"}}
+{"imports": {"@particiapp/particiapp-web-client": "{{ url_for('static', filename='particiapp-web-client.js') }}?v={{ git_version }}"}}
 </script>
-<script type="module" nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='particiapp-web-components.js') }}"></script>
+<script type="module" nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='particiapp-web-components.js') }}?v={{ git_version }}"></script>
 {% endif %}
 {% endblock %}
 {% block content %}

@@ -125,6 +125,22 @@ a general upstream improvement; it is not a blocker for our deployment.)
 
 ---
 
+## Static assets
+
+Static files (CSS, fonts, JS) are served directly by Flask from the `/static/` directory.
+
+**Caching strategy:** all `/static/` responses carry `Cache-Control: public, max-age=604800` (1 week).
+To prevent stale assets after a deploy, every static URL includes a `?v=<git-sha>` query
+parameter injected at pod startup via `_GIT_VERSION`. A new deploy produces a new SHA →
+new URLs → browser fetches fresh assets automatically. No CDN or manual cache invalidation
+is needed.
+
+**Scope:** only truly static files benefit from this — fonts, stylesheets, and bundled JS.
+API responses, proxied Particiapi calls, and dynamically generated Polis cluster images are
+not under `/static/` and are always served fresh.
+
+---
+
 ## Status & roadmap
 
 This document describes the architecture **as built**, not a build sequence. For the

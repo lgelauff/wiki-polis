@@ -40,6 +40,24 @@ them:
   name — use `docker-compose -p wiki-polis-staging logs <service>` (see
   [Staging environment](#staging-environment)).
 
+## Changes not showing up in the browser
+
+If a deployed change to CSS, JS, or fonts isn't visible:
+
+1. **Check the footer SHA.** The git commit hash in the page footer must match what you
+   deployed. If it doesn't, the pod is still running the old code — wait for the deploy
+   to finish or restart the webservice.
+2. **Hard-reload isn't enough.** Static assets are cached for 1 year in the browser.
+   A normal reload or even `Cmd+Shift+R` may still serve the old cached file if the URL
+   hasn't changed.
+3. **The URL must change.** The `?v=<git-sha>` suffix on static URLs is what busts the
+   cache. If the footer SHA matches your deploy but the asset still looks wrong, open
+   DevTools → Network → find the file and check its URL contains the new SHA. If it
+   doesn't, something is serving stale HTML — check your local browser cache or a
+   proxy/CDN in front.
+4. **Force-clear for local testing.** DevTools → Network → check **Disable cache** while
+   DevTools is open, then reload. This bypasses the browser cache entirely for that session.
+
 ## Investigating a 5xx
 
 When a 5xx is reported (by a soak run, monitoring, or a user), work outside-in:
@@ -224,6 +242,14 @@ single ingress `503` (~1 in 3000) — Toolforge's front proxy when the pod is br
 saturated, **not** the app (see [Investigating a 5xx](#investigating-a-5xx)). For a
 prototype this is harmless; raise uwsgi `processes`/`threads` only if real bursty traffic
 is expected.
+
+**Cold-pod latency.** Staging receives little traffic so its Kubernetes pod is frequently
+reaped by Toolforge. The first request after a cold start pays ~30 s while the pod
+schedules, the container starts, and the Django app boots. Subsequent requests are fast.
+Production is unaffected as long as it receives regular traffic. There is no fix short of
+a keepalive cron job (`curl -s -o /dev/null https://wiki-polis-dev.toolforge.org/ ` every
+10 min from a Toolforge cron).
+
 
 ## Secrets rotation
 
