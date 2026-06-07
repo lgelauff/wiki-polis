@@ -119,6 +119,12 @@
           <span class="vote-progress-queued" id="vote-progress-queued"></span>
         </div>
 
+        {# ── SR-only live region — announces each new statement to screen
+             readers (the visible <pa-statement> text is not in a live region
+             and focus moves to the vote buttons, so the statement change is
+             otherwise silent). ── #}
+        <p class="sr-only" id="statement-live" role="status" aria-live="polite"></p>
+
         {# ── Statement card — always visible ── #}
         <div class="statement-card" id="statement-card">
           <div class="statement-card-header">
@@ -1001,6 +1007,7 @@
   var votedBadge       = document.getElementById('voted-badge');
   var votedLabel       = document.getElementById('voted-label');
   var votedStmtText    = document.getElementById('voted-stmt-text');
+  var stmtLive         = document.getElementById('statement-live');
   var triad            = document.getElementById('v2-triad');
   var triadLabel       = document.getElementById('v2-triad-label');
   var triadSuggest     = document.getElementById('triad-suggest');
@@ -1042,6 +1049,18 @@
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   function liveStmt() { return conv.querySelector('pa-statement'); }
+
+  // Announce the currently-displayed statement in the polite live region.
+  // The component advances pa-statement synchronously on vote, so by the time
+  // we re-enter the idle vote view liveStmt() already holds the next statement.
+  function announceStatement() {
+    if (!stmtLive) return;
+    if (isAllDone()) { stmtLive.textContent = ''; return; }
+    var s   = liveStmt();
+    var txt = s ? (s.text || '').trim() : '';
+    if (!txt && conv.statement && conv.statement.text) txt = String(conv.statement.text).trim();
+    if (txt) stmtLive.textContent = 'Statement: ' + txt;
+  }
 
   function getVotedCount() {
     try { return conv.client.participant.votes.size; } catch (e) { return 0; }
@@ -1122,6 +1141,9 @@
     // Restore keyboard focus
     var target = focusTarget || choiceRow.querySelector('.vote-choice');
     if (target) target.focus();
+
+    // Announce the new statement now that the idle vote view is showing.
+    announceStatement();
   }
 
   // ── Mode: voted ───────────────────────────────────────────────────────────────
@@ -1420,6 +1442,10 @@
   // `value`, never statementID.) Consumed by "change" (#69) and the error handler below.
   var lastVoteStmtId = null;
 
+  // Announce the first statement once the client has loaded (subsequent
+  // statements are announced from enterIdle as the queue advances).
+  var initialAnnounced = false;
+
   // On vote failure: mark the statement as voted in the web component so it advances,
   // then reset UI. Covers both own-statement 403s and any other transient failures.
   conv.addEventListener('particiappvotesubmiterror', function () {
@@ -1446,6 +1472,7 @@
     if (e.state === 'loaded' && conv.client) {
       updateProgress(conv.client.statements);
       handleNoStatement();
+      if (!initialAnnounced) { initialAnnounced = true; announceStatement(); }
     }
   });
 }());
