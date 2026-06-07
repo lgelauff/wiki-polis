@@ -294,7 +294,7 @@
           <pa-submit-button id="pvb-submit-newstmt" submitfor="newstmt-input">new-statement</pa-submit-button>
         </span>
 
-        <div id="conv-error" hidden>
+        <div id="conv-error" role="alert" hidden>
           <p class="muted" id="conv-error-msg">Unable to load statements. Please refresh the page.</p>
         </div>
 
@@ -393,6 +393,11 @@
        class="tab-panel arguments-tab{% if tabs|length > 1 and tabs[0] != 'arguments' %} tab-panel--hidden{% endif %}"
        role="tabpanel" aria-labelledby="tab-btn-arguments"
        data-voting="{{ 'true' if arg_voting_open else 'false' }}">
+
+    {# SR-only assertive region — vote-rejection reasons are shown transiently
+       in the visible status strip (and reverted); mirror them here so screen
+       readers hear them once without announcing the instructional baseline. #}
+    <p class="sr-only" id="arg-alert" role="alert"></p>
 
     {% if featured_data | length == 0 %}
     <div class="landing-section">
@@ -752,7 +757,7 @@
           <span class="stmt-dot"></span>
           INFORMED VOTE &middot; {{ loop.index }} of {{ phase6_data | length }}
         </span>
-        <span class="p6-voted-badge" hidden></span>
+        <span class="p6-voted-badge" role="alert" hidden></span>
       </div>
 
       {# Statement text #}
@@ -947,9 +952,9 @@
       if (skip) {
         skip.addEventListener('click', function () {
           skip.hidden = true;
-          badge.textContent = 'Skipped';
           badge.className = 'p6-voted-badge';
           badge.removeAttribute('hidden');
+          badge.textContent = 'Skipped';
           row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = true; b.classList.add('p6-voted'); });
           card.classList.add('p6-card--voted');
           markTerminal(card);
@@ -972,9 +977,9 @@
             if (resp.ok) {
               var label = vote === 1 ? 'Agreed' : vote === -1 ? 'Disagreed' : 'Passed';
               var cls   = vote === 1 ? 'agree' : vote === -1 ? 'disagree' : 'pass';
-              badge.textContent = '✓ ' + label;
               badge.className = 'p6-voted-badge p6-voted-badge--' + cls;
               badge.removeAttribute('hidden');
+              badge.textContent = '✓ ' + label;
               row.querySelectorAll('.btn-p6-vote').forEach(function (b) {
                 b.classList.toggle('p6-voted', b.dataset.vote === String(vote));
               });
@@ -986,8 +991,8 @@
               if (skip) skip.hidden = false;
             }
           }).catch(function () {
-            badge.textContent = 'Network error — refresh to check';
             badge.removeAttribute('hidden');
+            badge.textContent = 'Network error — refresh to check';
           });
         });
       });
@@ -1877,9 +1882,13 @@
               var prev = txt.textContent;
               txt.textContent = msgs[data.reason];
               strip.classList.add('arg-status-strip--error');
+              // Mirror to the assertive alert region so screen readers hear it.
+              var alertEl = document.getElementById('arg-alert');
+              if (alertEl) alertEl.textContent = msgs[data.reason];
               setTimeout(function () {
                 txt.textContent = prev;
                 strip.classList.remove('arg-status-strip--error');
+                if (alertEl) alertEl.textContent = '';
               }, 3500);
             }
           }).catch(function () {});
