@@ -300,6 +300,24 @@ def test_partial_polis_failure_still_imports_others(admin_client, conv):
     assert b'already in polis' in resp.data.lower()
 
 
+def test_banner_shows_skipped_count_when_mixed_with_successes(admin_client, conv):
+    """When some statements succeed and one is Polis-rejected, the banner shows
+    the correct counts and the per-statement flash explains the Polis skip."""
+    # bulk_add_seeds returns (2, [('Bad one', exc)]) — 2 succeed, 1 Polis-rejected
+    def bulk_side_effect(conv_id, texts):
+        return len(texts) - 1, [(texts[-1], PolisServerError('already exists'))]
+
+    csv = b'text\nGood one\nAlso good\nBad one'
+    with _mock_polis() as mock:
+        mock.return_value.bulk_add_seeds.side_effect = bulk_side_effect
+        resp = _upload(admin_client, conv.id, csv)
+    # Banner: "✓ 2 imported — ⚠ 1 skipped"
+    assert b'2 imported' in resp.data
+    assert b'1 skipped' in resp.data
+    # Per-statement toast explains the skip reason
+    assert b'already in polis' in resp.data.lower()
+
+
 # ── Security ─────────────────────────────────────────────────────────────────
 
 def test_xss_in_statement_text_is_escaped(admin_client, conv):

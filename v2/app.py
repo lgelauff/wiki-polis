@@ -1211,7 +1211,8 @@ def admin_statement_seed_import(conv_id):
         try:
             successes, failures = _polis_server_client().bulk_add_seeds(conv.polis_id, clean_texts)
             for text, exc in failures:
-                current_app.logger.warning('Polis rejected imported row (may already exist): %s', exc)
+                current_app.logger.warning('Polis rejected imported row (%s, may already exist): %s',
+                                           type(exc).__name__, exc)
                 polis_skipped.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
         except PolisServerError:
             current_app.logger.exception('Polis login failed during bulk import')
@@ -1232,16 +1233,19 @@ def admin_statement_seed_import(conv_id):
     # Persistent inline result near the upload button.
     n_skipped = len(dedup_errors) + len(polis_skipped)
     n_errors   = len(polis_errors)
-    if successes and not n_skipped and not n_errors:
+    # Note: polis_errors is only set in the except-PolisServerError branch, which
+    # means successes == 0 whenever polis_errors is non-empty. The two cannot
+    # coexist; n_errors is checked last to keep the ladder exhaustive.
+    if successes and not n_skipped:
         flash(f'✓ {successes} statement{"s" if successes != 1 else ""} imported', 'import_result')
     elif successes:
         flash(f'✓ {successes} imported — ⚠ {n_skipped} skipped', 'import_result')
-    elif n_skipped and not n_errors:
-        flash(f'⚠ 0 imported — {n_skipped} already existed in Polis', 'import_result')
     elif n_errors:
         flash('✗ Import failed — could not reach Polis. Check server logs.', 'import_result')
+    elif n_skipped:
+        flash(f'⚠ 0 imported — {n_skipped} already existed in Polis', 'import_result')
     else:
-        flash('⚠ 0 imported — all statements were skipped', 'import_result')
+        flash('⚠ 0 imported — Polis returned no result', 'import_result')
 
     return redirect(redirect_target)
 
