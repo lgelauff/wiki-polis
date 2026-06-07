@@ -1091,6 +1091,10 @@
 
   // ── Mode: idle ────────────────────────────────────────────────────────────────
   function enterIdle(focusTarget) {
+    // If the queue is empty, route to the all-done state so the propose
+    // button is correctly enabled (fixes #107 — idle vs all-done inconsistency).
+    if (isAllDone()) { enterAllDone(); return; }
+
     stmtCard.classList.remove('statement-card--voted');
     stmtCard.hidden        = false;
     votedStmtText.hidden   = true;
