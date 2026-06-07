@@ -318,6 +318,40 @@ def test_banner_shows_skipped_count_when_mixed_with_successes(admin_client, conv
     assert b'already in polis' in resp.data.lower()
 
 
+# ── Non-CSV file type rejection ──────────────────────────────────────────────
+
+def test_txt_file_rejected_by_extension_check(admin_client, conv):
+    with _mock_polis():
+        resp = _upload(admin_client, conv.id, b'hello world',
+                       filename='innocent.txt', content_type='text/plain')
+    assert b'please upload a .csv' in resp.data.lower()
+    assert b'imported' not in resp.data.lower()
+
+
+def test_jpg_file_rejected_by_extension_check(admin_client, conv):
+    with _mock_polis():
+        resp = _upload(admin_client, conv.id, b'\xff\xd8\xff\xe0junk',
+                       filename='photo.jpg', content_type='image/jpeg')
+    assert b'please upload a .csv' in resp.data.lower()
+
+
+def test_json_with_csv_extension_fails_parse(admin_client, conv):
+    """A file named .csv but containing JSON content should fail at the CSV parse stage."""
+    with _mock_polis():
+        resp = _upload(admin_client, conv.id, b'{"key": "value"}',
+                       filename='evil.csv', content_type='application/json')
+    # Extension check passes (.csv), but CSV parse fails (no 'text' column)
+    assert b'imported' not in resp.data.lower()
+    assert b'import' in resp.data.lower()  # some rejection message present
+
+
+def test_no_extension_file_rejected(admin_client, conv):
+    with _mock_polis():
+        resp = _upload(admin_client, conv.id, b'text\nhello',
+                       filename='noextension', content_type='application/octet-stream')
+    assert b'please upload a .csv' in resp.data.lower()
+
+
 # ── Security ─────────────────────────────────────────────────────────────────
 
 def test_xss_in_statement_text_is_escaped(admin_client, conv):
