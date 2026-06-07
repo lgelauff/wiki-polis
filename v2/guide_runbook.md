@@ -120,6 +120,50 @@ docker exec -it $CID psql -U polis -d polis -c \
     ORDER BY created DESC LIMIT 20;"
 ```
 
+## Hiding and closing an unwanted Polis conversation
+
+Use this when a Polis conversation was created but should no longer be visible or
+accept votes — for example an orphaned Phase 6 conversation left behind by a failed
+`admin_phase6_init` call (logged as `"abandoning Polis conversation <zinvite>"`).
+
+There is no hard-delete in the Polis API. The safe equivalent is to:
+1. **Close** it — set `is_active: false` so no new votes are accepted.
+2. **Hide** it — set `vis_type: 0` so it does not appear in Polis's own UI.
+
+Neither action removes data; it can be reversed if needed.
+
+```bash
+# On the VPS (prod or staging). Replace <ZINVITE> with the orphaned conversation ID.
+ZINVITE=<ZINVITE>
+POLIS_URL=http://localhost:8001      # staging: http://localhost:8011
+POLIS_EMAIL=<POLIS_ADMIN_EMAIL>
+POLIS_PASSWORD=<POLIS_ADMIN_PASSWORD>
+
+# 1. Log in and capture the session token
+TOKEN=$(curl -s -X POST "$POLIS_URL/api/v3/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"$POLIS_EMAIL\",\"password\":\"$POLIS_PASSWORD\"}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+
+# 2. Close and hide the conversation in one PUT
+curl -s -X PUT "$POLIS_URL/api/v3/conversations" \
+  -H "Content-Type: application/json" \
+  -H "x-polis: $TOKEN" \
+  -d "{\"conversation_id\":\"$ZINVITE\",\"is_active\":false,\"vis_type\":0}"
+```
+
+**When it is safe to ignore** an orphaned conversation: if the zinvite never made it
+into the wiki-polis Flask DB (`phase6_polis_conversation_id` is NULL for that
+conversation) and there are zero votes in Polis PG, the orphan is completely inert —
+no participant can reach it. Run the vote-count query below to confirm, then decide
+whether to hide it or leave it.
+
+```bash
+docker exec -it $CID psql -U polis -d polis -c \
+  "SELECT COUNT(*) FROM votes
+    WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<ZINVITE>');"
+```
+
 ## Diagnosing empty results
 
 The Results tab shows "Results will appear here once enough votes have been cast."
