@@ -162,12 +162,80 @@ def test_advance_at_final_stage_is_noop(admin_client, conv):
     assert _current_stage_index(conv) == len(PHASE_SEQUENCE) - 1
 
 
-def test_advance_requires_global_admin(auth_client, conv):
-    """A non-global-admin (regular participant / moderator) cannot advance."""
+def test_advance_forbidden_for_regular_participant(auth_client, conv):
+    """A logged-in participant with no role cannot advance."""
     resp = auth_client.post(f'/admin/conversations/{conv.id}/phase/advance')
     assert resp.status_code == 403
     db.session.refresh(conv)
     assert conv.phase_submission is False
+
+
+def test_advance_forbidden_for_moderator(client, conv, participant):
+    """A conversation MODERATOR (not a global admin) cannot advance phases —
+    phase control is global-admin only in this PR."""
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='moderator'))
+    db.session.commit()
+    login(client, 'testuser')
+    resp = client.post(f'/admin/conversations/{conv.id}/phase/advance')
+    assert resp.status_code == 403
+    db.session.refresh(conv)
+    assert conv.phase_submission is False
+
+
+def test_moderator_sees_readonly_stepper(client, conv, participant):
+    """A moderator reaches the detail page and sees the stepper, but the forward
+    control is disabled and the advanced controls are absent."""
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='moderator'))
+    db.session.commit()
+    login(client, 'testuser')
+    resp = client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'phase-stepper' in resp.data           # same interface
+    assert b'disabled' in resp.data                # button inert
+    assert b'Advanced phase controls' not in resp.data
+    assert b'phase/advance' not in resp.data        # no actionable advance form
+
+
+def test_advance_from_non_linear_state_rejected(admin_client, conv):
+    """The route refuses to advance from a custom (non-linear) state instead of
+    perpetuating it — backward/custom repair is an advanced-mode action."""
+    conv.phase_submission = True
+    conv.phase_argument_mapping = True            # two flags on → non-linear
+    db.session.commit()
+    resp = _advance(admin_client, conv)
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    # Unchanged — no silent normalisation, no extra flag flipped.
+    assert conv.phase_submission is True
+    assert conv.phase_argument_mapping is True
+    assert conv.phase_informed_voting is False
+
+
+def test_advance_on_closed_conversation_jumps_to_public_results(admin_client, conv):
+    """A closed conversation jumps straight to public results, skipping steps."""
+    conv.phase_submission = True                  # mid-sequence
+    conv.active = False
+    db.session.commit()
+    _advance(admin_client, conv)
+    db.session.refresh(conv)
+    assert conv.phase_public_results is True
+    assert conv.phase_submission is False         # exclusive: prior cleared
+    assert conv.phase_argument_mapping is False
+
+
+def test_advance_vis_type_failure_flashes(admin_client, conv):
+    """If the Polis vis_type sync fails, the phase change still persists and a
+    warning is flashed."""
+    with patch('app.PolisServerClient.set_vis_type',
+               side_effect=PolisServerError('boom')):
+        resp = admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                                 follow_redirects=True)
+    assert resp.status_code == 200
+    assert b'results visibility in Polis failed' in resp.data
+    db.session.refresh(conv)
+    assert conv.phase_submission is True          # change persisted despite failure
 
 
 def test_advance_to_informed_voting_does_not_init_phase6(admin_client, conv):
@@ -199,6 +267,16 @@ def test_advance_syncs_vis_type(admin_client, conv):
         admin_client.post(f'/admin/conversations/{conv.id}/phase/advance')
     m.assert_called_once_with(conv.polis_id, 0)
 
+    # Argument mapping → informed voting → vis_type 0.
+    with patch('app.PolisServerClient.set_vis_type') as m:
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance')
+    m.assert_called_once_with(conv.polis_id, 0)
+
+    # Informed voting → public results → vis_type 1.
+    with patch('app.PolisServerClient.set_vis_type') as m:
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance')
+    m.assert_called_once_with(conv.polis_id, 1)
+
 
 def test_current_stage_index_and_linearity():
     c = Conversation(slug='x', polis_id='p', title='t', active=True,
@@ -216,8 +294,9 @@ def test_current_stage_index_and_linearity():
 def test_simple_panel_shows_advance_button(admin_client, conv):
     resp = admin_client.get(f'/admin/conversations/{conv.id}')
     assert resp.status_code == 200
-    assert b'Advance to next phase' in resp.data
+    assert b'Move to Submission' in resp.data       # forward control, contextual label
     assert b'phase-stepper' in resp.data
+    assert b'aria-current="step"' in resp.data      # a11y: current stage marked
 
 
 def test_non_linear_state_suppresses_advance_button(admin_client, conv):
@@ -227,7 +306,8 @@ def test_non_linear_state_suppresses_advance_button(admin_client, conv):
     resp = admin_client.get(f'/admin/conversations/{conv.id}')
     assert resp.status_code == 200
     assert b'custom state' in resp.data
-    assert b'Advance to next phase' not in resp.data
+    assert b'Move to ' not in resp.data           # no actionable forward control
+    assert b'phase/advance' not in resp.data
 
 
 # ── Pause / close ─────────────────────────────────────────────────────────────
