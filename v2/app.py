@@ -828,6 +828,14 @@ def admin_conversation_close(conv_id):
 @admin_required
 def admin_conversation_phases(conv_id):
     conv = Conversation.query.get_or_404(conv_id)
+    enabling_arg_mapping = (bool(request.form.get('phase_argument_mapping'))
+                            and not conv.phase_argument_mapping)
+    if enabling_arg_mapping:
+        featured_count = FeaturedStatement.query.filter_by(conversation_id=conv_id).count()
+        if featured_count == 0:
+            flash('Cannot enable argument mapping — add at least one featured statement first.', 'error')
+            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
     conv.phase_submission       = bool(request.form.get('phase_submission'))
     conv.phase_personal_results = bool(request.form.get('phase_personal_results'))
     conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
