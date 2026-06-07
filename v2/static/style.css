@@ -955,14 +955,16 @@ pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
 }
 
 /* Hide action labels in pre-vote dimmed state */
-.v2-triad:not(.v2-triad--active) .v2-option-action { visibility: hidden; }
+.v2-triad:not(.v2-triad--active):not(.v2-triad--alldone) .v2-option-action { visibility: hidden; }
 
-/* Active state — set when triad has v2-triad--active */
-.v2-triad--active .v2-option-card:not([aria-disabled="true"]) {
+/* Active and all-done states — set when triad has v2-triad--active or v2-triad--alldone */
+.v2-triad--active .v2-option-card:not([aria-disabled="true"]),
+.v2-triad--alldone .v2-option-card:not([aria-disabled="true"]) {
   opacity: 1;
   cursor: pointer;
 }
-.v2-triad--active .v2-option-card:not([aria-disabled="true"]):hover {
+.v2-triad--active .v2-option-card:not([aria-disabled="true"]):hover,
+.v2-triad--alldone .v2-option-card:not([aria-disabled="true"]):hover {
   border-color: #888; /* fallback for Safari < 15.4 */
   border-color: color-mix(in srgb, var(--ink) 55%, transparent);
 }
