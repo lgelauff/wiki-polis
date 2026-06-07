@@ -225,6 +225,18 @@ saturated, **not** the app (see [Investigating a 5xx](#investigating-a-5xx)). Fo
 prototype this is harmless; raise uwsgi `processes`/`threads` only if real bursty traffic
 is expected.
 
+**Cold-pod latency.** Staging receives little traffic so its Kubernetes pod is frequently
+reaped by Toolforge. The first request after a cold start pays ~30 s while the pod
+schedules, the container starts, and the Django app boots. Subsequent requests are fast.
+Production is unaffected as long as it receives regular traffic. There is no fix short of
+a keepalive cron job (`curl -s -o /dev/null https://wiki-polis-dev.toolforge.org/ ` every
+10 min from a Toolforge cron).
+
+**Static asset caching.** All `/static/` responses are served with
+`Cache-Control: public, max-age=31536000`. Static file URLs include a `?v=<git-sha>`
+query parameter so each deploy automatically busts the browser cache. Dynamic routes
+(API, proxy, cluster images) are unaffected and always served fresh.
+
 ## Secrets rotation
 
 `toolforge envvars` has no `update` — rotate by delete + recreate:
