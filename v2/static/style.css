@@ -1180,14 +1180,13 @@ pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
 /* ── Hidden pa-vote-button/pa-submit-button for API submission ── */
 
 .pvb-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+  /* These pa-* elements exist only so JS can fire them at the API via .click()
+     (which works on display:none elements). They must NOT be visually-hidden
+     (clip/sr-only), because that keeps them in the a11y tree + tab order — a
+     screen-reader/keyboard user would otherwise hit phantom Agree/Pass/Disagree
+     + submit controls duplicating the visible UI. display:none removes them
+     from layout, the a11y tree, and the tab order while keeping .click() working. */
+  display: none;
 }
 
 /* ── Statement display ── */

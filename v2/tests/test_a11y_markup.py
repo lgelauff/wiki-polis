@@ -5,11 +5,14 @@ so a future template edit that drops an aria hook or breaks the
 tab `aria-controls` -> panel `id` coupling fails CI instead of silently
 regressing (the rest of the suite only proves templates still render).
 """
+import os
 import re
 
 import pytest
 
 from db import Conversation, Participation, db
+
+_STYLE_CSS = os.path.join(os.path.dirname(__file__), os.pardir, 'static', 'style.css')
 
 
 @pytest.fixture
@@ -65,6 +68,23 @@ def test_conversation_has_h1_with_title(auth_client, conv, participation):
     resp = auth_client.get('/c/test-conv')
     assert resp.status_code == 200
     assert re.search(rb'<h1[^>]*>\s*Test Conversation\s*</h1>', resp.data)
+
+
+# ── Hidden API-proxy controls must be out of the a11y tree (4.1.2) ─────────────
+
+def test_pvb_hidden_uses_display_none_not_sr_only():
+    """The hidden pa-* vote/submit proxies must be display:none, not clip/sr-only.
+
+    They are fired only via JS .click() (works under display:none). If hidden with
+    the visually-hidden clip pattern they stay focusable + in the a11y tree, so a
+    screen-reader/keyboard user hits phantom Agree/Pass/Disagree + submit controls.
+    """
+    css = open(_STYLE_CSS, encoding='utf-8').read()
+    m = re.search(r'\.pvb-hidden\s*\{([^}]*)\}', css)
+    assert m, '.pvb-hidden rule not found'
+    body = m.group(1)
+    assert re.search(r'display:\s*none', body), '.pvb-hidden must use display:none'
+    assert 'clip:' not in body, '.pvb-hidden must not use the clip/sr-only pattern'
 
 
 # ── Consultation listing semantics (1.3.1 / 2.4.6 / 4.1.2) ─────────────────────
