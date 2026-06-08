@@ -5,11 +5,14 @@ so a future template edit that drops an aria hook or breaks the
 tab `aria-controls` -> panel `id` coupling fails CI instead of silently
 regressing (the rest of the suite only proves templates still render).
 """
+import os
 import re
 
 import pytest
 
 from db import Conversation, Participation, db
+
+_STYLE_CSS = os.path.join(os.path.dirname(__file__), os.pardir, 'static', 'style.css')
 
 
 @pytest.fixture
@@ -65,6 +68,53 @@ def test_conversation_has_h1_with_title(auth_client, conv, participation):
     resp = auth_client.get('/c/test-conv')
     assert resp.status_code == 200
     assert re.search(rb'<h1[^>]*>\s*Test Conversation\s*</h1>', resp.data)
+
+
+# ── Hidden API-proxy controls must be out of the a11y tree (4.1.2) ─────────────
+
+def test_pvb_hidden_uses_display_none_not_sr_only():
+    """The hidden pa-* vote/submit proxies must be display:none, not clip/sr-only.
+
+    They are fired only via JS .click() (works under display:none). If hidden with
+    the visually-hidden clip pattern they stay focusable + in the a11y tree, so a
+    screen-reader/keyboard user hits phantom Agree/Pass/Disagree + submit controls.
+
+    REMOVE THIS GUARD when #159 lands: that refactor deletes the hidden pa-*
+    proxy entirely (calling Particiapi directly), so `.pvb-hidden` ceases to
+    exist and this interim test becomes obsolete.
+    """
+    css = open(_STYLE_CSS, encoding='utf-8').read()
+    m = re.search(r'\.pvb-hidden\s*\{([^}]*)\}', css)
+    assert m, '.pvb-hidden rule not found'
+    body = m.group(1)
+    assert re.search(r'display:\s*none', body), '.pvb-hidden must use display:none'
+    assert 'clip:' not in body, '.pvb-hidden must not use the clip/sr-only pattern'
+
+
+# ── Consultation listing semantics (1.3.1 / 2.4.6 / 4.1.2) ─────────────────────
+
+def test_home_listing_has_list_and_heading_semantics(client, conv):
+    """The consultation listing is a real list with heading-navigable titles.
+
+    Sibling <a> cards with no list role gave SR users no "list, N items" / item
+    position; plain <span> titles were not heading-navigable (1.3.1 / 2.4.6).
+    """
+    resp = client.get('/')
+    assert resp.status_code == 200
+    html = resp.data.decode()
+    assert '<ul class="conv-list">' in html
+    assert '<h2 class="home-section-label"' in html
+    assert re.search(r'<h3 class="conv-card-title">\s*Test Conversation\s*</h3>', html)
+
+
+def test_home_pseudonym_announced_with_context(auth_client, conv, participation):
+    """A joined consultation announces the pseudonym labelled as such, not as a
+    bare token, and the redundant visible badge is hidden from AT (1.3.1 / 4.1.2)."""
+    resp = auth_client.get('/')
+    assert resp.status_code == 200
+    html = resp.data.decode()
+    assert 'your pseudonym: happy-fox' in html
+    assert '<span class="conv-card-badge" aria-hidden="true">happy-fox</span>' in html
 
 
 # ── Name/role/value affordances (4.1.2 / 1.3.1) ────────────────────────────────

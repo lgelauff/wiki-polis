@@ -342,6 +342,25 @@ header {
   margin-bottom: 24px;
 }
 
+/* Consultation listing uses real list + heading semantics (a11y); these resets
+   keep the visual appearance identical by neutralising UA list/heading styles. */
+.conv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+h2.home-section-label {
+  margin: 0;
+  font-weight: 400;
+}
+h3.conv-card-title {
+  margin: 0;
+}
+h3.conv-card-title-wrap {
+  margin: 0;
+  font: inherit;
+}
+
 .home-section-header {
   display: flex;
   align-items: baseline;
@@ -1164,14 +1183,15 @@ pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
 /* ── Hidden pa-vote-button/pa-submit-button for API submission ── */
 
 .pvb-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+  /* These pa-* elements exist only so JS can fire them at the API via .click()
+     (which works on display:none elements). They must NOT be visually-hidden
+     (clip/sr-only), because that keeps them in the a11y tree + tab order — a
+     screen-reader/keyboard user would otherwise hit phantom Agree/Pass/Disagree
+     + submit controls duplicating the visible UI. display:none removes them
+     from layout, the a11y tree, and the tab order while keeping .click() working.
+     NOTE: this whole rule (and the .pvb-hidden span) goes away with #159, which
+     drops the pa-* proxy and talks to Particiapi directly — remove it then. */
+  display: none;
 }
 
 /* ── Statement display ── */

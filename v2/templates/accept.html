@@ -33,7 +33,7 @@
   {% endif %}
 
   <p style="font-size:14px;color:var(--muted);margin-top:18px;margin-bottom:0">
-    Quick setup before you start — pick a pseudonym and review how your data is handled.
+    Quick setup before you start — pick a pseudonym for this topic and review how your data is handled.
   </p>
 
   <form method="post"
@@ -49,7 +49,6 @@
          aria-labelledby="pseudonym-title"
          aria-describedby="pseudonym-help pseudonym-status">
       <div class="pseudonym-card-header">
-        <div class="pseudonym-card-title" id="pseudonym-title">Pick a name for yourself for this consultation</div>
         <button type="button"
                 class="reroll-btn"
                 id="reroll-btn"
@@ -57,7 +56,7 @@
                 aria-label="Generate new pseudonym options">↻ reroll</button>
       </div>
       <div class="pseudonym-card-sub" id="pseudonym-help">
-        This name appears inside this consultation. It is separate from your Wikimedia username.
+        This name appears next to your opinions in this consultation. It is separate from your Wikimedia username.
       </div>
       <p class="sr-only" id="pseudonym-status" role="status" aria-live="polite"></p>
 
@@ -157,7 +156,7 @@
              required
              aria-required="true">
       <span>
-        I understand that my individual votes are private, my pseudonym may appear
+        I understand that my individual votes will appear with my pseudonym
         in consultation records, and wiki-polis keeps an internal username link
         while the consultation is running.
       </span>
