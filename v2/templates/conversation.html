@@ -412,106 +412,93 @@
     </div>
     {% endif %}
 
-    {% if featured_data | length > 1 %}
-    <nav class="arg-toc" aria-label="Proposals navigation">
-      <ul class="arg-toc-list">
-        {% for item in featured_data %}
-        <li>
-          <button class="arg-toc-btn{% if loop.first %} arg-toc-btn--active{% endif %}"
-                  data-target="fs-{{ item.fs.id }}"
-                  {% if loop.first %}aria-current="true"{% endif %}
-                  type="button">
-            <span class="arg-toc-index">{{ loop.index }}</span>
-            <span class="arg-toc-label">{{ item.short_title }}</span>
-          </button>
-        </li>
-        {% endfor %}
-      </ul>
-    </nav>
-    {% endif %}
+    {% if featured_data | length > 0 %}
+
+    {# Orientation banner — collapsed state persisted in localStorage per conversation slug #}
+    <div class="at-orient" id="at-orient-{{ conversation.slug }}">
+      <span class="at-orient-icon" aria-hidden="true">?</span>
+      <div class="at-orient-body">
+        <div class="at-orient-full">
+          <strong>This isn't another vote — it's a short writing task.</strong>
+          These are the statements that divided people most. For each one, add one argument
+          <em>for</em> and one <em>against</em> (or skip a side), then mark the arguments — from
+          anyone — you find most important.
+        </div>
+        <div class="at-orient-mini">What is this tab? <strong>A two-step task on the most divisive statements.</strong></div>
+      </div>
+      <button class="at-orient-toggle" type="button" id="at-orient-toggle-{{ conversation.slug }}">collapse ▲</button>
+    </div>
 
     <div class="arg-panels">
     {% for item in featured_data %}
     {% set fs = item.fs %}
     {% set both_gate = item.pro_gate and item.con_gate %}
+    {% set pro_vote_ready = item.pro_args | length > item.k %}
+    {% set con_vote_ready = item.con_args | length > item.k %}
 
-    <div class="arg-block{% if not loop.first %} arg-block--hidden{% endif %}" id="fs-{{ fs.id }}" tabindex="-1">
+    <div class="at-panel arg-block{% if not loop.first %} arg-block--hidden{% endif %}"
+         id="fs-{{ fs.id }}"
+         tabindex="-1"
+         data-index="{{ loop.index0 }}"
+         data-both-gate="{{ 'true' if both_gate else 'false' }}"
+         data-pro-vote-ready="{{ 'true' if pro_vote_ready else 'false' }}"
+         data-con-vote-ready="{{ 'true' if con_vote_ready else 'false' }}">
 
-      {# ── Featured statement card ── #}
-      <div class="arg-statement">
-        <div class="arg-statement-header">
-          <div class="arg-featured-badge">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="1.2" stroke-linecap="round"
-                 stroke-dasharray="1.4 1.6" aria-hidden="true">
-              <circle cx="12" cy="12" r="9"/>
-              <ellipse cx="12" cy="12" rx="9" ry="3.5"/>
-              <ellipse cx="12" cy="12" rx="3.5" ry="9"/>
+      {# ── Statement header + two-step indicator ── #}
+      <div class="at-head">
+        <div class="at-head-main">
+          <div class="at-featured-label" aria-hidden="true">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="m12 2 3 7 7 .5-5.5 4.5 2 7-6.5-4-6.5 4 2-7L2 9.5 9 9z"/>
             </svg>
-            FEATURED
+            Featured statement
           </div>
+          <p class="at-stmt">{{ item.text }}</p>
         </div>
-        <p class="arg-statement-text">{{ item.text }}</p>
-      </div>
 
-      {# ── Status strip ── #}
-      <div class="arg-status-strip{% if both_gate %} arg-status-strip--gated{% endif %}"
-           data-fs="{{ fs.id }}">
-        {% set pro_vote_ready = item.pro_args | length > item.k %}
-        {% set con_vote_ready = item.con_args | length > item.k %}
-        <span class="arg-status-text">
-          {% if both_gate %}
-            {% if pro_vote_ready and con_vote_ready %}
-              Pick the {{ item.k }} most important on each side. You can change your mind any time.
-            {% elif pro_vote_ready %}
-              Pick the {{ item.k }} most important for-arguments. Voting on the against side unlocks once there are at least {{ item.k + 1 }} arguments there.
-            {% elif con_vote_ready %}
-              Pick the {{ item.k }} most important against-arguments. Voting on the for side unlocks once there are at least {{ item.k + 1 }} arguments there.
-            {% else %}
-              Voting unlocks once each side has at least {{ item.k + 1 }} arguments.
-            {% endif %}
-          {% else %}
-            Add or skip on each side, then pick the {{ item.k }} most important.
-          {% endif %}
-        </span>
-        <div class="arg-status-chips">
-          <span class="arg-chip arg-chip--pro{% if item.pro_gate %} arg-chip--done{% endif %}"
-                id="chip-pro-{{ fs.id }}">
-            {% if both_gate and pro_vote_ready %}
-              FOR · <span class="chip-count">{{ item.pro_voted_count }}</span>/{{ item.k }}
-            {% elif item.pro_gate %}
-              <svg width="9" height="7" viewBox="0 0 9 7" fill="none" aria-hidden="true"><path d="M1 3.5L3 5.5L8 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              FOR
-            {% else %}
-              FOR
-            {% endif %}
-          </span>
-          <span class="arg-chip arg-chip--con{% if item.con_gate %} arg-chip--done{% endif %}"
-                id="chip-con-{{ fs.id }}">
-            {% if both_gate and con_vote_ready %}
-              AGAINST · <span class="chip-count">{{ item.con_voted_count }}</span>/{{ item.k }}
-            {% elif item.con_gate %}
-              <svg width="9" height="7" viewBox="0 0 9 7" fill="none" aria-hidden="true"><path d="M1 3.5L3 5.5L8 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              AGAINST
-            {% else %}
-              AGAINST
-            {% endif %}
-          </span>
+        {# Two-step indicator #}
+        <div class="at-steps" id="steps-{{ fs.id }}">
+          <div class="at-step {% if both_gate %}at-step--done{% else %}at-step--active{% endif %}" id="step1-{{ fs.id }}">
+            <span class="at-step-num">{% if both_gate %}✓{% else %}1{% endif %}</span>
+            <div>
+              <div class="at-step-name">1 · Add arguments</div>
+              <div class="at-step-sub" id="step1-sub-{{ fs.id }}">
+                {%- if both_gate -%}
+                  for ✓ · against ✓
+                {%- else -%}
+                  {%- if item.pro_gate %}for ✓{% else %}for{% endif %} · {% if item.con_gate %}against ✓{% else %}against{% endif -%}
+                {%- endif -%}
+              </div>
+            </div>
+          </div>
+          <div class="at-step {% if both_gate %}at-step--active{% else %}at-step--locked{% endif %}" id="step2-{{ fs.id }}">
+            <span class="at-step-num">{% if not both_gate %}🔒{% else %}2{% endif %}</span>
+            <div>
+              <div class="at-step-name">2 · Prioritise</div>
+              <div class="at-step-sub" id="step2-sub-{{ fs.id }}">
+                {%- if both_gate -%}
+                  {{ item.pro_voted_count }}/{{ item.k }} for · {{ item.con_voted_count }}/{{ item.k }} against · can change
+                {%- else -%}
+                  after step 1
+                {%- endif -%}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       {# ── Two-column grid ── #}
-      <div class="arg-columns">
+      <div class="at-cols">
 
-        {# ── Pro column ── #}
-        <div class="arg-col arg-col--pro">
-          <div class="arg-col-heading-row">
-            <span class="arg-col-sign">+</span>
-            <span class="arg-col-heading">For</span>
-            <span class="arg-col-count">{{ item.pro_args | length }}</span>
+        {# ── For column ── #}
+        <div class="at-col at-col--for">
+          <div class="at-col-head">
+            <span class="at-col-sign" aria-hidden="true">+</span>
+            <span class="at-col-label">For</span>
+            <span class="at-col-count">{{ item.pro_args | length }}</span>
           </div>
 
-          {# Contribute affordance — pro #}
+          {# Contribute affordance — pro (data-* attrs unchanged for JS compatibility) #}
           <div class="contribute-wrapper"
                data-state="{{ 'submitted' if item.pro_proposed else ('skipped' if item.pro_gate else 'idle') }}"
                data-side="pro"
@@ -521,10 +508,9 @@
                data-csrf="{{ csrf_token() }}"
                data-k="{{ item.k }}"
                data-my-pseudonym="{{ participation.pseudonym }}">
-            <button class="contribute-affordance contribute-affordance--pro" type="button">
-              <span class="contribute-glyph">+</span>
-              <span class="contribute-label">Add one for, or skip</span>
-              <span class="contribute-meta">unlocks voting</span>
+            <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--pro" type="button">
+              <span class="at-contribute-glyph" style="background:rgba(21,115,74,.15);color:var(--agree);font-weight:700" aria-hidden="true">+</span>
+              Add one for-argument, or skip
             </button>
             <div class="contribute-composer">
               <div class="contribute-composer-header">
@@ -540,26 +526,29 @@
                 <button type="button" class="btn-primary contribute-submit-btn" disabled>Submit argument</button>
               </div>
             </div>
-            <div class="contribute-submitted contribute-submitted--pro">
-              YOU ADDED ONE — see below
+            <div class="at-contribute at-contribute--done contribute-submitted contribute-submitted--pro">
+              <span class="at-contribute-glyph"><svg width="11" height="9" viewBox="0 0 13 10" fill="none" aria-hidden="true"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              You added one argument for
             </div>
-            <div class="contribute-skipped">
-              <span class="contribute-skipped-label">NOTHING TO ADD — skipped</span>
-              <button type="button" class="contribute-changemind">change my mind</button>
+            <div class="at-contribute at-contribute--skipped contribute-skipped">
+              <span class="at-contribute-glyph" aria-hidden="true">↷</span>
+              Nothing to add
+              <button type="button" class="at-link contribute-changemind">change my mind</button>
             </div>
           </div>
 
-          {# Argument cards — pro #}
-          {% if item.pro_args | length == 0 %}
-          <p class="arg-empty">No for-arguments yet.</p>
+          {# Locked-state note — only shown before step 1 started #}
+          {% if not item.pro_gate and not item.con_gate %}
+          <p class="at-col-note">Other arguments appear here once you've added yours or skipped — so you form your own view first.</p>
           {% endif %}
 
+          {# Argument cards — pro #}
           {% for arg in item.pro_args %}
           {% set is_own = arg.proposer_id == participation.participant_id %}
           {% set is_picked = arg.id in item.voted_ids %}
-          {% set pro_can_vote = both_gate and item.pro_args | length > item.k and not is_own and not arg.hidden %}
+          {% set pro_can_vote = both_gate and pro_vote_ready and not is_own and not arg.hidden %}
           {% set pro_limit_reached = pro_can_vote and item.pro_voted_count >= item.k and not is_picked %}
-          <div class="argument-card"
+          <div class="at-card argument-card"
                data-side="pro"
                data-arg-id="{{ arg.id }}"
                data-picked="{{ 'true' if is_picked else 'false' }}"
@@ -570,7 +559,7 @@
                data-vote-url="{{ url_for('participant.argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
                data-unvote-url="{{ url_for('participant.argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
                data-csrf="{{ csrf_token() }}">
-            <button class="argument-checkbox"
+            <button class="at-pick argument-checkbox"
                     aria-pressed="{{ 'true' if is_picked else 'false' }}"
                     aria-label="{{ 'Unmark as most important' if is_picked else 'Mark as most important' }}"
                     tabindex="{{ '0' if pro_can_vote else '-1' }}">
@@ -580,10 +569,10 @@
               </svg>
               {% endif %}
             </button>
-            <div class="argument-body">
-              <p class="argument-text">{{ arg.body }}</p>
-              <div class="argument-meta">
-                <span class="argument-importance">
+            <div class="at-card-body argument-body">
+              <p class="at-card-text argument-text">{{ arg.body }}</p>
+              <div class="at-card-meta argument-meta">
+                <span class="at-star argument-importance">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
                           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -591,9 +580,8 @@
                   <strong class="importance-count">{{ arg.votes | length }}</strong>
                   <span class="sr-only"> importance votes</span>
                 </span>
-                <span class="argument-by">{{ item.proposer_pseudonyms.get(arg.proposer_id, 'admin') if arg.proposer_id else 'admin' }}</span>
-                {% if is_own %}<span class="argument-yours">YOURS</span>{% endif %}
-                {% if arg.hidden %}<span class="argument-hidden-badge">HIDDEN</span>{% endif %}
+                {% if is_own %}<span class="at-yours argument-yours">YOURS</span>{% endif %}
+                {% if arg.hidden %}<span class="at-hidden-badge argument-hidden-badge">HIDDEN</span>{% endif %}
                 {% if can_moderate %}
                 <span style="display:inline-flex;gap:4px;margin-left:auto">
                   {% if arg.hidden %}
@@ -614,17 +602,22 @@
           </div>
           {% endfor %}
 
-          {% if both_gate and item.pro_args | length < item.k %}
-          <p class="arg-threshold">Importance voting unlocks at {{ item.k }} for-arguments ({{ item.pro_args | length }} so far).</p>
+          {% if both_gate and not pro_vote_ready %}
+          <div class="at-volnote">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+            <span>Prioritising unlocks once there are more than {{ item.k }} for-arguments ({{ item.pro_args | length }} so far).</span>
+          </div>
           {% endif %}
-        </div>{# end pro col #}
+        </div>{# end for col #}
 
-        {# ── Con column ── #}
-        <div class="arg-col arg-col--con">
-          <div class="arg-col-heading-row">
-            <span class="arg-col-sign">−</span>
-            <span class="arg-col-heading">Against</span>
-            <span class="arg-col-count">{{ item.con_args | length }}</span>
+        <div class="at-rule" aria-hidden="true"></div>
+
+        {# ── Against column ── #}
+        <div class="at-col at-col--against">
+          <div class="at-col-head">
+            <span class="at-col-sign" aria-hidden="true">−</span>
+            <span class="at-col-label">Against</span>
+            <span class="at-col-count">{{ item.con_args | length }}</span>
           </div>
 
           {# Contribute affordance — con #}
@@ -637,10 +630,9 @@
                data-csrf="{{ csrf_token() }}"
                data-k="{{ item.k }}"
                data-my-pseudonym="{{ participation.pseudonym }}">
-            <button class="contribute-affordance contribute-affordance--con" type="button">
-              <span class="contribute-glyph">−</span>
-              <span class="contribute-label">Add one against, or skip</span>
-              <span class="contribute-meta">unlocks voting</span>
+            <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--con" type="button">
+              <span class="at-contribute-glyph" style="background:rgba(178,58,58,.15);color:var(--disagree);font-weight:700" aria-hidden="true">−</span>
+              Add one against-argument, or skip
             </button>
             <div class="contribute-composer">
               <div class="contribute-composer-header">
@@ -656,26 +648,24 @@
                 <button type="button" class="btn-primary contribute-submit-btn" disabled>Submit argument</button>
               </div>
             </div>
-            <div class="contribute-submitted contribute-submitted--con">
-              YOU ADDED ONE — see below
+            <div class="at-contribute at-contribute--done contribute-submitted contribute-submitted--con">
+              <span class="at-contribute-glyph"><svg width="11" height="9" viewBox="0 0 13 10" fill="none" aria-hidden="true"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              You added one argument against
             </div>
-            <div class="contribute-skipped">
-              <span class="contribute-skipped-label">NOTHING TO ADD — skipped</span>
-              <button type="button" class="contribute-changemind">change my mind</button>
+            <div class="at-contribute at-contribute--skipped contribute-skipped">
+              <span class="at-contribute-glyph" aria-hidden="true">↷</span>
+              Nothing to add
+              <button type="button" class="at-link contribute-changemind">change my mind</button>
             </div>
           </div>
 
           {# Argument cards — con #}
-          {% if item.con_args | length == 0 %}
-          <p class="arg-empty">No against-arguments yet.</p>
-          {% endif %}
-
           {% for arg in item.con_args %}
           {% set is_own = arg.proposer_id == participation.participant_id %}
           {% set is_picked = arg.id in item.voted_ids %}
-          {% set con_can_vote = both_gate and item.con_args | length > item.k and not is_own and not arg.hidden %}
+          {% set con_can_vote = both_gate and con_vote_ready and not is_own and not arg.hidden %}
           {% set con_limit_reached = con_can_vote and item.con_voted_count >= item.k and not is_picked %}
-          <div class="argument-card"
+          <div class="at-card argument-card"
                data-side="con"
                data-arg-id="{{ arg.id }}"
                data-picked="{{ 'true' if is_picked else 'false' }}"
@@ -686,7 +676,7 @@
                data-vote-url="{{ url_for('participant.argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
                data-unvote-url="{{ url_for('participant.argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
                data-csrf="{{ csrf_token() }}">
-            <button class="argument-checkbox"
+            <button class="at-pick argument-checkbox"
                     aria-pressed="{{ 'true' if is_picked else 'false' }}"
                     aria-label="{{ 'Unmark as most important' if is_picked else 'Mark as most important' }}"
                     tabindex="{{ '0' if con_can_vote else '-1' }}">
@@ -696,10 +686,10 @@
               </svg>
               {% endif %}
             </button>
-            <div class="argument-body">
-              <p class="argument-text">{{ arg.body }}</p>
-              <div class="argument-meta">
-                <span class="argument-importance">
+            <div class="at-card-body argument-body">
+              <p class="at-card-text argument-text">{{ arg.body }}</p>
+              <div class="at-card-meta argument-meta">
+                <span class="at-star argument-importance">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
                           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -707,9 +697,8 @@
                   <strong class="importance-count">{{ arg.votes | length }}</strong>
                   <span class="sr-only"> importance votes</span>
                 </span>
-                <span class="argument-by">{{ item.proposer_pseudonyms.get(arg.proposer_id, 'admin') if arg.proposer_id else 'admin' }}</span>
-                {% if is_own %}<span class="argument-yours">YOURS</span>{% endif %}
-                {% if arg.hidden %}<span class="argument-hidden-badge">HIDDEN</span>{% endif %}
+                {% if is_own %}<span class="at-yours argument-yours">YOURS</span>{% endif %}
+                {% if arg.hidden %}<span class="at-hidden-badge argument-hidden-badge">HIDDEN</span>{% endif %}
                 {% if can_moderate %}
                 <span style="display:inline-flex;gap:4px;margin-left:auto">
                   {% if arg.hidden %}
@@ -730,15 +719,52 @@
           </div>
           {% endfor %}
 
-          {% if both_gate and item.con_args | length < item.k %}
-          <p class="arg-threshold">Importance voting unlocks at {{ item.k }} against-arguments ({{ item.con_args | length }} so far).</p>
+          {% if both_gate and not con_vote_ready %}
+          <div class="at-volnote">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+            <span>Prioritising unlocks once there are more than {{ item.k }} against-arguments ({{ item.con_args | length }} so far).</span>
+          </div>
           {% endif %}
-        </div>{# end con col #}
+        </div>{# end against col #}
 
-      </div>{# end arg-columns #}
-    </div>{# end arg-block #}
+      </div>{# end at-cols #}
+
+      {# ── Panel nav footer — Prev / Next + circles ── #}
+      <div class="at-nav">
+        <button class="at-navbtn at-navbtn--prev" type="button"
+                {% if loop.first %}disabled{% endif %}
+                aria-label="Previous statement">← Previous</button>
+        <div class="at-circles" id="circles-{{ fs.id }}" aria-label="Statement progress"></div>
+        <button class="at-navbtn at-navbtn--next" type="button"
+                {% if loop.last %}disabled{% endif %}
+                aria-label="Next statement">Next →</button>
+      </div>
+
+    </div>{# end at-panel / arg-block #}
     {% endfor %}
     </div>{# end arg-panels #}
+
+    {# All-complete state — shown by JS when every panel is done #}
+    <div class="at-complete" id="at-complete" hidden>
+      <div class="interlude">
+        <span class="interlude-glyph">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 6 9 17l-5-5"/>
+          </svg>
+        </span>
+        <h2 class="interlude-title">You've been through all of them</h2>
+        <p class="interlude-sub">You can revisit any statement to change your priorities while this phase is open — nothing is locked in.</p>
+        <div class="at-circles at-circles--complete" id="at-complete-circles" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    {# Panel count used by JS for circles #}
+    <script type="application/json" id="at-panel-data" nonce="{{ csp_nonce }}">
+    {{ featured_data | map(attribute='fs') | map(attribute='id') | list | tojson }}
+    </script>
+
+    {% endif %}{# end featured_data | length > 0 #}
 
   </div>
   {% endif %}
@@ -1525,69 +1551,192 @@
   var tab = document.getElementById('tab-arguments');
   if (!tab) return;
 
-  // ── ToC / single-panel navigation ────────────────────────────────────────────
-  var toc = tab.querySelector('.arg-toc');
-  if (toc) {
-    var allPanels = Array.prototype.slice.call(tab.querySelectorAll('.arg-panels .arg-block'));
+  // ── Orientation banner collapse (persisted per slug) ─────────────────────────
+  (function () {
+    var slug = {{ conversation.slug | tojson }};
+    var key  = 'at-orient-' + slug;
+    var orient = document.getElementById('at-orient-' + slug);
+    var btn    = document.getElementById('at-orient-toggle-' + slug);
+    if (!orient || !btn) return;
+    if (localStorage.getItem(key) === 'collapsed') {
+      orient.classList.add('at-collapsed');
+      btn.textContent = 'what is this? ▼';
+    }
+    btn.addEventListener('click', function () {
+      var c = orient.classList.toggle('at-collapsed');
+      btn.textContent = c ? 'what is this? ▼' : 'collapse ▲';
+      try { localStorage.setItem(key, c ? 'collapsed' : 'open'); } catch(e) {}
+    });
+  })();
 
-    // Apply initial hidden state via JS so no-JS users see all panels stacked.
+  // ── Circle-nav / panel navigation ────────────────────────────────────────────
+  var panelDataEl = document.getElementById('at-panel-data');
+  var panelIds = panelDataEl ? JSON.parse(panelDataEl.textContent) : [];
+  var allPanels = Array.prototype.slice.call(tab.querySelectorAll('.arg-panels .arg-block'));
+  var currentIdx = 0;
+
+  // Completion state per panel: 'none' | 'half' | 'complete'
+  function getPanelState(panel) {
+    if (!panel) return 'none';
+    var bothGate = panel.dataset.bothGate === 'true';
+    var proReady = panel.dataset.proVoteReady === 'true';
+    var conReady = panel.dataset.conVoteReady === 'true';
+    if (!bothGate) return 'none';
+    // half = both_gate true but prioritise not yet fully voted on at least one side
+    var fsId = panel.id.replace('fs-', '');
+    var wrapper = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
+    var k = wrapper ? parseInt(wrapper.dataset.k || '2', 10) : 2;
+    var pickedPro = panel.querySelectorAll('.argument-card[data-side="pro"][data-picked="true"]').length;
+    var pickedCon = panel.querySelectorAll('.argument-card[data-side="con"][data-picked="true"]').length;
+    // A side is "done" if: not vote-ready (volume gate not met, nothing to pick) OR picks == k
+    var proDone = !proReady || pickedPro >= k;
+    var conDone = !conReady || pickedCon >= k;
+    if (proDone && conDone) return 'complete';
+    return 'half';
+  }
+
+  // SVG circle factory
+  var NS = 'http://www.w3.org/2000/svg';
+  var SPOT_FILL   = 'var(--spot, #fef3c7)';
+  var INK_STROKE  = 'var(--ink, #2c3e6b)';
+  var PASS_STROKE = 'var(--pass, #3b5bdb)';
+  var MUTED_STROKE = 'var(--muted, #9ca3af)';
+  var BLUE_DARK   = 'var(--blue-dark, #1e3a8a)';
+
+  function makeCircle(state, num, isCurrent) {
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('class', 'at-circle');
+    svg.setAttribute('viewBox', '0 0 36 36');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'Statement ' + num + ': ' + state);
+
+    var ring = document.createElementNS(NS, 'circle');
+    ring.setAttribute('cx', '18'); ring.setAttribute('cy', '18'); ring.setAttribute('r', '15');
+    ring.setAttribute('fill', state === 'complete' ? SPOT_FILL : 'var(--surface, #fff)');
+    var strokeColor = isCurrent ? INK_STROKE : (state === 'none' ? MUTED_STROKE : PASS_STROKE);
+    ring.setAttribute('stroke', strokeColor);
+    ring.setAttribute('stroke-width', isCurrent ? '3' : '2');
+    svg.appendChild(ring);
+
+    if (state === 'half') {
+      var half = document.createElementNS(NS, 'path');
+      half.setAttribute('d', 'M18 3 A15 15 0 0 0 18 33 Z');
+      half.setAttribute('fill', SPOT_FILL);
+      half.setAttribute('opacity', '.75');
+      svg.appendChild(half);
+    }
+
+    var t = document.createElementNS(NS, 'text');
+    t.setAttribute('x', '18'); t.setAttribute('y', '22'); t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('class', 'at-circle-label');
+    t.setAttribute('fill', state === 'complete' ? BLUE_DARK : 'var(--pass, #3b5bdb)');
+    t.setAttribute('aria-hidden', 'true');
+    t.textContent = num;
+    svg.appendChild(t);
+    return svg;
+  }
+
+  // Render circles for all .at-circles containers in the given panel (max 5 visible)
+  function paintCircles(panel) {
+    var containers = panel.querySelectorAll('.at-circles');
+    containers.forEach(function (el) {
+      el.innerHTML = '';
+      var total = allPanels.length;
+      // Determine which indices to show (current ± 2, max 5)
+      var cidx = allPanels.indexOf(panel);
+      var start = 0, end = total;
+      if (total > 5) {
+        start = Math.max(0, cidx - 2);
+        end   = Math.min(total, start + 5);
+        if (end - start < 5) start = Math.max(0, end - 5);
+      }
+      if (start > 0) {
+        var ell = document.createElement('span');
+        ell.textContent = '…'; ell.style.color = 'var(--muted)'; ell.style.fontSize = '12px';
+        el.appendChild(ell);
+      }
+      for (var i = start; i < end; i++) {
+        var p  = allPanels[i];
+        var state = getPanelState(p);
+        var svg = makeCircle(state, i + 1, i === cidx);
+        (function (idx) {
+          svg.style.cursor = 'pointer';
+          svg.addEventListener('click', function () { activatePanel(idx, false); });
+        })(i);
+        el.appendChild(svg);
+      }
+      if (end < total) {
+        var ell2 = document.createElement('span');
+        ell2.textContent = '…'; ell2.style.color = 'var(--muted)'; ell2.style.fontSize = '12px';
+        el.appendChild(ell2);
+      }
+    });
+  }
+
+  // Repaint circles in ALL panels (needed after a state change anywhere)
+  function paintAllCircles() {
+    allPanels.forEach(function (p) { paintCircles(p); });
+    // all-complete circles
+    var completeEl = document.getElementById('at-complete-circles');
+    if (completeEl) {
+      completeEl.innerHTML = '';
+      allPanels.forEach(function (p, i) {
+        completeEl.appendChild(makeCircle('complete', i + 1, false));
+      });
+    }
+    checkAllComplete();
+  }
+
+  function checkAllComplete() {
+    var allDone = allPanels.every(function (p) { return getPanelState(p) === 'complete'; });
+    var completeDiv = document.getElementById('at-complete');
+    if (completeDiv) completeDiv.hidden = !allDone;
+  }
+
+  function activatePanel(idx, moveFocus) {
+    idx = Math.max(0, Math.min(idx, allPanels.length - 1));
+    currentIdx = idx;
     allPanels.forEach(function (block, i) {
-      if (i > 0) {
-        block.classList.add('arg-block--hidden');
-        block.setAttribute('aria-hidden', 'true');
-      }
+      var hide = i !== idx;
+      block.classList.toggle('arg-block--hidden', hide);
+      block.setAttribute('aria-hidden', hide ? 'true' : 'false');
     });
-
-    function activatePanel(targetId, moveFocus) {
-      allPanels.forEach(function (block) {
-        var hide = block.id !== targetId;
-        block.classList.toggle('arg-block--hidden', hide);
-        block.setAttribute('aria-hidden', hide ? 'true' : 'false');
-      });
-      toc.querySelectorAll('.arg-toc-btn').forEach(function (b) {
-        var active = b.dataset.target === targetId;
-        b.classList.toggle('arg-toc-btn--active', active);
-        if (active) { b.setAttribute('aria-current', 'true'); }
-        else         { b.removeAttribute('aria-current'); }
-      });
-      if (moveFocus) {
-        var panel = document.getElementById(targetId);
-        if (panel) panel.focus();
-      }
+    // Update Prev/Next buttons in active panel
+    var panel = allPanels[idx];
+    if (panel) {
+      var prevBtn = panel.querySelector('.at-navbtn--prev');
+      var nextBtn = panel.querySelector('.at-navbtn--next');
+      if (prevBtn) prevBtn.disabled = (idx === 0);
+      if (nextBtn) nextBtn.disabled = (idx === allPanels.length - 1);
+      paintCircles(panel);
+      if (moveFocus) panel.focus();
     }
+  }
 
-    toc.addEventListener('click', function (e) {
-      var btn = e.target.closest('.arg-toc-btn');
-      if (btn) activatePanel(btn.dataset.target);
-    });
+  // Wire Prev/Next buttons in each panel
+  allPanels.forEach(function (panel, i) {
+    var prev = panel.querySelector('.at-navbtn--prev');
+    var next = panel.querySelector('.at-navbtn--next');
+    if (prev) prev.addEventListener('click', function () { activatePanel(currentIdx - 1, true); });
+    if (next) next.addEventListener('click', function () { activatePanel(currentIdx + 1, true); });
+    paintCircles(panel);
+  });
 
-    toc.addEventListener('keydown', function (e) {
-      var btns = Array.prototype.slice.call(toc.querySelectorAll('.arg-toc-btn'));
-      var idx  = btns.indexOf(document.activeElement);
-      if (idx === -1) return;
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-        e.preventDefault();
-        var next = btns[(idx + 1) % btns.length];
-        activatePanel(next.dataset.target);
-        next.focus();
-      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-        e.preventDefault();
-        var prev = btns[(idx - 1 + btns.length) % btns.length];
-        activatePanel(prev.dataset.target);
-        prev.focus();
-      } else if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        activatePanel(btns[idx].dataset.target, true);
-      }
-    });
-
-    // Activate the panel whose id matches the URL hash (e.g. after a
-    // contribute/skip form posts and redirects back to #fs-N).
-    var hash = window.location.hash;
-    if (hash && hash.indexOf('#fs-') === 0) {
-      var hashId = hash.slice(1);
-      if (document.getElementById(hashId)) activatePanel(hashId);
+  // Apply initial hidden state via JS so no-JS users see all panels stacked.
+  allPanels.forEach(function (block, i) {
+    if (i > 0) {
+      block.classList.add('arg-block--hidden');
+      block.setAttribute('aria-hidden', 'true');
     }
+  });
+
+  // Activate the panel whose id matches the URL hash (e.g. after a
+  // contribute/skip form posts and redirects back to #fs-N).
+  var hash = window.location.hash;
+  if (hash && hash.indexOf('#fs-') === 0) {
+    var hashId = hash.slice(1);
+    var hashPanel = document.getElementById(hashId);
+    if (hashPanel) activatePanel(allPanels.indexOf(hashPanel), false);
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1629,20 +1778,22 @@
   }
 
   function updateChip(fsId, side) {
-    var chip = document.getElementById('chip-' + side + '-' + fsId);
-    if (!chip) return;
-    if (!chip.classList.contains('arg-chip--done')) return; // pre-gate: don't touch
-    var wrapper = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="' + side + '"]');
+    // Update the step-2 sub-line with current pick counts
+    var block = document.getElementById('fs-' + fsId);
+    if (!block || block.dataset.bothGate !== 'true') return;
+    var wrapper = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
     var k = getK(wrapper);
-    var voted = countVoted(fsId, side);
-    var countEl = chip.querySelector('.chip-count');
-    if (countEl) countEl.textContent = voted;
+    var pickedPro = countVoted(fsId, 'pro');
+    var pickedCon = countVoted(fsId, 'con');
+    var s2sub = document.getElementById('step2-sub-' + fsId);
+    if (s2sub) s2sub.textContent = pickedPro + '/' + k + ' for · ' + pickedCon + '/' + k + ' against · can change';
+    paintAllCircles();
   }
 
   // Build a new argument card element (used after contribute submit)
   function buildArgCard(argId, body, pseudonym, side, voteUrl, unvoteUrl, csrf) {
     var div = document.createElement('div');
-    div.className = 'argument-card';
+    div.className = 'at-card argument-card';
     div.dataset.side = side;
     div.dataset.argId = argId;
     div.dataset.picked = 'false';
@@ -1653,19 +1804,18 @@
     div.dataset.unvoteUrl = unvoteUrl;
     div.dataset.csrf = csrf;
     div.innerHTML =
-      '<button class="argument-checkbox" aria-pressed="false" aria-label="Mark as most important" tabindex="-1"></button>' +
-      '<div class="argument-body">' +
-        '<p class="argument-text">' + escapeHtml(body) + '</p>' +
-        '<div class="argument-meta">' +
-          '<span class="argument-importance">' +
+      '<button class="at-pick argument-checkbox" aria-pressed="false" aria-label="Mark as most important" tabindex="-1"></button>' +
+      '<div class="at-card-body argument-body">' +
+        '<p class="at-card-text argument-text">' + escapeHtml(body) + '</p>' +
+        '<div class="at-card-meta argument-meta">' +
+          '<span class="at-star argument-importance">' +
             '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
               '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
             '</svg>' +
             '<strong class="importance-count">0</strong>' +
             '<span class="sr-only"> importance votes</span>' +
           '</span>' +
-          '<span class="argument-by">' + escapeHtml(pseudonym) + '</span>' +
-          '<span class="argument-yours">YOURS</span>' +
+          '<span class="at-yours argument-yours">YOURS</span>' +
         '</div>' +
       '</div>';
     return div;
@@ -1752,8 +1902,8 @@
             var colCards = col.querySelectorAll('.argument-card');
             var emptyNotice = col.querySelector('.arg-empty');
             if (emptyNotice) emptyNotice.remove();
-            // Append before threshold notice if it exists
-            var threshold = col.querySelector('.arg-threshold');
+            // Append before volume-unlock note if it exists
+            var threshold = col.querySelector('.at-volnote');
             var voteUrl   = wrapper.dataset.submitUrl.replace('/submit', '/' + data.id + '/vote').replace('/arguments/' + fsId, '/arguments/' + data.id);
             // Derive URLs from data-vote-url of any existing card, or construct from submitUrl
             var anyCard = col.querySelector('.argument-card');
@@ -1776,7 +1926,7 @@
   });
 
   // After skipping or submitting, check if both sides are now gated
-  // and if so update the status strip to the post-gate style.
+  // and if so transition the two-step indicator to post-gate style.
   function checkGateTransition(wrapper) {
     var fsId = wrapper.dataset.fs;
     var proW = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
@@ -1787,46 +1937,55 @@
     var bothGated = (proState === 'submitted' || proState === 'skipped')
                  && (conState === 'submitted' || conState === 'skipped');
 
-    // Update chip to "done" on the just-completed side
+    // Update step-1 sub-line to reflect which side just completed
     var side = wrapper.dataset.side;
-    var chip = document.getElementById('chip-' + side + '-' + fsId);
-    if (chip) chip.classList.add('arg-chip--done');
+    var step1Sub = document.getElementById('step1-sub-' + fsId);
+    if (step1Sub && !bothGated) {
+      var proW2 = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
+      var conW2 = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="con"]');
+      var ps = proW2 ? proW2.dataset.state : 'idle';
+      var cs = conW2 ? conW2.dataset.state : 'idle';
+      var proTick = (ps === 'submitted' || ps === 'skipped') ? 'for ✓' : 'for';
+      var conTick = (cs === 'submitted' || cs === 'skipped') ? 'against ✓' : 'against';
+      step1Sub.textContent = proTick + ' · ' + conTick;
+    }
 
     if (bothGated) {
       var block = document.getElementById('fs-' + fsId);
-      var proWrap = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
-      var conWrap = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="con"]');
-      var kVal = getK(proWrap);  // k is the same for both sides
-      var nPro = block ? block.querySelectorAll('.argument-card[data-side="pro"]').length : 0;
-      var nCon = block ? block.querySelectorAll('.argument-card[data-side="con"]').length : 0;
+      var kVal  = getK(proW);
+      var nPro  = block ? block.querySelectorAll('.argument-card[data-side="pro"]').length : 0;
+      var nCon  = block ? block.querySelectorAll('.argument-card[data-side="con"]').length : 0;
       var proReady = nPro > kVal;
       var conReady = nCon > kVal;
 
-      // Transition status strip to post-gate style
-      var strip = tab.querySelector('.arg-status-strip[data-fs="' + fsId + '"]');
-      if (strip) {
-        strip.classList.add('arg-status-strip--gated');
-        var stripMsg;
-        if (proReady && conReady) {
-          stripMsg = 'Pick the ' + kVal + ' most important on each side. You can change your mind any time.';
-        } else if (proReady) {
-          stripMsg = 'Pick the ' + kVal + ' most important for-arguments. Voting on the against side unlocks once there are at least ' + (kVal + 1) + ' arguments there.';
-        } else if (conReady) {
-          stripMsg = 'Pick the ' + kVal + ' most important against-arguments. Voting on the for side unlocks once there are at least ' + (kVal + 1) + ' arguments there.';
-        } else {
-          stripMsg = 'Voting unlocks once each side has at least ' + (kVal + 1) + ' arguments.';
-        }
-        strip.querySelector('.arg-status-text').textContent = stripMsg;
-        // Update chips to show vote counters only on sides that are ready
-        ['pro', 'con'].forEach(function(s) {
-          var c = document.getElementById('chip-' + s + '-' + fsId);
-          var ready = s === 'pro' ? proReady : conReady;
-          if (c && ready) {
-            c.innerHTML = (s === 'pro' ? 'FOR' : 'AGAINST') + ' · <span class="chip-count">0</span>/' + kVal;
-          }
-        });
+      // Transition step-1 → done, step-2 → active
+      var step1 = document.getElementById('step1-' + fsId);
+      if (step1) {
+        step1.classList.remove('at-step--active');
+        step1.classList.add('at-step--done');
+        var num = step1.querySelector('.at-step-num');
+        if (num) num.textContent = '✓';
+        var s1sub = document.getElementById('step1-sub-' + fsId);
+        if (s1sub) s1sub.textContent = 'for ✓ · against ✓';
       }
-      // Enable voting on cards only where K+1 threshold is met
+      var step2 = document.getElementById('step2-' + fsId);
+      if (step2) {
+        step2.classList.remove('at-step--locked');
+        step2.classList.add('at-step--active');
+        var num2 = step2.querySelector('.at-step-num');
+        if (num2) num2.textContent = '2';
+        var s2sub = document.getElementById('step2-sub-' + fsId);
+        if (s2sub) s2sub.textContent = '0/' + kVal + ' for · 0/' + kVal + ' against · can change';
+      }
+
+      // Update panel data-* so getPanelState() sees the new gate
+      if (block) {
+        block.dataset.bothGate = 'true';
+        block.dataset.proVoteReady = proReady ? 'true' : 'false';
+        block.dataset.conVoteReady = conReady ? 'true' : 'false';
+      }
+
+      // Enable voting on cards where K+1 threshold is met
       if (block) {
         ['pro', 'con'].forEach(function (s) {
           var ready = s === 'pro' ? proReady : conReady;
@@ -1842,6 +2001,8 @@
           updateLimitReached(fsId, s);
         });
       }
+
+      paintAllCircles();
     }
   }
 
@@ -1894,38 +2055,33 @@
           }
           updateLimitReached(fsId, side);
           updateChip(fsId, side);
-          // Surface the rejection reason in the status strip
+          // Surface the rejection reason transiently in the step-2 sub-line
           r.json().then(function (data) {
+            var kVal = getK(tab.querySelector(‘.contribute-wrapper[data-fs="’ + fsId + ‘"][data-side="’ + side + ‘"]’));
             var msgs = {
-              cap:  'You’ve already picked your ' + getK(tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="' + side + '"]')) + ' most important — unvote one first.',
-              gate: 'Voting is not open yet — add or skip on each side first.',
-              own:  'You can’t vote for your own argument.',
+              cap:  ‘You’ve already picked your ‘ + kVal + ‘ most important — unvote one first.’,
+              gate: ‘Voting is not open yet — add or skip on each side first.’,
+              own:  ‘You can’t vote for your own argument.’,
             };
-            var strip = tab.querySelector('.arg-status-strip[data-fs="' + fsId + '"]');
-            if (strip && data && msgs[data.reason]) {
-              var txt = strip.querySelector('.arg-status-text');
-              var prev = txt.textContent;
-              txt.textContent = msgs[data.reason];
-              strip.classList.add('arg-status-strip--error');
-              // Mirror to the assertive alert region so screen readers hear it.
-              // Blank first, then set on the next frame, so a repeated identical
-              // reason still mutates the node and is re-announced. Track the clear
-              // timer per element so back-to-back messages don't blank each other early.
-              var alertEl = document.getElementById('arg-alert');
-              if (alertEl) {
-                if (alertEl._clearTimer) clearTimeout(alertEl._clearTimer);
-                alertEl.textContent = '';
-                window.requestAnimationFrame(function () {
-                  alertEl.textContent = msgs[data.reason];
-                });
-                alertEl._clearTimer = setTimeout(function () {
-                  alertEl.textContent = '';
+            if (data && msgs[data.reason]) {
+              var msg = msgs[data.reason];
+              var s2sub = document.getElementById(‘step2-sub-’ + fsId);
+              if (s2sub) {
+                var prev = s2sub.textContent;
+                s2sub.style.color = ‘var(--danger, #dc2626)’;
+                s2sub.textContent = msg;
+                setTimeout(function () {
+                  s2sub.style.color = ‘’;
+                  s2sub.textContent = prev;
                 }, 3500);
               }
-              setTimeout(function () {
-                txt.textContent = prev;
-                strip.classList.remove('arg-status-strip--error');
-              }, 3500);
+              var alertEl = document.getElementById(‘arg-alert’);
+              if (alertEl) {
+                if (alertEl._clearTimer) clearTimeout(alertEl._clearTimer);
+                alertEl.textContent = ‘’;
+                window.requestAnimationFrame(function () { alertEl.textContent = msg; });
+                alertEl._clearTimer = setTimeout(function () { alertEl.textContent = ‘’; }, 3500);
+              }
             }
           }).catch(function () {});
         }
