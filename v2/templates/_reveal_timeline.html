@@ -1,0 +1,35 @@
+{# Identity-reveal timeline (#70). Three nodes: closed → window opens → window
+   closes, with exact dates and the current position highlighted. `reveal` is the
+   dict from app._reveal_context (closed_at / opens_at / closes_at / state /
+   days_left / cooldown_days / window_days). #}
+{% macro reveal_timeline(reveal) %}
+<div class="reveal-timeline" aria-label="Identity reveal timeline">
+  <ol class="reveal-track">
+    <li class="reveal-node reveal-node--done">
+      <span class="reveal-pip" aria-hidden="true"></span>
+      <div class="reveal-when">{{ reveal.closed_at.strftime('%-d %b %Y') }}</div>
+      <div class="reveal-what">Closed — a {{ reveal.cooldown_days }}-day cooldown begins</div>
+    </li>
+    <li class="reveal-node
+        {%- if reveal.state in ['open', 'revealed'] %} reveal-node--now
+        {%- elif reveal.state == 'expired' %} reveal-node--done{% endif %}"
+        {% if reveal.state in ['open', 'revealed'] %}aria-current="step"{% endif %}>
+      <span class="reveal-pip" aria-hidden="true"></span>
+      <div class="reveal-when">{{ reveal.opens_at.strftime('%-d %b %Y') }}</div>
+      <div class="reveal-what">Reveal window opens — you can optionally link your name</div>
+    </li>
+    <li class="reveal-node{% if reveal.state == 'expired' %} reveal-node--now{% endif %}"
+        {% if reveal.state == 'expired' %}aria-current="step"{% endif %}>
+      <span class="reveal-pip" aria-hidden="true"></span>
+      <div class="reveal-when">{{ reveal.closes_at.strftime('%-d %b %Y') }}</div>
+      <div class="reveal-what">Window closes — unlinked records stay pseudonymous for good</div>
+    </li>
+  </ol>
+  {% if reveal.state == 'open' %}
+  <p class="reveal-deadline">
+    <strong>{{ reveal.days_left }} day{{ 's' if reveal.days_left != 1 }}</strong> left to decide —
+    linking is <strong>permanent and cannot be undone</strong>.
+  </p>
+  {% endif %}
+</div>
+{% endmacro %}

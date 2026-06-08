@@ -28,29 +28,38 @@
   {% endif %}
 
   {% if not conversation.active %}
+  {% from '_reveal_timeline.html' import reveal_timeline %}
   <div class="landing-section">
-    <p class="muted">This consultation is closed.</p>
+    {% if reveal %}
+    <p class="muted">
+      This consultation closed on <strong>{{ reveal.closed_at.strftime('%-d %b %Y') }}</strong>.
+      Your votes were recorded under your pseudonym; for a limited time you may optionally and
+      permanently link your Wikimedia username to it.
+    </p>
+
+    {{ reveal_timeline(reveal) }}
 
     {% if reveal_state == 'revealed' %}
     <p class="muted" style="margin-top:.5rem;font-size:13px">
       You linked your identity — your username is associated with pseudonym
       <strong>{{ participation.pseudonym }}</strong> in this consultation's records.
     </p>
-
     {% elif reveal_state == 'open' %}
     <p style="margin-top:.75rem;font-size:13px">
-      The identity reveal window is open.
       <a href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">Optionally link your username →</a>
     </p>
-
     {% elif reveal_state == 'pending' %}
     <p class="muted" style="margin-top:.5rem;font-size:13px">
-      The identity reveal window opens {{ reveal_opens_at.strftime('%Y-%m-%d') }}.
+      The window opens on {{ reveal.opens_at.strftime('%-d %b %Y') }} — nothing to do until then.
     </p>
-
+    {% elif reveal_state == 'expired' %}
+    <p class="muted" style="margin-top:.5rem;font-size:13px">
+      The reveal window has closed. Records stay pseudonymous — identities can no longer be linked.
+    </p>
     {% endif %}
-    {# reveal_state == 'expired' or None: no reveal section shown #}
-
+    {% else %}
+    <p class="muted">This consultation is closed.</p>
+    {% endif %}
   </div>
 
   {% elif conversation.paused %}

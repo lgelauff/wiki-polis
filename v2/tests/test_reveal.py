@@ -34,23 +34,44 @@ def test_reveal_state_pending(auth_client, app, participant):
     assert b'reveal window opens' in resp.data.lower()
 
 
+def test_reveal_timeline_shows_close_and_window_dates(auth_client, app, participant):
+    """#70: the closed page states the close date and the three timeline dates
+    (closed → window opens at +30d → window closes at +60d)."""
+    from datetime import datetime, timezone, timedelta
+    conv = _closed_conv(app, 'dated-conv', 10, 'dat1234567')
+    _participate(participant, conv, 'quiet-fox')
+    with app.app_context():
+        c = Conversation.query.filter_by(slug='dated-conv').first()
+        closed = c.closed_at
+    resp = auth_client.get('/c/dated-conv')
+    body = resp.data.decode()
+    fmt = lambda d: d.strftime('%-d %b %Y')
+    assert f'closed on <strong>{fmt(closed)}' in body
+    assert fmt(closed + timedelta(days=30)) in body            # window opens
+    assert fmt(closed + timedelta(days=60)) in body            # window closes
+    assert 'unlinked records stay pseudonymous' in body
+
+
 def test_reveal_state_open(auth_client, app, participant):
-    """Closed 30–59 days ago → reveal window open link is shown."""
+    """Closed 30–59 days ago → reveal window open; the opt-in link + timeline show."""
     conv = _closed_conv(app, 'open-conv', 45, 'opn1234567')
     _participate(participant, conv, 'bold-hawk')
     resp = auth_client.get('/c/open-conv')
     assert resp.status_code == 200
-    assert b'reveal window is open' in resp.data.lower()
+    assert b'optionally link your username' in resp.data.lower()
+    assert b'reveal-timeline' in resp.data                  # #70 timeline
+    assert b'left to decide' in resp.data.lower()           # days-left deadline
 
 
 def test_reveal_state_expired(auth_client, app, participant):
-    """Closed ≥ 60 days ago → window expired; only 'consultation is closed' shown."""
+    """Closed ≥ 60 days ago → window expired; timeline shows it closed and that
+    records stay pseudonymous (#70)."""
     conv = _closed_conv(app, 'expired-conv', 70, 'exp1234567')
     _participate(participant, conv, 'calm-deer')
     resp = auth_client.get('/c/expired-conv')
     assert resp.status_code == 200
-    assert b'consultation is closed' in resp.data.lower()
-    assert b'reveal window' not in resp.data.lower()
+    assert b'reveal window has closed' in resp.data.lower()
+    assert b'records stay pseudonymous' in resp.data.lower()
 
 
 def test_reveal_state_already_revealed(auth_client, app, participant):

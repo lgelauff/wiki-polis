@@ -76,6 +76,33 @@ _REVEAL_WINDOW_DAYS   = 30   # days participants may opt in once the window open
 _MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
+
+def _reveal_context(conv, participation):
+    """Identity-reveal timeline for a closed conversation (#70): when it closed, when
+    the opt-in window opens (after the cooldown) and closes, the current state, and the
+    days left while the window is open. Returns None when the conversation is not closed.
+    """
+    if not conv.closed_at:
+        return None
+    closed = (conv.closed_at if conv.closed_at.tzinfo
+              else conv.closed_at.replace(tzinfo=timezone.utc))
+    opens_at  = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
+    closes_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS)
+    age = datetime.now(timezone.utc) - closed
+    if participation and participation.public_username:
+        state = 'revealed'
+    elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
+        state = 'expired'
+    elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
+        state = 'open'
+    else:
+        state = 'pending'
+    closes_aware = closes_at if closes_at.tzinfo else closes_at.replace(tzinfo=timezone.utc)
+    days_left = max(0, (closes_aware - datetime.now(timezone.utc)).days)
+    return {'closed_at': conv.closed_at, 'opens_at': opens_at, 'closes_at': closes_at,
+            'state': state, 'days_left': days_left,
+            'cooldown_days': _REVEAL_COOLDOWN_DAYS, 'window_days': _REVEAL_WINDOW_DAYS}
+
 # Canonical consultation phase sequence. One flag per stage; preparation = all off.
 # Simple mode advances through this list (forward-only, exclusive). The existing
 # independent toggles remain available in advanced mode.
@@ -1867,20 +1894,10 @@ def conversation(slug):
                     _math_recompute_last[conv.id] = _now
                     recomputing = True
 
-    # Reveal window state for closed conversations.
-    reveal_state    = None
-    reveal_opens_at = None
-    if conv.closed_at:
-        age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-        reveal_opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
-        if participation.public_username:
-            reveal_state = 'revealed'
-        elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
-            reveal_state = 'expired'
-        elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
-            reveal_state = 'open'
-        else:
-            reveal_state = 'pending'
+    # Reveal-window timeline for closed conversations (#70).
+    reveal          = _reveal_context(conv, participation)
+    reveal_state    = reveal['state'] if reveal else None
+    reveal_opens_at = reveal['opens_at'] if reveal else None
 
     featured_data = []
     if conv.phase_argument_mapping and participation:
@@ -1939,6 +1956,7 @@ def conversation(slug):
                            polis_stats=polis_stats,
                            reveal_state=reveal_state,
                            reveal_opens_at=reveal_opens_at,
+                           reveal=reveal,
                            featured_data=featured_data,
                            new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10,
                            new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
@@ -2162,7 +2180,8 @@ def reveal_identity(slug):
                            participation=participation,
                            window_open=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS),
                            window_closed=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS),
-                           opens_at=opens_at)
+                           opens_at=opens_at,
+                           reveal=_reveal_context(conv, participation))
 
 @participant_bp.post('/c/<slug>/reveal')
 @login_required

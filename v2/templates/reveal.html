@@ -10,6 +10,7 @@
 {% endblock %}
 
 {% block content %}
+{% from '_reveal_timeline.html' import reveal_timeline %}
 
 <div class="container" style="max-width:660px">
 
@@ -68,6 +69,8 @@
     in this consultation's public record.
   </p>
 
+  {% if reveal %}{{ reveal_timeline(reveal) }}{% endif %}
+
   {% else %}
 
   <div class="reveal-banner">
@@ -93,6 +96,8 @@
     <span style="font-family:var(--mono);color:var(--ink)">{{ participation.pseudonym }}</span>
     in this conversation. Other pseudonyms you used elsewhere are unaffected.
   </p>
+
+  {% if reveal %}{{ reveal_timeline(reveal) }}{% endif %}
 
   <div class="close-warning" style="margin:1.25rem 0">
     <p style="font-weight:600;margin-bottom:.5rem;color:#9a3412">Irreversible</p>
