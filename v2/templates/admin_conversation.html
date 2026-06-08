@@ -31,9 +31,9 @@
   <div class="console-head">
     <h1 class="console-title">{{ conversation.title }}</h1>
     {% if not conversation.active %}
-      <span class="status-pill"><span class="status-pill-dot"></span>Closed</span>
+      <span class="status-pill status-pill--closed"><span class="status-pill-dot"></span>Closed</span>
     {% elif conversation.paused %}
-      <span class="status-pill" style="color:var(--spot)"><span class="status-pill-dot" style="background:var(--spot)"></span>Paused</span>
+      <span class="status-pill status-pill--paused"><span class="status-pill-dot"></span>Paused</span>
     {% else %}
       <span class="status-pill status-pill--active"><span class="status-pill-dot"></span>Active</span>
     {% endif %}
@@ -54,8 +54,8 @@
         {# Reusable per-box Guided/Advanced switch. Only this box has one today; the
            generic JS (bottom) drives any box with [data-mode] + .mode-switch. #}
         <span class="mode-switch" role="group" aria-label="Phase control mode">
-          <button type="button" class="pc-guided" aria-pressed="true">Simple</button>
-          <button type="button" class="pc-advanced mode-adv" aria-pressed="false">Advanced</button>
+          <button type="button" class="pc-guided" aria-pressed="true" aria-controls="phaseControl">Simple</button>
+          <button type="button" class="pc-advanced mode-adv" aria-pressed="false" aria-controls="phaseControl">Advanced</button>
         </span>
         {% endif %}
       </div>
@@ -128,6 +128,15 @@
     <div class="mode-guided-part">
       {% if transition %}
         {% if is_admin %}
+        {# At-a-glance readiness summary in the hero — machine-checkable conditions
+           that are currently unmet block the move. #}
+        {% set unmet = transition.preconditions | selectattr('met', 'equalto', false) | list | length %}
+        <div class="phase-foot">
+          <div class="phase-foot-ready {{ 'phase-foot-ready--wait' if unmet else 'phase-foot-ready--go' }}">
+            <span class="phase-foot-ready-icon" aria-hidden="true">{{ '!' if unmet else '✓' }}</span>
+            <span>{% if unmet %}{{ unmet }} readiness check{{ 's' if unmet != 1 }} still need resolving before {{ transition.target.label }}{% else %}No blocking checks — confirm each item below to move on to {{ transition.target.label }}{% endif %}</span>
+          </div>
+        </div>
         {# Guided 'Move on' (#156): consequences + tick-each-precondition checklist.
            Submit ships ENABLED (no-JS can advance; route enforces server-side); JS
            disables it until every box is ticked. Gating logic unchanged. #}
@@ -148,9 +157,12 @@
               {% if transition.auto_close %}
               <li><span class="consequence-tag consequence-tag--closes">Ends</span>
                   <span><strong>Permanently closes the consultation</strong> and starts the identity-reveal window.</span></li>
-              {% endif %}
+              <li><span class="consequence-tag consequence-tag--closes">Undo</span>
+                  <span><strong>Not possible</strong> — closing is irreversible.</span></li>
+              {% else %}
               <li><span class="consequence-tag" style="background:var(--surface2);color:var(--muted)">Undo</span>
                   <span>Reversible only by a site admin via advanced controls.</span></li>
+              {% endif %}
             </ul>
 
             {% if not conversation.active %}
@@ -304,45 +316,11 @@
     </div>
   </div>
 
-  {% if is_admin %}
-  {# ── Configuration — settings + moderators (inline; no separate pages yet) ── #}
+  {# ── Moderators — roster visible to anyone managing the conversation;
+     adding / removing is global-admin only (can_manage_roles). ── #}
   <div class="console-section">
-    <div class="console-section-label">Configuration</div>
-
+    <div class="console-section-label">Moderators</div>
     <details class="phase-advanced">
-      <summary>Settings — title, intro/outro, access policy</summary>
-      <form method="post" class="panel"
-            action="{{ url_for('admin.admin_conversation_edit', conv_id=conversation.id) }}"
-            style="margin-top:.75rem">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="edit-row-fields">
-          <label>Title
-            <input type="text" name="title" value="{{ conversation.title }}" required>
-          </label>
-          <label>Polis ID (zinvite, read-only)
-            <input type="text" value="{{ conversation.polis_id }}" readonly style="background:#f5f5f5;color:#666">
-          </label>
-          <label>Access policy
-            <select name="access_policy">
-              {% for p in ['public', 'invite_only'] %}
-              <option value="{{ p }}" {% if conversation.access_policy == p %}selected{% endif %}>{{ p }}</option>
-              {% endfor %}
-            </select>
-          </label>
-        </div>
-        <div class="edit-row-texts">
-          <label>Intro text (HTML, optional)
-            <textarea name="intro_text" rows="4">{{ conversation.intro_text or '' }}</textarea>
-          </label>
-          <label>Outro text (HTML, optional)
-            <textarea name="outro_text" rows="4">{{ conversation.outro_text or '' }}</textarea>
-          </label>
-        </div>
-        <button type="submit">Save settings</button>
-      </form>
-    </details>
-
-    <details class="phase-advanced" style="margin-top:.5rem">
       <summary>Moderators{% if conv_roles %} ({{ conv_roles | length }}){% endif %}</summary>
       {% if conv_roles %}
       <table class="admin-table" style="margin-top:.75rem">
@@ -390,6 +368,45 @@
         <button type="submit">Add moderator</button>
       </form>
       {% endif %}
+    </details>
+  </div>
+
+  {% if is_admin %}
+  {# ── Configuration — settings (inline; no separate page yet) ── #}
+  <div class="console-section">
+    <div class="console-section-label">Configuration</div>
+
+    <details class="phase-advanced">
+      <summary>Settings — title, intro/outro, access policy</summary>
+      <form method="post" class="panel"
+            action="{{ url_for('admin.admin_conversation_edit', conv_id=conversation.id) }}"
+            style="margin-top:.75rem">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="edit-row-fields">
+          <label>Title
+            <input type="text" name="title" value="{{ conversation.title }}" required>
+          </label>
+          <label>Polis ID (zinvite, read-only)
+            <input type="text" value="{{ conversation.polis_id }}" readonly style="background:#f5f5f5;color:#666">
+          </label>
+          <label>Access policy
+            <select name="access_policy">
+              {% for p in ['public', 'invite_only'] %}
+              <option value="{{ p }}" {% if conversation.access_policy == p %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <div class="edit-row-texts">
+          <label>Intro text (HTML, optional)
+            <textarea name="intro_text" rows="4">{{ conversation.intro_text or '' }}</textarea>
+          </label>
+          <label>Outro text (HTML, optional)
+            <textarea name="outro_text" rows="4">{{ conversation.outro_text or '' }}</textarea>
+          </label>
+        </div>
+        <button type="submit">Save settings</button>
+      </form>
     </details>
   </div>
 

@@ -239,6 +239,21 @@ def test_moderator_sees_readonly_stepper(client, conv, participant):
     assert b'phase/advance' not in resp.data        # no actionable form
 
 
+def test_moderator_sees_roster_readonly(client, conv, participant):
+    """A moderator sees the moderator roster (read-only) but no manage controls
+    or settings — the roster must not be hidden behind the admin-only block."""
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='moderator'))
+    db.session.commit()
+    login(client, 'testuser')
+    resp = client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'testuser' in resp.data                  # roster lists the moderator
+    assert b'Add moderator' not in resp.data         # cannot manage roles
+    assert b'Save settings' not in resp.data         # no settings form
+    assert b'roles/' not in resp.data                # no add/remove role actions
+
+
 def test_move_from_non_linear_state_rejected(admin_client, conv):
     conv.phase_submission = True
     conv.phase_argument_mapping = True            # non-linear
