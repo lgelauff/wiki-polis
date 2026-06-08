@@ -67,6 +67,32 @@ def test_conversation_has_h1_with_title(auth_client, conv, participation):
     assert re.search(rb'<h1[^>]*>\s*Test Conversation\s*</h1>', resp.data)
 
 
+# ── Consultation listing semantics (1.3.1 / 2.4.6 / 4.1.2) ─────────────────────
+
+def test_home_listing_has_list_and_heading_semantics(client, conv):
+    """The consultation listing is a real list with heading-navigable titles.
+
+    Sibling <a> cards with no list role gave SR users no "list, N items" / item
+    position; plain <span> titles were not heading-navigable (1.3.1 / 2.4.6).
+    """
+    resp = client.get('/')
+    assert resp.status_code == 200
+    html = resp.data.decode()
+    assert '<ul class="conv-list">' in html
+    assert '<h2 class="home-section-label"' in html
+    assert re.search(r'<h3 class="conv-card-title">\s*Test Conversation\s*</h3>', html)
+
+
+def test_home_pseudonym_announced_with_context(auth_client, conv, participation):
+    """A joined consultation announces the pseudonym labelled as such, not as a
+    bare token, and the redundant visible badge is hidden from AT (1.3.1 / 4.1.2)."""
+    resp = auth_client.get('/')
+    assert resp.status_code == 200
+    html = resp.data.decode()
+    assert 'your pseudonym: happy-fox' in html
+    assert '<span class="conv-card-badge" aria-hidden="true">happy-fox</span>' in html
+
+
 # ── Name/role/value affordances (4.1.2 / 1.3.1) ────────────────────────────────
 
 def test_composer_textareas_have_accessible_names(auth_client, conv, participation):

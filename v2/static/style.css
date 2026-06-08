@@ -342,6 +342,25 @@ header {
   margin-bottom: 24px;
 }
 
+/* Consultation listing uses real list + heading semantics (a11y); these resets
+   keep the visual appearance identical by neutralising UA list/heading styles. */
+.conv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+h2.home-section-label {
+  margin: 0;
+  font-weight: 400;
+}
+h3.conv-card-title {
+  margin: 0;
+}
+h3.conv-card-title-wrap {
+  margin: 0;
+  font: inherit;
+}
+
 .home-section-header {
   display: flex;
   align-items: baseline;
