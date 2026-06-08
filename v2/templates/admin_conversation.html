@@ -74,6 +74,28 @@
       {% endfor %}
     </ol>
 
+    {# Pause / Resume — lives here in Phases (it governs the running consultation),
+       not under Status. Global admin only; hidden once closed. #}
+    {% if is_admin and conversation.active %}
+    <div class="phase-pause-row" style="display:flex;align-items:center;gap:1rem;margin:.75rem 0 1rem">
+      <form method="post" style="display:inline"
+            action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit"
+                class="btn-small {% if conversation.paused %}btn-approve{% else %}btn-pause{% endif %}">
+          {{ 'Resume' if conversation.paused else 'Pause' }}
+        </button>
+      </form>
+      <span class="muted" style="font-size:13px">
+        {% if conversation.paused %}
+          Paused — participants cannot vote. The identity-reveal clock has <strong>not</strong> started; resuming is possible.
+        {% else %}
+          Pause temporarily disables voting without starting the reveal timeline.
+        {% endif %}
+      </span>
+    </div>
+    {% endif %}
+
     {% if transition %}
       {% if is_admin %}
       {# Guided 'Move on' box (#156): consequences + tick-each-precondition checklist.
@@ -126,25 +148,10 @@
         </form>
 
         {% if transition.show_pause %}
-        <div class="phase-move-pause muted" style="font-size:12px">
-          {% if conversation.paused %}
-          The conversation is paused.
-          <form method="post" style="display:inline"
-                action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="link-btn">Resume it</button>
-          </form>
-          when you’re ready to invite people back.
-          {% else %}
-          Need time to coordinate inviting people back? You can
-          <form method="post" style="display:inline"
-                action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="link-btn">pause the conversation</button>
-          </form>
-          first.
-          {% endif %}
-        </div>
+        <p class="phase-move-pause muted" style="font-size:12px">
+          Need time to coordinate inviting people back? Use the
+          {{ 'Resume' if conversation.paused else 'Pause' }} button above first.
+        </p>
         {% endif %}
       </div>
       <script nonce="{{ csp_nonce }}">
@@ -290,26 +297,7 @@
 
     {% else %}
 
-    <!-- Pause / Resume -->
-    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
-      <form method="post"
-            action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}"
-            style="display:inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit"
-                class="btn-small {% if conversation.paused %}btn-approve{% else %}btn-pause{% endif %}">
-          {{ 'Resume' if conversation.paused else 'Pause' }}
-        </button>
-      </form>
-      <span class="muted" style="font-size:13px">
-        {% if conversation.paused %}
-          Consultation is paused — participants cannot vote.
-          The identity reveal clock has <strong>not</strong> started; resuming is possible.
-        {% else %}
-          Pause temporarily disables voting without starting the reveal timeline.
-        {% endif %}
-      </span>
-    </div>
+    <!-- Pause / Resume now lives in the Phases block above. -->
 
     <!-- Close (irreversible) -->
     <div class="close-warning">
