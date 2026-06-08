@@ -76,6 +76,68 @@ _REVEAL_WINDOW_DAYS   = 30   # days participants may opt in once the window open
 _MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
+# Canonical consultation phase sequence. One flag per stage; preparation = all off.
+# Simple mode advances through this list (forward-only, exclusive). The existing
+# independent toggles remain available in advanced mode.
+PHASE_SEQUENCE = [
+    {'key': 'preparation',        'label': 'Preparation',        'flag': None,
+     'effect': 'setup only — participants cannot do anything yet'},
+    {'key': 'submission',         'label': 'Submission',         'flag': 'phase_submission',
+     'effect': 'participants can submit statements and vote on them'},
+    {'key': 'featured_selection', 'label': 'Featured selection', 'flag': 'phase_personal_results',
+     'effect': 'participants can see their personal results while you curate featured statements'},
+    {'key': 'argument_mapping',   'label': 'Argument mapping',   'flag': 'phase_argument_mapping',
+     'effect': 'participants can add and rate arguments on featured statements'},
+    {'key': 'informed_voting',    'label': 'Informed voting',    'flag': 'phase_informed_voting',
+     'effect': 'participants vote again on featured statements (requires initialising Phase 6)'},
+    {'key': 'public_results',     'label': 'Public results',     'flag': 'phase_public_results',
+     'effect': 'everyone can see the full aggregate results'},
+]
+_PHASE_FLAGS = [s['flag'] for s in PHASE_SEQUENCE if s['flag']]
+
+
+def _current_stage_index(conv) -> int:
+    """Furthest-along stage whose flag is on; 0 (preparation) if none on."""
+    idx = 0
+    for i, stage in enumerate(PHASE_SEQUENCE):
+        if stage['flag'] and getattr(conv, stage['flag']):
+            idx = i
+    return idx
+
+
+def _is_linear_phase_state(conv) -> bool:
+    """True if at most one phase flag is on — the simple-mode invariant."""
+    return sum(1 for f in _PHASE_FLAGS if getattr(conv, f)) <= 1
+
+
+def _advance_target_index(conv) -> int | None:
+    """Index simple-mode advance would move to, or None if no forward move.
+
+    Active conversation: one step forward. Closed conversation: jump straight
+    to the final stage (public results) — closed consultations skip the
+    intermediate steps. Returns None when already at/after the target.
+    """
+    i = _current_stage_index(conv)
+    last = len(PHASE_SEQUENCE) - 1
+    target = last if not conv.active else i + 1
+    return target if target > i and target <= last else None
+
+
+def _advance_confirm_message(conv) -> str:
+    """Plain-language confirmation describing what the next forward move does
+    to participants in this specific conversation."""
+    i = _current_stage_index(conv)
+    target = _advance_target_index(conv)
+    if target is None:
+        return ''
+    nxt = PHASE_SEQUENCE[target]
+    cur = PHASE_SEQUENCE[i]
+    parts = [f'Move to “{nxt["label"]}”? Participants: {nxt["effect"]}.']
+    if cur['flag']:
+        parts.append(f'This closes the current phase ({cur["effect"]}).')
+    parts.append('This cannot be undone here — only a site admin can change it back.')
+    return ' '.join(parts)
+
 
 csrf    = CSRFProtect()
 # No global default — limits applied per endpoint only.
@@ -740,7 +802,12 @@ def admin_conversation_detail(conv_id):
                            participant_count=participant_count,
                            polis_stats=polis_stats,
                            admin_roles=ADMIN_ROLES,
-                           can_manage_roles=can_manage_roles)
+                           can_manage_roles=can_manage_roles,
+                           phase_sequence=PHASE_SEQUENCE,
+                           current_stage_index=_current_stage_index(conv),
+                           linear_phase_state=_is_linear_phase_state(conv),
+                           advance_target_index=_advance_target_index(conv),
+                           advance_confirm=_advance_confirm_message(conv))
 
 @admin_bp.post('/admin/conversations/new')
 @login_required
@@ -823,6 +890,28 @@ def admin_conversation_close(conv_id):
     db.session.commit()
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
+def _sync_vis_type(conv) -> bool:
+    """Mirror the results phases onto Polis's vis_type, which gates GET /results/
+    (off by default — otherwise the Results tab stays empty no matter how many votes
+    are cast). Returns False on a Polis failure (best-effort; never raises).
+
+    CAVEAT: vis_type is a single all-or-nothing Polis flag — it cannot distinguish
+    public vs personal results. Enabling it for *personal* results makes the full
+    aggregate /results/ fetchable by any logged-in participant through the proxy.
+    Withholding/scoping the aggregate for personal results (the anti-anchoring intent)
+    must be enforced app-side — tracked as #81 Part 2 — not via vis_type.
+    """
+    if not conv.polis_id:
+        return True
+    results_on = conv.phase_public_results or conv.phase_personal_results
+    try:
+        _polis_server_client().set_vis_type(conv.polis_id, 1 if results_on else 0)
+        return True
+    except PolisServerError as exc:
+        current_app.logger.warning('vis_type update failed for %s: %s', conv.slug, exc)
+        return False
+
+
 @admin_bp.post('/admin/conversations/<int:conv_id>/phases')
 @login_required
 @admin_required
@@ -843,23 +932,48 @@ def admin_conversation_phases(conv_id):
     conv.phase_informed_voting  = bool(request.form.get('phase_informed_voting'))
     db.session.commit()
 
-    # Mirror the results phase onto Polis's vis_type, which gates GET /results/ (off by
-    # default — otherwise the Results tab stays empty no matter how many votes are cast).
-    # Best-effort: a Polis failure must not lose the phase change we just saved.
-    #
-    # CAVEAT: vis_type is a single all-or-nothing Polis flag — it cannot distinguish
-    # public vs personal results. Enabling it for *personal* results makes the full
-    # aggregate /results/ fetchable by any logged-in participant through the proxy.
-    # Withholding/scoping the aggregate for personal results (the anti-anchoring intent)
-    # must be enforced app-side — tracked as #81 Part 2 — not via vis_type.
-    if conv.polis_id:
-        results_on = conv.phase_public_results or conv.phase_personal_results
-        try:
-            _polis_server_client().set_vis_type(conv.polis_id, 1 if results_on else 0)
-        except PolisServerError as exc:
-            current_app.logger.warning('vis_type update failed for %s: %s', conv.slug, exc)
-            flash('Phases saved, but updating results visibility in Polis failed — '
-                  'results may not appear until you save phases again.', 'error')
+    if not _sync_vis_type(conv):
+        flash('Phases saved, but updating results visibility in Polis failed — '
+              'results may not appear until you save phases again.', 'error')
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/phase/advance')
+@login_required
+@admin_required                      # simple-mode forward move — global admin (later: organizer)
+def admin_conversation_advance(conv_id):
+    """Simple-mode forward move through PHASE_SEQUENCE. Exclusive: the target
+    stage's flag is turned on and the current stage's flag turned off.
+
+    Active conversation → one step forward. Closed conversation → jump straight
+    to the final stage (public results). Going backward or fixing a custom
+    (non-linear) flag combination is an advanced-mode, global-admin action — so
+    this route refuses to operate on a non-linear state and points there.
+    """
+    conv = Conversation.query.get_or_404(conv_id)
+
+    # Backward / custom-state repair lives in advanced mode. Refuse to advance
+    # from a non-linear state rather than perpetuate it (the UI hides the button
+    # here, but a stale page or direct POST must not silently corrupt state).
+    if not _is_linear_phase_state(conv):
+        flash('Phases are in a custom state — use Advanced controls to adjust.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    i = _current_stage_index(conv)
+    target = _advance_target_index(conv)
+    if target is None:
+        flash('Already at the final phase (public results).', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    cur, nxt = PHASE_SEQUENCE[i], PHASE_SEQUENCE[target]
+    if cur['flag']:                  # preparation has flag=None
+        setattr(conv, cur['flag'], False)
+    setattr(conv, nxt['flag'], True)
+    db.session.commit()
+
+    if not _sync_vis_type(conv):
+        flash('Phase advanced, but updating results visibility in Polis failed.', 'error')
+    flash(f'Moved to: {nxt["label"]}.', 'success')
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 
