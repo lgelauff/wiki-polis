@@ -1023,15 +1023,11 @@ def _sync_vis_type(conv) -> bool:
 @login_required
 @admin_required
 def admin_conversation_phases(conv_id):
+    # Advanced mode: independent toggles, out of order, NO readiness checks — the admin
+    # is responsible for the resulting state (the guided flow enforces preconditions like
+    # ≥1 featured statement before argument mapping; this route deliberately does not, so
+    # a single rejected toggle never silently discards the whole save).
     conv = Conversation.query.get_or_404(conv_id)
-    enabling_arg_mapping = (bool(request.form.get('phase_argument_mapping'))
-                            and not conv.phase_argument_mapping)
-    if enabling_arg_mapping:
-        featured_count = FeaturedStatement.query.filter_by(conversation_id=conv_id).count()
-        if featured_count == 0:
-            flash('Cannot enable argument mapping — add at least one featured statement first.', 'error')
-            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
     conv.phase_submission       = bool(request.form.get('phase_submission'))
     conv.phase_personal_results = bool(request.form.get('phase_personal_results'))
     conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
@@ -1084,11 +1080,12 @@ def admin_conversation_advance(conv_id):
     # Run the Phase 6 Polis I/O FIRST, before mutating conv. This keeps the network
     # round-trips out of the open write transaction: the only DB write happens at the
     # commit below, so a slow Polis backend never holds a row lock on the conversation.
+    # Initialise the Phase 6 round only if it hasn't been already. If it has (advanced
+    # path, or a re-entry), just proceed with the transition — re-initialising adds no
+    # value and would fail on the UNIQUE constraint. The featured statements were seeded
+    # at init time, so round 6 already reflects the round-5 featured set.
     created_p6 = None
-    if ctx['runs_phase6_init']:
-        if conv.phase6_polis_conversation_id:     # already initialised (advanced/concurrent)
-            flash('Phase 6 is already initialised.', 'error')
-            return redirect_to
+    if ctx['runs_phase6_init'] and not conv.phase6_polis_conversation_id:
         ok, msg = _init_phase6(conv)              # assigns ids onto conv/featured; no commit
         if not ok:
             db.session.rollback()

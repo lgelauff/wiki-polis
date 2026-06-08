@@ -1,4 +1,5 @@
 """Tests for admin conversation management, roles, and phase toggles."""
+import re
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -121,6 +122,27 @@ def test_phase_toggles_on(admin_client, conv):
     assert conv.phase_public_results is True
     assert conv.phase_personal_results is False
     assert conv.phase_argument_mapping is False
+
+
+def test_advanced_phases_form_persists_end_to_end(admin_client, conv):
+    """Render the console, submit exactly what the advanced form posts, and confirm
+    the change persists AND the re-rendered advanced checkboxes reflect it."""
+    conv.phase_submission = True
+    db.session.commit()
+    # The advanced form posts only the ticked boxes (here: argument_mapping + cleanup).
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/phases',
+                             data={'phase_argument_mapping': '1', 'phase_cleanup': '1'},
+                             follow_redirects=True)
+    assert resp.status_code == 200
+    db.session.refresh(conv)
+    assert conv.phase_submission is False          # unticked → cleared
+    assert conv.phase_argument_mapping is True     # ticked → set
+    assert conv.phase_cleanup is True
+    # The re-rendered advanced form reflects the saved state.
+    page = admin_client.get(f'/admin/conversations/{conv.id}').data.decode()
+    assert re.search(r'name="phase_argument_mapping"[^>]*checked', page)
+    assert re.search(r'name="phase_cleanup"[^>]*checked', page)
+    assert not re.search(r'name="phase_submission"[^>]*checked', page)
 
 
 def test_phase_toggles_off(admin_client, conv):
@@ -495,20 +517,51 @@ def test_informed_voting_newcomers_has_no_machine_check():
     assert iv['newcomers'].get('check') is None
 
 
-def test_move_to_informed_voting_blocked_if_already_initialised(admin_client, conv):
-    """The guided route refuses to re-init Phase 6 (precheck), without any Polis call."""
+def test_move_to_informed_voting_proceeds_if_already_initialised(admin_client, conv):
+    """If Phase 6 is already initialised, moving to Informed vote PROCEEDS without
+    re-initialising — re-init adds no value and would fail on the UNIQUE constraint."""
     conv.phase_cleanup = True                     # next move: cleanup → informed vote
     conv.phase6_polis_conversation_id = 'pre-existing'
     db.session.commit()
     _add_featured(conv)
     with patch('app.PolisServerClient.create_conversation') as cc, \
          patch('app.PolisServerClient.set_vis_type'):
-        resp = admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
-                                 data=_checks_for(conv), follow_redirects=True)
-    assert b'already initialised' in resp.data.lower()
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                          data=_checks_for(conv))
     db.session.refresh(conv)
-    assert conv.phase_informed_voting is False
-    cc.assert_not_called()
+    assert conv.phase_informed_voting is True                       # advanced
+    assert conv.phase_cleanup is False
+    assert conv.phase6_polis_conversation_id == 'pre-existing'      # unchanged
+    cc.assert_not_called()                                          # no re-init
+
+
+def test_move_to_informed_voting_seeds_round5_featured_set(admin_client, conv):
+    """Moving to Informed vote seeds round 6 with exactly the round-5 CONFIRMED featured
+    statements — unconfirmed ones are excluded, so round 6 reflects round 5."""
+    conv.phase_cleanup = True
+    db.session.commit()
+    fs1 = _add_featured(conv, tid=1, text='Featured A')
+    fs2 = _add_featured(conv, tid=2, text='Featured B')
+    unconf = FeaturedStatement(conversation_id=conv.id, polis_statement_id=3,
+                               statement_text='Not confirmed', confirmed_by_admin=False)
+    db.session.add(unconf); db.session.commit()
+
+    seeded = {}
+    def fake_seed(p6id, text):
+        seeded[text] = 100 + len(seeded)
+        return seeded[text]
+    with patch('app.PolisServerClient.set_vis_type'), \
+         patch('app.PolisServerClient.create_conversation', return_value='p6round'), \
+         patch('app.PolisServerClient.add_seed_return_id', side_effect=fake_seed):
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance', data=_checks_for(conv))
+
+    db.session.refresh(conv); db.session.refresh(fs1)
+    db.session.refresh(fs2); db.session.refresh(unconf)
+    assert conv.phase6_polis_conversation_id == 'p6round'
+    assert set(seeded) == {'Featured A', 'Featured B'}     # exactly the confirmed set
+    assert fs1.phase6_polis_statement_id is not None
+    assert fs2.phase6_polis_statement_id is not None
+    assert unconf.phase6_polis_statement_id is None        # unconfirmed not seeded
 
 
 def test_move_informed_voting_empty_text_aborts(admin_client, conv):

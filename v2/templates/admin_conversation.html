@@ -50,14 +50,6 @@
 
       <div class="phase-hero-top">
         <span class="phase-now-kicker">Phase control</span>
-        {% if is_admin %}
-        {# Reusable per-box Guided/Advanced switch. Only this box has one today; the
-           generic JS (bottom) drives any box with [data-mode] + .mode-switch. #}
-        <span class="mode-switch" role="group" aria-label="Phase control mode">
-          <button type="button" class="pc-guided" aria-pressed="true" aria-controls="phaseControl">Simple</button>
-          <button type="button" class="pc-advanced mode-adv" aria-pressed="false" aria-controls="phaseControl">Advanced</button>
-        </span>
-        {% endif %}
       </div>
 
       {# 7-phase journey rail (#163 added the passive 'Cleanup' phase between
@@ -76,6 +68,17 @@
         </li>
         {% endfor %}
       </ol>
+
+      {% if is_admin %}
+      {# Reusable per-box Guided/Advanced switch, right under the timeline. The generic
+         JS (bottom) drives any box with [data-mode] + .mode-switch. #}
+      <div class="mode-switch-row">
+        <span class="mode-switch" role="group" aria-label="Phase control mode">
+          <button type="button" class="pc-guided" aria-pressed="true" aria-controls="phaseControl">Simple</button>
+          <button type="button" class="pc-advanced mode-adv" aria-pressed="false" aria-controls="phaseControl">Advanced</button>
+        </span>
+      </div>
+      {% endif %}
 
       {# Current-phase body #}
       <div class="phase-hero-body">
@@ -263,7 +266,7 @@
                {% if conversation.phase_public_results %}checked{% endif %}> Public results</label>
         <label><input type="checkbox" name="phase_informed_voting" value="1"
                {% if conversation.phase_informed_voting %}checked{% endif %}> Informed voting</label>
-        <button type="submit" class="btn-small">save</button>
+        <button type="submit" class="btn-small phases-save">Save phases</button>
       </form>
 
       {# Phase 6 initialisation — fallback for the advanced/demo path (the guided
@@ -462,6 +465,14 @@
     }
     g.addEventListener('click', function () { set(false); });
     a.addEventListener('click', function () { set(true); });
+  });
+
+  // Advanced phase toggles: darken the Save button once something changes, so the
+  // pending save isn't overlooked.
+  document.querySelectorAll('.phases-form').forEach(function (f) {
+    var save = f.querySelector('.phases-save');
+    if (!save) return;
+    f.addEventListener('change', function () { save.classList.add('phases-save--dirty'); });
   });
 </script>
 
