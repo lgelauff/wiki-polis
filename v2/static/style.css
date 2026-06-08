@@ -7,17 +7,17 @@
   /* Cluster palette */
   --ink:           #0c0c0e;
   --body:          #3f3f43;
-  --muted:         #71717a;
+  --muted:         #5f5f68;  /* darkened for WCAG AA (4.5:1) on off-white panels */
   --bg:            #fafaf9;
   --surface:       #ffffff;
   --surface2:      #f4f4f3;
   --surface3:      #eeece6;
   --hairline:      #e5e5e6;
   --hairline-soft: #efefef;
-  --agree:         #1f8a5b;
+  --agree:         #15734a;  /* darkened for WCAG AA as text/badges (see --green for the brighter legacy tone) */
   --pass:          #3d6dba;
-  --disagree:      #c44a4a;
-  --spot:          #f59e0b;
+  --disagree:      #b23a3a;  /* darkened for WCAG AA as text/badges */
+  --spot:          #b45309;  /* deepened amber: was #f59e0b (2.15:1 as text); now AA as text and white-on-spot */
   --accent:        #2d2d31;
   /* Legacy aliases used by admin UI */
   --blue:          #3d6dba;
@@ -41,6 +41,41 @@
 :focus-visible {
   outline: 2px solid var(--pass);
   outline-offset: 2px;
+}
+
+/* These composer textareas suppress the default outline for a borderless look
+   (border:0/outline:0 below). Restore a clear keyboard focus ring on
+   :focus-visible — higher specificity than the base rules, so it wins on
+   focus while leaving the resting/mouse appearance untouched. Inset offset so
+   the ring is never clipped by the surrounding composer frame. */
+.propose-textarea:focus-visible,
+.v2-composer-textarea:focus-visible,
+.contribute-textarea:focus-visible {
+  outline: 2px solid var(--pass);
+  outline-offset: -2px;
+}
+
+/* Skip-to-content link: off-screen until focused, then pinned top-left. */
+.skip-link {
+  position: absolute;
+  top: -48px;
+  left: 8px;
+  z-index: 1000;
+  padding: 8px 14px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  font-size: 13px;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+.skip-link:focus {
+  top: 8px;
+}
+/* Suppress the focus outline on the jump target itself (it is not a control). */
+#main:focus {
+  outline: none;
 }
 
 /* .conv-card is always an <a> element — this rule relies on that assumption */
@@ -360,7 +395,15 @@ header {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .conv-card { transition: none; }
+  /* Neutralise motion app-wide: make transitions/animations effectively
+     instant and disable CSS smooth scrolling. (JS scrollIntoView with
+     behavior:'smooth' ignores this; it is gated separately in the template.) */
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
   .conv-card:active { transform: none; }
   /* shadow change on :active is retained intentionally — not vestibular motion */
 }
@@ -1318,6 +1361,7 @@ pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
   align-items: center;
   gap: 6px;
   padding: 2px 0;
+  min-height: 24px; /* WCAG 2.5.8 target size */
   font-family: var(--sans);
 }
 
@@ -1497,6 +1541,12 @@ h3.section-heading {
   line-height: 1;
   padding: 0;
   flex-shrink: 0;
+  /* keep the glyph small but the hit area >= 24px (WCAG 2.5.8) */
+  min-width: 24px;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .toast__close:hover { opacity: 1; }
 .toast--out { opacity: 0; transform: translateY(.5rem); }
