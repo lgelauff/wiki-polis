@@ -65,6 +65,11 @@ class Conversation(db.Model):
     phase_submission       = db.Column(db.Boolean, default=False, nullable=False)
     phase_personal_results = db.Column(db.Boolean, default=False, nullable=False)
     phase_argument_mapping = db.Column(db.Boolean, default=False, nullable=False)
+    # Cleanup — a passive phase between argument mapping and informed voting (#163):
+    # participants do nothing; the organizer moderates arguments before the second
+    # voting round. Default off; set via the guided transition.
+    phase_cleanup          = db.Column(db.Boolean, default=False, nullable=False,
+                                       server_default=sa.false())
     phase_public_results   = db.Column(db.Boolean, default=False, nullable=False)
     # Phase 6 — informed voting: a second, independent voting round on featured
     # statements only, with arguments shown inline. Enabling this toggle triggers

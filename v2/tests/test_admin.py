@@ -266,21 +266,21 @@ def test_move_to_argument_mapping_blocked_without_featured(admin_client, conv):
 def test_move_to_informed_voting_runs_phase6_init(admin_client, conv):
     """Moving into Informed voting folds in Phase 6 init: creates the Polis
     conversation and seeds the confirmed featured statements, atomically."""
-    conv.phase_argument_mapping = True
+    conv.phase_cleanup = True                     # next move: cleanup → informed vote
     db.session.commit()
     fs = _add_featured(conv)
     _move(admin_client, conv)
     db.session.refresh(conv)
     db.session.refresh(fs)
     assert conv.phase_informed_voting is True
-    assert conv.phase_argument_mapping is False
+    assert conv.phase_cleanup is False
     assert conv.phase6_polis_conversation_id == 'p6conv1234'
     assert fs.phase6_polis_statement_id == 42
 
 
 def test_move_to_informed_voting_init_failure_rolls_back(admin_client, conv):
     """If Phase 6 seeding fails, the informed-voting flag is NOT set (atomic)."""
-    conv.phase_argument_mapping = True
+    conv.phase_cleanup = True                     # next move: cleanup → informed vote
     db.session.commit()
     _add_featured(conv)
     with patch('app.PolisServerClient.set_vis_type'), \
@@ -291,8 +291,29 @@ def test_move_to_informed_voting_init_failure_rolls_back(admin_client, conv):
                           data=_checks_for(conv))
     db.session.refresh(conv)
     assert conv.phase_informed_voting is False     # rolled back
-    assert conv.phase_argument_mapping is True     # prior flag preserved
+    assert conv.phase_cleanup is True              # prior flag preserved
     assert conv.phase6_polis_conversation_id is None
+
+
+def test_cleanup_phase_sits_between_arguments_and_informed_vote(admin_client, conv):
+    """#163: the passive Cleanup phase is inserted between Arguments and Informed vote."""
+    keys = [s['key'] for s in PHASE_SEQUENCE]
+    assert keys.index('cleanup') == keys.index('argument_mapping') + 1
+    assert keys.index('cleanup') == keys.index('informed_voting') - 1
+
+
+def test_move_arguments_to_cleanup_does_not_init_phase6(admin_client, conv):
+    """Moving Arguments → Cleanup flips only the cleanup flag; Phase 6 init happens on
+    the next move (Cleanup → Informed vote), not here."""
+    conv.phase_argument_mapping = True
+    db.session.commit()
+    _add_featured(conv)
+    _move(admin_client, conv)
+    db.session.refresh(conv)
+    assert conv.phase_cleanup is True
+    assert conv.phase_argument_mapping is False
+    assert conv.phase_informed_voting is False
+    assert conv.phase6_polis_conversation_id is None   # not initialised yet
 
 
 def test_move_to_public_results_auto_closes(admin_client, conv):
@@ -334,7 +355,8 @@ def test_move_vis_type_failure_flashes(admin_client, conv):
 def test_move_syncs_vis_type(admin_client, conv):
     """vis_type=1 entering a results stage, 0 otherwise."""
     _add_featured(conv)
-    expectations = [0, 1, 0, 0, 1]   # submission, featured(personal), argument, informed, public
+    # explore, featured(personal), arguments, cleanup, informed, report
+    expectations = [0, 1, 0, 0, 0, 1]
     for expected in expectations:
         with patch('app.PolisServerClient.set_vis_type') as m, \
              patch('app.PolisServerClient.create_conversation', return_value='p6conv1234'), \
@@ -460,7 +482,7 @@ def test_informed_voting_newcomers_has_no_machine_check():
 
 def test_move_to_informed_voting_blocked_if_already_initialised(admin_client, conv):
     """The guided route refuses to re-init Phase 6 (precheck), without any Polis call."""
-    conv.phase_argument_mapping = True
+    conv.phase_cleanup = True                     # next move: cleanup → informed vote
     conv.phase6_polis_conversation_id = 'pre-existing'
     db.session.commit()
     _add_featured(conv)
@@ -477,7 +499,7 @@ def test_move_to_informed_voting_blocked_if_already_initialised(admin_client, co
 def test_move_informed_voting_empty_text_aborts(admin_client, conv):
     """A confirmed featured statement with no cached text aborts Phase 6 init before
     seeding; the phase flag is not set."""
-    conv.phase_argument_mapping = True
+    conv.phase_cleanup = True                     # next move: cleanup → informed vote
     db.session.commit()
     _add_featured(conv, text='')
     with patch('app.PolisServerClient.set_vis_type'), \
@@ -497,7 +519,7 @@ def test_move_commit_failure_rolls_back_and_logs_orphan(admin_client, conv, capl
     back and the orphaned Polis conversation id is logged for cleanup."""
     import logging
     from sqlalchemy.exc import IntegrityError
-    conv.phase_argument_mapping = True
+    conv.phase_cleanup = True                     # next move: cleanup → informed vote
     db.session.commit()
     _add_featured(conv)
     with patch('app.PolisServerClient.set_vis_type'), \
@@ -519,7 +541,7 @@ def test_move_commit_db_error_rolls_back_and_logs_orphan(admin_client, conv, cap
     conversation id, and warns the organizer not to blind-retry."""
     import logging
     from sqlalchemy.exc import OperationalError
-    conv.phase_argument_mapping = True
+    conv.phase_cleanup = True                     # next move: cleanup → informed vote
     db.session.commit()
     _add_featured(conv)
     with patch('app.PolisServerClient.set_vis_type'), \

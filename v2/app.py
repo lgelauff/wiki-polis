@@ -88,6 +88,8 @@ PHASE_SEQUENCE = [
      'effect': 'participants can see their personal results while you curate featured statements'},
     {'key': 'argument_mapping',   'label': 'Arguments',          'flag': 'phase_argument_mapping',
      'effect': 'participants can add and rate arguments on featured statements'},
+    {'key': 'cleanup',            'label': 'Cleanup',            'flag': 'phase_cleanup',
+     'effect': 'a quiet pause — participants are idle while you moderate the arguments before the informed vote'},
     {'key': 'informed_voting',    'label': 'Informed vote',      'flag': 'phase_informed_voting',
      'effect': 'participants vote again on featured statements (requires initialising Phase 6)'},
     {'key': 'public_results',     'label': 'Report',             'flag': 'phase_public_results',
@@ -166,8 +168,12 @@ PHASE_TRANSITIONS = {
         {'id': 'no_more_stmt', 'label': 'I understand participants cannot add further statements later'},
         {'id': 'args_visible', 'label': 'I understand featured statements become visible and participants add/rate arguments'},
     ]},
+    'cleanup': {'preconditions': [
+        {'id': 'args_collected', 'label': 'Argument mapping has run long enough — enough pro/con reasoning has been gathered'},
+        {'id': 'args_close',     'label': 'I understand participants can no longer add or rate arguments after this'},
+        {'id': 'ready_moderate', 'label': 'I’m ready to review and moderate the arguments before the informed vote'},
+    ]},
     'informed_voting': {'runs_phase6_init': True, 'show_pause': True, 'preconditions': [
-        {'id': 'args_done',   'label': 'We’ve collected all the necessary arguments to move on'},
         {'id': 'args_modded', 'label': 'I’ve reviewed all arguments and removed those against moderation expectations'},
         {'id': 'reinvite',    'label': 'I’m ready to invite participants back for the informed voting phase'},
         {'id': 'newcomers',   'label': 'I understand participants who didn’t take part earlier can join this round'},
@@ -1029,6 +1035,7 @@ def admin_conversation_phases(conv_id):
     conv.phase_submission       = bool(request.form.get('phase_submission'))
     conv.phase_personal_results = bool(request.form.get('phase_personal_results'))
     conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
+    conv.phase_cleanup          = bool(request.form.get('phase_cleanup'))
     conv.phase_public_results   = bool(request.form.get('phase_public_results'))
     conv.phase_informed_voting  = bool(request.form.get('phase_informed_voting'))
     db.session.commit()

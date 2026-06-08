@@ -60,8 +60,8 @@
         {% endif %}
       </div>
 
-      {# 6-phase journey rail. TODO(#163): a passive 'Cleanup' phase is inserted
-         between Arguments and Informed vote — that adds a 7th node here. #}
+      {# 7-phase journey rail (#163 added the passive 'Cleanup' phase between
+         Arguments and Informed vote). Renders from PHASE_SEQUENCE. #}
       <ol class="journey phase-stepper" aria-label="Consultation phase progress">
         {% for stage in phase_sequence %}
         <li class="journey-step
@@ -245,6 +245,8 @@
                {% if conversation.phase_personal_results %}checked{% endif %}> Personal results</label>
         <label><input type="checkbox" name="phase_argument_mapping" value="1"
                {% if conversation.phase_argument_mapping %}checked{% endif %}> Argument mapping</label>
+        <label><input type="checkbox" name="phase_cleanup" value="1"
+               {% if conversation.phase_cleanup %}checked{% endif %}> Cleanup</label>
         <label><input type="checkbox" name="phase_public_results" value="1"
                {% if conversation.phase_public_results %}checked{% endif %}> Public results</label>
         <label><input type="checkbox" name="phase_informed_voting" value="1"
