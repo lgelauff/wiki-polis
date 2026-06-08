@@ -10,6 +10,7 @@
   {% block head %}{% endblock %}
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
   <header>
     <div class="header-inner">
       <div style="display:flex;align-items:center;gap:14px">
@@ -46,7 +47,7 @@
     </div>
   </header>
 
-  <main>
+  <main id="main" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
 
