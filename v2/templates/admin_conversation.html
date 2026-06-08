@@ -127,13 +127,23 @@
 
         {% if transition.show_pause %}
         <div class="phase-move-pause muted" style="font-size:12px">
-          Coordinating inviting people back? You can
+          {% if conversation.paused %}
+          The conversation is paused.
           <form method="post" style="display:inline"
                 action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="link-btn">{{ 'resume' if conversation.paused else 'pause the conversation' }}</button>
+            <button type="submit" class="link-btn">Resume it</button>
+          </form>
+          when you’re ready to invite people back.
+          {% else %}
+          Need time to coordinate inviting people back? You can
+          <form method="post" style="display:inline"
+                action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="link-btn">pause the conversation</button>
           </form>
           first.
+          {% endif %}
         </div>
         {% endif %}
       </div>
