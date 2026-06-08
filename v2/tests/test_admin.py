@@ -483,6 +483,43 @@ def test_resync_is_idempotent(admin_client, conv):
     mod.assert_not_called()
 
 
+def test_resync_empty_featured_set_hides_everything(admin_client, conv):
+    """Re-entry with zero confirmed featured statements hides every live round-6
+    statement (nothing added)."""
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()                            # no featured statements
+    round6 = ([], [{'tid': 1, 'txt': 'A'}, {'tid': 2, 'txt': 'B'}], [])
+    with patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate') as mod, \
+         patch('app.PolisServerClient.add_seed_return_id') as add:
+        ok, msg = _sync_phase6_featured(conv)
+    assert ok
+    add.assert_not_called()
+    assert sorted(c.args[1] for c in mod.call_args_list) == [1, 2]   # both hidden
+    assert all(c.args[2] == -1 for c in mod.call_args_list)
+
+
+def test_resync_duplicate_featured_text_skips_one_and_warns(admin_client, conv, caplog):
+    """Two confirmed featured statements with identical text collapse under the text
+    key: one is mapped, the other left unmapped, and a warning is logged (a degenerate
+    input — surfaced, not silently corrupting the round)."""
+    import logging
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    f1, f2 = _featured(conv, 'Same', 'Same')        # duplicate text
+    round6 = ([], [{'tid': 1, 'txt': 'Same'}], [])
+    with caplog.at_level(logging.WARNING), \
+         patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate') as mod, \
+         patch('app.PolisServerClient.add_seed_return_id') as add:
+        ok, msg = _sync_phase6_featured(conv); db.session.commit()
+    assert ok
+    add.assert_not_called(); mod.assert_not_called()
+    mapped = [fs.phase6_polis_statement_id for fs in (f1, f2)]
+    assert mapped.count(1) == 1 and mapped.count(None) == 1   # exactly one mapped
+    assert 'duplicates' in caplog.text
+
+
 def test_reentry_persists_seeded_tid_through_the_route(admin_client, conv):
     """End-to-end: a featured statement seeded during the route's re-sync has its
     phase6_polis_statement_id committed and surviving a fresh DB read."""
