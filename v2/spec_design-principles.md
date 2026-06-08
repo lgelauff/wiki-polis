@@ -32,3 +32,7 @@ These are stable. They should not be re-debated in each session; challenge them 
 14. **Phases are stable checkpoints.** Don't blend phases. Each phase must be independently deployable.
 15. **No premature abstraction.** Build for the current phase; refactor when a real need emerges.
 16. **Polis is the deliberation engine.** Don't reimplement clustering, PCA, or vote math. Own the wrapper, not the engine.
+
+## Accessibility
+
+17. **Accessibility is a build requirement, not a polish pass.** Target WCAG 2.1/2.2 AA, follow the MediaWiki [Accessibility guide for developers](https://www.mediawiki.org/wiki/Accessibility_guide_for_developers), and prefer semantic HTML + progressive enhancement over ARIA workarounds. The conventions, PR checklist, and testing recipe live in [`spec_accessibility.md`](spec_accessibility.md).
