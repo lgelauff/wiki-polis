@@ -274,3 +274,21 @@ arguments so participants deliberate before casting a clean vote.
 - [x] Wrong Polis vote endpoint: corrected to `PUT /api/conversations/{id}/votes/{tid}`
 - [x] Active/paused guard on vote route
 - [x] CSRF token forwarded to Particiapi on vote
+
+## Step 7 — Admin phase control, CSV import, a11y (2026-06-08)
+
+**Admin phase control** ([#140](https://github.com/lgelauff/wiki-polis/issues/140), [#156](https://github.com/lgelauff/wiki-polis/issues/156))
+- [x] Guided "Move on" forward-transition box: consequence summary + per-phase readiness checklist (client-gated, server-re-validated); machine-checked "≥1 featured statement" precondition with met/not-met badge
+- [x] "Advanced phase controls" (global admin only): independent per-phase toggles incl. backward moves; auto-opens in non-linear state
+- [x] Phase-transition guard catalogue (hard + soft) documented in `spec_functional-design.md`
+
+**Seed CSV import** ([#61](https://github.com/lgelauff/wiki-polis/issues/61))
+- [x] Bulk import seed statements from a `text`-column CSV; 20-row / 100 KB caps; whole-file rejection over limit; UTF-8 + null-byte + formula-injection validation; per-row error reporting; duplicate-safe
+
+**Accessibility** ([#150](https://github.com/lgelauff/wiki-polis/issues/150), [#166](https://github.com/lgelauff/wiki-polis/issues/166))
+- [x] Participant-front WCAG 2.1/2.2 AA audit fixes (live regions, focus, contrast, reduced motion, skip link, headings)
+- [x] Consultation listing: real list + heading semantics, pseudonym announced with context
+- [x] Hidden pa-* API-proxy controls moved to `display:none` so they leave the a11y tree/tab order (interim; full de-dup tracked in [#159](https://github.com/lgelauff/wiki-polis/issues/159))
+
+**Ops**
+- [x] `deploy.sh --migrate` runs Alembic from the bastion via dynamic envvar loading + `MIGRATION_MODE=1` (skips web-server-only startup checks); documented in `guide_deployment.md`

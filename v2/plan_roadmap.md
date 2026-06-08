@@ -94,8 +94,7 @@ retention commitment (decision D-PRIV), pending legal/comms review.
   warning for un-seeded confirmed statements.
 - **Return engagement** — notifications (talk page / email), "new since last visit".
 - **Analytics export** — structured export of votes / clusters / arguments.
-- **Admin & ops** — seed CSV import
-  ([#61](https://github.com/lgelauff/wiki-polis/issues/61)), ban participant
+- **Admin & ops** — ban participant
   ([#60](https://github.com/lgelauff/wiki-polis/issues/60)), per-conversation
   participants tab ([#42](https://github.com/lgelauff/wiki-polis/issues/42)), statement
   advising module ([#56](https://github.com/lgelauff/wiki-polis/issues/56)), centralised
