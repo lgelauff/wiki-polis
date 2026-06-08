@@ -370,6 +370,32 @@ def test_guided_box_shows_unmet_machine_check(admin_client, conv):
     assert b'not met' in resp.data
 
 
+def test_pause_control_in_phases_block_not_status(admin_client, conv):
+    """Pause/Resume lives in the Phases block (once), not the Status block."""
+    conv.phase_personal_results = True            # a live, mid-flow phase
+    db.session.commit()
+    resp = admin_client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'phase-pause-row' in resp.data
+    assert resp.data.count(b'/pause"') == 1                       # one pause form, not duplicated
+    assert b'temporarily disables voting without starting' in resp.data   # active copy
+    assert b'btn-pause' in resp.data
+    # Not in the Status block.
+    status_tail = resp.data.split(b'<h3 class="section-heading">Status</h3>')[1]
+    assert b'/pause"' not in status_tail
+
+
+def test_pause_control_paused_state_copy(admin_client, conv):
+    conv.phase_personal_results = True
+    conv.paused = True
+    db.session.commit()
+    resp = admin_client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'identity-reveal clock has' in resp.data       # paused safety copy
+    assert b'btn-approve' in resp.data                     # Resume styling
+    assert b'temporarily disables voting without starting' not in resp.data
+
+
 def test_featured_check_shows_selected_count_and_recommendation(admin_client, conv):
     """The featured-statement precondition reports '(N selected, 15 recommended)'."""
     conv.phase_personal_results = True            # next transition → argument mapping
