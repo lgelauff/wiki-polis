@@ -62,11 +62,11 @@
   </h1>
   <p style="font-size:15px;line-height:1.6;color:var(--body);margin-top:14px">
     The identity reveal window has not opened yet.
-    It will open on <strong>{{ opens_at.strftime('%Y-%m-%d') }}</strong>.
+    It will open on <strong>{{ opens_at.strftime('%-d %b %Y') }}</strong>.
   </p>
   <p class="muted" style="margin-top:8px">
-    After that date you may optionally link your Wikimedia username to your pseudonym
-    in this consultation's public record.
+    After that date you may optionally and <strong>permanently</strong> link your Wikimedia
+    username to your pseudonym in this consultation's public record. You're never required to.
   </p>
 
   {% if reveal %}{{ reveal_timeline(reveal) }}{% endif %}

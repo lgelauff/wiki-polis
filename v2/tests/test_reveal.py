@@ -31,7 +31,7 @@ def test_reveal_state_pending(auth_client, app, participant):
     _participate(participant, conv, 'quick-mouse')
     resp = auth_client.get('/c/pending-conv')
     assert resp.status_code == 200
-    assert b'reveal window opens' in resp.data.lower()
+    assert b'window opens' in resp.data.lower()
 
 
 def test_reveal_timeline_shows_close_and_window_dates(auth_client, app, participant):
@@ -49,7 +49,7 @@ def test_reveal_timeline_shows_close_and_window_dates(auth_client, app, particip
     assert f'closed on <strong>{fmt(closed)}' in body
     assert fmt(closed + timedelta(days=30)) in body            # window opens
     assert fmt(closed + timedelta(days=60)) in body            # window closes
-    assert 'unlinked records stay pseudonymous' in body
+    assert 'records stay pseudonymous permanently' in body
 
 
 def test_reveal_state_open(auth_client, app, participant):

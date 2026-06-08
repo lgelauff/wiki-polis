@@ -98,7 +98,10 @@ def _reveal_context(conv, participation):
     else:
         state = 'pending'
     closes_aware = closes_at if closes_at.tzinfo else closes_at.replace(tzinfo=timezone.utc)
-    days_left = max(0, (closes_aware - datetime.now(timezone.utc)).days)
+    # Round a partial day UP so the final open day never reads "0 days left" while
+    # the window (and the reveal POST) is still open.
+    _delta = closes_aware - datetime.now(timezone.utc)
+    days_left = max(0, _delta.days + (1 if (_delta.seconds or _delta.microseconds) else 0))
     return {'closed_at': conv.closed_at, 'opens_at': opens_at, 'closes_at': closes_at,
             'state': state, 'days_left': days_left,
             'cooldown_days': _REVEAL_COOLDOWN_DAYS, 'window_days': _REVEAL_WINDOW_DAYS}
