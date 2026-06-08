@@ -27,7 +27,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect, validate_csrf
 from sqlalchemy import text as _sa_text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from wtforms.validators import ValidationError
 
@@ -1098,18 +1098,36 @@ def admin_conversation_advance(conv_id):
         conv.paused    = False
         conv.closed_at = datetime.now(timezone.utc)
 
+    slug = conv.slug                              # capture before any rollback expires it
     try:
         db.session.commit()                       # flag flip (+ phase6 ids / close) atomic
     except IntegrityError:
         db.session.rollback()
-        # A concurrent transition won the UNIQUE race. If we created a Phase 6 Polis
-        # conversation in this request it is now orphaned — log it for manual cleanup.
+        # A concurrent transition won the UNIQUE race. The winner committed cleanly, so
+        # reload-and-retry resolves it. If we created a Phase 6 Polis conversation in this
+        # request it is now orphaned — log it for manual cleanup.
         if created_p6:
             current_app.logger.error(
                 'Phase advance lost a concurrent race after Phase 6 init — '
-                'orphaned Polis conversation %s (conv %s)', created_p6, conv.slug)
+                'orphaned Polis conversation %s (conv %s)', created_p6, slug)
         flash('Could not move on — the conversation changed at the same time. '
               'Reload and try again.', 'error')
+        return redirect_to
+    except SQLAlchemyError:
+        # Any other DB failure (deadlock, timeout, lost connection). Scoped to
+        # SQLAlchemyError so genuine programming errors still surface. If Phase 6 init
+        # already created a remote conversation it is orphaned — a blind retry would
+        # create a SECOND one, so warn the organizer rather than inviting a re-submit.
+        db.session.rollback()
+        if created_p6:
+            current_app.logger.error(
+                'Phase advance commit failed after Phase 6 init — '
+                'orphaned Polis conversation %s (conv %s)', created_p6, slug)
+            flash('Could not complete the move — a database error occurred, and a '
+                  'linked Polis conversation may already have been created. Do not '
+                  'simply retry; check with a site admin first.', 'error')
+        else:
+            flash('Could not move on — a database error occurred. Please try again.', 'error')
         return redirect_to
 
     if not _sync_vis_type(conv):

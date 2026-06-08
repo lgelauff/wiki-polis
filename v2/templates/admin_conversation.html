@@ -160,8 +160,12 @@
           var boxes  = box.querySelectorAll('.phase-move-check');
           var submit = box.querySelector('.phase-move-submit');
           var form   = box.querySelector('.phase-move-form');
+          // A machine-checked precondition rendered as unmet gates the move server-side
+          // too — keep the button disabled so it never enables-then-bounces.
+          var hasUnmet = box.querySelector('.phase-check-unmet') != null;
           function sync() {
-            submit.disabled = !Array.prototype.every.call(boxes, function (c) { return c.checked; });
+            submit.disabled = hasUnmet ||
+              !Array.prototype.every.call(boxes, function (c) { return c.checked; });
           }
           box.addEventListener('change', sync);
           sync();   // progressive enhancement: disable on load until all ticked

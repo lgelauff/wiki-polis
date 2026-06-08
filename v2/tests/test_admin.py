@@ -502,6 +502,41 @@ def test_move_commit_failure_rolls_back_and_logs_orphan(admin_client, conv, capl
     assert 'p6orphan99' in caplog.text             # orphan logged
 
 
+def test_move_commit_db_error_rolls_back_and_logs_orphan(admin_client, conv, caplog):
+    """A non-IntegrityError commit failure (deadlock/timeout) after Phase 6 init must
+    NOT 500 with the orphan unlogged: it rolls back, logs the orphaned Polis
+    conversation id, and warns the organizer not to blind-retry."""
+    import logging
+    from sqlalchemy.exc import OperationalError
+    conv.phase_argument_mapping = True
+    db.session.commit()
+    _add_featured(conv)
+    with patch('app.PolisServerClient.set_vis_type'), \
+         patch('app.PolisServerClient.create_conversation', return_value='p6orphanOE'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=42), \
+         patch('app.db.session.commit',
+               side_effect=OperationalError('stmt', {}, Exception('deadlock'))), \
+         caplog.at_level(logging.ERROR):
+        resp = admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                                 data=_checks_for(conv), follow_redirects=True)
+    assert resp.status_code == 200                 # graceful, not a 500
+    db.session.refresh(conv)
+    assert conv.phase_informed_voting is False     # rolled back
+    assert conv.phase6_polis_conversation_id is None
+    assert 'p6orphanOE' in caplog.text             # orphan logged for cleanup
+    assert b'site admin' in resp.data.lower()      # warned against blind retry
+
+
+def test_unmet_machine_check_renders_gating_hook(admin_client, conv):
+    """An unmet machine-checked precondition renders the .phase-check-unmet marker the
+    JS uses to keep 'Move on' disabled (so it can't enable-then-server-bounce)."""
+    conv.phase_personal_results = True             # → argument mapping next, machine-checked
+    db.session.commit()                            # no featured statement ⇒ unmet
+    resp = admin_client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'phase-check-unmet' in resp.data
+
+
 # ── Standalone Phase 6 init route (advanced/demo fallback) ────────────────────
 
 def test_phase6_init_success(admin_client, conv):
@@ -543,6 +578,22 @@ def test_phase6_init_blocked_on_closed_conversation(admin_client, conv):
     resp = admin_client.post(f'/admin/conversations/{conv.id}/phase6/init',
                              follow_redirects=True)
     assert b'closed or paused' in resp.data.lower()
+
+
+def test_phase6_init_blocked_on_paused_conversation(admin_client, conv):
+    """An active-but-PAUSED conversation must not initialise Phase 6 — and the guard
+    must fire before any Polis call (no orphan)."""
+    conv.phase_informed_voting = True
+    conv.paused = True                             # active stays True
+    db.session.commit()
+    _add_featured(conv)
+    with patch('app.PolisServerClient.create_conversation') as cc:
+        resp = admin_client.post(f'/admin/conversations/{conv.id}/phase6/init',
+                                 follow_redirects=True)
+    assert b'closed or paused' in resp.data.lower()
+    cc.assert_not_called()                         # guard fired before touching Polis
+    db.session.refresh(conv)
+    assert conv.phase6_polis_conversation_id is None
 
 
 def test_phase6_init_no_confirmed_featured(admin_client, conv):
