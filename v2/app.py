@@ -717,7 +717,7 @@ def _build_featured_data(conv, participation, can_mod=False):
             'con_gate':  bool(con_proposed or con_state.skipped),
             'pro_proposed': pro_proposed,
             'con_proposed': con_proposed,
-            'k': conv.argument_vote_data.get('K', 2),
+            'k': int((conv.argument_vote_data or {}).get('K', 2)),
             'pro_voted_count': pro_voted_count,
             'con_voted_count': con_voted_count,
             'proposer_pseudonyms': proposer_pseudonym_map,
@@ -1961,7 +1961,7 @@ def argument_vote(slug, arg_id):
         abort(403)
 
     # K-approval cap: count existing votes for this side.
-    k = conv.argument_vote_data.get('K', 2)
+    k = int((conv.argument_vote_data or {}).get('K', 2))
     side_arg_ids = [a.id for a in
                     Argument.query.filter_by(
                         featured_statement_id=fs.id, side=arg.side).all()]
