@@ -27,7 +27,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect, validate_csrf
 from sqlalchemy import text as _sa_text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from wtforms.validators import ValidationError
 
@@ -137,6 +137,106 @@ def _advance_confirm_message(conv) -> str:
         parts.append(f'This closes the current phase ({cur["effect"]}).')
     parts.append('This cannot be undone here — only a site admin can change it back.')
     return ' '.join(parts)
+
+
+# Guided phase transitions (#156). Keyed by the TARGET stage. Each transition lists
+# the preconditions the organizer must affirm (one checkbox each) before the "Move on"
+# button enables. `check` (optional) names a machine-verifiable predicate, shown met/
+# unmet and enforced server-side. Behavioural flags: runs_phase6_init, auto_close,
+# show_pause.
+PHASE_TRANSITIONS = {
+    'submission': {'preconditions': [
+        {'id': 'seeds',       'label': 'Enough seed statements added (the voting loop isn’t empty)'},
+        {'id': 'intro',       'label': 'Intro text / topic framing finalized'},
+        {'id': 'access',      'label': 'Access policy (public / invite-only) set correctly'},
+        {'id': 'modpolicy',   'label': 'Moderation policy decided and configured'},
+        {'id': 'mods',        'label': 'Moderators appointed for this conversation'},
+        {'id': 'live',        'label': 'I understand participants can submit and vote immediately'},
+    ]},
+    'featured_selection': {'preconditions': [
+        {'id': 'no_submit',   'label': 'Participants no longer expect to submit new statements'},
+        {'id': 'no_agree',    'label': 'Participants no longer expect to express agreement (voting closes)'},
+        {'id': 'spectrum',    'label': 'The current statements cover the full spectrum of my theme'},
+        {'id': 'ready_curate', 'label': 'I’m ready to select featured statements as a representative set'},
+    ]},
+    'argument_mapping': {'preconditions': [
+        {'id': 'all_featured', 'label': 'I have selected all featured statements as a representative set',
+         'check': 'has_confirmed_featured'},
+        {'id': 'no_more_feat', 'label': 'I understand no further featured statements can be added later'},
+        {'id': 'no_more_stmt', 'label': 'I understand participants cannot add further statements later'},
+        {'id': 'args_visible', 'label': 'I understand featured statements become visible and participants add/rate arguments'},
+    ]},
+    'informed_voting': {'runs_phase6_init': True, 'show_pause': True, 'preconditions': [
+        {'id': 'args_done',   'label': 'We’ve collected all the necessary arguments to move on'},
+        {'id': 'args_modded', 'label': 'I’ve reviewed all arguments and removed those against moderation expectations'},
+        {'id': 'reinvite',    'label': 'I’m ready to invite participants back for the informed voting phase'},
+        {'id': 'newcomers',   'label': 'I understand participants who didn’t take part earlier can join this round'},
+    ]},
+    'public_results': {'auto_close': True, 'preconditions': [
+        {'id': 'ran_long',    'label': 'The informed voting round has run long enough / had enough participation'},
+        {'id': 'public',      'label': 'I understand full aggregate results become public to everyone'},
+        {'id': 'no_identity', 'label': 'I understand results won’t expose individual identities (aggregate only)'},
+        {'id': 'disclosure',  'label': 'I understand participants can now begin disclosing their identities'},
+        {'id': 'inform',      'label': 'I’m ready to inform participants of the results and that they may disclose'},
+        {'id': 'final',       'label': 'I understand this is the final phase and closes the consultation'},
+    ]},
+}
+
+# Recommended number of featured statements. Advisory only (Phase 6 needs ≥1); the
+# ideal count depends on topic complexity — surfaced to the organizer as guidance.
+# TODO: make this per-conversation configurable when complexity tiers land.
+_RECOMMENDED_FEATURED = 15
+
+
+def _check_confirmed_featured(conv):
+    """Machine check for the featured-statement precondition. Returns (met, note):
+    met is True when at least one is confirmed (the hard requirement); note shows the
+    selected count against the recommended target so the organizer can judge coverage."""
+    n = (FeaturedStatement.query
+         .filter_by(conversation_id=conv.id, confirmed_by_admin=True).count())
+    return n > 0, f'{n} selected, {_RECOMMENDED_FEATURED} recommended'
+
+
+# Machine-verifiable preconditions: name → check(conv) -> (met: bool, note: str|None).
+_PRECONDITION_CHECKS = {
+    'has_confirmed_featured': _check_confirmed_featured,
+}
+
+
+def _transition_context(conv):
+    """Context for the guided 'Move on' box and the route. Returns None when there is
+    no forward move (non-linear state or already final). Otherwise a dict with the
+    target stage, the source stage, the consequence text, and the preconditions with
+    each machine `check` evaluated (met/unmet)."""
+    if not _is_linear_phase_state(conv):
+        return None
+    target = _advance_target_index(conv)
+    if target is None:
+        return None
+    cur = PHASE_SEQUENCE[_current_stage_index(conv)]
+    nxt = PHASE_SEQUENCE[target]
+    cfg = PHASE_TRANSITIONS.get(nxt['key'], {})
+    preconds = []
+    for p in cfg.get('preconditions', []):
+        met, note = None, None
+        if p.get('check'):
+            met, note = _PRECONDITION_CHECKS[p['check']](conv)
+        preconds.append({**p, 'met': met, 'note': note})
+    # Consequence text — what opens, what closes, irreversibility.
+    consequence = {
+        'opens':  nxt['effect'],
+        'closes': cur['effect'] if cur['flag'] else None,
+        'auto_close': bool(cfg.get('auto_close')),
+    }
+    return {
+        'target': nxt,
+        'source': cur,
+        'preconditions': preconds,
+        'consequence': consequence,
+        'runs_phase6_init': bool(cfg.get('runs_phase6_init')),
+        'show_pause': bool(cfg.get('show_pause')),
+        'auto_close': bool(cfg.get('auto_close')),
+    }
 
 
 csrf    = CSRFProtect()
@@ -807,7 +907,7 @@ def admin_conversation_detail(conv_id):
                            current_stage_index=_current_stage_index(conv),
                            linear_phase_state=_is_linear_phase_state(conv),
                            advance_target_index=_advance_target_index(conv),
-                           advance_confirm=_advance_confirm_message(conv))
+                           transition=_transition_context(conv))
 
 @admin_bp.post('/admin/conversations/new')
 @login_required
@@ -940,41 +1040,100 @@ def admin_conversation_phases(conv_id):
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/phase/advance')
 @login_required
-@admin_required                      # simple-mode forward move — global admin (later: organizer)
+@admin_required                      # guided forward move — global admin (later: organizer)
 def admin_conversation_advance(conv_id):
-    """Simple-mode forward move through PHASE_SEQUENCE. Exclusive: the target
-    stage's flag is turned on and the current stage's flag turned off.
+    """Guided 'Move on' phase transition (#156). The organizer must affirm every
+    precondition (one checkbox each) before this is accepted; the route re-enforces
+    that server-side and re-runs machine-checkable preconditions.
 
-    Active conversation → one step forward. Closed conversation → jump straight
-    to the final stage (public results). Going backward or fixing a custom
-    (non-linear) flag combination is an advanced-mode, global-admin action — so
-    this route refuses to operate on a non-linear state and points there.
+    Exclusive: the target stage's flag is set and the current stage's flag cleared.
+    Active conversation → one step forward; closed → jump to public results. Backward
+    / custom-state repair is an advanced-mode action, so a non-linear state is refused.
+    The Informed-voting transition runs Phase 6 init atomically; the Public-results
+    transition auto-closes the conversation (starting the identity-reveal window).
     """
     conv = Conversation.query.get_or_404(conv_id)
+    redirect_to = redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
-    # Backward / custom-state repair lives in advanced mode. Refuse to advance
-    # from a non-linear state rather than perpetuate it (the UI hides the button
-    # here, but a stale page or direct POST must not silently corrupt state).
-    if not _is_linear_phase_state(conv):
-        flash('Phases are in a custom state — use Advanced controls to adjust.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    ctx = _transition_context(conv)
+    if ctx is None:
+        if not _is_linear_phase_state(conv):
+            flash('Phases are in a custom state — use Advanced controls to adjust.', 'error')
+        else:
+            flash('Already at the final phase (public results).', 'error')
+        return redirect_to
 
-    i = _current_stage_index(conv)
-    target = _advance_target_index(conv)
-    if target is None:
-        flash('Already at the final phase (public results).', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    # Server-side enforcement of the readiness checklist (the UI disables the button
+    # until all are ticked; a stale page or direct POST must not bypass it).
+    for p in ctx['preconditions']:
+        if request.form.get(p['id']) != 'on':
+            flash('Confirm every readiness check before moving on.', 'error')
+            return redirect_to
+        if p.get('met') is False:                 # machine-checkable and currently unmet
+            flash('A readiness condition is not met yet — fix it before moving on.', 'error')
+            return redirect_to
 
-    cur, nxt = PHASE_SEQUENCE[i], PHASE_SEQUENCE[target]
-    if cur['flag']:                  # preparation has flag=None
+    # Run the Phase 6 Polis I/O FIRST, before mutating conv. This keeps the network
+    # round-trips out of the open write transaction: the only DB write happens at the
+    # commit below, so a slow Polis backend never holds a row lock on the conversation.
+    created_p6 = None
+    if ctx['runs_phase6_init']:
+        if conv.phase6_polis_conversation_id:     # already initialised (advanced/concurrent)
+            flash('Phase 6 is already initialised.', 'error')
+            return redirect_to
+        ok, msg = _init_phase6(conv)              # assigns ids onto conv/featured; no commit
+        if not ok:
+            db.session.rollback()
+            flash(msg, 'error')
+            return redirect_to
+        created_p6 = conv.phase6_polis_conversation_id
+
+    cur, nxt = ctx['source'], ctx['target']
+    if cur['flag']:                               # preparation has flag=None
         setattr(conv, cur['flag'], False)
     setattr(conv, nxt['flag'], True)
-    db.session.commit()
+
+    if ctx['auto_close'] and conv.closed_at is None:
+        conv.active    = False
+        conv.paused    = False
+        conv.closed_at = datetime.now(timezone.utc)
+
+    slug = conv.slug                              # capture before any rollback expires it
+    try:
+        db.session.commit()                       # flag flip (+ phase6 ids / close) atomic
+    except IntegrityError:
+        db.session.rollback()
+        # A concurrent transition won the UNIQUE race. The winner committed cleanly, so
+        # reload-and-retry resolves it. If we created a Phase 6 Polis conversation in this
+        # request it is now orphaned — log it for manual cleanup.
+        if created_p6:
+            current_app.logger.error(
+                'Phase advance lost a concurrent race after Phase 6 init — '
+                'orphaned Polis conversation %s (conv %s)', created_p6, slug)
+        flash('Could not move on — the conversation changed at the same time. '
+              'Reload and try again.', 'error')
+        return redirect_to
+    except SQLAlchemyError:
+        # Any other DB failure (deadlock, timeout, lost connection). Scoped to
+        # SQLAlchemyError so genuine programming errors still surface. If Phase 6 init
+        # already created a remote conversation it is orphaned — a blind retry would
+        # create a SECOND one, so warn the organizer rather than inviting a re-submit.
+        db.session.rollback()
+        if created_p6:
+            current_app.logger.error(
+                'Phase advance commit failed after Phase 6 init — '
+                'orphaned Polis conversation %s (conv %s)', created_p6, slug)
+            flash('Could not complete the move — a database error occurred, and a '
+                  'linked Polis conversation may already have been created. Do not '
+                  'simply retry; check with a site admin first.', 'error')
+        else:
+            flash('Could not move on — a database error occurred. Please try again.', 'error')
+        return redirect_to
 
     if not _sync_vis_type(conv):
-        flash('Phase advanced, but updating results visibility in Polis failed.', 'error')
+        flash('Phase moved, but updating results visibility in Polis failed.', 'error')
     flash(f'Moved to: {nxt["label"]}.', 'success')
-    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    return redirect_to
 
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/phase6/init')
@@ -1005,72 +1164,65 @@ def admin_phase6_init(conv_id):
         flash('Phase 6 already initialised.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
-    statements = (FeaturedStatement.query
-                  .filter_by(conversation_id=conv_id, confirmed_by_admin=True)
-                  .all())
-    if not statements:
-        flash('No confirmed featured statements — confirm at least one before initialising Phase 6.', 'error')
+    ok, msg = _init_phase6(conv)
+    if not ok:
+        flash(msg, 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    client = _polis_server_client()
-    try:
-        p6_conv_id = client.create_conversation(
-            f'{conv.title} — Informed Voting',
-            strict_moderation=True,
-        )
-    except PolisServerError as exc:
-        current_app.logger.error('Phase 6 conversation creation failed: %s', exc)
-        flash(f'Could not create Phase 6 Polis conversation: {exc}', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    # Seed each confirmed featured statement and collect tids.
-    # All-or-nothing: if any seed fails, do not commit — log the orphaned Polis
-    # conversation ID for manual cleanup and let the admin retry cleanly.
-    seeded: list[tuple[FeaturedStatement, int]] = []
-    for fs in statements:
-        text = fs.statement_text or ''
-        if not text:
-            current_app.logger.error(
-                'Phase 6 init: fs %s has no cached text — skipping; '
-                'abandoning Polis conversation %s', fs.id, p6_conv_id)
-            flash(
-                f'Phase 6 init failed: statement {fs.id} has no cached text. '
-                f'The orphaned Polis conversation ID has been logged. '
-                f'Fix the statement text and retry.',
-                'error',
-            )
-            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-        try:
-            tid = client.add_seed_return_id(p6_conv_id, text)
-            seeded.append((fs, tid))
-        except PolisServerError as exc:
-            current_app.logger.error(
-                'Phase 6 init: seed failed for fs %s: %s; '
-                'abandoning Polis conversation %s', fs.id, exc, p6_conv_id)
-            flash(
-                f'Phase 6 init failed while seeding statement {fs.id}. '
-                f'The orphaned Polis conversation ID has been logged. '
-                f'Retry initialisation.',
-                'error',
-            )
-            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    # All seeds succeeded — write atomically.
-    for fs, tid in seeded:
-        fs.phase6_polis_statement_id = tid
-    conv.phase6_polis_conversation_id = p6_conv_id
     try:
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
         flash('Phase 6 was already initialised by a concurrent request.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    flash(
-        f'Phase 6 initialised — {len(seeded)} statement(s) seeded.',
-        'success',
-    )
+    flash(msg, 'success')
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+
+def _init_phase6(conv) -> tuple[bool, str]:
+    """Create the Phase 6 Polis conversation and seed all confirmed featured statements,
+    assigning the resulting ids onto the conversation and featured rows.
+
+    Does NOT commit — the caller commits so a flag flip plus this init are one
+    transaction. All-or-nothing: on any Polis failure no model fields are changed and
+    the orphaned remote conversation id is logged for manual cleanup. Returns
+    (ok, message).
+    """
+    statements = (FeaturedStatement.query
+                  .filter_by(conversation_id=conv.id, confirmed_by_admin=True)
+                  .all())
+    if not statements:
+        return False, 'No confirmed featured statements — confirm at least one before initialising Phase 6.'
+
+    client = _polis_server_client()
+    try:
+        p6_conv_id = client.create_conversation(
+            f'{conv.title} — Informed Voting', strict_moderation=True)
+    except PolisServerError as exc:
+        current_app.logger.error('Phase 6 conversation creation failed: %s', exc)
+        return False, f'Could not create Phase 6 Polis conversation: {exc}'
+
+    seeded: list[tuple[FeaturedStatement, int]] = []
+    for fs in statements:
+        text = fs.statement_text or ''
+        if not text:
+            current_app.logger.error(
+                'Phase 6 init: fs %s has no cached text — abandoning Polis conversation %s',
+                fs.id, p6_conv_id)
+            return False, (f'Phase 6 init failed: statement {fs.id} has no cached text. '
+                           'The orphaned Polis conversation id has been logged.')
+        try:
+            seeded.append((fs, client.add_seed_return_id(p6_conv_id, text)))
+        except PolisServerError as exc:
+            current_app.logger.error(
+                'Phase 6 init: seed failed for fs %s: %s; abandoning Polis conversation %s',
+                fs.id, exc, p6_conv_id)
+            return False, (f'Phase 6 init failed while seeding statement {fs.id}. '
+                           'The orphaned Polis conversation id has been logged.')
+
+    for fs, tid in seeded:
+        fs.phase6_polis_statement_id = tid
+    conv.phase6_polis_conversation_id = p6_conv_id
+    return True, f'Phase 6 initialised — {len(seeded)} statement(s) seeded.'
 
 
 @admin_bp.post('/admin/global-admins/add')

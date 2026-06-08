@@ -12,7 +12,7 @@
     {% if not conversation.active %}
       <span class="badge-inactive">closed</span>
     {% elif conversation.paused %}
-      <span style="color:#b07800;font-size:13px;font-weight:600">paused</span>
+      <span style="color:var(--spot);font-size:13px;font-weight:600">paused</span>
     {% else %}
       <span style="color:var(--green);font-size:13px;font-weight:600">active</span>
     {% endif %}
@@ -74,34 +74,120 @@
       {% endfor %}
     </ol>
 
-    {% if linear_phase_state %}
-      {% if target_stage %}
-        {% if is_admin %}
-        <form method="post"
-              action="{{ url_for('admin.admin_conversation_advance', conv_id=conversation.id) }}"
-              onsubmit="return confirm(this.dataset.confirm);"
-              data-confirm="{{ advance_confirm }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn-small">Move to {{ target_stage.label }} →</button>
-        </form>
+    {# Pause / Resume — directly under the phase bar; governs the running
+       consultation. Global admin only; hidden once closed. #}
+    {% if is_admin and conversation.active %}
+    <div class="phase-pause-row" style="display:flex;align-items:center;gap:1rem;margin:.75rem 0 1rem">
+      <form method="post" style="display:inline"
+            action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit"
+                class="btn-small {% if conversation.paused %}btn-approve{% else %}btn-pause{% endif %}">
+          {{ 'Resume' if conversation.paused else 'Pause' }}
+        </button>
+      </form>
+      <span class="muted" style="font-size:13px">
+        {% if conversation.paused %}
+          Paused — participants cannot vote. The identity-reveal clock has <strong>not</strong> started; resuming is possible.
+        {% else %}
+          Pause temporarily disables voting without starting the reveal timeline.
+        {% endif %}
+      </span>
+    </div>
+    {% endif %}
+
+    {% if transition %}
+      {% if is_admin %}
+      {# Guided 'Move on' box (#156): consequences + tick-each-precondition checklist.
+         The submit ships ENABLED so no-JS users can still advance (the route enforces
+         the checklist server-side); JS disables it until every box is ticked. #}
+      <div class="phase-move-box">
+        <div class="phase-move-head">
+          <span class="phase-move-from">{{ transition.source.label }}</span>
+          <span class="phase-move-arrow" aria-hidden="true">→</span>
+          <span class="phase-move-to">{{ transition.target.label }}</span>
+        </div>
+
+        <ul class="phase-move-consequences">
+          <li><strong>Opens:</strong> {{ transition.consequence.opens }}</li>
+          {% if transition.consequence.closes %}
+          <li><strong>Closes:</strong> {{ transition.consequence.closes }}</li>
+          {% endif %}
+          {% if transition.auto_close %}
+          <li class="phase-move-warn"><span aria-hidden="true">⚠️</span> This <strong>permanently closes the consultation</strong> and starts the identity-reveal window.</li>
+          {% endif %}
+          <li class="muted">This cannot be undone here — only a site admin can reopen a phase via advanced controls.</li>
+        </ul>
+
         {% if not conversation.active %}
-        <p class="muted" style="margin-top:.4rem;font-size:12px">
-          This consultation is closed — the only move is to open public results.
+        <p class="muted" style="font-size:12px">This consultation is closed — the only move is to open public results.</p>
+        {% endif %}
+
+        <form method="post" class="phase-move-form"
+              action="{{ url_for('admin.admin_conversation_advance', conv_id=conversation.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <ul class="phase-move-checklist">
+            {% for p in transition.preconditions %}
+            <li>
+              <label>
+                <input type="checkbox" name="{{ p.id }}" class="phase-move-check">
+                <span>{{ p.label }}</span>
+              </label>
+              {% if p.met is not none %}
+                {% if p.met %}<span class="phase-check-met"><span aria-hidden="true">✓</span><span class="sr-only">condition met</span></span>
+                {% else %}<span class="phase-check-unmet"><span aria-hidden="true">✗</span> not met yet</span>{% endif %}
+                {% if p.note %}<span class="phase-check-note">({{ p.note }})</span>{% endif %}
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          <p class="phase-move-hint muted">Confirm every item above to enable “Move on”. Anything marked “not met yet” must be resolved first.</p>
+          <button type="submit" class="btn-small phase-move-submit">
+            Move on to {{ transition.target.label }} →
+          </button>
+        </form>
+
+        {% if transition.show_pause %}
+        <p class="phase-move-pause muted" style="font-size:12px">
+          Need time to coordinate inviting people back? You can pause first.
         </p>
         {% endif %}
-        {% else %}
-        {# Moderator: same interface, but cannot act. #}
-        <button type="button" class="btn-small" disabled
-                title="Only a site admin can change phases">Move to {{ target_stage.label }} →</button>
-        {% endif %}
+      </div>
+      <script nonce="{{ csp_nonce }}">
+        (function () {
+          var box = document.querySelector('.phase-move-box');
+          if (!box) return;
+          var boxes  = box.querySelectorAll('.phase-move-check');
+          var submit = box.querySelector('.phase-move-submit');
+          var form   = box.querySelector('.phase-move-form');
+          // A machine-checked precondition rendered as unmet gates the move server-side
+          // too — keep the button disabled so it never enables-then-bounces.
+          var hasUnmet = box.querySelector('.phase-check-unmet') != null;
+          function sync() {
+            submit.disabled = hasUnmet ||
+              !Array.prototype.every.call(boxes, function (c) { return c.checked; });
+          }
+          box.addEventListener('change', sync);
+          sync();   // progressive enhancement: disable on load until all ticked
+          form.addEventListener('submit', function () {
+            submit.disabled = true;            // prevent double-submit during Polis I/O
+            submit.textContent = 'Moving on…';
+          });
+        }());
+      </script>
       {% else %}
-      <p class="muted" style="font-size:13px">Final phase reached — public results are open.</p>
+      {# Moderator: same stepper, read-only — cannot move phases. #}
+      <p class="muted" style="font-size:13px">Only a site admin can change phases.</p>
+      <button type="button" class="btn-small" disabled
+              title="Only a site admin can change phases">Move on to {{ transition.target.label }} →</button>
       {% endif %}
-    {% else %}
+    {% elif not linear_phase_state %}
       <p class="muted" style="margin-top:.5rem;font-size:13px">
         ⚠️ Phases are in a custom state (more than one active).
         {% if is_admin %}Use advanced controls below to adjust.{% else %}A site admin can adjust this.{% endif %}
       </p>
+    {% else %}
+      <p class="muted" style="font-size:13px">Final phase reached — public results are open.</p>
     {% endif %}
 
     {# Advanced controls — global admin only: independent toggles, go backward,
@@ -214,26 +300,7 @@
 
     {% else %}
 
-    <!-- Pause / Resume -->
-    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
-      <form method="post"
-            action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}"
-            style="display:inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit"
-                class="btn-small {% if conversation.paused %}btn-approve{% else %}btn-pause{% endif %}">
-          {{ 'Resume' if conversation.paused else 'Pause' }}
-        </button>
-      </form>
-      <span class="muted" style="font-size:13px">
-        {% if conversation.paused %}
-          Consultation is paused — participants cannot vote.
-          The identity reveal clock has <strong>not</strong> started; resuming is possible.
-        {% else %}
-          Pause temporarily disables voting without starting the reveal timeline.
-        {% endif %}
-      </span>
-    </div>
+    <!-- Pause / Resume now lives in the Phases block above. -->
 
     <!-- Close (irreversible) -->
     <div class="close-warning">
