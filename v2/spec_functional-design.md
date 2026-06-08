@@ -287,13 +287,63 @@ Admins can:
 - Mark statements as featured
 - Enable or disable the argument layer on a featured statement
 
-**Results phases (four independent toggles per conversation):**
-- Toggle 1: open or close statement submission
-- Toggle 2: enable or disable personal results (visible to logged-in participants for statements they voted on)
-- Toggle 3: show or hide the argument mapping tab
-- Toggle 4: enable or disable full public results (visible to everyone including visitors)
+**Statements:**
+- Add seed statements individually, or **bulk-import** them from a CSV (a `text` column; max 20 rows / 100 KB; the whole file is rejected if over limit; duplicates are ignored by Polis).
+
+**Phases:** see *Phase control* below.
 
 Admins do not need a separate moderation UI for hiding individual statements or arguments — that is handled in the Polis admin interface directly.
+
+---
+
+## Phase control
+
+A conversation moves through a linear sequence of six phases, each backed by a boolean flag on the conversation:
+
+| Order | Phase | Flag | What it enables |
+|---|---|---|---|
+| 1 | Preparation | *(none)* | setup only; participants can't act yet |
+| 2 | Submission | `phase_submission` | participants submit statements and vote |
+| 3 | Featured selection | `phase_personal_results` | participants see personal results while the organizer curates featured statements |
+| 4 | Argument mapping | `phase_argument_mapping` | pro/con argument layer on featured statements |
+| 5 | Informed voting | `phase_informed_voting` (+ `phase6_polis_conversation_id`) | second clean vote round on featured statements; requires a one-time **initialise** |
+| 6 | Public results | `phase_public_results` | full aggregate map public to everyone; **auto-closes** the conversation |
+
+Two control surfaces:
+
+- **Simple / guided ("Move on").** Advances one step forward through the sequence. Renders a consequence summary plus a **readiness checklist** (per-phase preconditions); the submit button is gated client-side until every item is confirmed, and the server re-validates on POST. Machine-checked preconditions (currently only "≥1 confirmed featured statement" before argument mapping) show a met / not-met badge. A closed conversation jumps straight to public results.
+- **Advanced toggles (global admin only).** Each phase flag as an independent on/off control, including backward moves and non-linear states. Opens automatically when the conversation is already in a non-linear state.
+
+Conversation moderators (non-admins) see phase controls read-only. Pause/Resume and Close are separate conversation-status actions (see above), not phases.
+
+### Phase-control and transition guards
+
+Transitions and phase-critical mutations are protected by **hard guards** (block the action server-side) and **soft guards** (warn but allow). Catalogue as implemented:
+
+**Hard guards** (server-side `flash`-error + redirect, or `abort`):
+
+| Guard | Trigger | Message / effect |
+|---|---|---|
+| Featured required for argument mapping | Enabling `phase_argument_mapping` with 0 featured statements | "Cannot enable argument mapping — add at least one featured statement first." |
+| Readiness checklist | "Move on" POST with any unchecked / unmet precondition | "Confirm every readiness check before moving on." / "A readiness condition is not met yet…" |
+| Non-linear state in simple mode | Simple advance while multiple flags are on | "Phases are in a custom state — use Advanced controls to adjust." |
+| Already final | Simple advance at public results | "Already at the final phase (public results)." |
+| Phase 6 init — status | Initialise on a closed or paused conversation | "Cannot initialise Phase 6 on a closed or paused conversation." |
+| Phase 6 init — toggle | Initialise without informed-voting enabled | "Enable the Informed voting toggle first, then initialise." |
+| Phase 6 init — once | Re-initialise | "Phase 6 already initialised." |
+| Last featured — remove | Remove the last featured statement while argument mapping is active | "Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first." (row-locked) |
+| Last featured — hide/pending | Hide or move-to-pending the last featured statement while argument mapping is active | same message |
+| Participant submission | Submit a statement while closed/paused or submission off | HTTP 403 |
+| Participant argument | Propose/skip an argument while closed/paused or argument mapping off | HTTP 403 |
+| Argument-vote gate | Vote on an argument before contributing-or-skipping both sides | HTTP 403 / `{ok:false, reason:"gate"}` |
+| Phase 6 vote | Vote while closed/paused, or informed voting off / not initialised | HTTP 403 / 404 |
+
+**Soft guards** (confirm dialog, disabled control + tooltip, warning banner, inline hint):
+
+- Guided checklist: submit disabled until all boxes ticked and no unmet machine checks.
+- Moderators: phase controls disabled — "Only a site admin can change phases."
+- Consequence banners in the Move-on box (e.g. public results "permanently closes the consultation and starts the identity-reveal window"; informed voting "you can pause first").
+- `confirm()` dialogs on Close permanently and on argument delete.
 
 ---
 

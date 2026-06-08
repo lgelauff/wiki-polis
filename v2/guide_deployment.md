@@ -415,7 +415,26 @@ bash ~/wiki-polis/deploy.sh
 
 ## Database migrations
 
-Alembic migrations must run inside `toolforge webservice python3.13 shell` — **not** on the bastion shell. The reason: `toolforge envvars` (including `DATABASE_URL`) are only injected into the webservice pod environment, not exported to regular bastion sessions. Running `flask db upgrade` on the bastion will fail with `RuntimeError: DATABASE_URL is not set`.
+There are two ways to run Alembic migrations. **The supported path is `bash ~/wiki-polis/deploy.sh --migrate`** (see below) — it handles the environment for you. The manual webservice-shell path is documented after it as a fallback / for ad-hoc upgrades.
+
+The underlying constraint: `toolforge envvars` (including `DATABASE_URL`) are injected into the webservice pod, not into bastion sessions, **and** the app's production startup runs checks (TRUSTED_HOSTS, distributed rate-limit storage) that also depend on pod-only values. So a bare `flask db upgrade` on the bastion fails twice over — first on `DATABASE_URL`, then on those startup checks.
+
+### `deploy.sh --migrate` and `MIGRATION_MODE`
+
+`deploy.sh --migrate` runs the migration from the bastion by:
+1. **Loading all Toolforge envvars** into the environment dynamically (so `DATABASE_URL` etc. are present — no hard-coded list to maintain).
+2. Running `MIGRATION_MODE=1 flask --app app db upgrade`.
+
+**`MIGRATION_MODE=1`** tells `create_app()` to **skip the web-server-only startup checks** (TRUSTED_HOSTS, RATELIMIT_STORAGE_URI / key / identity secret) that require Kubernetes-injected values unavailable on the bastion. It has **no effect on which code runs** — migrations only touch the database — so it is safe and is the intended way to migrate outside the pod. (It is also handy when running the test suite or any one-off Flask command on a machine without the full production env.)
+
+```bash
+# from the bastion, as the wiki-polis tool
+bash ~/wiki-polis/deploy.sh --migrate
+```
+
+### Manual path (fallback)
+
+Run inside the webservice shell, where pod envvars are present (here you do **not** set `MIGRATION_MODE` — the real env satisfies the checks):
 
 ### Migration history
 

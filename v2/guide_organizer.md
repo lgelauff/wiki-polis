@@ -33,16 +33,25 @@ can then act on. It is **not**:
 
 ## How a consultation works (the phases)
 
-A consultation moves through phases that you turn on in order — each builds on the last.
-Today there are **four toggles**:
+A consultation moves through a linear sequence of phases — each builds on the last:
 
-1. **Open submission** — participants vote on statements and propose their own (the data-collection phase).
-2. **Personal results** — each participant sees where they sit, but only for statements they voted on.
-3. **Argument mapping** — opens a pro/con argument layer on featured statements. Participants read, submit, and vote on short pro/con arguments for each featured statement.
-4. **Full public results** — opens the complete opinion map to everyone, including visitors.
-5. **Informed voting** — a second, independent voting round on the featured statements only. Arguments from Phase 3 are shown inline so participants deliberate before casting a clean Agree / Disagree / Pass vote. Participants who skipped Phase 1 can join here; the statement set is fixed.
+1. **Preparation** — setup only; participants can't do anything yet. You write seed statements, intro text, access and moderation policy, and appoint moderators.
+2. **Submission** — participants submit statements and vote on them (the data-collection phase).
+3. **Featured selection** — participants can see their personal results while you curate the featured statements that the argument layer will use.
+4. **Argument mapping** — opens a pro/con argument layer on the featured statements. Participants read, submit, and vote on short pro/con arguments.
+5. **Informed voting** — a second, independent voting round on the featured statements only, with the Phase 4 arguments shown inline so participants deliberate before casting a clean Agree / Disagree / Pass vote. Participants who skipped earlier phases can join here; the statement set is fixed. Must be **initialised** from the admin panel before the tab appears (see [Enabling informed voting](#enabling-informed-voting)).
+6. **Public results** — opens the complete opinion map to everyone, including visitors. Reaching this phase **permanently closes the consultation** and starts the identity-reveal window.
 
-Phases 1–5 are independent toggles you can enable in any order. Informed voting (Phase 5) requires Phase 3 (argument mapping) to have produced substantive arguments first, and must be **initialised** from the admin panel before the tab appears for participants (see [Enabling informed voting](#enabling-informed-voting) below).
+### Moving between phases
+
+There are two ways to advance, both in the conversation's admin panel:
+
+- **Move on (guided, the normal path).** A "Move on to *<next phase>* →" box walks you one step forward. It spells out the consequences (what opens, what closes, what's irreversible) and shows a **readiness checklist** you must confirm before the button enables. Some items are machine-checked (e.g. "at least one featured statement selected" shows a met / not-met badge); the rest are judgement calls you tick off. The server re-checks everything on submit, so the checklist is a real gate, not just a reminder.
+- **Advanced phase controls (admin only).** An "Advanced phase controls" panel exposes each phase as an independent on/off toggle, including moving **backward**. Use this only when you deliberately need a non-linear state; it opens automatically if the conversation is already in one. Only a site admin (not a conversation moderator) can change phases either way.
+
+**Pause / Resume** is separate from phases: it temporarily disables voting without starting the identity-reveal clock, and is fully reversible. Pausing before informed voting is a good way to buy time to re-invite participants.
+
+The guards that block or warn on these transitions (hard and soft) are catalogued in [`spec_functional-design.md`](spec_functional-design.md#phase-control-and-transition-guards).
 
 ## What a statement is
 
@@ -108,6 +117,27 @@ statements; the rest only vote [3].
 - **What proportion should agree with a good statement?** *Unknown — requires further
   research / literature review.* The sources don't give a target agreement level (the 56%
   figure above is a framing illustration, not a guideline).
+
+### Bulk-importing seed statements (CSV)
+
+Instead of adding seed statements one at a time, you can upload them in bulk from the
+conversation admin panel.
+
+- **Format:** a UTF-8 CSV with a header row containing a **`text`** column (other columns
+  are ignored). One statement per row.
+- **Limits:** up to **20 rows** and **100 KB** per file. A file over either limit is
+  **rejected whole** — nothing is imported — so fix and re-upload rather than getting a
+  partial import.
+- **Validation:** rows with an empty `text` are skipped and reported; the file must be
+  valid UTF-8 with no null bytes. Leading spreadsheet formula characters (`= + - @`) are
+  stripped to prevent CSV-injection.
+- **Result:** after upload you get a summary — how many statements were imported, how many
+  rows were skipped, and how many Polis already had (duplicates are silently ignored by
+  Polis, which is why a re-upload of the same file imports 0).
+
+This seeds statements the same way the manual "add statement" form does; everything in
+[*Writing good statements*](#3-writing-good-statements) above still applies — the limits
+are deliberately low because a good seed set is ~10–15 statements, not hundreds.
 
 ## 4. Open submission and moderate
 
