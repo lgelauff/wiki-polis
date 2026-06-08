@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="380" height="326" viewBox="0 0 380 326" role="img" aria-label="Map the arguments">
+<title>wiki-polis phase: Map the arguments</title>
+
+  <rect x="0" y="0" width="380" height="326" rx="14" fill="#ffffff" stroke="#e5e5e6"></rect>
+  <text x="22" y="40" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="19" font-weight="700" letter-spacing="-0.4" fill="#0c0c0e">Map the arguments</text>
+  <line x1="22" y1="72" x2="358" y2="72" stroke="#e5e5e6"></line>
+  <g transform="translate(95,84)"><rect x="26" y="6" width="138" height="34" rx="8" fill="#ffffff" stroke="#e5e5e6" stroke-width="1.5"></rect>
+<line x1="40" y1="18" x2="118" y2="18" stroke="#cfcdc6" stroke-width="3.2" stroke-linecap="round"></line>
+<line x1="40" y1="28" x2="94" y2="28" stroke="#cfcdc6" stroke-width="3.2" stroke-linecap="round"></line>
+<rect x="30" y="52" width="118" height="24" rx="7" fill="#15734a0f" stroke="#15734a" stroke-width="1.5" stroke-dasharray="4 3"></rect>
+<path d="M40 64 h10 M45 59 v10" stroke="#15734a" stroke-width="2.4" stroke-linecap="round"></path>
+<g transform="rotate(34 150 64)"><rect x="120" y="59" width="30" height="9" rx="1.5" fill="#3d6dba"></rect><rect x="117" y="59" width="6" height="9" fill="#b45309"></rect><path d="M150 59 L158 63.5 L150 68 Z" fill="#0c0c0e"></path></g>
+<rect x="30" y="84" width="118" height="24" rx="7" fill="#f4f4f3" stroke="#5f5f68" stroke-width="1.5" stroke-dasharray="4 3"></rect>
+<path d="M40 96 h10" stroke="#5f5f68" stroke-width="2.4" stroke-linecap="round"></path>
+<g transform="rotate(34 150 96)"><rect x="120" y="91" width="30" height="9" rx="1.5" fill="#3d6dba"></rect><rect x="117" y="91" width="6" height="9" fill="#b45309"></rect><path d="M150 91 L158 95.5 L150 100 Z" fill="#0c0c0e"></path></g></g>
+  <text x="190" y="222" text-anchor="middle" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="12.5" font-style="italic" fill="#5f5f68">Write the pro &amp; con arguments that matter</text>
+  <rect x="22" y="240" width="336" height="66" rx="10" fill="#eef3fb" stroke="#c9d6ef"></rect>
+  <text x="38" y="262" font-family="&#39;JetBrains Mono&#39;,monospace" font-size="10.5" font-weight="700" letter-spacing="1.3" fill="#3d6dba">WHAT WE LEARN</text>
+  <g transform="translate(38,270)"><rect x="4" y="5" width="14" height="10" rx="2.5" fill="#15734a24" stroke="#15734a" stroke-width="1.3"></rect><path d="M8 10 h6 M11 7 v6" stroke="#15734a" stroke-width="1.6" stroke-linecap="round"></path><rect x="22" y="6" width="14" height="8" rx="2.5" fill="#15734a12"></rect><rect x="4" y="20" width="14" height="10" rx="2.5" fill="#f4f4f3" stroke="#5f5f68" stroke-width="1.3"></rect><path d="M8 25 h6" stroke="#5f5f68" stroke-width="1.6" stroke-linecap="round"></path><rect x="22" y="21" width="14" height="8" rx="2.5" fill="#f4f4f3"></rect></g>
+  <text x="88" y="280" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="13" fill="#3f3f43">A map of the arguments that</text>
+  <text x="88" y="297" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="13" fill="#3f3f43">matter, pro &amp; con</text>
+</svg>
