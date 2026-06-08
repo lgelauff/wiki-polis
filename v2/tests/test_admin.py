@@ -363,7 +363,7 @@ def test_guided_box_renders_checklist(admin_client, conv):
     assert resp.status_code == 200
     assert b'phase-move-box' in resp.data
     assert b'phase-move-check' in resp.data          # checklist present
-    assert b'Move on to Submission' in resp.data
+    assert b'Move on to Explore' in resp.data        # renamed: Submission → Explore
     assert b'phase-move-submit' in resp.data
     # Submit ships enabled (no-JS can advance; route enforces server-side); JS
     # disables it until all ticked.
@@ -383,7 +383,7 @@ def test_guided_box_shows_unmet_machine_check(admin_client, conv):
 
 
 def test_pause_control_in_phases_block_not_status(admin_client, conv):
-    """Pause/Resume lives in the Phases block (once), not the Status block."""
+    """Pause/Resume lives once, in the phase hero (directly under the phase bar)."""
     conv.phase_personal_results = True            # a live, mid-flow phase
     db.session.commit()
     resp = admin_client.get(f'/admin/conversations/{conv.id}')
@@ -392,9 +392,8 @@ def test_pause_control_in_phases_block_not_status(admin_client, conv):
     assert resp.data.count(b'/pause"') == 1                       # one pause form, not duplicated
     assert b'temporarily disables voting without starting' in resp.data   # active copy
     assert b'btn-pause' in resp.data
-    # Not in the Status block.
-    status_tail = resp.data.split(b'<h3 class="section-heading">Status</h3>')[1]
-    assert b'/pause"' not in status_tail
+    # The pause row sits inside the phase hero, before the management grid.
+    assert resp.data.index(b'phase-pause-row') < resp.data.index(b'Content &amp; access')
 
 
 def test_pause_control_paused_state_copy(admin_client, conv):

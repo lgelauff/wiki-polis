@@ -82,15 +82,15 @@ _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 PHASE_SEQUENCE = [
     {'key': 'preparation',        'label': 'Preparation',        'flag': None,
      'effect': 'setup only — participants cannot do anything yet'},
-    {'key': 'submission',         'label': 'Submission',         'flag': 'phase_submission',
+    {'key': 'submission',         'label': 'Explore',            'flag': 'phase_submission',
      'effect': 'participants can submit statements and vote on them'},
     {'key': 'featured_selection', 'label': 'Featured selection', 'flag': 'phase_personal_results',
      'effect': 'participants can see their personal results while you curate featured statements'},
-    {'key': 'argument_mapping',   'label': 'Argument mapping',   'flag': 'phase_argument_mapping',
+    {'key': 'argument_mapping',   'label': 'Arguments',          'flag': 'phase_argument_mapping',
      'effect': 'participants can add and rate arguments on featured statements'},
-    {'key': 'informed_voting',    'label': 'Informed voting',    'flag': 'phase_informed_voting',
+    {'key': 'informed_voting',    'label': 'Informed vote',      'flag': 'phase_informed_voting',
      'effect': 'participants vote again on featured statements (requires initialising Phase 6)'},
-    {'key': 'public_results',     'label': 'Public results',     'flag': 'phase_public_results',
+    {'key': 'public_results',     'label': 'Report',             'flag': 'phase_public_results',
      'effect': 'everyone can see the full aggregate results'},
 ]
 _PHASE_FLAGS = [s['flag'] for s in PHASE_SEQUENCE if s['flag']]
