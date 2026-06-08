@@ -186,6 +186,37 @@ docker exec -it $CID psql -U polis -d polis -c \
 
 If `finished_time` is set, the worker processed it. If rows are absent and the admin stats panel is blank, fix `POLIS_DATABASE_URL` first.
 
+## Migration fails with "Duplicate column" (alembic drift)
+
+**Symptom:** `deploy.sh --migrate` fails with e.g. `(1060, "Duplicate column name 'phase6_card_order'")` while "Running upgrade `<old>` -> `<rev>`". The migration is trying to ADD a column that already exists.
+
+**Cause:** the DB's `alembic_version` lags behind the actual schema. This happens when a column reached the DB some other way than its migration — most often because the schema was built (or extended) with SQLAlchemy `create_all()`, which creates *all* current model columns, while `alembic_version` stayed stamped at an older revision. Alembic then replays a migration whose column is already present.
+
+**Fix — verify, then stamp the already-applied revision, then upgrade.** Do NOT blindly stamp to head: that would skip migrations whose changes are genuinely missing. Confirm the specific column exists first.
+
+```bash
+# On the bastion, with Toolforge envvars loaded + venv active (see deploy.sh), in v2/:
+MIGRATION_MODE=1 flask --app app db current        # the lagging revision
+
+# Confirm the column the failing migration adds ALREADY exists (so stamping skips nothing):
+MIGRATION_MODE=1 flask --app app shell <<'PY'
+from db import db
+from sqlalchemy import inspect
+insp = inspect(db.engine)
+print('participations:', [c['name'] for c in insp.get_columns('participations')])
+print('conversations :', [c['name'] for c in insp.get_columns('conversations')])
+PY
+
+# If (and only if) the failing migration's column is present and the NEXT one's is absent:
+MIGRATION_MODE=1 flask --app app db stamp <revision-whose-column-already-exists>
+MIGRATION_MODE=1 flask --app app db upgrade        # applies the genuinely-missing ones
+MIGRATION_MODE=1 flask --app app db current        # expect: <head> (head)
+```
+
+`stamp` marks a revision as applied **without running it** — safe only because you verified its schema change is already present. After this the version table tracks true head and `--migrate` works normally again.
+
+**Prevention:** add a migration for every model column (don't rely on `create_all()` to extend a live DB), and keep `alembic_version` in lockstep with the schema. (Historically the `phase_*` toggle columns were added to the model without migrations — the root of this drift.)
+
 ## Backups & restore
 
 - **Backups:** a nightly `pg_dump` of the Polis Postgres DB → offsite. **⚠️ not live
