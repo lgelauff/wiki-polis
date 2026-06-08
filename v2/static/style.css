@@ -1977,6 +1977,8 @@ a { color: var(--pass); }
 
 .phase-move-submit[disabled] { opacity: .5; cursor: not-allowed; }
 
+.phase-move-hint { font-size: 12px; margin: 0 0 .5rem; }
+
 .phase-move-pause { margin-top: .75rem; }
 
 /* ── Stats grid ── */

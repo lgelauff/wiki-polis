@@ -76,8 +76,9 @@
 
     {% if transition %}
       {% if is_admin %}
-      {# Guided 'Move on' box (#156): consequences + tick-each-precondition checklist;
-         the Move on button stays disabled until every box is ticked. #}
+      {# Guided 'Move on' box (#156): consequences + tick-each-precondition checklist.
+         The submit ships ENABLED so no-JS users can still advance (the route enforces
+         the checklist server-side); JS disables it until every box is ticked. #}
       <div class="phase-move-box">
         <div class="phase-move-head">
           <span class="phase-move-from">{{ transition.source.label }}</span>
@@ -91,7 +92,7 @@
           <li><strong>Closes:</strong> {{ transition.consequence.closes }}</li>
           {% endif %}
           {% if transition.auto_close %}
-          <li class="phase-move-warn">⚠️ This <strong>permanently closes the consultation</strong> and starts the identity-reveal window.</li>
+          <li class="phase-move-warn"><span aria-hidden="true">⚠️</span> This <strong>permanently closes the consultation</strong> and starts the identity-reveal window.</li>
           {% endif %}
           <li class="muted">This cannot be undone here — only a site admin can reopen a phase via advanced controls.</li>
         </ul>
@@ -111,19 +112,20 @@
                 <span>{{ p.label }}</span>
               </label>
               {% if p.met is not none %}
-                {% if p.met %}<span class="phase-check-met" title="Condition met">✓</span>
-                {% else %}<span class="phase-check-unmet" title="Condition not met yet">✗ not met</span>{% endif %}
+                {% if p.met %}<span class="phase-check-met"><span aria-hidden="true">✓</span><span class="sr-only">condition met</span></span>
+                {% else %}<span class="phase-check-unmet"><span aria-hidden="true">✗</span> not met yet</span>{% endif %}
               {% endif %}
             </li>
             {% endfor %}
           </ul>
-          <button type="submit" class="btn-small phase-move-submit" disabled>
+          <p class="phase-move-hint muted">Confirm every item above to enable “Move on”.</p>
+          <button type="submit" class="btn-small phase-move-submit">
             Move on to {{ transition.target.label }} →
           </button>
         </form>
 
         {% if transition.show_pause %}
-        <p class="phase-move-pause muted" style="font-size:12px">
+        <div class="phase-move-pause muted" style="font-size:12px">
           Coordinating inviting people back? You can
           <form method="post" style="display:inline"
                 action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}">
@@ -131,7 +133,7 @@
             <button type="submit" class="link-btn">{{ 'resume' if conversation.paused else 'pause the conversation' }}</button>
           </form>
           first.
-        </p>
+        </div>
         {% endif %}
       </div>
       <script nonce="{{ csp_nonce }}">
@@ -140,16 +142,21 @@
           if (!box) return;
           var boxes  = box.querySelectorAll('.phase-move-check');
           var submit = box.querySelector('.phase-move-submit');
+          var form   = box.querySelector('.phase-move-form');
           function sync() {
-            var all = Array.prototype.every.call(boxes, function (c) { return c.checked; });
-            submit.disabled = !all;
+            submit.disabled = !Array.prototype.every.call(boxes, function (c) { return c.checked; });
           }
           box.addEventListener('change', sync);
-          sync();
+          sync();   // progressive enhancement: disable on load until all ticked
+          form.addEventListener('submit', function () {
+            submit.disabled = true;            // prevent double-submit during Polis I/O
+            submit.textContent = 'Moving on…';
+          });
         }());
       </script>
       {% else %}
       {# Moderator: same stepper, read-only — cannot move phases. #}
+      <p class="muted" style="font-size:13px">Only a site admin can change phases.</p>
       <button type="button" class="btn-small" disabled
               title="Only a site admin can change phases">Move on to {{ transition.target.label }} →</button>
       {% endif %}

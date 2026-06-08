@@ -170,8 +170,7 @@ PHASE_TRANSITIONS = {
         {'id': 'args_done',   'label': 'We’ve collected all the necessary arguments to move on'},
         {'id': 'args_modded', 'label': 'I’ve reviewed all arguments and removed those against moderation expectations'},
         {'id': 'reinvite',    'label': 'I’m ready to invite participants back for the informed voting phase'},
-        {'id': 'newcomers',   'label': 'I understand participants who didn’t take part earlier can join this round',
-         'check': 'has_confirmed_featured'},
+        {'id': 'newcomers',   'label': 'I understand participants who didn’t take part earlier can join this round'},
     ]},
     'public_results': {'auto_close': True, 'preconditions': [
         {'id': 'ran_long',    'label': 'The informed voting round has run long enough / had enough participation'},
@@ -1052,24 +1051,44 @@ def admin_conversation_advance(conv_id):
             flash('A readiness condition is not met yet — fix it before moving on.', 'error')
             return redirect_to
 
+    # Run the Phase 6 Polis I/O FIRST, before mutating conv. This keeps the network
+    # round-trips out of the open write transaction: the only DB write happens at the
+    # commit below, so a slow Polis backend never holds a row lock on the conversation.
+    created_p6 = None
+    if ctx['runs_phase6_init']:
+        if conv.phase6_polis_conversation_id:     # already initialised (advanced/concurrent)
+            flash('Phase 6 is already initialised.', 'error')
+            return redirect_to
+        ok, msg = _init_phase6(conv)              # assigns ids onto conv/featured; no commit
+        if not ok:
+            db.session.rollback()
+            flash(msg, 'error')
+            return redirect_to
+        created_p6 = conv.phase6_polis_conversation_id
+
     cur, nxt = ctx['source'], ctx['target']
     if cur['flag']:                               # preparation has flag=None
         setattr(conv, cur['flag'], False)
     setattr(conv, nxt['flag'], True)
-
-    if ctx['runs_phase6_init']:
-        ok, msg = _init_phase6(conv)              # assigns ids; does not commit
-        if not ok:
-            db.session.rollback()                 # flag flip discarded too
-            flash(msg, 'error')
-            return redirect_to
 
     if ctx['auto_close'] and conv.closed_at is None:
         conv.active    = False
         conv.paused    = False
         conv.closed_at = datetime.now(timezone.utc)
 
-    db.session.commit()                           # flag flip (+ phase6 ids / close) atomic
+    try:
+        db.session.commit()                       # flag flip (+ phase6 ids / close) atomic
+    except IntegrityError:
+        db.session.rollback()
+        # A concurrent transition won the UNIQUE race. If we created a Phase 6 Polis
+        # conversation in this request it is now orphaned — log it for manual cleanup.
+        if created_p6:
+            current_app.logger.error(
+                'Phase advance lost a concurrent race after Phase 6 init — '
+                'orphaned Polis conversation %s (conv %s)', created_p6, conv.slug)
+        flash('Could not move on — the conversation changed at the same time. '
+              'Reload and try again.', 'error')
+        return redirect_to
 
     if not _sync_vis_type(conv):
         flash('Phase moved, but updating results visibility in Polis failed.', 'error')

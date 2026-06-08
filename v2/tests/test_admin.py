@@ -346,14 +346,17 @@ def test_current_stage_index_and_linearity():
     assert _current_stage_index(c) == 3
 
 
-def test_guided_box_renders_checklist_disabled_submit(admin_client, conv):
+def test_guided_box_renders_checklist(admin_client, conv):
     resp = admin_client.get(f'/admin/conversations/{conv.id}')
     assert resp.status_code == 200
     assert b'phase-move-box' in resp.data
     assert b'phase-move-check' in resp.data          # checklist present
     assert b'Move on to Submission' in resp.data
     assert b'phase-move-submit' in resp.data
-    assert b'disabled' in resp.data                  # submit starts disabled
+    # Submit ships enabled (no-JS can advance; route enforces server-side); JS
+    # disables it until all ticked.
+    assert b'submit.disabled' in resp.data           # JS gate present
+    assert b'Confirm every item' in resp.data        # disabled-reason hint
     assert b'aria-current="step"' in resp.data       # a11y
 
 
@@ -376,6 +379,171 @@ def test_non_linear_state_suppresses_box(admin_client, conv):
     assert b'custom state' in resp.data
     assert b'phase-move-box' not in resp.data
     assert b'phase/advance' not in resp.data
+
+
+# ── Guided transition — review follow-ups (#158) ──────────────────────────────
+
+def test_move_rejects_non_on_checkbox_value(admin_client, conv):
+    """Only the literal 'on' value satisfies a precondition; '1'/'true' do not."""
+    data = {k: '1' for k in _checks_for(conv)}
+    resp = _move(admin_client, conv, data=data)
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.phase_submission is False
+
+
+def test_move_requires_every_checkbox(admin_client, conv):
+    """Dropping ANY single precondition blocks — not just the first."""
+    all_checks = _checks_for(conv)
+    assert len(all_checks) > 1
+    for drop in list(all_checks):
+        data = {k: v for k, v in all_checks.items() if k != drop}
+        resp = _move(admin_client, conv, data=data)
+        assert resp.status_code == 302
+        db.session.refresh(conv)
+        assert conv.phase_submission is False, f'dropping {drop} should block'
+
+
+def test_informed_voting_newcomers_has_no_machine_check():
+    """U6 regression: the 'newcomers' precondition must not carry a machine check —
+    its badge would otherwise render against an unrelated label."""
+    iv = {p['id']: p for p in PHASE_TRANSITIONS['informed_voting']['preconditions']}
+    assert iv['newcomers'].get('check') is None
+
+
+def test_move_to_informed_voting_blocked_if_already_initialised(admin_client, conv):
+    """The guided route refuses to re-init Phase 6 (precheck), without any Polis call."""
+    conv.phase_argument_mapping = True
+    conv.phase6_polis_conversation_id = 'pre-existing'
+    db.session.commit()
+    _add_featured(conv)
+    with patch('app.PolisServerClient.create_conversation') as cc, \
+         patch('app.PolisServerClient.set_vis_type'):
+        resp = admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                                 data=_checks_for(conv), follow_redirects=True)
+    assert b'already initialised' in resp.data.lower()
+    db.session.refresh(conv)
+    assert conv.phase_informed_voting is False
+    cc.assert_not_called()
+
+
+def test_move_informed_voting_empty_text_aborts(admin_client, conv):
+    """A confirmed featured statement with no cached text aborts Phase 6 init before
+    seeding; the phase flag is not set."""
+    conv.phase_argument_mapping = True
+    db.session.commit()
+    _add_featured(conv, text='')
+    with patch('app.PolisServerClient.set_vis_type'), \
+         patch('app.PolisServerClient.create_conversation', return_value='p6x') as cc, \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=1) as seed:
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                          data=_checks_for(conv))
+    db.session.refresh(conv)
+    assert conv.phase_informed_voting is False
+    assert conv.phase6_polis_conversation_id is None
+    cc.assert_called_once()       # remote conversation was created…
+    seed.assert_not_called()      # …but seeding never started (empty text aborts)
+
+
+def test_move_commit_failure_rolls_back_and_logs_orphan(admin_client, conv, caplog):
+    """If the commit loses a UNIQUE race after Phase 6 init, the transition rolls
+    back and the orphaned Polis conversation id is logged for cleanup."""
+    import logging
+    from sqlalchemy.exc import IntegrityError
+    conv.phase_argument_mapping = True
+    db.session.commit()
+    _add_featured(conv)
+    with patch('app.PolisServerClient.set_vis_type'), \
+         patch('app.PolisServerClient.create_conversation', return_value='p6orphan99'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=42), \
+         patch('app.db.session.commit', side_effect=IntegrityError('x', 'y', 'z')), \
+         caplog.at_level(logging.ERROR):
+        resp = admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                                 data=_checks_for(conv), follow_redirects=True)
+    assert b'changed at the same time' in resp.data.lower()
+    db.session.refresh(conv)
+    assert conv.phase_informed_voting is False     # rolled back
+    assert 'p6orphan99' in caplog.text             # orphan logged
+
+
+# ── Standalone Phase 6 init route (advanced/demo fallback) ────────────────────
+
+def test_phase6_init_success(admin_client, conv):
+    conv.phase_informed_voting = True
+    db.session.commit()
+    fs = _add_featured(conv)
+    with patch('app.PolisServerClient.create_conversation', return_value='p6conv1234'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=7):
+        resp = admin_client.post(f'/admin/conversations/{conv.id}/phase6/init')
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    db.session.refresh(fs)
+    assert conv.phase6_polis_conversation_id == 'p6conv1234'
+    assert fs.phase6_polis_statement_id == 7
+
+
+def test_phase6_init_requires_informed_voting_enabled(admin_client, conv):
+    _add_featured(conv)
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/phase6/init',
+                             follow_redirects=True)
+    assert b'enable the informed voting toggle first' in resp.data.lower()
+    db.session.refresh(conv)
+    assert conv.phase6_polis_conversation_id is None
+
+
+def test_phase6_init_blocked_when_already_initialised(admin_client, conv):
+    conv.phase_informed_voting = True
+    conv.phase6_polis_conversation_id = 'existing123'
+    db.session.commit()
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/phase6/init',
+                             follow_redirects=True)
+    assert b'already initialised' in resp.data.lower()
+
+
+def test_phase6_init_blocked_on_closed_conversation(admin_client, conv):
+    conv.phase_informed_voting = True
+    conv.active = False
+    db.session.commit()
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/phase6/init',
+                             follow_redirects=True)
+    assert b'closed or paused' in resp.data.lower()
+
+
+def test_phase6_init_no_confirmed_featured(admin_client, conv):
+    conv.phase_informed_voting = True
+    db.session.commit()
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/phase6/init',
+                             follow_redirects=True)
+    assert b'no confirmed featured statements' in resp.data.lower()
+
+
+def test_phase6_init_accessible_to_moderator(client, conv, participant):
+    """Unlike the guided advance, the standalone init allows conversation moderators."""
+    conv.phase_informed_voting = True
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='moderator'))
+    db.session.commit()
+    _add_featured(conv)
+    login(client, 'testuser')
+    with patch('app.PolisServerClient.create_conversation', return_value='p6modok'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=9):
+        resp = client.post(f'/admin/conversations/{conv.id}/phase6/init')
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.phase6_polis_conversation_id == 'p6modok'
+
+
+def test_phase6_init_integrityerror_flashes(admin_client, conv):
+    from sqlalchemy.exc import IntegrityError
+    conv.phase_informed_voting = True
+    db.session.commit()
+    _add_featured(conv)
+    with patch('app.PolisServerClient.create_conversation', return_value='p6conv1234'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=7), \
+         patch('app.db.session.commit', side_effect=IntegrityError('x', 'y', 'z')):
+        resp = admin_client.post(f'/admin/conversations/{conv.id}/phase6/init',
+                                 follow_redirects=True)
+    assert b'already initialised by a concurrent request' in resp.data.lower()
 
 
 # ── Pause / close ─────────────────────────────────────────────────────────────
