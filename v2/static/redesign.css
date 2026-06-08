@@ -1,0 +1,898 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   redesign.css — ADDITIVE components for the wiki-polis organizer redesign.
+
+   Loads AFTER production style.css and only adds NEW components. It reuses the
+   production design tokens (--ink, --spot, --hairline, --mono, etc.) and never
+   restyles existing classes, so it ports back as a clean, isolated addition.
+
+   Component groups:
+     1. Role / mode bar (the persistent indicator)        [FA1]
+     2. Console layout + section rhythm                    [FA1]
+     3. Status pills (active / paused / closed / scheduled) [FA1, FA3]
+     4. Phase hero (current phase + the four glance-answers) [FA1]
+     5. Phase journey rail (7-phase stepper, richer)        [FA1, FA2]
+     6. Move-on panel refinements (calm #156)               [FA1]
+     7. Scheduling: UTC + countdown + freeze/edit/cancel    [FA3]
+     8. Locked controls (explain-why)                       [FA3]
+     9. Danger / disposable                                 [FA3]
+    10. Participant journey: interludes + in-context help   [FA2]
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Wider canvas for the console than the 900px participant container */
+.console {
+  max-width: 1000px;
+  margin: 0 auto 3rem;
+  padding: 0 1.5rem;
+}
+
+/* ── 1. Role / mode bar ─────────────────────────────────────────────────────
+   Persistent strip directly under the header. Always answers: which hat am I
+   wearing, which consultation, and (for admins) which lens. */
+
+.role-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.role-bar-inner {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 8px 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--hairline);
+  background: var(--surface2);
+  color: var(--body);
+  white-space: nowrap;
+}
+
+.role-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.role-chip--organizer    { border-color: rgba(61,109,186,0.4);  background: rgba(61,109,186,0.07); color: var(--pass); }
+.role-chip--organizer    .role-chip-dot { background: var(--pass); }
+.role-chip--moderator    { border-color: var(--hairline); }
+.role-chip--moderator    .role-chip-dot { background: var(--muted); }
+.role-chip--admin        { border-color: rgba(180,83,9,0.4);   background: rgba(180,83,9,0.07);  color: var(--spot); }
+.role-chip--admin        .role-chip-dot { background: var(--spot); }
+
+.role-bar-context {
+  font-size: 13px;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.role-bar-context strong {
+  color: var(--ink);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-bar-spacer { flex: 1; }
+
+/* Mode switch (global admin only): Simple ⇄ Advanced */
+.mode-switch {
+  display: inline-flex;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.mode-switch button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 5px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mode-switch button[aria-pressed="true"] { color: #fff; background: var(--ink); }
+.mode-switch button.mode-adv[aria-pressed="true"] { background: var(--spot); }
+.mode-switch button:focus-visible { outline: 2px solid var(--pass); outline-offset: -2px; }
+
+.view-as-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--body);
+  text-decoration: none;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+.view-as-btn:hover { border-color: var(--accent); color: var(--ink); }
+
+/* Per-box simple/advanced — the distinction belongs to ONE control box at a
+   time (e.g. the phase control), never the whole console. No global mode, no
+   header switch. A box opts in by carrying [data-mode] and a .box-mode toggle. */
+[data-mode] .mode-advanced-part { display: none; }
+[data-mode="advanced"] .mode-advanced-part { display: revert; }
+[data-mode="advanced"] .mode-guided-part   { display: none; }
+
+.box-adv-note {
+  display: none;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 12px;
+  padding: 9px 13px;
+  border-radius: 8px;
+  background: rgba(180,83,9,0.06);
+  border: 1px solid rgba(180,83,9,0.3);
+  font-size: 12.5px;
+  color: var(--spot);
+}
+[data-mode="advanced"] .box-adv-note { display: flex; }
+
+/* advanced box gets a subtle amber inset rail so it reads as "off the rails"
+   without colouring the whole page */
+[data-mode="advanced"] .phase-hero { box-shadow: inset 4px 0 0 rgba(180,83,9,0.35), 0 1px 2px rgba(0,0,0,0.02); }
+
+/* ── 2. Console layout + section rhythm ─────────────────────────────────────*/
+
+.console-head {
+  margin: 1.5rem 0 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.console-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0;
+}
+.console-sub {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+.console-sub code { color: var(--body); }
+
+.console-section { margin-top: 1.75rem; }
+.console-section-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.6rem;
+  font-weight: 600;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 22px 24px;
+}
+
+/* ── 3. Status pills ────────────────────────────────────────────────────────*/
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.status-pill-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+.status-pill--active    { background: rgba(31,138,91,0.12);  color: var(--agree); }
+.status-pill--active    .status-pill-dot { background: var(--agree); }
+.status-pill--paused    { background: rgba(180,83,9,0.12);   color: var(--spot); }
+.status-pill--paused    .status-pill-dot { background: var(--spot); }
+.status-pill--closed    { background: var(--surface2);       color: var(--muted); }
+.status-pill--closed    .status-pill-dot { background: var(--muted); }
+.status-pill--scheduled { background: rgba(61,109,186,0.12); color: var(--pass); }
+.status-pill--scheduled .status-pill-dot { background: var(--pass); animation: pulse-dot 2s infinite; }
+
+@keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .status-pill--scheduled .status-pill-dot { animation: none; }
+}
+
+/* ── 4. Phase hero ─────────────────────────────────────────────────────────
+   The centrepiece. Answers, top to bottom: what phase / the numbers /
+   ready to move on? / what moving on does + can I undo. */
+
+.phase-hero {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02), 0 14px 36px -22px rgba(0,0,0,0.10);
+}
+
+.phase-hero-body { padding: 22px 24px; }
+
+.phase-now-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.phase-now-kicker {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.phase-now-name {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.phase-now-desc {
+  font-size: 13.5px;
+  color: var(--body);
+  margin: 6px 0 0;
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+/* the numbers — contextual to the current phase */
+.phase-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 26px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline-soft);
+}
+.phase-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1.15;
+}
+.phase-stat-value .unit { font-size: 13px; color: var(--muted); font-weight: 600; margin-left: 2px; }
+.phase-stat-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.phase-stat-delta { font-size: 11px; font-weight: 600; font-family: var(--mono); }
+.phase-stat-delta--up   { color: var(--agree); }
+.phase-stat-delta--down { color: var(--disagree); }
+
+/* readiness + move-on launcher footer */
+.phase-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  background: var(--surface2);
+  border-top: 1px solid var(--hairline);
+  flex-wrap: wrap;
+}
+.phase-foot-ready {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--body);
+}
+.phase-foot-ready-icon {
+  width: 18px; height: 18px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.phase-foot-ready--go   .phase-foot-ready-icon { background: var(--agree); color: #fff; }
+.phase-foot-ready--wait .phase-foot-ready-icon { background: var(--spot);  color: #fff; }
+
+/* the primary "Move on" button — emphasis depends on rhythm direction.
+   winding DOWN an active phase (low-risk): quiet primary.
+   OPENING an active phase / closing for good: deliberate. */
+.rd-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ink);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+}
+.rd-btn-primary:hover { background: var(--accent); }
+.rd-btn-primary--deliberate { background: var(--spot); }
+.rd-btn-primary--deliberate:hover { background: #95450a; }
+.rd-btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── 5. Phase journey rail ──────────────────────────────────────────────────
+   Richer 7-phase stepper than the production .phase-stepper pills. Shown above
+   the hero so the organizer sees the whole arc and where they sit on it. */
+
+.journey {
+  display: flex;
+  align-items: flex-start;
+  padding: 18px 24px 6px;
+  border-bottom: 1px solid var(--hairline);
+  overflow-x: auto;
+  gap: 0;
+}
+.journey-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  flex: 1;
+  min-width: 78px;
+}
+/* connector line */
+.journey-step::before {
+  content: "";
+  position: absolute;
+  top: 13px;
+  left: -50%;
+  width: 100%;
+  height: 2px;
+  background: var(--hairline);
+  z-index: 0;
+}
+.journey-step:first-child::before { display: none; }
+.journey-step--done::before,
+.journey-step--current::before { background: var(--ink); }
+
+.journey-dot {
+  position: relative;
+  z-index: 1;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  background: var(--surface); border: 1.5px solid var(--hairline); color: var(--muted);
+}
+.journey-step--done    .journey-dot { background: var(--ink); border-color: var(--ink); color: #fff; }
+.journey-step--current .journey-dot { background: var(--ink); border-color: var(--ink); color: #fff; box-shadow: 0 0 0 4px rgba(12,12,14,0.12); }
+.journey-step--locked  .journey-dot { border-style: dashed; background: var(--surface2); }
+
+.journey-label {
+  margin-top: 7px;
+  font-size: 11.5px;
+  line-height: 1.25;
+  color: var(--muted);
+  letter-spacing: -0.005em;
+  max-width: 92px;
+}
+.journey-step--current .journey-label { color: var(--ink); font-weight: 700; }
+.journey-step--done .journey-label { color: var(--body); }
+
+/* ── 6. Move-on panel (calm #156) ───────────────────────────────────────────
+   Reuses production .phase-move-* checklist semantics; this wraps them in a
+   modal-less expandable panel with clearer consequence framing. */
+
+.moveon {
+  margin-top: 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.moveon[hidden] { display: none; }
+.moveon-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--hairline);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+}
+.moveon-from { color: var(--muted); font-weight: 500; }
+.moveon-arrow { color: var(--spot); }
+.moveon-body { padding: 18px 20px; }
+
+/* consequence list — opens/closes/irreversible, plainly */
+.consequence {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.consequence li {
+  display: flex;
+  gap: 10px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--body);
+}
+.consequence-tag {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  height: fit-content;
+  margin-top: 1px;
+  min-width: 58px;
+  text-align: center;
+}
+.consequence-tag--opens   { background: rgba(31,138,91,0.12);  color: var(--agree); }
+.consequence-tag--closes  { background: var(--surface2);       color: var(--muted); }
+.consequence-tag--final   { background: rgba(196,74,74,0.12);  color: var(--disagree); }
+
+/* readiness checklist (machine-checked + manual) */
+.readiness {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.readiness li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+.readiness li + li { border-top: 1px solid var(--hairline-soft); }
+.readiness-state {
+  flex-shrink: 0;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-top: 1px;
+}
+.readiness-state--met    { background: var(--agree); color: #fff; }
+.readiness-state--unmet  { background: rgba(196,74,74,0.12); color: var(--disagree); border: 1px solid rgba(196,74,74,0.4); }
+.readiness-label { flex: 1; color: var(--body); }
+.readiness-note { color: var(--muted); font-size: 12px; }
+
+/* manual-confirm checkbox rows */
+.confirm-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  font-size: 13.5px;
+  color: var(--body);
+  cursor: pointer;
+  border-radius: 8px;
+}
+.confirm-row:hover { background: var(--surface2); }
+.confirm-row input { margin-top: 3px; flex-shrink: 0; }
+
+.moveon-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.moveon-hint { font-size: 12px; color: var(--muted); }
+
+/* ── 7. Scheduling (FA3) ────────────────────────────────────────────────────*/
+
+.schedule-card {
+  border: 1px solid rgba(61,109,186,0.35);
+  background: rgba(61,109,186,0.05);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.schedule-icon {
+  width: 38px; height: 38px;
+  border-radius: 9px;
+  background: rgba(61,109,186,0.12);
+  color: var(--pass);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.schedule-main { flex: 1; min-width: 200px; }
+.schedule-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+.schedule-when {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--body);
+  margin-top: 3px;
+}
+.schedule-utc {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--pass);
+  background: rgba(61,109,186,0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.countdown {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--pass);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.countdown-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.schedule-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── 8. Locked controls (explain-why) ───────────────────────────────────────*/
+
+.locked-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px dashed var(--hairline);
+  border-radius: 9px;
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 13px;
+}
+.locked-control svg { flex-shrink: 0; color: var(--muted); }
+.locked-control strong { color: var(--body); font-weight: 600; }
+.locked-why { font-size: 12.5px; }
+
+/* ── 9. Danger / disposable ─────────────────────────────────────────────────*/
+
+.danger-zone {
+  border: 1px solid rgba(196,74,74,0.3);
+  border-radius: 12px;
+  padding: 4px 20px;
+}
+.danger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  flex-wrap: wrap;
+}
+.danger-row + .danger-row { border-top: 1px solid var(--hairline-soft); }
+.danger-row-main { flex: 1; min-width: 220px; }
+.danger-row-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+.danger-row-desc { font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+
+.btn-danger-solid {
+  background: var(--surface);
+  border: 1px solid var(--disagree);
+  color: var(--disagree);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-danger-solid:hover { background: var(--disagree); color: #fff; }
+.btn-danger-solid:disabled {
+  opacity: 0.5; cursor: not-allowed; border-color: var(--hairline); color: var(--muted);
+}
+.btn-danger-solid:disabled:hover { background: var(--surface); color: var(--muted); }
+
+/* disposable hint when delete is allowed */
+.disposable-ok { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+
+/* ── secondary management cards ─────────────────────────────────────────────*/
+
+.manage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+@media (max-width: 720px) { .manage-grid { grid-template-columns: 1fr; } }
+
+.manage-card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 16px 18px;
+  text-decoration: none;
+  color: var(--body);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.manage-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 1px 0 0 var(--hairline-soft), 0 6px 16px -10px rgba(0,0,0,0.12);
+}
+.manage-card-top {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+}
+.manage-card-icon {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--surface2); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.manage-card-count {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  background: var(--surface2); border: 1px solid var(--hairline);
+  padding: 1px 7px; border-radius: 999px;
+}
+.manage-card-title { font-size: 14.5px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em; }
+.manage-card-desc { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+
+/* ── 10. Participant journey: interludes + in-context help (FA2) ─────────────*/
+
+.interlude {
+  max-width: 720px;
+  margin: 2.5rem auto;
+  text-align: center;
+}
+.interlude-glyph {
+  width: 56px; height: 56px; border-radius: 14px;
+  background: var(--surface2);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+.interlude-title { font-size: 22px; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); margin: 0; }
+.interlude-sub { font-size: 15px; color: var(--body); line-height: 1.6; margin: 10px auto 0; max-width: 52ch; }
+
+.interlude-digest {
+  text-align: left;
+  margin: 28px auto 0;
+  max-width: 560px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 8px 4px;
+}
+.interlude-digest-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 18px;
+}
+.interlude-digest-row + .interlude-digest-row { border-top: 1px solid var(--hairline-soft); }
+.interlude-digest-num {
+  font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink);
+  font-variant-numeric: tabular-nums; min-width: 56px;
+}
+.interlude-digest-text { font-size: 13.5px; color: var(--body); line-height: 1.4; }
+
+/* in-context help disclosure ("what is this screen?") */
+.help-note {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: rgba(61,109,186,0.05);
+  border: 1px solid rgba(61,109,186,0.22);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 18px;
+}
+.help-note-icon {
+  flex-shrink: 0;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(61,109,186,0.14); color: var(--pass);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 13px; font-weight: 700;
+}
+.help-note-body { font-size: 13px; color: var(--body); line-height: 1.5; }
+.help-note-body strong { color: var(--ink); }
+.help-note-dismiss {
+  flex-shrink: 0; background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 16px; line-height: 1; padding: 2px;
+  min-width: 24px; min-height: 24px;
+}
+
+/* phase tab bar — disabled (not-yet-open) tabs explain themselves */
+.ptab {
+  position: relative;
+}
+.ptab[aria-disabled="true"] {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.6;
+}
+.ptab-lock { margin-left: 5px; vertical-align: middle; }
+.ptab-soon {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--muted);
+  margin-left: 5px;
+}
+
+/* generic small ghost button used in scheduling / panels */
+.btn-ghost {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--body);
+  cursor: pointer;
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--ink); }
+
+.section-help {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: -0.2rem 0 0.8rem;
+  line-height: 1.5;
+  max-width: 64ch;
+}
+
+/* ── Participant timeline (FA2) ─────────────────────────────────────────────
+   Three active participant phases (+ report) shown as a compact journey, mirroring
+   the organizer journey rail. Moderator-only phases (passive for participants)
+   carry a DASHED outline; the participant's own active phases carry a SOLID one. */
+
+.ptimeline {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  margin: 1.5rem 0 0.5rem;
+  overflow-x: auto;
+}
+.ptl-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  flex: 1;
+  min-width: 70px;
+}
+.ptl-step::before {
+  content: "";
+  position: absolute;
+  top: 13px;
+  left: -50%;
+  width: 100%;
+  height: 2px;
+  background: var(--hairline);
+  z-index: 0;
+}
+.ptl-step:first-child::before { display: none; }
+.ptl-step--done::before, .ptl-step--current::before { background: var(--ink); }
+
+.ptl-dot {
+  position: relative;
+  z-index: 1;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  background: var(--surface);
+  color: var(--muted);
+}
+/* solid = active participant phase; dashed = moderator-only / passive */
+.ptl-step--active  .ptl-dot { border: 2px solid var(--ink);   color: var(--ink); }
+.ptl-step--passive .ptl-dot { border: 2px dashed var(--hairline); color: var(--muted); }
+.ptl-step--done    .ptl-dot { background: var(--ink); border: 2px solid var(--ink); color: #fff; }
+.ptl-step--current .ptl-dot { background: var(--ink); border: 2px solid var(--ink); color: #fff; box-shadow: 0 0 0 4px rgba(12,12,14,0.12); }
+.ptl-step--report  .ptl-dot { border: 2px solid var(--pass); color: var(--pass); }
+
+.ptl-label {
+  margin-top: 7px;
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--muted);
+  max-width: 84px;
+}
+.ptl-step--current .ptl-label { color: var(--ink); font-weight: 700; }
+.ptl-step--active  .ptl-label,
+.ptl-step--done    .ptl-label { color: var(--body); }
+
+/* legend under the participant timeline */
+.ptl-legend {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.ptl-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.ptl-legend-swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+.ptl-legend-swatch--active  { border: 2px solid var(--ink); }
+.ptl-legend-swatch--passive { border: 2px dashed var(--hairline); }
+
+/* ── Pass-1 polish (#172 staging feedback) ────────────────────────────────── */
+/* Phase-hero header row: kicker left, Simple/Advanced switch hard right. */
+.phase-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--hairline);
+}
+/* Tighter readiness rows — the checkbox label no longer double-pads. */
+.readiness li { padding-top: 6px; padding-bottom: 6px; }
+.readiness li > label { display: inline-flex; align-items: flex-start; gap: 9px; margin: 0; cursor: pointer; }
+/* More breathing room around the phase-control section, like the other boxes. */
+#phaseControl { margin-top: 1.75rem; }
+
+/* Mode switch relocated to its own row under the timeline. */
+.mode-switch-row { display: flex; justify-content: flex-end; padding: 0 24px 4px; }
+
+/* Advanced "Save phases": quiet until something changes, then dark + prominent. */
+.phases-save {
+  font-weight: 600;
+  border: 1px solid var(--hairline);
+  background: var(--surface2);
+  color: var(--muted);
+  transition: background .12s, color .12s, border-color .12s;
+}
+.phases-save--dirty {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}

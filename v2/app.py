@@ -82,15 +82,17 @@ _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 PHASE_SEQUENCE = [
     {'key': 'preparation',        'label': 'Preparation',        'flag': None,
      'effect': 'setup only — participants cannot do anything yet'},
-    {'key': 'submission',         'label': 'Submission',         'flag': 'phase_submission',
+    {'key': 'submission',         'label': 'Explore',            'flag': 'phase_submission',
      'effect': 'participants can submit statements and vote on them'},
     {'key': 'featured_selection', 'label': 'Featured selection', 'flag': 'phase_personal_results',
      'effect': 'participants can see their personal results while you curate featured statements'},
-    {'key': 'argument_mapping',   'label': 'Argument mapping',   'flag': 'phase_argument_mapping',
+    {'key': 'argument_mapping',   'label': 'Arguments',          'flag': 'phase_argument_mapping',
      'effect': 'participants can add and rate arguments on featured statements'},
-    {'key': 'informed_voting',    'label': 'Informed voting',    'flag': 'phase_informed_voting',
+    {'key': 'cleanup',            'label': 'Cleanup',            'flag': 'phase_cleanup',
+     'effect': 'a quiet pause — participants are idle while you moderate the arguments before the informed vote'},
+    {'key': 'informed_voting',    'label': 'Informed vote',      'flag': 'phase_informed_voting',
      'effect': 'participants vote again on featured statements (requires initialising Phase 6)'},
-    {'key': 'public_results',     'label': 'Public results',     'flag': 'phase_public_results',
+    {'key': 'public_results',     'label': 'Report',             'flag': 'phase_public_results',
      'effect': 'everyone can see the full aggregate results'},
 ]
 _PHASE_FLAGS = [s['flag'] for s in PHASE_SEQUENCE if s['flag']]
@@ -166,8 +168,12 @@ PHASE_TRANSITIONS = {
         {'id': 'no_more_stmt', 'label': 'I understand participants cannot add further statements later'},
         {'id': 'args_visible', 'label': 'I understand featured statements become visible and participants add/rate arguments'},
     ]},
+    'cleanup': {'preconditions': [
+        {'id': 'args_collected', 'label': 'Argument mapping has run long enough — enough pro/con reasoning has been gathered'},
+        {'id': 'args_close',     'label': 'I understand participants can no longer add or rate arguments after this'},
+        {'id': 'ready_moderate', 'label': 'I’m ready to review and moderate the arguments before the informed vote'},
+    ]},
     'informed_voting': {'runs_phase6_init': True, 'show_pause': True, 'preconditions': [
-        {'id': 'args_done',   'label': 'We’ve collected all the necessary arguments to move on'},
         {'id': 'args_modded', 'label': 'I’ve reviewed all arguments and removed those against moderation expectations'},
         {'id': 'reinvite',    'label': 'I’m ready to invite participants back for the informed voting phase'},
         {'id': 'newcomers',   'label': 'I understand participants who didn’t take part earlier can join this round'},
@@ -1017,18 +1023,15 @@ def _sync_vis_type(conv) -> bool:
 @login_required
 @admin_required
 def admin_conversation_phases(conv_id):
+    # Advanced mode: independent toggles, out of order, NO readiness checks — the admin
+    # is responsible for the resulting state (the guided flow enforces preconditions like
+    # ≥1 featured statement before argument mapping; this route deliberately does not, so
+    # a single rejected toggle never silently discards the whole save).
     conv = Conversation.query.get_or_404(conv_id)
-    enabling_arg_mapping = (bool(request.form.get('phase_argument_mapping'))
-                            and not conv.phase_argument_mapping)
-    if enabling_arg_mapping:
-        featured_count = FeaturedStatement.query.filter_by(conversation_id=conv_id).count()
-        if featured_count == 0:
-            flash('Cannot enable argument mapping — add at least one featured statement first.', 'error')
-            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
     conv.phase_submission       = bool(request.form.get('phase_submission'))
     conv.phase_personal_results = bool(request.form.get('phase_personal_results'))
     conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
+    conv.phase_cleanup          = bool(request.form.get('phase_cleanup'))
     conv.phase_public_results   = bool(request.form.get('phase_public_results'))
     conv.phase_informed_voting  = bool(request.form.get('phase_informed_voting'))
     db.session.commit()
@@ -1077,11 +1080,12 @@ def admin_conversation_advance(conv_id):
     # Run the Phase 6 Polis I/O FIRST, before mutating conv. This keeps the network
     # round-trips out of the open write transaction: the only DB write happens at the
     # commit below, so a slow Polis backend never holds a row lock on the conversation.
+    # Initialise the Phase 6 round only if it hasn't been already. If it has (advanced
+    # path, or a re-entry), just proceed with the transition — re-initialising adds no
+    # value and would fail on the UNIQUE constraint. The featured statements were seeded
+    # at init time, so round 6 already reflects the round-5 featured set.
     created_p6 = None
-    if ctx['runs_phase6_init']:
-        if conv.phase6_polis_conversation_id:     # already initialised (advanced/concurrent)
-            flash('Phase 6 is already initialised.', 'error')
-            return redirect_to
+    if ctx['runs_phase6_init'] and not conv.phase6_polis_conversation_id:
         ok, msg = _init_phase6(conv)              # assigns ids onto conv/featured; no commit
         if not ok:
             db.session.rollback()

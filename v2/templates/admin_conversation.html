@@ -1,436 +1,479 @@
 {% extends "base.html" %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='redesign.css') }}?v={{ git_version }}">
+{% endblock %}
 {% block content %}
 
-<div class="container">
+{# ── Persistent role / mode bar (FA1) ─────────────────────────────────────── #}
+<div class="role-bar">
+  <div class="role-bar-inner">
+    <span class="role-chip {% if is_admin %}role-chip--admin{% endif %}"
+          title="Your assigned role on this platform">
+      <span class="role-chip-dot"></span>{{ 'Global admin' if is_admin else 'Moderator' }}
+    </span>
+    <span class="role-bar-context">managing&nbsp;<strong>{{ conversation.title }}</strong></span>
+    <span class="role-bar-spacer"></span>
+    {# View as participant — just a shortcut link to the participant view (not impersonation). #}
+    <a class="view-as-btn" href="{{ url_for('participant.conversation', slug=conversation.slug) }}">
+      View as participant
+    </a>
+  </div>
+</div>
 
-  <p class="muted" style="margin-bottom:1.5rem">
+{# base.html already provides <main id="main">; don't nest a second one. #}
+<div class="console">
+
+  <p class="muted" style="margin-bottom:1rem">
     <a href="{{ url_for('admin.admin') }}">← admin panel</a>
   </p>
 
-  <div style="display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;margin-bottom:.25rem">
-    <h2 style="margin-bottom:0">{{ conversation.title }}</h2>
+  {# ── Consultation header ──────────────────────────────────────────────── #}
+  <div class="console-head">
+    <h1 class="console-title">{{ conversation.title }}</h1>
     {% if not conversation.active %}
-      <span class="badge-inactive">closed</span>
+      <span class="status-pill status-pill--closed"><span class="status-pill-dot"></span>Closed</span>
     {% elif conversation.paused %}
-      <span style="color:var(--spot);font-size:13px;font-weight:600">paused</span>
+      <span class="status-pill status-pill--paused"><span class="status-pill-dot"></span>Paused</span>
     {% else %}
-      <span style="color:var(--green);font-size:13px;font-weight:600">active</span>
+      <span class="status-pill status-pill--active"><span class="status-pill-dot"></span>Active</span>
     {% endif %}
   </div>
-  <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
-    <code>/c/{{ conversation.slug }}</code>
-    · {{ conversation.access_policy }}
-    · {{ participant_count }} joined
+  <p class="console-sub">
+    <code>/c/{{ conversation.slug }}</code> &nbsp;·&nbsp;
+    {{ conversation.access_policy }} &nbsp;·&nbsp; {{ participant_count }} joined
   </p>
 
-  <!-- ── Polis stats ───────────────────────────────────── -->
-  {% if polis_stats %}
-  <div class="edit-form" style="margin-bottom:1.5rem">
-    <div class="stats-grid">
-      <div class="stat-item">
-        <div class="stat-value">{{ polis_stats.n_participants }}</div>
-        <div class="stat-label">participants</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">{{ polis_stats.n_votes }}</div>
-        <div class="stat-label">votes cast</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">{{ polis_stats.avg_votes }}</div>
-        <div class="stat-label">avg votes / person</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">{{ polis_stats.median_votes | int }}</div>
-        <div class="stat-label">median votes / person</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">{{ polis_stats.n_statements }}</div>
-        <div class="stat-label">statements ({{ polis_stats.n_seed }} seed)</div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
+  {# ── PHASE HERO (FA1) — the centrepiece ───────────────────────────────── #}
+  {% set target_stage = phase_sequence[advance_target_index] if advance_target_index is not none else none %}
+  <div class="console-section" id="phaseControl" data-mode="simple">
+    <div class="phase-hero">
 
-  <!-- ── Phases ──────────────────────────────────────── -->
-  <h3 class="section-heading">Phases</h3>
-  <div class="edit-form">
-    {% set target_stage = phase_sequence[advance_target_index] if advance_target_index is not none else none %}
+      <div class="phase-hero-top">
+        <span class="phase-now-kicker">Phase control</span>
+      </div>
 
-    {# Simple view — shared by every role. The stepper shows the current phase;
-       the forward control is interactive for global admins (later: organizers)
-       and inert (disabled) for moderators, who cannot change phases. #}
-    <ol class="phase-stepper" aria-label="Consultation phase progress">
-      {% for stage in phase_sequence %}
-      <li class="phase-step
-                 {%- if loop.index0 == current_stage_index %} phase-step--current
-                 {%- elif loop.index0 < current_stage_index %} phase-step--done{% endif %}"
-          {% if loop.index0 == current_stage_index %}aria-current="step"{% endif %}>
-        <span class="phase-step-num">{{ loop.index }}</span>
-        <span class="phase-step-label">{{ stage.label }}</span>
-        {% if loop.index0 == current_stage_index %}<span class="sr-only">(current phase)</span>
-        {% elif loop.index0 < current_stage_index %}<span class="sr-only">(completed)</span>
-        {% else %}<span class="sr-only">(upcoming)</span>{% endif %}
-      </li>
-      {% endfor %}
-    </ol>
+      {# 7-phase journey rail (#163 added the passive 'Cleanup' phase between
+         Arguments and Informed vote). Renders from PHASE_SEQUENCE. #}
+      <ol class="journey phase-stepper" aria-label="Consultation phase progress">
+        {% for stage in phase_sequence %}
+        <li class="journey-step
+                   {%- if loop.index0 == current_stage_index %} journey-step--current
+                   {%- elif loop.index0 < current_stage_index %} journey-step--done{% endif %}"
+            {% if loop.index0 == current_stage_index %}aria-current="step"{% endif %}>
+          <span class="journey-dot">{% if loop.index0 < current_stage_index %}✓{% else %}{{ loop.index }}{% endif %}</span>
+          <span class="journey-label">{{ stage.label }}</span>
+          {% if loop.index0 == current_stage_index %}<span class="sr-only">(current phase)</span>
+          {% elif loop.index0 < current_stage_index %}<span class="sr-only">(completed)</span>
+          {% else %}<span class="sr-only">(upcoming)</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ol>
 
-    {# Pause / Resume — directly under the phase bar; governs the running
-       consultation. Global admin only; hidden once closed. #}
-    {% if is_admin and conversation.active %}
-    <div class="phase-pause-row" style="display:flex;align-items:center;gap:1rem;margin:.75rem 0 1rem">
-      <form method="post" style="display:inline"
-            action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit"
-                class="btn-small {% if conversation.paused %}btn-approve{% else %}btn-pause{% endif %}">
-          {{ 'Resume' if conversation.paused else 'Pause' }}
-        </button>
-      </form>
-      <span class="muted" style="font-size:13px">
-        {% if conversation.paused %}
-          Paused — participants cannot vote. The identity-reveal clock has <strong>not</strong> started; resuming is possible.
-        {% else %}
-          Pause temporarily disables voting without starting the reveal timeline.
-        {% endif %}
-      </span>
-    </div>
-    {% endif %}
-
-    {% if transition %}
       {% if is_admin %}
-      {# Guided 'Move on' box (#156): consequences + tick-each-precondition checklist.
-         The submit ships ENABLED so no-JS users can still advance (the route enforces
-         the checklist server-side); JS disables it until every box is ticked. #}
-      <div class="phase-move-box">
-        <div class="phase-move-head">
-          <span class="phase-move-from">{{ transition.source.label }}</span>
-          <span class="phase-move-arrow" aria-hidden="true">→</span>
-          <span class="phase-move-to">{{ transition.target.label }}</span>
+      {# Reusable per-box Guided/Advanced switch, right under the timeline. The generic
+         JS (bottom) drives any box with [data-mode] + .mode-switch. #}
+      <div class="mode-switch-row">
+        <span class="mode-switch" role="group" aria-label="Phase control mode">
+          <button type="button" class="pc-guided" aria-pressed="true" aria-controls="phaseControl">Simple</button>
+          <button type="button" class="pc-advanced mode-adv" aria-pressed="false" aria-controls="phaseControl">Advanced</button>
+        </span>
+      </div>
+      {% endif %}
+
+      {# Current-phase body #}
+      <div class="phase-hero-body">
+        <div class="phase-now-head">
+          <span class="phase-now-kicker">You are in phase {{ current_stage_index + 1 }} of {{ phase_sequence | length }}</span>
         </div>
+        <div class="phase-now-head" style="margin-top:2px">
+          <span class="phase-now-name">{{ phase_sequence[current_stage_index].label }}</span>
+        </div>
+        <p class="phase-now-desc">{{ phase_sequence[current_stage_index].effect }}</p>
 
-        <ul class="phase-move-consequences">
-          <li><strong>Opens:</strong> {{ transition.consequence.opens }}</li>
-          {% if transition.consequence.closes %}
-          <li><strong>Closes:</strong> {{ transition.consequence.closes }}</li>
-          {% endif %}
-          {% if transition.auto_close %}
-          <li class="phase-move-warn"><span aria-hidden="true">⚠️</span> This <strong>permanently closes the consultation</strong> and starts the identity-reveal window.</li>
-          {% endif %}
-          <li class="muted">This cannot be undone here — only a site admin can reopen a phase via advanced controls.</li>
-        </ul>
-
-        {% if not conversation.active %}
-        <p class="muted" style="font-size:12px">This consultation is closed — the only move is to open public results.</p>
+        {# The few numbers we already fetch. TODO(#165/#42): per-phase statistics
+           (e.g. featured-with-arguments, awaiting moderation) replace these. #}
+        {% if polis_stats %}
+        <div class="phase-stats">
+          <div><div class="phase-stat-value">{{ polis_stats.n_participants }}</div>
+               <div class="phase-stat-label">participants</div></div>
+          <div><div class="phase-stat-value">{{ polis_stats.n_votes }}</div>
+               <div class="phase-stat-label">votes cast</div></div>
+          <div><div class="phase-stat-value">{{ polis_stats.n_statements }}</div>
+               <div class="phase-stat-label">statements ({{ polis_stats.n_seed }} seed)</div></div>
+        </div>
         {% endif %}
+      </div>
 
-        <form method="post" class="phase-move-form"
-              action="{{ url_for('admin.admin_conversation_advance', conv_id=conversation.id) }}">
+      {# Pause / Resume — directly under the phase bar (governs the running
+         consultation). Global admin only; hidden once closed. #}
+      {% if is_admin and conversation.active %}
+      <div class="phase-foot phase-pause-row">
+        <form method="post" style="display:inline"
+              action="{{ url_for('admin.admin_conversation_pause', conv_id=conversation.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <ul class="phase-move-checklist">
-            {% for p in transition.preconditions %}
-            <li>
-              <label>
-                <input type="checkbox" name="{{ p.id }}" class="phase-move-check">
-                <span>{{ p.label }}</span>
-              </label>
-              {% if p.met is not none %}
-                {% if p.met %}<span class="phase-check-met"><span aria-hidden="true">✓</span><span class="sr-only">condition met</span></span>
-                {% else %}<span class="phase-check-unmet"><span aria-hidden="true">✗</span> not met yet</span>{% endif %}
-                {% if p.note %}<span class="phase-check-note">({{ p.note }})</span>{% endif %}
-              {% endif %}
-            </li>
-            {% endfor %}
-          </ul>
-          <p class="phase-move-hint muted">Confirm every item above to enable “Move on”. Anything marked “not met yet” must be resolved first.</p>
-          <button type="submit" class="btn-small phase-move-submit">
-            Move on to {{ transition.target.label }} →
+          <button type="submit"
+                  class="btn-small {% if conversation.paused %}btn-approve{% else %}btn-pause{% endif %}">
+            {{ 'Resume' if conversation.paused else 'Pause' }}
           </button>
         </form>
-
-        {% if transition.show_pause %}
-        <p class="phase-move-pause muted" style="font-size:12px">
-          Need time to coordinate inviting people back? You can pause first.
-        </p>
-        {% endif %}
+        <span class="muted" style="font-size:13px">
+          {% if conversation.paused %}
+            Paused — participants cannot vote. The identity-reveal clock has <strong>not</strong> started; resuming is possible.
+          {% else %}
+            Pause temporarily disables voting without starting the reveal timeline.
+          {% endif %}
+        </span>
       </div>
-      <script nonce="{{ csp_nonce }}">
-        (function () {
-          var box = document.querySelector('.phase-move-box');
-          if (!box) return;
-          var boxes  = box.querySelectorAll('.phase-move-check');
-          var submit = box.querySelector('.phase-move-submit');
-          var form   = box.querySelector('.phase-move-form');
-          // A machine-checked precondition rendered as unmet gates the move server-side
-          // too — keep the button disabled so it never enables-then-bounces.
-          var hasUnmet = box.querySelector('.phase-check-unmet') != null;
-          function sync() {
-            submit.disabled = hasUnmet ||
-              !Array.prototype.every.call(boxes, function (c) { return c.checked; });
-          }
-          box.addEventListener('change', sync);
-          sync();   // progressive enhancement: disable on load until all ticked
-          form.addEventListener('submit', function () {
-            submit.disabled = true;            // prevent double-submit during Polis I/O
-            submit.textContent = 'Moving on…';
-          });
-        }());
-      </script>
-      {% else %}
-      {# Moderator: same stepper, read-only — cannot move phases. #}
-      <p class="muted" style="font-size:13px">Only a site admin can change phases.</p>
-      <button type="button" class="btn-small" disabled
-              title="Only a site admin can change phases">Move on to {{ transition.target.label }} →</button>
       {% endif %}
-    {% elif not linear_phase_state %}
-      <p class="muted" style="margin-top:.5rem;font-size:13px">
-        ⚠️ Phases are in a custom state (more than one active).
-        {% if is_admin %}Use advanced controls below to adjust.{% else %}A site admin can adjust this.{% endif %}
-      </p>
-    {% else %}
-      <p class="muted" style="font-size:13px">Final phase reached — public results are open.</p>
-    {% endif %}
+    </div>
 
-    {# Advanced controls — global admin only: independent toggles, go backward,
-       fix a custom state. #}
+    {# ── Guided move-on (mode-guided-part) ──────────────────────────────── #}
+    <div class="mode-guided-part">
+      {% if transition %}
+        {% if is_admin %}
+        {# At-a-glance readiness summary in the hero — machine-checkable conditions
+           that are currently unmet block the move. #}
+        {% set unmet = transition.preconditions | selectattr('met', 'equalto', false) | list | length %}
+        <div class="phase-foot">
+          <div class="phase-foot-ready {{ 'phase-foot-ready--wait' if unmet else 'phase-foot-ready--go' }}">
+            <span class="phase-foot-ready-icon" aria-hidden="true">{{ '!' if unmet else '✓' }}</span>
+            <span>{% if unmet %}{{ unmet }} readiness check{{ 's' if unmet != 1 }} still need resolving before {{ transition.target.label }}{% else %}No blocking checks — confirm each item below to move on to {{ transition.target.label }}{% endif %}</span>
+          </div>
+        </div>
+        {# Guided 'Move on' (#156): consequences + tick-each-precondition checklist.
+           Submit ships ENABLED (no-JS can advance; route enforces server-side); JS
+           disables it until every box is ticked. Gating logic unchanged. #}
+        <div class="moveon phase-move-box" style="margin-top:14px">
+          <div class="moveon-head">
+            <span class="moveon-from">{{ transition.source.label }}</span>
+            <span class="moveon-arrow" aria-hidden="true">→</span>
+            <span>{{ transition.target.label }}</span>
+          </div>
+          <div class="moveon-body">
+            <ul class="consequence">
+              <li><span class="consequence-tag consequence-tag--opens">Opens</span>
+                  <span>{{ transition.consequence.opens }}</span></li>
+              {% if transition.consequence.closes %}
+              <li><span class="consequence-tag consequence-tag--closes">Closes</span>
+                  <span>{{ transition.consequence.closes }}</span></li>
+              {% endif %}
+              {% if transition.auto_close %}
+              <li><span class="consequence-tag consequence-tag--closes">Ends</span>
+                  <span><strong>Permanently closes the consultation</strong> and starts the identity-reveal window.</span></li>
+              <li><span class="consequence-tag consequence-tag--closes">Undo</span>
+                  <span><strong>Not possible</strong> — closing is irreversible.</span></li>
+              {% else %}
+              <li><span class="consequence-tag" style="background:var(--surface2);color:var(--muted)">Undo</span>
+                  <span>Reversible only by a site admin via advanced controls.</span></li>
+              {% endif %}
+            </ul>
+
+            {% if not conversation.active %}
+            <p class="muted" style="font-size:12px">This consultation is closed — the only move is to open the final report.</p>
+            {% endif %}
+
+            <div class="console-section-label" style="margin-bottom:8px">Readiness</div>
+            <form method="post" class="phase-move-form"
+                  action="{{ url_for('admin.admin_conversation_advance', conv_id=conversation.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <ul class="readiness">
+                {% for p in transition.preconditions %}
+                <li>
+                  <label>
+                    <input type="checkbox" name="{{ p.id }}" class="phase-move-check moveon-check">
+                    <span class="readiness-label">{{ p.label }}
+                      {% if p.met is not none %}
+                        {% if p.met %}<span class="readiness-note">({{ p.note or 'met' }})</span>
+                        {% else %}<span class="phase-check-unmet"><span aria-hidden="true">✗</span> not met yet</span>{% if p.note %}<span class="readiness-note">({{ p.note }})</span>{% endif %}{% endif %}
+                      {% endif %}
+                    </span>
+                  </label>
+                </li>
+                {% endfor %}
+              </ul>
+              <p class="phase-move-hint moveon-hint muted">Confirm every item above to enable “Move on”. Anything marked “not met yet” must be resolved first.</p>
+              <button type="submit" class="rd-btn-primary phase-move-submit">
+                Move on to {{ transition.target.label }} →
+              </button>
+            </form>
+
+            {% if transition.show_pause %}
+            <p class="muted" style="font-size:12px;margin-top:10px">Need time to coordinate inviting people back? You can pause first.</p>
+            {% endif %}
+          </div>
+        </div>
+        <script nonce="{{ csp_nonce }}">
+          (function () {
+            var box = document.querySelector('.phase-move-box');
+            if (!box) return;
+            var boxes  = box.querySelectorAll('.phase-move-check');
+            var submit = box.querySelector('.phase-move-submit');
+            var form   = box.querySelector('.phase-move-form');
+            var hasUnmet = box.querySelector('.phase-check-unmet') != null;
+            function sync() {
+              submit.disabled = hasUnmet ||
+                !Array.prototype.every.call(boxes, function (c) { return c.checked; });
+            }
+            box.addEventListener('change', sync);
+            sync();
+            form.addEventListener('submit', function () {
+              submit.disabled = true;
+              submit.textContent = 'Moving on…';
+            });
+          }());
+        </script>
+        {% else %}
+        {# Moderator: read-only — cannot move phases. #}
+        <p class="muted" style="font-size:13px;margin-top:14px">Only a site admin can change phases.</p>
+        <button type="button" class="btn-small" disabled
+                title="Only a site admin can change phases">Move on to {{ transition.target.label }} →</button>
+        {% endif %}
+      {% elif not linear_phase_state %}
+        <p class="muted" style="margin-top:14px;font-size:13px">
+          <span aria-hidden="true">⚠️</span> Phases are in a custom state (more than one active).
+          {% if is_admin %}Use Advanced below to adjust.{% else %}A site admin can adjust this.{% endif %}
+        </p>
+      {% else %}
+        <p class="muted" style="margin-top:14px;font-size:13px">Final phase reached — the report is open.</p>
+      {% endif %}
+
+      {# TODO(#164): scheduled wind-down card + composer (UTC, countdown,
+         freeze/edit/cancel) go here, under the move-on launcher. Needs a
+         scheduler worker — see redesign/organizer-console.html .schedule-card. #}
+    </div>
+
+    {# ── Advanced (mode-advanced-part) — global admin only ──────────────── #}
     {% if is_admin %}
-    <details class="phase-advanced" {% if not linear_phase_state %}open{% endif %}>
-      <summary>Advanced phase controls</summary>
+    <div class="mode-advanced-part" style="margin-top:14px">
+      <div class="box-adv-note">
+        <span aria-hidden="true">⚠️</span>
+        <span><strong>Advanced.</strong> These toggles act independently and out of order, with no
+          readiness checks — for demos and recovery, not routine runs.</span>
+      </div>
       <form method="post"
             action="{{ url_for('admin.admin_conversation_phases', conv_id=conversation.id) }}"
             class="phases-form" style="flex-wrap:wrap;gap:.75rem;margin-top:.75rem">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label title="Submission open">
-          <input type="checkbox" name="phase_submission" value="1"
-                 {% if conversation.phase_submission %}checked{% endif %}>
-          Statement submission
-        </label>
-        <label title="Personal results">
-          <input type="checkbox" name="phase_personal_results" value="1"
-                 {% if conversation.phase_personal_results %}checked{% endif %}>
-          Personal results
-        </label>
-        <label title="Argument mapping">
-          <input type="checkbox" name="phase_argument_mapping" value="1"
-                 {% if conversation.phase_argument_mapping %}checked{% endif %}>
-          Argument mapping
-        </label>
-        <label title="Public results">
-          <input type="checkbox" name="phase_public_results" value="1"
-                 {% if conversation.phase_public_results %}checked{% endif %}>
-          Public results
-        </label>
-        <label title="Informed voting (Phase 6)">
-          <input type="checkbox" name="phase_informed_voting" value="1"
-                 {% if conversation.phase_informed_voting %}checked{% endif %}>
-          Informed voting
-        </label>
-        <button type="submit" class="btn-small">save</button>
+        <label><input type="checkbox" name="phase_submission" value="1"
+               {% if conversation.phase_submission %}checked{% endif %}> Statement submission (Explore)</label>
+        <label><input type="checkbox" name="phase_personal_results" value="1"
+               {% if conversation.phase_personal_results %}checked{% endif %}> Personal results</label>
+        <label><input type="checkbox" name="phase_argument_mapping" value="1"
+               {% if conversation.phase_argument_mapping %}checked{% endif %}> Argument mapping</label>
+        <label><input type="checkbox" name="phase_cleanup" value="1"
+               {% if conversation.phase_cleanup %}checked{% endif %}> Cleanup</label>
+        <label><input type="checkbox" name="phase_public_results" value="1"
+               {% if conversation.phase_public_results %}checked{% endif %}> Public results</label>
+        <label><input type="checkbox" name="phase_informed_voting" value="1"
+               {% if conversation.phase_informed_voting %}checked{% endif %}> Informed voting</label>
+        <button type="submit" class="btn-small phases-save">Save phases</button>
       </form>
+
+      {# Phase 6 initialisation — fallback for the advanced/demo path (the guided
+         Informed-vote transition folds this in). #}
+      {% if conversation.phase_informed_voting %}
+      <div style="margin-top:1rem">
+        <div class="console-section-label">Informed voting — setup</div>
+        {% if conversation.phase6_polis_conversation_id %}
+        <p style="font-size:13px">
+          Phase 6 Polis conversation: <code>{{ conversation.phase6_polis_conversation_id }}</code> ·
+          {{ conversation.featured_statements | selectattr('confirmed_by_admin') | selectattr('phase6_polis_statement_id', 'ne', none) | list | length }}
+          of {{ conversation.featured_statements | selectattr('confirmed_by_admin') | list | length }} statements seeded.
+        </p>
+        {% else %}
+        <p style="font-size:13px;margin-bottom:.5rem">
+          Enabled but not initialised. Initialising creates a dedicated Polis conversation and seeds
+          all confirmed featured statements.
+        </p>
+        <form method="post" action="{{ url_for('admin.admin_phase6_init', conv_id=conversation.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-small">Initialise Phase 6</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Secondary management (navigation) ────────────────────────────────── #}
+  <div class="console-section">
+    <div class="console-section-label">Content &amp; access</div>
+    <div class="manage-grid">
+      <a class="manage-card" href="{{ url_for('admin.admin_conversation_statements', conv_id=conversation.id) }}">
+        <div class="manage-card-title">Statements</div>
+        <div class="manage-card-desc">Review, approve or hide statements; add seed statements</div>
+      </a>
+      <a class="manage-card" href="{{ url_for('admin.admin_conversation_invites', conv_id=conversation.id) }}">
+        <div class="manage-card-top"><span class="manage-card-count">{{ invite_count }} invite{{ 's' if invite_count != 1 }}</span></div>
+        <div class="manage-card-title">Invites &amp; access</div>
+        <div class="manage-card-desc">Who can join this consultation</div>
+      </a>
+      <a class="manage-card" href="{{ url_for('admin.admin_conversation_featured', conv_id=conversation.id) }}">
+        <div class="manage-card-top"><span class="manage-card-count">{{ conversation.featured_statements | length }} featured</span></div>
+        <div class="manage-card-title">Featured statements</div>
+        <div class="manage-card-desc">Curate the set for arguments &amp; informed voting</div>
+      </a>
+      {# TODO(#165/#42): a 'Statistics' manage-card linking to a per-conversation
+         stats page goes here once that page exists. #}
+    </div>
+  </div>
+
+  {# ── Moderators — roster visible to anyone managing the conversation;
+     adding / removing is global-admin only (can_manage_roles). ── #}
+  <div class="console-section">
+    <div class="console-section-label">Moderators</div>
+    <details class="phase-advanced">
+      <summary>Moderators{% if conv_roles %} ({{ conv_roles | length }}){% endif %}</summary>
+      {% if conv_roles %}
+      <table class="admin-table" style="margin-top:.75rem">
+        <thead><tr><th>Participant</th><th>Role</th><th></th></tr></thead>
+        <tbody>
+          {% for role in conv_roles %}
+          <tr>
+            <td>{{ role.participant.mw_username }}</td>
+            <td>{{ role.role }}</td>
+            <td>
+              {% if can_manage_roles %}
+              <form method="post" action="{{ url_for('admin.admin_role_remove', role_id=role.id) }}" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="redirect_to" value="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">
+                <button type="submit" class="btn-small btn-danger">remove</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="margin:.75rem 0;font-size:14px">No moderators assigned.</p>
+      {% endif %}
+
+      {% if can_manage_roles %}
+      <form method="post" action="{{ url_for('admin.admin_role_add') }}" style="margin-top:.5rem">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="conversation_id" value="{{ conversation.id }}">
+        <input type="hidden" name="redirect_to" value="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">
+        <div class="edit-row-fields">
+          <label>Participant
+            <select name="participant_id" required>
+              <option value="">— select —</option>
+              {% for p in participants %}<option value="{{ p.id }}">{{ p.mw_username }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>Role
+            <select name="role" required>
+              {% for r in admin_roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+            </select>
+          </label>
+        </div>
+        <button type="submit">Add moderator</button>
+      </form>
+      {% endif %}
     </details>
-    {% endif %}
-  </div>
-
-  <!-- ── Phase 6 initialisation ────────────────────────── -->
-  {% if is_admin and conversation.phase_informed_voting %}
-  <h3 class="section-heading">Informed voting — setup</h3>
-  <div class="edit-form">
-    {% if conversation.phase6_polis_conversation_id %}
-    <p style="font-size:14px">
-      Phase 6 Polis conversation: <code>{{ conversation.phase6_polis_conversation_id }}</code>
-      &nbsp;·&nbsp;
-      {{ conversation.featured_statements | selectattr('confirmed_by_admin') | selectattr('phase6_polis_statement_id', 'ne', none) | list | length }}
-      of
-      {{ conversation.featured_statements | selectattr('confirmed_by_admin') | list | length }}
-      statements seeded.
-    </p>
-    {% else %}
-    <p style="font-size:14px;margin-bottom:.75rem">
-      Phase 6 is enabled but not yet initialised. Initialising creates a dedicated
-      Polis conversation and seeds all confirmed featured statements into it.
-      Run this once, after argument mapping is substantively complete.
-    </p>
-    <form method="post"
-          action="{{ url_for('admin.admin_phase6_init', conv_id=conversation.id) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn-small">Initialise Phase 6</button>
-    </form>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  <!-- ── Content & access ─────────────────────────────── -->
-  <h3 class="section-heading">Content &amp; access</h3>
-  <div class="conv-action-grid">
-
-    <a href="{{ url_for('admin.admin_conversation_statements', conv_id=conversation.id) }}"
-       class="conv-action-card">
-      <div class="conv-action-title">Statements</div>
-      <div class="conv-action-desc">Review, approve or hide participant statements; add seed statements</div>
-    </a>
-
-    <a href="{{ url_for('admin.admin_conversation_invites', conv_id=conversation.id) }}"
-       class="conv-action-card">
-      <div class="conv-action-title">Invites</div>
-      <div class="conv-action-desc">
-        {{ invite_count }} invite{{ 's' if invite_count != 1 }} · manage who can join
-      </div>
-    </a>
-
-    <a href="{{ url_for('admin.admin_conversation_featured', conv_id=conversation.id) }}"
-       class="conv-action-card">
-      <div class="conv-action-title">Featured statements</div>
-      <div class="conv-action-desc">
-        {{ conversation.featured_statements | length }} featured · curate for argument mapping
-      </div>
-    </a>
-
   </div>
 
   {% if is_admin %}
+  {# ── Configuration — settings (inline; no separate page yet) ── #}
+  <div class="console-section">
+    <div class="console-section-label">Configuration</div>
 
-  <!-- ── Status ────────────────────────────────────────── -->
-  <h3 class="section-heading">Status</h3>
-  <div class="edit-form">
-
-    {% if not conversation.active %}
-    <p class="muted" style="font-size:13px">
-      This consultation is <strong>permanently closed</strong>.
-      The 30-day identity reveal window has started and cannot be reset.
-    </p>
-
-    {% else %}
-
-    <!-- Pause / Resume now lives in the Phases block above. -->
-
-    <!-- Close (irreversible) -->
-    <div class="close-warning">
-      <p style="font-weight:600;margin-bottom:.35rem">Close permanently</p>
-      <p style="font-size:13px;margin-bottom:.75rem">
-        Closing is <strong>irreversible</strong> and immediately starts the 30-day identity
-        reveal window. Use <em>Pause</em> above if you only need to temporarily suspend the
-        consultation.
-      </p>
-      <form id="close-permanently-form" method="post"
-            action="{{ url_for('admin.admin_conversation_close', conv_id=conversation.id) }}"
-            style="display:inline">
+    <details class="phase-advanced">
+      <summary>Settings — title, intro/outro, access policy</summary>
+      <form method="post" class="panel"
+            action="{{ url_for('admin.admin_conversation_edit', conv_id=conversation.id) }}"
+            style="margin-top:.75rem">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn-small btn-danger">Close permanently</button>
+        <div class="edit-row-fields">
+          <label>Title
+            <input type="text" name="title" value="{{ conversation.title }}" required>
+          </label>
+          <label>Polis ID (zinvite, read-only)
+            <input type="text" value="{{ conversation.polis_id }}" readonly style="background:#f5f5f5;color:#666">
+          </label>
+          <label>Access policy
+            <select name="access_policy">
+              {% for p in ['public', 'invite_only'] %}
+              <option value="{{ p }}" {% if conversation.access_policy == p %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <div class="edit-row-texts">
+          <label>Intro text (HTML, optional)
+            <textarea name="intro_text" rows="4">{{ conversation.intro_text or '' }}</textarea>
+          </label>
+          <label>Outro text (HTML, optional)
+            <textarea name="outro_text" rows="4">{{ conversation.outro_text or '' }}</textarea>
+          </label>
+        </div>
+        <button type="submit">Save settings</button>
       </form>
-      <script nonce="{{ csp_nonce }}">
-      document.getElementById('close-permanently-form').addEventListener('submit', function(e) {
-        if (!confirm('Close this consultation permanently?\n\nThis cannot be undone and starts the identity reveal timeline.')) {
-          e.preventDefault();
-        }
-      });
-      </script>
+    </details>
+  </div>
+
+  {# ── Danger zone ──────────────────────────────────────────────────────── #}
+  <div class="console-section">
+    <div class="console-section-label" style="color:var(--disagree)">Ending the consultation</div>
+    <div class="danger-zone">
+      {% if not conversation.active %}
+      <div class="danger-row">
+        <div class="danger-row-main">
+          <div class="danger-row-title">Permanently closed</div>
+          <div class="danger-row-desc">The 30-day identity-reveal window has started and cannot be reset.</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="danger-row">
+        <div class="danger-row-main">
+          <div class="danger-row-title">Close permanently</div>
+          <div class="danger-row-desc">Irreversible. Opens the report and starts the 30-day identity-reveal window. Only do this when the process is genuinely over.</div>
+        </div>
+        <form id="close-permanently-form" method="post"
+              action="{{ url_for('admin.admin_conversation_close', conv_id=conversation.id) }}" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-small btn-danger">Close permanently…</button>
+        </form>
+      </div>
+      {% endif %}
+      {# TODO(#145): a 'Delete consultation' danger-row (disabled with an inline
+         reason when participation exists) goes here. Needs a delete route + a
+         no-valid-votes guard. #}
     </div>
-
-    {% endif %}
-
   </div>
-
-  <!-- ── Settings ──────────────────────────────────────── -->
-  <h3 class="section-heading">Settings</h3>
-  <div class="edit-form">
-    <form method="post"
-          action="{{ url_for('admin.admin_conversation_edit', conv_id=conversation.id) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="edit-row-fields">
-        <label>Title
-          <input type="text" name="title" value="{{ conversation.title }}" required>
-        </label>
-        <label>Polis ID (zinvite, read-only)
-          <input type="text" value="{{ conversation.polis_id }}" readonly style="background:#f5f5f5;color:#666">
-        </label>
-        <label>Access policy
-          <select name="access_policy">
-            {% for p in ['public', 'invite_only'] %}
-            <option value="{{ p }}" {% if conversation.access_policy == p %}selected{% endif %}>{{ p }}</option>
-            {% endfor %}
-          </select>
-        </label>
-      </div>
-      <div class="edit-row-texts">
-        <label>Intro text (HTML, optional)
-          <textarea name="intro_text" rows="4">{{ conversation.intro_text or '' }}</textarea>
-        </label>
-        <label>Outro text (HTML, optional)
-          <textarea name="outro_text" rows="4">{{ conversation.outro_text or '' }}</textarea>
-        </label>
-      </div>
-      <button type="submit">Save settings</button>
-    </form>
-  </div>
-
+  <script nonce="{{ csp_nonce }}">
+    var cf = document.getElementById('close-permanently-form');
+    if (cf) cf.addEventListener('submit', function (e) {
+      if (!confirm('Close this consultation permanently?\n\nThis cannot be undone and starts the identity reveal timeline.')) e.preventDefault();
+    });
+  </script>
   {% endif %}{# is_admin #}
 
-  <!-- ── Moderators ─────────────────────────────────────── -->
-  <h3 class="section-heading">Moderators</h3>
-
-  {% if conv_roles %}
-  <table class="admin-table">
-    <thead>
-      <tr>
-        <th>Participant</th>
-        <th>Role</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for role in conv_roles %}
-      <tr>
-        <td>{{ role.participant.mw_username }}</td>
-        <td>{{ role.role }}</td>
-        <td>
-          {% if can_manage_roles %}
-          <form method="post"
-                action="{{ url_for('admin.admin_role_remove', role_id=role.id) }}"
-                style="display:inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="redirect_to"
-                   value="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">
-            <button type="submit" class="btn-small btn-danger">remove</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="muted" style="margin-bottom:1rem;font-size:14px">No moderators assigned.</p>
-  {% endif %}
-
-  {% if can_manage_roles %}
-  <div class="edit-form">
-    <h3>Add moderator</h3>
-    <form method="post" action="{{ url_for('admin.admin_role_add') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="conversation_id" value="{{ conversation.id }}">
-      <input type="hidden" name="redirect_to"
-             value="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">
-      <div class="edit-row-fields">
-        <label>Participant
-          <select name="participant_id" required>
-            <option value="">— select —</option>
-            {% for p in participants %}
-            <option value="{{ p.id }}">{{ p.mw_username }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label>Role
-          <select name="role" required>
-            {% for r in admin_roles %}
-            <option value="{{ r }}">{{ r }}</option>
-            {% endfor %}
-          </select>
-        </label>
-      </div>
-      <button type="submit">Add</button>
-    </form>
-  </div>
-  {% endif %}
-
 </div>
+
+{# Generic per-box Guided/Advanced switch — drives any [data-mode] box with a
+   .mode-switch (.pc-guided / .pc-advanced). Only the phase box has one today. #}
+<script nonce="{{ csp_nonce }}">
+  document.querySelectorAll('[data-mode] .mode-switch').forEach(function (sw) {
+    var box = sw.closest('[data-mode]');
+    var g = sw.querySelector('.pc-guided'), a = sw.querySelector('.pc-advanced');
+    function set(adv) {
+      box.dataset.mode = adv ? 'advanced' : 'simple';
+      g.setAttribute('aria-pressed', String(!adv));
+      a.setAttribute('aria-pressed', String(adv));
+    }
+    g.addEventListener('click', function () { set(false); });
+    a.addEventListener('click', function () { set(true); });
+  });
+
+  // Advanced phase toggles: darken the Save button once something changes, so the
+  // pending save isn't overlooked.
+  document.querySelectorAll('.phases-form').forEach(function (f) {
+    var save = f.querySelector('.phases-save');
+    if (!save) return;
+    f.addEventListener('change', function () { save.classList.add('phases-save--dirty'); });
+  });
+</script>
 
 {% endblock %}

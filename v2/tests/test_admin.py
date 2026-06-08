@@ -1,4 +1,5 @@
 """Tests for admin conversation management, roles, and phase toggles."""
+import re
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -123,6 +124,27 @@ def test_phase_toggles_on(admin_client, conv):
     assert conv.phase_argument_mapping is False
 
 
+def test_advanced_phases_form_persists_end_to_end(admin_client, conv):
+    """Render the console, submit exactly what the advanced form posts, and confirm
+    the change persists AND the re-rendered advanced checkboxes reflect it."""
+    conv.phase_submission = True
+    db.session.commit()
+    # The advanced form posts only the ticked boxes (here: argument_mapping + cleanup).
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/phases',
+                             data={'phase_argument_mapping': '1', 'phase_cleanup': '1'},
+                             follow_redirects=True)
+    assert resp.status_code == 200
+    db.session.refresh(conv)
+    assert conv.phase_submission is False          # unticked → cleared
+    assert conv.phase_argument_mapping is True     # ticked → set
+    assert conv.phase_cleanup is True
+    # The re-rendered advanced form reflects the saved state.
+    page = admin_client.get(f'/admin/conversations/{conv.id}').data.decode()
+    assert re.search(r'name="phase_argument_mapping"[^>]*checked', page)
+    assert re.search(r'name="phase_cleanup"[^>]*checked', page)
+    assert not re.search(r'name="phase_submission"[^>]*checked', page)
+
+
 def test_phase_toggles_off(admin_client, conv):
     conv.phase_submission = True
     db.session.commit()
@@ -239,6 +261,21 @@ def test_moderator_sees_readonly_stepper(client, conv, participant):
     assert b'phase/advance' not in resp.data        # no actionable form
 
 
+def test_moderator_sees_roster_readonly(client, conv, participant):
+    """A moderator sees the moderator roster (read-only) but no manage controls
+    or settings — the roster must not be hidden behind the admin-only block."""
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='moderator'))
+    db.session.commit()
+    login(client, 'testuser')
+    resp = client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'testuser' in resp.data                  # roster lists the moderator
+    assert b'Add moderator' not in resp.data         # cannot manage roles
+    assert b'Save settings' not in resp.data         # no settings form
+    assert b'roles/' not in resp.data                # no add/remove role actions
+
+
 def test_move_from_non_linear_state_rejected(admin_client, conv):
     conv.phase_submission = True
     conv.phase_argument_mapping = True            # non-linear
@@ -266,21 +303,21 @@ def test_move_to_argument_mapping_blocked_without_featured(admin_client, conv):
 def test_move_to_informed_voting_runs_phase6_init(admin_client, conv):
     """Moving into Informed voting folds in Phase 6 init: creates the Polis
     conversation and seeds the confirmed featured statements, atomically."""
-    conv.phase_argument_mapping = True
+    conv.phase_cleanup = True                     # next move: cleanup → informed vote
     db.session.commit()
     fs = _add_featured(conv)
     _move(admin_client, conv)
     db.session.refresh(conv)
     db.session.refresh(fs)
     assert conv.phase_informed_voting is True
-    assert conv.phase_argument_mapping is False
+    assert conv.phase_cleanup is False
     assert conv.phase6_polis_conversation_id == 'p6conv1234'
     assert fs.phase6_polis_statement_id == 42
 
 
 def test_move_to_informed_voting_init_failure_rolls_back(admin_client, conv):
     """If Phase 6 seeding fails, the informed-voting flag is NOT set (atomic)."""
-    conv.phase_argument_mapping = True
+    conv.phase_cleanup = True                     # next move: cleanup → informed vote
     db.session.commit()
     _add_featured(conv)
     with patch('app.PolisServerClient.set_vis_type'), \
@@ -291,8 +328,29 @@ def test_move_to_informed_voting_init_failure_rolls_back(admin_client, conv):
                           data=_checks_for(conv))
     db.session.refresh(conv)
     assert conv.phase_informed_voting is False     # rolled back
-    assert conv.phase_argument_mapping is True     # prior flag preserved
+    assert conv.phase_cleanup is True              # prior flag preserved
     assert conv.phase6_polis_conversation_id is None
+
+
+def test_cleanup_phase_sits_between_arguments_and_informed_vote(admin_client, conv):
+    """#163: the passive Cleanup phase is inserted between Arguments and Informed vote."""
+    keys = [s['key'] for s in PHASE_SEQUENCE]
+    assert keys.index('cleanup') == keys.index('argument_mapping') + 1
+    assert keys.index('cleanup') == keys.index('informed_voting') - 1
+
+
+def test_move_arguments_to_cleanup_does_not_init_phase6(admin_client, conv):
+    """Moving Arguments → Cleanup flips only the cleanup flag; Phase 6 init happens on
+    the next move (Cleanup → Informed vote), not here."""
+    conv.phase_argument_mapping = True
+    db.session.commit()
+    _add_featured(conv)
+    _move(admin_client, conv)
+    db.session.refresh(conv)
+    assert conv.phase_cleanup is True
+    assert conv.phase_argument_mapping is False
+    assert conv.phase_informed_voting is False
+    assert conv.phase6_polis_conversation_id is None   # not initialised yet
 
 
 def test_move_to_public_results_auto_closes(admin_client, conv):
@@ -334,7 +392,8 @@ def test_move_vis_type_failure_flashes(admin_client, conv):
 def test_move_syncs_vis_type(admin_client, conv):
     """vis_type=1 entering a results stage, 0 otherwise."""
     _add_featured(conv)
-    expectations = [0, 1, 0, 0, 1]   # submission, featured(personal), argument, informed, public
+    # explore, featured(personal), arguments, cleanup, informed, report
+    expectations = [0, 1, 0, 0, 0, 1]
     for expected in expectations:
         with patch('app.PolisServerClient.set_vis_type') as m, \
              patch('app.PolisServerClient.create_conversation', return_value='p6conv1234'), \
@@ -363,7 +422,7 @@ def test_guided_box_renders_checklist(admin_client, conv):
     assert resp.status_code == 200
     assert b'phase-move-box' in resp.data
     assert b'phase-move-check' in resp.data          # checklist present
-    assert b'Move on to Submission' in resp.data
+    assert b'Move on to Explore' in resp.data        # renamed: Submission → Explore
     assert b'phase-move-submit' in resp.data
     # Submit ships enabled (no-JS can advance; route enforces server-side); JS
     # disables it until all ticked.
@@ -383,7 +442,7 @@ def test_guided_box_shows_unmet_machine_check(admin_client, conv):
 
 
 def test_pause_control_in_phases_block_not_status(admin_client, conv):
-    """Pause/Resume lives in the Phases block (once), not the Status block."""
+    """Pause/Resume lives once, in the phase hero (directly under the phase bar)."""
     conv.phase_personal_results = True            # a live, mid-flow phase
     db.session.commit()
     resp = admin_client.get(f'/admin/conversations/{conv.id}')
@@ -392,9 +451,8 @@ def test_pause_control_in_phases_block_not_status(admin_client, conv):
     assert resp.data.count(b'/pause"') == 1                       # one pause form, not duplicated
     assert b'temporarily disables voting without starting' in resp.data   # active copy
     assert b'btn-pause' in resp.data
-    # Not in the Status block.
-    status_tail = resp.data.split(b'<h3 class="section-heading">Status</h3>')[1]
-    assert b'/pause"' not in status_tail
+    # The pause row sits inside the phase hero, before the management grid.
+    assert resp.data.index(b'phase-pause-row') < resp.data.index(b'Content &amp; access')
 
 
 def test_pause_control_paused_state_copy(admin_client, conv):
@@ -459,26 +517,57 @@ def test_informed_voting_newcomers_has_no_machine_check():
     assert iv['newcomers'].get('check') is None
 
 
-def test_move_to_informed_voting_blocked_if_already_initialised(admin_client, conv):
-    """The guided route refuses to re-init Phase 6 (precheck), without any Polis call."""
-    conv.phase_argument_mapping = True
+def test_move_to_informed_voting_proceeds_if_already_initialised(admin_client, conv):
+    """If Phase 6 is already initialised, moving to Informed vote PROCEEDS without
+    re-initialising — re-init adds no value and would fail on the UNIQUE constraint."""
+    conv.phase_cleanup = True                     # next move: cleanup → informed vote
     conv.phase6_polis_conversation_id = 'pre-existing'
     db.session.commit()
     _add_featured(conv)
     with patch('app.PolisServerClient.create_conversation') as cc, \
          patch('app.PolisServerClient.set_vis_type'):
-        resp = admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
-                                 data=_checks_for(conv), follow_redirects=True)
-    assert b'already initialised' in resp.data.lower()
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                          data=_checks_for(conv))
     db.session.refresh(conv)
-    assert conv.phase_informed_voting is False
-    cc.assert_not_called()
+    assert conv.phase_informed_voting is True                       # advanced
+    assert conv.phase_cleanup is False
+    assert conv.phase6_polis_conversation_id == 'pre-existing'      # unchanged
+    cc.assert_not_called()                                          # no re-init
+
+
+def test_move_to_informed_voting_seeds_round5_featured_set(admin_client, conv):
+    """Moving to Informed vote seeds round 6 with exactly the round-5 CONFIRMED featured
+    statements — unconfirmed ones are excluded, so round 6 reflects round 5."""
+    conv.phase_cleanup = True
+    db.session.commit()
+    fs1 = _add_featured(conv, tid=1, text='Featured A')
+    fs2 = _add_featured(conv, tid=2, text='Featured B')
+    unconf = FeaturedStatement(conversation_id=conv.id, polis_statement_id=3,
+                               statement_text='Not confirmed', confirmed_by_admin=False)
+    db.session.add(unconf); db.session.commit()
+
+    seeded = {}
+    def fake_seed(p6id, text):
+        seeded[text] = 100 + len(seeded)
+        return seeded[text]
+    with patch('app.PolisServerClient.set_vis_type'), \
+         patch('app.PolisServerClient.create_conversation', return_value='p6round'), \
+         patch('app.PolisServerClient.add_seed_return_id', side_effect=fake_seed):
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance', data=_checks_for(conv))
+
+    db.session.refresh(conv); db.session.refresh(fs1)
+    db.session.refresh(fs2); db.session.refresh(unconf)
+    assert conv.phase6_polis_conversation_id == 'p6round'
+    assert set(seeded) == {'Featured A', 'Featured B'}     # exactly the confirmed set
+    assert fs1.phase6_polis_statement_id is not None
+    assert fs2.phase6_polis_statement_id is not None
+    assert unconf.phase6_polis_statement_id is None        # unconfirmed not seeded
 
 
 def test_move_informed_voting_empty_text_aborts(admin_client, conv):
     """A confirmed featured statement with no cached text aborts Phase 6 init before
     seeding; the phase flag is not set."""
-    conv.phase_argument_mapping = True
+    conv.phase_cleanup = True                     # next move: cleanup → informed vote
     db.session.commit()
     _add_featured(conv, text='')
     with patch('app.PolisServerClient.set_vis_type'), \
@@ -498,7 +587,7 @@ def test_move_commit_failure_rolls_back_and_logs_orphan(admin_client, conv, capl
     back and the orphaned Polis conversation id is logged for cleanup."""
     import logging
     from sqlalchemy.exc import IntegrityError
-    conv.phase_argument_mapping = True
+    conv.phase_cleanup = True                     # next move: cleanup → informed vote
     db.session.commit()
     _add_featured(conv)
     with patch('app.PolisServerClient.set_vis_type'), \
@@ -520,7 +609,7 @@ def test_move_commit_db_error_rolls_back_and_logs_orphan(admin_client, conv, cap
     conversation id, and warns the organizer not to blind-retry."""
     import logging
     from sqlalchemy.exc import OperationalError
-    conv.phase_argument_mapping = True
+    conv.phase_cleanup = True                     # next move: cleanup → informed vote
     db.session.commit()
     _add_featured(conv)
     with patch('app.PolisServerClient.set_vis_type'), \
