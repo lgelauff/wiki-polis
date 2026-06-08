@@ -427,7 +427,7 @@
         <div class="at-orient-mini">What is this tab? <strong>A two-step task on the most divisive statements.</strong></div>
       </div>
       <button class="at-orient-toggle" type="button" id="at-orient-toggle-{{ conversation.slug }}"
-              aria-expanded="true" aria-controls="at-orient-body-{{ conversation.slug }}">collapse ▲</button>
+              aria-expanded="true" aria-controls="at-orient-body-{{ conversation.slug }}">collapse <span aria-hidden="true">▲</span></button>
     </div>
 
     <div class="arg-panels">
@@ -538,8 +538,8 @@
             </div>
           </div>
 
-          {# Locked-state note — shown until this side's gate opens #}
-          {% if not item.pro_gate %}
+          {# Locked-state note — only when gate is closed and no cards exist yet #}
+          {% if not item.pro_gate and item.pro_args | length == 0 %}
           <p class="at-col-note">Other arguments appear here once you've added yours or skipped — so you form your own view first.</p>
           {% endif %}
 
@@ -664,8 +664,8 @@
             </div>
           </div>
 
-          {# Locked-state note — shown until this side's gate opens #}
-          {% if not item.con_gate %}
+          {# Locked-state note — only when gate is closed and no cards exist yet #}
+          {% if not item.con_gate and item.con_args | length == 0 %}
           <p class="at-col-note">Other arguments appear here once you've added yours or skipped — so you form your own view first.</p>
           {% endif %}
 
@@ -748,7 +748,7 @@
         <button class="at-navbtn at-navbtn--prev" type="button"
                 {% if loop.first %}disabled{% endif %}
                 aria-label="Previous statement">← Previous</button>
-        <div class="at-circles" id="circles-{{ fs.id }}" aria-label="Statement progress"></div>
+        <div class="at-circles" id="circles-{{ fs.id }}" role="group" aria-label="Statement progress"></div>
         <button class="at-navbtn at-navbtn--next" type="button"
                 {% if loop.last %}disabled{% endif %}
                 aria-label="Next statement">Next →</button>
@@ -1575,10 +1575,11 @@
     if (localStorage.getItem(key) === 'collapsed') {
       orient.classList.add('at-collapsed');
       btn.textContent = 'what is this? ▼';
+      btn.setAttribute('aria-expanded', 'false');
     }
     btn.addEventListener('click', function () {
       var c = orient.classList.toggle('at-collapsed');
-      btn.textContent = c ? 'what is this? ▼' : 'collapse ▲';
+      btn.innerHTML = c ? 'what is this? <span aria-hidden="true">▼</span>' : 'collapse <span aria-hidden="true">▲</span>';
       btn.setAttribute('aria-expanded', c ? 'false' : 'true');
       try { localStorage.setItem(key, c ? 'collapsed' : 'open'); } catch(e) {}
     });
@@ -1744,6 +1745,9 @@
       block.setAttribute('aria-hidden', 'true');
     }
   });
+
+  // Paint circles on load so returning participants see correct completion state.
+  paintAllCircles();
 
   // Activate the panel whose id matches the URL hash (e.g. after a
   // contribute/skip form posts and redirects back to #fs-N).
@@ -2001,16 +2005,23 @@
         block.dataset.conVoteReady = conReady ? 'true' : 'false';
       }
 
-      // Enable voting on cards where K+1 threshold is met
+      // Enable voting on cards where K+1 threshold is met; clear aria-disabled
       if (block) {
         ['pro', 'con'].forEach(function (s) {
           var ready = s === 'pro' ? proReady : conReady;
+          var col = block.querySelector('.at-col--' + (s === 'pro' ? 'for' : 'against'));
+          // Remove the locked-state note now that the gate is open
+          if (col) { var note = col.querySelector('.at-col-note'); if (note) note.remove(); }
           if (ready) {
             block.querySelectorAll('.argument-card[data-side="' + s + '"]').forEach(function (card) {
               if (card.dataset.own !== 'true') {
                 card.dataset.canVote = 'true';
                 var cb = card.querySelector('.argument-checkbox');
-                if (cb) cb.tabIndex = 0;
+                if (cb) {
+                  cb.tabIndex = 0;
+                  cb.removeAttribute('aria-disabled');
+                  cb.removeAttribute('aria-describedby');
+                }
               }
             });
           }
@@ -2020,9 +2031,14 @@
 
       paintAllCircles();
 
-      // Announce gate unlock to screen readers
+      // Announce gate unlock to screen readers (blank-then-rAF so repeat panels re-trigger)
       var alertEl = document.getElementById('arg-alert');
-      if (alertEl) alertEl.textContent = 'Step 2 unlocked — you can now mark the most important arguments.';
+      if (alertEl) {
+        alertEl.textContent = '';
+        requestAnimationFrame(function () {
+          alertEl.textContent = 'Step 2 unlocked — you can now mark the most important arguments.';
+        });
+      }
     }
   }
 
