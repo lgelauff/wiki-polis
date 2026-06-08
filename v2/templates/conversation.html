@@ -19,6 +19,8 @@
 
 <div class="container">
 
+  <h1 class="sr-only">{{ conversation.title }}</h1>
+
   {% if conversation.intro_text %}
   <div class="intro-text">
     {{ conversation.intro_text | safe }}
@@ -76,23 +78,27 @@
   <div class="tab-bar" role="tablist">
     {% if 'vote' in tabs %}
     <button id="tab-btn-vote" class="tab-btn{% if tabs[0] == 'vote' %} tab-btn--active{% endif %}"
-            role="tab" data-tab="tab-vote"
-            aria-selected="{{ 'true' if tabs[0] == 'vote' else 'false' }}">Vote</button>
+            role="tab" data-tab="tab-vote" aria-controls="tab-vote"
+            aria-selected="{{ 'true' if tabs[0] == 'vote' else 'false' }}"
+            tabindex="{{ '0' if tabs[0] == 'vote' else '-1' }}">Vote</button>
     {% endif %}
     {% if 'results' in tabs %}
     <button id="tab-btn-results" class="tab-btn{% if tabs[0] == 'results' %} tab-btn--active{% endif %}"
-            role="tab" data-tab="tab-results"
-            aria-selected="{{ 'true' if tabs[0] == 'results' else 'false' }}">Results</button>
+            role="tab" data-tab="tab-results" aria-controls="tab-results"
+            aria-selected="{{ 'true' if tabs[0] == 'results' else 'false' }}"
+            tabindex="{{ '0' if tabs[0] == 'results' else '-1' }}">Results</button>
     {% endif %}
     {% if 'arguments' in tabs %}
     <button id="tab-btn-arguments" class="tab-btn{% if tabs[0] == 'arguments' %} tab-btn--active{% endif %}"
-            role="tab" data-tab="tab-arguments"
-            aria-selected="{{ 'true' if tabs[0] == 'arguments' else 'false' }}">Arguments</button>
+            role="tab" data-tab="tab-arguments" aria-controls="tab-arguments"
+            aria-selected="{{ 'true' if tabs[0] == 'arguments' else 'false' }}"
+            tabindex="{{ '0' if tabs[0] == 'arguments' else '-1' }}">Arguments</button>
     {% endif %}
     {% if 'informed-voting' in tabs %}
     <button id="tab-btn-informed-voting" class="tab-btn{% if tabs[0] == 'informed-voting' %} tab-btn--active{% endif %}"
-            role="tab" data-tab="tab-informed-voting"
-            aria-selected="{{ 'true' if tabs[0] == 'informed-voting' else 'false' }}">Informed voting</button>
+            role="tab" data-tab="tab-informed-voting" aria-controls="tab-informed-voting"
+            aria-selected="{{ 'true' if tabs[0] == 'informed-voting' else 'false' }}"
+            tabindex="{{ '0' if tabs[0] == 'informed-voting' else '-1' }}">Informed voting</button>
     {% endif %}
   </div>
   {% endif %}
@@ -114,10 +120,17 @@
             <span id="votes-total">?</span>
           </span>
           <div class="vote-progress-bar-wrap">
-            <div class="vote-progress-bar" id="vote-progress-bar"></div>
+            <div class="vote-progress-bar" id="vote-progress-bar"
+                 role="progressbar" aria-label="Statements voted" aria-valuemin="0" aria-valuenow="0"></div>
           </div>
           <span class="vote-progress-queued" id="vote-progress-queued"></span>
         </div>
+
+        {# ── SR-only live region — announces each new statement to screen
+             readers (the visible <pa-statement> text is not in a live region
+             and focus moves to the vote buttons, so the statement change is
+             otherwise silent). ── #}
+        <p class="sr-only" id="statement-live" role="status" aria-live="polite"></p>
 
         {# ── Statement card — always visible ── #}
         <div class="statement-card" id="statement-card">
@@ -224,12 +237,13 @@
         <div id="composer-suggest" class="v2-composer" hidden>
           <div class="v2-composer-header">
             <div>
-              <div class="v2-composer-title">Suggest different wording</div>
-              <div class="v2-composer-helper">Stays close to the same idea — just a clearer or fairer phrasing.</div>
+              <div class="v2-composer-title" id="composer-suggest-title">Suggest different wording</div>
+              <div class="v2-composer-helper" id="composer-suggest-helper">Stays close to the same idea — just a clearer or fairer phrasing.</div>
             </div>
             <span class="propose-charcount"><span id="suggest-len">0</span> / 280</span>
           </div>
           <textarea id="suggest-input" class="v2-composer-textarea" maxlength="280"
+                    aria-labelledby="composer-suggest-title" aria-describedby="composer-suggest-helper"
                     placeholder="Re-confirmation every five years would balance accountability against admin burnout…"></textarea>
           <div class="v2-composer-footer">
             <span class="v2-composer-hint">Goes into the pool with the original</span>
@@ -244,12 +258,13 @@
         <div id="composer-newstmt" class="v2-composer" hidden>
           <div class="v2-composer-header">
             <div>
-              <div class="v2-composer-title">Propose a new statement</div>
-              <div class="v2-composer-helper">A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool.</div>
+              <div class="v2-composer-title" id="composer-newstmt-title">Propose a new statement</div>
+              <div class="v2-composer-helper" id="composer-newstmt-helper">A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool.</div>
             </div>
             <span class="propose-charcount"><span id="newstmt-len">0</span> / 280</span>
           </div>
           <textarea id="newstmt-input" class="v2-composer-textarea" maxlength="280"
+                    aria-labelledby="composer-newstmt-title" aria-describedby="composer-newstmt-helper"
                     placeholder="A new angle on the topic…"></textarea>
           <div class="v2-composer-footer">
             <span class="v2-composer-hint">A separate statement — others will vote on it too</span>
@@ -286,7 +301,7 @@
           <pa-submit-button id="pvb-submit-newstmt" submitfor="newstmt-input">new-statement</pa-submit-button>
         </span>
 
-        <div id="conv-error" hidden>
+        <div id="conv-error" role="alert" hidden>
           <p class="muted" id="conv-error-msg">Unable to load statements. Please refresh the page.</p>
         </div>
 
@@ -385,6 +400,11 @@
        class="tab-panel arguments-tab{% if tabs|length > 1 and tabs[0] != 'arguments' %} tab-panel--hidden{% endif %}"
        role="tabpanel" aria-labelledby="tab-btn-arguments"
        data-voting="{{ 'true' if arg_voting_open else 'false' }}">
+
+    {# SR-only assertive region — vote-rejection reasons are shown transiently
+       in the visible status strip (and reverted); mirror them here so screen
+       readers hear them once without announcing the instructional baseline. #}
+    <p class="sr-only" id="arg-alert" role="alert"></p>
 
     {% if featured_data | length == 0 %}
     <div class="landing-section">
@@ -509,10 +529,11 @@
             <div class="contribute-composer">
               <div class="contribute-composer-header">
                 <span class="contribute-glyph filled">+</span>
-                <span class="contribute-composer-label">Your for-argument · one sentence, one claim</span>
+                <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-pro">Your for-argument · one sentence, one claim</span>
                 <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
               </div>
               <textarea class="contribute-textarea" maxlength="280" rows="3"
+                        aria-labelledby="contribute-label-{{ fs.id }}-pro"
                         placeholder="Add a short for-argument (one sentence, max 280 characters)…"></textarea>
               <div class="contribute-actions">
                 <button type="button" class="btn-secondary contribute-skip-btn">Nothing to add</button>
@@ -549,7 +570,9 @@
                data-vote-url="{{ url_for('participant.argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
                data-unvote-url="{{ url_for('participant.argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
                data-csrf="{{ csrf_token() }}">
-            <button class="argument-checkbox" aria-label="Mark as most important"
+            <button class="argument-checkbox"
+                    aria-pressed="{{ 'true' if is_picked else 'false' }}"
+                    aria-label="{{ 'Unmark as most important' if is_picked else 'Mark as most important' }}"
                     tabindex="{{ '0' if pro_can_vote else '-1' }}">
               {% if is_picked %}
               <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
@@ -566,6 +589,7 @@
                           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
                   <strong class="importance-count">{{ arg.votes | length }}</strong>
+                  <span class="sr-only"> importance votes</span>
                 </span>
                 <span class="argument-by">{{ item.proposer_pseudonyms.get(arg.proposer_id, 'admin') if arg.proposer_id else 'admin' }}</span>
                 {% if is_own %}<span class="argument-yours">YOURS</span>{% endif %}
@@ -621,10 +645,11 @@
             <div class="contribute-composer">
               <div class="contribute-composer-header">
                 <span class="contribute-glyph filled">−</span>
-                <span class="contribute-composer-label">Your against-argument · one sentence, one claim</span>
+                <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-con">Your against-argument · one sentence, one claim</span>
                 <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
               </div>
               <textarea class="contribute-textarea" maxlength="280" rows="3"
+                        aria-labelledby="contribute-label-{{ fs.id }}-con"
                         placeholder="Add a short against-argument (one sentence, max 280 characters)…"></textarea>
               <div class="contribute-actions">
                 <button type="button" class="btn-secondary contribute-skip-btn">Nothing to add</button>
@@ -661,7 +686,9 @@
                data-vote-url="{{ url_for('participant.argument_vote', slug=conversation.slug, arg_id=arg.id) }}"
                data-unvote-url="{{ url_for('participant.argument_unvote', slug=conversation.slug, arg_id=arg.id) }}"
                data-csrf="{{ csrf_token() }}">
-            <button class="argument-checkbox" aria-label="Mark as most important"
+            <button class="argument-checkbox"
+                    aria-pressed="{{ 'true' if is_picked else 'false' }}"
+                    aria-label="{{ 'Unmark as most important' if is_picked else 'Mark as most important' }}"
                     tabindex="{{ '0' if con_can_vote else '-1' }}">
               {% if is_picked %}
               <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
@@ -678,6 +705,7 @@
                           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
                   <strong class="importance-count">{{ arg.votes | length }}</strong>
+                  <span class="sr-only"> importance votes</span>
                 </span>
                 <span class="argument-by">{{ item.proposer_pseudonyms.get(arg.proposer_id, 'admin') if arg.proposer_id else 'admin' }}</span>
                 {% if is_own %}<span class="argument-yours">YOURS</span>{% endif %}
@@ -736,7 +764,7 @@
           <span class="stmt-dot"></span>
           INFORMED VOTE &middot; {{ loop.index }} of {{ phase6_data | length }}
         </span>
-        <span class="p6-voted-badge" hidden></span>
+        <span class="p6-voted-badge" role="alert" hidden></span>
       </div>
 
       {# Statement text #}
@@ -849,6 +877,7 @@
       btns.forEach(function (b) {
         b.classList.remove('tab-btn--active');
         b.setAttribute('aria-selected', 'false');
+        b.setAttribute('tabindex', '-1');
       });
       panels.forEach(function (p) {
         p.classList.add('tab-panel--hidden');
@@ -856,6 +885,7 @@
       });
       btn.classList.add('tab-btn--active');
       btn.setAttribute('aria-selected', 'true');
+      btn.setAttribute('tabindex', '0');
       var target = document.getElementById(btn.dataset.tab);
       if (target) {
         target.classList.remove('tab-panel--hidden');
@@ -896,13 +926,19 @@
     var voteUrl   = '{{ url_for("participant.phase6_vote", slug=conversation.slug) }}';
     var doneEl    = document.querySelector('.p6-done');
 
+    // Respect prefers-reduced-motion: a smooth auto-scroll becomes an instant
+    // jump. Read at call time so a mid-session preference change is honoured.
+    function scrollBehavior() {
+      return (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth';
+    }
+
     function scrollToNext(card) {
       var cards = Array.prototype.slice.call(document.querySelectorAll('.p6-card'));
       var idx   = cards.indexOf(card);
       var next  = cards[idx + 1];
       if (next) {
         setTimeout(function () {
-          next.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          next.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
         }, 400);
       }
     }
@@ -915,7 +951,7 @@
       if (done.length === all.length && doneEl) {
         doneEl.removeAttribute('hidden');
         setTimeout(function () {
-          doneEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          doneEl.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
         }, 400);
       }
     }
@@ -931,9 +967,9 @@
       if (skip) {
         skip.addEventListener('click', function () {
           skip.hidden = true;
-          badge.textContent = 'Skipped';
           badge.className = 'p6-voted-badge';
           badge.removeAttribute('hidden');
+          badge.textContent = 'Skipped';
           row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = true; b.classList.add('p6-voted'); });
           card.classList.add('p6-card--voted');
           markTerminal(card);
@@ -956,9 +992,9 @@
             if (resp.ok) {
               var label = vote === 1 ? 'Agreed' : vote === -1 ? 'Disagreed' : 'Passed';
               var cls   = vote === 1 ? 'agree' : vote === -1 ? 'disagree' : 'pass';
-              badge.textContent = '✓ ' + label;
               badge.className = 'p6-voted-badge p6-voted-badge--' + cls;
               badge.removeAttribute('hidden');
+              badge.textContent = '✓ ' + label;
               row.querySelectorAll('.btn-p6-vote').forEach(function (b) {
                 b.classList.toggle('p6-voted', b.dataset.vote === String(vote));
               });
@@ -970,8 +1006,8 @@
               if (skip) skip.hidden = false;
             }
           }).catch(function () {
-            badge.textContent = 'Network error — refresh to check';
             badge.removeAttribute('hidden');
+            badge.textContent = 'Network error — refresh to check';
           });
         });
       });
@@ -1001,6 +1037,7 @@
   var votedBadge       = document.getElementById('voted-badge');
   var votedLabel       = document.getElementById('voted-label');
   var votedStmtText    = document.getElementById('voted-stmt-text');
+  var stmtLive         = document.getElementById('statement-live');
   var triad            = document.getElementById('v2-triad');
   var triadLabel       = document.getElementById('v2-triad-label');
   var triadSuggest     = document.getElementById('triad-suggest');
@@ -1042,6 +1079,18 @@
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   function liveStmt() { return conv.querySelector('pa-statement'); }
+
+  // Announce the currently-displayed statement in the polite live region.
+  // The component advances pa-statement synchronously on vote, so by the time
+  // we re-enter the idle vote view liveStmt() already holds the next statement.
+  function announceStatement() {
+    if (!stmtLive) return;
+    if (isAllDone()) { stmtLive.textContent = ''; return; }
+    var s   = liveStmt();
+    var txt = s ? (s.text || '').trim() : '';
+    if (!txt && conv.statement && conv.statement.text) txt = String(conv.statement.text).trim();
+    if (txt) stmtLive.textContent = 'Statement: ' + txt;
+  }
 
   function getVotedCount() {
     try { return conv.client.participant.votes.size; } catch (e) { return 0; }
@@ -1129,6 +1178,9 @@
     // Restore keyboard focus
     var target = focusTarget || choiceRow.querySelector('.vote-choice');
     if (target) target.focus();
+
+    // Announce the new statement now that the idle vote view is showing.
+    announceStatement();
   }
 
   // ── Mode: voted ───────────────────────────────────────────────────────────────
@@ -1376,6 +1428,9 @@
     progressRow.style.display = '';
     votesDone.textContent  = done;
     votesTotal.textContent = total;
+    progressBar.setAttribute('aria-valuenow', done);
+    progressBar.setAttribute('aria-valuemax', total);
+    progressBar.setAttribute('aria-valuetext', done + ' of ' + total + ' statements voted');
     var current = conv.statement;
     progressBar.innerHTML = '';
     for (var i = 0; i < total; i++) {
@@ -1427,6 +1482,10 @@
   // `value`, never statementID.) Consumed by "change" (#69) and the error handler below.
   var lastVoteStmtId = null;
 
+  // Announce the first statement once the client has loaded (subsequent
+  // statements are announced from enterIdle as the queue advances).
+  var initialAnnounced = false;
+
   // On vote failure: mark the statement as voted in the web component so it advances,
   // then reset UI. Covers both own-statement 403s and any other transient failures.
   conv.addEventListener('particiappvotesubmiterror', function () {
@@ -1453,6 +1512,7 @@
     if (e.state === 'loaded' && conv.client) {
       updateProgress(conv.client.statements);
       handleNoStatement();
+      if (!initialAnnounced) { initialAnnounced = true; announceStatement(); }
     }
   });
 }());
@@ -1593,7 +1653,7 @@
     div.dataset.unvoteUrl = unvoteUrl;
     div.dataset.csrf = csrf;
     div.innerHTML =
-      '<button class="argument-checkbox" aria-label="Mark as most important" tabindex="-1"></button>' +
+      '<button class="argument-checkbox" aria-pressed="false" aria-label="Mark as most important" tabindex="-1"></button>' +
       '<div class="argument-body">' +
         '<p class="argument-text">' + escapeHtml(body) + '</p>' +
         '<div class="argument-meta">' +
@@ -1602,6 +1662,7 @@
               '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
             '</svg>' +
             '<strong class="importance-count">0</strong>' +
+            '<span class="sr-only"> importance votes</span>' +
           '</span>' +
           '<span class="argument-by">' + escapeHtml(pseudonym) + '</span>' +
           '<span class="argument-yours">YOURS</span>' +
@@ -1612,6 +1673,17 @@
 
   function escapeHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Reflect an argument's pick state on its checkbox: the visible checkmark
+  // plus the programmatic toggle state (aria-pressed) and the label a screen
+  // reader announces. Keeps the two in lock-step everywhere the state flips.
+  var PICK_SVG = '<svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  function setPicked(cb, picked) {
+    if (!cb) return;
+    cb.innerHTML = picked ? PICK_SVG : '';
+    cb.setAttribute('aria-pressed', picked ? 'true' : 'false');
+    cb.setAttribute('aria-label', picked ? 'Unmark as most important' : 'Mark as most important');
   }
 
   // ── Contribute wrapper state machine ─────────────────────────────────────────
@@ -1793,17 +1865,15 @@
       var fsId = getCardFsId(card);
 
       // Optimistic update
+      var cb  = card.querySelector('.argument-checkbox');
+      var cnt = card.querySelector('.importance-count');
       if (isPicked) {
         card.dataset.picked = 'false';
-        var cb = card.querySelector('.argument-checkbox');
-        if (cb) cb.innerHTML = '';
-        var cnt = card.querySelector('.importance-count');
+        setPicked(cb, false);
         if (cnt) cnt.textContent = Math.max(0, parseInt(cnt.textContent, 10) - 1);
       } else {
         card.dataset.picked = 'true';
-        var cb = card.querySelector('.argument-checkbox');
-        if (cb) cb.innerHTML = '<svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-        var cnt = card.querySelector('.importance-count');
+        setPicked(cb, true);
         if (cnt) cnt.textContent = parseInt(cnt.textContent, 10) + 1;
       }
 
@@ -1815,15 +1885,11 @@
           // Revert on error
           if (isPicked) {
             card.dataset.picked = 'true';
-            var cb = card.querySelector('.argument-checkbox');
-            if (cb) cb.innerHTML = '<svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-            var cnt = card.querySelector('.importance-count');
+            setPicked(cb, true);
             if (cnt) cnt.textContent = parseInt(cnt.textContent, 10) + 1;
           } else {
             card.dataset.picked = 'false';
-            var cb = card.querySelector('.argument-checkbox');
-            if (cb) cb.innerHTML = '';
-            var cnt = card.querySelector('.importance-count');
+            setPicked(cb, false);
             if (cnt) cnt.textContent = Math.max(0, parseInt(cnt.textContent, 10) - 1);
           }
           updateLimitReached(fsId, side);
@@ -1841,6 +1907,21 @@
               var prev = txt.textContent;
               txt.textContent = msgs[data.reason];
               strip.classList.add('arg-status-strip--error');
+              // Mirror to the assertive alert region so screen readers hear it.
+              // Blank first, then set on the next frame, so a repeated identical
+              // reason still mutates the node and is re-announced. Track the clear
+              // timer per element so back-to-back messages don't blank each other early.
+              var alertEl = document.getElementById('arg-alert');
+              if (alertEl) {
+                if (alertEl._clearTimer) clearTimeout(alertEl._clearTimer);
+                alertEl.textContent = '';
+                window.requestAnimationFrame(function () {
+                  alertEl.textContent = msgs[data.reason];
+                });
+                alertEl._clearTimer = setTimeout(function () {
+                  alertEl.textContent = '';
+                }, 3500);
+              }
               setTimeout(function () {
                 txt.textContent = prev;
                 strip.classList.remove('arg-status-strip--error');

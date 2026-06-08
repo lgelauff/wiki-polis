@@ -1017,6 +1017,14 @@ def _sync_vis_type(conv) -> bool:
 @admin_required
 def admin_conversation_phases(conv_id):
     conv = Conversation.query.get_or_404(conv_id)
+    enabling_arg_mapping = (bool(request.form.get('phase_argument_mapping'))
+                            and not conv.phase_argument_mapping)
+    if enabling_arg_mapping:
+        featured_count = FeaturedStatement.query.filter_by(conversation_id=conv_id).count()
+        if featured_count == 0:
+            flash('Cannot enable argument mapping — add at least one featured statement first.', 'error')
+            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
     conv.phase_submission       = bool(request.form.get('phase_submission'))
     conv.phase_personal_results = bool(request.form.get('phase_personal_results'))
     conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
@@ -1357,11 +1365,15 @@ def admin_statement_moderate(conv_id, tid):
         is_featured = FeaturedStatement.query.filter_by(
             conversation_id=conv_id, polis_statement_id=tid).first() is not None
         if is_featured and conv.phase_argument_mapping:
+            # Best-effort check: the mutation here is a Polis API call, not a
+            # DB write, so FOR UPDATE would be released before the call anyway.
+            # The strong DB-level invariant is enforced by admin_featured_remove,
+            # which does lock correctly before db.session.commit().
             featured_count = FeaturedStatement.query.filter_by(
                 conversation_id=conv_id).count()
             if featured_count <= 1:
                 flash(
-                    'Cannot hide the last featured statement while argument mapping is active. Disable the argument mapping phase first.',
+                    'Cannot hide or move the last featured statement to pending while argument mapping is active. Disable the argument mapping phase first.',
                     'error'
                 )
                 return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
@@ -1603,7 +1615,7 @@ def admin_featured_remove(conv_id, fs_id):
     fs = FeaturedStatement.query.filter_by(
         id=fs_id, conversation_id=conv_id).first_or_404()
     if conv.phase_argument_mapping:
-        remaining = FeaturedStatement.query.filter_by(conversation_id=conv_id).count()
+        remaining = FeaturedStatement.query.filter_by(conversation_id=conv_id).with_for_update().count()
         if remaining <= 1:
             flash('Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first.', 'error')
             return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
