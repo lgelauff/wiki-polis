@@ -182,10 +182,24 @@ PHASE_TRANSITIONS = {
     ]},
 }
 
-# Machine-verifiable preconditions: name → predicate(conv) -> bool.
+# Recommended number of featured statements. Advisory only (Phase 6 needs ≥1); the
+# ideal count depends on topic complexity — surfaced to the organizer as guidance.
+# TODO: make this per-conversation configurable when complexity tiers land.
+_RECOMMENDED_FEATURED = 15
+
+
+def _check_confirmed_featured(conv):
+    """Machine check for the featured-statement precondition. Returns (met, note):
+    met is True when at least one is confirmed (the hard requirement); note shows the
+    selected count against the recommended target so the organizer can judge coverage."""
+    n = (FeaturedStatement.query
+         .filter_by(conversation_id=conv.id, confirmed_by_admin=True).count())
+    return n > 0, f'{n} selected, {_RECOMMENDED_FEATURED} recommended'
+
+
+# Machine-verifiable preconditions: name → check(conv) -> (met: bool, note: str|None).
 _PRECONDITION_CHECKS = {
-    'has_confirmed_featured': lambda conv: FeaturedStatement.query.filter_by(
-        conversation_id=conv.id, confirmed_by_admin=True).count() > 0,
+    'has_confirmed_featured': _check_confirmed_featured,
 }
 
 
@@ -204,10 +218,10 @@ def _transition_context(conv):
     cfg = PHASE_TRANSITIONS.get(nxt['key'], {})
     preconds = []
     for p in cfg.get('preconditions', []):
-        met = None
+        met, note = None, None
         if p.get('check'):
-            met = bool(_PRECONDITION_CHECKS[p['check']](conv))
-        preconds.append({**p, 'met': met})
+            met, note = _PRECONDITION_CHECKS[p['check']](conv)
+        preconds.append({**p, 'met': met, 'note': note})
     # Consequence text — what opens, what closes, irreversibility.
     consequence = {
         'opens':  nxt['effect'],

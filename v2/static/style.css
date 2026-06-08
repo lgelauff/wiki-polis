@@ -1974,6 +1974,7 @@ a { color: var(--pass); }
 
 .phase-check-met   { color: var(--agree); font-weight: 600; }
 .phase-check-unmet { color: var(--disagree); font-weight: 600; font-size: 12px; }
+.phase-check-note  { color: var(--muted); font-size: 12px; }
 
 .phase-move-submit[disabled] { opacity: .5; cursor: not-allowed; }
 

@@ -370,6 +370,16 @@ def test_guided_box_shows_unmet_machine_check(admin_client, conv):
     assert b'not met' in resp.data
 
 
+def test_featured_check_shows_selected_count_and_recommendation(admin_client, conv):
+    """The featured-statement precondition reports '(N selected, 15 recommended)'."""
+    conv.phase_personal_results = True            # next transition → argument mapping
+    db.session.commit()
+    _add_featured(conv); _add_featured(conv, tid=2)   # 2 confirmed
+    resp = admin_client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'2 selected, 15 recommended' in resp.data
+
+
 def test_non_linear_state_suppresses_box(admin_client, conv):
     conv.phase_submission = True
     conv.phase_public_results = True

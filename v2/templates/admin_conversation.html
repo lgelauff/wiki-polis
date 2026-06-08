@@ -114,6 +114,7 @@
               {% if p.met is not none %}
                 {% if p.met %}<span class="phase-check-met"><span aria-hidden="true">✓</span><span class="sr-only">condition met</span></span>
                 {% else %}<span class="phase-check-unmet"><span aria-hidden="true">✗</span> not met yet</span>{% endif %}
+                {% if p.note %}<span class="phase-check-note">({{ p.note }})</span>{% endif %}
               {% endif %}
             </li>
             {% endfor %}
