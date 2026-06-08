@@ -20,7 +20,7 @@
   </div>
 </div>
 
-<main id="main" tabindex="-1">
+{# base.html already provides <main id="main">; don't nest a second one. #}
 <div class="console">
 
   <p class="muted" style="margin-bottom:1rem">
@@ -54,7 +54,7 @@
         {# Reusable per-box Guided/Advanced switch. Only this box has one today; the
            generic JS (bottom) drives any box with [data-mode] + .mode-switch. #}
         <span class="mode-switch" role="group" aria-label="Phase control mode">
-          <button type="button" class="pc-guided" aria-pressed="true">Guided</button>
+          <button type="button" class="pc-guided" aria-pressed="true">Simple</button>
           <button type="button" class="pc-advanced mode-adv" aria-pressed="false">Advanced</button>
         </span>
         {% endif %}
@@ -164,12 +164,12 @@
               <ul class="readiness">
                 {% for p in transition.preconditions %}
                 <li>
-                  <label class="confirm-row">
+                  <label>
                     <input type="checkbox" name="{{ p.id }}" class="phase-move-check moveon-check">
                     <span class="readiness-label">{{ p.label }}
                       {% if p.met is not none %}
-                        {% if p.met %}<span class="readiness-note">✓ {{ p.note or 'met' }}</span>
-                        {% else %}<span class="phase-check-unmet readiness-state--unmet"><span aria-hidden="true">✗</span> not met yet</span>{% if p.note %}<span class="readiness-note">({{ p.note }})</span>{% endif %}{% endif %}
+                        {% if p.met %}<span class="readiness-note">({{ p.note or 'met' }})</span>
+                        {% else %}<span class="phase-check-unmet"><span aria-hidden="true">✗</span> not met yet</span>{% if p.note %}<span class="readiness-note">({{ p.note }})</span>{% endif %}{% endif %}
                       {% endif %}
                     </span>
                   </label>
@@ -311,7 +311,7 @@
 
     <details class="phase-advanced">
       <summary>Settings — title, intro/outro, access policy</summary>
-      <form method="post"
+      <form method="post" class="panel"
             action="{{ url_for('admin.admin_conversation_edit', conv_id=conversation.id) }}"
             style="margin-top:.75rem">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -431,7 +431,6 @@
   {% endif %}{# is_admin #}
 
 </div>
-</main>
 
 {# Generic per-box Guided/Advanced switch — drives any [data-mode] box with a
    .mode-switch (.pc-guided / .pc-advanced). Only the phase box has one today. #}
