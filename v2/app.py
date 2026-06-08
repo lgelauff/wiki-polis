@@ -957,7 +957,8 @@ def admin_conversation_edit(conv_id):
     fields = _parse_conversation_form()
 
     if not fields['title']:
-        abort(400)
+        flash('Title is required.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
     conv.title         = fields['title']
     conv.intro_text    = fields['intro_text']

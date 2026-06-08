@@ -96,6 +96,18 @@ def test_edit_conversation(admin_client, conv):
     assert conv.access_policy == 'invite_only'
 
 
+def test_edit_conversation_missing_title_flashes(admin_client, conv):
+    """Blank title flashes and redirects back (not a bare 400) — matches create (#153)."""
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/edit', data={
+        'title': '   ',
+        'access_policy': 'public',
+    }, follow_redirects=True)
+    assert resp.status_code == 200
+    assert b'Title is required' in resp.data
+    db.session.refresh(conv)
+    assert conv.title == 'Admin Test Conv'          # unchanged
+
+
 # ── Phase toggles ─────────────────────────────────────────────────────────────
 
 def test_phase_toggles_on(admin_client, conv):
