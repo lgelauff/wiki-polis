@@ -416,9 +416,10 @@ def test_resync_noop_when_unchanged(admin_client, conv):
     add.assert_not_called()
 
 
-def test_resync_pg_unavailable_adds_new_only_and_warns(admin_client, conv):
-    """No stats DB → can't read round 6: seed featured statements that have no local
-    mapping (add side), warn that de-featured statements can't be hidden."""
+def test_resync_stats_db_unconfigured_adds_new_only_and_warns(admin_client, conv):
+    """Stats DB NOT configured → can't read round 6: seed featured statements with no
+    local mapping (add side), warn that de-featured statements can't be hidden."""
+    admin_client.application.config['POLIS_DATABASE_URL'] = ''   # genuinely unconfigured
     conv.phase6_polis_conversation_id = 'r6'
     db.session.commit()
     a, b = _featured(conv, 'A', 'B')
@@ -431,9 +432,97 @@ def test_resync_pg_unavailable_adds_new_only_and_warns(admin_client, conv):
     assert ok
     add.assert_called_once_with('r6', 'A')        # only the unmapped one
     mod.assert_not_called()                        # can't hide without reading round 6
-    assert 'stats DB unavailable' in msg
+    assert 'check manually' in msg
     db.session.commit()
     assert a.phase6_polis_statement_id == 7
+
+
+def test_resync_stats_db_read_failure_aborts(admin_client, conv):
+    """Stats DB IS configured but the read fails → do NOT guess (double-seed risk):
+    return failure so the caller rolls back. Nothing is seeded."""
+    admin_client.application.config['POLIS_DATABASE_URL'] = 'postgresql://x/y'  # configured
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    _featured(conv, 'A')
+    with patch('app.PolisServerClient.get_statements', return_value=None), \
+         patch('app.PolisServerClient.add_seed_return_id') as add, \
+         patch('app.PolisServerClient.moderate') as mod:
+        ok, msg = _sync_phase6_featured(conv)
+    assert ok is False                            # caller will roll back
+    add.assert_not_called()                        # no blind seeding
+    mod.assert_not_called()
+    assert 'try again' in msg
+
+
+def test_resync_abc_to_bcd_reports_counts(admin_client, conv):
+    """The summary message reports the add/restore/hide counts."""
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    _featured(conv, 'B', 'C', 'D')
+    round6 = ([], [{'tid': 1, 'txt': 'A'}, {'tid': 2, 'txt': 'B'}, {'tid': 3, 'txt': 'C'}], [])
+    with patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=4):
+        ok, msg = _sync_phase6_featured(conv)
+    assert ok
+    assert '1 added' in msg and '1 hidden' in msg
+
+
+def test_resync_is_idempotent(admin_client, conv):
+    """Running the sync twice on an unchanged round 6 makes no second-round calls."""
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    _featured(conv, 'A', 'B')
+    round6 = ([], [{'tid': 1, 'txt': 'A'}, {'tid': 2, 'txt': 'B'}], [])
+    with patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate') as mod, \
+         patch('app.PolisServerClient.add_seed_return_id') as add:
+        _sync_phase6_featured(conv); db.session.commit()
+        _sync_phase6_featured(conv); db.session.commit()
+    add.assert_not_called()
+    mod.assert_not_called()
+
+
+def test_reentry_persists_seeded_tid_through_the_route(admin_client, conv):
+    """End-to-end: a featured statement seeded during the route's re-sync has its
+    phase6_polis_statement_id committed and surviving a fresh DB read."""
+    conv.phase_cleanup = True
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    _featured(conv, 'NewOne')                      # not yet in round 6 → must be seeded
+    round6 = ([], [], [])                          # round 6 currently empty
+    with patch('app.PolisServerClient.set_vis_type'), \
+         patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=77), \
+         patch('app.PolisServerClient.create_conversation'):
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                          data=_checks_for(conv))
+    db.session.expire_all()                        # force a fresh read from the DB
+    fs = FeaturedStatement.query.filter_by(conversation_id=conv.id).first()
+    assert fs.phase6_polis_statement_id == 77      # the route committed the sync
+
+
+def test_reentry_resync_failure_rolls_back(admin_client, conv):
+    """If the re-sync hits a Polis error, the route rolls back: the phase flag is NOT
+    set and no featured mapping is persisted."""
+    conv.phase_cleanup = True
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    _featured(conv, 'A')                           # de-featured set is empty; A must be added
+    round6 = ([], [], [])
+    with patch('app.PolisServerClient.set_vis_type'), \
+         patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.add_seed_return_id',
+               side_effect=PolisServerError('boom')), \
+         patch('app.PolisServerClient.create_conversation'):
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                          data=_checks_for(conv))
+    db.session.expire_all()
+    db.session.refresh(conv)
+    assert conv.phase_informed_voting is False     # not advanced
+    fs = FeaturedStatement.query.filter_by(conversation_id=conv.id).first()
+    assert fs.phase6_polis_statement_id is None     # no partial mapping persisted
 
 
 def test_reentry_resyncs_instead_of_reinitialising(admin_client, conv):

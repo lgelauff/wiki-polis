@@ -1144,7 +1144,7 @@ def admin_conversation_advance(conv_id):
     if not _sync_vis_type(conv):
         flash('Phase moved, but updating results visibility in Polis failed.', 'error')
     if sync_msg:                                  # re-entry re-synced round 6 (#175)
-        flash(sync_msg, 'success')
+        flash(sync_msg, 'warning' if 'check manually' in sync_msg else 'success')
     flash(f'Moved to: {nxt["label"]}.', 'success')
     return redirect_to
 
@@ -1253,12 +1253,16 @@ def _sync_phase6_featured(conv) -> tuple[bool, str]:
     - live in round 6 but no longer featured   → moderate(-1) to hide (votes kept)
 
     Does NOT commit — the caller commits so the reconciliation and the flag flip are
-    one transaction. On any Polis failure returns (False, msg) so the caller rolls back.
+    one transaction. On any Polis failure returns (False, msg) so the caller rolls back
+    the DB; note that remote moderation calls already applied are non-transactional and
+    persist — re-running the sync is idempotent and reconciles them.
 
-    Hiding requires reading round 6's actual moderation state, which comes from the
-    Polis stats DB. If that is unavailable, falls back to the add-side only (seed
-    featured statements with no local mapping) and warns that removed statements
-    could not be hidden.
+    Hiding requires reading round 6's actual moderation state from the Polis stats DB:
+    - stats DB read succeeds → full reconcile (add / restore / adopt / hide);
+    - stats DB not configured → add-side only (seed unmapped featured statements) and
+      warn that removed statements could not be hidden;
+    - stats DB configured but the read FAILS → return failure (caller rolls back) rather
+      than risk double-seeding a live statement we momentarily couldn't see.
     """
     round6 = conv.phase6_polis_conversation_id
     client = _polis_server_client()
@@ -1266,12 +1270,14 @@ def _sync_phase6_featured(conv) -> tuple[bool, str]:
                 .filter_by(conversation_id=conv.id, confirmed_by_admin=True).all())
     featured_by_text = {_norm(fs.statement_text): fs
                         for fs in featured if _norm(fs.statement_text)}
+    n_texts = sum(1 for fs in featured if _norm(fs.statement_text))
+    if len(featured_by_text) < n_texts:                # last-write-wins collapsed duplicates
+        current_app.logger.warning(
+            'Round 6 re-sync: %d featured statements collapsed to %d distinct texts '
+            '(duplicates) for conv %s — some may be skipped.', n_texts,
+            len(featured_by_text), conv.slug)
 
-    try:
-        rows = client.get_statements(round6)
-    except PolisServerError as exc:
-        current_app.logger.warning('Round 6 re-sync: could not read round 6 (%s)', exc)
-        rows = None
+    rows = client.get_statements(round6)   # None if stats DB unconfigured OR the read failed
 
     added = restored = removed = 0
     try:
@@ -1288,8 +1294,10 @@ def _sync_phase6_featured(conv) -> tuple[bool, str]:
                     fs.phase6_polis_statement_id = hidden_tid[key]
                     restored += 1
                 else:
+                    # New statement. Owner-authored seeds are auto-approved even under
+                    # strict_moderation (same path as _init_phase6), so it's visible.
                     fs.phase6_polis_statement_id = client.add_seed_return_id(
-                        round6, fs.statement_text)                        # new
+                        round6, fs.statement_text)
                     added += 1
 
             for key, tid in live_tid.items():                            # de-featured → hide
@@ -1300,14 +1308,24 @@ def _sync_phase6_featured(conv) -> tuple[bool, str]:
             return True, (f'Round 6 re-synced to the current featured set — '
                           f'{added} added, {restored} restored, {removed} hidden.')
 
-        # Stats DB unavailable — add side only, cannot detect/hide removed statements.
-        for fs in featured:
-            if fs.phase6_polis_statement_id is None and _norm(fs.statement_text):
-                fs.phase6_polis_statement_id = client.add_seed_return_id(
-                    round6, fs.statement_text)
-                added += 1
-        return True, (f'Round 6: added {added} new statement(s). Could not read round 6 to '
-                      'hide de-featured statements (stats DB unavailable) — check manually.')
+        if not client._db_url:
+            # Stats DB genuinely not configured — add side only (cannot read round 6 to
+            # hide removed statements). Only seed featured statements with no local
+            # mapping (i.e. genuinely new ones); warn about the limitation.
+            for fs in featured:
+                if fs.phase6_polis_statement_id is None and _norm(fs.statement_text):
+                    fs.phase6_polis_statement_id = client.add_seed_return_id(
+                        round6, fs.statement_text)
+                    added += 1
+            return True, (f'Round 6: added {added} new statement(s). The stats DB is not '
+                          'configured, so de-featured statements could not be hidden — '
+                          'check manually.')
+
+        # Stats DB IS configured but the read failed — do not guess (seeding here could
+        # double-seed a live statement we couldn't see). Fail so the caller rolls back.
+        current_app.logger.error('Round 6 re-sync: stats DB read failed for %s', round6)
+        return False, ('Could not read round 6 from the stats DB to re-sync — nothing was '
+                       'changed; reload and try again.')
     except PolisServerError as exc:
         current_app.logger.error('Round 6 re-sync failed: %s', exc)
         return False, f'Could not re-sync round 6 with the featured set: {exc}'
