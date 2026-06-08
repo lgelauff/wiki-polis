@@ -78,6 +78,10 @@ def test_pvb_hidden_uses_display_none_not_sr_only():
     They are fired only via JS .click() (works under display:none). If hidden with
     the visually-hidden clip pattern they stay focusable + in the a11y tree, so a
     screen-reader/keyboard user hits phantom Agree/Pass/Disagree + submit controls.
+
+    REMOVE THIS GUARD when #159 lands: that refactor deletes the hidden pa-*
+    proxy entirely (calling Particiapi directly), so `.pvb-hidden` ceases to
+    exist and this interim test becomes obsolete.
     """
     css = open(_STYLE_CSS, encoding='utf-8').read()
     m = re.search(r'\.pvb-hidden\s*\{([^}]*)\}', css)

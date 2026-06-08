@@ -1185,7 +1185,9 @@ pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
      (clip/sr-only), because that keeps them in the a11y tree + tab order — a
      screen-reader/keyboard user would otherwise hit phantom Agree/Pass/Disagree
      + submit controls duplicating the visible UI. display:none removes them
-     from layout, the a11y tree, and the tab order while keeping .click() working. */
+     from layout, the a11y tree, and the tab order while keeping .click() working.
+     NOTE: this whole rule (and the .pvb-hidden span) goes away with #159, which
+     drops the pa-* proxy and talks to Particiapi directly — remove it then. */
   display: none;
 }
 
