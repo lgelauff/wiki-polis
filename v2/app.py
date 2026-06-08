@@ -1080,18 +1080,24 @@ def admin_conversation_advance(conv_id):
     # Run the Phase 6 Polis I/O FIRST, before mutating conv. This keeps the network
     # round-trips out of the open write transaction: the only DB write happens at the
     # commit below, so a slow Polis backend never holds a row lock on the conversation.
-    # Initialise the Phase 6 round only if it hasn't been already. If it has (advanced
-    # path, or a re-entry), just proceed with the transition — re-initialising adds no
-    # value and would fail on the UNIQUE constraint. The featured statements were seeded
-    # at init time, so round 6 already reflects the round-5 featured set.
+    # First entry → initialise the round. Re-entry (the featured set may have changed
+    # in between) → re-sync round 6 to the current featured set, preserving votes (#175).
     created_p6 = None
-    if ctx['runs_phase6_init'] and not conv.phase6_polis_conversation_id:
-        ok, msg = _init_phase6(conv)              # assigns ids onto conv/featured; no commit
-        if not ok:
-            db.session.rollback()
-            flash(msg, 'error')
-            return redirect_to
-        created_p6 = conv.phase6_polis_conversation_id
+    sync_msg = None
+    if ctx['runs_phase6_init']:
+        if not conv.phase6_polis_conversation_id:
+            ok, msg = _init_phase6(conv)          # assigns ids onto conv/featured; no commit
+            if not ok:
+                db.session.rollback()
+                flash(msg, 'error')
+                return redirect_to
+            created_p6 = conv.phase6_polis_conversation_id
+        else:
+            ok, sync_msg = _sync_phase6_featured(conv)
+            if not ok:
+                db.session.rollback()
+                flash(sync_msg, 'error')
+                return redirect_to
 
     cur, nxt = ctx['source'], ctx['target']
     if cur['flag']:                               # preparation has flag=None
@@ -1137,6 +1143,8 @@ def admin_conversation_advance(conv_id):
 
     if not _sync_vis_type(conv):
         flash('Phase moved, but updating results visibility in Polis failed.', 'error')
+    if sync_msg:                                  # re-entry re-synced round 6 (#175)
+        flash(sync_msg, 'warning' if 'check manually' in sync_msg else 'success')
     flash(f'Moved to: {nxt["label"]}.', 'success')
     return redirect_to
 
@@ -1228,6 +1236,99 @@ def _init_phase6(conv) -> tuple[bool, str]:
         fs.phase6_polis_statement_id = tid
     conv.phase6_polis_conversation_id = p6_conv_id
     return True, f'Phase 6 initialised — {len(seeded)} statement(s) seeded.'
+
+
+def _norm(text) -> str:
+    """Case/space-insensitive key for matching statement text across systems."""
+    return (text or '').strip().casefold()
+
+
+def _sync_phase6_featured(conv) -> tuple[bool, str]:
+    """Reconcile an ALREADY-initialised Phase 6 round with the CURRENT confirmed
+    featured set, preserving votes (#175). Statements are matched by text:
+
+    - featured but missing from round 6        → add_seed_return_id (new)
+    - featured but hidden in round 6           → moderate(+1) to restore
+    - featured and live                        → adopt its tid
+    - live in round 6 but no longer featured   → moderate(-1) to hide (votes kept)
+
+    Does NOT commit — the caller commits so the reconciliation and the flag flip are
+    one transaction. On any Polis failure returns (False, msg) so the caller rolls back
+    the DB; note that remote moderation calls already applied are non-transactional and
+    persist — re-running the sync is idempotent and reconciles them.
+
+    Hiding requires reading round 6's actual moderation state from the Polis stats DB:
+    - stats DB read succeeds → full reconcile (add / restore / adopt / hide);
+    - stats DB not configured → add-side only (seed unmapped featured statements) and
+      warn that removed statements could not be hidden;
+    - stats DB configured but the read FAILS → return failure (caller rolls back) rather
+      than risk double-seeding a live statement we momentarily couldn't see.
+    """
+    round6 = conv.phase6_polis_conversation_id
+    client = _polis_server_client()
+    featured = (FeaturedStatement.query
+                .filter_by(conversation_id=conv.id, confirmed_by_admin=True).all())
+    featured_by_text = {_norm(fs.statement_text): fs
+                        for fs in featured if _norm(fs.statement_text)}
+    n_texts = sum(1 for fs in featured if _norm(fs.statement_text))
+    if len(featured_by_text) < n_texts:                # last-write-wins collapsed duplicates
+        current_app.logger.warning(
+            'Round 6 re-sync: %d featured statements collapsed to %d distinct texts '
+            '(duplicates) for conv %s — some may be skipped.', n_texts,
+            len(featured_by_text), conv.slug)
+
+    rows = client.get_statements(round6)   # None if stats DB unconfigured OR the read failed
+
+    added = restored = removed = 0
+    try:
+        if rows is not None:
+            pending, approved, hidden = rows
+            live_tid   = {_norm(s['txt']): s['tid'] for s in approved + pending}
+            hidden_tid = {_norm(s['txt']): s['tid'] for s in hidden}
+
+            for key, fs in featured_by_text.items():
+                if key in live_tid:
+                    fs.phase6_polis_statement_id = live_tid[key]          # already live
+                elif key in hidden_tid:
+                    client.moderate(round6, hidden_tid[key], 1)           # restore
+                    fs.phase6_polis_statement_id = hidden_tid[key]
+                    restored += 1
+                else:
+                    # New statement. Owner-authored seeds are auto-approved even under
+                    # strict_moderation (same path as _init_phase6), so it's visible.
+                    fs.phase6_polis_statement_id = client.add_seed_return_id(
+                        round6, fs.statement_text)
+                    added += 1
+
+            for key, tid in live_tid.items():                            # de-featured → hide
+                if key not in featured_by_text:
+                    client.moderate(round6, tid, -1)
+                    removed += 1
+
+            return True, (f'Round 6 re-synced to the current featured set — '
+                          f'{added} added, {restored} restored, {removed} hidden.')
+
+        if not client._db_url:
+            # Stats DB genuinely not configured — add side only (cannot read round 6 to
+            # hide removed statements). Only seed featured statements with no local
+            # mapping (i.e. genuinely new ones); warn about the limitation.
+            for fs in featured:
+                if fs.phase6_polis_statement_id is None and _norm(fs.statement_text):
+                    fs.phase6_polis_statement_id = client.add_seed_return_id(
+                        round6, fs.statement_text)
+                    added += 1
+            return True, (f'Round 6: added {added} new statement(s). The stats DB is not '
+                          'configured, so de-featured statements could not be hidden — '
+                          'check manually.')
+
+        # Stats DB IS configured but the read failed — do not guess (seeding here could
+        # double-seed a live statement we couldn't see). Fail so the caller rolls back.
+        current_app.logger.error('Round 6 re-sync: stats DB read failed for %s', round6)
+        return False, ('Could not read round 6 from the stats DB to re-sync — nothing was '
+                       'changed; reload and try again.')
+    except PolisServerError as exc:
+        current_app.logger.error('Round 6 re-sync failed: %s', exc)
+        return False, f'Could not re-sync round 6 with the featured set: {exc}'
 
 
 @admin_bp.post('/admin/global-admins/add')
