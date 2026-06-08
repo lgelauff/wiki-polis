@@ -96,7 +96,7 @@ After every vote, a three-card triad appears below the statement. The three opti
 
 So if there are 6 statements, unlock requires 6 votes (100%). If there are 20, unlock requires 10 votes. The threshold can be configured per conversation (`new_stmt_unlock_at`, default 10).
 
-Once unlocked, each participant may submit at most **3 new statements** per conversation (default; future: configurable per conversation as `new_stmt_max`). The remaining count is shown on the card (e.g. "2 of 3 remaining"). Once the quota is exhausted, the card is permanently disabled for that participant in that conversation.
+Once unlocked, each participant may submit at most **3 new statements** per conversation (default; configurable per conversation as `new_stmt_max`). The remaining count is shown on the card (e.g. "2 of 3 remaining"). Once the quota is exhausted, the card is permanently disabled for that participant in that conversation.
 
 Wording suggestions ("Suggest different wording") do not count against this quota.
 
@@ -332,7 +332,7 @@ Transitions and phase-critical mutations are protected by **hard guards** (block
 | Phase 6 init — toggle | Initialise without informed-voting enabled | "Enable the Informed voting toggle first, then initialise." |
 | Phase 6 init — once | Re-initialise | "Phase 6 already initialised." |
 | Last featured — remove | Remove the last featured statement while argument mapping is active | "Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first." (row-locked) |
-| Last featured — hide/pending | Hide or move-to-pending the last featured statement while argument mapping is active | same message |
+| Last featured — hide/pending | Hide or move-to-pending the last featured statement while argument mapping is active | "Cannot hide or move the last featured statement to pending while argument mapping is active. Disable the argument mapping phase first." (not row-locked — best-effort count check) |
 | Participant submission | Submit a statement while closed/paused or submission off | HTTP 403 |
 | Participant argument | Propose/skip an argument while closed/paused or argument mapping off | HTTP 403 |
 | Argument-vote gate | Vote on an argument before contributing-or-skipping both sides | HTTP 403 / `{ok:false, reason:"gate"}` |

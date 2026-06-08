@@ -438,9 +438,18 @@ Run inside the webservice shell, where pod envvars are present (here you do **no
 
 ### Migration history
 
-| Revision | Description |
-|---|---|
-| `3e86727dbcee` | Phase 6 — adds `phase_informed_voting`, `phase6_polis_conversation_id` to conversations; `phase6_polis_statement_id` to featured_statements; UNIQUE constraints and index. Required when deploying PR #115. |
+Ordered chain (oldest → newest); the current head is `f667548e9519`. Run `flask --app app db upgrade` to apply everything up to the head — you do not apply these individually.
+
+| Order | Revision | Description |
+|---|---|---|
+| 1 | `65de8d5c7314` | Adds `closed_at`, `public_username`, `revealed_at`. |
+| 2 | `b959def66404` | Adds `conversations.paused`. |
+| 3 | `99f8b42af697` | Adds `arguments.hidden`. |
+| 4 | `a3f1c8e2d905` | Adds `participations.new_stmt_ids`. |
+| 5 | `3e86727dbcee` | Phase 6 — adds `phase_informed_voting`, `phase6_polis_conversation_id` to conversations; `phase6_polis_statement_id` to featured_statements; UNIQUE constraints and index. |
+| 6 | `f667548e9519` | Adds `participations.phase6_card_order` (JSON, nullable). **Current head.** |
+
+Verify the live head with `flask --app app db current`; confirm it matches `f667548e9519` after deploying. When new migrations land, append them here.
 
 ### Check whether a migration is needed
 
@@ -534,7 +543,7 @@ To export an envvar to the shell:
 export SECRET_KEY=$(toolforge envvars show SECRET_KEY | tail -1 | awk '{print $NF}')
 ```
 
-`deploy.sh --migrate` does this automatically for `DATABASE_URL`, `SECRET_KEY`, and `PARTICIAPI_BASE_URL`.
+`deploy.sh --migrate` does this automatically — it loads **all** Toolforge envvars dynamically (the full `toolforge envvars list`), so every required variable is present with no hard-coded list to maintain.
 
 ---
 

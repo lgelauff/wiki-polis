@@ -132,8 +132,10 @@ conversation admin panel.
   valid UTF-8 with no null bytes. Leading spreadsheet formula characters (`= + - @`) are
   stripped to prevent CSV-injection.
 - **Result:** after upload you get a summary — how many statements were imported, how many
-  rows were skipped, and how many Polis already had (duplicates are silently ignored by
-  Polis, which is why a re-upload of the same file imports 0).
+  rows were skipped, and how many were duplicates. Duplicates are detected by wiki-polis
+  itself (case-insensitive, against the statements already in this conversation) and each
+  skipped statement is listed, so re-uploading the same file imports 0 and tells you exactly
+  which rows already existed.
 
 This seeds statements the same way the manual "add statement" form does; everything in
 [*Writing good statements*](#3-writing-good-statements) above still applies — the limits
