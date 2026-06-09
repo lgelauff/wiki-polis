@@ -1865,7 +1865,7 @@ def argument_submit(slug, fs_id):
     if existing:
         if request.headers.get('X-Requested-With') == 'fetch':
             return jsonify({'ok': True, 'id': existing.id, 'body': existing.body})
-        return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+        return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
     arg = Argument(
         featured_statement_id=fs_id,
@@ -1899,7 +1899,7 @@ def argument_submit(slug, fs_id):
     db.session.commit()
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True, 'id': arg.id, 'body': body})
-    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+    return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
 @participant_bp.post('/c/<slug>/arguments/<int:fs_id>/<side>/skip')
 @login_required
@@ -1929,7 +1929,7 @@ def argument_skip(slug, fs_id, side):
         db.session.commit()
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
-    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+    return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
 @participant_bp.post('/c/<slug>/arguments/<int:arg_id>/vote')
 @login_required

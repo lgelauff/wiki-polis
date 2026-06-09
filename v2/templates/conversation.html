@@ -1725,7 +1725,7 @@
       if (prevBtn) prevBtn.disabled = (idx === 0);
       if (nextBtn) nextBtn.disabled = (idx === allPanels.length - 1);
       paintCircles(panel);
-      if (moveFocus) panel.focus();
+      if (moveFocus) panel.focus({ preventScroll: true });
     }
   }
 
