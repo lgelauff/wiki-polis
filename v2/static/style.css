@@ -2876,7 +2876,7 @@ a { color: var(--pass); }
     grid-template-columns: 1fr;
   }
   .p6-args-panel {
-    order: -1;  /* arguments appear above statement on mobile */
+    order: 1;  /* arguments follow statement on mobile — read statement first, then consider arguments */
   }
 }
 
@@ -2896,6 +2896,7 @@ a { color: var(--pass); }
   transition: color .1s;
 }
 .p6-skip-btn:hover { color: var(--ink); }
+.p6-skip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Done state */
 .p6-done {
@@ -2924,6 +2925,10 @@ a { color: var(--pass); }
   max-width: 480px;
   border-top: 1px solid var(--hairline);
   padding-top: .75rem;
+}
+.p6-done-reveal--open {
+  color: var(--ink);
+  border-top-color: var(--accent);
 }
 
 /* Identity reveal callout on the closed conversation banner */

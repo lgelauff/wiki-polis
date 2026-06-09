@@ -40,7 +40,7 @@
     {% elif reveal_state == 'open' %}
     <div class="reveal-callout">
       <p class="reveal-callout-text">The identity reveal window is open. Your participation is recorded under pseudonym <strong>{{ participation.pseudonym }}</strong>.</p>
-      <a class="reveal-callout-link" href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">Optionally link your Wikimedia username →</a>
+      <a class="reveal-callout-link" href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">Optionally link your Wikimedia username <span aria-hidden="true">→</span></a>
     </div>
 
     {% elif reveal_state == 'pending' %}
@@ -785,7 +785,7 @@
               <span class="vote-dot vote-dot--disagree"></span>Disagree
             </button>
           </div>
-          <button class="p6-skip-btn" type="button">Skip for now →</button>
+          <button class="p6-skip-btn" type="button">Skip for now <span aria-hidden="true">→</span></button>
           {% endif %}
         </div>{# end p6-statement-col #}
 
@@ -793,7 +793,7 @@
         <div class="p6-args-panel">
 
           <div class="p6-args-side p6-args-side--pro">
-            <div class="p6-args-side-header">For</div>
+            <h3 class="p6-args-side-header">For</h3>
             {% if item.pro | length == 0 %}
             <p class="p6-args-empty">No arguments yet.</p>
             {% else %}
@@ -812,7 +812,7 @@
           </div>
 
           <div class="p6-args-side p6-args-side--con">
-            <div class="p6-args-side-header">Against</div>
+            <h3 class="p6-args-side-header">Against</h3>
             {% if item.con | length == 0 %}
             <p class="p6-args-empty">No arguments yet.</p>
             {% else %}
@@ -839,8 +839,10 @@
 
   {# Done screen — shown when all cards are voted or skipped #}
   <div class="p6-done" hidden>
-    <p class="p6-done-heading">You've completed informed voting.</p>
-    {% if conversation.phase_submission or conversation.phase_argument_mapping %}
+    <h2 class="p6-done-heading">You've completed informed voting.</h2>
+    {% if conversation.phase_personal_results or conversation.phase_public_results %}
+    <p class="p6-done-text">The results are available — see the <a href="#tab-results" data-tab="tab-results">Results tab</a>.</p>
+    {% elif conversation.phase_submission or conversation.phase_argument_mapping %}
     <p class="p6-done-text">The deliberation is still open — come back if new arguments are added.</p>
     {% elif conversation.active %}
     <p class="p6-done-text">The results report will be published here once this consultation closes.</p>
@@ -850,7 +852,7 @@
     {% if reveal_state is none or reveal_state == 'pending' %}
     <p class="p6-done-reveal">Your votes are recorded under pseudonym <strong>{{ participation.pseudonym }}</strong>. Once this consultation closes, you will have a limited window to optionally link your Wikimedia username. You cannot make that decision yet.</p>
     {% elif reveal_state == 'open' %}
-    <p class="p6-done-reveal">Your votes are recorded under pseudonym <strong>{{ participation.pseudonym }}</strong>. The identity reveal window is open — <a href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">optionally link your username →</a></p>
+    <p class="p6-done-reveal p6-done-reveal--open">Your votes are recorded under pseudonym <strong>{{ participation.pseudonym }}</strong>. The identity reveal window is open — <a href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">optionally link your username <span aria-hidden="true">→</span></a></p>
     {% endif %}
   </div>
 
@@ -985,7 +987,7 @@
               var cls   = vote === 1 ? 'agree' : vote === -1 ? 'disagree' : 'pass';
               badge.className = 'p6-voted-badge p6-voted-badge--' + cls;
               badge.removeAttribute('hidden');
-              badge.textContent = '✓ ' + label;
+              badge.innerHTML = '<span aria-hidden="true">✓</span> ' + label;
               row.querySelectorAll('.btn-p6-vote').forEach(function (b) {
                 b.classList.toggle('p6-voted', b.dataset.vote === String(vote));
               });
@@ -997,8 +999,10 @@
               if (skip) skip.hidden = false;
             }
           }).catch(function () {
+            row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = false; });
+            if (skip) skip.hidden = false;
             badge.removeAttribute('hidden');
-            badge.textContent = 'Network error — refresh to check';
+            badge.textContent = 'Network error — try again';
           });
         });
       });
