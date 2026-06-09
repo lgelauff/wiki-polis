@@ -757,7 +757,7 @@ def _build_featured_data(conv, participation, can_mod=False):
             'con_gate':  bool(con_proposed or con_state.skipped),
             'pro_proposed': pro_proposed,
             'con_proposed': con_proposed,
-            'k': conv.argument_vote_data.get('K', 2),
+            'k': int((conv.argument_vote_data or {}).get('K', 2)),
             'pro_voted_count': pro_voted_count,
             'con_voted_count': con_voted_count,
             'proposer_pseudonyms': proposer_pseudonym_map,
@@ -1997,7 +1997,7 @@ def argument_submit(slug, fs_id):
     if existing:
         if request.headers.get('X-Requested-With') == 'fetch':
             return jsonify({'ok': True, 'id': existing.id, 'body': existing.body})
-        return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+        return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
     arg = Argument(
         featured_statement_id=fs_id,
@@ -2031,7 +2031,7 @@ def argument_submit(slug, fs_id):
     db.session.commit()
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True, 'id': arg.id, 'body': body})
-    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+    return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
 @participant_bp.post('/c/<slug>/arguments/<int:fs_id>/<side>/skip')
 @login_required
@@ -2061,7 +2061,7 @@ def argument_skip(slug, fs_id, side):
         db.session.commit()
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
-    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+    return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
 @participant_bp.post('/c/<slug>/arguments/<int:arg_id>/vote')
 @login_required
@@ -2093,7 +2093,7 @@ def argument_vote(slug, arg_id):
         abort(403)
 
     # K-approval cap: count existing votes for this side.
-    k = conv.argument_vote_data.get('K', 2)
+    k = int((conv.argument_vote_data or {}).get('K', 2))
     side_arg_ids = [a.id for a in
                     Argument.query.filter_by(
                         featured_statement_id=fs.id, side=arg.side).all()]

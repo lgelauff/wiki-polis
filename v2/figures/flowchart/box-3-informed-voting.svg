@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="380" height="326" viewBox="0 0 380 326" role="img" aria-label="Express informed opinions">
+<title>wiki-polis phase: Express informed opinions</title>
+
+  <rect x="0" y="0" width="380" height="326" rx="14" fill="#ffffff" stroke="#e5e5e6"></rect>
+  <text x="22" y="40" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="19" font-weight="700" letter-spacing="-0.4" fill="#0c0c0e">Express informed opinions</text>
+  <line x1="22" y1="72" x2="358" y2="72" stroke="#e5e5e6"></line>
+  <g transform="translate(95,84)"><rect x="26" y="4" width="138" height="30" rx="8" fill="#ffffff" stroke="#e5e5e6" stroke-width="1.5"></rect>
+<line x1="40" y1="14" x2="118" y2="14" stroke="#cfcdc6" stroke-width="3.2" stroke-linecap="round"></line>
+<line x1="40" y1="24" x2="94" y2="24" stroke="#cfcdc6" stroke-width="3.2" stroke-linecap="round"></line>
+<g transform="translate(34 44)"><rect width="56" height="20" rx="6" fill="#15734a1f" stroke="#15734a" stroke-width="1.3"></rect><path d="M12 10 h9 M16.5 5.5 v9" stroke="#15734a" stroke-width="2.2" stroke-linecap="round"></path><line x1="30" y1="10" x2="48" y2="10" stroke="#15734a" stroke-width="2.6" stroke-linecap="round" opacity="0.6"></line></g>
+<g transform="translate(100 44)"><rect width="56" height="20" rx="6" fill="#f4f4f3" stroke="#5f5f68" stroke-width="1.3"></rect><path d="M12 10 h9" stroke="#5f5f68" stroke-width="2.2" stroke-linecap="round"></path><line x1="30" y1="10" x2="48" y2="10" stroke="#5f5f68" stroke-width="2.6" stroke-linecap="round" opacity="0.6"></line></g>
+<g transform="translate(58 78)"><rect width="30" height="30" rx="7" fill="#15734a1f" stroke="#15734a" stroke-width="1.5"></rect><path d="M9 15 L13 19 L21 10" stroke="#15734a" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+<g transform="translate(102 78)"><rect width="30" height="30" rx="7" fill="#b23a3a1a" stroke="#b23a3a" stroke-width="1.5"></rect><path d="M10 10 L20 20 M20 10 L10 20" stroke="#b23a3a" stroke-width="2.6" stroke-linecap="round"></path></g></g>
+  <text x="190" y="222" text-anchor="middle" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="12.5" font-style="italic" fill="#5f5f68">Vote again, with the key arguments shown</text>
+  <rect x="22" y="240" width="336" height="66" rx="10" fill="#eef3fb" stroke="#c9d6ef"></rect>
+  <text x="38" y="262" font-family="&#39;JetBrains Mono&#39;,monospace" font-size="10.5" font-weight="700" letter-spacing="1.3" fill="#3d6dba">WHAT WE LEARN</text>
+  <g transform="translate(38,270)"><rect x="5" y="16" width="8" height="14" rx="2" fill="#3d6dba"></rect><rect x="16" y="8" width="8" height="22" rx="2" fill="#3d6dba"></rect><rect x="27" y="20" width="8" height="10" rx="2" fill="#3d6dba" opacity="0.55"></rect></g>
+  <text x="88" y="280" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="13" fill="#3f3f43">How different parts of the</text>
+  <text x="88" y="297" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="13" fill="#3f3f43">community feel</text>
+</svg>
