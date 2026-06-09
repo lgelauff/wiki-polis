@@ -2093,30 +2093,30 @@
           updateChip(fsId, side);
           // Surface the rejection reason transiently in the step-2 sub-line
           r.json().then(function (data) {
-            var kVal = getK(tab.querySelector(‘.contribute-wrapper[data-fs="’ + fsId + ‘"][data-side="’ + side + ‘"]’));
+            var kVal = getK(tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="' + side + '"]'));
             var msgs = {
-              cap:  ‘You’ve already picked your ‘ + kVal + ‘ most important — unvote one first.’,
-              gate: ‘Voting is not open yet — add or skip on each side first.’,
-              own:  ‘You can’t vote for your own argument.’,
+              cap:  "You've already picked your " + kVal + " most important — unvote one first.",
+              gate: 'Voting is not open yet — add or skip on each side first.',
+              own:  "You can't vote for your own argument.",
             };
             if (data && msgs[data.reason]) {
               var msg = msgs[data.reason];
-              var s2sub = document.getElementById(‘step2-sub-’ + fsId);
+              var s2sub = document.getElementById('step2-sub-' + fsId);
               if (s2sub) {
                 var prev = s2sub.textContent;
-                s2sub.style.color = ‘var(--danger, #dc2626)’;
+                s2sub.style.color = 'var(--danger, #dc2626)';
                 s2sub.textContent = msg;
                 setTimeout(function () {
-                  s2sub.style.color = ‘’;
+                  s2sub.style.color = '';
                   s2sub.textContent = prev;
                 }, 3500);
               }
-              var alertEl = document.getElementById(‘arg-alert’);
+              var alertEl = document.getElementById('arg-alert');
               if (alertEl) {
                 if (alertEl._clearTimer) clearTimeout(alertEl._clearTimer);
-                alertEl.textContent = ‘’;
+                alertEl.textContent = '';
                 window.requestAnimationFrame(function () { alertEl.textContent = msg; });
-                alertEl._clearTimer = setTimeout(function () { alertEl.textContent = ‘’; }, 3500);
+                alertEl._clearTimer = setTimeout(function () { alertEl.textContent = ''; }, 3500);
               }
             }
           }).catch(function () {});
