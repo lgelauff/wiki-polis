@@ -28,7 +28,7 @@
   {% endif %}
 
   {% if not conversation.active %}
-  {% from '_reveal_timeline.html' import reveal_timeline %}
+  {% from '_reveal_timeline.html' import reveal_timeline with context %}
   <div class="landing-section">
     {% if reveal %}
     <p class="muted">

@@ -84,11 +84,16 @@ def _reveal_context(conv, participation):
     """
     if not conv.closed_at:
         return None
+    # Normalize ONCE to a tz-aware UTC instant, then derive everything from it — so the
+    # displayed dates and the countdown target are the same correct UTC moments the
+    # state math uses. (DB may hand back a naive datetime; deriving window dates off a
+    # naive value would make the live countdown tick to the wrong instant.)
     closed = (conv.closed_at if conv.closed_at.tzinfo
               else conv.closed_at.replace(tzinfo=timezone.utc))
-    opens_at  = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
-    closes_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS)
-    age = datetime.now(timezone.utc) - closed
+    opens_at  = closed + timedelta(days=_REVEAL_COOLDOWN_DAYS)
+    closes_at = closed + timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS)
+    now = datetime.now(timezone.utc)
+    age = now - closed
     if participation and participation.public_username:
         state = 'revealed'
     elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
@@ -97,13 +102,18 @@ def _reveal_context(conv, participation):
         state = 'open'
     else:
         state = 'pending'
-    closes_aware = closes_at if closes_at.tzinfo else closes_at.replace(tzinfo=timezone.utc)
-    # Round a partial day UP so the final open day never reads "0 days left" while
-    # the window (and the reveal POST) is still open.
-    _delta = closes_aware - datetime.now(timezone.utc)
-    days_left = max(0, _delta.days + (1 if (_delta.seconds or _delta.microseconds) else 0))
-    return {'closed_at': conv.closed_at, 'opens_at': opens_at, 'closes_at': closes_at,
+    # The window's next boundary, as a UTC instant the client ticks a live countdown
+    # against (per the design): opens_at while in cooldown, closes_at while open.
+    target = opens_at if state == 'pending' else closes_at if state == 'open' else None
+    # No-JS fallback: whole days to that boundary, partial day rounded UP so the final
+    # open day never reads "0 days left" while the reveal POST is still accepted.
+    days_left = 0
+    if target is not None:
+        _d = target - now
+        days_left = max(0, _d.days + (1 if (_d.seconds or _d.microseconds) else 0))
+    return {'closed_at': closed, 'opens_at': opens_at, 'closes_at': closes_at,
             'state': state, 'days_left': days_left,
+            'countdown_target_iso': target.isoformat() if target else None,
             'cooldown_days': _REVEAL_COOLDOWN_DAYS, 'window_days': _REVEAL_WINDOW_DAYS}
 
 # Canonical consultation phase sequence. One flag per stage; preparation = all off.
@@ -2176,15 +2186,16 @@ def reveal_identity(slug):
     if not conv.closed_at:
         abort(404)
 
-    age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-    opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
+    # Single source of truth: the displayed timeline and these gate flags both come
+    # from _reveal_context, so the page can never show "open" while the POST rejects.
+    reveal = _reveal_context(conv, participation)
     return render_template('reveal.html',
                            conversation=conv,
                            participation=participation,
-                           window_open=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS),
-                           window_closed=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS),
-                           opens_at=opens_at,
-                           reveal=_reveal_context(conv, participation))
+                           window_open=reveal['state'] in ('open', 'revealed'),
+                           window_closed=reveal['state'] == 'expired',
+                           opens_at=reveal['opens_at'],
+                           reveal=reveal)
 
 @participant_bp.post('/c/<slug>/reveal')
 @login_required
@@ -2202,10 +2213,9 @@ def reveal_identity_post(slug):
     if not conv.closed_at:
         abort(400)
 
-    age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-    if age < timedelta(days=_REVEAL_COOLDOWN_DAYS):
-        abort(400)
-    if age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
+    # Same source of truth as the GET page / timeline — the window is open iff
+    # _reveal_context says so. (Already-revealed → state 'revealed', also rejected.)
+    if _reveal_context(conv, participation)['state'] != 'open':
         abort(400)
     if participation.public_username is not None:
         abort(400)
