@@ -76,6 +76,46 @@ _REVEAL_WINDOW_DAYS   = 30   # days participants may opt in once the window open
 _MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
+
+def _reveal_context(conv, participation):
+    """Identity-reveal timeline for a closed conversation (#70): when it closed, when
+    the opt-in window opens (after the cooldown) and closes, the current state, and the
+    days left while the window is open. Returns None when the conversation is not closed.
+    """
+    if not conv.closed_at:
+        return None
+    # Normalize ONCE to a tz-aware UTC instant, then derive everything from it — so the
+    # displayed dates and the countdown target are the same correct UTC moments the
+    # state math uses. (DB may hand back a naive datetime; deriving window dates off a
+    # naive value would make the live countdown tick to the wrong instant.)
+    closed = (conv.closed_at if conv.closed_at.tzinfo
+              else conv.closed_at.replace(tzinfo=timezone.utc))
+    opens_at  = closed + timedelta(days=_REVEAL_COOLDOWN_DAYS)
+    closes_at = closed + timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS)
+    now = datetime.now(timezone.utc)
+    age = now - closed
+    if participation and participation.public_username:
+        state = 'revealed'
+    elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
+        state = 'expired'
+    elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
+        state = 'open'
+    else:
+        state = 'pending'
+    # The window's next boundary, as a UTC instant the client ticks a live countdown
+    # against (per the design): opens_at while in cooldown, closes_at while open.
+    target = opens_at if state == 'pending' else closes_at if state == 'open' else None
+    # No-JS fallback: whole days to that boundary, partial day rounded UP so the final
+    # open day never reads "0 days left" while the reveal POST is still accepted.
+    days_left = 0
+    if target is not None:
+        _d = target - now
+        days_left = max(0, _d.days + (1 if (_d.seconds or _d.microseconds) else 0))
+    return {'closed_at': closed, 'opens_at': opens_at, 'closes_at': closes_at,
+            'state': state, 'days_left': days_left,
+            'countdown_target_iso': target.isoformat() if target else None,
+            'cooldown_days': _REVEAL_COOLDOWN_DAYS, 'window_days': _REVEAL_WINDOW_DAYS}
+
 # Canonical consultation phase sequence. One flag per stage; preparation = all off.
 # Simple mode advances through this list (forward-only, exclusive). The existing
 # independent toggles remain available in advanced mode.
@@ -1867,20 +1907,10 @@ def conversation(slug):
                     _math_recompute_last[conv.id] = _now
                     recomputing = True
 
-    # Reveal window state for closed conversations.
-    reveal_state    = None
-    reveal_opens_at = None
-    if conv.closed_at:
-        age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-        reveal_opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
-        if participation.public_username:
-            reveal_state = 'revealed'
-        elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
-            reveal_state = 'expired'
-        elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
-            reveal_state = 'open'
-        else:
-            reveal_state = 'pending'
+    # Reveal-window timeline for closed conversations (#70).
+    reveal          = _reveal_context(conv, participation)
+    reveal_state    = reveal['state'] if reveal else None
+    reveal_opens_at = reveal['opens_at'] if reveal else None
 
     featured_data = []
     if conv.phase_argument_mapping and participation:
@@ -1939,6 +1969,7 @@ def conversation(slug):
                            polis_stats=polis_stats,
                            reveal_state=reveal_state,
                            reveal_opens_at=reveal_opens_at,
+                           reveal=reveal,
                            featured_data=featured_data,
                            new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10,
                            new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
@@ -2155,14 +2186,16 @@ def reveal_identity(slug):
     if not conv.closed_at:
         abort(404)
 
-    age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-    opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
+    # Single source of truth: the displayed timeline and these gate flags both come
+    # from _reveal_context, so the page can never show "open" while the POST rejects.
+    reveal = _reveal_context(conv, participation)
     return render_template('reveal.html',
                            conversation=conv,
                            participation=participation,
-                           window_open=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS),
-                           window_closed=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS),
-                           opens_at=opens_at)
+                           window_open=reveal['state'] in ('open', 'revealed'),
+                           window_closed=reveal['state'] == 'expired',
+                           opens_at=reveal['opens_at'],
+                           reveal=reveal)
 
 @participant_bp.post('/c/<slug>/reveal')
 @login_required
@@ -2180,10 +2213,9 @@ def reveal_identity_post(slug):
     if not conv.closed_at:
         abort(400)
 
-    age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-    if age < timedelta(days=_REVEAL_COOLDOWN_DAYS):
-        abort(400)
-    if age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
+    # Same source of truth as the GET page / timeline — the window is open iff
+    # _reveal_context says so. (Already-revealed → state 'revealed', also rejected.)
+    if _reveal_context(conv, participation)['state'] != 'open':
         abort(400)
     if participation.public_username is not None:
         abort(400)

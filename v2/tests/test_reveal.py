@@ -1,6 +1,7 @@
 """Tests for the identity reveal window: state transitions and POST validation."""
 from datetime import datetime, timedelta, timezone
 
+from app import _reveal_context, _REVEAL_COOLDOWN_DAYS, _REVEAL_WINDOW_DAYS
 from db import Conversation, Participant, Participation, db
 
 
@@ -31,26 +32,49 @@ def test_reveal_state_pending(auth_client, app, participant):
     _participate(participant, conv, 'quick-mouse')
     resp = auth_client.get('/c/pending-conv')
     assert resp.status_code == 200
-    assert b'reveal window opens' in resp.data.lower()
+    assert b'window opens' in resp.data.lower()
+
+
+def test_reveal_timeline_shows_close_and_window_dates(auth_client, app, participant):
+    """#70: the closed page states the close date and the three timeline dates
+    (closed → window opens at +30d → window closes at +60d)."""
+    from datetime import datetime, timezone, timedelta
+    conv = _closed_conv(app, 'dated-conv', 10, 'dat1234567')
+    _participate(participant, conv, 'quiet-fox')
+    with app.app_context():
+        c = Conversation.query.filter_by(slug='dated-conv').first()
+        closed = c.closed_at
+    resp = auth_client.get('/c/dated-conv')
+    body = resp.data.decode()
+    fmt = lambda d: d.strftime('%-d %b %Y')
+    assert f'closed on <strong>{fmt(closed)}' in body
+    assert fmt(closed + timedelta(days=30)) in body            # window opens
+    assert fmt(closed + timedelta(days=60)) in body            # window closes
+    assert 'records stay pseudonymous permanently' in body
 
 
 def test_reveal_state_open(auth_client, app, participant):
-    """Closed 30–59 days ago → reveal window open link is shown."""
+    """Closed 30–59 days ago → reveal window open; the opt-in link + timeline show."""
     conv = _closed_conv(app, 'open-conv', 45, 'opn1234567')
     _participate(participant, conv, 'bold-hawk')
     resp = auth_client.get('/c/open-conv')
     assert resp.status_code == 200
-    assert b'reveal window is open' in resp.data.lower()
+    assert b'optionally link your username' in resp.data.lower()
+    assert b'reveal-timeline' in resp.data                  # #70 timeline
+    assert b'window closes in' in resp.data.lower()         # live countdown label
+    assert b'data-reveal-countdown=' in resp.data           # #70 live countdown target
+    assert b'permanent and cannot be undone' in resp.data.lower()
 
 
 def test_reveal_state_expired(auth_client, app, participant):
-    """Closed ≥ 60 days ago → window expired; only 'consultation is closed' shown."""
+    """Closed ≥ 60 days ago → window expired; timeline shows it closed and that
+    records stay pseudonymous (#70)."""
     conv = _closed_conv(app, 'expired-conv', 70, 'exp1234567')
     _participate(participant, conv, 'calm-deer')
     resp = auth_client.get('/c/expired-conv')
     assert resp.status_code == 200
-    assert b'consultation is closed' in resp.data.lower()
-    assert b'reveal window' not in resp.data.lower()
+    assert b'reveal window has closed' in resp.data.lower()
+    assert b'records stay pseudonymous' in resp.data.lower()
 
 
 def test_reveal_state_already_revealed(auth_client, app, participant):
@@ -180,3 +204,50 @@ def test_reveal_page_keeps_existing_reveal_after_window(auth_client, app):
     assert resp.status_code == 200
     assert b'identity linked' in resp.data.lower()
     assert part.public_username == 'recentuser'
+
+
+# ── _reveal_context: countdown target, tz-normalization, boundaries (#70) ──────
+
+def _ctx(days_ago, revealed=False):
+    """Call _reveal_context on a lightweight (unpersisted) closed conversation."""
+    conv = Conversation(slug='x', polis_id='p', title='t', active=False,
+                        access_policy='public',
+                        closed_at=datetime.now(timezone.utc) - timedelta(days=days_ago))
+    part = Participation(public_username='Someone' if revealed else None)
+    return _reveal_context(conv, part)
+
+
+def test_reveal_context_target_pending_is_opens_at():
+    ctx = _ctx(10)
+    assert ctx['state'] == 'pending'
+    assert ctx['countdown_target_iso'] == ctx['opens_at'].isoformat()
+    assert ctx['opens_at'].tzinfo is not None          # aware UTC instant for the JS clock
+
+
+def test_reveal_context_target_open_is_closes_at():
+    ctx = _ctx(_REVEAL_COOLDOWN_DAYS + 5)
+    assert ctx['state'] == 'open'
+    assert ctx['countdown_target_iso'] == ctx['closes_at'].isoformat()
+
+
+def test_reveal_context_no_target_when_expired_or_revealed():
+    assert _ctx(_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS + 5)['countdown_target_iso'] is None
+    assert _ctx(_REVEAL_COOLDOWN_DAYS + 5, revealed=True)['countdown_target_iso'] is None
+
+
+def test_reveal_context_boundaries():
+    """Just inside the cooldown → pending; just past it → open; past the window → expired."""
+    assert _ctx(_REVEAL_COOLDOWN_DAYS - 0.01)['state'] == 'pending'
+    assert _ctx(_REVEAL_COOLDOWN_DAYS + 0.01)['state'] == 'open'
+    assert _ctx(_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS + 0.01)['state'] == 'expired'
+
+
+def test_reveal_context_normalizes_naive_closed_at():
+    """#1: a naive closed_at is normalized to aware UTC, so the derived window dates and
+    the countdown target are correct UTC instants (isoformat carries a +00:00 offset)."""
+    conv = Conversation(slug='x', polis_id='p', title='t', active=False,
+                        access_policy='public',
+                        closed_at=(datetime.now(timezone.utc) - timedelta(days=10)).replace(tzinfo=None))  # naive
+    ctx = _reveal_context(conv, Participation())
+    assert ctx['opens_at'].tzinfo is not None and ctx['closes_at'].tzinfo is not None
+    assert ctx['countdown_target_iso'].endswith('+00:00')
