@@ -1,5 +1,9 @@
 # Claude
-.claude/
+.claude/*
+# Cloud-session config: committed so Claude Code on the web installs the
+# agent-tooling plugin + reads its bindings. Both are secret-free.
+!.claude/settings.json
+!.claude/pr-check.json
 notes.md
 tmp/
 .dev-session

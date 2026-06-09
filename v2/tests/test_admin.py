@@ -157,7 +157,7 @@ def test_phase_toggles_off(admin_client, conv):
 # ── Guided phase transition (#140 + #156) ─────────────────────────────────────
 
 from app import (PHASE_SEQUENCE, PHASE_TRANSITIONS, _current_stage_index,
-                 _is_linear_phase_state, _advance_target_index)
+                 _is_linear_phase_state, _advance_target_index, _sync_phase6_featured)
 from db import FeaturedStatement
 
 
@@ -353,6 +353,236 @@ def test_move_arguments_to_cleanup_does_not_init_phase6(admin_client, conv):
     assert conv.phase6_polis_conversation_id is None   # not initialised yet
 
 
+# ── Round 6 re-sync on re-entry (#175) ────────────────────────────────────────
+
+def _featured(conv, *texts):
+    """Add confirmed featured statements with the given texts; return them."""
+    out = []
+    for i, t in enumerate(texts, start=1):
+        fs = FeaturedStatement(conversation_id=conv.id, polis_statement_id=i,
+                               statement_text=t, confirmed_by_admin=True)
+        db.session.add(fs); out.append(fs)
+    db.session.commit()
+    return out
+
+
+def test_resync_abc_to_bcd_adds_d_hides_a_keeps_bc(admin_client, conv):
+    """Featured was A,B,C at init; now B,C,D. Re-sync adds D, hides A, keeps B/C —
+    votes on B/C/A are never touched (hide ≠ delete)."""
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    b, c, d = _featured(conv, 'B', 'C', 'D')      # current featured set
+    round6 = ([], [{'tid': 1, 'txt': 'A'}, {'tid': 2, 'txt': 'B'}, {'tid': 3, 'txt': 'C'}], [])
+    with patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate') as mod, \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=4) as add:
+        ok, msg = _sync_phase6_featured(conv)
+    assert ok
+    add.assert_called_once_with('r6', 'D')        # D added
+    mod.assert_called_once_with('r6', 1, -1)      # A hidden, votes preserved
+    db.session.commit()
+    assert (b.phase6_polis_statement_id, c.phase6_polis_statement_id) == (2, 3)  # adopted
+    assert d.phase6_polis_statement_id == 4
+
+
+def test_resync_restores_a_refeatured_statement(admin_client, conv):
+    """A was removed (hidden in round 6) then re-featured → restore via moderate(+1)."""
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    (a,) = _featured(conv, 'A')
+    round6 = ([], [], [{'tid': 9, 'txt': 'A'}])    # A currently hidden in round 6
+    with patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate') as mod, \
+         patch('app.PolisServerClient.add_seed_return_id') as add:
+        ok, msg = _sync_phase6_featured(conv)
+    assert ok
+    mod.assert_called_once_with('r6', 9, 1)        # restored
+    add.assert_not_called()
+    db.session.commit()
+    assert a.phase6_polis_statement_id == 9
+
+
+def test_resync_noop_when_unchanged(admin_client, conv):
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    _featured(conv, 'A', 'B')
+    round6 = ([], [{'tid': 1, 'txt': 'A'}, {'tid': 2, 'txt': 'B'}], [])
+    with patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate') as mod, \
+         patch('app.PolisServerClient.add_seed_return_id') as add:
+        ok, msg = _sync_phase6_featured(conv)
+    assert ok
+    mod.assert_not_called()
+    add.assert_not_called()
+
+
+def test_resync_stats_db_unconfigured_adds_new_only_and_warns(admin_client, conv):
+    """Stats DB NOT configured → can't read round 6: seed featured statements with no
+    local mapping (add side), warn that de-featured statements can't be hidden."""
+    admin_client.application.config['POLIS_DATABASE_URL'] = ''   # genuinely unconfigured
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    a, b = _featured(conv, 'A', 'B')
+    b.phase6_polis_statement_id = 2               # already mapped; A is not
+    db.session.commit()
+    with patch('app.PolisServerClient.get_statements', return_value=None), \
+         patch('app.PolisServerClient.moderate') as mod, \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=7) as add:
+        ok, msg = _sync_phase6_featured(conv)
+    assert ok
+    add.assert_called_once_with('r6', 'A')        # only the unmapped one
+    mod.assert_not_called()                        # can't hide without reading round 6
+    assert 'check manually' in msg
+    db.session.commit()
+    assert a.phase6_polis_statement_id == 7
+
+
+def test_resync_stats_db_read_failure_aborts(admin_client, conv):
+    """Stats DB IS configured but the read fails → do NOT guess (double-seed risk):
+    return failure so the caller rolls back. Nothing is seeded."""
+    admin_client.application.config['POLIS_DATABASE_URL'] = 'postgresql://x/y'  # configured
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    _featured(conv, 'A')
+    with patch('app.PolisServerClient.get_statements', return_value=None), \
+         patch('app.PolisServerClient.add_seed_return_id') as add, \
+         patch('app.PolisServerClient.moderate') as mod:
+        ok, msg = _sync_phase6_featured(conv)
+    assert ok is False                            # caller will roll back
+    add.assert_not_called()                        # no blind seeding
+    mod.assert_not_called()
+    assert 'try again' in msg
+
+
+def test_resync_abc_to_bcd_reports_counts(admin_client, conv):
+    """The summary message reports the add/restore/hide counts."""
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    _featured(conv, 'B', 'C', 'D')
+    round6 = ([], [{'tid': 1, 'txt': 'A'}, {'tid': 2, 'txt': 'B'}, {'tid': 3, 'txt': 'C'}], [])
+    with patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=4):
+        ok, msg = _sync_phase6_featured(conv)
+    assert ok
+    assert '1 added' in msg and '1 hidden' in msg
+
+
+def test_resync_is_idempotent(admin_client, conv):
+    """Running the sync twice on an unchanged round 6 makes no second-round calls."""
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    _featured(conv, 'A', 'B')
+    round6 = ([], [{'tid': 1, 'txt': 'A'}, {'tid': 2, 'txt': 'B'}], [])
+    with patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate') as mod, \
+         patch('app.PolisServerClient.add_seed_return_id') as add:
+        _sync_phase6_featured(conv); db.session.commit()
+        _sync_phase6_featured(conv); db.session.commit()
+    add.assert_not_called()
+    mod.assert_not_called()
+
+
+def test_resync_empty_featured_set_hides_everything(admin_client, conv):
+    """Re-entry with zero confirmed featured statements hides every live round-6
+    statement (nothing added)."""
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()                            # no featured statements
+    round6 = ([], [{'tid': 1, 'txt': 'A'}, {'tid': 2, 'txt': 'B'}], [])
+    with patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate') as mod, \
+         patch('app.PolisServerClient.add_seed_return_id') as add:
+        ok, msg = _sync_phase6_featured(conv)
+    assert ok
+    add.assert_not_called()
+    assert sorted(c.args[1] for c in mod.call_args_list) == [1, 2]   # both hidden
+    assert all(c.args[2] == -1 for c in mod.call_args_list)
+
+
+def test_resync_duplicate_featured_text_skips_one_and_warns(admin_client, conv, caplog):
+    """Two confirmed featured statements with identical text collapse under the text
+    key: one is mapped, the other left unmapped, and a warning is logged (a degenerate
+    input — surfaced, not silently corrupting the round)."""
+    import logging
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    f1, f2 = _featured(conv, 'Same', 'Same')        # duplicate text
+    round6 = ([], [{'tid': 1, 'txt': 'Same'}], [])
+    with caplog.at_level(logging.WARNING), \
+         patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate') as mod, \
+         patch('app.PolisServerClient.add_seed_return_id') as add:
+        ok, msg = _sync_phase6_featured(conv); db.session.commit()
+    assert ok
+    add.assert_not_called(); mod.assert_not_called()
+    mapped = [fs.phase6_polis_statement_id for fs in (f1, f2)]
+    assert mapped.count(1) == 1 and mapped.count(None) == 1   # exactly one mapped
+    assert 'duplicates' in caplog.text
+
+
+def test_reentry_persists_seeded_tid_through_the_route(admin_client, conv):
+    """End-to-end: a featured statement seeded during the route's re-sync has its
+    phase6_polis_statement_id committed and surviving a fresh DB read."""
+    conv.phase_cleanup = True
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    _featured(conv, 'NewOne')                      # not yet in round 6 → must be seeded
+    round6 = ([], [], [])                          # round 6 currently empty
+    with patch('app.PolisServerClient.set_vis_type'), \
+         patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=77), \
+         patch('app.PolisServerClient.create_conversation'):
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                          data=_checks_for(conv))
+    db.session.expire_all()                        # force a fresh read from the DB
+    fs = FeaturedStatement.query.filter_by(conversation_id=conv.id).first()
+    assert fs.phase6_polis_statement_id == 77      # the route committed the sync
+
+
+def test_reentry_resync_failure_rolls_back(admin_client, conv):
+    """If the re-sync hits a Polis error, the route rolls back: the phase flag is NOT
+    set and no featured mapping is persisted."""
+    conv.phase_cleanup = True
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+    _featured(conv, 'A')                           # de-featured set is empty; A must be added
+    round6 = ([], [], [])
+    with patch('app.PolisServerClient.set_vis_type'), \
+         patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.add_seed_return_id',
+               side_effect=PolisServerError('boom')), \
+         patch('app.PolisServerClient.create_conversation'):
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                          data=_checks_for(conv))
+    db.session.expire_all()
+    db.session.refresh(conv)
+    assert conv.phase_informed_voting is False     # not advanced
+    fs = FeaturedStatement.query.filter_by(conversation_id=conv.id).first()
+    assert fs.phase6_polis_statement_id is None     # no partial mapping persisted
+
+
+def test_reentry_resyncs_instead_of_reinitialising(admin_client, conv):
+    """The guided Cleanup→Informed-vote move re-syncs an already-initialised round 6
+    rather than creating a second Polis conversation."""
+    conv.phase_cleanup = True
+    conv.phase6_polis_conversation_id = 'r6'       # already initialised
+    db.session.commit()
+    _featured(conv, 'A')
+    round6 = ([], [{'tid': 1, 'txt': 'A'}], [])
+    with patch('app.PolisServerClient.set_vis_type'), \
+         patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate'), \
+         patch('app.PolisServerClient.add_seed_return_id'), \
+         patch('app.PolisServerClient.create_conversation') as create:
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                          data=_checks_for(conv))
+    create.assert_not_called()                     # no re-init
+    db.session.refresh(conv)
+    assert conv.phase_informed_voting is True
+    assert conv.phase6_polis_conversation_id == 'r6'   # unchanged
+
+
 def test_move_to_public_results_auto_closes(admin_client, conv):
     """The final transition opens public results and permanently closes the
     conversation, starting the identity-reveal flow."""
@@ -518,14 +748,17 @@ def test_informed_voting_newcomers_has_no_machine_check():
 
 
 def test_move_to_informed_voting_proceeds_if_already_initialised(admin_client, conv):
-    """If Phase 6 is already initialised, moving to Informed vote PROCEEDS without
-    re-initialising — re-init adds no value and would fail on the UNIQUE constraint."""
+    """If Phase 6 is already initialised, moving to Informed vote PROCEEDS by re-syncing
+    round 6 (not re-initialising) — re-init would fail on the UNIQUE constraint."""
     conv.phase_cleanup = True                     # next move: cleanup → informed vote
     conv.phase6_polis_conversation_id = 'pre-existing'
     db.session.commit()
     _add_featured(conv)
     with patch('app.PolisServerClient.create_conversation') as cc, \
-         patch('app.PolisServerClient.set_vis_type'):
+         patch('app.PolisServerClient.set_vis_type'), \
+         patch('app.PolisServerClient.get_statements', return_value=([], [], [])), \
+         patch('app.PolisServerClient.moderate'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=99):
         admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
                           data=_checks_for(conv))
     db.session.refresh(conv)

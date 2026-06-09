@@ -76,6 +76,46 @@ _REVEAL_WINDOW_DAYS   = 30   # days participants may opt in once the window open
 _MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
+
+def _reveal_context(conv, participation):
+    """Identity-reveal timeline for a closed conversation (#70): when it closed, when
+    the opt-in window opens (after the cooldown) and closes, the current state, and the
+    days left while the window is open. Returns None when the conversation is not closed.
+    """
+    if not conv.closed_at:
+        return None
+    # Normalize ONCE to a tz-aware UTC instant, then derive everything from it — so the
+    # displayed dates and the countdown target are the same correct UTC moments the
+    # state math uses. (DB may hand back a naive datetime; deriving window dates off a
+    # naive value would make the live countdown tick to the wrong instant.)
+    closed = (conv.closed_at if conv.closed_at.tzinfo
+              else conv.closed_at.replace(tzinfo=timezone.utc))
+    opens_at  = closed + timedelta(days=_REVEAL_COOLDOWN_DAYS)
+    closes_at = closed + timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS)
+    now = datetime.now(timezone.utc)
+    age = now - closed
+    if participation and participation.public_username:
+        state = 'revealed'
+    elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
+        state = 'expired'
+    elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
+        state = 'open'
+    else:
+        state = 'pending'
+    # The window's next boundary, as a UTC instant the client ticks a live countdown
+    # against (per the design): opens_at while in cooldown, closes_at while open.
+    target = opens_at if state == 'pending' else closes_at if state == 'open' else None
+    # No-JS fallback: whole days to that boundary, partial day rounded UP so the final
+    # open day never reads "0 days left" while the reveal POST is still accepted.
+    days_left = 0
+    if target is not None:
+        _d = target - now
+        days_left = max(0, _d.days + (1 if (_d.seconds or _d.microseconds) else 0))
+    return {'closed_at': closed, 'opens_at': opens_at, 'closes_at': closes_at,
+            'state': state, 'days_left': days_left,
+            'countdown_target_iso': target.isoformat() if target else None,
+            'cooldown_days': _REVEAL_COOLDOWN_DAYS, 'window_days': _REVEAL_WINDOW_DAYS}
+
 # Canonical consultation phase sequence. One flag per stage; preparation = all off.
 # Simple mode advances through this list (forward-only, exclusive). The existing
 # independent toggles remain available in advanced mode.
@@ -1080,18 +1120,24 @@ def admin_conversation_advance(conv_id):
     # Run the Phase 6 Polis I/O FIRST, before mutating conv. This keeps the network
     # round-trips out of the open write transaction: the only DB write happens at the
     # commit below, so a slow Polis backend never holds a row lock on the conversation.
-    # Initialise the Phase 6 round only if it hasn't been already. If it has (advanced
-    # path, or a re-entry), just proceed with the transition — re-initialising adds no
-    # value and would fail on the UNIQUE constraint. The featured statements were seeded
-    # at init time, so round 6 already reflects the round-5 featured set.
+    # First entry → initialise the round. Re-entry (the featured set may have changed
+    # in between) → re-sync round 6 to the current featured set, preserving votes (#175).
     created_p6 = None
-    if ctx['runs_phase6_init'] and not conv.phase6_polis_conversation_id:
-        ok, msg = _init_phase6(conv)              # assigns ids onto conv/featured; no commit
-        if not ok:
-            db.session.rollback()
-            flash(msg, 'error')
-            return redirect_to
-        created_p6 = conv.phase6_polis_conversation_id
+    sync_msg = None
+    if ctx['runs_phase6_init']:
+        if not conv.phase6_polis_conversation_id:
+            ok, msg = _init_phase6(conv)          # assigns ids onto conv/featured; no commit
+            if not ok:
+                db.session.rollback()
+                flash(msg, 'error')
+                return redirect_to
+            created_p6 = conv.phase6_polis_conversation_id
+        else:
+            ok, sync_msg = _sync_phase6_featured(conv)
+            if not ok:
+                db.session.rollback()
+                flash(sync_msg, 'error')
+                return redirect_to
 
     cur, nxt = ctx['source'], ctx['target']
     if cur['flag']:                               # preparation has flag=None
@@ -1137,6 +1183,8 @@ def admin_conversation_advance(conv_id):
 
     if not _sync_vis_type(conv):
         flash('Phase moved, but updating results visibility in Polis failed.', 'error')
+    if sync_msg:                                  # re-entry re-synced round 6 (#175)
+        flash(sync_msg, 'warning' if 'check manually' in sync_msg else 'success')
     flash(f'Moved to: {nxt["label"]}.', 'success')
     return redirect_to
 
@@ -1228,6 +1276,99 @@ def _init_phase6(conv) -> tuple[bool, str]:
         fs.phase6_polis_statement_id = tid
     conv.phase6_polis_conversation_id = p6_conv_id
     return True, f'Phase 6 initialised — {len(seeded)} statement(s) seeded.'
+
+
+def _norm(text) -> str:
+    """Case/space-insensitive key for matching statement text across systems."""
+    return (text or '').strip().casefold()
+
+
+def _sync_phase6_featured(conv) -> tuple[bool, str]:
+    """Reconcile an ALREADY-initialised Phase 6 round with the CURRENT confirmed
+    featured set, preserving votes (#175). Statements are matched by text:
+
+    - featured but missing from round 6        → add_seed_return_id (new)
+    - featured but hidden in round 6           → moderate(+1) to restore
+    - featured and live                        → adopt its tid
+    - live in round 6 but no longer featured   → moderate(-1) to hide (votes kept)
+
+    Does NOT commit — the caller commits so the reconciliation and the flag flip are
+    one transaction. On any Polis failure returns (False, msg) so the caller rolls back
+    the DB; note that remote moderation calls already applied are non-transactional and
+    persist — re-running the sync is idempotent and reconciles them.
+
+    Hiding requires reading round 6's actual moderation state from the Polis stats DB:
+    - stats DB read succeeds → full reconcile (add / restore / adopt / hide);
+    - stats DB not configured → add-side only (seed unmapped featured statements) and
+      warn that removed statements could not be hidden;
+    - stats DB configured but the read FAILS → return failure (caller rolls back) rather
+      than risk double-seeding a live statement we momentarily couldn't see.
+    """
+    round6 = conv.phase6_polis_conversation_id
+    client = _polis_server_client()
+    featured = (FeaturedStatement.query
+                .filter_by(conversation_id=conv.id, confirmed_by_admin=True).all())
+    featured_by_text = {_norm(fs.statement_text): fs
+                        for fs in featured if _norm(fs.statement_text)}
+    n_texts = sum(1 for fs in featured if _norm(fs.statement_text))
+    if len(featured_by_text) < n_texts:                # last-write-wins collapsed duplicates
+        current_app.logger.warning(
+            'Round 6 re-sync: %d featured statements collapsed to %d distinct texts '
+            '(duplicates) for conv %s — some may be skipped.', n_texts,
+            len(featured_by_text), conv.slug)
+
+    rows = client.get_statements(round6)   # None if stats DB unconfigured OR the read failed
+
+    added = restored = removed = 0
+    try:
+        if rows is not None:
+            pending, approved, hidden = rows
+            live_tid   = {_norm(s['txt']): s['tid'] for s in approved + pending}
+            hidden_tid = {_norm(s['txt']): s['tid'] for s in hidden}
+
+            for key, fs in featured_by_text.items():
+                if key in live_tid:
+                    fs.phase6_polis_statement_id = live_tid[key]          # already live
+                elif key in hidden_tid:
+                    client.moderate(round6, hidden_tid[key], 1)           # restore
+                    fs.phase6_polis_statement_id = hidden_tid[key]
+                    restored += 1
+                else:
+                    # New statement. Owner-authored seeds are auto-approved even under
+                    # strict_moderation (same path as _init_phase6), so it's visible.
+                    fs.phase6_polis_statement_id = client.add_seed_return_id(
+                        round6, fs.statement_text)
+                    added += 1
+
+            for key, tid in live_tid.items():                            # de-featured → hide
+                if key not in featured_by_text:
+                    client.moderate(round6, tid, -1)
+                    removed += 1
+
+            return True, (f'Round 6 re-synced to the current featured set — '
+                          f'{added} added, {restored} restored, {removed} hidden.')
+
+        if not client._db_url:
+            # Stats DB genuinely not configured — add side only (cannot read round 6 to
+            # hide removed statements). Only seed featured statements with no local
+            # mapping (i.e. genuinely new ones); warn about the limitation.
+            for fs in featured:
+                if fs.phase6_polis_statement_id is None and _norm(fs.statement_text):
+                    fs.phase6_polis_statement_id = client.add_seed_return_id(
+                        round6, fs.statement_text)
+                    added += 1
+            return True, (f'Round 6: added {added} new statement(s). The stats DB is not '
+                          'configured, so de-featured statements could not be hidden — '
+                          'check manually.')
+
+        # Stats DB IS configured but the read failed — do not guess (seeding here could
+        # double-seed a live statement we couldn't see). Fail so the caller rolls back.
+        current_app.logger.error('Round 6 re-sync: stats DB read failed for %s', round6)
+        return False, ('Could not read round 6 from the stats DB to re-sync — nothing was '
+                       'changed; reload and try again.')
+    except PolisServerError as exc:
+        current_app.logger.error('Round 6 re-sync failed: %s', exc)
+        return False, f'Could not re-sync round 6 with the featured set: {exc}'
 
 
 @admin_bp.post('/admin/global-admins/add')
@@ -1766,20 +1907,10 @@ def conversation(slug):
                     _math_recompute_last[conv.id] = _now
                     recomputing = True
 
-    # Reveal window state for closed conversations.
-    reveal_state    = None
-    reveal_opens_at = None
-    if conv.closed_at:
-        age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-        reveal_opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
-        if participation.public_username:
-            reveal_state = 'revealed'
-        elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
-            reveal_state = 'expired'
-        elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
-            reveal_state = 'open'
-        else:
-            reveal_state = 'pending'
+    # Reveal-window timeline for closed conversations (#70).
+    reveal          = _reveal_context(conv, participation)
+    reveal_state    = reveal['state'] if reveal else None
+    reveal_opens_at = reveal['opens_at'] if reveal else None
 
     featured_data = []
     if conv.phase_argument_mapping and participation:
@@ -1838,6 +1969,7 @@ def conversation(slug):
                            polis_stats=polis_stats,
                            reveal_state=reveal_state,
                            reveal_opens_at=reveal_opens_at,
+                           reveal=reveal,
                            featured_data=featured_data,
                            new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10,
                            new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
@@ -2054,14 +2186,16 @@ def reveal_identity(slug):
     if not conv.closed_at:
         abort(404)
 
-    age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-    opens_at = conv.closed_at + timedelta(days=_REVEAL_COOLDOWN_DAYS)
+    # Single source of truth: the displayed timeline and these gate flags both come
+    # from _reveal_context, so the page can never show "open" while the POST rejects.
+    reveal = _reveal_context(conv, participation)
     return render_template('reveal.html',
                            conversation=conv,
                            participation=participation,
-                           window_open=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS),
-                           window_closed=age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS),
-                           opens_at=opens_at)
+                           window_open=reveal['state'] in ('open', 'revealed'),
+                           window_closed=reveal['state'] == 'expired',
+                           opens_at=reveal['opens_at'],
+                           reveal=reveal)
 
 @participant_bp.post('/c/<slug>/reveal')
 @login_required
@@ -2079,10 +2213,9 @@ def reveal_identity_post(slug):
     if not conv.closed_at:
         abort(400)
 
-    age = datetime.now(timezone.utc) - conv.closed_at.replace(tzinfo=timezone.utc)
-    if age < timedelta(days=_REVEAL_COOLDOWN_DAYS):
-        abort(400)
-    if age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
+    # Same source of truth as the GET page / timeline — the window is open iff
+    # _reveal_context says so. (Already-revealed → state 'revealed', also rejected.)
+    if _reveal_context(conv, participation)['state'] != 'open':
         abort(400)
     if participation.public_username is not None:
         abort(400)
