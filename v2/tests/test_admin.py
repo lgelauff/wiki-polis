@@ -706,6 +706,17 @@ def test_featured_check_shows_selected_count_and_recommendation(admin_client, co
     assert b'2 selected, 15 recommended' in resp.data
 
 
+def test_featured_check_zero_confirmed_suppresses_count(admin_client, conv):
+    """With zero confirmed featured the row shows "not met yet" and suppresses the
+    redundant "(0 selected, ...)" note - _check_confirmed_featured returns note=None."""
+    conv.phase_personal_results = True
+    db.session.commit()
+    resp = admin_client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'not met yet' in resp.data
+    assert b'selected, 15 recommended' not in resp.data
+
+
 def test_non_linear_state_suppresses_box(admin_client, conv):
     conv.phase_submission = True
     conv.phase_public_results = True

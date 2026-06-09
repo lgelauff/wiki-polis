@@ -1192,6 +1192,10 @@ def admin_phase6_init(conv_id):
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     except SQLAlchemyError:
         db.session.rollback()
+        # Logged unconditionally (unlike the guided route's `if created_p6:`
+        # guard): this route early-returns when an id already exists and has no
+        # re-sync path, so reaching the commit means _init_phase6 just created a
+        # fresh Polis conversation, now orphaned by the rollback.
         current_app.logger.error(
             'Phase 6 standalone init: DB error after Polis I/O — '
             'orphaned Polis conversation %s (conv %s)', orphan_id, slug)
