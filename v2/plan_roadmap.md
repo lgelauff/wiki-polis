@@ -17,9 +17,11 @@ Production is **live** at `wiki-polis.toolforge.org` (Toolforge Flask app + VPS 
 up). Provisioning, OAuth, secrets, and the Flask↔VPS wiring are done. Remaining
 operational hardening:
 
-- **Backups — top priority, not confirmed running.** Production is live without
-  verified backups; set up / confirm the nightly `pg_dump` → offsite, then rehearse a
-  restore. Address before other hardening.
+- **Backups — top priority, not confirmed running**
+  ([#139](https://github.com/lgelauff/wiki-polis/issues/139)). Production is live without
+  verified backups; the plan (daily `pg_dump` → Backblaze B2 via `rclone`, 14-day
+  retention, dead-man's-switch alert, restore drill in the runbook) is scoped on #139 but
+  not yet running. Address before other hardening.
 - Monitoring / alerting — deferred (D-MON,
   [#49](https://github.com/lgelauff/wiki-polis/issues/49)).
 
@@ -39,9 +41,12 @@ retention commitment (decision D-PRIV), pending legal/comms review.
   `participant_bp`; `_register_routes` complexity 177→33. Steps 1–4 (PR #88), 5–6 (#97),
   7 (#98), 8 (#99), 9 (#100); issues #89–93 closed. See
   [`log_changelog.md`](log_changelog.md).
-- **Soak harness follow-up** — `synthetic_traffic.py` soaks the proxy/vote path; its
-  accept step doesn't yet establish a Participation, so `statements/new` returns 401 and is
-  not exercised. Fix the accept step so statement-submit gets soak coverage too.
+- **Soak harness follow-up**
+  ([#130](https://github.com/lgelauff/wiki-polis/issues/130)) — `synthetic_traffic.py`
+  soaks the proxy/vote path, but its `act_submit` step broke after the same-origin CSRF
+  validation landed (#106) and the accept step doesn't establish a Participation, so
+  `statements/new` returns 401 and is not exercised. Fix the accept step so
+  statement-submit gets soak coverage too.
 - **Testing strategy / CI** — decision pending (D-TEST); recommendation in
   `.claude/testing-strategy-recommendations.md`. Leaning toward a CI gate on PRs plus
   coverage for the untested risky paths (proxy, reveal-window timing, Polis-Postgres
@@ -53,26 +58,30 @@ retention commitment (decision D-PRIV), pending legal/comms review.
 
 ## 4. Product / UX
 
-- **Voting** — "change vote" reopens + resubmits to Polis
-  ([#69](https://github.com/lgelauff/wiki-polis/issues/69)); three-action footer polish
-  ([#64](https://github.com/lgelauff/wiki-polis/issues/64)); slug-format hint on
-  validation ([#68](https://github.com/lgelauff/wiki-polis/issues/68)); mobile tap
-  affordance ([#71](https://github.com/lgelauff/wiki-polis/issues/71)).
-- **Arguments tab** — visual + interaction overhaul to the design handoff (Screen 2):
-  status strip, dashed contribute affordance, reserved checkbox slot, importance-vote
-  gating ([#79](https://github.com/lgelauff/wiki-polis/issues/79),
-  [#80](https://github.com/lgelauff/wiki-polis/issues/80),
-  [#47](https://github.com/lgelauff/wiki-polis/issues/47)); clarify when importance
-  voting unlocks ([#11](https://github.com/lgelauff/wiki-polis/issues/11)) and gate the
-  Arguments phase toggle on ≥1 featured proposal
-  ([#12](https://github.com/lgelauff/wiki-polis/issues/12)). _(The detailed visual spec
+- **Voting** — ✅ "change vote" reopens + resubmits to Polis
+  ([#69](https://github.com/lgelauff/wiki-polis/issues/69)), the three-action footer
+  ([#64](https://github.com/lgelauff/wiki-polis/issues/64)), and the slug-format hint on
+  validation ([#68](https://github.com/lgelauff/wiki-polis/issues/68)) all shipped.
+  Remaining: mobile tap affordance on listing cards
+  ([#71](https://github.com/lgelauff/wiki-polis/issues/71)).
+- **Arguments tab** — ✅ the visual + interaction overhaul to the design handoff (Screen 2)
+  shipped (PR #174): status strip, dashed contribute affordance, reserved checkbox slot,
+  importance-vote gating, the top-of-tab explanation
+  ([#80](https://github.com/lgelauff/wiki-polis/issues/80)), the clarified
+  importance-vote unlock state ([#11](https://github.com/lgelauff/wiki-polis/issues/11)),
+  and the Arguments-phase toggle gated on ≥1 featured proposal
+  ([#12](https://github.com/lgelauff/wiki-polis/issues/12)). Remaining: resolve the
+  concurrent-active-phases tab navigation
+  ([#79](https://github.com/lgelauff/wiki-polis/issues/79)) and the cleaner
+  admin/participant UI split with a visual mode indicator
+  ([#47](https://github.com/lgelauff/wiki-polis/issues/47)). _(The detailed visual spec
   lives in the design-handoff doc; the pre-rename build-log history has the full
   checklist.)_
-- **Results / identity** — fix the participant results tab
-  ([#81](https://github.com/lgelauff/wiki-polis/issues/81)); simplify the pseudonym
-  selection screen ([#82](https://github.com/lgelauff/wiki-polis/issues/82)); show the
-  reveal-window end date on closed conversations
-  ([#70](https://github.com/lgelauff/wiki-polis/issues/70)).
+- **Results / identity** — ✅ participant results tab fixed
+  ([#81](https://github.com/lgelauff/wiki-polis/issues/81)) and the reveal-window end date
+  + "what happens next" now shown on closed conversations
+  ([#70](https://github.com/lgelauff/wiki-polis/issues/70)). Remaining: simplify the
+  pseudonym selection screen ([#82](https://github.com/lgelauff/wiki-polis/issues/82)).
 - **Internal-link removal still needed.** Per D-PRIV (clarified), a voluntary reveal is
   permanent and is no longer nullified by the app. The remaining work is a separate
   data-minimisation mechanism that removes the *internal* account↔pseudonym link for
@@ -88,10 +97,13 @@ retention commitment (decision D-PRIV), pending legal/comms review.
 
 ## 5. Deferred / later
 
-- ~~**Phase 6 — informed voting**~~ ✅ Implemented (PR #115, 2026-06-04). Data model,
-  admin init, participant UI, vote route. See `log_changelog.md` for detail.
-  Follow-up: dedup table for repeat votes, 409 UX, tab on closed convs, admin
-  warning for un-seeded confirmed statements.
+- ~~**Phase 6 — informed voting**~~ ✅ Implemented (PR #115, 2026-06-04); standalone
+  phase6-init hardened (PR #179). Data model, admin init, participant UI, vote route. See
+  `log_changelog.md` for detail. Follow-up: informed-voting card layout polish
+  ([#119](https://github.com/lgelauff/wiki-polis/issues/119)), a Phase-2-vs-informed
+  results report ([#122](https://github.com/lgelauff/wiki-polis/issues/122)), and the
+  "Done" completion screen after all cards are voted/skipped
+  ([#128](https://github.com/lgelauff/wiki-polis/issues/128)).
 - **Return engagement** — notifications (talk page / email), "new since last visit".
 - **Analytics export** — structured export of votes / clusters / arguments.
 - **Admin & ops** — ban participant
