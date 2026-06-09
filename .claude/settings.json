@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "wikimedia-agent-tooling": {
+      "source": { "source": "github", "repo": "lgelauff/wikimedia-coding-agent-lessons" }
+    }
+  },
+  "enabledPlugins": {
+    "agent-tooling@wikimedia-agent-tooling": true
+  }
+}
