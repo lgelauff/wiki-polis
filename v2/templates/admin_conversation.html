@@ -90,16 +90,27 @@
         </div>
         <p class="phase-now-desc">{{ phase_sequence[current_stage_index].effect }}</p>
 
-        {# The few numbers we already fetch. TODO(#165/#42): per-phase statistics
-           (e.g. featured-with-arguments, awaiting moderation) replace these. #}
-        {% if polis_stats %}
+        {# Phase-specific statistics (#165). Tiles are scoped to the current phase and
+           built server-side by _phase_stats(). Flask-derived numbers (featured,
+           arguments) render even when Polis PG is down; the warning below fires only
+           when PG is configured but unreachable. #}
+        {% if polis_stats_unavailable %}
+        <div class="phase-stats-warning" role="alert">
+          <span aria-hidden="true">⚠️</span>
+          <span><strong>Live statistics unavailable.</strong> The Polis statistics database
+            could not be reached, so vote and participant counts may be missing or stale.
+            Check the server logs.</span>
+        </div>
+        {% endif %}
+        {% if phase_stats %}
         <div class="phase-stats">
-          <div><div class="phase-stat-value">{{ polis_stats.n_participants }}</div>
-               <div class="phase-stat-label">participants</div></div>
-          <div><div class="phase-stat-value">{{ polis_stats.n_votes }}</div>
-               <div class="phase-stat-label">votes cast</div></div>
-          <div><div class="phase-stat-value">{{ polis_stats.n_statements }}</div>
-               <div class="phase-stat-label">statements ({{ polis_stats.n_seed }} seed)</div></div>
+          {% for t in phase_stats %}
+          <div>
+            <div class="phase-stat-value">{{ t.value }}{% if t.unit %}<span class="unit">{{ t.unit }}</span>{% endif %}</div>
+            <div class="phase-stat-label">{{ t.label }}</div>
+            {% if t.note %}<div class="phase-stat-note">{{ t.note }}</div>{% endif %}
+          </div>
+          {% endfor %}
         </div>
         {% endif %}
       </div>

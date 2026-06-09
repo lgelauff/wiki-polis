@@ -304,6 +304,27 @@
 .phase-stat-delta { font-size: 11px; font-weight: 600; font-family: var(--mono); }
 .phase-stat-delta--up   { color: var(--agree); }
 .phase-stat-delta--down { color: var(--disagree); }
+.phase-stat-note {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-top: 2px;
+}
+/* Loud, always-visible banner when Polis PG is configured but unreachable (#165).
+   Unlike .box-adv-note this is not gated on advanced mode — the organizer must see it. */
+.phase-stats-warning {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: rgba(180,83,9,0.10);
+  border: 1px solid rgba(180,83,9,0.45);
+  font-size: 13px;
+  color: var(--spot);
+}
 
 /* readiness + move-on launcher footer */
 .phase-foot {
