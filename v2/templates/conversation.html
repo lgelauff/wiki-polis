@@ -283,7 +283,7 @@
             </svg>
           </span>
           <span class="propose-submitted-label">PROPOSED — heading to moderation</span>
-          <button type="button" id="propose-next" class="propose-next-btn">Next statement →</button>
+          <button type="button" id="propose-next" class="propose-next-btn">Next statement <span aria-hidden="true">→</span></button>
         </div>
 
         {# ── All done message ── #}
@@ -889,6 +889,17 @@
     bar.addEventListener('click', function (e) {
       var btn = e.target.closest('.tab-btn');
       if (btn) activate(btn);
+    });
+
+    // Deep-link: <a data-tab="tab-*"> anywhere on the page activates that tab.
+    document.addEventListener('click', function (e) {
+      var link = e.target.closest('a[data-tab]');
+      if (!link || link.classList.contains('tab-btn')) return;
+      var btn = bar.querySelector('[data-tab="' + link.dataset.tab + '"]');
+      if (!btn) return;
+      e.preventDefault();
+      activate(btn);
+      btn.focus();
     });
 
     bar.addEventListener('keydown', function (e) {
