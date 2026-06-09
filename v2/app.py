@@ -240,7 +240,8 @@ def _check_confirmed_featured(conv):
     selected count against the recommended target so the organizer can judge coverage."""
     n = (FeaturedStatement.query
          .filter_by(conversation_id=conv.id, confirmed_by_admin=True).count())
-    return n > 0, f'{n} selected, {_RECOMMENDED_FEATURED} recommended'
+    note = f'{n} selected, {_RECOMMENDED_FEATURED} recommended' if n > 0 else None
+    return n > 0, note
 
 
 # Machine-verifiable preconditions: name → check(conv) -> (met: bool, note: str|None).
@@ -1221,11 +1222,25 @@ def admin_phase6_init(conv_id):
     if not ok:
         flash(msg, 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    orphan_id = conv.phase6_polis_conversation_id  # capture before any rollback expires it
+    slug = conv.slug
     try:
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
         flash('Phase 6 was already initialised by a concurrent request.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    except SQLAlchemyError:
+        db.session.rollback()
+        # Logged unconditionally (unlike the guided route's `if created_p6:`
+        # guard): this route early-returns when an id already exists and has no
+        # re-sync path, so reaching the commit means _init_phase6 just created a
+        # fresh Polis conversation, now orphaned by the rollback.
+        current_app.logger.error(
+            'Phase 6 standalone init: DB error after Polis I/O — '
+            'orphaned Polis conversation %s (conv %s)', orphan_id, slug)
+        flash('Phase 6 initialisation failed due to a database error. '
+              'Contact a site admin — the Polis conversation id has been logged.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     flash(msg, 'success')
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))

@@ -1861,6 +1861,12 @@ a { color: var(--pass); }
   font-weight: 600;
 }
 
+.badge-paused-inline {
+  color: var(--spot);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 /* ── Statement moderation table ── */
 
 .stmt-table .stmt-text {

@@ -706,6 +706,17 @@ def test_featured_check_shows_selected_count_and_recommendation(admin_client, co
     assert b'2 selected, 15 recommended' in resp.data
 
 
+def test_featured_check_zero_confirmed_suppresses_count(admin_client, conv):
+    """With zero confirmed featured the row shows "not met yet" and suppresses the
+    redundant "(0 selected, ...)" note - _check_confirmed_featured returns note=None."""
+    conv.phase_personal_results = True
+    db.session.commit()
+    resp = admin_client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'not met yet' in resp.data
+    assert b'selected, 15 recommended' not in resp.data
+
+
 def test_non_linear_state_suppresses_box(admin_client, conv):
     conv.phase_submission = True
     conv.phase_public_results = True
@@ -722,6 +733,16 @@ def test_non_linear_state_suppresses_box(admin_client, conv):
 def test_move_rejects_non_on_checkbox_value(admin_client, conv):
     """Only the literal 'on' value satisfies a precondition; '1'/'true' do not."""
     data = {k: '1' for k in _checks_for(conv)}
+    resp = _move(admin_client, conv, data=data)
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.phase_submission is False
+
+
+@pytest.mark.parametrize('bad_value', ['true', ''])
+def test_move_rejects_non_on_checkbox_variants(admin_client, conv, bad_value):
+    """'true' and '' are not accepted — only the literal 'on' passes."""
+    data = {k: bad_value for k in _checks_for(conv)}
     resp = _move(admin_client, conv, data=data)
     assert resp.status_code == 302
     db.session.refresh(conv)
@@ -813,6 +834,40 @@ def test_move_informed_voting_empty_text_aborts(admin_client, conv):
     assert conv.phase6_polis_conversation_id is None
     cc.assert_called_once()       # remote conversation was created…
     seed.assert_not_called()      # …but seeding never started (empty text aborts)
+
+
+def test_move_informed_voting_none_text_aborts(admin_client, conv):
+    """A statement_text of None (not '') aborts Phase 6 init — same path as empty string."""
+    conv.phase_cleanup = True
+    db.session.commit()
+    _add_featured(conv, text=None)
+    with patch('app.PolisServerClient.create_conversation', return_value='p6y') as cc, \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=1) as seed:
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                          data=_checks_for(conv))
+    db.session.refresh(conv)
+    assert conv.phase_informed_voting is False
+    assert conv.phase6_polis_conversation_id is None
+    cc.assert_called_once()
+    seed.assert_not_called()
+
+
+def test_move_polis_create_error_leaves_flags_untouched(admin_client, conv):
+    """If create_conversation raises, the phase flag must not be mutated and
+    set_vis_type must never be reached — the Polis I/O runs before the flag write."""
+    from app import PolisServerError
+    conv.phase_cleanup = True
+    db.session.commit()
+    _add_featured(conv)
+    with patch('app.PolisServerClient.set_vis_type') as vis, \
+         patch('app.PolisServerClient.create_conversation',
+               side_effect=PolisServerError('network error')):
+        admin_client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                          data=_checks_for(conv))
+    db.session.refresh(conv)
+    assert conv.phase_informed_voting is False   # flag not set
+    assert conv.phase_cleanup is True            # current flag not cleared
+    vis.assert_not_called()                      # set_vis_type never reached
 
 
 def test_move_commit_failure_rolls_back_and_logs_orphan(admin_client, conv, caplog):
@@ -965,6 +1020,28 @@ def test_phase6_init_integrityerror_flashes(admin_client, conv):
         resp = admin_client.post(f'/admin/conversations/{conv.id}/phase6/init',
                                  follow_redirects=True)
     assert b'already initialised by a concurrent request' in resp.data.lower()
+
+
+def test_phase6_init_sqlalchemy_error_flashes_and_logs_orphan(admin_client, conv, caplog):
+    """A non-integrity DB error (deadlock/timeout) after Polis I/O must not 500:
+    it rolls back, logs the orphaned Polis conversation id, and shows an error flash."""
+    import logging
+    from sqlalchemy.exc import OperationalError
+    conv.phase_informed_voting = True
+    db.session.commit()
+    _add_featured(conv)
+    with patch('app.PolisServerClient.create_conversation', return_value='p6orphanSA'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=7), \
+         patch('app.db.session.commit',
+               side_effect=OperationalError('stmt', {}, Exception('deadlock'))), \
+         caplog.at_level(logging.ERROR):
+        resp = admin_client.post(f'/admin/conversations/{conv.id}/phase6/init',
+                                 follow_redirects=True)
+    assert resp.status_code == 200
+    assert b'database error' in resp.data.lower()
+    assert 'p6orphanSA' in caplog.text
+    db.session.refresh(conv)
+    assert conv.phase6_polis_conversation_id is None   # rolled back
 
 
 # ── Pause / close ─────────────────────────────────────────────────────────────
