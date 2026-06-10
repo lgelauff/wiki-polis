@@ -1,0 +1,39 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Node (for the inline-JS syntax gate)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Lint (ruff — pyflakes; catches undefined names / unused)
+        run: uvx ruff check .
+
+      - name: Tests + inline-template-JS syntax gate
+        # No .env in CI, and app.py instantiates the app at import, so the
+        # production startup checks need these supplied. FLASK_DEBUG=1 bypasses
+        # the web-server-only guards; the security tests override it per-test.
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
+          SECRET_KEY: "0000000000000000000000000000000000000000"
+          FLASK_DEBUG: "1"
+        run: uv run pytest -q

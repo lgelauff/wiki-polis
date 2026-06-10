@@ -45,3 +45,12 @@ packages = []
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff.lint]
+# Start with pyflakes (real errors: undefined names, unused imports/vars) —
+# this is what caught the undefined `logger` bug. Tighten to E/W (style) later.
+select = ["F"]
+
+[tool.ruff.lint.per-file-ignores]
+# Unused test imports/locals are low-value noise; clean up opportunistically.
+"tests/*" = ["F401", "F841"]

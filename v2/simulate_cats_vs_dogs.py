@@ -246,9 +246,9 @@ def create_polis_conversation(topic: str, description: str) -> str:
     """Insert a new conversation directly into Polis PostgreSQL. Returns zinvite."""
     zinvite = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
     zid = psql(
-        f"INSERT INTO conversations "
-        f"(topic, description, owner, is_active, is_public, write_type, vis_type) "
-        f"VALUES ($$%s$$, $$%s$$, 1, true, true, 1, 1) RETURNING zid;" % (topic, description)
+        "INSERT INTO conversations "
+        "(topic, description, owner, is_active, is_public, write_type, vis_type) "
+        "VALUES ($$%s$$, $$%s$$, 1, true, true, 1, 1) RETURNING zid;" % (topic, description)
     )
     psql(f"INSERT INTO zinvites (zid, zinvite) VALUES ({zid}, '{zinvite}');")
     return zinvite
@@ -430,10 +430,10 @@ def run_simulation(conv_id: str) -> None:
           + f", {len(pool)} statements total")
 
     print(f"\n{'=' * 62}")
-    print(f"Simulation complete.")
+    print("Simulation complete.")
     print(f"  Polis conversation: {conv_id}")
     print(f"  Particiapi results: {PARTICIAPI}/api/conversations/{conv_id}/results/")
-    print(f"  (Polis math runs in the background — typically 30–60 s)")
+    print("  (Polis math runs in the background — typically 30–60 s)")
 
     # Build text → tid mapping for the caller (used by seed_featured_statements).
     text_to_tid = {}
