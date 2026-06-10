@@ -3267,32 +3267,24 @@ a { color: var(--pass); }
 .at-complete { margin-bottom: 8px; }
 .at-complete .interlude { margin-top: 1rem; }
 
-/* Revisit bar — collapsed panel summary shown after all-complete */
-.at-revisit-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 10px 14px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #15734a;
-  text-align: left;
+/* Collapse toggle — appears in at-head after all-done; matches at-orient-toggle style */
+.at-collapse-btn {
+  align-self: flex-start;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
+  background: none;
+  border: none;
   cursor: pointer;
-  margin-top: 4px;
+  padding: 2px 4px;
+  font-family: inherit;
+  white-space: nowrap;
 }
-.at-revisit-bar:hover { background: #dcfce7; }
-.at-revisit-bar svg  { flex-shrink: 0; color: #15734a; }
-.at-revisit-bar span:nth-child(2) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.at-revisit-chevron  { flex-shrink: 0; font-size: 10px; }
+.at-collapse-btn:hover { color: var(--ink); }
 
-/* Hide panel body when collapsed after completion */
-.at-panel--done:not(.at-panel--expanded) .at-head,
+/* Hide panel body when collapsed after completion; header stays visible */
 .at-panel--done:not(.at-panel--expanded) .at-cols,
 .at-panel--done:not(.at-panel--expanded) .at-nav { display: none; }
-.at-panel--done:not(.at-panel--expanded) { padding: 0; border: none; box-shadow: none; background: none; }
 
 /* Mobile */
 @media (max-width: 680px) {

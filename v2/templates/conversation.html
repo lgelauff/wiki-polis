@@ -441,6 +441,20 @@
               aria-expanded="true" aria-controls="at-orient-body-{{ conversation.slug }}">collapse <span aria-hidden="true">▲</span></button>
     </div>
 
+    {# All-complete state — shown by JS when every panel is done; sits above panels #}
+    <div class="at-complete" id="at-complete" hidden>
+      <div class="interlude">
+        <span class="interlude-glyph">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 6 9 17l-5-5"/>
+          </svg>
+        </span>
+        <h2 class="interlude-title">You've been through all of them</h2>
+        <p class="interlude-sub">Nothing is locked in — you can still adjust your priorities below.</p>
+      </div>
+    </div>
+
     <div class="arg-panels">
     {% for item in featured_data %}
     {% set fs = item.fs %}
@@ -497,6 +511,9 @@
             </div>
           </div>
         </div>
+        {# Collapse toggle — only shown after all-done #}
+        <button class="at-collapse-btn" type="button" hidden aria-expanded="true"
+                aria-label="Collapse this panel">collapse <span class="at-collapse-chevron" aria-hidden="true">▲</span></button>
       </div>
 
       {# ── Two-column grid ── #}
@@ -765,33 +782,9 @@
                 aria-label="Next statement">Next →</button>
       </div>
 
-      {# Revisit bar — visible only when all panels are collapsed after completion #}
-      <button class="at-revisit-bar" type="button" hidden aria-expanded="false">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M20 6 9 17l-5-5"/>
-        </svg>
-        <span>{{ item.text | truncate(60, True) }}</span>
-        <span class="at-revisit-chevron" aria-hidden="true">▼</span>
-      </button>
-
     </div>{# end at-panel / arg-block #}
     {% endfor %}
     </div>{# end arg-panels #}
-
-    {# All-complete state — shown by JS when every panel is done #}
-    <div class="at-complete" id="at-complete" hidden>
-      <div class="interlude">
-        <span class="interlude-glyph">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M20 6 9 17l-5-5"/>
-          </svg>
-        </span>
-        <h2 class="interlude-title">You've been through all of them</h2>
-        <p class="interlude-sub">Nothing is locked in — you can still adjust your priorities below.</p>
-      </div>
-    </div>
 
     {# Panel count used by JS for circles #}
     <script type="application/json" id="at-panel-data" nonce="{{ csp_nonce }}">
@@ -1717,23 +1710,28 @@
     var completeDiv = document.getElementById('at-complete');
     if (completeDiv) completeDiv.hidden = !allDone;
     allPanels.forEach(function (panel) {
-      var bar = panel.querySelector('.at-revisit-bar');
-      if (!bar) return;
+      var btn = panel.querySelector('.at-collapse-btn');
+      if (!btn) return;
       if (allDone) {
         panel.classList.add('at-panel--done');
-        bar.hidden = false;
-        // collapse panel body; bar click expands it
-        if (!bar._wired) {
-          bar._wired = true;
-          bar.addEventListener('click', function () {
+        // start collapsed; toggle shows the panel
+        panel.classList.remove('at-panel--expanded');
+        btn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('aria-label', 'Expand this panel');
+        btn.querySelector('.at-collapse-chevron').textContent = '▼';
+        btn.hidden = false;
+        if (!btn._wired) {
+          btn._wired = true;
+          btn.addEventListener('click', function () {
             var expanded = panel.classList.toggle('at-panel--expanded');
-            bar.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-            bar.querySelector('.at-revisit-chevron').textContent = expanded ? '▲' : '▼';
+            btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            btn.querySelector('.at-collapse-chevron').textContent = expanded ? '▲' : '▼';
+            btn.setAttribute('aria-label', expanded ? 'Collapse this panel' : 'Expand this panel');
           });
         }
       } else {
         panel.classList.remove('at-panel--done', 'at-panel--expanded');
-        bar.hidden = true;
+        btn.hidden = true;
       }
     });
   }
