@@ -40,7 +40,8 @@ A consultation moves through a linear sequence of phases — each builds on the 
 3. **Featured selection** — participants can see their personal results while you curate the featured statements that the argument layer will use.
 4. **Argument mapping** — opens a pro/con argument layer on the featured statements. Participants read, submit, and vote on short pro/con arguments.
 5. **Informed voting** — a second, independent voting round on the featured statements only, with the Phase 4 arguments shown inline so participants deliberate before casting a clean Agree / Disagree / Pass vote. Participants who skipped earlier phases can join here; the statement set is fixed. Must be **initialised** from the admin panel before the tab appears (see [Enabling informed voting](#enabling-informed-voting)).
-6. **Public results** — opens the complete opinion map to everyone, including visitors. Reaching this phase **permanently closes the consultation** and starts the identity-reveal window.
+   *After informed voting ends:* participants see **preliminary results** while the organizer reviews and moderates before publishing. This is the **cleanup window** — no new phase flag, just the active conversation in a review state (see [section 7](#7-review-results-and-clean-up-the-cleanup-window)).
+6. **Publish final report** — the organizer explicitly closes the conversation once satisfied with the results. This publishes the final report at `/c/<slug>/report`, freezes the moderation filter (making report figures semi-immutable), and starts the identity-reveal window. Closing is **irreversible**.
 
 ### Moving between phases
 
@@ -184,35 +185,51 @@ representative or strongly dividing ones) from the system's suggestions, or add 
 manually. On featured statements participants read, submit, and vote on short pro/con
 arguments. Keep the set small (≈8–12) — curation quality drives the argument layer.
 
-## 7. Read the informed voting results
+## 7. Review results and clean up (the cleanup window)
 
-After Phase 6 (informed voting) the platform generates three result surfaces:
+After informed voting ends there is a **cleanup window** before the final report is
+published. This is not a separate phase toggle — the conversation stays active while you
+review. Participants see a **Preliminary results** banner during this time.
 
-### Preliminary results (while the round is live)
-Participants see a comparison table on the **Results tab** as soon as the round is open.
-It shows agree/disagree bars for each featured statement side-by-side (Phase 2 initial vote vs
-Phase 6 informed vote) and a shift indicator (e.g. +12% agree). This is marked
-**Preliminary** — counts change as more participants vote.
+**What to do in the cleanup window:**
+- Review the preliminary results (the Results tab shows the same data the final report will).
+- Moderate any remaining flagged statements from the informed voting round.
+- Once issue #60 ships: exclude any participants who violated the terms — their votes will
+  be filtered from the final report counts.
+- When you are satisfied: **publish the final report** by closing the conversation (see
+  section 8 below).
 
-### Final report (after you close)
-Once you close the consultation, a **final report** is published at `/c/<slug>/report`.
-It shows:
-- Participation counts for each round (initial and informed voting)
-- The full opinion-shift table, sorted by size of shift
-- Opinion groups (clusters) identified in the informed voting round by Polis math
-- Any moderation exclusions applied (e.g. statements or participants removed post-round)
+> **Don't rush this step.** Once you close, the moderation filter is frozen and the
+> aggregate counts in the report become semi-immutable. You can add a narrative and
+> context before publishing, but the vote tallies won't change after close.
+
+### What participants see during the cleanup window
+The Results tab shows a "Preliminary results" banner. Once you close, it transitions to a
+"Read the final report →" link. Participants are not notified automatically — consider
+sending a talk-page or email notification when the final report goes live.
+
+### Result surfaces
+
+#### Preliminary results
+Available on the **Results tab** as soon as informed voting is open (and continues through
+the cleanup window). Shows agree/disagree bars side-by-side (Phase 2 initial vote vs Phase 6
+informed vote) and an aggregate shift indicator. Marked **Preliminary** — counts change while
+voting is open.
+
+#### Final report (after close)
+Published at `/c/<slug>/report` once `closed_at` is set. Shows:
+- Participation counts for each round
+- Full opinion-shift table, sorted by size of shift
+- Opinion groups (clusters) identified in the informed voting round
+- Moderation exclusions applied (statements and participants filtered from counts)
+- Process timeline and methodology notes
 
 The report is public when **Public results** is on; login-required when only
 **Personal results** is on.
 
-> **Organizer cleanup before the report.** Between closing and publishing, you may want
-> to moderate any remaining flagged statements or (once issue #60 ships) exclude
-> participants who violated the terms. All exclusions are reflected in the final report's
-> counts — the raw votes remain in Polis but are filtered from the displayed aggregates.
-
-### Self-comparison (coming soon)
-A future surface will let participants explore where their own informed votes place them
-relative to the opinion groups. See issue #122 for tracking.
+#### Self-comparison (coming soon)
+A future surface will let participants see where their own votes place them relative to the
+opinion groups.
 
 ### Two data sources — what the platform checks
 The platform queries **two sources** and compares them:
@@ -220,16 +237,18 @@ The platform queries **two sources** and compares them:
   moderation filters are applied here.
 - **Particiapi results API** — provides the cluster/group structure that Polis math computed.
 
-If the participant counts diverge by more than 5% (e.g. a moderation sync lag), the app
-logs a warning. You'll see this in the server logs if it occurs.
+If participant counts diverge by more than 5% (e.g. a moderation sync lag), the app logs a
+warning. You'll see this in the server logs if it occurs.
 
-## 8. Close and identity reveal
+## 8. Publish the final report and identity reveal
 
-**Closing is irreversible** and starts the retention clock. After a cooldown a
-participant may *voluntarily and permanently* attach their Wikimedia username to their
-pseudonym; that reveal is never undone. The internal link between an account and its
-pseudonym is removed within 180 days for participants who did **not** reveal. See the
-identity model in [`spec_functional-design.md`](spec_functional-design.md) and the
+**Closing is irreversible.** It publishes the final report, freezes the moderation filter
+(so aggregate counts in the report are semi-immutable), and starts the retention clock.
+
+After a cooldown a participant may *voluntarily and permanently* attach their Wikimedia
+username to their pseudonym; that reveal is never undone. The internal link between an
+account and its pseudonym is removed within 180 days for participants who did **not** reveal.
+See the identity model in [`spec_functional-design.md`](spec_functional-design.md) and the
 [privacy statement](pub_privacy.md).
 
 ---
