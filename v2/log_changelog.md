@@ -293,6 +293,36 @@ arguments so participants deliberate before casting a clean vote.
 **Ops**
 - [x] `deploy.sh --migrate` runs Alembic from the bastion via dynamic envvar loading + `MIGRATION_MODE=1` (skips web-server-only startup checks); documented in `guide_deployment.md`
 
+## Phase-specific admin statistics (2026-06-09, [#165](https://github.com/lgelauff/wiki-polis/issues/165))
+
+The admin conversation window's phase-hero stat block now shows numbers **scoped to the
+current phase** instead of a fixed participants/votes/statements readout — they sit above
+the guided "Move on" box and double as readiness signals (#156).
+
+- [x] `_phase_stats(conv, polis_stats, phase6_stats)` builds per-phase tiles: Explore →
+  participants / votes / statements + avg & median votes; Featured selection → selected vs
+  recommended + candidate pool; Arguments & Cleanup → featured count, pro/con argument
+  counts (human, visible — seeds and hidden excluded), distinct contributors & raters;
+  Informed vote → statements seeded, round-2 participants/votes (from the Phase 6 Polis
+  conversation) vs round-1 participants; Report → headline totals
+- [x] Flask-derived tiles (featured, arguments) render even when Polis PG is down — only
+  Polis-derived counts depend on it
+- [x] **Loud warning banner** in the hero when `POLIS_DATABASE_URL` is configured but the
+  stats DB is unreachable (`get_polis_stats` → None); stays silent when PG is intentionally
+  not wired (local/dev), where None is expected
+- [x] Tests: per-phase tile correctness (featured-selection, argument-mapping, informed-vote
+  with mocked Phase 6 stats) + warning shown / not-shown by PG-configured state
+
+**Review fixes (pr-check #183)**
+- [x] Warning banner now also fires when the **round-2 (Phase 6) stats fetch fails** during
+  informed voting — previously a phase-6 outage dropped the round-2 tiles silently
+- [x] `n_raters` excludes raters whose only votes were on hidden/moderated arguments,
+  matching the `Argument.hidden` filter the sibling tiles already apply
+- [x] a11y: each stat tile carries an `aria-label` tying value→label→note together (screen
+  readers read one phrase, not a stream of loose numbers); warning banner uses `role="status"`
+  (not the render-time-inappropriate `role="alert"`); warning text darkened to clear AA
+  contrast on the tinted panel
+
 ## Step 8 — Phase 6 results report (2026-06-10)
 
 **Phase 6 results — three surfaces** ([#122](https://github.com/lgelauff/wiki-polis/issues/122), [#165](https://github.com/lgelauff/wiki-polis/issues/165) partial)

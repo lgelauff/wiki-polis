@@ -281,10 +281,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 26px;
-  margin-top: 18px;
+  /* margin set on all sides so the <dl> element carries no UA margin (#165). */
+  margin: 18px 0 0;
   padding-top: 18px;
   border-top: 1px solid var(--hairline-soft);
 }
+.phase-stats dd { margin: 0; }  /* drop the UA dd indent — tiles stack value over label */
 .phase-stat-value {
   font-size: 24px;
   font-weight: 700;
@@ -304,6 +306,29 @@
 .phase-stat-delta { font-size: 11px; font-weight: 600; font-family: var(--mono); }
 .phase-stat-delta--up   { color: var(--agree); }
 .phase-stat-delta--down { color: var(--disagree); }
+.phase-stat-note {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-top: 2px;
+}
+/* Loud, always-visible banner when Polis PG is configured but unreachable (#165).
+   Unlike .box-adv-note this is not gated on advanced mode — the organizer must see it. */
+.phase-stats-warning {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: rgba(180,83,9,0.10);
+  border: 1px solid rgba(180,83,9,0.45);
+  font-size: 13px;
+  /* Darker than --spot (#b45309): at 13px on the tinted amber panel --spot lands
+     ~4.2:1, under AA. #7c2d12 clears 4.5:1 on this background (#165 a11y). */
+  color: #7c2d12;
+}
 
 /* readiness + move-on launcher footer */
 .phase-foot {

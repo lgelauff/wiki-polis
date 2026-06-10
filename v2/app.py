@@ -507,6 +507,106 @@ def _transition_context(conv):
     }
 
 
+def _featured_counts(conv):
+    """(confirmed, total) featured statements for one conversation."""
+    base = FeaturedStatement.query.filter_by(conversation_id=conv.id)
+    return (base.filter_by(confirmed_by_admin=True).count(), base.count())
+
+
+def _argument_stats(conv):
+    """Argument-phase aggregates for one conversation (Flask DB only).
+
+    Counts human-authored, visible arguments — seeds (NULL proposer_id) and
+    hidden/moderated arguments are excluded — plus the distinct participants
+    who contributed or rated arguments.
+    """
+    visible = (db.session.query(Argument)
+               .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
+               .filter(FeaturedStatement.conversation_id == conv.id,
+                       Argument.hidden.is_(False),
+                       Argument.proposer_id.isnot(None)))
+    by_side = dict(visible.with_entities(Argument.side, db.func.count(Argument.id))
+                          .group_by(Argument.side).all())
+    n_contributors = (visible.with_entities(db.func.count(db.distinct(Argument.proposer_id)))
+                             .scalar() or 0)
+    n_raters = (db.session.query(db.func.count(db.distinct(ArgumentVote.participant_id)))
+                .join(Argument, ArgumentVote.argument_id == Argument.id)
+                .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
+                .filter(FeaturedStatement.conversation_id == conv.id,
+                        Argument.hidden.is_(False)).scalar() or 0)
+    return {
+        'n_pro':          int(by_side.get('pro', 0)),
+        'n_con':          int(by_side.get('con', 0)),
+        'n_contributors': int(n_contributors),
+        'n_raters':       int(n_raters),
+    }
+
+
+def _phase_stats(conv, polis_stats, phase6_stats=None):
+    """Tiles for the phase-hero readout, scoped to the conversation's current phase
+    (#165). Each tile is {value, label, unit?, note?}.
+
+    Polis-derived tiles (vote/participant counts) are omitted when polis_stats is
+    None — the template shows a loud warning instead. Flask-derived tiles (featured
+    statements, arguments) always render, since they don't depend on Polis PG.
+    """
+    def polis_basic():
+        if not polis_stats:
+            return []
+        return [
+            {'value': polis_stats['n_participants'], 'label': 'participants'},
+            {'value': polis_stats['n_votes'],        'label': 'votes cast'},
+            {'value': polis_stats['n_statements'],
+             'label': 'statements ({} seed)'.format(polis_stats['n_seed'])},
+        ]
+
+    key   = PHASE_SEQUENCE[_current_stage_index(conv)]['key']
+    tiles = []
+
+    if key == 'submission':
+        tiles = polis_basic()
+        if polis_stats:
+            tiles.append({'value': polis_stats['avg_votes'],    'label': 'avg votes / person'})
+            tiles.append({'value': polis_stats['median_votes'], 'label': 'median votes / person'})
+
+    elif key == 'featured_selection':
+        confirmed, _ = _featured_counts(conv)
+        tiles.append({'value': confirmed, 'label': 'featured selected',
+                      'note': '{} recommended'.format(_RECOMMENDED_FEATURED)})
+        if polis_stats:
+            tiles.append({'value': polis_stats['n_statements'],   'label': 'candidate statements'})
+            tiles.append({'value': polis_stats['n_participants'], 'label': 'participants'})
+
+    elif key in ('argument_mapping', 'cleanup'):
+        confirmed, _ = _featured_counts(conv)
+        a = _argument_stats(conv)
+        tiles.append({'value': confirmed,          'label': 'featured statements'})
+        tiles.append({'value': a['n_pro'],         'label': 'pro arguments'})
+        tiles.append({'value': a['n_con'],         'label': 'con arguments'})
+        tiles.append({'value': a['n_contributors'], 'label': 'contributors'})
+        if key == 'argument_mapping':
+            tiles.append({'value': a['n_raters'],  'label': 'rating arguments'})
+
+    elif key == 'informed_voting':
+        confirmed, _ = _featured_counts(conv)
+        seeded = (FeaturedStatement.query
+                  .filter(FeaturedStatement.conversation_id == conv.id,
+                          FeaturedStatement.confirmed_by_admin.is_(True),
+                          FeaturedStatement.phase6_polis_statement_id.isnot(None))
+                  .count())
+        tiles.append({'value': '{}/{}'.format(seeded, confirmed), 'label': 'statements seeded'})
+        if phase6_stats:
+            tiles.append({'value': phase6_stats['n_participants'], 'label': 'voted this round'})
+            tiles.append({'value': phase6_stats['n_votes'],        'label': 'informed votes'})
+        if polis_stats:
+            tiles.append({'value': polis_stats['n_participants'], 'label': 'round 1 participants'})
+
+    else:  # preparation, public_results — show the headline totals
+        tiles = polis_basic()
+
+    return tiles
+
+
 csrf    = CSRFProtect()
 # No global default — limits applied per endpoint only.
 # Toolforge provides TOOL_REDIS_URI; production startup validates Redis isolation.
@@ -1161,7 +1261,25 @@ def admin_conversation_detail(conv_id):
     )
     invite_count      = ConversationInvite.query.filter_by(conversation_id=conv_id).count()
     participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
-    polis_stats       = _polis_server_client().get_polis_stats(conv.polis_id)
+    client            = _polis_server_client()
+    polis_stats       = client.get_polis_stats(conv.polis_id)
+    # Round-2 tiles render only when the *displayed* stage is informed voting (the
+    # furthest-along flag), which can differ from the raw phase_informed_voting flag in
+    # non-linear states. Key the phase-6 fetch and its warning off the same stage, so the
+    # banner can't fire for round-2 tiles that were never shown (#165).
+    in_informed_voting = PHASE_SEQUENCE[_current_stage_index(conv)]['key'] == 'informed_voting'
+    phase6_stats      = (client.get_polis_stats(conv.phase6_polis_conversation_id)
+                         if in_informed_voting and conv.phase6_polis_conversation_id
+                         else None)
+    # Loud warning only when Polis PG is configured but unreachable — never when it is
+    # deliberately not wired (local/dev), where None is expected. Unavailable if the
+    # round-1 fetch failed, or — in informed voting — the round-2 (phase-6) fetch failed
+    # (without that a phase-6 outage would drop the round-2 tiles silently).
+    polis_pg_configured     = bool(current_app.config.get('POLIS_DATABASE_URL'))
+    polis_stats_unavailable = polis_pg_configured and (
+        polis_stats is None
+        or (in_informed_voting and conv.phase6_polis_conversation_id
+            and phase6_stats is None))
     phase6_results    = (_build_phase6_results(conv, participation=None)
                          if conv.phase_informed_voting and conv.phase6_polis_conversation_id
                          else None)
@@ -1173,6 +1291,8 @@ def admin_conversation_detail(conv_id):
                            invite_count=invite_count,
                            participant_count=participant_count,
                            polis_stats=polis_stats,
+                           phase_stats=_phase_stats(conv, polis_stats, phase6_stats),
+                           polis_stats_unavailable=polis_stats_unavailable,
                            phase6_results=phase6_results,
                            reveal=reveal,
                            admin_roles=ADMIN_ROLES,

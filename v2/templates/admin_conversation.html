@@ -90,18 +90,33 @@
         </div>
         <p class="phase-now-desc">{{ phase_sequence[current_stage_index].effect }}</p>
 
-        {% if polis_stats %}
-        <div class="phase-stats">
-          <div><div class="phase-stat-value">{{ polis_stats.n_participants }}</div>
-               <div class="phase-stat-label">participants</div></div>
-          <div><div class="phase-stat-value">{{ polis_stats.n_votes }}</div>
-               <div class="phase-stat-label">votes cast</div></div>
-          <div><div class="phase-stat-value">{{ polis_stats.n_statements }}</div>
-               <div class="phase-stat-label">statements ({{ polis_stats.n_seed }} seed)</div></div>
+        {# Phase-specific statistics (#165). Tiles are scoped to the current phase and
+           built server-side by _phase_stats(). Flask-derived numbers (featured,
+           arguments) render even when Polis PG is down; the warning below fires only
+           when PG is configured but unreachable. #}
+        {% if polis_stats_unavailable %}
+        <div class="phase-stats-warning" role="status">
+          <span aria-hidden="true">⚠️</span>
+          <span><strong>Live statistics unavailable.</strong> Vote and participant counts may be
+            missing or stale — the Polis statistics database may be unreachable, or this
+            conversation may not yet be registered in Polis. Check the server logs.</span>
         </div>
         {% endif %}
+        {% if phase_stats %}
+        {# A <dl> ties each value to its label programmatically: a screen reader reads each
+           tile as "<value> <label>" rather than a stream of disconnected numbers. Native
+           dt/dd needs no ARIA — the visible text is the accessible text (#165). #}
+        <dl class="phase-stats">
+          {% for t in phase_stats %}
+          <div>
+            <dt class="phase-stat-value">{{ t.value }}{% if t.unit %}<span class="unit">{{ t.unit }}</span>{% endif %}</dt>
+            <dd class="phase-stat-label">{{ t.label }}{% if t.note %}<div class="phase-stat-note">{{ t.note }}</div>{% endif %}</dd>
+          </div>
+          {% endfor %}
+        </dl>
+        {% endif %}
 
-        {# Phase 6 (informed voting) stats — shown when the round is active. #}
+        {# Phase 6 (informed voting) results teaser — shown when the round is active (#122/#184). #}
         {% if phase6_results %}
         <div class="phase-stats phase-stats--p6" style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--hairline)">
           <div>
