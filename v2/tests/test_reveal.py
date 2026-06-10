@@ -59,7 +59,7 @@ def test_reveal_state_open(auth_client, app, participant):
     _participate(participant, conv, 'bold-hawk')
     resp = auth_client.get('/c/open-conv')
     assert resp.status_code == 200
-    assert b'optionally link your username' in resp.data.lower()
+    assert b'optionally link your wikimedia username' in resp.data.lower()
     assert b'reveal-timeline' in resp.data                  # #70 timeline
     assert b'window closes in' in resp.data.lower()         # live countdown label
     assert b'data-reveal-countdown=' in resp.data           # #70 live countdown target

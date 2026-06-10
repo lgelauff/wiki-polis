@@ -45,9 +45,11 @@
       <strong>{{ participation.pseudonym }}</strong> in this consultation's records.
     </p>
     {% elif reveal_state == 'open' %}
-    <p style="margin-top:.75rem;font-size:13px">
-      <a href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">Optionally link your username →</a>
-    </p>
+    <div class="reveal-callout">
+      <p class="reveal-callout-text">The identity reveal window is open. Your participation is recorded under pseudonym <strong>{{ participation.pseudonym }}</strong>.</p>
+      <a class="reveal-callout-link" href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">Optionally link your Wikimedia username <span aria-hidden="true">→</span></a>
+    </div>
+
     {% elif reveal_state == 'pending' %}
     <p class="muted" style="margin-top:.5rem;font-size:13px">
       The window opens on {{ reveal.opens_at.strftime('%-d %b %Y') }} — nothing to do until then.
@@ -107,7 +109,7 @@
     <button id="tab-btn-informed-voting" class="tab-btn{% if tabs[0] == 'informed-voting' %} tab-btn--active{% endif %}"
             role="tab" data-tab="tab-informed-voting" aria-controls="tab-informed-voting"
             aria-selected="{{ 'true' if tabs[0] == 'informed-voting' else 'false' }}"
-            tabindex="{{ '0' if tabs[0] == 'informed-voting' else '-1' }}">Informed voting</button>
+            tabindex="{{ '0' if tabs[0] == 'informed-voting' else '-1' }}">Informed vote</button>
     {% endif %}
   </div>
   {% endif %}
@@ -292,7 +294,7 @@
             </svg>
           </span>
           <span class="propose-submitted-label">PROPOSED — heading to moderation</span>
-          <button type="button" id="propose-next" class="propose-next-btn">Next statement →</button>
+          <button type="button" id="propose-next" class="propose-next-btn">Next statement <span aria-hidden="true">→</span></button>
         </div>
 
         {# ── All done message ── #}
@@ -816,100 +818,92 @@
         <span class="p6-voted-badge" role="alert" hidden></span>
       </div>
 
-      {# Statement text #}
-      <p class="p6-statement-text">{{ item.text }}</p>
+      <div class="p6-card-inner">
 
-      {# Arguments — two-column layout matching Phase 5 argument tab #}
-      <div class="arg-columns" style="margin-top:1.25rem;margin-bottom:1rem">
+        {# Left: statement text + vote controls #}
+        <div class="p6-statement-col">
+          <p class="p6-statement-text">{{ item.text }}</p>
 
-        {# For #}
-        <div class="arg-col arg-col--pro">
-          <div class="arg-col-heading-row">
-            <span class="arg-col-sign">+</span>
-            <span class="arg-col-heading">For</span>
-            <span class="arg-col-count muted">({{ item.pro | length }})</span>
+          {% if item.phase6_stmt_id is not none %}
+          <div class="vote-choice-row p6-vote-row">
+            <button class="vote-choice btn-p6-vote" data-vote="1">
+              <span class="vote-dot vote-dot--agree"></span>Agree
+            </button>
+            <button class="vote-choice btn-p6-vote" data-vote="0">
+              <span class="vote-dot vote-dot--pass"></span>Pass
+            </button>
+            <button class="vote-choice btn-p6-vote" data-vote="-1">
+              <span class="vote-dot vote-dot--disagree"></span>Disagree
+            </button>
           </div>
-          {% if item.pro | length == 0 %}
-          <p class="muted" style="font-size:.85rem;font-style:italic">No arguments yet.</p>
-          {% else %}
-          {% for arg in item.pro[:3] %}
-          <div class="argument-card" data-side="pro">
-            <div class="argument-body">
-              <p class="argument-text">{{ arg.body }}</p>
-            </div>
-          </div>
-          {% endfor %}
-          {% if item.pro | length > 3 %}
-          <details class="p6-args-more">
-            <summary>Show {{ item.pro | length - 3 }} more</summary>
-            {% for arg in item.pro[3:] %}
-            <div class="argument-card" data-side="pro">
-              <div class="argument-body">
-                <p class="argument-text">{{ arg.body }}</p>
-              </div>
-            </div>
+          {% endif %}
+        </div>{# end p6-statement-col #}
+
+        {# Right: For / Against argument panels #}
+        <div class="p6-args-panel">
+
+          <div class="p6-args-side p6-args-side--pro">
+            <h3 class="p6-args-side-header">For</h3>
+            {% if item.pro | length == 0 %}
+            <p class="p6-args-empty">No arguments yet.</p>
+            {% else %}
+            {% for arg in item.pro[:3] %}
+            <p class="p6-arg-item">{{ arg.body }}</p>
             {% endfor %}
-          </details>
-          {% endif %}
-          {% endif %}
-        </div>
+            {% if item.pro | length > 3 %}
+            <details class="p6-args-more">
+              <summary>{{ item.pro | length - 3 }} more</summary>
+              {% for arg in item.pro[3:] %}
+              <p class="p6-arg-item">{{ arg.body }}</p>
+              {% endfor %}
+            </details>
+            {% endif %}
+            {% endif %}
+          </div>
 
-        {# Against #}
-        <div class="arg-col arg-col--con">
-          <div class="arg-col-heading-row">
-            <span class="arg-col-sign">−</span>
-            <span class="arg-col-heading">Against</span>
-            <span class="arg-col-count muted">({{ item.con | length }})</span>
-          </div>
-          {% if item.con | length == 0 %}
-          <p class="muted" style="font-size:.85rem;font-style:italic">No arguments yet.</p>
-          {% else %}
-          {% for arg in item.con[:3] %}
-          <div class="argument-card" data-side="con">
-            <div class="argument-body">
-              <p class="argument-text">{{ arg.body }}</p>
-            </div>
-          </div>
-          {% endfor %}
-          {% if item.con | length > 3 %}
-          <details class="p6-args-more">
-            <summary>Show {{ item.con | length - 3 }} more</summary>
-            {% for arg in item.con[3:] %}
-            <div class="argument-card" data-side="con">
-              <div class="argument-body">
-                <p class="argument-text">{{ arg.body }}</p>
-              </div>
-            </div>
+          <div class="p6-args-side p6-args-side--con">
+            <h3 class="p6-args-side-header">Against</h3>
+            {% if item.con | length == 0 %}
+            <p class="p6-args-empty">No arguments yet.</p>
+            {% else %}
+            {% for arg in item.con[:3] %}
+            <p class="p6-arg-item">{{ arg.body }}</p>
             {% endfor %}
-          </details>
-          {% endif %}
-          {% endif %}
-        </div>
+            {% if item.con | length > 3 %}
+            <details class="p6-args-more">
+              <summary>{{ item.con | length - 3 }} more</summary>
+              {% for arg in item.con[3:] %}
+              <p class="p6-arg-item">{{ arg.body }}</p>
+              {% endfor %}
+            </details>
+            {% endif %}
+            {% endif %}
+          </div>
 
-      </div>{# end arg-columns #}
+        </div>{# end p6-args-panel #}
 
-      {# Vote buttons — reuse Phase 1/2 .vote-choice-row and .vote-choice exactly #}
-      {% if item.phase6_stmt_id is not none %}
-      <div class="vote-choice-row p6-vote-row">
-        <button class="vote-choice btn-p6-vote" data-vote="1">
-          <span class="vote-dot vote-dot--agree"></span>Agree
-        </button>
-        <button class="vote-choice btn-p6-vote" data-vote="0">
-          <span class="vote-dot vote-dot--pass"></span>Pass
-        </button>
-        <button class="vote-choice btn-p6-vote" data-vote="-1">
-          <span class="vote-dot vote-dot--disagree"></span>Disagree
-        </button>
-      </div>
-      <button class="p6-skip-btn" type="button">Skip for now →</button>
-      {% endif %}
+      </div>{# end p6-card-inner #}
 
     </div>{# end p6-card #}
     {% endfor %}
 
-  {# Done placeholder — shown when all cards are voted or skipped #}
+  {# Done screen — shown when all cards are voted or skipped #}
   <div class="p6-done" hidden>
-    <p class="p6-done-text">You've completed informed voting. Thank you for participating.</p>
+    <h2 class="p6-done-heading">You've completed informed voting.</h2>
+    {% if conversation.phase_personal_results or conversation.phase_public_results %}
+    <p class="p6-done-text">Preliminary results are available — see the <a href="#tab-results" data-tab="tab-results">Results tab</a>.</p>
+    {% elif conversation.phase_submission or conversation.phase_argument_mapping %}
+    <p class="p6-done-text">The deliberation is still open — come back if new arguments are added.</p>
+    {% elif conversation.active %}
+    <p class="p6-done-text">The results report will be published here once this consultation closes.</p>
+    {% else %}
+    <p class="p6-done-text">This consultation is now closed.</p>
+    {% endif %}
+    {% if reveal_state is none or reveal_state == 'pending' %}
+    <p class="p6-done-reveal">Your votes are recorded under pseudonym <strong>{{ participation.pseudonym }}</strong>. Once this consultation closes, you will have a limited window to optionally link your Wikimedia username. You cannot make that decision yet.</p>
+    {% elif reveal_state == 'open' %}
+    <p class="p6-done-reveal p6-done-reveal--open">Your votes are recorded under pseudonym <strong>{{ participation.pseudonym }}</strong>. The identity reveal window is open — <a href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">optionally link your username <span aria-hidden="true">→</span></a></p>
+    {% endif %}
   </div>
 
   </div>{# end tab-informed-voting #}
@@ -945,6 +939,17 @@
     bar.addEventListener('click', function (e) {
       var btn = e.target.closest('.tab-btn');
       if (btn) activate(btn);
+    });
+
+    // Deep-link: <a data-tab="tab-*"> anywhere on the page activates that tab.
+    document.addEventListener('click', function (e) {
+      var link = e.target.closest('a[data-tab]');
+      if (!link || link.classList.contains('tab-btn')) return;
+      var btn = bar.querySelector('[data-tab="' + link.dataset.tab + '"]');
+      if (!btn) return;
+      e.preventDefault();
+      activate(btn);
+      btn.focus();
     });
 
     bar.addEventListener('keydown', function (e) {
@@ -1009,29 +1014,13 @@
       var fsId  = card.dataset.fsId;
       var row   = card.querySelector('.p6-vote-row');
       var badge = card.querySelector('.p6-voted-badge');
-      var skip  = card.querySelector('.p6-skip-btn');
       if (!row) return;
-
-      // Skip button
-      if (skip) {
-        skip.addEventListener('click', function () {
-          skip.hidden = true;
-          badge.className = 'p6-voted-badge';
-          badge.removeAttribute('hidden');
-          badge.textContent = 'Skipped';
-          row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = true; b.classList.add('p6-voted'); });
-          card.classList.add('p6-card--voted');
-          markTerminal(card);
-          scrollToNext(card);
-        });
-      }
 
       // Vote buttons
       row.querySelectorAll('.btn-p6-vote').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var vote = parseInt(btn.dataset.vote, 10);
           row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = true; });
-          if (skip) skip.hidden = true;
           // pid/tid are resolved server-side from fs_id — never sent by the client.
           fetch(voteUrl, {
             method: 'POST',
@@ -1043,7 +1032,7 @@
               var cls   = vote === 1 ? 'agree' : vote === -1 ? 'disagree' : 'pass';
               badge.className = 'p6-voted-badge p6-voted-badge--' + cls;
               badge.removeAttribute('hidden');
-              badge.textContent = '✓ ' + label;
+              badge.innerHTML = '<span aria-hidden="true">✓</span> ' + label;
               row.querySelectorAll('.btn-p6-vote').forEach(function (b) {
                 b.classList.toggle('p6-voted', b.dataset.vote === String(vote));
               });
@@ -1055,8 +1044,10 @@
               if (skip) skip.hidden = false;
             }
           }).catch(function () {
+            row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = false; });
+            if (skip) skip.hidden = false;
             badge.removeAttribute('hidden');
-            badge.textContent = 'Network error — refresh to check';
+            badge.textContent = 'Network error — try again';
           });
         });
       });

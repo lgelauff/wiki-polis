@@ -2880,26 +2880,12 @@ a { color: var(--pass); }
     grid-template-columns: 1fr;
   }
   .p6-args-panel {
-    order: -1;  /* arguments appear above statement on mobile */
+    order: 1;  /* arguments follow statement on mobile — read statement first, then consider arguments */
   }
 }
 
 /* Skip affordance */
-.p6-skip-btn {
-  display: block;
-  width: 100%;
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-family: var(--sans);
-  font-size: .875rem;
-  text-align: center;
-  padding: 10px 0;
-  min-height: 44px;
-  cursor: pointer;
-  transition: color .1s;
-}
-.p6-skip-btn:hover { color: var(--ink); }
+
 
 /* Done state */
 .p6-done {
@@ -2910,10 +2896,47 @@ a { color: var(--pass); }
   margin-bottom: 1.5rem;
   text-align: center;
 }
+.p6-done-heading {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 .5rem;
+}
 .p6-done-text {
-  font-size: 1rem;
+  font-size: .9375rem;
   color: var(--muted);
-  margin: 0;
+  margin: 0 0 .75rem;
+}
+.p6-done-reveal {
+  font-size: .875rem;
+  color: var(--muted);
+  margin: .75rem auto 0;
+  max-width: 480px;
+  border-top: 1px solid var(--hairline);
+  padding-top: .75rem;
+}
+.p6-done-reveal--open {
+  color: var(--ink);
+  border-top-color: var(--accent);
+}
+
+/* Identity reveal callout on the closed conversation banner */
+.reveal-callout {
+  margin-top: 1rem;
+  background: var(--surface2);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 14px 18px;
+  text-align: left;
+}
+.reveal-callout-text {
+  font-size: .9375rem;
+  color: var(--ink);
+  margin: 0 0 .4rem;
+}
+.reveal-callout-link {
+  font-size: .9375rem;
+  font-weight: 500;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
