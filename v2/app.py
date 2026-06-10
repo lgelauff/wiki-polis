@@ -551,13 +551,21 @@ def _argument_stats(conv):
     }
 
 
-def _phase_tiles(conv, key, polis_stats, phase6_stats=None):
+def _phase_tiles(conv, key, polis_stats, phase6_stats=None,
+                 get_featured_counts=None, get_argument_stats=None):
     """Stat tiles for a single phase `key` (#165). Each tile is {value, label, unit?, note?}.
 
     Polis-derived tiles (vote/participant counts) are omitted when polis_stats is
     None — the template shows a loud warning instead. Flask-derived tiles (featured
     statements, arguments) always render, since they don't depend on Polis PG.
+
+    `get_featured_counts` / `get_argument_stats` are optional accessors so a multi-phase
+    caller can memoize those DB aggregates across phases (several active phases reuse the
+    same featured/argument counts); they default to a fresh per-call query.
     """
+    get_featured_counts = get_featured_counts or (lambda: _featured_counts(conv))
+    get_argument_stats  = get_argument_stats  or (lambda: _argument_stats(conv))
+
     def polis_basic():
         if not polis_stats:
             return []
@@ -577,7 +585,7 @@ def _phase_tiles(conv, key, polis_stats, phase6_stats=None):
             tiles.append({'value': polis_stats['median_votes'], 'label': 'median votes / person'})
 
     elif key == 'featured_selection':
-        confirmed, _ = _featured_counts(conv)
+        confirmed, _ = get_featured_counts()
         tiles.append({'value': confirmed, 'label': 'featured selected',
                       'note': '{} recommended'.format(_RECOMMENDED_FEATURED)})
         if polis_stats:
@@ -585,8 +593,8 @@ def _phase_tiles(conv, key, polis_stats, phase6_stats=None):
             tiles.append({'value': polis_stats['n_participants'], 'label': 'participants'})
 
     elif key in ('argument_mapping', 'cleanup'):
-        confirmed, _ = _featured_counts(conv)
-        a = _argument_stats(conv)
+        confirmed, _ = get_featured_counts()
+        a = get_argument_stats()
         tiles.append({'value': confirmed,          'label': 'featured statements'})
         tiles.append({'value': a['n_pro'],         'label': 'pro arguments'})
         tiles.append({'value': a['n_con'],         'label': 'con arguments'})
@@ -595,7 +603,7 @@ def _phase_tiles(conv, key, polis_stats, phase6_stats=None):
             tiles.append({'value': a['n_raters'],  'label': 'rating arguments'})
 
     elif key == 'informed_voting':
-        confirmed, _ = _featured_counts(conv)
+        confirmed, _ = get_featured_counts()
         seeded = (FeaturedStatement.query
                   .filter(FeaturedStatement.conversation_id == conv.id,
                           FeaturedStatement.confirmed_by_admin.is_(True),
@@ -621,11 +629,29 @@ def _phase_stat_groups(conv, polis_stats, phase6_stats=None):
     control box shows a group per phase — its name plus the tiles relevant to it —
     rather than only the furthest-along phase. Groups with no tiles are kept here and
     skipped by the template.
+
+    The featured/argument DB aggregates are memoized across phases here: in advanced
+    mode several active phases (e.g. argument_mapping + cleanup + informed_voting) each
+    want the featured count, and they'd otherwise re-run the same COUNT/aggregate query
+    per phase on every admin page load.
     """
+    cache = {}
+
+    def featured_counts():
+        if 'featured' not in cache:
+            cache['featured'] = _featured_counts(conv)
+        return cache['featured']
+
+    def argument_stats():
+        if 'arguments' not in cache:
+            cache['arguments'] = _argument_stats(conv)
+        return cache['arguments']
+
     return [
         {'key':   PHASE_SEQUENCE[i]['key'],
          'label': PHASE_SEQUENCE[i]['label'],
-         'tiles': _phase_tiles(conv, PHASE_SEQUENCE[i]['key'], polis_stats, phase6_stats)}
+         'tiles': _phase_tiles(conv, PHASE_SEQUENCE[i]['key'], polis_stats, phase6_stats,
+                               featured_counts, argument_stats)}
         for i in _active_stage_indices(conv)
     ]
 
@@ -1301,7 +1327,6 @@ def admin_conversation_detail(conv_id):
         polis_stats is None
         or (conv.phase_informed_voting and conv.phase6_polis_conversation_id
             and phase6_stats is None))
-    active_phase_labels = [PHASE_SEQUENCE[i]['label'] for i in _active_stage_indices(conv)]
     phase6_results    = (_build_phase6_results(conv, participation=None)
                          if conv.phase_informed_voting and conv.phase6_polis_conversation_id
                          else None)
@@ -1314,7 +1339,6 @@ def admin_conversation_detail(conv_id):
                            participant_count=participant_count,
                            polis_stats=polis_stats,
                            phase_stat_groups=_phase_stat_groups(conv, polis_stats, phase6_stats),
-                           active_phase_labels=active_phase_labels,
                            polis_stats_unavailable=polis_stats_unavailable,
                            phase6_results=phase6_results,
                            reveal=reveal,
@@ -1322,6 +1346,7 @@ def admin_conversation_detail(conv_id):
                            can_manage_roles=can_manage_roles,
                            phase_sequence=PHASE_SEQUENCE,
                            current_stage_index=_current_stage_index(conv),
+                           active_stage_indices=_active_stage_indices(conv),
                            linear_phase_state=_is_linear_phase_state(conv),
                            advance_target_index=_advance_target_index(conv),
                            transition=_transition_context(conv))

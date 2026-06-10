@@ -249,6 +249,55 @@ def test_multi_phase_informed_voting_warns_on_phase6_outage(app, admin_client, c
     assert 'Multiple phases active' in page
 
 
+def test_multi_phase_lone_tiled_group_is_still_labelled(admin_client, conv):
+    # Non-linear with two phases named, but only one currently has data: Explore is
+    # Polis-only (no tiles while PG is down) and Arguments has Flask-derived tiles. The
+    # single rendered group must still carry its phase label — otherwise the header names
+    # two phases over one anonymous block and the reader can't tell whose numbers these are.
+    conv.phase_submission = True            # Explore — polis_basic() → [] (no polis stats)
+    conv.phase_argument_mapping = True      # Arguments — Flask tiles always render
+    db.session.commit()
+
+    page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+    assert 'Multiple phases active' in page
+    assert 'Explore + Arguments' in page                  # header names both active phases
+    # The lone tiled group is labelled and the <dl> is associated with it for screen readers.
+    assert 'phase-stats-group-label">Arguments' in page
+    assert 'aria-labelledby="psg-1"' in page
+    # Explore yields no tiles, so it gets no group block of its own.
+    assert 'phase-stats-group-label">Explore' not in page
+    assert 'Statistics for the phases with available data are shown below' in page
+
+
+def test_multi_phase_all_polis_only_omits_shown_below_copy(admin_client, conv):
+    # Two Polis-only phases active with no Polis stats (PG unconfigured → no warning):
+    # neither yields tiles. The header still names them, but the "...shown below" promise
+    # must be dropped rather than left dangling over an empty stats area.
+    conv.phase_submission = True            # Explore — polis-only
+    conv.phase_public_results = True        # Report  — polis-only
+    db.session.commit()
+
+    page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+    assert 'Multiple phases active' in page
+    assert 'Explore + Report' in page
+    assert 'Statistics for the phases with available data are shown below' not in page
+    assert 'phase-stats-group-label' not in page          # no group renders
+    assert 'phase-stats-warning' not in page              # PG unconfigured — None is expected
+
+
+def test_multi_phase_stepper_marks_every_active_step_current(admin_client, conv):
+    # The journey stepper must agree with the hero: in non-linear mode every active phase
+    # is "current" and none is shown as "done", rather than marking earlier still-open
+    # phases complete off the single furthest-along stage.
+    conv.phase_submission = True            # index 1
+    conv.phase_argument_mapping = True      # index 3 (non-contiguous)
+    db.session.commit()
+
+    page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+    assert page.count('journey-step--current') == 2       # both active steps marked current
+    assert 'journey-step--done' not in page               # nothing collapsed to "done"
+
+
 # ── Loud warning when Polis PG is configured but down ───────────────────────────
 
 def test_warning_when_pg_configured_but_unavailable(app, admin_client, conv):

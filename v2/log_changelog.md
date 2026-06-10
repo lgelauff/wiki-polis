@@ -344,6 +344,26 @@ and only that phase's stats. It now reflects **every active phase**.
 - [x] Tests: group-per-active-phase rendering, single-phase stays flat, and the multi-phase
   phase-6-outage warning
 
+**Review follow-up (#189):** reconcile the three "which phases are active" surfaces so the
+box never contradicts itself in advanced mode.
+
+- [x] Journey stepper now reflects multi-active state: in non-linear mode every active phase
+  is marked *current* and none shown as *done* (was: driven by the single furthest-along
+  stage, contradicting the "Multiple phases active" hero). `active_stage_indices` passed to
+  the template.
+- [x] Group labelling keys off the hero state (`not linear_phase_state`), not the tile count:
+  a lone tiled group is still labelled when the header names ≥2 phases, so the reader can
+  tell whose numbers they are.
+- [x] The "...shown below" copy is reworded and omitted when no active phase currently has
+  data (e.g. Polis-only phases while PG is down) — no dangling promise over an empty area.
+- [x] a11y: each grouped `<dl>` is `aria-labelledby` its phase label, so a screen reader
+  announces the group name rather than a flat number stream across phase boundaries.
+- [x] Featured/argument DB aggregates memoized across phases in `_phase_stat_groups` (was:
+  re-queried per active phase); dropped the duplicate `active_phase_labels` (header labels
+  derive from the group list).
+- [x] Tests: lone-tiled-group still labelled, all-Polis-only omits the copy, stepper marks
+  every active step current.
+
 ## Step 8 — Phase 6 results report (2026-06-10)
 
 **Phase 6 results — three surfaces** ([#122](https://github.com/lgelauff/wiki-polis/issues/122), [#165](https://github.com/lgelauff/wiki-polis/issues/165) partial)

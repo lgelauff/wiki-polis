@@ -56,14 +56,22 @@
          Arguments and Informed vote). Renders from PHASE_SEQUENCE. #}
       <ol class="journey phase-stepper" aria-label="Consultation phase progress">
         {% for stage in phase_sequence %}
+        {# Linear (simple) mode: one current step, earlier steps done ✓ — driven by the
+           furthest-along stage. Non-linear (advanced) mode: several phases are open at
+           once, so mark *every* active step current and never show a phase as "done",
+           keeping the stepper consistent with the "Multiple phases active" hero below
+           rather than contradicting it. #}
+        {%- set is_current = (loop.index0 == current_stage_index) if linear_phase_state
+                             else (loop.index0 in active_stage_indices) %}
+        {%- set is_done = (loop.index0 < current_stage_index) if linear_phase_state else false %}
         <li class="journey-step
-                   {%- if loop.index0 == current_stage_index %} journey-step--current
-                   {%- elif loop.index0 < current_stage_index %} journey-step--done{% endif %}"
-            {% if loop.index0 == current_stage_index %}aria-current="step"{% endif %}>
-          <span class="journey-dot">{% if loop.index0 < current_stage_index %}✓{% else %}{{ loop.index }}{% endif %}</span>
+                   {%- if is_current %} journey-step--current
+                   {%- elif is_done %} journey-step--done{% endif %}"
+            {% if is_current %}aria-current="step"{% endif %}>
+          <span class="journey-dot">{% if is_done %}✓{% else %}{{ loop.index }}{% endif %}</span>
           <span class="journey-label">{{ stage.label }}</span>
-          {% if loop.index0 == current_stage_index %}<span class="sr-only">(current phase)</span>
-          {% elif loop.index0 < current_stage_index %}<span class="sr-only">(completed)</span>
+          {% if is_current %}<span class="sr-only">(current phase)</span>
+          {% elif is_done %}<span class="sr-only">(completed)</span>
           {% else %}<span class="sr-only">(upcoming)</span>{% endif %}
         </li>
         {% endfor %}
@@ -82,6 +90,10 @@
 
       {# Current-phase body #}
       <div class="phase-hero-body">
+        {# Active phases that actually have data to show right now. Distinct from the set of
+           active phases (a Polis-only phase yields no tiles while PG is down), so the header
+           copy and the per-phase render below both key off this single list. #}
+        {% set shown_groups = phase_stat_groups | selectattr('tiles') | list %}
         {% if linear_phase_state %}
         <div class="phase-now-head">
           <span class="phase-now-kicker">You are in phase {{ current_stage_index + 1 }} of {{ phase_sequence | length }}</span>
@@ -97,9 +109,10 @@
           <span class="phase-now-kicker">Multiple phases active</span>
         </div>
         <div class="phase-now-head" style="margin-top:2px">
-          <span class="phase-now-name">{{ active_phase_labels | join(' + ') }}</span>
+          <span class="phase-now-name">{{ phase_stat_groups | map(attribute='label') | join(' + ') }}</span>
         </div>
-        <p class="phase-now-desc">Several phases are open at once (advanced mode). Statistics for each are shown below.</p>
+        {# Reword + omit the "shown below" promise unless a group will actually render. #}
+        <p class="phase-now-desc">Several phases are open at once (advanced mode).{% if shown_groups %} Statistics for the phases with available data are shown below.{% endif %}</p>
         {% endif %}
 
         {# Phase-specific statistics (#165). One group per active phase; in advanced mode
@@ -114,15 +127,19 @@
             conversation may not yet be registered in Polis. Check the server logs.</span>
         </div>
         {% endif %}
-        {# `multi` = more than one active phase actually has tiles; only then do we label
-           each group (a single group renders flat, unchanged from simple mode). #}
-        {% set multi = (phase_stat_groups | selectattr('tiles') | list | length) > 1 %}
-        {% for g in phase_stat_groups if g.tiles %}
-        {% if multi %}<div class="phase-stats-group-label">{{ g.label }}</div>{% endif %}
+        {# Label each group whenever the box is in non-linear (advanced) mode — i.e. whenever
+           the hero names more than one phase — so the reader can always tell which phase the
+           numbers belong to, even when only one of the named phases currently has data. A
+           single active phase (simple mode) still renders flat, unchanged. #}
+        {% for g in shown_groups %}
+        {% if not linear_phase_state %}<div id="psg-{{ loop.index }}" class="phase-stats-group-label">{{ g.label }}</div>{% endif %}
         {# A <dl> ties each value to its label programmatically: a screen reader reads each
            tile as "<value> <label>" rather than a stream of disconnected numbers. Native
-           dt/dd needs no ARIA — the visible text is the accessible text (#165). #}
-        <dl class="phase-stats{% if multi %} phase-stats--grouped{% endif %}">
+           dt/dd needs no ARIA. In grouped mode aria-labelledby points the list at its phase
+           label, so the group name is announced as the list's name — without it a SR hears a
+           flat number stream across phase boundaries (#165 a11y follow-up). #}
+        <dl class="phase-stats{% if not linear_phase_state %} phase-stats--grouped{% endif %}"
+            {% if not linear_phase_state %}aria-labelledby="psg-{{ loop.index }}"{% endif %}>
           {% for t in g.tiles %}
           <div>
             <dt class="phase-stat-value">{{ t.value }}{% if t.unit %}<span class="unit">{{ t.unit }}</span>{% endif %}</dt>
