@@ -298,6 +298,13 @@
   margin-top: 18px;
 }
 .phase-stats--grouped { margin: 8px 0 0; padding-top: 0; border-top: none; }
+/* Divider between consecutive phase groups (advanced mode): a group label that follows a
+   previous group's stats gets a hairline rule above it. The first group has no preceding
+   stats, so no leading bar. */
+.phase-stats--grouped + .phase-stats-group-label {
+  border-top: 1px solid var(--hairline-soft);
+  padding-top: 18px;
+}
 .phase-stat-value {
   font-size: 24px;
   font-weight: 700;
