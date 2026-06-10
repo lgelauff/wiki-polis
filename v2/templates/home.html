@@ -102,6 +102,11 @@
 
   <h1 class="sr-only">Your consultations</h1>
 
+  {# ── Flow diagram ─────────────────────────────────────────────────────── #}
+  <img src="{{ url_for('static', filename='wiki-polis-flow.svg') }}"
+       alt="How a wiki-polis conversation works"
+       style="width:100%;max-width:900px;display:block;margin:0 auto 1.5rem">
+
   {# ── Phase journey legend ──────────────────────────────────────────────── #}
   <div class="phase-legend" role="img" aria-label="Consultation phases: Explore, Arguments, Informed vote, Report">
     <div class="phase-legend-node">
