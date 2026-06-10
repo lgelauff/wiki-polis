@@ -368,13 +368,21 @@ def _current_stage_index(conv) -> int:
     return idx
 
 
-def _active_stage_indices(conv) -> list[int]:
-    """Every stage index whose flag is on, in sequence order; [0] (preparation) if
-    none are. In simple/linear mode this is a single index; in advanced mode multiple
-    phases can be active at once and each is surfaced in the phase-control box."""
-    active = [i for i, s in enumerate(PHASE_SEQUENCE)
-              if s['flag'] and getattr(conv, s['flag'])]
-    return active or [0]
+def _active_phases(conv) -> set:
+    """Return the set of currently-active phase keys for a conversation.
+
+    Uses PHASE_SEQUENCE flag names as keys. Also adds 'cleanup_window' (inferred:
+    informed_voting on, not yet closed) and 'closed'. Multiple keys are possible
+    when the conversation is in advanced/non-linear mode.
+    """
+    phases = {s['key'] for s in PHASE_SEQUENCE if s['flag'] and getattr(conv, s['flag'])}
+    if not phases and not conv.closed_at:
+        phases.add('preparation')
+    if conv.phase_informed_voting and not conv.closed_at:
+        phases.add('cleanup_window')   # inferred: after IV, before publish
+    if conv.closed_at:
+        phases.add('closed')
+    return phases
 
 
 def _is_linear_phase_state(conv) -> bool:
@@ -652,7 +660,7 @@ def _phase_stat_groups(conv, polis_stats, phase6_stats=None):
          'label': PHASE_SEQUENCE[i]['label'],
          'tiles': _phase_tiles(conv, PHASE_SEQUENCE[i]['key'], polis_stats, phase6_stats,
                                featured_counts, argument_stats)}
-        for i in _active_stage_indices(conv)
+        for i in [j for j, s in enumerate(PHASE_SEQUENCE) if s['key'] in _active_phases(conv)]
     ]
 
 
@@ -1346,7 +1354,8 @@ def admin_conversation_detail(conv_id):
                            can_manage_roles=can_manage_roles,
                            phase_sequence=PHASE_SEQUENCE,
                            current_stage_index=_current_stage_index(conv),
-                           active_stage_indices=_active_stage_indices(conv),
+                           active_stage_indices=[i for i, s in enumerate(PHASE_SEQUENCE)
+                                                  if s['key'] in _active_phases(conv)],
                            linear_phase_state=_is_linear_phase_state(conv),
                            advance_target_index=_advance_target_index(conv),
                            transition=_transition_context(conv))
@@ -3192,11 +3201,13 @@ def _register_routes(app: Flask) -> None:
                      .order_by(Conversation.created_at.desc())
                      .all())
 
+        mod_ids: set = set()
         moderating = []
         if participant:
             if _is_global_admin(participant):
                 moderating = (Conversation.query
                               .order_by(Conversation.created_at.desc()).all())
+                mod_ids = {c.id for c in moderating}
             else:
                 roles = AdminRole.query.filter(
                     AdminRole.participant_id == participant.id,
@@ -3206,15 +3217,45 @@ def _register_routes(app: Flask) -> None:
                     moderating = Conversation.query.filter(
                         Conversation.id.in_(mod_ids)).all()
 
+        # Exclude moderated conversations from Browse — they already appear in "You moderate"
+        available = [c for c in available if c.id not in mod_ids]
+
         # keyed by conversation_id, scoped to current user only
         # assumes at most one Participation per (user, conversation) — last row wins if duplicates exist
         pseudonym_map = {p.conversation_id: p for p in joined_parts}
+
+        # Per-conversation action signals for the home page tiles.
+        all_home_convs = active_joined + archived_joined + list(available)
+
+        # Bulk-fetch statements remaining via Polis Postgres (xid → pid via xids table).
+        # Only meaningful for submission-phase conversations; falls back to None on error.
+        xid = session.get('xid')
+        submission_convs = [c for c in all_home_convs if c.phase_submission and c.active]
+        zinvites = [c.polis_id for c in submission_convs if c.polis_id]
+        remaining_by_zinvite: dict = {}
+        if zinvites and xid:
+            result = _polis_server_client().get_statements_remaining_bulk(zinvites, xid)
+            if result:
+                remaining_by_zinvite = result
+        signals_map: dict = {}
+        for conv in all_home_convs:
+            part = pseudonym_map.get(conv.id)
+            reveal = _reveal_context(conv, part) if conv.closed_at else None
+            remaining = remaining_by_zinvite.get(
+                conv.polis_id) if conv.polis_id else None
+            signals_map[conv.id] = {
+                'phases':               _active_phases(conv),
+                'statements_remaining': remaining,
+                'reveal':               reveal,
+            }
+
         return render_template('home.html',
                                active_joined=active_joined,
                                archived_joined=archived_joined,
                                available=available,
                                moderating=moderating,
                                pseudonym_map=pseudonym_map,
+                               signals_map=signals_map,
                                dev_test_users=dev_test_users)
 
 

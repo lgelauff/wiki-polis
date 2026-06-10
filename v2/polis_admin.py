@@ -112,6 +112,50 @@ _PHASE6_PARTICIPANT_COUNT_SQL = """
       AND NOT (v.pid = ANY(%s))
 """
 
+# Statements remaining to vote on, across multiple conversations, for one participant.
+# Identified by xid (our SHA-256 of mw_user_id — stored in xids.xid).
+# Returns one row per zinvite: total approved statements and how many the participant
+# has already cast a non-pass vote on (pass counts as "voted" for progress purposes).
+# zinvites is an ARRAY of text; only zinvites present in the xids table for this xid
+# are counted (i.e. conversations the participant has actually joined in Polis).
+_STATEMENTS_REMAINING_BULK_SQL = """
+    WITH zmap AS (
+        SELECT zi.zinvite, zi.zid
+        FROM zinvites zi
+        WHERE zi.zinvite = ANY(%s)
+    ),
+    pid_map AS (
+        SELECT p.zid, p.pid
+        FROM participants p
+        JOIN xids x ON x.uid = p.uid AND x.zid = p.zid
+        WHERE x.xid = %s
+          AND p.zid IN (SELECT zid FROM zmap)
+    ),
+    total_stmts AS (
+        SELECT zmap.zinvite, COUNT(c.tid)::int AS n_total
+        FROM comments c
+        JOIN zmap ON c.zid = zmap.zid
+        WHERE c.active = TRUE AND c.mod = 1
+        GROUP BY zmap.zinvite
+    ),
+    voted_stmts AS (
+        SELECT zmap.zinvite, COUNT(DISTINCT v.tid)::int AS n_voted
+        FROM votes_latest_unique v
+        JOIN zmap ON v.zid = zmap.zid
+        JOIN pid_map pm ON pm.zid = v.zid AND pm.pid = v.pid
+        JOIN comments c ON c.zid = zmap.zid AND c.tid = v.tid
+          AND c.active = TRUE AND c.mod = 1
+        GROUP BY zmap.zinvite
+    )
+    SELECT
+        ts.zinvite,
+        ts.n_total,
+        COALESCE(vs.n_voted, 0) AS n_voted,
+        GREATEST(0, ts.n_total - COALESCE(vs.n_voted, 0)) AS n_remaining
+    FROM total_stmts ts
+    LEFT JOIN voted_stmts vs USING (zinvite)
+"""
+
 # Personal votes: the logged-in participant's own votes in a given conversation,
 # keyed by statement tid. Used to show "You: Agreed / Disagreed / Passed" on
 # the results surfaces. Requires the participant's Polis pid.
@@ -585,6 +629,34 @@ class PolisServerClient:
         if rows is None:
             return None
         return int(rows[0][0]) if rows else 0
+
+    def get_statements_remaining_bulk(
+        self,
+        zinvites: list[str],
+        xid: str,
+    ) -> dict[str, int] | None:
+        """Return statements remaining to vote on per conversation for one participant.
+
+        zinvites: list of Polis zinvites (conv.polis_id values).
+        xid: the participant's xid (sha256 of mw_user_id) — used to look up their
+             Polis pid via the xids table without storing pid separately.
+
+        Returns dict[zinvite → n_remaining], or None if Postgres is unavailable.
+        Conversations where the participant has no Polis record are absent from the dict.
+        """
+        if not self._db_url or not zinvites or not xid:
+            return None
+        safe = [z for z in zinvites if _SAFE_ZINVITE.match(z or '')]
+        if not safe:
+            return {}
+        rows = self._pg_query(
+            _STATEMENTS_REMAINING_BULK_SQL,
+            (safe, xid),
+            'get_statements_remaining_bulk',
+        )
+        if rows is None:
+            return None
+        return {r[0]: int(r[3]) for r in rows}
 
     def get_personal_votes(
         self,
