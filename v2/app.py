@@ -1165,6 +1165,7 @@ def admin_conversation_detail(conv_id):
     phase6_results    = (_build_phase6_results(conv, participation=None)
                          if conv.phase_informed_voting and conv.phase6_polis_conversation_id
                          else None)
+    reveal            = _reveal_context(conv, participation=None)
     return render_template('admin_conversation.html',
                            conversation=conv,
                            conv_roles=conv_roles,
@@ -1173,6 +1174,7 @@ def admin_conversation_detail(conv_id):
                            participant_count=participant_count,
                            polis_stats=polis_stats,
                            phase6_results=phase6_results,
+                           reveal=reveal,
                            admin_roles=ADMIN_ROLES,
                            can_manage_roles=can_manage_roles,
                            phase_sequence=PHASE_SEQUENCE,
