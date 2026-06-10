@@ -175,20 +175,27 @@ def test_informed_voting_warns_when_phase6_fetch_fails(app, admin_client, conv):
     assert _tile_value(page, 'voted this round') is None
 
 
-def test_no_round2_warning_when_informed_voting_not_displayed_stage(app, admin_client, conv):
-    # Non-linear state: both informed-voting and public-results flags are on, so the
-    # *displayed* stage is public_results (furthest-along). No round-2 tiles render, so a
-    # failed phase-6 fetch must NOT trip the warning — it tracks the shown stage, not the
-    # raw flag (#165). Guards the false-positive the flag-based condition would have raised.
-    app.config['POLIS_DATABASE_URL'] = 'postgresql://unused/db'
+# ── Multiple phases active at once (advanced mode) ──────────────────────────────
+
+def test_multi_phase_renders_a_group_per_active_phase(admin_client, conv):
+    # Two phase flags on → the box names every active phase and renders a labelled
+    # stat group per phase, each with its own tiles (not just the furthest-along one).
+    conv.phase_argument_mapping = True
     conv.phase_informed_voting = True
-    conv.phase_public_results = True
     conv.phase6_polis_conversation_id = 'p6conv1234'
+    fs = FeaturedStatement(conversation_id=conv.id, polis_statement_id=1,
+                           confirmed_by_admin=True, phase6_polis_statement_id=0)
+    db.session.add(fs)
+    db.session.commit()
+    author = _participant(301, 'c1')
+    db.session.add(Argument(featured_statement_id=fs.id, proposer_id=author.id,
+                            body='pro a', side='pro'))
     db.session.commit()
 
     def stats_for(zinvite):
         if zinvite == 'p6conv1234':
-            return None                              # round-2 PG unreachable (but not shown)
+            return {'n_participants': 7, 'n_votes': 21, 'avg_votes': 3.0,
+                    'median_votes': 3.0, 'n_statements': 1, 'n_seed': 1}
         return {'n_participants': 12, 'n_votes': 80, 'avg_votes': 6.0,
                 'median_votes': 6.0, 'n_statements': 10, 'n_seed': 2}
 
@@ -197,8 +204,49 @@ def test_no_round2_warning_when_informed_voting_not_displayed_stage(app, admin_c
     with patch('app._polis_server_client', return_value=server):
         page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
 
-    # Round-1 stats are healthy and shown; the irrelevant phase-6 failure stays silent.
-    assert 'phase-stats-warning' not in page
+    assert 'Multiple phases active' in page
+    # A labelled group for each active phase, in sequence order.
+    assert 'phase-stats-group-label">Arguments' in page
+    assert 'phase-stats-group-label">Informed vote' in page
+    # Tiles from both groups render.
+    assert _tile_value(page, 'pro arguments') == '1'
+    assert _tile_value(page, 'statements seeded') == '1/1'
+    assert _tile_value(page, 'voted this round') == '7'
+
+
+def test_single_phase_renders_flat_without_group_label(admin_client, conv):
+    # One active phase → flat readout, no per-phase heading (simple-mode look preserved).
+    conv.phase_argument_mapping = True
+    db.session.commit()
+    page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+    assert 'phase-stats-group-label' not in page
+    assert 'Multiple phases active' not in page
+
+
+def test_multi_phase_informed_voting_warns_on_phase6_outage(app, admin_client, conv):
+    # Advanced/non-linear: informed-voting + public-results both on. The informed-voting
+    # group renders, so a failed phase-6 fetch DOES drop its round-2 tiles — the warning
+    # must fire (the round-2 tiles are genuinely shown when the flag is on).
+    app.config['POLIS_DATABASE_URL'] = 'postgresql://unused/db'
+    conv.phase_informed_voting = True
+    conv.phase_public_results = True
+    conv.phase6_polis_conversation_id = 'p6conv1234'
+    db.session.commit()
+
+    def stats_for(zinvite):
+        if zinvite == 'p6conv1234':
+            return None                              # round-2 PG unreachable
+        return {'n_participants': 12, 'n_votes': 80, 'avg_votes': 6.0,
+                'median_votes': 6.0, 'n_statements': 10, 'n_seed': 2}
+
+    server = MagicMock()
+    server.get_polis_stats.side_effect = stats_for
+    with patch('app._polis_server_client', return_value=server):
+        page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+
+    assert 'phase-stats-warning' in page
+    assert 'Live statistics unavailable' in page
+    assert 'Multiple phases active' in page
 
 
 # ── Loud warning when Polis PG is configured but down ───────────────────────────

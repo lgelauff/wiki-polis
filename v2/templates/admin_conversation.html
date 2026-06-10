@@ -82,6 +82,7 @@
 
       {# Current-phase body #}
       <div class="phase-hero-body">
+        {% if linear_phase_state %}
         <div class="phase-now-head">
           <span class="phase-now-kicker">You are in phase {{ current_stage_index + 1 }} of {{ phase_sequence | length }}</span>
         </div>
@@ -89,11 +90,22 @@
           <span class="phase-now-name">{{ phase_sequence[current_stage_index].label }}</span>
         </div>
         <p class="phase-now-desc">{{ phase_sequence[current_stage_index].effect }}</p>
+        {% else %}
+        {# Advanced/non-linear: several phase flags are on at once — name them all rather
+           than only the furthest-along one. #}
+        <div class="phase-now-head">
+          <span class="phase-now-kicker">Multiple phases active</span>
+        </div>
+        <div class="phase-now-head" style="margin-top:2px">
+          <span class="phase-now-name">{{ active_phase_labels | join(' + ') }}</span>
+        </div>
+        <p class="phase-now-desc">Several phases are open at once (advanced mode). Statistics for each are shown below.</p>
+        {% endif %}
 
-        {# Phase-specific statistics (#165). Tiles are scoped to the current phase and
-           built server-side by _phase_stats(). Flask-derived numbers (featured,
-           arguments) render even when Polis PG is down; the warning below fires only
-           when PG is configured but unreachable. #}
+        {# Phase-specific statistics (#165). One group per active phase; in advanced mode
+           several render at once, each headed by its phase name. Flask-derived numbers
+           (featured, arguments) render even when Polis PG is down; the warning below fires
+           only when PG is configured but unreachable. #}
         {% if polis_stats_unavailable %}
         <div class="phase-stats-warning" role="status">
           <span aria-hidden="true">⚠️</span>
@@ -102,19 +114,23 @@
             conversation may not yet be registered in Polis. Check the server logs.</span>
         </div>
         {% endif %}
-        {% if phase_stats %}
+        {# `multi` = more than one active phase actually has tiles; only then do we label
+           each group (a single group renders flat, unchanged from simple mode). #}
+        {% set multi = (phase_stat_groups | selectattr('tiles') | list | length) > 1 %}
+        {% for g in phase_stat_groups if g.tiles %}
+        {% if multi %}<div class="phase-stats-group-label">{{ g.label }}</div>{% endif %}
         {# A <dl> ties each value to its label programmatically: a screen reader reads each
            tile as "<value> <label>" rather than a stream of disconnected numbers. Native
            dt/dd needs no ARIA — the visible text is the accessible text (#165). #}
-        <dl class="phase-stats">
-          {% for t in phase_stats %}
+        <dl class="phase-stats{% if multi %} phase-stats--grouped{% endif %}">
+          {% for t in g.tiles %}
           <div>
             <dt class="phase-stat-value">{{ t.value }}{% if t.unit %}<span class="unit">{{ t.unit }}</span>{% endif %}</dt>
             <dd class="phase-stat-label">{{ t.label }}{% if t.note %}<div class="phase-stat-note">{{ t.note }}</div>{% endif %}</dd>
           </div>
           {% endfor %}
         </dl>
-        {% endif %}
+        {% endfor %}
       </div>
 
       {# Pause / Resume — directly under the phase bar (governs the running

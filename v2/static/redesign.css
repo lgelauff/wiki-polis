@@ -287,6 +287,17 @@
   border-top: 1px solid var(--hairline-soft);
 }
 .phase-stats dd { margin: 0; }  /* drop the UA dd indent — tiles stack value over label */
+/* Per-phase group heading + tighter spacing when several phases are active at once
+   in advanced mode (the single-phase case renders flat, without these). */
+.phase-stats-group-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 18px;
+}
+.phase-stats--grouped { margin: 8px 0 0; padding-top: 0; border-top: none; }
 .phase-stat-value {
   font-size: 24px;
   font-weight: 700;

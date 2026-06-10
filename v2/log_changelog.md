@@ -322,3 +322,24 @@ the guided "Move on" box and double as readiness signals (#156).
   readers read one phrase, not a stream of loose numbers); warning banner uses `role="status"`
   (not the render-time-inappropriate `role="alert"`); warning text darkened to clear AA
   contrast on the tinted panel
+
+## Multi-phase statistics in the phase-control box (follow-up to #165)
+
+In advanced mode an organizer can have several phase flags on at once. The phase-control
+box previously collapsed that to the single furthest-along phase — showing one phase name
+and only that phase's stats. It now reflects **every active phase**.
+
+- [x] `_active_stage_indices(conv)` returns all on-flag stage indices (was: only the
+  furthest via `_current_stage_index`)
+- [x] `_phase_stats` split into `_phase_tiles(conv, key, …)` (per-phase tile builder) +
+  `_phase_stat_groups(conv, …)` which returns one `{key, label, tiles}` group per active
+  phase — addressing the long if/elif altitude nit from the #183 review
+- [x] Phase-hero header: simple mode unchanged ("You are in phase N of M"); non-linear mode
+  shows "Multiple phases active" + the active phase names joined
+- [x] Stats render a labelled group per active phase; a single active phase still renders
+  flat (no heading), identical to before
+- [x] Phase-6 fetch + outage warning go back to gating on the `phase_informed_voting` flag
+  (the round-2 tiles now render whenever that phase is active, not only when furthest), which
+  supersedes the #183 narrowing coherently
+- [x] Tests: group-per-active-phase rendering, single-phase stays flat, and the multi-phase
+  phase-6-outage warning
