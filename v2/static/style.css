@@ -3229,8 +3229,9 @@ a { color: var(--pass); }
 .at-circle   { width: 34px; height: 34px; cursor: pointer; flex-shrink: 0; overflow: visible; }
 .at-circle-label { font-family: var(--mono); font-size: 11px; font-weight: 700; }
 
-/* All-complete interlude */
-.at-complete { margin-bottom: 8px; }
+/* All-complete interlude — full-width row, sits between banner (order 0) and panels (order 2) */
+.at-complete { flex: 1 0 100%; order: 1; margin-bottom: 8px; }
+.arg-panels   { order: 2; }
 .at-complete .interlude { margin-top: 1rem; }
 
 /* Revisit bar — collapsed panel summary shown after all-complete */
