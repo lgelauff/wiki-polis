@@ -457,7 +457,11 @@
       {% if not conversation.active %}
       <div class="danger-row">
         <div class="danger-row-main">
-          <div class="danger-row-title">Permanently closed</div>
+          <div class="danger-row-title">Permanently closed
+            {% if conversation.phase_public_results or conversation.phase_personal_results %}
+            · <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}" style="font-weight:400;font-size:13px">View final report <span aria-hidden="true">→</span></a>
+            {% endif %}
+          </div>
           <div class="danger-row-desc">
             {% if reveal and reveal.state == 'cooldown' %}
               Closed {{ conversation.closed_at.strftime('%-d %b %Y') }}.
