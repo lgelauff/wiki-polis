@@ -224,6 +224,10 @@ def test_empty_results_triggers_recompute_and_shows_computing_message(
                         lambda self, zinvite: recompute_called.append(zinvite) or True)
     # Reset rate-limit state so the trigger fires.
     monkeypatch.setitem(app_module._math_recompute_last, conv.id, 0)
+    # Hermetic: the trigger is also gated on POLIS_DATABASE_URL being configured
+    # (app.py polis_pg_configured). Set it explicitly instead of relying on ambient
+    # config/.env — otherwise this passes locally but fails in CI's collection order.
+    auth_client.application.config['POLIS_DATABASE_URL'] = 'postgresql://ci/test'
 
     resp = auth_client.get('/c/test-conv')
     assert resp.status_code == 200
