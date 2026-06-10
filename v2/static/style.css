@@ -3162,6 +3162,66 @@ a { color: var(--pass); }
   padding: 18px 20px;
 }
 
+/* Report — new scaffold elements */
+.report-placeholder {
+  font-size: 13px;
+  color: var(--muted);
+  font-style: italic;
+  background: var(--surface2);
+  border: 1px dashed var(--hairline);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: .75rem;
+}
+.report-placeholder-inline {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+.report-section-sub-heading {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 1rem 0 .4rem;
+}
+.report-stat--placeholder { opacity: .45; }
+.report-col-note {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+  display: block;
+}
+.report-anchor { color: var(--muted); font-size: inherit; }
+.report-anchor:hover { color: var(--link); }
+
+/* Process timeline */
+.report-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: .5rem;
+}
+.report-timeline-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.report-timeline-item--placeholder { opacity: .5; }
+.report-timeline-label { color: var(--fg); }
+.report-timeline-value { color: var(--muted); text-align: right; }
+
+/* Statement rows used in initial opinions section */
+.report-stmt-row {
+  margin-bottom: 1rem;
+}
+.report-stmt-text {
+  font-size: 14px;
+  margin: 0 0 .35rem;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    Arguments tab redesign — at-* components
    Additive; does not override existing arg-* rules.

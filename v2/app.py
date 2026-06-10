@@ -123,9 +123,10 @@ def _build_phase6_results(
       {
         'statements': [{
           'text', 'fs_id',
-          'p2': {n_agree, n_disagree, n_pass, n_voters, pct_agree},
-          'p6': {n_agree, n_disagree, n_pass, n_voters, pct_agree},
-          'shift': float | None,     # p6_pct_agree - p2_pct_agree; None if p2 unavailable
+          'p2': {n_agree, n_disagree, n_pass, n_voters, pct_agree, pct_disagree, pct_pass},
+          'p6': {n_agree, n_disagree, n_pass, n_voters, pct_agree, pct_disagree, pct_pass},
+          'shift': float | None,     # aggregate: p6_pct_agree - p2_pct_agree (population comparison,
+                                     #   NOT individual-level delta — see 'matched_participants')
           'my_p2_vote': int | None,  # raw Polis vote; None if participation absent or PG unavail
           'my_p6_vote': int | None,
           'my_p2_label': str | None,
@@ -133,6 +134,11 @@ def _build_phase6_results(
         }],
         'p6_participants': int | None,
         'p2_participants': int | None,
+        'matched_participants': None,  # int | None — participants who voted in BOTH rounds;
+                                       # requires xid→pid mapping (not yet stored, see TODO below).
+                                       # Individual-level delta + CI extrapolation depend on this.
+        'p2_consensus': list,   # top-3 statements by Phase 2 agree rate (population consensus)
+        'p2_divisive':  list,   # top-3 statements by balanced agree/disagree split (most divisive)
         'filter': Phase6ResultsFilter,
         'source_divergence': float | None,  # abs diff between PG count and Particiapi count
         'is_preliminary': bool,   # True while conversation is still active
@@ -267,15 +273,27 @@ def _build_phase6_results(
     # Sort by largest absolute shift first; statements with no shift data go last.
     statements.sort(key=lambda s: abs(s['shift']) if s['shift'] is not None else -1, reverse=True)
 
+    # Phase 2 consensus / divisiveness derived from the same data.
+    p2_with_data = [s for s in statements if s['p2'] is not None and s['p2']['n_voters'] > 0]
+    p2_consensus = sorted(p2_with_data,
+                          key=lambda s: s['p2']['pct_agree'] or 0, reverse=True)[:3]
+    # Most divisive = smallest gap between agree and disagree (most 50/50 split).
+    p2_divisive  = sorted(p2_with_data,
+                          key=lambda s: abs((s['p2']['pct_agree'] or 0) - (s['p2']['pct_disagree'] or 0)))[:3]
+
     return {
-        'statements':         statements,
-        'p6_participants':    p6_total_participants,
-        'p2_participants':    p2_total_participants,
-        'filter':             filt,
-        'source_divergence':  source_divergence,
-        'is_preliminary':     bool(conv.active),
-        'clusters':           clusters,
-        'pg_available':       pg_available,
+        'statements':            statements,
+        'p6_participants':       p6_total_participants,
+        'p2_participants':       p2_total_participants,
+        # TODO: compute once xid→pid mapping is available (see personal-votes TODO above).
+        'matched_participants':  None,
+        'p2_consensus':          p2_consensus,
+        'p2_divisive':           p2_divisive,
+        'filter':                filt,
+        'source_divergence':     source_divergence,
+        'is_preliminary':        bool(conv.active),
+        'clusters':              clusters,
+        'pg_available':          pg_available,
     }
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
