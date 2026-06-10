@@ -115,6 +115,45 @@
           {% endfor %}
         </dl>
         {% endif %}
+
+        {# Phase 6 (informed voting) results teaser — shown when the round is active (#122/#184). #}
+        {% if phase6_results %}
+        <div class="phase-stats phase-stats--p6" style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--hairline)">
+          <div>
+            <div class="phase-stat-label" style="margin-bottom:3px">Informed voting</div>
+            {% if phase6_results.p6_participants is not none %}
+            <div><div class="phase-stat-value">{{ phase6_results.p6_participants }}</div>
+                 <div class="phase-stat-label">participants in round 6</div></div>
+            {% else %}
+            <div class="muted" style="font-size:12px">participant count unavailable</div>
+            {% endif %}
+          </div>
+          {% if phase6_results.statements %}
+          <div>
+            <div class="phase-stat-value">{{ phase6_results.statements | length }}</div>
+            <div class="phase-stat-label">statements voted on</div>
+          </div>
+          {# Teaser: statement with largest opinion shift #}
+          {% set biggest = phase6_results.statements | selectattr('shift', 'ne', none) | list | first %}
+          {% if biggest %}
+          <div style="grid-column:1/-1;margin-top:.25rem">
+            <div class="phase-stat-label" style="margin-bottom:3px">Largest shift</div>
+            <span style="font-size:13px">"{{ biggest.text | truncate(60, True, '…') }}"</span>
+            <span class="p6-shift {% if biggest.shift > 0 %}p6-shift--up{% elif biggest.shift < 0 %}p6-shift--down{% endif %}" style="margin-left:.4rem">
+              {% if biggest.shift > 0 %}+{% endif %}{{ biggest.shift }}%
+            </span>
+          </div>
+          {% endif %}
+          {% endif %}
+          {% if phase6_results.filter.excluded_tids or phase6_results.filter.excluded_pids %}
+          <div style="grid-column:1/-1;font-size:11px;color:var(--muted)">
+            Moderation:
+            {% if phase6_results.filter.excluded_tids %}{{ phase6_results.filter.excluded_tids | length }} stmt excluded{% endif %}
+            {% if phase6_results.filter.excluded_pids %}· {{ phase6_results.filter.excluded_pids | length }} participant excluded{% endif %}
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
       </div>
 
       {# Pause / Resume — directly under the phase bar (governs the running
@@ -433,8 +472,26 @@
       {% if not conversation.active %}
       <div class="danger-row">
         <div class="danger-row-main">
-          <div class="danger-row-title">Permanently closed</div>
-          <div class="danger-row-desc">The 30-day identity-reveal window has started and cannot be reset.</div>
+          <div class="danger-row-title">Permanently closed
+            {% if conversation.phase_public_results or conversation.phase_personal_results %}
+            · <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}" style="font-weight:400;font-size:13px">View final report <span aria-hidden="true">→</span></a>
+            {% endif %}
+          </div>
+          <div class="danger-row-desc">
+            {% if reveal and reveal.state == 'cooldown' %}
+              Closed {{ conversation.closed_at.strftime('%-d %b %Y') }}.
+              The identity-reveal window opens on {{ reveal.opens_at.strftime('%-d %b %Y') }}
+              ({{ reveal.days_until_open }} day{{ 's' if reveal.days_until_open != 1 }} away) — nothing to do until then.
+            {% elif reveal and reveal.state == 'open' %}
+              Closed {{ conversation.closed_at.strftime('%-d %b %Y') }}.
+              The identity-reveal window is open until {{ reveal.closes_at.strftime('%-d %b %Y') }}.
+            {% elif reveal and reveal.state == 'closed' %}
+              Closed {{ conversation.closed_at.strftime('%-d %b %Y') }}.
+              The identity-reveal window has closed; records are permanently pseudonymous.
+            {% else %}
+              Closed{% if conversation.closed_at %} {{ conversation.closed_at.strftime('%-d %b %Y') }}{% endif %}. Cannot be reopened.
+            {% endif %}
+          </div>
         </div>
       </div>
       {% else %}

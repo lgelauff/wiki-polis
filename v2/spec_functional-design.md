@@ -298,7 +298,7 @@ Admins do not need a separate moderation UI for hiding individual statements or 
 
 ## Phase control
 
-A conversation moves through a linear sequence of six phases, each backed by a boolean flag on the conversation:
+A conversation moves through a linear sequence of phases, each backed by a boolean flag on the conversation:
 
 | Order | Phase | Flag | What it enables |
 |---|---|---|---|
@@ -307,11 +307,16 @@ A conversation moves through a linear sequence of six phases, each backed by a b
 | 3 | Featured selection | `phase_personal_results` | participants see personal results while the organizer curates featured statements |
 | 4 | Argument mapping | `phase_argument_mapping` | pro/con argument layer on featured statements |
 | 5 | Informed voting | `phase_informed_voting` (+ `phase6_polis_conversation_id`) | second clean vote round on featured statements; requires a one-time **initialise** |
-| 6 | Public results | `phase_public_results` | full aggregate map public to everyone; **auto-closes** the conversation |
+| — | *Cleanup window* | *(no flag — inferred state)* | organizer reviews results before publishing; participants see preliminary results; see [#163] |
+| 6 | Public results | `phase_public_results` | full aggregate map public to everyone |
+
+The **cleanup window** is the period after informed voting ends and before the organizer publishes the final report by closing the conversation (`closed_at` set). No separate flag is needed: the state is inferred from `conv.active AND NOT conv.phase_informed_voting` (or informed voting still on but organizer is reviewing). Participants see a "Preliminary results" banner during this window; the final report at `/c/<slug>/report` is only published once `closed_at` is set. At that moment the `Phase6ResultsFilter` (excluded statements and participants) is snapshotted so the published figures are semi-immutable — see [#163] for implementation.
+
+**Closing is irreversible** and starts the identity-reveal clock. It does not happen automatically — the organizer explicitly publishes the final report as a deliberate action.
 
 Two control surfaces:
 
-- **Simple / guided ("Move on").** Advances one step forward through the sequence. Renders a consequence summary plus a **readiness checklist** (per-phase preconditions); the submit button is gated client-side until every item is confirmed, and the server re-validates on POST. Machine-checked preconditions (currently only "≥1 confirmed featured statement" before argument mapping) show a met / not-met badge. A closed conversation jumps straight to public results.
+- **Simple / guided ("Move on").** Advances one step forward through the sequence. Renders a consequence summary plus a **readiness checklist** (per-phase preconditions); the submit button is gated client-side until every item is confirmed, and the server re-validates on POST. Machine-checked preconditions (currently only "≥1 confirmed featured statement" before argument mapping) show a met / not-met badge.
 - **Advanced toggles (global admin only).** Each phase flag as an independent on/off control, including backward moves and non-linear states. Opens automatically when the conversation is already in a non-linear state.
 
 Conversation moderators (non-admins) see phase controls read-only. Pause/Resume and Close are separate conversation-status actions (see above), not phases.

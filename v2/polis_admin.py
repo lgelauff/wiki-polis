@@ -79,6 +79,49 @@ _FEATURED_CANDIDATES_SQL = """
     LIMIT %s
 """
 
+# Per-statement vote counts for a Phase 6 (informed voting) conversation.
+# Uses votes_latest_unique (one vote per participant per statement) — the same
+# table Polis math uses — so counts are deduplicated and authoritative.
+# allowed_tids filters to confirmed featured statements; hidden/moderated tids
+# are excluded by passing only the non-moderated set from the caller.
+# excluded_pids is an array of Polis participant IDs (ints) to exclude from counts
+# (banned participants); pass an empty array when no bans are in effect.
+# Raw vote sign: -1 = agree, +1 = disagree, 0 = pass (Polis convention).
+_PHASE6_VOTE_COUNTS_SQL = """
+    WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s)
+    SELECT
+      v.tid,
+      COUNT(DISTINCT v.pid) FILTER (WHERE v.vote = -1) AS n_agree,
+      COUNT(DISTINCT v.pid) FILTER (WHERE v.vote =  1) AS n_disagree,
+      COUNT(DISTINCT v.pid) FILTER (WHERE v.vote =  0) AS n_pass,
+      COUNT(DISTINCT v.pid)                             AS n_voters
+    FROM votes_latest_unique v, z
+    WHERE v.zid = z.zid
+      AND v.tid = ANY(%s)
+      AND NOT (v.pid = ANY(%s))
+    GROUP BY v.tid
+"""
+
+# Total distinct participant count for a Phase 6 conversation, optionally
+# excluding banned pids. Used as the denominator for participation rate.
+_PHASE6_PARTICIPANT_COUNT_SQL = """
+    WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s)
+    SELECT COUNT(DISTINCT v.pid)
+    FROM votes_latest_unique v, z
+    WHERE v.zid = z.zid
+      AND NOT (v.pid = ANY(%s))
+"""
+
+# Personal votes: the logged-in participant's own votes in a given conversation,
+# keyed by statement tid. Used to show "You: Agreed / Disagreed / Passed" on
+# the results surfaces. Requires the participant's Polis pid.
+_PERSONAL_VOTES_SQL = """
+    WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s)
+    SELECT v.tid, v.vote
+    FROM votes_latest_unique v, z
+    WHERE v.zid = z.zid AND v.pid = %s
+"""
+
 _POLIS_STATS_SQL = """
     WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s),
     vd AS (
@@ -477,6 +520,92 @@ class PolisServerClient:
             }
         except (ValueError, IndexError):
             return None
+
+    def get_phase6_vote_counts(
+        self,
+        zinvite: str,
+        allowed_tids: list[int],
+        excluded_pids: list[int] | None = None,
+    ) -> dict[int, dict] | None:
+        """Return per-statement vote counts for a Phase 6 conversation.
+
+        Queries votes_latest_unique (one vote per participant per statement).
+        Only counts votes for tids in allowed_tids — caller passes the
+        confirmed, non-moderated set so hidden statements are automatically
+        excluded from aggregates.
+
+        excluded_pids is an optional list of Polis participant IDs to suppress
+        (e.g. banned participants). Pass None or [] when no bans are in effect.
+
+        Returns dict[tid → {n_agree, n_disagree, n_pass, n_voters}], or None
+        if the Postgres connection is unavailable.
+
+        Raw Polis vote sign: -1 = agree, +1 = disagree, 0 = pass.
+        """
+        if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
+            return None
+        if not allowed_tids:
+            return {}
+        pids = list(excluded_pids or [])
+        rows = self._pg_query(
+            _PHASE6_VOTE_COUNTS_SQL,
+            (zinvite, allowed_tids, pids),
+            'get_phase6_vote_counts',
+        )
+        if rows is None:
+            return None
+        return {
+            int(r[0]): {
+                'n_agree':    int(r[1]),
+                'n_disagree': int(r[2]),
+                'n_pass':     int(r[3]),
+                'n_voters':   int(r[4]),
+            }
+            for r in rows
+        }
+
+    def get_phase6_participant_count(
+        self,
+        zinvite: str,
+        excluded_pids: list[int] | None = None,
+    ) -> int | None:
+        """Return the number of distinct participants in a Phase 6 conversation.
+
+        Excludes any pids in excluded_pids (banned participants).
+        Returns None if Postgres is unavailable.
+        """
+        if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
+            return None
+        pids = list(excluded_pids or [])
+        rows = self._pg_query(
+            _PHASE6_PARTICIPANT_COUNT_SQL,
+            (zinvite, pids),
+            'get_phase6_participant_count',
+        )
+        if rows is None:
+            return None
+        return int(rows[0][0]) if rows else 0
+
+    def get_personal_votes(
+        self,
+        zinvite: str,
+        polis_pid: int,
+    ) -> dict[int, int] | None:
+        """Return the participant's own votes in a conversation keyed by tid.
+
+        Returns dict[tid → vote] where vote is -1 (agree), +1 (disagree), or
+        0 (pass). Returns None if Postgres is unavailable.
+        """
+        if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
+            return None
+        rows = self._pg_query(
+            _PERSONAL_VOTES_SQL,
+            (zinvite, polis_pid),
+            'get_personal_votes',
+        )
+        if rows is None:
+            return None
+        return {int(r[0]): int(r[1]) for r in rows}
 
     def queue_math_recompute(self, zinvite: str) -> bool:
         """Insert a worker_tasks row to trigger a polismath recompute for one conversation.
