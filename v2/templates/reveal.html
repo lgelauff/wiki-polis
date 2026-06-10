@@ -10,6 +10,7 @@
 {% endblock %}
 
 {% block content %}
+{% from '_reveal_timeline.html' import reveal_timeline with context %}
 
 <div class="container" style="max-width:660px">
 
@@ -61,12 +62,14 @@
   </h1>
   <p style="font-size:15px;line-height:1.6;color:var(--body);margin-top:14px">
     The identity reveal window has not opened yet.
-    It will open on <strong>{{ opens_at.strftime('%Y-%m-%d') }}</strong>.
+    It will open on <strong>{{ opens_at.strftime('%-d %b %Y') }}</strong>.
   </p>
   <p class="muted" style="margin-top:8px">
-    After that date you may optionally link your Wikimedia username to your pseudonym
-    in this consultation's public record.
+    After that date you may optionally and <strong>permanently</strong> link your Wikimedia
+    username to your pseudonym in this consultation's public record. You're never required to.
   </p>
+
+  {% if reveal %}{{ reveal_timeline(reveal) }}{% endif %}
 
   {% else %}
 
@@ -93,6 +96,8 @@
     <span style="font-family:var(--mono);color:var(--ink)">{{ participation.pseudonym }}</span>
     in this conversation. Other pseudonyms you used elsewhere are unaffected.
   </p>
+
+  {% if reveal %}{{ reveal_timeline(reveal) }}{% endif %}
 
   <div class="close-warning" style="margin:1.25rem 0">
     <p style="font-weight:600;margin-bottom:.5rem;color:#9a3412">Irreversible</p>

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-label="How a wiki-polis conversation works">
+<title>How a wiki-polis conversation works</title>
+<desc>Three phases — Explore the questions, Map the arguments, Express informed opinions — each producing data that converges into a more balanced policy draft.</desc>
+<rect x="0.5" y="0.5" width="1199" height="599" rx="18" fill="#fafaf9" stroke="#e5e5e6"></rect>
+<text x="48" y="62" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="30" font-weight="700" letter-spacing="-0.7" fill="#0c0c0e">How a wiki-polis conversation works</text>
+<text x="48" y="94" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="16" fill="#5f5f68">Not a decision exercise — a shared picture of where a community agrees, disagrees, and why.</text>
+<g transform="translate(48,124)">
+  <rect x="0" y="0" width="348" height="326" rx="14" fill="#ffffff" stroke="#e5e5e6"></rect>
+  <text x="22" y="40" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="19" font-weight="700" letter-spacing="-0.4" fill="#0c0c0e">Explore the questions</text>
+  <line x1="22" y1="72" x2="326" y2="72" stroke="#e5e5e6"></line>
+  <g transform="translate(79,84)"><rect x="26" y="14" width="138" height="46" rx="9" fill="#ffffff" stroke="#e5e5e6" stroke-width="1.5"></rect>
+<line x1="42" y1="31" x2="120" y2="31" stroke="#cfcdc6" stroke-width="3.2" stroke-linecap="round"></line>
+<line x1="42" y1="43" x2="96" y2="43" stroke="#cfcdc6" stroke-width="3.2" stroke-linecap="round"></line>
+<g transform="rotate(38 150 44)"><rect x="120" y="38" width="40" height="12" rx="2" fill="#3d6dba"></rect><rect x="116" y="38" width="8" height="12" fill="#b45309"></rect><path d="M160 38 L170 44 L160 50 Z" fill="#0c0c0e"></path></g>
+<g transform="translate(58 78)"><rect width="30" height="30" rx="7" fill="#15734a1f" stroke="#15734a" stroke-width="1.5"></rect><path d="M9 15 L13 19 L21 10" stroke="#15734a" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+<g transform="translate(102 78)"><rect width="30" height="30" rx="7" fill="#b23a3a1a" stroke="#b23a3a" stroke-width="1.5"></rect><path d="M10 10 L20 20 M20 10 L10 20" stroke="#b23a3a" stroke-width="2.6" stroke-linecap="round"></path></g></g>
+  <text x="174" y="222" text-anchor="middle" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="12.5" font-style="italic" fill="#5f5f68">Vote yes / no — and edit or add statements</text>
+  <rect x="22" y="240" width="304" height="66" rx="10" fill="#eef3fb" stroke="#c9d6ef"></rect>
+  <text x="38" y="262" font-family="&#39;JetBrains Mono&#39;,monospace" font-size="10.5" font-weight="700" letter-spacing="1.3" fill="#3d6dba">WHAT WE LEARN</text>
+  <g transform="translate(38,270)"><circle cx="9" cy="11" r="3.2" fill="#3d6dba"></circle><circle cx="20" cy="7" r="3.2" fill="#3d6dba"></circle><circle cx="16" cy="19" r="3.2" fill="#3d6dba"></circle><circle cx="28" cy="15" r="3.2" fill="#3d6dba" opacity="0.55"></circle><circle cx="11" cy="25" r="3.2" fill="#3d6dba" opacity="0.55"></circle><circle cx="30" cy="26" r="3.2" fill="#3d6dba" opacity="0.55"></circle></g>
+  <text x="88" y="280" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="13" fill="#3f3f43">Clusters of statements that</text>
+  <text x="88" y="297" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="13" fill="#3f3f43">inform the topic</text></g>
+<g transform="translate(426,124)">
+  <rect x="0" y="0" width="348" height="326" rx="14" fill="#ffffff" stroke="#e5e5e6"></rect>
+  <text x="22" y="40" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="19" font-weight="700" letter-spacing="-0.4" fill="#0c0c0e">Map the arguments</text>
+  <line x1="22" y1="72" x2="326" y2="72" stroke="#e5e5e6"></line>
+  <g transform="translate(79,84)"><rect x="26" y="6" width="138" height="34" rx="8" fill="#ffffff" stroke="#e5e5e6" stroke-width="1.5"></rect>
+<line x1="40" y1="18" x2="118" y2="18" stroke="#cfcdc6" stroke-width="3.2" stroke-linecap="round"></line>
+<line x1="40" y1="28" x2="94" y2="28" stroke="#cfcdc6" stroke-width="3.2" stroke-linecap="round"></line>
+<rect x="30" y="52" width="118" height="24" rx="7" fill="#15734a0f" stroke="#15734a" stroke-width="1.5" stroke-dasharray="4 3"></rect>
+<path d="M40 64 h10 M45 59 v10" stroke="#15734a" stroke-width="2.4" stroke-linecap="round"></path>
+<g transform="rotate(34 150 64)"><rect x="120" y="59" width="30" height="9" rx="1.5" fill="#3d6dba"></rect><rect x="117" y="59" width="6" height="9" fill="#b45309"></rect><path d="M150 59 L158 63.5 L150 68 Z" fill="#0c0c0e"></path></g>
+<rect x="30" y="84" width="118" height="24" rx="7" fill="#f4f4f3" stroke="#5f5f68" stroke-width="1.5" stroke-dasharray="4 3"></rect>
+<path d="M40 96 h10" stroke="#5f5f68" stroke-width="2.4" stroke-linecap="round"></path>
+<g transform="rotate(34 150 96)"><rect x="120" y="91" width="30" height="9" rx="1.5" fill="#3d6dba"></rect><rect x="117" y="91" width="6" height="9" fill="#b45309"></rect><path d="M150 91 L158 95.5 L150 100 Z" fill="#0c0c0e"></path></g></g>
+  <text x="174" y="222" text-anchor="middle" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="12.5" font-style="italic" fill="#5f5f68">Write the pro &amp; con arguments that matter</text>
+  <rect x="22" y="240" width="304" height="66" rx="10" fill="#eef3fb" stroke="#c9d6ef"></rect>
+  <text x="38" y="262" font-family="&#39;JetBrains Mono&#39;,monospace" font-size="10.5" font-weight="700" letter-spacing="1.3" fill="#3d6dba">WHAT WE LEARN</text>
+  <g transform="translate(38,270)"><rect x="4" y="5" width="14" height="10" rx="2.5" fill="#15734a24" stroke="#15734a" stroke-width="1.3"></rect><path d="M8 10 h6 M11 7 v6" stroke="#15734a" stroke-width="1.6" stroke-linecap="round"></path><rect x="22" y="6" width="14" height="8" rx="2.5" fill="#15734a12"></rect><rect x="4" y="20" width="14" height="10" rx="2.5" fill="#f4f4f3" stroke="#5f5f68" stroke-width="1.3"></rect><path d="M8 25 h6" stroke="#5f5f68" stroke-width="1.6" stroke-linecap="round"></path><rect x="22" y="21" width="14" height="8" rx="2.5" fill="#f4f4f3"></rect></g>
+  <text x="88" y="280" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="13" fill="#3f3f43">A map of the arguments that</text>
+  <text x="88" y="297" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="13" fill="#3f3f43">matter, pro &amp; con</text></g>
+<g transform="translate(804,124)">
+  <rect x="0" y="0" width="348" height="326" rx="14" fill="#ffffff" stroke="#e5e5e6"></rect>
+  <text x="22" y="40" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="19" font-weight="700" letter-spacing="-0.4" fill="#0c0c0e">Express informed opinions</text>
+  <line x1="22" y1="72" x2="326" y2="72" stroke="#e5e5e6"></line>
+  <g transform="translate(79,84)"><rect x="26" y="4" width="138" height="30" rx="8" fill="#ffffff" stroke="#e5e5e6" stroke-width="1.5"></rect>
+<line x1="40" y1="14" x2="118" y2="14" stroke="#cfcdc6" stroke-width="3.2" stroke-linecap="round"></line>
+<line x1="40" y1="24" x2="94" y2="24" stroke="#cfcdc6" stroke-width="3.2" stroke-linecap="round"></line>
+<g transform="translate(34 44)"><rect width="56" height="20" rx="6" fill="#15734a1f" stroke="#15734a" stroke-width="1.3"></rect><path d="M12 10 h9 M16.5 5.5 v9" stroke="#15734a" stroke-width="2.2" stroke-linecap="round"></path><line x1="30" y1="10" x2="48" y2="10" stroke="#15734a" stroke-width="2.6" stroke-linecap="round" opacity="0.6"></line></g>
+<g transform="translate(100 44)"><rect width="56" height="20" rx="6" fill="#f4f4f3" stroke="#5f5f68" stroke-width="1.3"></rect><path d="M12 10 h9" stroke="#5f5f68" stroke-width="2.2" stroke-linecap="round"></path><line x1="30" y1="10" x2="48" y2="10" stroke="#5f5f68" stroke-width="2.6" stroke-linecap="round" opacity="0.6"></line></g>
+<g transform="translate(58 78)"><rect width="30" height="30" rx="7" fill="#15734a1f" stroke="#15734a" stroke-width="1.5"></rect><path d="M9 15 L13 19 L21 10" stroke="#15734a" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+<g transform="translate(102 78)"><rect width="30" height="30" rx="7" fill="#b23a3a1a" stroke="#b23a3a" stroke-width="1.5"></rect><path d="M10 10 L20 20 M20 10 L10 20" stroke="#b23a3a" stroke-width="2.6" stroke-linecap="round"></path></g></g>
+  <text x="174" y="222" text-anchor="middle" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="12.5" font-style="italic" fill="#5f5f68">Vote again, with the key arguments shown</text>
+  <rect x="22" y="240" width="304" height="66" rx="10" fill="#eef3fb" stroke="#c9d6ef"></rect>
+  <text x="38" y="262" font-family="&#39;JetBrains Mono&#39;,monospace" font-size="10.5" font-weight="700" letter-spacing="1.3" fill="#3d6dba">WHAT WE LEARN</text>
+  <g transform="translate(38,270)"><rect x="5" y="16" width="8" height="14" rx="2" fill="#3d6dba"></rect><rect x="16" y="8" width="8" height="22" rx="2" fill="#3d6dba"></rect><rect x="27" y="20" width="8" height="10" rx="2" fill="#3d6dba" opacity="0.55"></rect></g>
+  <text x="88" y="280" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="13" fill="#3f3f43">How different parts of the</text>
+  <text x="88" y="297" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="13" fill="#3f3f43">community feel</text></g>
+<path d="M405 256 L417 269 L405 282" fill="none" stroke="#5f5f68" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
+<path d="M783 256 L795 269 L783 282" fill="none" stroke="#5f5f68" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
+<g stroke="#3d6dba" stroke-width="1.75" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M222 452 C222 478, 600 470, 600 488"></path>
+  <path d="M600 452 L600 488"></path>
+  <path d="M978 452 C978 478, 600 470, 600 488"></path>
+  <path d="M600 488 L600 500"></path>
+  <path d="M594 495 L600 501 L606 495"></path>
+</g>
+<circle cx="600" cy="488" r="2.6" fill="#3d6dba"></circle>
+<rect x="48" y="506" width="1104" height="64" rx="14" fill="#eef3fb" stroke="#c9d6ef"></rect>
+<rect x="68" y="520" width="36" height="36" rx="9" fill="#ffffff" stroke="#c9d6ef"></rect>
+<g transform="translate(75,527)" fill="none" stroke="#3d6dba" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M9 14l2 2 4-4" stroke="#15734a"></path>
+</g>
+<text x="124" y="544" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="19" font-weight="700" letter-spacing="-0.4" fill="#0c0c0e">A more balanced policy draft</text>
+</svg>
