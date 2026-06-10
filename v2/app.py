@@ -660,7 +660,7 @@ def _phase_stat_groups(conv, polis_stats, phase6_stats=None):
          'label': PHASE_SEQUENCE[i]['label'],
          'tiles': _phase_tiles(conv, PHASE_SEQUENCE[i]['key'], polis_stats, phase6_stats,
                                featured_counts, argument_stats)}
-        for i in _active_stage_indices(conv)
+        for i in [j for j, s in enumerate(PHASE_SEQUENCE) if s['key'] in _active_phases(conv)]
     ]
 
 
@@ -1354,7 +1354,8 @@ def admin_conversation_detail(conv_id):
                            can_manage_roles=can_manage_roles,
                            phase_sequence=PHASE_SEQUENCE,
                            current_stage_index=_current_stage_index(conv),
-                           active_stage_indices=_active_stage_indices(conv),
+                           active_stage_indices=[i for i, s in enumerate(PHASE_SEQUENCE)
+                                                  if s['key'] in _active_phases(conv)],
                            linear_phase_state=_is_linear_phase_state(conv),
                            advance_target_index=_advance_target_index(conv),
                            transition=_transition_context(conv))
