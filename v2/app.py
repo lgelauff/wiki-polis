@@ -209,7 +209,7 @@ def _build_phase6_results(
             current_app.config['PARTICIAPI_BASE']
         ).get_results(p6_zinvite)
     except Exception:
-        logger.exception('Particiapi get_results failed for Phase 6 zinvite %s', p6_zinvite)
+        current_app.logger.exception('Particiapi get_results failed for Phase 6 zinvite %s', p6_zinvite)
 
     clusters = None
     source_divergence = None
@@ -226,7 +226,7 @@ def _build_phase6_results(
         if pa_n and p6_total_participants:
             source_divergence = abs(pa_n - p6_total_participants) / max(p6_total_participants, 1)
             if source_divergence > 0.05:
-                logger.warning(
+                current_app.logger.warning(
                     'Phase 6 source divergence %.1f%% for conv %s '
                     '(PG=%d, Particiapi=%d) — may indicate moderation sync lag',
                     source_divergence * 100, conv.slug, p6_total_participants, pa_n,
