@@ -184,7 +184,46 @@ representative or strongly dividing ones) from the system's suggestions, or add 
 manually. On featured statements participants read, submit, and vote on short pro/con
 arguments. Keep the set small (≈8–12) — curation quality drives the argument layer.
 
-## 7. Close and identity reveal
+## 7. Read the informed voting results
+
+After Phase 6 (informed voting) the platform generates three result surfaces:
+
+### Preliminary results (while the round is live)
+Participants see a comparison table on the **Results tab** as soon as the round is open.
+It shows agree/disagree bars for each featured statement side-by-side (Phase 2 initial vote vs
+Phase 6 informed vote) and a shift indicator (e.g. +12% agree). This is marked
+**Preliminary** — counts change as more participants vote.
+
+### Final report (after you close)
+Once you close the consultation, a **final report** is published at `/c/<slug>/report`.
+It shows:
+- Participation counts for each round (initial and informed voting)
+- The full opinion-shift table, sorted by size of shift
+- Opinion groups (clusters) identified in the informed voting round by Polis math
+- Any moderation exclusions applied (e.g. statements or participants removed post-round)
+
+The report is public when **Public results** is on; login-required when only
+**Personal results** is on.
+
+> **Organizer cleanup before the report.** Between closing and publishing, you may want
+> to moderate any remaining flagged statements or (once issue #60 ships) exclude
+> participants who violated the terms. All exclusions are reflected in the final report's
+> counts — the raw votes remain in Polis but are filtered from the displayed aggregates.
+
+### Self-comparison (coming soon)
+A future surface will let participants explore where their own informed votes place them
+relative to the opinion groups. See issue #122 for tracking.
+
+### Two data sources — what the platform checks
+The platform queries **two sources** and compares them:
+- **Polis Postgres directly** (`votes_latest_unique`) — ground truth for vote counts;
+  moderation filters are applied here.
+- **Particiapi results API** — provides the cluster/group structure that Polis math computed.
+
+If the participant counts diverge by more than 5% (e.g. a moderation sync lag), the app
+logs a warning. You'll see this in the server logs if it occurs.
+
+## 8. Close and identity reveal
 
 **Closing is irreversible** and starts the retention clock. After a cooldown a
 participant may *voluntarily and permanently* attach their Wikimedia username to their

@@ -63,10 +63,23 @@ enum(`moderator`) · `granted_at` · `granted_by` FK→participants (**SET NULL*
 `(participant_id, conversation_id, role)`.
 
 ### `featured_statements`
-`id` PK · `conversation_id` FK (CASCADE) · `polis_statement_id` int · `statement_text`
-(nullable; cached from Particiapi for when the API is down) · `suggested_by_system`
-bool=F · `confirmed_by_admin` bool=F · `created_at`. Unique
-`(conversation_id, polis_statement_id)`.
+`id` PK · `conversation_id` FK (CASCADE) · `polis_statement_id` int (Phase 2 tid in the
+main Polis conversation) · `phase6_polis_statement_id` int nullable (Phase 6 tid in the
+dedicated informed-voting Polis conversation; set by `admin_phase6_init`/`_sync_phase6_featured`
+and cleared to NULL when the statement is hidden in Phase 6) · `statement_text`
+(nullable; cached from Particiapi) · `suggested_by_system` bool=F · `confirmed_by_admin`
+bool=F · `created_at`. Unique `(conversation_id, polis_statement_id)`.
+
+**Phase 6 two-conversation architecture.** Each `Conversation` holds two separate Polis
+conversation IDs: `polis_id` (Phase 2, all statements) and `phase6_polis_conversation_id`
+(Phase 6, only confirmed featured statements as seeds). These are independent Polis
+conversations with distinct zinvites and vote sets. Joining them for comparison uses the
+`FeaturedStatement` as the bridge: `polis_statement_id` is the Phase 2 tid,
+`phase6_polis_statement_id` is the Phase 6 tid for the same logical statement.
+
+**Vote-sign convention (both conversations).** Raw Polis DB: `-1 = Agree, 1 = Disagree,
+0 = Pass`. The participant-facing CSV export negates this (agree = +1). wiki-polis always
+reads from `votes_latest_unique` using the raw sign. See `ref_polis-data-model.md`.
 
 ### `arguments`
 `id` PK · `featured_statement_id` FK (CASCADE) · `proposer_id` FK→participants
@@ -115,5 +128,15 @@ proposer_id)`, `argument_votes(argument_id, participant_id)`,
   workflow is still needed to remove internal account↔pseudonym links for non-revealed
   participations by the retention commitment.
 
-> The proposal's `phase6_*` fields (from [`prop_phase-model.md`](prop_phase-model.md)) are
-> **not** in `db.py` — they exist only in the proposal.
+**Phase 6 results moderation.** `Phase6ResultsFilter` (defined in `app.py`) carries two
+exclusion sets applied uniformly across all result surfaces:
+- `excluded_tids` — Phase 6 Polis tids suppressed post-init (de-featured statements whose
+  `phase6_polis_statement_id` was moderated to `mod = -1`).
+- `excluded_pids` — Polis participant pids suppressed (banned participants; empty until
+  issue #60 ships the admin ban UI). The field exists so results can be recomputed with
+  exclusions without a schema change.
+
+**Result surfaces.** Three surfaces are built from the same `_build_phase6_results` helper:
+1. **Surface A — preliminary** (results tab in `conversation.html` while round is live).
+2. **Surface B — final report** (`/c/<slug>/report`, public after close).
+3. **Surface C — self-comparison** (placeholder in the final report; full implementation deferred).

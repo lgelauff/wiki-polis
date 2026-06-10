@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block header_crumb %}
+<span class="header-crumb">
+  <span class="header-crumb-sep">/</span>
+  <span>{{ conversation.title | truncate(40, True, '…') }}</span>
+  <span class="header-crumb-sep">/</span>
+  <span>report</span>
+</span>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:800px">
+
+  <p style="margin-bottom:1.25rem">
+    <a href="{{ url_for('participant.conversation', slug=conversation.slug) }}"
+       style="font-size:13px;color:var(--muted);text-decoration:none">
+      <span aria-hidden="true">←</span> {{ conversation.title }}
+    </a>
+  </p>
+
+  {# ── Header ──────────────────────────────────────────────────────────────── #}
+  <div class="report-header">
+    <div>
+      <h1 class="report-title">{{ conversation.title }}</h1>
+      <p class="report-subtitle">
+        Final results report
+        {% if conversation.closed_at %}
+        · closed {{ conversation.closed_at.strftime('%-d %b %Y') }}
+        {% endif %}
+      </p>
+    </div>
+    <span class="report-badge">Final</span>
+  </div>
+
+  {% if phase6_results %}
+
+  {# ── Participation summary ────────────────────────────────────────────────── #}
+  <div class="report-section">
+    <h2 class="report-section-heading">Participation</h2>
+    <div class="report-stats-row">
+      {% if phase6_results.p2_participants %}
+      <div class="report-stat">
+        <span class="report-stat-value">{{ phase6_results.p2_participants }}</span>
+        <span class="report-stat-label">Initial voting</span>
+      </div>
+      {% endif %}
+      {% if phase6_results.p6_participants %}
+      <div class="report-stat">
+        <span class="report-stat-value">{{ phase6_results.p6_participants }}</span>
+        <span class="report-stat-label">Informed voting</span>
+      </div>
+      {% endif %}
+    </div>
+    {% if phase6_results.filter.excluded_tids or phase6_results.filter.excluded_pids %}
+    <p class="report-moderation-note muted">
+      Moderation applied:
+      {% if phase6_results.filter.excluded_tids %}
+      {{ phase6_results.filter.excluded_tids | length }} statement{{ 's' if phase6_results.filter.excluded_tids | length != 1 }} excluded
+      {% endif %}
+      {% if phase6_results.filter.excluded_pids %}
+      · {{ phase6_results.filter.excluded_pids | length }} participant{{ 's' if phase6_results.filter.excluded_pids | length != 1 }} excluded
+      {% endif %}
+    </p>
+    {% endif %}
+    {% if not phase6_results.pg_available %}
+    <p class="muted" style="font-size:13px;margin-top:.5rem">
+      Detailed vote counts are not available — the results database is unreachable.
+    </p>
+    {% endif %}
+  </div>
+
+  {# ── Opinion shift table ─────────────────────────────────────────────────── #}
+  {% if phase6_results.statements and phase6_results.pg_available %}
+  <div class="report-section">
+    <h2 class="report-section-heading">
+      Opinion shift
+      <span class="report-section-sub">Did argument exposure change views?</span>
+    </h2>
+    <p class="muted" style="font-size:13px;margin-bottom:1rem">
+      Each row compares the initial vote (Phase 2, before seeing arguments) with the
+      informed vote (Phase 6, after argument mapping). Shift = change in agree rate.
+      Sorted by size of shift.
+    </p>
+    <table class="p6-results-table report-table" aria-label="Opinion shift per statement">
+      <thead>
+        <tr>
+          <th class="p6-col-stmt">Statement</th>
+          <th class="p6-col-phase">Initial</th>
+          <th class="p6-col-phase">Informed</th>
+          <th class="p6-col-shift">Shift</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for s in phase6_results.statements %}
+      <tr class="p6-results-row">
+        <td class="p6-col-stmt">{{ s.text }}</td>
+        <td class="p6-col-phase">
+          {% if s.p2 %}
+          <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}%">
+            <div class="p6-bar-agree" style="width:{{ s.p2.pct_agree }}%"></div>
+            <div class="p6-bar-disagree" style="width:{{ s.p2.pct_disagree }}%"></div>
+          </div>
+          <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree · {{ s.p2.n_voters }} votes</span>
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td class="p6-col-phase">
+          <div class="p6-vote-bar" title="Agree {{ s.p6.pct_agree }}% · Disagree {{ s.p6.pct_disagree }}%">
+            <div class="p6-bar-agree" style="width:{{ s.p6.pct_agree }}%"></div>
+            <div class="p6-bar-disagree" style="width:{{ s.p6.pct_disagree }}%"></div>
+          </div>
+          <span class="p6-bar-label">{{ s.p6.pct_agree }}% agree · {{ s.p6.n_voters }} votes</span>
+        </td>
+        <td class="p6-col-shift">
+          {% if s.shift is not none %}
+          <span class="p6-shift {% if s.shift > 0 %}p6-shift--up{% elif s.shift < 0 %}p6-shift--down{% endif %}">
+            {% if s.shift > 0 %}+{% endif %}{{ s.shift }}%
+          </span>
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# ── Opinion groups (clusters from Particiapi) ───────────────────────────── #}
+  {% if phase6_results.clusters %}
+  <div class="report-section">
+    <h2 class="report-section-heading">
+      Opinion groups
+      <span class="report-section-sub">{{ phase6_results.clusters | length }} group{{ 's' if phase6_results.clusters | length != 1 }} identified in the informed voting round</span>
+    </h2>
+    <p class="muted" style="font-size:13px;margin-bottom:1rem">
+      Groups represent clusters of participants with similar voting patterns.
+      Statements listed here were most characteristic of each group.
+    </p>
+    {% for group in phase6_results.clusters %}
+    <div class="results-block" style="margin-bottom:1rem">
+      <p class="results-group-heading">
+        Group {{ loop.index }}
+        {% if group.n_members %}<span class="muted" style="font-weight:400;font-size:12px">· {{ group.n_members }} participant{{ 's' if group.n_members != 1 }}</span>{% endif %}
+      </p>
+      {% for r in group.agree %}
+      <div class="results-row">
+        <span class="results-badge results-agree">agree</span>
+        <span class="results-text">"{{ r.statement_text }}"</span>
+        {% if r.value %}<span class="results-pct">{{ (r.value * 100)|int }}%</span>{% endif %}
+      </div>
+      {% endfor %}
+      {% for r in group.disagree %}
+      <div class="results-row">
+        <span class="results-badge results-disagree">disagree</span>
+        <span class="results-text">"{{ r.statement_text }}"</span>
+        {% if r.value %}<span class="results-pct">{{ (r.value * 100)|int }}%</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# ── Self-comparison placeholder (Surface C) ─────────────────────────────── #}
+  {% if participation and phase6_results.clusters %}
+  <div class="report-section report-section--explore">
+    <h2 class="report-section-heading">Where did you land?</h2>
+    <p class="muted" style="font-size:13px">
+      Personalised group comparison — coming soon. This will show how your informed votes
+      compare to each opinion group and where your views sit in the overall distribution.
+    </p>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="landing-section">
+    <p class="muted">Informed voting results are not available for this consultation yet.</p>
+  </div>
+  {% endif %}
+
+  {# ── Identity reveal callout ──────────────────────────────────────────────── #}
+  {% if reveal_state == 'open' and participation %}
+  <div class="reveal-callout" style="margin-top:2rem">
+    <p class="reveal-callout-text">
+      The identity reveal window is open. Your participation is recorded under
+      pseudonym <strong>{{ participation.pseudonym }}</strong>.
+    </p>
+    <a class="reveal-callout-link"
+       href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">
+      Optionally link your Wikimedia username <span aria-hidden="true">→</span>
+    </a>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

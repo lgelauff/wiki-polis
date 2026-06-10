@@ -292,3 +292,17 @@ arguments so participants deliberate before casting a clean vote.
 
 **Ops**
 - [x] `deploy.sh --migrate` runs Alembic from the bastion via dynamic envvar loading + `MIGRATION_MODE=1` (skips web-server-only startup checks); documented in `guide_deployment.md`
+
+## Step 8 — Phase 6 results report (2026-06-10)
+
+**Phase 6 results — three surfaces** ([#122](https://github.com/lgelauff/wiki-polis/issues/122), [#165](https://github.com/lgelauff/wiki-polis/issues/165) partial)
+
+- [x] `Phase6ResultsFilter` dataclass in `app.py`: `excluded_tids` (hidden Phase 6 statements) + `excluded_pids` (banned participants, empty until #60); applied uniformly across all result surfaces
+- [x] Three new `PolisServerClient` Postgres methods (all query `votes_latest_unique`): `get_phase6_vote_counts(zinvite, allowed_tids, excluded_pids)`, `get_phase6_participant_count`, `get_personal_votes`
+- [x] `_build_phase6_results` helper: per-statement Phase 2 vs Phase 6 comparison, shift calculation, personal vote lookup (deferred pending xid→pid mapping), source-divergence check between PG and Particiapi; graceful fallback when PG unavailable
+- [x] **Surface A — preliminary** (`conversation.html` results tab): agree/disagree bar chart per statement, shift indicator (↑/↓), personal vote badge, preliminary banner; shown while round is live
+- [x] **Surface B — final report** (`/c/<slug>/report`): new route + `report.html` template; aggregate only, opinion-shift table, cluster section from Particiapi, participation counts, moderation note, Final badge; public when `phase_public_results`, login-gated when `phase_personal_results` only
+- [x] **Surface C placeholder** in final report: "Where did you land?" self-comparison section reserved, full implementation deferred
+- [x] **Admin stats slice** (#165, informed voting only): Phase 6 participant count, statement count, largest-shift teaser in admin conversation stats panel
+- [x] Done screen updated: closed-state links to final report
+- [x] Docs: `ref_data-model.md` (two-conversation architecture, vote-sign, filter model, result surfaces), `ref_polis-data-model.md` (`votes_latest_unique` Phase 6 note), `guide_organizer.md` (new "Read the informed voting results" section)

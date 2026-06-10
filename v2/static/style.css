@@ -2940,6 +2940,229 @@ a { color: var(--pass); }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   Phase 6 results table — shared by conversation.html results tab (Surface A)
+   and report.html (Surface B).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.p6-results-block {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.p6-results-header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.p6-results-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.p6-results-badge--preliminary {
+  color: var(--spot);
+  background: rgba(180,83,9,.08);
+  border: 1px solid rgba(180,83,9,.18);
+}
+
+/* Results comparison table */
+.p6-results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .875rem;
+  margin-top: .5rem;
+}
+.p6-results-table th {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 8px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--hairline);
+}
+.p6-results-table td {
+  padding: 10px 8px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--hairline-soft, var(--hairline));
+}
+.p6-results-row:last-child td { border-bottom: none; }
+
+.p6-col-stmt  { width: 40%; min-width: 160px; line-height: 1.4; }
+.p6-col-phase { width: 22%; min-width: 120px; }
+.p6-col-shift { width: 10%; min-width: 56px;  white-space: nowrap; }
+.p6-col-mine  { width: 10%; min-width: 70px;  }
+
+/* Stacked agree/disagree bar */
+.p6-vote-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface2);
+  margin-bottom: 3px;
+}
+.p6-bar-agree    { background: var(--agree);    transition: width .2s; }
+.p6-bar-disagree { background: var(--disagree); transition: width .2s; }
+
+.p6-bar-label {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Shift indicator */
+.p6-shift {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.p6-shift--up   { color: var(--agree); }
+.p6-shift--down { color: var(--disagree); }
+
+/* Personal vote badge */
+.p6-my-vote {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--surface2);
+  color: var(--muted);
+}
+.p6-my-vote--agreed    { color: var(--agree);    background: rgba(31,138,91,.09); }
+.p6-my-vote--disagreed { color: var(--disagree); background: rgba(196,74,74,.09); }
+.p6-my-vote--passed    { color: var(--pass);     background: rgba(61,109,186,.09); }
+
+/* Mobile: collapse phase columns */
+@media (max-width: 640px) {
+  .p6-col-stmt  { width: auto; }
+  .p6-col-phase { width: 90px; min-width: 90px; }
+  .p6-col-shift { width: 48px; min-width: 48px; }
+  .p6-col-mine  { display: none; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Final report page (report.html)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.report-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -.02em;
+  line-height: 1.25;
+  margin: 0 0 .25rem;
+}
+
+.report-subtitle {
+  font-size: .875rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.report-badge {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 4px;
+  color: var(--agree);
+  background: rgba(31,138,91,.09);
+  border: 1px solid rgba(31,138,91,.2);
+}
+
+.report-section {
+  margin-bottom: 2.5rem;
+}
+
+.report-section-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 .75rem;
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+
+.report-section-sub {
+  font-size: .8125rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.report-stats-row {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.report-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.report-stat-value {
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -.03em;
+  line-height: 1;
+}
+
+.report-stat-label {
+  font-size: .75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-family: var(--mono);
+  letter-spacing: .05em;
+}
+
+.report-moderation-note {
+  font-size: 12px;
+  margin-top: .75rem;
+}
+
+.report-table th,
+.report-table td { padding: 10px 10px; }
+
+.report-section--explore {
+  background: var(--surface2);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    Arguments tab redesign — at-* components
    Additive; does not override existing arg-* rules.
    ───────────────────────────────────────────────────────────────────────────── */

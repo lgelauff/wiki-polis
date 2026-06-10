@@ -90,8 +90,6 @@
         </div>
         <p class="phase-now-desc">{{ phase_sequence[current_stage_index].effect }}</p>
 
-        {# The few numbers we already fetch. TODO(#165/#42): per-phase statistics
-           (e.g. featured-with-arguments, awaiting moderation) replace these. #}
         {% if polis_stats %}
         <div class="phase-stats">
           <div><div class="phase-stat-value">{{ polis_stats.n_participants }}</div>
@@ -100,6 +98,45 @@
                <div class="phase-stat-label">votes cast</div></div>
           <div><div class="phase-stat-value">{{ polis_stats.n_statements }}</div>
                <div class="phase-stat-label">statements ({{ polis_stats.n_seed }} seed)</div></div>
+        </div>
+        {% endif %}
+
+        {# Phase 6 (informed voting) stats — shown when the round is active. #}
+        {% if phase6_results %}
+        <div class="phase-stats phase-stats--p6" style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--hairline)">
+          <div>
+            <div class="phase-stat-label" style="margin-bottom:3px">Informed voting</div>
+            {% if phase6_results.p6_participants is not none %}
+            <div><div class="phase-stat-value">{{ phase6_results.p6_participants }}</div>
+                 <div class="phase-stat-label">participants in round 6</div></div>
+            {% else %}
+            <div class="muted" style="font-size:12px">participant count unavailable</div>
+            {% endif %}
+          </div>
+          {% if phase6_results.statements %}
+          <div>
+            <div class="phase-stat-value">{{ phase6_results.statements | length }}</div>
+            <div class="phase-stat-label">statements voted on</div>
+          </div>
+          {# Teaser: statement with largest opinion shift #}
+          {% set biggest = phase6_results.statements | selectattr('shift', 'ne', none) | list | first %}
+          {% if biggest %}
+          <div style="grid-column:1/-1;margin-top:.25rem">
+            <div class="phase-stat-label" style="margin-bottom:3px">Largest shift</div>
+            <span style="font-size:13px">"{{ biggest.text | truncate(60, True, '…') }}"</span>
+            <span class="p6-shift {% if biggest.shift > 0 %}p6-shift--up{% elif biggest.shift < 0 %}p6-shift--down{% endif %}" style="margin-left:.4rem">
+              {% if biggest.shift > 0 %}+{% endif %}{{ biggest.shift }}%
+            </span>
+          </div>
+          {% endif %}
+          {% endif %}
+          {% if phase6_results.filter.excluded_tids or phase6_results.filter.excluded_pids %}
+          <div style="grid-column:1/-1;font-size:11px;color:var(--muted)">
+            Moderation:
+            {% if phase6_results.filter.excluded_tids %}{{ phase6_results.filter.excluded_tids | length }} stmt excluded{% endif %}
+            {% if phase6_results.filter.excluded_pids %}· {{ phase6_results.filter.excluded_pids | length }} participant excluded{% endif %}
+          </div>
+          {% endif %}
         </div>
         {% endif %}
       </div>
