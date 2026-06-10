@@ -36,18 +36,14 @@
   {# ── Introduction ─────────────────────────────────────────────────────────── #}
   <div class="report-section">
     <h2 class="report-section-heading">Introduction</h2>
-    {# PLACEHOLDER: organizer-written introduction text.
-       This section should describe: the topic, why this consultation was run,
-       who organised it, and what will be done with the results.
-       Add a `conversation.report_intro` field and render it here. #}
+    {# PLACEHOLDER: organizer-written report introduction.
+       Add a `conversation.report_intro` field (separate from intro_text, which is
+       the participant-facing submission prompt) and render it here. #}
     <p class="report-placeholder">
       <em>Organizer introduction not yet added. This section should explain
       what the consultation was about, who organised it, and how the results
       will be used.</em>
     </p>
-    {% if conversation.intro_text %}
-    <div class="report-intro-text">{{ conversation.intro_text | safe }}</div>
-    {% endif %}
   </div>
 
   {# ── Process timeline ────────────────────────────────────────────────────── #}
