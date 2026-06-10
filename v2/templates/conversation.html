@@ -836,7 +836,6 @@
               <span class="vote-dot vote-dot--disagree"></span>Disagree
             </button>
           </div>
-          <button class="p6-skip-btn" type="button">Skip for now <span aria-hidden="true">→</span></button>
           {% endif %}
         </div>{# end p6-statement-col #}
 
@@ -1015,29 +1014,13 @@
       var fsId  = card.dataset.fsId;
       var row   = card.querySelector('.p6-vote-row');
       var badge = card.querySelector('.p6-voted-badge');
-      var skip  = card.querySelector('.p6-skip-btn');
       if (!row) return;
-
-      // Skip button
-      if (skip) {
-        skip.addEventListener('click', function () {
-          skip.hidden = true;
-          badge.className = 'p6-voted-badge';
-          badge.removeAttribute('hidden');
-          badge.textContent = 'Skipped';
-          row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = true; b.classList.add('p6-voted'); });
-          card.classList.add('p6-card--voted');
-          markTerminal(card);
-          scrollToNext(card);
-        });
-      }
 
       // Vote buttons
       row.querySelectorAll('.btn-p6-vote').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var vote = parseInt(btn.dataset.vote, 10);
           row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = true; });
-          if (skip) skip.hidden = true;
           // pid/tid are resolved server-side from fs_id — never sent by the client.
           fetch(voteUrl, {
             method: 'POST',
