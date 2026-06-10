@@ -463,16 +463,16 @@
             {% endif %}
           </div>
           <div class="danger-row-desc">
-            {% if reveal and reveal.state == 'cooldown' %}
+            {% if reveal and reveal.state == 'pending' %}
               Closed {{ conversation.closed_at.strftime('%-d %b %Y') }}.
               The identity-reveal window opens on {{ reveal.opens_at.strftime('%-d %b %Y') }}
-              ({{ reveal.days_until_open }} day{{ 's' if reveal.days_until_open != 1 }} away) — nothing to do until then.
+              ({{ reveal.days_left }} day{{ 's' if reveal.days_left != 1 }} away) — nothing to do until then.
             {% elif reveal and reveal.state == 'open' %}
               Closed {{ conversation.closed_at.strftime('%-d %b %Y') }}.
               The identity-reveal window is open until {{ reveal.closes_at.strftime('%-d %b %Y') }}.
-            {% elif reveal and reveal.state == 'closed' %}
+            {% elif reveal and reveal.state == 'expired' %}
               Closed {{ conversation.closed_at.strftime('%-d %b %Y') }}.
-              The identity-reveal window has closed; records are permanently pseudonymous.
+              The identity-reveal window has ended — records are permanently pseudonymous.
             {% else %}
               Closed{% if conversation.closed_at %} {{ conversation.closed_at.strftime('%-d %b %Y') }}{% endif %}. Cannot be reopened.
             {% endif %}
