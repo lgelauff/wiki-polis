@@ -3200,11 +3200,13 @@ def _register_routes(app: Flask) -> None:
                      .order_by(Conversation.created_at.desc())
                      .all())
 
+        mod_ids: set = set()
         moderating = []
         if participant:
             if _is_global_admin(participant):
                 moderating = (Conversation.query
                               .order_by(Conversation.created_at.desc()).all())
+                mod_ids = {c.id for c in moderating}
             else:
                 roles = AdminRole.query.filter(
                     AdminRole.participant_id == participant.id,
@@ -3213,6 +3215,9 @@ def _register_routes(app: Flask) -> None:
                     mod_ids = {r.conversation_id for r in roles}
                     moderating = Conversation.query.filter(
                         Conversation.id.in_(mod_ids)).all()
+
+        # Exclude moderated conversations from Browse — they already appear in "You moderate"
+        available = [c for c in available if c.id not in mod_ids]
 
         # keyed by conversation_id, scoped to current user only
         # assumes at most one Participation per (user, conversation) — last row wins if duplicates exist

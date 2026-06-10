@@ -3765,6 +3765,12 @@ a { color: var(--pass); }
   color: #fff;
 }
 
+.home-mode-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+
 /* ── Conv card: phase-rail variant ────────────────────────────────────────── */
 
 .conv-card--phase .conv-card-left { flex-direction: column; align-items: flex-start; gap: 6px; }

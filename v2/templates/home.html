@@ -3,14 +3,14 @@
 
 {# ── Phase rail macro: 4 dots showing where this conversation is in the journey ─ #}
 {% macro phase_rail(phases) %}
-{%- set pos = 4 if 'closed' in phases else
-              (3 if ('cleanup_window' in phases or 'informed_voting' in phases) else
+{%- set pos = 4 if ('closed' in phases or 'public_results' in phases) else
+              (3 if ('cleanup_window' in phases or 'informed_voting' in phases or 'cleanup' in phases) else
                (2 if ('argument_mapping' in phases or 'featured_selection' in phases) else
                 (1 if 'submission' in phases else 0))) -%}
 <div class="conv-phase-rail" aria-hidden="true">
   <span class="conv-phase-dot{% if pos == 1 %} conv-phase-dot--active{% elif pos > 1 %} conv-phase-dot--past{% endif %}" title="Explore"></span>
   <span class="conv-phase-rail-line{% if pos > 1 %} conv-phase-rail-line--done{% endif %}"></span>
-  <span class="conv-phase-dot{% if pos == 2 %} conv-phase-dot--active{% elif pos > 2 %} conv-phase-dot--past{% endif %}" title="Arguments"></span>
+  <span class="conv-phase-dot{% if pos == 2 %} conv-phase-dot--active{% elif pos > 2 %} conv-phase-dot--past{% endif %}" title="Featured / Arguments"></span>
   <span class="conv-phase-rail-line{% if pos > 2 %} conv-phase-rail-line--done{% endif %}"></span>
   <span class="conv-phase-dot{% if pos == 3 %} conv-phase-dot--active{% elif pos > 3 %} conv-phase-dot--past{% endif %}" title="Informed vote"></span>
   <span class="conv-phase-rail-line{% if pos > 3 %} conv-phase-rail-line--done{% endif %}"></span>
@@ -20,13 +20,14 @@
 
 {# ── Action chips macro ─────────────────────────────────────────────────────── #}
 {% macro conv_chips(sig) %}
-{%- if sig and sig.statements_remaining is not none and sig.statements_remaining > 0 -%}
-<span class="conv-chip">{{ sig.statements_remaining }} to vote</span>
+{%- if sig and sig.get('statements_remaining') is not none and sig.get('statements_remaining') > 0 -%}
+<span class="conv-chip">{{ sig.get('statements_remaining') }} to vote</span>
 {%- endif -%}
-{%- if sig and sig.reveal and sig.reveal.state == 'open' -%}
-<span class="conv-chip conv-chip--alert">Reveal window: {{ sig.reveal.days_left }}d left</span>
-{%- elif sig and sig.reveal and sig.reveal.state == 'pending' -%}
-<span class="conv-chip">Reveal opens in {{ sig.reveal.days_left }}d</span>
+{%- if sig and sig.get('reveal') and sig.get('reveal').state == 'open' -%}
+{%- set dl = sig.get('reveal').days_left -%}
+<span class="conv-chip conv-chip--alert"><span aria-hidden="true">! </span>Reveal window: {{ 'today' if dl <= 0 else (dl|string + 'd left') }}</span>
+{%- elif sig and sig.get('reveal') and sig.get('reveal').state == 'pending' -%}
+<span class="conv-chip">Reveal opens in {{ sig.get('reveal').days_left }}d</span>
 {%- endif -%}
 {% endmacro %}
 
@@ -102,7 +103,7 @@
   <h1 class="sr-only">Your consultations</h1>
 
   {# ── Phase journey legend ──────────────────────────────────────────────── #}
-  <div class="phase-legend" aria-label="Consultation phases overview">
+  <div class="phase-legend" role="img" aria-label="Consultation phases: Explore, Arguments, Informed vote, Report">
     <div class="phase-legend-node">
       <span class="phase-legend-icon" aria-hidden="true">
         {# Explore: two horizontal bars + checkmark #}
@@ -112,7 +113,7 @@
           <polyline points="12,9 14,12.5 17,5.5"/>
         </svg>
       </span>
-      <span class="phase-legend-label">Explore</span>
+      <span class="phase-legend-label" aria-hidden="true">Explore</span>
     </div>
     <div class="phase-legend-connector" aria-hidden="true">
       <span class="phase-legend-line"></span>
@@ -130,7 +131,7 @@
           <path d="M14,6 L12,9.5 Q14,13 16,9.5 Z"/>
         </svg>
       </span>
-      <span class="phase-legend-label">Arguments</span>
+      <span class="phase-legend-label" aria-hidden="true">Arguments</span>
     </div>
     <div class="phase-legend-connector" aria-hidden="true">
       <span class="phase-legend-line"></span>
@@ -150,7 +151,7 @@
           <path d="M15,6 L14,8 Q15,10 16,8 Z"/>
         </svg>
       </span>
-      <span class="phase-legend-label">Informed vote</span>
+      <span class="phase-legend-label" aria-hidden="true">Informed vote</span>
     </div>
     <div class="phase-legend-connector" aria-hidden="true">
       <span class="phase-legend-line"></span>
@@ -167,16 +168,14 @@
           <line x1="6" y1="12" x2="10" y2="12"/>
         </svg>
       </span>
-      <span class="phase-legend-label">Report</span>
+      <span class="phase-legend-label" aria-hidden="true">Report</span>
     </div>
   </div>
 
   {# ── Mode toggle ───────────────────────────────────────────────────────── #}
-  {% set has_yours = active_joined or archived_joined %}
-  {% set has_browse = available %}
   <div class="home-mode-toggle" role="group" aria-label="View mode">
-    <button class="home-mode-btn" data-target="yours" type="button">Your conversations</button>
-    <button class="home-mode-btn" data-target="browse" type="button">Browse</button>
+    <button class="home-mode-btn" data-target="yours" type="button" aria-pressed="true">Your conversations</button>
+    <button class="home-mode-btn" data-target="browse" type="button" aria-pressed="false">Browse</button>
   </div>
 
   {# ── Your conversations ────────────────────────────────────────────────── #}
@@ -256,7 +255,7 @@
   </div>{# /home-yours #}
 
   {# ── Browse ────────────────────────────────────────────────────────────── #}
-  <div id="home-browse">
+  <div id="home-browse" hidden>
 
     {% if available %}
     <section aria-labelledby="sec-available">
@@ -329,19 +328,26 @@
 {% if username %}
 <script nonce="{{ csp_nonce }}">
 (function () {
-  var btns     = document.querySelectorAll('.home-mode-btn');
-  var yours    = document.getElementById('home-yours');
-  var browse   = document.getElementById('home-browse');
-  var stored   = localStorage.getItem('home-mode') || 'yours';
+  var MODES = ['yours', 'browse'];
+  var btns   = document.querySelectorAll('.home-mode-btn');
+  var yours  = document.getElementById('home-yours');
+  var browse = document.getElementById('home-browse');
+
+  function lsGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function lsSet(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+
+  var raw    = lsGet('home-mode');
+  var stored = MODES.includes(raw) ? raw : 'yours';
 
   function setMode(m) {
-    localStorage.setItem('home-mode', m);
+    if (m !== stored || !yours) lsSet('home-mode', m);
+    stored = m;
     btns.forEach(function (b) {
       b.classList.toggle('home-mode-btn--active', b.dataset.target === m);
       b.setAttribute('aria-pressed', b.dataset.target === m ? 'true' : 'false');
     });
-    yours.hidden  = m !== 'yours';
-    browse.hidden = m !== 'browse';
+    if (yours)  yours.hidden  = m !== 'yours';
+    if (browse) browse.hidden = m !== 'browse';
   }
 
   btns.forEach(function (b) {

@@ -135,7 +135,7 @@ _STATEMENTS_REMAINING_BULK_SQL = """
         SELECT zmap.zinvite, COUNT(c.tid)::int AS n_total
         FROM comments c
         JOIN zmap ON c.zid = zmap.zid
-        WHERE c.active = TRUE AND c.mod >= 0
+        WHERE c.active = TRUE AND c.mod = 1
         GROUP BY zmap.zinvite
     ),
     voted_stmts AS (
@@ -143,6 +143,8 @@ _STATEMENTS_REMAINING_BULK_SQL = """
         FROM votes_latest_unique v
         JOIN zmap ON v.zid = zmap.zid
         JOIN pid_map pm ON pm.zid = v.zid AND pm.pid = v.pid
+        JOIN comments c ON c.zid = zmap.zid AND c.tid = v.tid
+          AND c.active = TRUE AND c.mod = 1
         GROUP BY zmap.zinvite
     )
     SELECT
@@ -640,7 +642,7 @@ class PolisServerClient:
              Polis pid via the xids table without storing pid separately.
 
         Returns dict[zinvite → n_remaining], or None if Postgres is unavailable.
-        Conversations where the participant has no Polis record return 0.
+        Conversations where the participant has no Polis record are absent from the dict.
         """
         if not self._db_url or not zinvites or not xid:
             return None
