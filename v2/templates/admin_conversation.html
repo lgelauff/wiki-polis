@@ -347,10 +347,10 @@
                {% if conversation.phase_argument_mapping %}checked{% endif %}> Argument mapping</label>
         <label><input type="checkbox" name="phase_cleanup" value="1"
                {% if conversation.phase_cleanup %}checked{% endif %}> Cleanup</label>
-        <label><input type="checkbox" name="phase_public_results" value="1"
-               {% if conversation.phase_public_results %}checked{% endif %}> Public results</label>
         <label><input type="checkbox" name="phase_informed_voting" value="1"
                {% if conversation.phase_informed_voting %}checked{% endif %}> Informed voting</label>
+        <label><input type="checkbox" name="phase_public_results" value="1"
+               {% if conversation.phase_public_results %}checked{% endif %}> Public results</label>
         <button type="submit" class="btn-small phases-save">Save phases</button>
       </form>
 
