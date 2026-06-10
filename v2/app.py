@@ -368,6 +368,15 @@ def _current_stage_index(conv) -> int:
     return idx
 
 
+def _active_stage_indices(conv) -> list[int]:
+    """Every stage index whose flag is on, in sequence order; [0] (preparation) if
+    none are. In simple/linear mode this is a single index; in advanced mode multiple
+    phases can be active at once and each is surfaced in the phase-control box."""
+    active = [i for i, s in enumerate(PHASE_SEQUENCE)
+              if s['flag'] and getattr(conv, s['flag'])]
+    return active or [0]
+
+
 def _is_linear_phase_state(conv) -> bool:
     """True if at most one phase flag is on — the simple-mode invariant."""
     return sum(1 for f in _PHASE_FLAGS if getattr(conv, f)) <= 1
@@ -542,14 +551,21 @@ def _argument_stats(conv):
     }
 
 
-def _phase_stats(conv, polis_stats, phase6_stats=None):
-    """Tiles for the phase-hero readout, scoped to the conversation's current phase
-    (#165). Each tile is {value, label, unit?, note?}.
+def _phase_tiles(conv, key, polis_stats, phase6_stats=None,
+                 get_featured_counts=None, get_argument_stats=None):
+    """Stat tiles for a single phase `key` (#165). Each tile is {value, label, unit?, note?}.
 
     Polis-derived tiles (vote/participant counts) are omitted when polis_stats is
     None — the template shows a loud warning instead. Flask-derived tiles (featured
     statements, arguments) always render, since they don't depend on Polis PG.
+
+    `get_featured_counts` / `get_argument_stats` are optional accessors so a multi-phase
+    caller can memoize those DB aggregates across phases (several active phases reuse the
+    same featured/argument counts); they default to a fresh per-call query.
     """
+    get_featured_counts = get_featured_counts or (lambda: _featured_counts(conv))
+    get_argument_stats  = get_argument_stats  or (lambda: _argument_stats(conv))
+
     def polis_basic():
         if not polis_stats:
             return []
@@ -560,7 +576,6 @@ def _phase_stats(conv, polis_stats, phase6_stats=None):
              'label': 'statements ({} seed)'.format(polis_stats['n_seed'])},
         ]
 
-    key   = PHASE_SEQUENCE[_current_stage_index(conv)]['key']
     tiles = []
 
     if key == 'submission':
@@ -570,7 +585,7 @@ def _phase_stats(conv, polis_stats, phase6_stats=None):
             tiles.append({'value': polis_stats['median_votes'], 'label': 'median votes / person'})
 
     elif key == 'featured_selection':
-        confirmed, _ = _featured_counts(conv)
+        confirmed, _ = get_featured_counts()
         tiles.append({'value': confirmed, 'label': 'featured selected',
                       'note': '{} recommended'.format(_RECOMMENDED_FEATURED)})
         if polis_stats:
@@ -578,8 +593,8 @@ def _phase_stats(conv, polis_stats, phase6_stats=None):
             tiles.append({'value': polis_stats['n_participants'], 'label': 'participants'})
 
     elif key in ('argument_mapping', 'cleanup'):
-        confirmed, _ = _featured_counts(conv)
-        a = _argument_stats(conv)
+        confirmed, _ = get_featured_counts()
+        a = get_argument_stats()
         tiles.append({'value': confirmed,          'label': 'featured statements'})
         tiles.append({'value': a['n_pro'],         'label': 'pro arguments'})
         tiles.append({'value': a['n_con'],         'label': 'con arguments'})
@@ -588,7 +603,7 @@ def _phase_stats(conv, polis_stats, phase6_stats=None):
             tiles.append({'value': a['n_raters'],  'label': 'rating arguments'})
 
     elif key == 'informed_voting':
-        confirmed, _ = _featured_counts(conv)
+        confirmed, _ = get_featured_counts()
         seeded = (FeaturedStatement.query
                   .filter(FeaturedStatement.conversation_id == conv.id,
                           FeaturedStatement.confirmed_by_admin.is_(True),
@@ -605,6 +620,40 @@ def _phase_stats(conv, polis_stats, phase6_stats=None):
         tiles = polis_basic()
 
     return tiles
+
+
+def _phase_stat_groups(conv, polis_stats, phase6_stats=None):
+    """One stat group per *active* phase, in sequence order; each is
+    {key, label, tiles}. In simple/linear mode this is a single group (the template
+    renders it flat). In advanced mode several phases can be on at once, so the
+    control box shows a group per phase — its name plus the tiles relevant to it —
+    rather than only the furthest-along phase. Groups with no tiles are kept here and
+    skipped by the template.
+
+    The featured/argument DB aggregates are memoized across phases here: in advanced
+    mode several active phases (e.g. argument_mapping + cleanup + informed_voting) each
+    want the featured count, and they'd otherwise re-run the same COUNT/aggregate query
+    per phase on every admin page load.
+    """
+    cache = {}
+
+    def featured_counts():
+        if 'featured' not in cache:
+            cache['featured'] = _featured_counts(conv)
+        return cache['featured']
+
+    def argument_stats():
+        if 'arguments' not in cache:
+            cache['arguments'] = _argument_stats(conv)
+        return cache['arguments']
+
+    return [
+        {'key':   PHASE_SEQUENCE[i]['key'],
+         'label': PHASE_SEQUENCE[i]['label'],
+         'tiles': _phase_tiles(conv, PHASE_SEQUENCE[i]['key'], polis_stats, phase6_stats,
+                               featured_counts, argument_stats)}
+        for i in _active_stage_indices(conv)
+    ]
 
 
 csrf    = CSRFProtect()
@@ -1263,22 +1312,20 @@ def admin_conversation_detail(conv_id):
     participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
     client            = _polis_server_client()
     polis_stats       = client.get_polis_stats(conv.polis_id)
-    # Round-2 tiles render only when the *displayed* stage is informed voting (the
-    # furthest-along flag), which can differ from the raw phase_informed_voting flag in
-    # non-linear states. Key the phase-6 fetch and its warning off the same stage, so the
-    # banner can't fire for round-2 tiles that were never shown (#165).
-    in_informed_voting = PHASE_SEQUENCE[_current_stage_index(conv)]['key'] == 'informed_voting'
+    # Informed-voting round-2 tiles render whenever that phase is active (its flag is
+    # on) — including alongside other phases in advanced mode — so fetch the phase-6
+    # stats and gate the warning on the flag itself.
     phase6_stats      = (client.get_polis_stats(conv.phase6_polis_conversation_id)
-                         if in_informed_voting and conv.phase6_polis_conversation_id
+                         if conv.phase_informed_voting and conv.phase6_polis_conversation_id
                          else None)
     # Loud warning only when Polis PG is configured but unreachable — never when it is
     # deliberately not wired (local/dev), where None is expected. Unavailable if the
-    # round-1 fetch failed, or — in informed voting — the round-2 (phase-6) fetch failed
-    # (without that a phase-6 outage would drop the round-2 tiles silently).
+    # round-1 fetch failed, or — when informed voting is active — the round-2 (phase-6)
+    # fetch failed (without that a phase-6 outage would drop the round-2 tiles silently).
     polis_pg_configured     = bool(current_app.config.get('POLIS_DATABASE_URL'))
     polis_stats_unavailable = polis_pg_configured and (
         polis_stats is None
-        or (in_informed_voting and conv.phase6_polis_conversation_id
+        or (conv.phase_informed_voting and conv.phase6_polis_conversation_id
             and phase6_stats is None))
     phase6_results    = (_build_phase6_results(conv, participation=None)
                          if conv.phase_informed_voting and conv.phase6_polis_conversation_id
@@ -1291,7 +1338,7 @@ def admin_conversation_detail(conv_id):
                            invite_count=invite_count,
                            participant_count=participant_count,
                            polis_stats=polis_stats,
-                           phase_stats=_phase_stats(conv, polis_stats, phase6_stats),
+                           phase_stat_groups=_phase_stat_groups(conv, polis_stats, phase6_stats),
                            polis_stats_unavailable=polis_stats_unavailable,
                            phase6_results=phase6_results,
                            reveal=reveal,
@@ -1299,6 +1346,7 @@ def admin_conversation_detail(conv_id):
                            can_manage_roles=can_manage_roles,
                            phase_sequence=PHASE_SEQUENCE,
                            current_stage_index=_current_stage_index(conv),
+                           active_stage_indices=_active_stage_indices(conv),
                            linear_phase_state=_is_linear_phase_state(conv),
                            advance_target_index=_advance_target_index(conv),
                            transition=_transition_context(conv))

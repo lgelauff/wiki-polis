@@ -323,6 +323,47 @@ the guided "Move on" box and double as readiness signals (#156).
   (not the render-time-inappropriate `role="alert"`); warning text darkened to clear AA
   contrast on the tinted panel
 
+## Multi-phase statistics in the phase-control box (follow-up to #165)
+
+In advanced mode an organizer can have several phase flags on at once. The phase-control
+box previously collapsed that to the single furthest-along phase — showing one phase name
+and only that phase's stats. It now reflects **every active phase**.
+
+- [x] `_active_stage_indices(conv)` returns all on-flag stage indices (was: only the
+  furthest via `_current_stage_index`)
+- [x] `_phase_stats` split into `_phase_tiles(conv, key, …)` (per-phase tile builder) +
+  `_phase_stat_groups(conv, …)` which returns one `{key, label, tiles}` group per active
+  phase — addressing the long if/elif altitude nit from the #183 review
+- [x] Phase-hero header: simple mode unchanged ("You are in phase N of M"); non-linear mode
+  shows "Multiple phases active" + the active phase names joined
+- [x] Stats render a labelled group per active phase; a single active phase still renders
+  flat (no heading), identical to before
+- [x] Phase-6 fetch + outage warning go back to gating on the `phase_informed_voting` flag
+  (the round-2 tiles now render whenever that phase is active, not only when furthest), which
+  supersedes the #183 narrowing coherently
+- [x] Tests: group-per-active-phase rendering, single-phase stays flat, and the multi-phase
+  phase-6-outage warning
+
+**Review follow-up (#189):** reconcile the three "which phases are active" surfaces so the
+box never contradicts itself in advanced mode.
+
+- [x] Journey stepper now reflects multi-active state: in non-linear mode every active phase
+  is marked *current* and none shown as *done* (was: driven by the single furthest-along
+  stage, contradicting the "Multiple phases active" hero). `active_stage_indices` passed to
+  the template.
+- [x] Group labelling keys off the hero state (`not linear_phase_state`), not the tile count:
+  a lone tiled group is still labelled when the header names ≥2 phases, so the reader can
+  tell whose numbers they are.
+- [x] The "...shown below" copy is reworded and omitted when no active phase currently has
+  data (e.g. Polis-only phases while PG is down) — no dangling promise over an empty area.
+- [x] a11y: each grouped `<dl>` is `aria-labelledby` its phase label, so a screen reader
+  announces the group name rather than a flat number stream across phase boundaries.
+- [x] Featured/argument DB aggregates memoized across phases in `_phase_stat_groups` (was:
+  re-queried per active phase); dropped the duplicate `active_phase_labels` (header labels
+  derive from the group list).
+- [x] Tests: lone-tiled-group still labelled, all-Polis-only omits the copy, stepper marks
+  every active step current.
+
 ## Step 8 — Phase 6 results report (2026-06-10)
 
 **Phase 6 results — three surfaces** ([#122](https://github.com/lgelauff/wiki-polis/issues/122), [#165](https://github.com/lgelauff/wiki-polis/issues/165) partial)
