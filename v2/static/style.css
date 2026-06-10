@@ -3267,20 +3267,34 @@ a { color: var(--pass); }
 .at-complete { margin-bottom: 8px; }
 .at-complete .interlude { margin-top: 1rem; }
 
-/* Collapse toggle — appears in at-head after all-done; matches at-orient-toggle style */
-.at-collapse-btn {
-  align-self: flex-start;
+/* Collapsed-state chevron — floated to the right of at-head */
+.at-collapse-chevron {
+  align-self: center;
   flex-shrink: 0;
   font-size: 11px;
   color: var(--muted);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 2px 4px;
-  font-family: inherit;
-  white-space: nowrap;
+  margin-left: auto;
+  padding-left: 8px;
 }
-.at-collapse-btn:hover { color: var(--ink); }
+
+/* When collapsed: whole at-head is the click target */
+.at-panel--done .at-head {
+  cursor: pointer;
+  user-select: none;
+  border-bottom: none;
+}
+.at-panel--done .at-head:hover { background: var(--surface3); }
+
+/* When collapsed: hide full statement text, steps; show one-line summary */
+.at-panel--done:not(.at-panel--expanded) .at-stmt,
+.at-panel--done:not(.at-panel--expanded) .at-steps { display: none; }
+.at-panel--done:not(.at-panel--expanded) .at-stmt-summary { display: block; }
+
+/* When expanded: show full statement, hide summary */
+.at-panel--done.at-panel--expanded .at-stmt-summary { display: none; }
+
+/* Always hide summary in normal (non-done) state */
+.at-stmt-summary { display: none; }
 
 /* Hide panel body when collapsed after completion; header stays visible */
 .at-panel--done:not(.at-panel--expanded) .at-cols,
