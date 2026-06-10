@@ -311,7 +311,8 @@ def _argument_stats(conv):
     n_raters = (db.session.query(db.func.count(db.distinct(ArgumentVote.participant_id)))
                 .join(Argument, ArgumentVote.argument_id == Argument.id)
                 .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
-                .filter(FeaturedStatement.conversation_id == conv.id).scalar() or 0)
+                .filter(FeaturedStatement.conversation_id == conv.id,
+                        Argument.hidden.is_(False)).scalar() or 0)
     return {
         'n_pro':          int(by_side.get('pro', 0)),
         'n_con':          int(by_side.get('con', 0)),
@@ -1047,7 +1048,13 @@ def admin_conversation_detail(conv_id):
     # Loud warning only when Polis PG is configured but unreachable — never when it is
     # deliberately not wired (local/dev), where None is expected.
     polis_pg_configured     = bool(current_app.config.get('POLIS_DATABASE_URL'))
-    polis_stats_unavailable = polis_pg_configured and polis_stats is None
+    # Unavailable if the round-1 fetch failed, or — in informed voting — the round-2
+    # (phase-6) fetch failed. Without the second clause a phase-6 outage would drop the
+    # round-2 tiles silently, defeating the warning's purpose (#165).
+    polis_stats_unavailable = polis_pg_configured and (
+        polis_stats is None
+        or (conv.phase_informed_voting and conv.phase6_polis_conversation_id
+            and phase6_stats is None))
     return render_template('admin_conversation.html',
                            conversation=conv,
                            conv_roles=conv_roles,

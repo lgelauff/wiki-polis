@@ -95,7 +95,7 @@
            arguments) render even when Polis PG is down; the warning below fires only
            when PG is configured but unreachable. #}
         {% if polis_stats_unavailable %}
-        <div class="phase-stats-warning" role="alert">
+        <div class="phase-stats-warning" role="status">
           <span aria-hidden="true">⚠️</span>
           <span><strong>Live statistics unavailable.</strong> The Polis statistics database
             could not be reached, so vote and participant counts may be missing or stale.
@@ -104,11 +104,14 @@
         {% endif %}
         {% if phase_stats %}
         <div class="phase-stats">
+          {# Each tile carries an aria-label tying value→label→note together, so a screen
+             reader reads one coherent phrase instead of a stream of disconnected numbers
+             and captions; the visual pieces are hidden from the a11y tree (#165). #}
           {% for t in phase_stats %}
-          <div>
-            <div class="phase-stat-value">{{ t.value }}{% if t.unit %}<span class="unit">{{ t.unit }}</span>{% endif %}</div>
-            <div class="phase-stat-label">{{ t.label }}</div>
-            {% if t.note %}<div class="phase-stat-note">{{ t.note }}</div>{% endif %}
+          <div role="group" aria-label="{{ t.value }}{% if t.unit %} {{ t.unit }}{% endif %} {{ t.label }}{% if t.note %} ({{ t.note }}){% endif %}">
+            <div aria-hidden="true" class="phase-stat-value">{{ t.value }}{% if t.unit %}<span class="unit">{{ t.unit }}</span>{% endif %}</div>
+            <div aria-hidden="true" class="phase-stat-label">{{ t.label }}</div>
+            {% if t.note %}<div aria-hidden="true" class="phase-stat-note">{{ t.note }}</div>{% endif %}
           </div>
           {% endfor %}
         </div>

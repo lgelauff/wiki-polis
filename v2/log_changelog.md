@@ -312,3 +312,13 @@ the guided "Move on" box and double as readiness signals (#156).
   not wired (local/dev), where None is expected
 - [x] Tests: per-phase tile correctness (featured-selection, argument-mapping, informed-vote
   with mocked Phase 6 stats) + warning shown / not-shown by PG-configured state
+
+**Review fixes (pr-check #183)**
+- [x] Warning banner now also fires when the **round-2 (Phase 6) stats fetch fails** during
+  informed voting — previously a phase-6 outage dropped the round-2 tiles silently
+- [x] `n_raters` excludes raters whose only votes were on hidden/moderated arguments,
+  matching the `Argument.hidden` filter the sibling tiles already apply
+- [x] a11y: each stat tile carries an `aria-label` tying value→label→note together (screen
+  readers read one phrase, not a stream of loose numbers); warning banner uses `role="status"`
+  (not the render-time-inappropriate `role="alert"`); warning text darkened to clear AA
+  contrast on the tinted panel

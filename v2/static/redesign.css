@@ -323,7 +323,9 @@
   background: rgba(180,83,9,0.10);
   border: 1px solid rgba(180,83,9,0.45);
   font-size: 13px;
-  color: var(--spot);
+  /* Darker than --spot (#b45309): at 13px on the tinted amber panel --spot lands
+     ~4.2:1, under AA. #7c2d12 clears 4.5:1 on this background (#165 a11y). */
+  color: #7c2d12;
 }
 
 /* readiness + move-on launcher footer */

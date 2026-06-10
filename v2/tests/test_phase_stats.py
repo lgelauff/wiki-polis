@@ -91,6 +91,34 @@ def test_argument_mapping_counts_pro_con_contributors_raters(admin_client, conv)
     assert _tile_value(page, 'rating arguments') == '1'  # one distinct rater
 
 
+def test_argument_mapping_raters_exclude_hidden_only_voters(admin_client, conv):
+    # A participant who rated *only* a hidden argument must not inflate the rater count —
+    # n_raters applies the same Argument.hidden filter as the other tiles (#165 should-fix).
+    conv.phase_argument_mapping = True
+    fs = FeaturedStatement(conversation_id=conv.id, polis_statement_id=1,
+                           confirmed_by_admin=True)
+    db.session.add(fs)
+    db.session.commit()
+
+    author = _participant(201, 'author')
+    visible = Argument(featured_statement_id=fs.id, proposer_id=author.id,
+                       body='visible', side='pro')
+    hidden = Argument(featured_statement_id=fs.id, proposer_id=author.id,
+                      body='moderated', side='con', hidden=True)
+    db.session.add_all([visible, hidden])
+    db.session.commit()
+
+    visible_rater = _participant(202, 'visible_rater')
+    hidden_rater = _participant(203, 'hidden_rater')
+    db.session.add(ArgumentVote(argument_id=visible.id, participant_id=visible_rater.id))
+    db.session.add(ArgumentVote(argument_id=hidden.id, participant_id=hidden_rater.id))
+    db.session.commit()
+
+    page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+    # Only the visible-arg rater counts; the hidden-only rater is excluded.
+    assert _tile_value(page, 'rating arguments') == '1'
+
+
 # ── Informed-voting phase ───────────────────────────────────────────────────────
 
 def test_informed_voting_shows_round2_stats(admin_client, conv):
@@ -117,6 +145,34 @@ def test_informed_voting_shows_round2_stats(admin_client, conv):
     assert _tile_value(page, 'voted this round') == '7'
     assert _tile_value(page, 'informed votes') == '21'
     assert _tile_value(page, 'round 1 participants') == '12'
+
+
+def test_informed_voting_warns_when_phase6_fetch_fails(app, admin_client, conv):
+    # Round-1 stats succeed but the phase-6 (round-2) fetch returns None. The warning
+    # must still fire — otherwise the round-2 tiles vanish silently (#165 must-fix).
+    app.config['POLIS_DATABASE_URL'] = 'postgresql://unused/db'
+    conv.phase_informed_voting = True
+    conv.phase6_polis_conversation_id = 'p6conv1234'
+    fs = FeaturedStatement(conversation_id=conv.id, polis_statement_id=1,
+                           confirmed_by_admin=True, phase6_polis_statement_id=0)
+    db.session.add(fs)
+    db.session.commit()
+
+    def stats_for(zinvite):
+        if zinvite == 'p6conv1234':
+            return None                              # round-2 PG unreachable
+        return {'n_participants': 12, 'n_votes': 80, 'avg_votes': 6.0,
+                'median_votes': 6.0, 'n_statements': 10, 'n_seed': 2}
+
+    server = MagicMock()
+    server.get_polis_stats.side_effect = stats_for
+    with patch('app._polis_server_client', return_value=server):
+        page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+
+    assert 'phase-stats-warning' in page
+    assert 'Live statistics unavailable' in page
+    # Round-2 tiles are absent (no phase6_stats); the warning explains why.
+    assert _tile_value(page, 'voted this round') is None
 
 
 # ── Loud warning when Polis PG is configured but down ───────────────────────────
