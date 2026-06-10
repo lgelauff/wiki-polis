@@ -62,6 +62,11 @@
     {% else %}
     <p class="muted">This consultation is closed.</p>
     {% endif %}
+    {% if conversation.phase_public_results or conversation.phase_personal_results %}
+    <p style="margin-top:1rem;font-size:14px">
+      <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">Read the final report <span aria-hidden="true">→</span></a>
+    </p>
+    {% endif %}
   </div>
 
   {% elif conversation.paused %}
@@ -399,6 +404,78 @@
       {% else %}
         <p class="muted">Results haven't been published yet. Check back soon.</p>
       {% endif %}
+
+      {# ── Phase 6 informed voting results (Surface A — preliminary) ──────── #}
+      {% if phase6_results and phase6_results.statements %}
+      <div class="results-block p6-results-block">
+        <div class="p6-results-header">
+          <p class="results-label">Informed voting results</p>
+          {% if phase6_results.is_preliminary %}
+          <span class="p6-results-badge p6-results-badge--preliminary">Preliminary</span>
+          {% endif %}
+          {% if phase6_results.p6_participants %}
+          <span class="muted" style="font-size:12px">{{ phase6_results.p6_participants }} participant{{ 's' if phase6_results.p6_participants != 1 }}</span>
+          {% endif %}
+        </div>
+        {% if not phase6_results.pg_available %}
+        <p class="muted" style="font-size:13px">Detailed vote counts are not available right now.</p>
+        {% else %}
+        <table class="p6-results-table" aria-label="Informed voting results by statement">
+          <thead>
+            <tr>
+              <th class="p6-col-stmt">Statement</th>
+              <th class="p6-col-phase" title="Phase 2 — initial voting">Initial vote</th>
+              <th class="p6-col-phase" title="Phase 6 — informed voting">Informed vote</th>
+              <th class="p6-col-shift" title="Change in agree rate">Shift</th>
+              {% if participation %}<th class="p6-col-mine">Yours</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+          {% for s in phase6_results.statements %}
+          <tr class="p6-results-row">
+            <td class="p6-col-stmt">{{ s.text }}</td>
+            <td class="p6-col-phase">
+              {% if s.p2 %}
+              <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}%">
+                <div class="p6-bar-agree" style="width:{{ s.p2.pct_agree }}%"></div>
+                <div class="p6-bar-disagree" style="width:{{ s.p2.pct_disagree }}%"></div>
+              </div>
+              <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree</span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td class="p6-col-phase">
+              <div class="p6-vote-bar" title="Agree {{ s.p6.pct_agree }}% · Disagree {{ s.p6.pct_disagree }}%">
+                <div class="p6-bar-agree" style="width:{{ s.p6.pct_agree }}%"></div>
+                <div class="p6-bar-disagree" style="width:{{ s.p6.pct_disagree }}%"></div>
+              </div>
+              <span class="p6-bar-label">{{ s.p6.pct_agree }}% agree</span>
+            </td>
+            <td class="p6-col-shift">
+              {% if s.shift is not none %}
+              <span class="p6-shift {% if s.shift > 0 %}p6-shift--up{% elif s.shift < 0 %}p6-shift--down{% endif %}">
+                {% if s.shift > 0 %}+{% endif %}{{ s.shift }}%
+              </span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            {% if participation %}
+            <td class="p6-col-mine">
+              {% if s.my_p6_label %}
+              <span class="p6-my-vote p6-my-vote--{{ s.my_p6_label|lower }}">{{ s.my_p6_label }}</span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+        {% if not conversation.active %}
+        <p style="margin-top:1rem;font-size:13px">
+          <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">Read the full results report <span aria-hidden="true">→</span></a>
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}{# end phase6_results #}
 
     </div>
   </div>
@@ -897,7 +974,7 @@
     {% elif conversation.active %}
     <p class="p6-done-text">The results report will be published here once this consultation closes.</p>
     {% else %}
-    <p class="p6-done-text">This consultation is now closed.</p>
+    <p class="p6-done-text">This consultation is now closed. <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">Read the final report <span aria-hidden="true">→</span></a></p>
     {% endif %}
     {% if reveal_state is none or reveal_state == 'pending' %}
     <p class="p6-done-reveal">Your votes are recorded under pseudonym <strong>{{ participation.pseudonym }}</strong>. Once this consultation closes, you will have a limited window to optionally link your Wikimedia username. You cannot make that decision yet.</p>
