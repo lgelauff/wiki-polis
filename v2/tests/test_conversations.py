@@ -222,12 +222,14 @@ def test_empty_results_triggers_recompute_and_shows_computing_message(
     recompute_called = []
     monkeypatch.setattr(polis_admin.PolisServerClient, 'queue_math_recompute',
                         lambda self, zinvite: recompute_called.append(zinvite) or True)
-    # Reset rate-limit state so the trigger fires.
-    monkeypatch.setitem(app_module._math_recompute_last, conv.id, 0)
-    # Hermetic: the trigger is also gated on POLIS_DATABASE_URL being configured
-    # (app.py polis_pg_configured). Set it explicitly instead of relying on ambient
-    # config/.env — otherwise this passes locally but fails in CI's collection order.
-    auth_client.application.config['POLIS_DATABASE_URL'] = 'postgresql://ci/test'
+    # Reset rate-limit state so the trigger fires. The gate is
+    # `time.monotonic() - _last > _MATH_RECOMPUTE_COOLDOWN`, so _last must be set
+    # to the PAST relative to now — not 0. On a freshly-booted CI runner
+    # monotonic() is near 0, so `now - 0` is < cooldown and the trigger wouldn't
+    # fire (passed locally, where monotonic() is large, but failed in CI).
+    import time
+    monkeypatch.setitem(app_module._math_recompute_last, conv.id,
+                        time.monotonic() - app_module._MATH_RECOMPUTE_COOLDOWN - 1)
 
     resp = auth_client.get('/c/test-conv')
     assert resp.status_code == 200
