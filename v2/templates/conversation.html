@@ -518,6 +518,20 @@
               aria-expanded="true" aria-controls="at-orient-body-{{ conversation.slug }}">collapse <span aria-hidden="true">▲</span></button>
     </div>
 
+    {# All-complete state — shown by JS when every panel is done; sits above panels #}
+    <div class="at-complete" id="at-complete" hidden>
+      <div class="interlude">
+        <span class="interlude-glyph">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 6 9 17l-5-5"/>
+          </svg>
+        </span>
+        <h2 class="interlude-title">You've been through all of them</h2>
+        <p class="interlude-sub">Nothing is locked in — you can still adjust your priorities below.</p>
+      </div>
+    </div>
+
     <div class="arg-panels">
     {% for item in featured_data %}
     {% set fs = item.fs %}
@@ -534,6 +548,7 @@
          data-con-vote-ready="{{ 'true' if con_vote_ready else 'false' }}">
 
       {# ── Statement header + two-step indicator ── #}
+      {# When all-done: at-head becomes a full-width click target; JS adds role/aria #}
       <div class="at-head">
         <div class="at-head-main">
           <div class="at-featured-label" aria-hidden="true">
@@ -543,9 +558,11 @@
             Featured statement
           </div>
           <p class="at-stmt">{{ item.text }}</p>
+          {# One-line summary shown only when collapsed after all-done #}
+          <p class="at-stmt-summary" aria-hidden="true">{{ item.text | truncate(80, True) }}</p>
         </div>
 
-        {# Two-step indicator #}
+        {# Two-step indicator — hidden when collapsed #}
         <div class="at-steps" id="steps-{{ fs.id }}">
           <div class="at-step {% if both_gate %}at-step--done{% else %}at-step--active{% endif %}" id="step1-{{ fs.id }}">
             <span class="at-step-num">{% if both_gate %}✓{% else %}1{% endif %}</span>
@@ -574,6 +591,8 @@
             </div>
           </div>
         </div>
+        {# Expand chevron — only shown when panel is collapsed after all-done #}
+        <span class="at-collapse-chevron" aria-hidden="true" hidden>▼</span>
       </div>
 
       {# ── Two-column grid ── #}
@@ -845,21 +864,6 @@
     </div>{# end at-panel / arg-block #}
     {% endfor %}
     </div>{# end arg-panels #}
-
-    {# All-complete state — shown by JS when every panel is done #}
-    <div class="at-complete" id="at-complete" hidden>
-      <div class="interlude">
-        <span class="interlude-glyph">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M20 6 9 17l-5-5"/>
-          </svg>
-        </span>
-        <h2 class="interlude-title">You've been through all of them</h2>
-        <p class="interlude-sub">You can revisit any statement to change your priorities while this phase is open — nothing is locked in.</p>
-        <div class="at-circles at-circles--complete" id="at-complete-circles" aria-hidden="true"></div>
-      </div>
-    </div>
 
     {# Panel count used by JS for circles #}
     <script type="application/json" id="at-panel-data" nonce="{{ csp_nonce }}">
@@ -1784,6 +1788,40 @@
     var allDone = allPanels.every(function (p) { return getPanelState(p) === 'complete'; });
     var completeDiv = document.getElementById('at-complete');
     if (completeDiv) completeDiv.hidden = !allDone;
+    allPanels.forEach(function (panel) {
+      var head    = panel.querySelector('.at-head');
+      var chevron = panel.querySelector('.at-collapse-chevron');
+      if (!head) return;
+      if (allDone) {
+        panel.classList.add('at-panel--done');
+        panel.classList.remove('at-panel--expanded');
+        head.setAttribute('role', 'button');
+        head.setAttribute('tabindex', '0');
+        head.setAttribute('aria-expanded', 'false');
+        head.setAttribute('aria-label', 'Expand this statement panel');
+        if (chevron) chevron.hidden = false;
+        if (!head._wired) {
+          head._wired = true;
+          function togglePanel() {
+            var expanded = panel.classList.toggle('at-panel--expanded');
+            head.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            head.setAttribute('aria-label', expanded ? 'Collapse this statement panel' : 'Expand this statement panel');
+            if (chevron) chevron.textContent = expanded ? '▲' : '▼';
+          }
+          head.addEventListener('click', togglePanel);
+          head.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePanel(); }
+          });
+        }
+      } else {
+        panel.classList.remove('at-panel--done', 'at-panel--expanded');
+        head.removeAttribute('role');
+        head.removeAttribute('tabindex');
+        head.removeAttribute('aria-expanded');
+        head.removeAttribute('aria-label');
+        if (chevron) chevron.hidden = true;
+      }
+    });
   }
 
   function activatePanel(idx, moveFocus) {

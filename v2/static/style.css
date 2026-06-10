@@ -2142,6 +2142,11 @@ a { color: var(--pass); }
 /* Orientation banner spans full width so arg-panels gets the whole row below it */
 .at-orient { flex: 1 0 100%; }
 
+/* All-done interlude claims its own full-width row too. Without this it defaults to
+   flex:0 1 auto and shares the row with the still-visible statement panel, squeezing
+   .arg-panels (flex:1; min-width:0) to a sliver that wraps one word per line. */
+.at-complete { flex: 1 0 100%; }
+
 .arg-toc {
   flex-shrink: 0;
   width: 200px;
@@ -3542,8 +3547,41 @@ a { color: var(--pass); }
 .at-circle-label { font-family: var(--mono); font-size: 11px; font-weight: 700; }
 
 /* All-complete interlude */
+.at-complete { margin-bottom: 8px; }
 .at-complete .interlude { margin-top: 1rem; }
-.at-complete .at-circles { justify-content: center; margin-top: 22px; }
+
+/* Collapsed-state chevron — floated to the right of at-head */
+.at-collapse-chevron {
+  align-self: center;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+/* When collapsed: whole at-head is the click target */
+.at-panel--done .at-head {
+  cursor: pointer;
+  user-select: none;
+  border-bottom: none;
+}
+.at-panel--done .at-head:hover { background: var(--surface3); }
+
+/* When collapsed: hide full statement text, steps; show one-line summary */
+.at-panel--done:not(.at-panel--expanded) .at-stmt,
+.at-panel--done:not(.at-panel--expanded) .at-steps { display: none; }
+.at-panel--done:not(.at-panel--expanded) .at-stmt-summary { display: block; }
+
+/* When expanded: show full statement, hide summary */
+.at-panel--done.at-panel--expanded .at-stmt-summary { display: none; }
+
+/* Always hide summary in normal (non-done) state */
+.at-stmt-summary { display: none; }
+
+/* Hide panel body when collapsed after completion; header stays visible */
+.at-panel--done:not(.at-panel--expanded) .at-cols,
+.at-panel--done:not(.at-panel--expanded) .at-nav { display: none; }
 
 /* Mobile */
 @media (max-width: 680px) {
