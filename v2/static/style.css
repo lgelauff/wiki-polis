@@ -3230,8 +3230,35 @@ a { color: var(--pass); }
 .at-circle-label { font-family: var(--mono); font-size: 11px; font-weight: 700; }
 
 /* All-complete interlude */
+.at-complete { margin-bottom: 8px; }
 .at-complete .interlude { margin-top: 1rem; }
-.at-complete .at-circles { justify-content: center; margin-top: 22px; }
+
+/* Revisit bar — collapsed panel summary shown after all-complete */
+.at-revisit-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #15734a;
+  text-align: left;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.at-revisit-bar:hover { background: #dcfce7; }
+.at-revisit-bar svg  { flex-shrink: 0; color: #15734a; }
+.at-revisit-bar span:nth-child(2) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.at-revisit-chevron  { flex-shrink: 0; font-size: 10px; }
+
+/* Hide panel body when collapsed after completion */
+.at-panel--done:not(.at-panel--expanded) .at-head,
+.at-panel--done:not(.at-panel--expanded) .at-cols,
+.at-panel--done:not(.at-panel--expanded) .at-nav { display: none; }
+.at-panel--done:not(.at-panel--expanded) { padding: 0; border: none; box-shadow: none; background: none; }
 
 /* Mobile */
 @media (max-width: 680px) {

@@ -763,6 +763,16 @@
                 aria-label="Next statement">Next →</button>
       </div>
 
+      {# Revisit bar — visible only when all panels are collapsed after completion #}
+      <button class="at-revisit-bar" type="button" hidden aria-expanded="false">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 6 9 17l-5-5"/>
+        </svg>
+        <span>{{ item.text | truncate(60, True) }}</span>
+        <span class="at-revisit-chevron" aria-hidden="true">▼</span>
+      </button>
+
     </div>{# end at-panel / arg-block #}
     {% endfor %}
     </div>{# end arg-panels #}
@@ -777,8 +787,7 @@
           </svg>
         </span>
         <h2 class="interlude-title">You've been through all of them</h2>
-        <p class="interlude-sub">You can revisit any statement to change your priorities while this phase is open — nothing is locked in.</p>
-        <div class="at-circles at-circles--complete" id="at-complete-circles" aria-hidden="true"></div>
+        <p class="interlude-sub">Nothing is locked in — you can still adjust your priorities below.</p>
       </div>
     </div>
 
@@ -1716,6 +1725,26 @@
     var allDone = allPanels.every(function (p) { return getPanelState(p) === 'complete'; });
     var completeDiv = document.getElementById('at-complete');
     if (completeDiv) completeDiv.hidden = !allDone;
+    allPanels.forEach(function (panel) {
+      var bar = panel.querySelector('.at-revisit-bar');
+      if (!bar) return;
+      if (allDone) {
+        panel.classList.add('at-panel--done');
+        bar.hidden = false;
+        // collapse panel body; bar click expands it
+        if (!bar._wired) {
+          bar._wired = true;
+          bar.addEventListener('click', function () {
+            var expanded = panel.classList.toggle('at-panel--expanded');
+            bar.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            bar.querySelector('.at-revisit-chevron').textContent = expanded ? '▲' : '▼';
+          });
+        }
+      } else {
+        panel.classList.remove('at-panel--done', 'at-panel--expanded');
+        bar.hidden = true;
+      }
+    });
   }
 
   function activatePanel(idx, moveFocus) {
