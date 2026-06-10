@@ -1042,18 +1042,22 @@ def admin_conversation_detail(conv_id):
     participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
     client            = _polis_server_client()
     polis_stats       = client.get_polis_stats(conv.polis_id)
+    # Round-2 tiles render only when the *displayed* stage is informed voting (the
+    # furthest-along flag), which can differ from the raw phase_informed_voting flag in
+    # non-linear states. Key the phase-6 fetch and its warning off the same stage, so the
+    # banner can't fire for round-2 tiles that were never shown (#165).
+    in_informed_voting = PHASE_SEQUENCE[_current_stage_index(conv)]['key'] == 'informed_voting'
     phase6_stats      = (client.get_polis_stats(conv.phase6_polis_conversation_id)
-                         if conv.phase_informed_voting and conv.phase6_polis_conversation_id
+                         if in_informed_voting and conv.phase6_polis_conversation_id
                          else None)
     # Loud warning only when Polis PG is configured but unreachable — never when it is
-    # deliberately not wired (local/dev), where None is expected.
+    # deliberately not wired (local/dev), where None is expected. Unavailable if the
+    # round-1 fetch failed, or — in informed voting — the round-2 (phase-6) fetch failed
+    # (without that a phase-6 outage would drop the round-2 tiles silently).
     polis_pg_configured     = bool(current_app.config.get('POLIS_DATABASE_URL'))
-    # Unavailable if the round-1 fetch failed, or — in informed voting — the round-2
-    # (phase-6) fetch failed. Without the second clause a phase-6 outage would drop the
-    # round-2 tiles silently, defeating the warning's purpose (#165).
     polis_stats_unavailable = polis_pg_configured and (
         polis_stats is None
-        or (conv.phase_informed_voting and conv.phase6_polis_conversation_id
+        or (in_informed_voting and conv.phase6_polis_conversation_id
             and phase6_stats is None))
     return render_template('admin_conversation.html',
                            conversation=conv,

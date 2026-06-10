@@ -97,24 +97,23 @@
         {% if polis_stats_unavailable %}
         <div class="phase-stats-warning" role="status">
           <span aria-hidden="true">⚠️</span>
-          <span><strong>Live statistics unavailable.</strong> The Polis statistics database
-            could not be reached, so vote and participant counts may be missing or stale.
-            Check the server logs.</span>
+          <span><strong>Live statistics unavailable.</strong> Vote and participant counts may be
+            missing or stale — the Polis statistics database may be unreachable, or this
+            conversation may not yet be registered in Polis. Check the server logs.</span>
         </div>
         {% endif %}
         {% if phase_stats %}
-        <div class="phase-stats">
-          {# Each tile carries an aria-label tying value→label→note together, so a screen
-             reader reads one coherent phrase instead of a stream of disconnected numbers
-             and captions; the visual pieces are hidden from the a11y tree (#165). #}
+        {# A <dl> ties each value to its label programmatically: a screen reader reads each
+           tile as "<value> <label>" rather than a stream of disconnected numbers. Native
+           dt/dd needs no ARIA — the visible text is the accessible text (#165). #}
+        <dl class="phase-stats">
           {% for t in phase_stats %}
-          <div role="group" aria-label="{{ t.value }}{% if t.unit %} {{ t.unit }}{% endif %} {{ t.label }}{% if t.note %} ({{ t.note }}){% endif %}">
-            <div aria-hidden="true" class="phase-stat-value">{{ t.value }}{% if t.unit %}<span class="unit">{{ t.unit }}</span>{% endif %}</div>
-            <div aria-hidden="true" class="phase-stat-label">{{ t.label }}</div>
-            {% if t.note %}<div aria-hidden="true" class="phase-stat-note">{{ t.note }}</div>{% endif %}
+          <div>
+            <dt class="phase-stat-value">{{ t.value }}{% if t.unit %}<span class="unit">{{ t.unit }}</span>{% endif %}</dt>
+            <dd class="phase-stat-label">{{ t.label }}{% if t.note %}<div class="phase-stat-note">{{ t.note }}</div>{% endif %}</dd>
           </div>
           {% endfor %}
-        </div>
+        </dl>
         {% endif %}
       </div>
 

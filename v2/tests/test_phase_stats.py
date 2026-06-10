@@ -175,6 +175,32 @@ def test_informed_voting_warns_when_phase6_fetch_fails(app, admin_client, conv):
     assert _tile_value(page, 'voted this round') is None
 
 
+def test_no_round2_warning_when_informed_voting_not_displayed_stage(app, admin_client, conv):
+    # Non-linear state: both informed-voting and public-results flags are on, so the
+    # *displayed* stage is public_results (furthest-along). No round-2 tiles render, so a
+    # failed phase-6 fetch must NOT trip the warning — it tracks the shown stage, not the
+    # raw flag (#165). Guards the false-positive the flag-based condition would have raised.
+    app.config['POLIS_DATABASE_URL'] = 'postgresql://unused/db'
+    conv.phase_informed_voting = True
+    conv.phase_public_results = True
+    conv.phase6_polis_conversation_id = 'p6conv1234'
+    db.session.commit()
+
+    def stats_for(zinvite):
+        if zinvite == 'p6conv1234':
+            return None                              # round-2 PG unreachable (but not shown)
+        return {'n_participants': 12, 'n_votes': 80, 'avg_votes': 6.0,
+                'median_votes': 6.0, 'n_statements': 10, 'n_seed': 2}
+
+    server = MagicMock()
+    server.get_polis_stats.side_effect = stats_for
+    with patch('app._polis_server_client', return_value=server):
+        page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+
+    # Round-1 stats are healthy and shown; the irrelevant phase-6 failure stays silent.
+    assert 'phase-stats-warning' not in page
+
+
 # ── Loud warning when Polis PG is configured but down ───────────────────────────
 
 def test_warning_when_pg_configured_but_unavailable(app, admin_client, conv):

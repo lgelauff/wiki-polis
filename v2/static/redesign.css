@@ -281,10 +281,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 26px;
-  margin-top: 18px;
+  /* margin set on all sides so the <dl> element carries no UA margin (#165). */
+  margin: 18px 0 0;
   padding-top: 18px;
   border-top: 1px solid var(--hairline-soft);
 }
+.phase-stats dd { margin: 0; }  /* drop the UA dd indent — tiles stack value over label */
 .phase-stat-value {
   font-size: 24px;
   font-weight: 700;
