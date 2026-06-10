@@ -4,6 +4,7 @@ app.py — Flask application for wiki-polis v2.
 
 import base64
 import click
+import dataclasses
 import functools
 import hashlib
 import hmac
@@ -74,6 +75,226 @@ ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.st
 _REVEAL_COOLDOWN_DAYS = 30   # days after close before reveal window opens
 _REVEAL_WINDOW_DAYS   = 30   # days participants may opt in once the window opens
 _MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
+
+# ── Phase 6 results ───────────────────────────────────────────────────────────
+
+@dataclasses.dataclass(frozen=True)
+class Phase6ResultsFilter:
+    """Moderation exclusions applied uniformly across all Phase 6 result surfaces.
+
+    excluded_tids: Phase 6 Polis statement tids to suppress (statements hidden via
+      admin moderation after Phase 6 init, e.g. de-featured mid-round). Populated
+      from FeaturedStatement rows whose phase6_polis_statement_id has mod=-1 in the
+      Phase 6 Polis conversation.
+
+    excluded_pids: Polis participant pids to suppress (banned participants). Empty
+      until issue #60 (ban participant) ships the admin UI; the field exists so
+      results can be recomputed with exclusions without a schema change.
+    """
+    excluded_tids: frozenset  # frozenset[int]
+    excluded_pids: frozenset  # frozenset[int]
+
+    @classmethod
+    def empty(cls) -> 'Phase6ResultsFilter':
+        return cls(excluded_tids=frozenset(), excluded_pids=frozenset())
+
+
+def _vote_label(vote: int | None) -> str | None:
+    """Human-readable label for a raw Polis vote value."""
+    if vote is None:
+        return None
+    return {-1: 'Agreed', 1: 'Disagreed', 0: 'Passed'}.get(vote)
+
+
+def _pct(n: int, total: int) -> float:
+    return round(n / total * 100, 1) if total else 0.0
+
+
+def _build_phase6_results(
+    conv,
+    participation,
+    results_filter: 'Phase6ResultsFilter | None' = None,
+) -> dict | None:
+    """Build the unified Phase 6 results object used by all result surfaces.
+
+    Returns None if Phase 6 is not initialised or has no confirmed statements.
+
+    The returned dict has shape:
+      {
+        'statements': [{
+          'text', 'fs_id',
+          'p2': {n_agree, n_disagree, n_pass, n_voters, pct_agree, pct_disagree, pct_pass},
+          'p6': {n_agree, n_disagree, n_pass, n_voters, pct_agree, pct_disagree, pct_pass},
+          'shift': float | None,     # aggregate: p6_pct_agree - p2_pct_agree (population comparison,
+                                     #   NOT individual-level delta — see 'matched_participants')
+          'my_p2_vote': int | None,  # raw Polis vote; None if participation absent or PG unavail
+          'my_p6_vote': int | None,
+          'my_p2_label': str | None,
+          'my_p6_label': str | None,
+        }],
+        'p6_participants': int | None,
+        'p2_participants': int | None,
+        'matched_participants': None,  # int | None — participants who voted in BOTH rounds;
+                                       # requires xid→pid mapping (not yet stored, see TODO below).
+                                       # Individual-level delta + CI extrapolation depend on this.
+        'p2_consensus': list,   # top-3 statements by Phase 2 agree rate (population consensus)
+        'p2_divisive':  list,   # top-3 statements by balanced agree/disagree split (most divisive)
+        'filter': Phase6ResultsFilter,
+        'source_divergence': float | None,  # abs diff between PG count and Particiapi count
+        'is_preliminary': bool,   # True while conversation is still active
+        'clusters': list | None,  # from Particiapi get_results on the Phase 6 zinvite
+        'pg_available': bool,
+      }
+
+    Data sources:
+      - Primary: PolisServerClient Postgres queries (votes_latest_unique).
+      - Comparison/clusters: ParticiAPIClient.get_results(phase6_zinvite).
+    Moderation is applied via results_filter before any aggregation.
+    If Postgres is unavailable, vote counts fall back to None (surfaces degrade
+    gracefully) but cluster data from Particiapi is still returned.
+    """
+    if not conv.phase6_polis_conversation_id:
+        return None
+
+    filt = results_filter or Phase6ResultsFilter.empty()
+
+    # Confirmed featured statements, excluding any whose Phase 6 tid is suppressed.
+    confirmed = [
+        fs for fs in FeaturedStatement.query.filter_by(
+            conversation_id=conv.id, confirmed_by_admin=True
+        ).all()
+        if fs.phase6_polis_statement_id is not None
+        and fs.phase6_polis_statement_id not in filt.excluded_tids
+        and fs.statement_text
+    ]
+    if not confirmed:
+        return None
+
+    p6_zinvite = conv.phase6_polis_conversation_id
+    p2_zinvite = conv.polis_id
+    excluded_pids = list(filt.excluded_pids)
+    allowed_p6_tids = [fs.phase6_polis_statement_id for fs in confirmed]
+
+    client = _polis_server_client()
+
+    # ── Primary source: Postgres ──────────────────────────────────────────────
+    p6_counts = client.get_phase6_vote_counts(p6_zinvite, allowed_p6_tids, excluded_pids)
+    p6_total_participants = client.get_phase6_participant_count(p6_zinvite, excluded_pids)
+    pg_available = p6_counts is not None
+
+    # Phase 2 counts keyed by polis_statement_id (Phase 2 tid).
+    p2_tids = [fs.polis_statement_id for fs in confirmed if fs.polis_statement_id]
+    p2_counts_raw = None
+    p2_total_participants = None
+    if p2_tids and pg_available:
+        # Reuse get_phase6_vote_counts against the Phase 2 zinvite — same SQL works.
+        p2_counts_raw = client.get_phase6_vote_counts(p2_zinvite, p2_tids, excluded_pids)
+        p2_total_participants = client.get_phase6_participant_count(p2_zinvite, excluded_pids)
+
+    # ── Personal votes (only when participation is present) ───────────────────
+    my_p2_votes: dict[int, int] = {}
+    my_p6_votes: dict[int, int] = {}
+    if participation and pg_available:
+        # We need the Polis pid for the participant. Polis pids are not stored in
+        # our DB — we use xid (hashed mw_user_id). The personal-votes query
+        # therefore cannot run until we have a xid→pid mapping.
+        # For now this is left as empty dicts (personal votes show as None).
+        # TODO: store or derive Polis pid to enable per-participant vote display.
+        pass
+
+    # ── Comparison source: Particiapi ─────────────────────────────────────────
+    pa_results = None
+    try:
+        pa_results = PolisParticipantClient(
+            current_app.config['PARTICIAPI_BASE']
+        ).get_results(p6_zinvite)
+    except Exception:
+        logger.exception('Particiapi get_results failed for Phase 6 zinvite %s', p6_zinvite)
+
+    clusters = None
+    source_divergence = None
+    if pa_results:
+        clusters = pa_results.get('groups') or None
+        # Sanity-check: compare Particiapi participant count vs Postgres count.
+        pa_n = None
+        if pa_results.get('majority'):
+            # Particiapi doesn't expose a participant count directly in majority.
+            # Use groups n_members sum as a proxy when available.
+            groups = pa_results.get('groups') or []
+            if groups:
+                pa_n = sum(g.get('n_members', 0) for g in groups)
+        if pa_n and p6_total_participants:
+            source_divergence = abs(pa_n - p6_total_participants) / max(p6_total_participants, 1)
+            if source_divergence > 0.05:
+                logger.warning(
+                    'Phase 6 source divergence %.1f%% for conv %s '
+                    '(PG=%d, Particiapi=%d) — may indicate moderation sync lag',
+                    source_divergence * 100, conv.slug, p6_total_participants, pa_n,
+                )
+
+    # ── Build per-statement rows ──────────────────────────────────────────────
+    statements = []
+    for fs in confirmed:
+        p6_tid = fs.phase6_polis_statement_id
+        p2_tid = fs.polis_statement_id
+
+        p6_row = (p6_counts or {}).get(p6_tid, {'n_agree': 0, 'n_disagree': 0, 'n_pass': 0, 'n_voters': 0})
+        p2_row = (p2_counts_raw or {}).get(p2_tid, None) if p2_tid else None
+
+        p6_n = p6_row['n_voters']
+        p6_pct_agree    = _pct(p6_row['n_agree'],    p6_n)
+        p6_pct_disagree = _pct(p6_row['n_disagree'], p6_n)
+        p6_pct_pass     = _pct(p6_row['n_pass'],     p6_n)
+
+        p2_pct_agree = p2_pct_disagree = p2_pct_pass = None
+        if p2_row:
+            p2_n = p2_row['n_voters']
+            p2_pct_agree    = _pct(p2_row['n_agree'],    p2_n)
+            p2_pct_disagree = _pct(p2_row['n_disagree'], p2_n)
+            p2_pct_pass     = _pct(p2_row['n_pass'],     p2_n)
+
+        shift = round(p6_pct_agree - p2_pct_agree, 1) if p2_pct_agree is not None else None
+
+        statements.append({
+            'text':        fs.statement_text,
+            'fs_id':       fs.id,
+            'p6': {**p6_row, 'pct_agree': p6_pct_agree,
+                   'pct_disagree': p6_pct_disagree, 'pct_pass': p6_pct_pass},
+            'p2': ({**p2_row, 'pct_agree': p2_pct_agree,
+                    'pct_disagree': p2_pct_disagree, 'pct_pass': p2_pct_pass}
+                   if p2_row else None),
+            'shift':       shift,
+            'my_p2_vote':  my_p2_votes.get(p2_tid),
+            'my_p6_vote':  my_p6_votes.get(p6_tid),
+            'my_p2_label': _vote_label(my_p2_votes.get(p2_tid)),
+            'my_p6_label': _vote_label(my_p6_votes.get(p6_tid)),
+        })
+
+    # Sort by largest absolute shift first; statements with no shift data go last.
+    statements.sort(key=lambda s: abs(s['shift']) if s['shift'] is not None else -1, reverse=True)
+
+    # Phase 2 consensus / divisiveness derived from the same data.
+    p2_with_data = [s for s in statements if s['p2'] is not None and s['p2']['n_voters'] > 0]
+    p2_consensus = sorted(p2_with_data,
+                          key=lambda s: s['p2']['pct_agree'] or 0, reverse=True)[:3]
+    # Most divisive = smallest gap between agree and disagree (most 50/50 split).
+    p2_divisive  = sorted(p2_with_data,
+                          key=lambda s: abs((s['p2']['pct_agree'] or 0) - (s['p2']['pct_disagree'] or 0)))[:3]
+
+    return {
+        'statements':            statements,
+        'p6_participants':       p6_total_participants,
+        'p2_participants':       p2_total_participants,
+        # TODO: compute once xid→pid mapping is available (see personal-votes TODO above).
+        'matched_participants':  None,
+        'p2_consensus':          p2_consensus,
+        'p2_divisive':           p2_divisive,
+        'filter':                filt,
+        'source_divergence':     source_divergence,
+        'is_preliminary':        bool(conv.active),
+        'clusters':              clusters,
+        'pg_available':          pg_available,
+    }
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
 
@@ -941,6 +1162,10 @@ def admin_conversation_detail(conv_id):
     invite_count      = ConversationInvite.query.filter_by(conversation_id=conv_id).count()
     participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
     polis_stats       = _polis_server_client().get_polis_stats(conv.polis_id)
+    phase6_results    = (_build_phase6_results(conv, participation=None)
+                         if conv.phase_informed_voting and conv.phase6_polis_conversation_id
+                         else None)
+    reveal            = _reveal_context(conv, participation=None)
     return render_template('admin_conversation.html',
                            conversation=conv,
                            conv_roles=conv_roles,
@@ -948,6 +1173,8 @@ def admin_conversation_detail(conv_id):
                            invite_count=invite_count,
                            participant_count=participant_count,
                            polis_stats=polis_stats,
+                           phase6_results=phase6_results,
+                           reveal=reveal,
                            admin_roles=ADMIN_ROLES,
                            can_manage_roles=can_manage_roles,
                            phase_sequence=PHASE_SEQUENCE,
@@ -1975,6 +2202,13 @@ def conversation(slug):
                 'phase6_stmt_id': fs.phase6_polis_statement_id,
             })
 
+    # Phase 6 results — built when the results tab is visible or Phase 6 is active.
+    # Surface A (preliminary) is shown inside the results tab while the round is live.
+    phase6_results = None
+    if (conv.phase_informed_voting or conv.phase_personal_results or conv.phase_public_results) \
+            and conv.phase6_polis_conversation_id:
+        phase6_results = _build_phase6_results(conv, participation)
+
     return render_template('conversation.html',
                            conversation=conv,
                            participation=participation,
@@ -1989,7 +2223,8 @@ def conversation(slug):
                            new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10,
                            new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
                            new_stmt_ids=participation.new_stmt_ids if participation else [],
-                           phase6_data=phase6_data)
+                           phase6_data=phase6_data,
+                           phase6_results=phase6_results)
 
 # ── Arguments ────────────────────────────────────────────────────────────
 
@@ -2594,6 +2829,53 @@ def create_app(test_config: dict | None = None) -> Flask:
     csrf.exempt(proxy_bp)
 
     return app
+
+
+# ── Phase 6 final report ──────────────────────────────────────────────────────
+
+@participant_bp.get('/c/<slug>/report')
+def conversation_report(slug):
+    """Phase 6 final results report — aggregate only, no personal votes.
+
+    Accessible once the conversation is closed (conv.closed_at is set).
+    Requires login when phase_personal_results is set; public when
+    phase_public_results is set.
+
+    Surface B: post-close, post-organizer-cleanup. Marked 'Final report'.
+    For the preliminary in-round view see the Results tab on the conversation page.
+    """
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    participation = (
+        Participation.query.filter_by(
+            conversation_id=conv.id,
+            participant_id=participant.id,
+        ).first()
+        if participant else None
+    )
+    _check_conversation_access(conv, participant)
+
+    if not conv.closed_at:
+        # Conversation still open — redirect to the results tab.
+        return redirect(url_for('participant.conversation', slug=slug) + '#tab-results')
+
+    if not (conv.phase_public_results or conv.phase_personal_results):
+        return redirect(url_for('participant.conversation', slug=slug))
+
+    if conv.phase_personal_results and not conv.phase_public_results and not participant:
+        return redirect(url_for('participant.login') + f'?next={request.path}')
+
+    phase6_results = _build_phase6_results(conv, participation=None)  # aggregate only
+
+    reveal = _reveal_context(conv, participation)
+    return render_template(
+        'report.html',
+        conversation=conv,
+        participation=participation,
+        phase6_results=phase6_results,
+        reveal=reveal,
+        reveal_state=reveal['state'] if reveal else None,
+    )
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

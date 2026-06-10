@@ -93,6 +93,13 @@ One row per statement. `txt` is the statement text.
 - `votes_latest_unique` is the **authoritative current vote** — a `RULE` upserts it on every `votes` insert. Query this for current state.
 - `vote` value: **-1 = Agree, 1 = Disagree, 0 = Pass/Unsure** (opposite of the data export sign).
 
+**Phase 6 vote queries use `votes_latest_unique`, not `votes`.** The Phase 6 informed
+voting round lives in a separate Polis conversation (`phase6_polis_conversation_id`). All
+wiki-polis result queries (`get_phase6_vote_counts`, `get_phase6_participant_count`,
+`get_personal_votes`) query `votes_latest_unique` to get one-vote-per-participant-per-statement,
+consistent with what Polis math uses. Filtering to confirmed featured statement tids and
+optionally excluding banned pids happens in the SQL `WHERE` clause — never post-hoc in Python.
+
 ### `participants` (keyed by `(zid, pid)`)
 
 One row per (user, conversation). Tracks `vote_count`, `last_interaction`.
