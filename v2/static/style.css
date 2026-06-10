@@ -2142,6 +2142,11 @@ a { color: var(--pass); }
 /* Orientation banner spans full width so arg-panels gets the whole row below it */
 .at-orient { flex: 1 0 100%; }
 
+/* All-done interlude claims its own full-width row too. Without this it defaults to
+   flex:0 1 auto and shares the row with the still-visible statement panel, squeezing
+   .arg-panels (flex:1; min-width:0) to a sliver that wraps one word per line. */
+.at-complete { flex: 1 0 100%; }
+
 .arg-toc {
   flex-shrink: 0;
   width: 200px;
