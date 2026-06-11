@@ -247,6 +247,37 @@ class ArgumentSideState(db.Model):
     featured_statement = db.relationship('FeaturedStatement')
 
 
+class AuditEvent(db.Model):
+    """Append-only accountability record (#135): who did what when, for admin/moderation
+    write actions. NEVER updated. Holds ids / enums / counts only — never statement text,
+    vote content, usernames, xid, or any PII (the writer's contract; see record_audit).
+
+    FKs use ON DELETE SET NULL (not CASCADE): the trail must outlive a deleted participant
+    or conversation — governance durability.
+    """
+    __tablename__ = 'audit_events'
+
+    id                   = db.Column(db.Integer, primary_key=True)
+    ts                   = db.Column(db.DateTime, nullable=False,
+                                     default=lambda: datetime.now(timezone.utc))
+    actor_participant_id = db.Column(db.Integer,
+                                     db.ForeignKey('participants.id', ondelete='SET NULL'),
+                                     nullable=True)
+    conversation_id      = db.Column(db.Integer,
+                                     db.ForeignKey('conversations.id', ondelete='SET NULL'),
+                                     nullable=True)
+    operation            = db.Column(db.String(64), nullable=False)
+    target_type          = db.Column(db.String(32), nullable=True)
+    target_id            = db.Column(db.String(64), nullable=True)
+    outcome              = db.Column(db.String(16), nullable=False, default='ok')
+    detail               = db.Column(db.JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        db.Index('ix_audit_events_conv_ts', 'conversation_id', 'ts'),
+        db.Index('ix_audit_events_actor_ts', 'actor_participant_id', 'ts'),
+    )
+
+
 # Explicit indexes — MySQL/MariaDB does not auto-index FK columns.
 # Cover the highest-volume lookup patterns in the argument mapping flow.
 db.Index('ix_participations_participant_id', Participation.participant_id)
