@@ -12,6 +12,7 @@ import os
 import random
 import re
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse, urljoin
 
@@ -28,6 +29,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect, validate_csrf
 from sqlalchemy import text as _sa_text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from wtforms.validators import ValidationError
@@ -38,6 +40,7 @@ from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideS
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
 from seed_csv import MAX_FILE_BYTES, MAX_ROWS, parse_csv_bytes, strip_formula_prefixes
+from logging_setup import configure_logging
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -2755,6 +2758,10 @@ def phase6_vote(slug):
     return resp
 
 
+# Accepted shape for a reused inbound X-Request-Id (only honoured behind a trusted proxy).
+_REQUEST_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+
+
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
 
@@ -2907,6 +2914,9 @@ def create_app(test_config: dict | None = None) -> Flask:
             'rate-limit keys do not expose raw client identities in shared Redis.'
         )
 
+    # Configure logging before extensions init so their startup logs are formatted/correlated.
+    configure_logging(app, on_toolforge=_on_toolforge)
+
     db.init_app(app)
     Migrate(app, db)
     Session(app)
@@ -2952,6 +2962,19 @@ def create_app(test_config: dict | None = None) -> Flask:
     def _set_csp_nonce():
         g.csp_nonce = secrets.token_urlsafe(16)
 
+    @app.before_request
+    def _set_request_id():
+        # Mint a fresh id by default. Only honour an inbound X-Request-Id when behind a
+        # trusted proxy AND it is well-formed — an unvalidated inbound value is a
+        # log-forging / header-injection vector.
+        rid = None
+        if app.config.get('TRUST_PROXY_HEADERS'):
+            inbound = request.headers.get('X-Request-Id', '')
+            if _REQUEST_ID_RE.match(inbound):
+                rid = inbound
+        g.request_id = rid or secrets.token_urlsafe(8)
+        g._t0 = time.perf_counter()
+
     @app.context_processor
     def _inject_globals():
         participant = _current_participant()
@@ -2979,6 +3002,18 @@ def create_app(test_config: dict | None = None) -> Flask:
         response.headers['Referrer-Policy']         = 'strict-origin-when-cross-origin'
         # X-Frame-Options superseded by frame-ancestors in CSP above, but kept for old browsers
         response.headers['X-Frame-Options']         = 'DENY'
+        response.headers['X-Request-Id']            = g.get('request_id', '-')
+
+        # Diagnostic completion line. request_id + participant_id ride the LogRecord factory
+        # (no DB access here). Skip successful static-asset hits to keep the log signal-dense;
+        # static errors (>=400) still log.
+        if not (request.path.startswith('/static/') and response.status_code < 400):
+            _t0 = g.get('_t0')
+            _ms = round((time.perf_counter() - _t0) * 1000, 1) if _t0 is not None else None
+            app.logger.info(
+                '%s %s -> %s (%sms)', request.method, request.path, response.status_code, _ms,
+                extra={'http_method': request.method, 'http_path': request.path,
+                       'http_status': response.status_code, 'duration_ms': _ms})
 
         # Cache static assets (fonts, CSS, JS) for 1 week.
         # URLs include ?v=<git-sha> so each deploy busts the cache automatically.
@@ -3004,6 +3039,22 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(admin_bp)
     app.register_blueprint(participant_bp)
     csrf.exempt(proxy_bp)
+
+    # Startup fingerprint — config-only, no secrets, no live probe. Answers
+    # "is this environment configured as expected" before chasing a phantom bug.
+    try:
+        _db_backend = make_url(app.config.get('SQLALCHEMY_DATABASE_URI', '')).drivername
+    except Exception:
+        _db_backend = 'unknown'
+    app.logger.info(
+        'startup env=%s db=%s polis=%s polis_pg=%s version=%s',
+        'toolforge' if _on_toolforge else 'dev', _db_backend,
+        bool(app.config.get('POLIS_SERVER_URL')), bool(app.config.get('POLIS_DATABASE_URL')),
+        _GIT_VERSION,
+        extra={'env': 'toolforge' if _on_toolforge else 'dev', 'db_backend': _db_backend,
+               'polis_configured': bool(app.config.get('POLIS_SERVER_URL')),
+               'polis_pg_configured': bool(app.config.get('POLIS_DATABASE_URL')),
+               'git_version': _GIT_VERSION})
 
     return app
 
