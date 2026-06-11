@@ -32,8 +32,9 @@ _factory_installed = False
 # Minimal redaction (full catalogue is Plan 3). Each entry scrubs a concrete high-risk
 # token from the final formatted line (message + traceback).
 _REDACTIONS = [
-    # credentials embedded in a URL: scheme://user:PASSWORD@host -> scheme://user:***@host
-    (re.compile(r'(://[^:/?#\s]+:)[^@/?#\s]+(@)'), r'\1***\2'),
+    # credentials embedded in a URL: scheme://[user]:PASSWORD@host -> scheme://[user]:***@host
+    # (username optional so scheme://:password@host is also caught)
+    (re.compile(r'(://[^:/?#\s]*:)[^@/?#\s]+(@)'), r'\1***\2'),
     # xid / sha256-shaped hex (reversible identifier, #96)
     (re.compile(r'\b[0-9a-fA-F]{64}\b'), '[redacted-hash]'),
     # key=value / key: value for sensitive keys — redact the whole value run (handles

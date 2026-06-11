@@ -52,12 +52,35 @@ def test_json_formatter_shape_and_redaction():
     assert 'pw' not in out                         # password scrubbed inside JSON
 
 
-def test_startup_fingerprint_logs_scheme_only():
-    # The fingerprint logs make_url(...).drivername — never the full URL/password.
-    from sqlalchemy.engine import make_url
-    url = make_url('mysql+pymysql://user:s3cret@host/db')
-    assert url.drivername == 'mysql+pymysql'
-    assert 's3cret' not in url.drivername
+def test_startup_fingerprint_logs_scheme_not_secrets(tmp_path, caplog):
+    # Drive the real create_app fingerprint and assert it logs the DB scheme but no secret.
+    import os
+    from unittest.mock import patch
+
+    from cachelib.file import FileSystemCache
+
+    from app import create_app
+
+    session_dir = tmp_path / 'sessions'
+    session_dir.mkdir()
+    env = {'FLASK_DEBUG': '0', 'DEV_LOGIN_USER': '', 'RATELIMIT_STORAGE_URI': '',
+           'RATELIMIT_KEY_PREFIX': '', 'RATELIMIT_IDENTITY_SECRET': '', 'TRUST_PROXY_HEADERS': '',
+           'TOOL_TOOLFORGE_API_URL': '', 'TOOL_REDIS_URI': ''}
+    with caplog.at_level(logging.INFO):
+        with patch.dict(os.environ, env, clear=False):
+            create_app({
+                'TESTING': True,
+                'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/t.db',
+                'WTF_CSRF_ENABLED': False, 'RATELIMIT_ENABLED': False,
+                'SECRET_KEY': 'super-secret-key', 'SESSION_TYPE': 'cachelib',
+                'SESSION_CACHELIB': FileSystemCache(str(session_dir)),
+                'SESSION_PERMANENT': False,
+            })
+    startup = [r for r in caplog.records if r.getMessage().startswith('startup ')]
+    assert startup, 'expected a startup fingerprint log record'
+    msg = startup[0].getMessage()
+    assert 'db=sqlite' in msg                 # scheme only
+    assert 'super-secret-key' not in msg      # no SECRET_KEY in the line
 
 
 # ── configure_logging idempotency (non-testing app) ─────────────────────────
@@ -105,6 +128,23 @@ def test_inbound_request_id_rejected_when_malformed(app):
     for bad in ('has spaces', 'y' * 65):               # fail the strict pattern
         r = c.get('/', headers={'X-Request-Id': bad})
         assert r.headers['X-Request-Id'] != bad
+
+
+def test_participant_id_rides_record_when_resolved(app, caplog):
+    # Proves the factory stamps participant_id from g.participant (not inert), no query.
+    from flask import g
+
+    class _P:
+        id = 4242
+
+    with app.test_request_context('/'):
+        g.request_id = 'rid-xyz'
+        g.participant = _P()
+        with caplog.at_level(logging.INFO):
+            logging.getLogger('test').info('hello')
+    rec = [r for r in caplog.records if r.getMessage() == 'hello'][0]
+    assert rec.participant_id == 4242
+    assert rec.request_id == 'rid-xyz'
 
 
 def test_completion_line_carries_request_id_no_participant(client, caplog):
