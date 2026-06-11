@@ -2538,11 +2538,6 @@ def argument_vote(slug, arg_id):
         if is_ajax:
             return jsonify({'ok': False, 'reason': 'hidden'}), 403
         abort(403)
-    if arg.proposer_id == part.participant_id:
-        if is_ajax:
-            return jsonify({'ok': False, 'reason': 'own'}), 403
-        abort(403)
-
     existing = ArgumentVote.query.filter_by(
         participant_id=part.participant_id, argument_id=arg_id).first()
     if not existing:

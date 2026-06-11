@@ -234,7 +234,7 @@ def test_vote_k_cap_enforced(auth_client, arg_conv, arg_part, fs,
     assert resp.status_code == 409
 
 
-def test_vote_own_argument_blocked(auth_client, arg_conv, arg_part, fs,
+def test_vote_own_argument_allowed(auth_client, arg_conv, arg_part, fs,
                                    participant, app):
     _pass_gate(auth_client, 'arg-conv', fs.id)
     own = Argument(featured_statement_id=fs.id, proposer_id=participant.id,
@@ -242,7 +242,7 @@ def test_vote_own_argument_blocked(auth_client, arg_conv, arg_part, fs,
     db.session.add(own)
     db.session.commit()
     resp = auth_client.post(f'/c/arg-conv/arguments/{own.id}/vote')
-    assert resp.status_code == 403
+    assert resp.status_code in (200, 302)
 
 
 def test_unvote_removes_vote(auth_client, arg_conv, arg_part, fs,
