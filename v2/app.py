@@ -1910,7 +1910,8 @@ def admin_invite_add(conv_id):
     except Exception:
         db.session.rollback()
     else:
-        record_audit('invite.add', conv_id=conv_id, count=added)  # count only — no usernames (PII)
+        if added:
+            record_audit('invite.add', conv_id=conv_id, count=added)  # count only — no usernames (PII)
     return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/invites/<int:invite_id>/remove')
@@ -2816,6 +2817,11 @@ def record_audit(operation, *, conv_id=None, target_type=None, target_id=None,
     this contract is the control (enforced by tests).
     """
     actor = getattr(g.get('participant'), 'id', None)
+    if actor is None and session.get('username'):
+        # Authenticated admin with no Participant row (env-listed ADMIN_USERS superadmin).
+        # Mark the row so a NULL actor is explained, not ambiguous — without storing the
+        # username (PII). See _is_global_admin's ADMIN_USERS branch.
+        detail.setdefault('actor_kind', 'env_admin')
     try:
         db.session.add(AuditEvent(
             actor_participant_id=actor, conversation_id=conv_id, operation=operation,

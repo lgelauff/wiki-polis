@@ -78,20 +78,31 @@ def test_close_route_writes_audit_row(client, app):
 
 def test_audit_rows_carry_no_pii_or_content(client, app):
     """Drive routes whose inputs include statement text / usernames and assert none of
-    that ever reaches an audit row — only ids / enums / counts."""
-    pid = _login(client, app)
+    that ever reaches an audit row — only ids / enums / counts.
+
+    The Polis client is mocked so statement.seed actually reaches its record_audit call
+    (otherwise add_seed raises and no row is written — the assertion would be vacuous)."""
+    from unittest.mock import patch
+
+    _login(client, app)
     with app.app_context():
         conv = Conversation(slug='auditp', title='Audit P', active=True, polis_id='p2')
         db.session.add(conv)
         db.session.commit()
         conv_id = conv.id
     secret_text = 'THE QUICK BROWN FOX statement body'
-    # statement.seed posts statement text; global_admin.grant posts a username.
-    client.post(f'/admin/conversations/{conv_id}/statements/seed', data={'txt': secret_text})
+    with patch('app.PolisServerClient.add_seed'):          # seed path now commits a row
+        r = client.post(f'/admin/conversations/{conv_id}/statements/seed',
+                        data={'txt': secret_text})
+        assert r.status_code in (302, 303)
     client.post('/admin/global-admins/add', data={'mw_username': 'AdminUser'})
+
     with app.app_context():
+        ops = {row.operation for row in AuditEvent.query.all()}
+        assert 'statement.seed' in ops                     # the seed row WAS written (not vacuous)
+        assert 'global_admin.grant' in ops
         for row in AuditEvent.query.all():
             blob = f'{row.target_type} {row.target_id} {row.detail}'
-            assert secret_text not in blob
-            assert 'AdminUser' not in blob
-            assert 'f' * 64 not in blob                # xid never present
+            assert secret_text not in blob                 # statement text never stored
+            assert 'AdminUser' not in blob                 # username never stored
+            assert 'f' * 64 not in blob                    # xid never present
