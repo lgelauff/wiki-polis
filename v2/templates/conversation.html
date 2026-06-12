@@ -82,6 +82,7 @@
   {% if conversation.phase_personal_results or conversation.phase_public_results %}{% set _ = tabs.append('results') %}{% endif %}
   {% if conversation.phase_argument_mapping %}{% set _ = tabs.append('arguments') %}{% endif %}
   {% if conversation.phase_informed_voting and conversation.phase6_polis_conversation_id %}{% set _ = tabs.append('informed-voting') %}{% endif %}
+  {% if conversation.phase_public_results and phase6_results and phase6_results.statements %}{% set _ = tabs.append('p6-results') %}{% endif %}
 
   {% if tabs | length == 0 %}
   <div class="landing-section">
@@ -102,7 +103,7 @@
     <button id="tab-btn-results" class="tab-btn{% if tabs[0] == 'results' %} tab-btn--active{% endif %}"
             role="tab" data-tab="tab-results" aria-controls="tab-results"
             aria-selected="{{ 'true' if tabs[0] == 'results' else 'false' }}"
-            tabindex="{{ '0' if tabs[0] == 'results' else '-1' }}">Results</button>
+            tabindex="{{ '0' if tabs[0] == 'results' else '-1' }}">Intermediate results</button>
     {% endif %}
     {% if 'arguments' in tabs %}
     <button id="tab-btn-arguments" class="tab-btn{% if tabs[0] == 'arguments' %} tab-btn--active{% endif %}"
@@ -115,6 +116,12 @@
             role="tab" data-tab="tab-informed-voting" aria-controls="tab-informed-voting"
             aria-selected="{{ 'true' if tabs[0] == 'informed-voting' else 'false' }}"
             tabindex="{{ '0' if tabs[0] == 'informed-voting' else '-1' }}">Informed vote</button>
+    {% endif %}
+    {% if 'p6-results' in tabs %}
+    <button id="tab-btn-p6-results" class="tab-btn{% if tabs[0] == 'p6-results' %} tab-btn--active{% endif %}"
+            role="tab" data-tab="tab-p6-results" aria-controls="tab-p6-results"
+            aria-selected="{{ 'true' if tabs[0] == 'p6-results' else 'false' }}"
+            tabindex="{{ '0' if tabs[0] == 'p6-results' else '-1' }}">Preliminary results</button>
     {% endif %}
   </div>
   {% endif %}
@@ -907,8 +914,8 @@
   {# Done screen — shown when all cards are voted or skipped #}
   <div class="p6-done" hidden>
     <h2 class="p6-done-heading">You've completed informed voting.</h2>
-    {% if conversation.phase_personal_results or conversation.phase_public_results %}
-    <p class="p6-done-text">Preliminary results are available below.</p>
+    {% if conversation.phase_public_results and phase6_results and phase6_results.statements %}
+    <p class="p6-done-text">See the <a href="#" onclick="document.querySelector('[data-tab=tab-p6-results]').click();return false;">Preliminary results</a> tab for the full comparison.</p>
     {% elif conversation.phase_submission or conversation.phase_argument_mapping %}
     <p class="p6-done-text">The deliberation is still open — come back if new arguments are added.</p>
     {% elif conversation.active %}
@@ -923,79 +930,84 @@
     {% endif %}
   </div>
 
-  {# Informed voting results — shown below the done screen (#204) #}
-  {% if phase6_results and phase6_results.statements %}
-  <div class="results-block p6-results-block">
-    <div class="p6-results-header">
-      <p class="results-label">Informed voting results</p>
-      {% if phase6_results.is_preliminary %}
-      <span class="p6-results-badge p6-results-badge--preliminary">Preliminary</span>
-      {% endif %}
-      {% if phase6_results.p6_participants %}
-      <span class="muted" style="font-size:12px">{{ phase6_results.p6_participants }} participant{{ 's' if phase6_results.p6_participants != 1 }}</span>
-      {% endif %}
-    </div>
-    {% if not phase6_results.pg_available %}
-    <p class="muted" style="font-size:13px">Detailed vote counts are not available right now.</p>
-    {% else %}
-    <table class="p6-results-table" aria-label="Informed voting results by statement">
-      <thead>
-        <tr>
-          <th class="p6-col-stmt">Statement</th>
-          <th class="p6-col-phase" title="Phase 2 — initial voting">Initial vote</th>
-          <th class="p6-col-phase" title="Phase 6 — informed voting">Informed vote</th>
-          <th class="p6-col-shift" title="Change in agree rate">Shift</th>
-          {% if participation %}<th class="p6-col-mine">Yours</th>{% endif %}
-        </tr>
-      </thead>
-      <tbody>
-      {% for s in phase6_results.statements %}
-      <tr class="p6-results-row">
-        <td class="p6-col-stmt">{{ s.text }}</td>
-        <td class="p6-col-phase">
-          {% if s.p2 %}
-          <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}%">
-            <div class="p6-bar-agree" style="width:{{ s.p2.pct_agree }}%"></div>
-            <div class="p6-bar-disagree" style="width:{{ s.p2.pct_disagree }}%"></div>
-          </div>
-          <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree</span>
-          {% else %}<span class="muted">—</span>{% endif %}
-        </td>
-        <td class="p6-col-phase">
-          <div class="p6-vote-bar" title="Agree {{ s.p6.pct_agree }}% · Disagree {{ s.p6.pct_disagree }}%">
-            <div class="p6-bar-agree" style="width:{{ s.p6.pct_agree }}%"></div>
-            <div class="p6-bar-disagree" style="width:{{ s.p6.pct_disagree }}%"></div>
-          </div>
-          <span class="p6-bar-label">{{ s.p6.pct_agree }}% agree</span>
-        </td>
-        <td class="p6-col-shift">
-          {% if s.shift is not none %}
-          <span class="p6-shift {% if s.shift > 0 %}p6-shift--up{% elif s.shift < 0 %}p6-shift--down{% endif %}">
-            {% if s.shift > 0 %}+{% endif %}{{ s.shift }}%
-          </span>
-          {% else %}<span class="muted">—</span>{% endif %}
-        </td>
-        {% if participation %}
-        <td class="p6-col-mine">
-          {% if s.my_p6_label %}
-          <span class="p6-my-vote p6-my-vote--{{ s.my_p6_label|lower }}">{{ s.my_p6_label }}</span>
-          {% else %}<span class="muted">—</span>{% endif %}
-        </td>
-        {% endif %}
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% endif %}
-    {% if not conversation.active %}
-    <p style="margin-top:1rem;font-size:13px">
-      <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">Read the full results report <span aria-hidden="true">→</span></a>
-    </p>
-    {% endif %}
-  </div>
-  {% endif %}{# end phase6_results #}
-
   </div>{# end tab-informed-voting #}
+  {% endif %}
+
+  {% if 'p6-results' in tabs %}
+  <div id="tab-p6-results"
+       class="tab-panel{% if tabs|length > 1 and tabs[0] != 'p6-results' %} tab-panel--hidden{% endif %}"
+       role="tabpanel" aria-labelledby="tab-btn-p6-results">
+    <div class="landing-section results-section">
+      <div class="results-block p6-results-block">
+        <div class="p6-results-header">
+          <p class="results-label">Preliminary results</p>
+          {% if phase6_results.is_preliminary %}
+          <span class="p6-results-badge p6-results-badge--preliminary">Preliminary</span>
+          {% endif %}
+          {% if phase6_results.p6_participants %}
+          <span class="muted" style="font-size:12px">{{ phase6_results.p6_participants }} participant{{ 's' if phase6_results.p6_participants != 1 }}</span>
+          {% endif %}
+        </div>
+        {% if not phase6_results.pg_available %}
+        <p class="muted" style="font-size:13px">Detailed vote counts are not available right now.</p>
+        {% else %}
+        <table class="p6-results-table" aria-label="Preliminary informed voting results by statement">
+          <thead>
+            <tr>
+              <th class="p6-col-stmt">Statement</th>
+              <th class="p6-col-phase" title="Phase 2 — initial voting">Initial vote</th>
+              <th class="p6-col-phase" title="Phase 6 — informed voting">Informed vote</th>
+              <th class="p6-col-shift" title="Change in agree rate">Shift</th>
+              {% if participation %}<th class="p6-col-mine">Yours</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+          {% for s in phase6_results.statements %}
+          <tr class="p6-results-row">
+            <td class="p6-col-stmt">{{ s.text }}</td>
+            <td class="p6-col-phase">
+              {% if s.p2 %}
+              <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}%">
+                <div class="p6-bar-agree" style="width:{{ s.p2.pct_agree }}%"></div>
+                <div class="p6-bar-disagree" style="width:{{ s.p2.pct_disagree }}%"></div>
+              </div>
+              <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree</span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td class="p6-col-phase">
+              <div class="p6-vote-bar" title="Agree {{ s.p6.pct_agree }}% · Disagree {{ s.p6.pct_disagree }}%">
+                <div class="p6-bar-agree" style="width:{{ s.p6.pct_agree }}%"></div>
+                <div class="p6-bar-disagree" style="width:{{ s.p6.pct_disagree }}%"></div>
+              </div>
+              <span class="p6-bar-label">{{ s.p6.pct_agree }}% agree</span>
+            </td>
+            <td class="p6-col-shift">
+              {% if s.shift is not none %}
+              <span class="p6-shift {% if s.shift > 0 %}p6-shift--up{% elif s.shift < 0 %}p6-shift--down{% endif %}">
+                {% if s.shift > 0 %}+{% endif %}{{ s.shift }}%
+              </span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            {% if participation %}
+            <td class="p6-col-mine">
+              {% if s.my_p6_label %}
+              <span class="p6-my-vote p6-my-vote--{{ s.my_p6_label|lower }}">{{ s.my_p6_label }}</span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+        {% if not conversation.active %}
+        <p style="margin-top:1rem;font-size:13px">
+          <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">Read the final report <span aria-hidden="true">→</span></a>
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>{# end tab-p6-results #}
   {% endif %}
 
   {% if tabs | length > 1 %}
