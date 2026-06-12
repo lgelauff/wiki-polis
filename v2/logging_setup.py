@@ -52,7 +52,9 @@ def _redact(s: str) -> str:
 
 # Extra record attributes the JSON formatter surfaces as top-level fields when present.
 _JSON_EXTRA_FIELDS = ('http_method', 'http_path', 'http_status', 'duration_ms',
-                      'env', 'db_backend', 'polis_configured', 'polis_pg_configured', 'git_version')
+                      'env', 'db_backend', 'polis_configured', 'polis_pg_configured', 'git_version',
+                      # audit backstop fields (Plan 2) — so the log line carries the full event
+                      'operation', 'target_type', 'target_id', 'outcome', 'conversation_id')
 
 
 class RedactingJsonFormatter(logging.Formatter):

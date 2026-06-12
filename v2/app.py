@@ -35,7 +35,7 @@ from sqlalchemy.orm import joinedload
 from wtforms.validators import ValidationError
 
 from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideState,
-                ArgumentVote, Conversation, ConversationInvite, FeaturedStatement,
+                ArgumentVote, AuditEvent, Conversation, ConversationInvite, FeaturedStatement,
                 Participant, Participation, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
@@ -1399,8 +1399,10 @@ def admin_conversation_new():
                 'Pass a polis_id manually or set the env vars.'
             )))
 
-    db.session.add(Conversation(slug=slug, active=True, polis_id=polis_id, **fields))
+    conv = Conversation(slug=slug, active=True, polis_id=polis_id, **fields)
+    db.session.add(conv)
     db.session.commit()
+    record_audit('conversation.create', conv_id=conv.id, slug=slug)
     return redirect(url_for('admin.admin'))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/edit')
@@ -1419,6 +1421,7 @@ def admin_conversation_edit(conv_id):
     conv.outro_text    = fields['outro_text']
     conv.access_policy = fields['access_policy']
     db.session.commit()
+    record_audit('conversation.edit', conv_id=conv.id)
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/pause')
@@ -1430,6 +1433,7 @@ def admin_conversation_pause(conv_id):
         abort(400)
     conv.paused = not conv.paused
     db.session.commit()
+    record_audit('conversation.pause', conv_id=conv.id, paused=conv.paused)
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/close')
@@ -1443,6 +1447,7 @@ def admin_conversation_close(conv_id):
     conv.paused    = False
     conv.closed_at = datetime.now(timezone.utc)
     db.session.commit()
+    record_audit('conversation.close', conv_id=conv.id)
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 def _sync_vis_type(conv) -> bool:
@@ -1483,6 +1488,10 @@ def admin_conversation_phases(conv_id):
     conv.phase_public_results   = bool(request.form.get('phase_public_results'))
     conv.phase_informed_voting  = bool(request.form.get('phase_informed_voting'))
     db.session.commit()
+    record_audit('phase.set', conv_id=conv.id, phases={
+        'submission': conv.phase_submission, 'personal_results': conv.phase_personal_results,
+        'argument_mapping': conv.phase_argument_mapping, 'cleanup': conv.phase_cleanup,
+        'public_results': conv.phase_public_results, 'informed_voting': conv.phase_informed_voting})
 
     if not _sync_vis_type(conv):
         flash('Phases saved, but updating results visibility in Polis failed — '
@@ -1589,6 +1598,10 @@ def admin_conversation_advance(conv_id):
             flash('Could not move on — a database error occurred. Please try again.', 'error')
         return redirect_to
 
+    record_audit('phase.advance', conv_id=conv.id, target_type='phase', target_id=nxt['key'],
+                 from_phase=cur['key'], phase6_created=bool(created_p6),
+                 auto_closed=bool(ctx['auto_close']))
+
     if not _sync_vis_type(conv):
         flash('Phase moved, but updating results visibility in Polis failed.', 'error')
     if sync_msg:                                  # re-entry re-synced round 6 (#175)
@@ -1649,6 +1662,7 @@ def admin_phase6_init(conv_id):
         flash('Phase 6 initialisation failed due to a database error. '
               'Contact a site admin — the Polis conversation id has been logged.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    record_audit('phase6.init', conv_id=conv.id)
     flash(msg, 'success')
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
@@ -1807,6 +1821,7 @@ def admin_global_admin_add():
         return redirect(url_for('admin.admin'))
     p.is_global_admin = True
     db.session.commit()
+    record_audit('global_admin.grant', target_type='participant', target_id=p.id)
     return redirect(url_for('admin.admin'))
 
 @admin_bp.post('/admin/global-admins/<int:participant_id>/remove')
@@ -1816,6 +1831,7 @@ def admin_global_admin_remove(participant_id):
     p = Participant.query.get_or_404(participant_id)
     p.is_global_admin = False
     db.session.commit()
+    record_audit('global_admin.revoke', target_type='participant', target_id=p.id)
     return redirect(url_for('admin.admin'))
 
 @admin_bp.post('/admin/roles/add')
@@ -1845,6 +1861,8 @@ def admin_role_add():
             granted_by=grantor.id if grantor else None,
         ))
         db.session.commit()
+        record_audit('role.grant', conv_id=conversation_id, target_type='participant',
+                     target_id=participant_id, role=role)
     return redirect(_safe_redirect(request.form.get('redirect_to', ''), url_for('admin.admin')))
 
 @admin_bp.post('/admin/roles/<int:role_id>/remove')
@@ -1852,8 +1870,11 @@ def admin_role_add():
 @admin_required
 def admin_role_remove(role_id):
     role = AdminRole.query.get_or_404(role_id)
+    conv_id, pid, role_name = role.conversation_id, role.participant_id, role.role
     db.session.delete(role)
     db.session.commit()
+    record_audit('role.revoke', conv_id=conv_id, target_type='participant',
+                 target_id=pid, role=role_name)
     return redirect(_safe_redirect(request.form.get('redirect_to', ''), url_for('admin.admin')))
 
 @admin_bp.get('/admin/conversations/<int:conv_id>/invites')
@@ -1878,14 +1899,19 @@ def admin_invite_add(conv_id):
         return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
     existing = {inv.mw_username for inv in
                 ConversationInvite.query.filter_by(conversation_id=conv_id).all()}
+    added = 0
     for username in usernames:
         if username not in existing:
             db.session.add(ConversationInvite(
                 conversation_id=conv_id, mw_username=username))
+            added += 1
     try:
         db.session.commit()
     except Exception:
         db.session.rollback()
+    else:
+        if added:
+            record_audit('invite.add', conv_id=conv_id, count=added)  # count only — no usernames (PII)
     return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/invites/<int:invite_id>/remove')
@@ -1896,6 +1922,7 @@ def admin_invite_remove(conv_id, invite_id):
         id=invite_id, conversation_id=conv_id).first_or_404()
     db.session.delete(invite)
     db.session.commit()
+    record_audit('invite.remove', conv_id=conv_id, target_type='invite', target_id=invite_id)
     return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
 
 # ── Admin: Polis statement moderation ─────────────────────────────────────
@@ -1969,6 +1996,8 @@ def admin_statement_moderate(conv_id, tid):
         current_app.logger.exception('moderate failed')
         flash('Moderation action failed. Check server logs for details.', 'error')
         return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
+    record_audit('statement.moderate', conv_id=conv_id, target_type='statement',
+                 target_id=tid, decision=mod)
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed')
@@ -1982,6 +2011,7 @@ def admin_statement_seed(conv_id):
     try:
         _polis_server_client().add_seed(conv.polis_id, text)
         flash('Seed statement added.', 'success')
+        record_audit('statement.seed', conv_id=conv_id)   # no text (statement content)
     except PolisServerError:
         current_app.logger.exception('add_seed failed')
         flash('Could not add seed statement. Check server logs for details.', 'error')
@@ -2119,6 +2149,9 @@ def admin_statement_seed_import(conv_id):
     else:
         flash('⚠ 0 imported — Polis returned no result', 'import_result')
 
+    if successes:
+        record_audit('statement.seed_import', conv_id=conv_id,
+                     imported=successes, skipped=n_skipped, errors=n_errors)
     return redirect(redirect_target)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/strict-moderation')
@@ -2128,6 +2161,7 @@ def admin_conversation_strict_moderation(conv_id):
     enabled = request.form.get('strict_moderation') == '1'
     try:
         _polis_server_client().set_strict_moderation(conv.polis_id, enabled)
+        record_audit('strict_moderation.set', conv_id=conv_id, enabled=enabled)
     except PolisServerError:
         current_app.logger.exception('set_strict_moderation failed')
         flash('Could not update moderation settings. Check server logs for details.', 'error')
@@ -2173,6 +2207,7 @@ def admin_featured_confirm(conv_id):
             confirmed_by_admin=True,
         ))
         db.session.commit()
+        record_audit('featured.confirm', conv_id=conv_id, target_type='statement', target_id=tid)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/featured/add')
@@ -2192,6 +2227,7 @@ def admin_featured_add(conv_id):
             confirmed_by_admin=True,
         ))
         db.session.commit()
+        record_audit('featured.add', conv_id=conv_id, target_type='statement', target_id=tid)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/featured/<int:fs_id>/remove')
@@ -2207,6 +2243,7 @@ def admin_featured_remove(conv_id, fs_id):
             return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
     db.session.delete(fs)
     db.session.commit()
+    record_audit('featured.remove', conv_id=conv_id, target_type='featured', target_id=fs_id)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/arguments/<int:arg_id>/delete')
@@ -2216,8 +2253,11 @@ def admin_argument_delete(conv_id, arg_id):
     arg  = Argument.query.filter_by(id=arg_id).first_or_404()
     FeaturedStatement.query.filter_by(
         id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+    fs_id = arg.featured_statement_id
     db.session.delete(arg)
     db.session.commit()
+    record_audit('argument.delete', conv_id=conv_id, target_type='argument', target_id=arg_id,
+                 featured_statement_id=fs_id)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
 
 
@@ -2760,6 +2800,42 @@ def phase6_vote(slug):
 
 # Accepted shape for a reused inbound X-Request-Id (only honoured behind a trusted proxy).
 _REQUEST_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+
+
+def record_audit(operation, *, conv_id=None, target_type=None, target_id=None,
+                 outcome='ok', **detail):
+    """Append an AuditEvent (#135) and emit a correlated structured log line.
+
+    Table-primary, log-as-backstop: the row is the system of record; the log line is the
+    redundant correlated copy (carries request_id + participant_id via the Phase-1 factory),
+    so the event survives even if the row write fails.
+
+    Call AFTER the audited action has committed — so a rolled-back action leaves no audit row.
+
+    PRIVACY CONTRACT: `detail` and target_* may contain ONLY ids / enums / counts — never
+    statement text, vote values, usernames, xid, or any PII. The row is not redaction-filtered;
+    this contract is the control (enforced by tests).
+    """
+    actor = getattr(g.get('participant'), 'id', None)
+    if actor is None and session.get('username'):
+        # Authenticated admin with no Participant row (env-listed ADMIN_USERS superadmin).
+        # Mark the row so a NULL actor is explained, not ambiguous — without storing the
+        # username (PII). See _is_global_admin's ADMIN_USERS branch.
+        detail.setdefault('actor_kind', 'env_admin')
+    try:
+        db.session.add(AuditEvent(
+            actor_participant_id=actor, conversation_id=conv_id, operation=operation,
+            target_type=target_type,
+            target_id=(str(target_id) if target_id is not None else None),
+            outcome=outcome, detail=detail))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('audit write failed: %s', operation)
+    current_app.logger.info(
+        'audit %s', operation,
+        extra={'audit': True, 'operation': operation, 'conversation_id': conv_id,
+               'target_type': target_type, 'target_id': target_id, 'outcome': outcome})
 
 
 def create_app(test_config: dict | None = None) -> Flask:

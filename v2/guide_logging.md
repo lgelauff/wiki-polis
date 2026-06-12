@@ -57,6 +57,27 @@ Flask's exception logs and pytest's `caplog`).
 - The startup fingerprint logs only the DB **scheme** (`make_url(...).drivername`) and
   booleans — never a URL with a password or any credential.
 
+## Audit events (#135)
+
+Admin/moderation **write** actions are recorded in the append-only `audit_events` table
+(durable governance trail) via `record_audit(...)`, which also emits a correlated
+`audit <operation>` log line.
+
+- **Call it after the action commits** — so a rolled-back action leaves no audit row.
+- **Privacy contract — ids / enums / counts ONLY.** Never put statement text, vote values,
+  usernames, `xid`, or any PII in `target_id` or `detail`. The audit *row* is not run through
+  the RedactingFormatter (that only scrubs the log line) — this discipline is the control, and
+  `tests/test_audit.py` enforces it. Reference participants by internal `participant_id`.
+- **Admin identity is recorded openly** (`actor_participant_id`): an admin acting in an official
+  capacity has a reduced expectation of privacy (privacy-statement disclosure #2). This is the
+  one place a name-resolvable id is deliberately retained long-term.
+
+Canonical operation names (keep stable; add here when you add a route):
+`conversation.create|edit|pause|close`, `phase.set`, `phase.advance`, `phase6.init`,
+`global_admin.grant|revoke`, `role.grant|revoke`, `invite.add|remove`,
+`statement.moderate|seed|seed_import`, `strict_moderation.set`,
+`featured.confirm|add|remove`, `argument.delete`.
+
 ## Adding a log statement — checklist
 
 1. Right level (table above)?
