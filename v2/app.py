@@ -2533,7 +2533,7 @@ def argument_vote(slug, arg_id):
             return jsonify({'ok': False, 'reason': 'cap'}), 409
         abort(409)   # cap reached
 
-    # Can't vote on hidden or own argument.
+    # Can't vote on a hidden argument.
     if arg.hidden:
         if is_ajax:
             return jsonify({'ok': False, 'reason': 'hidden'}), 403

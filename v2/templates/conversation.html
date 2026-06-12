@@ -2129,7 +2129,7 @@
           if (col) { var note = col.querySelector('.at-col-note'); if (note) note.remove(); }
           if (ready) {
             block.querySelectorAll('.argument-card[data-side="' + s + '"]').forEach(function (card) {
-              if (card.dataset.own !== 'true') {
+              if (card.dataset.hidden !== 'true') {
                 card.dataset.canVote = 'true';
                 var cb = card.querySelector('.argument-checkbox');
                 if (cb) {
@@ -2212,7 +2212,7 @@
             var msgs = {
               cap:  "You've already picked your " + kVal + " most important — unvote one first.",
               gate: 'Voting is not open yet — add or skip on each side first.',
-              own:  "You can't vote for your own argument.",
+              own:  'Could not record your pick — please try again.',
             };
             if (data && msgs[data.reason]) {
               var msg = msgs[data.reason];
