@@ -3851,3 +3851,16 @@ a { color: var(--pass); }
   color: var(--muted);
   border-color: var(--hairline);
 }
+
+/* Statement provenance badge (#143) — marks a recorded derivative in the admin view. */
+.prov-badge {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--spot, #b45309);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 0 5px;
+  margin-top: 2px;
+  white-space: nowrap;
+}

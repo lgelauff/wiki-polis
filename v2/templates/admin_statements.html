@@ -30,6 +30,11 @@
         <textarea name="txt" rows="3" maxlength="280" id="seed-txt" required
                   placeholder="Enter a statement participants will vote on…"></textarea>
       </label>
+      <label class="muted" style="display:block;margin-top:.5rem;font-size:13px">
+        Corrects statement&nbsp;#&nbsp;(optional)
+        <input type="number" name="derived_from" min="0" style="width:6rem"
+               title="If this is a corrected/derived version of an existing statement, enter its #id so the link is recorded (#143).">
+      </label>
       <div style="display:flex;align-items:center;gap:1rem;margin-top:.5rem">
         <button type="submit">Add seed statement</button>
         <span id="seed-count" class="muted" style="font-size:12px">0 / 280</span>
@@ -116,7 +121,9 @@
       {% set is_featured = s.tid in featured_tids %}
       {% set is_last_featured = is_featured and (featured_tids | length == 1) %}
       <tr>
-        <td class="muted">{{ s.tid }}{% if is_featured %} ★{% endif %}</td>
+        <td class="muted">{{ s.tid }}{% if is_featured %} ★{% endif %}
+          {%- set prov = provenance_map.get(s.tid) %}
+          {%- if prov %}<br><span class="prov-badge" title="Recorded as derived from #{{ prov.derived_from_tid }}">↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}</span>{% endif %}</td>
         <td class="stmt-text">{{ s.txt }}</td>
         <td class="stmt-votes muted">
           +{{ s.agree_count or 0 }}
@@ -166,7 +173,9 @@
       {% set is_featured = s.tid in featured_tids %}
       {% set is_last_featured = is_featured and (featured_tids | length == 1) %}
       <tr>
-        <td class="muted">{{ s.tid }}{% if is_featured %} ★{% endif %}</td>
+        <td class="muted">{{ s.tid }}{% if is_featured %} ★{% endif %}
+          {%- set prov = provenance_map.get(s.tid) %}
+          {%- if prov %}<br><span class="prov-badge" title="Recorded as derived from #{{ prov.derived_from_tid }}">↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}</span>{% endif %}</td>
         <td class="stmt-text">{{ s.txt }}</td>
         <td class="stmt-votes muted">
           +{{ s.agree_count or 0 }}

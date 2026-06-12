@@ -278,6 +278,69 @@ class AuditEvent(db.Model):
     )
 
 
+class StatementProvenance(db.Model):
+    """Records that a statement is a *derivative* of an existing one (#143).
+
+    wiki-polis has no general statement table — statements live in Polis (`comments`),
+    keyed by a Polis statement id (`tid`). So provenance lives here, keyed by
+    (conversation_id, polis_statement_id of the NEW statement). Absence of a row = `new`
+    (the default); a row exists only for derivatives.
+
+    `derived_from_tid` is a parent pointer, so derivatives form a chain/tree that the
+    clustering/weighting consumers resolve into lineage groups (see _lineage_group).
+
+    Similarity-at-creation scores live in the related StatementSimilarityScore rows — one
+    per metric (e.g. a cheap 'char' fallback now, a 'semantic' model from #207 later), so a
+    link can carry several kinds of score without a schema change.
+    """
+    __tablename__ = 'statement_provenance'
+
+    id                 = db.Column(db.Integer, primary_key=True)
+    conversation_id    = db.Column(db.Integer,
+                                   db.ForeignKey('conversations.id', ondelete='CASCADE'),
+                                   nullable=False)
+    polis_statement_id = db.Column(db.Integer, nullable=False)   # the NEW (derivative) tid
+    derived_from_tid   = db.Column(db.Integer, nullable=False)   # the parent it improves on
+    provenance_type    = db.Column(db.String(16), nullable=False, default='derivative')  # new|derivative
+    link_method        = db.Column(db.String(16), nullable=False, default='declared')    # declared|detected
+    created_at         = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    scores = db.relationship('StatementSimilarityScore', back_populates='provenance',
+                             cascade='all, delete-orphan')
+
+    __table_args__ = (
+        db.UniqueConstraint('conversation_id', 'polis_statement_id',
+                            name='uq_statement_provenance_conv_tid'),
+        db.Index('ix_statement_provenance_conv', 'conversation_id'),
+    )
+
+
+class StatementSimilarityScore(db.Model):
+    """One similarity-at-creation score for a provenance link (#143/#207).
+
+    Several kinds coexist — a cheap always-available `char` fallback and a `semantic`
+    model score (#207) — so consumers can prefer semantic when present and fall back to
+    char. `model` names the scorer/version; `value` is a similarity in [0, 1], **higher =
+    more similar** (cosine similarity is the standard metric). Unique per (provenance,
+    model) so re-scoring a metric replaces rather than duplicates.
+    """
+    __tablename__ = 'statement_similarity_scores'
+
+    id            = db.Column(db.Integer, primary_key=True)
+    provenance_id = db.Column(db.Integer,
+                              db.ForeignKey('statement_provenance.id', ondelete='CASCADE'),
+                              nullable=False)
+    model         = db.Column(db.String(64), nullable=False)   # scorer name/version, e.g. 'char', 'semantic-v1'
+    value         = db.Column(db.Float, nullable=False)        # similarity, higher = more similar
+    scored_at     = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    provenance = db.relationship('StatementProvenance', back_populates='scores')
+
+    __table_args__ = (
+        db.UniqueConstraint('provenance_id', 'model', name='uq_similarity_score_prov_model'),
+    )
+
+
 # Explicit indexes — MySQL/MariaDB does not auto-index FK columns.
 # Cover the highest-volume lookup patterns in the argument mapping flow.
 db.Index('ix_participations_participant_id', Participation.participant_id)
