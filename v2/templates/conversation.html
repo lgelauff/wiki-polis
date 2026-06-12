@@ -818,6 +818,7 @@
 
     {% for item in phase6_data %}
     <div class="p6-card{% if not loop.first %} p6-card--hidden{% endif %}" data-fs-id="{{ item.fs.id }}">
+      <div tabindex="-1" data-focus-anchor class="sr-only"></div>
 
       {# Card header: progress + post-vote badge #}
       <div class="p6-card-header">
@@ -907,7 +908,7 @@
   <div class="p6-done" hidden>
     <h2 class="p6-done-heading">You've completed informed voting.</h2>
     {% if conversation.phase_personal_results or conversation.phase_public_results %}
-    <p class="p6-done-text">Preliminary results are available — see the <a href="#tab-results" data-tab="tab-results">Results tab</a>.</p>
+    <p class="p6-done-text">Preliminary results are available below.</p>
     {% elif conversation.phase_submission or conversation.phase_argument_mapping %}
     <p class="p6-done-text">The deliberation is still open — come back if new arguments are added.</p>
     {% elif conversation.active %}
@@ -1091,8 +1092,10 @@
         if (prev) prev.disabled = (idx === 0);
         if (next) next.disabled = (idx === cards.length - 1);
       });
-      var panel = document.getElementById('tab-informed-voting');
-      if (panel) panel.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
+      cards[idx].scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
+      // Move keyboard focus into the revealed card so AT users aren't stranded
+      var anchor = cards[idx].querySelector('[data-focus-anchor]');
+      if (anchor) anchor.focus({ preventScroll: true });
     }
 
     // Wire Prev/Next buttons
@@ -1104,8 +1107,10 @@
     });
 
     function advanceAfterVote() {
-      // After voting, auto-advance to next unvoted card or show done
+      // After voting, auto-advance to next unvoted card or show done.
+      // Search forward first, then wrap around so voting out-of-order never strands the user.
       var nextUnvoted = cards.findIndex(function (c, i) { return i > currentIdx && !c.classList.contains('p6-card--voted'); });
+      if (nextUnvoted === -1) nextUnvoted = cards.findIndex(function (c) { return !c.classList.contains('p6-card--voted'); });
       if (nextUnvoted !== -1) {
         setTimeout(function () { showCard(nextUnvoted); }, 400);
       } else {
