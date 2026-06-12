@@ -32,8 +32,6 @@ def upgrade():
         sa.UniqueConstraint('conversation_id', 'polis_statement_id',
                             name='uq_statement_provenance_conv_tid'),
     )
-    with op.batch_alter_table('statement_provenance', schema=None) as batch_op:
-        batch_op.create_index('ix_statement_provenance_conv', ['conversation_id'])
 
     # Similarity-at-creation scores — many kinds per link (char fallback now, semantic #207 later).
     op.create_table(
@@ -51,6 +49,4 @@ def upgrade():
 
 def downgrade():
     op.drop_table('statement_similarity_scores')
-    with op.batch_alter_table('statement_provenance', schema=None) as batch_op:
-        batch_op.drop_index('ix_statement_provenance_conv')
     op.drop_table('statement_provenance')

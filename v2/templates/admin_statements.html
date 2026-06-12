@@ -123,7 +123,9 @@
       <tr>
         <td class="muted">{{ s.tid }}{% if is_featured %} ★{% endif %}
           {%- set prov = provenance_map.get(s.tid) %}
-          {%- if prov %}<br><span class="prov-badge" title="Recorded as derived from #{{ prov.derived_from_tid }}">↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}</span>{% endif %}</td>
+          {%- if prov %}<br><span class="prov-badge"
+                title="Derived from statement #{{ prov.derived_from_tid }}. Similarity 1.00 = identical.{% for sc in prov.scores %} {{ sc.model }} {{ '%.2f'|format(sc.value) }}.{% endfor %}">
+            <span class="sr-only">derived from statement {{ prov.derived_from_tid }}, </span>↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}</span>{% endif %}</td>
         <td class="stmt-text">{{ s.txt }}</td>
         <td class="stmt-votes muted">
           +{{ s.agree_count or 0 }}
@@ -175,7 +177,9 @@
       <tr>
         <td class="muted">{{ s.tid }}{% if is_featured %} ★{% endif %}
           {%- set prov = provenance_map.get(s.tid) %}
-          {%- if prov %}<br><span class="prov-badge" title="Recorded as derived from #{{ prov.derived_from_tid }}">↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}</span>{% endif %}</td>
+          {%- if prov %}<br><span class="prov-badge"
+                title="Derived from statement #{{ prov.derived_from_tid }}. Similarity 1.00 = identical.{% for sc in prov.scores %} {{ sc.model }} {{ '%.2f'|format(sc.value) }}.{% endfor %}">
+            <span class="sr-only">derived from statement {{ prov.derived_from_tid }}, </span>↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}</span>{% endif %}</td>
         <td class="stmt-text">{{ s.txt }}</td>
         <td class="stmt-votes muted">
           +{{ s.agree_count or 0 }}

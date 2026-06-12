@@ -2017,11 +2017,20 @@ def admin_statement_seed(conv_id):
     derived_from = request.form.get('derived_from', type=int)
     try:
         if derived_from is not None:
+            # Validate the parent is a real statement in THIS conversation before recording a
+            # link — a typo'd / cross-conversation tid would otherwise store a bogus link.
+            text_map = _statement_text_map(conv.polis_id)
+            if derived_from not in text_map:
+                flash(f'Statement #{derived_from} was not found in this conversation — '
+                      'fix the "corrects" number and try again. Nothing was added.', 'error')
+                return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
             new_tid = _polis_server_client().add_seed_return_id(conv.polis_id, text)
-            parent_text = _fetch_statement_text(conv.polis_id, derived_from)
-            record_statement_provenance(conv_id, new_tid, derived_from,
-                                        parent_text=parent_text, new_text=text)
-            flash(f'Seed statement added (recorded as a correction of #{derived_from}).', 'success')
+            prov = record_statement_provenance(conv_id, new_tid, derived_from,
+                                               parent_text=text_map.get(derived_from), new_text=text)
+            if prov is None:
+                flash('Seed statement added, but the correction link could not be recorded.', 'warning')
+            else:
+                flash(f'Seed statement added (recorded as a correction of #{derived_from}).', 'success')
             record_audit('statement.seed', conv_id=conv_id, target_type='statement',
                          target_id=new_tid, derived_from=derived_from)
         else:

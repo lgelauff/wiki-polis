@@ -101,7 +101,7 @@ def test_seed_derivative_route_records_provenance_and_audit(client, app):
     _login_admin(client, app)
     conv_id = _conv(app, 'provseed')
     with patch('app.PolisServerClient.add_seed_return_id', return_value=99) as add_id, \
-         patch('app._fetch_statement_text', return_value='parent text'):
+         patch('app._statement_text_map', return_value={11: 'parent text'}):
         r = client.post(f'/admin/conversations/{conv_id}/statements/seed',
                         data={'txt': 'a corrected statement', 'derived_from': '11'})
     assert r.status_code in (302, 303)
@@ -112,6 +112,20 @@ def test_seed_derivative_route_records_provenance_and_audit(client, app):
         audit = AuditEvent.query.filter_by(operation='statement.seed').all()
         assert audit and audit[0].detail.get('derived_from') == 11
         assert audit[0].target_id == '99'
+
+
+def test_seed_derivative_unknown_tid_is_rejected(client, app):
+    """A derived_from tid not in this conversation → reject, seed nothing, record nothing."""
+    from unittest.mock import patch
+    _login_admin(client, app)
+    conv_id = _conv(app, 'provbad')
+    with patch('app._statement_text_map', return_value={5: 'a real one'}), \
+         patch('app.PolisServerClient.add_seed_return_id') as add_id:
+        client.post(f'/admin/conversations/{conv_id}/statements/seed',
+                    data={'txt': 'x', 'derived_from': '999'})
+    add_id.assert_not_called()                        # nothing seeded
+    with app.app_context():
+        assert StatementProvenance.query.filter_by(conversation_id=conv_id).count() == 0
 
 
 def test_plain_seed_route_writes_no_provenance(client, app):

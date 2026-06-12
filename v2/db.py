@@ -309,9 +309,10 @@ class StatementProvenance(db.Model):
                              cascade='all, delete-orphan')
 
     __table_args__ = (
+        # The composite unique also serves conversation_id-only lookups (leading column),
+        # so no standalone conversation_id index is needed.
         db.UniqueConstraint('conversation_id', 'polis_statement_id',
                             name='uq_statement_provenance_conv_tid'),
-        db.Index('ix_statement_provenance_conv', 'conversation_id'),
     )
 
 
