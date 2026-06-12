@@ -2878,6 +2878,29 @@ a { color: var(--pass); }
 .p6-card--voted .p6-statement-text { opacity: 0.6; }
 .p6-card--voted .vote-choice { opacity: 0.4; }
 .p6-card--voted .vote-choice.p6-voted { opacity: 1; }
+.p6-card--hidden { display: none; }
+
+/* Pagination nav */
+.p6-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline, #e5e7eb);
+}
+.p6-nav-counter { font-size: 13px; color: var(--muted, #6b7280); }
+.p6-navbtn {
+  padding: 8px 18px;
+  min-height: 44px;
+  border: 1px solid var(--hairline, #e5e7eb);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+.p6-navbtn:hover:not(:disabled) { background: #f9fafb; }
+.p6-navbtn:disabled { opacity: 0.4; cursor: default; }
 
 /* Mobile: stack columns vertically */
 @media (max-width: 640px) {
