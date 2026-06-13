@@ -1,12 +1,20 @@
 {% extends "base.html" %}
+{% block header_mode %}header--admin{% endblock %}
+{% block header_crumb %}
+<span class="header-crumb">
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin') }}">Admin</a>
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ conversation.title | truncate(20, True, '…') }}</a>
+  <span class="header-crumb-sep">/</span>
+  <span>Statements</span>
+</span>
+{% endblock %}
 {% block content %}
 
 <div class="container">
 
   <h2>Statements — {{ conversation.title }}</h2>
-  <p class="muted" style="margin-bottom:1.5rem">
-    <a href="{{ url_for('admin.admin') }}">← admin</a>
-  </p>
 
 
   {% with messages = get_flashed_messages(with_categories=true) %}

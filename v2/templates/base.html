@@ -11,7 +11,7 @@
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
-  <header>
+  <header class="{% block header_mode %}{% endblock %}">
     <div class="header-inner">
       <div style="display:flex;align-items:center;gap:14px">
         <a href="{{ url_for('index') }}" class="header-logo">
@@ -25,6 +25,9 @@
           <span class="header-title">wiki-polis</span>
         </a>
         {% block header_crumb %}{% endblock %}
+        {% if self.header_mode() == 'header--admin' %}
+          <span class="header-admin-badge" aria-label="Admin mode">Admin</span>
+        {% endif %}
       </div>
 
       <div class="header-right">
