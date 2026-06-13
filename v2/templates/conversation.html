@@ -532,17 +532,9 @@
       </div>
 
       {# ── Two-column grid ── #}
-      <div class="at-cols">
-
-        {# ── For column ── #}
-        <div class="at-col at-col--for">
-          <div class="at-col-head">
-            <span class="at-col-sign" aria-hidden="true">+</span>
-            <span class="at-col-label">For</span>
-            <span class="at-col-count">{{ item.pro_args | length }}</span>
-          </div>
-
-          {# Contribute affordance — pro (data-* attrs unchanged for JS compatibility) #}
+      {# ── Step-1 contribute row — add for / no new arguments / add against ── #}
+      <div class="at-contribute-row">
+        <div class="at-contribute-cell at-contribute-cell--for">
           <div class="contribute-wrapper"
                data-state="{{ 'submitted' if item.pro_proposed else ('skipped' if item.pro_gate else 'idle') }}"
                data-side="pro"
@@ -554,7 +546,7 @@
                data-my-pseudonym="{{ participation.pseudonym }}">
             <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--pro" type="button">
               <span class="at-contribute-glyph" style="background:rgba(21,115,74,.15);color:var(--agree);font-weight:700" aria-hidden="true">+</span>
-              Add one for-argument, or skip
+              Add an argument for
             </button>
             <div class="contribute-composer">
               <div class="contribute-composer-header">
@@ -580,10 +572,72 @@
               <button type="button" class="at-link contribute-changemind">change my mind</button>
             </div>
           </div>
+        </div>
+        {% if not both_gate %}
+        <button type="button" class="at-skip-both" id="skipboth-{{ fs.id }}"
+                data-fs="{{ fs.id }}"
+                data-pro-skip-url="{{ url_for('participant.argument_skip', slug=conversation.slug, fs_id=fs.id, side='pro') }}"
+                data-con-skip-url="{{ url_for('participant.argument_skip', slug=conversation.slug, fs_id=fs.id, side='con') }}"
+                data-csrf="{{ csrf_token() }}">No new arguments to add</button>
+        {% else %}
+        <span class="at-skip-both-spacer" aria-hidden="true"></span>
+        {% endif %}
+        <div class="at-contribute-cell at-contribute-cell--against">
+          <div class="contribute-wrapper"
+               data-state="{{ 'submitted' if item.con_proposed else ('skipped' if item.con_gate else 'idle') }}"
+               data-side="con"
+               data-fs="{{ fs.id }}"
+               data-submit-url="{{ url_for('participant.argument_submit', slug=conversation.slug, fs_id=fs.id) }}"
+               data-skip-url="{{ url_for('participant.argument_skip', slug=conversation.slug, fs_id=fs.id, side='con') }}"
+               data-csrf="{{ csrf_token() }}"
+               data-k="{{ item.k }}"
+               data-my-pseudonym="{{ participation.pseudonym }}">
+            <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--con" type="button">
+              <span class="at-contribute-glyph" style="background:rgba(178,58,58,.15);color:var(--disagree);font-weight:700" aria-hidden="true">−</span>
+              Add an argument against
+            </button>
+            <div class="contribute-composer">
+              <div class="contribute-composer-header">
+                <span class="contribute-glyph filled">−</span>
+                <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-con">Your against-argument · one sentence, one claim</span>
+                <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
+              </div>
+              <textarea class="contribute-textarea" maxlength="280" rows="3"
+                        aria-labelledby="contribute-label-{{ fs.id }}-con"
+                        placeholder="Add a short against-argument (one sentence, max 280 characters)…"></textarea>
+              <div class="contribute-actions">
+                <button type="button" class="btn-secondary contribute-skip-btn">Nothing to add</button>
+                <button type="button" class="btn-primary contribute-submit-btn" disabled>Submit argument</button>
+              </div>
+            </div>
+            <div class="at-contribute at-contribute--done contribute-submitted contribute-submitted--con">
+              <span class="at-contribute-glyph"><svg width="11" height="9" viewBox="0 0 13 10" fill="none" aria-hidden="true"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              You added one argument against
+            </div>
+            <div class="at-contribute at-contribute--skipped contribute-skipped">
+              <span class="at-contribute-glyph" aria-hidden="true">↷</span>
+              Nothing to add
+              <button type="button" class="at-link contribute-changemind">change my mind</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-          {# Locked-state note — only when gate is closed and no cards exist yet #}
-          {% if not item.pro_gate and item.pro_args | length == 0 %}
-          <p class="at-col-note">Other arguments appear here once you've added yours or skipped — so you form your own view first.</p>
+      <div class="at-cols">
+
+        {# ── For column ── #}
+        <div class="at-col at-col--for">
+          <div class="at-col-head">
+            <span class="at-col-sign" aria-hidden="true">+</span>
+            <span class="at-col-label">For</span>
+            <span class="at-col-count">{{ item.pro_args | length }}</span>
+          </div>
+
+          {# Reserved slot — holds space for the reader's own for-argument until they add or skip #}
+          {% if not item.pro_gate %}
+          <div class="at-reserve at-reserve--for" id="reserve-pro-{{ fs.id }}" aria-hidden="true">
+            <span class="at-reserve-glyph">+</span> Your for-argument will appear here
+          </div>
           {% endif %}
 
           {# Argument cards — pro #}
@@ -668,48 +722,11 @@
             <span class="at-col-count">{{ item.con_args | length }}</span>
           </div>
 
-          {# Contribute affordance — con #}
-          <div class="contribute-wrapper"
-               data-state="{{ 'submitted' if item.con_proposed else ('skipped' if item.con_gate else 'idle') }}"
-               data-side="con"
-               data-fs="{{ fs.id }}"
-               data-submit-url="{{ url_for('participant.argument_submit', slug=conversation.slug, fs_id=fs.id) }}"
-               data-skip-url="{{ url_for('participant.argument_skip', slug=conversation.slug, fs_id=fs.id, side='con') }}"
-               data-csrf="{{ csrf_token() }}"
-               data-k="{{ item.k }}"
-               data-my-pseudonym="{{ participation.pseudonym }}">
-            <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--con" type="button">
-              <span class="at-contribute-glyph" style="background:rgba(178,58,58,.15);color:var(--disagree);font-weight:700" aria-hidden="true">−</span>
-              Add one against-argument, or skip
-            </button>
-            <div class="contribute-composer">
-              <div class="contribute-composer-header">
-                <span class="contribute-glyph filled">−</span>
-                <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-con">Your against-argument · one sentence, one claim</span>
-                <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
-              </div>
-              <textarea class="contribute-textarea" maxlength="280" rows="3"
-                        aria-labelledby="contribute-label-{{ fs.id }}-con"
-                        placeholder="Add a short against-argument (one sentence, max 280 characters)…"></textarea>
-              <div class="contribute-actions">
-                <button type="button" class="btn-secondary contribute-skip-btn">Nothing to add</button>
-                <button type="button" class="btn-primary contribute-submit-btn" disabled>Submit argument</button>
-              </div>
-            </div>
-            <div class="at-contribute at-contribute--done contribute-submitted contribute-submitted--con">
-              <span class="at-contribute-glyph"><svg width="11" height="9" viewBox="0 0 13 10" fill="none" aria-hidden="true"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-              You added one argument against
-            </div>
-            <div class="at-contribute at-contribute--skipped contribute-skipped">
-              <span class="at-contribute-glyph" aria-hidden="true">↷</span>
-              Nothing to add
-              <button type="button" class="at-link contribute-changemind">change my mind</button>
-            </div>
+          {# Reserved slot — holds space for the reader's own against-argument until they add or skip #}
+          {% if not item.con_gate %}
+          <div class="at-reserve at-reserve--against" id="reserve-con-{{ fs.id }}" aria-hidden="true">
+            <span class="at-reserve-glyph">−</span> Your against-argument will appear here
           </div>
-
-          {# Locked-state note — only when gate is closed and no cards exist yet #}
-          {% if not item.con_gate and item.con_args | length == 0 %}
-          <p class="at-col-note">Other arguments appear here once you've added yours or skipped — so you form your own view first.</p>
           {% endif %}
 
           {# Argument cards — con #}
@@ -2083,7 +2100,10 @@
           return r.json().then(function (data) {
             setState('submitted');
             // Insert the new card into the column's argument list
-            var col = wrapper.closest('.at-col');
+            var col = wrapper.closest('.at-col') || (function () {
+              var b = document.getElementById('fs-' + fsId);
+              return b ? b.querySelector('.at-col--' + (side === 'pro' ? 'for' : 'against')) : null;
+            })();
             if (!col) return;
             var colCards = col.querySelectorAll('.argument-card');
             var emptyNotice = col.querySelector('.arg-empty');
@@ -2111,6 +2131,27 @@
     });
   });
 
+  // ── Neutral "no new arguments to add" → skip every still-open side at once ──
+  tab.querySelectorAll('.at-skip-both').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var fsId = btn.dataset.fs;
+      var csrf = btn.dataset.csrf;
+      btn.disabled = true;
+      var jobs = [];
+      [['pro', btn.dataset.proSkipUrl], ['con', btn.dataset.conSkipUrl]].forEach(function (pair) {
+        var w = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="' + pair[0] + '"]');
+        if (!w) return;
+        var st = w.dataset.state;
+        if (st === 'submitted' || st === 'skipped') return;
+        jobs.push(argFetch(pair[1], csrf).then(function (r) { if (r.ok) w.dataset.state = 'skipped'; }));
+      });
+      Promise.all(jobs).then(function () {
+        var anyW = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
+        if (anyW) checkGateTransition(anyW);
+      }).catch(function () { btn.disabled = false; });
+    });
+  });
+
   // After skipping or submitting, check if both sides are now gated
   // and if so transition the two-step indicator to post-gate style.
   function checkGateTransition(wrapper) {
@@ -2118,6 +2159,14 @@
     var proW = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
     var conW = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="con"]');
     if (!proW || !conW) return;
+    // As each side completes, retire its dashed reserved slot in the column.
+    ['pro', 'con'].forEach(function (sd) {
+      var w = sd === 'pro' ? proW : conW;
+      if (w && (w.dataset.state === 'submitted' || w.dataset.state === 'skipped')) {
+        var r = document.getElementById('reserve-' + sd + '-' + fsId);
+        if (r) r.hidden = true;
+      }
+    });
     var proState = proW.dataset.state;
     var conState = conW.dataset.state;
     var bothGated = (proState === 'submitted' || proState === 'skipped')
@@ -2138,6 +2187,8 @@
 
     if (bothGated) {
       var block = document.getElementById('fs-' + fsId);
+      var skipBothBtn = document.getElementById('skipboth-' + fsId);
+      if (skipBothBtn) skipBothBtn.hidden = true;
       var kVal  = getK(proW);
       var nPro  = block ? block.querySelectorAll('.argument-card[data-side="pro"]').length : 0;
       var nCon  = block ? block.querySelectorAll('.argument-card[data-side="con"]').length : 0;

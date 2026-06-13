@@ -939,3 +939,96 @@
   color: #fff;
   border-color: var(--ink);
 }
+
+/* ── Easy-skip contribute row (argument mapping, step 1) ─────────────────────
+   The two "add an argument" affordances grow to fill their columns; a calm,
+   neutral "No new arguments to add" sits centred in the gutter and skips every
+   still-open side in one click. Existing arguments stay visible underneath, with
+   a dashed slot reserving space for the reader's own contribution. */
+
+.at-contribute-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 22px 14px;
+}
+.at-contribute-cell { min-width: 0; display: flex; align-items: center; }
+/* the moved wrappers and their inner states fill the cell */
+.at-contribute-cell .contribute-wrapper,
+.at-contribute-cell .at-contribute,
+.at-contribute-cell .contribute-affordance,
+.at-contribute-cell .contribute-composer,
+.at-contribute-cell .contribute-submitted,
+.at-contribute-cell .contribute-skipped { width: 100%; box-sizing: border-box; }
+/* the affordance carried a bottom margin for column spacing — not wanted in the row */
+.at-contribute-cell .at-contribute { margin: 0; }
+
+/* row "add" buttons read as solid, tinted CTAs (not dashed) and centre their label */
+.at-contribute-cell .at-contribute--idle {
+  border-style: solid;
+  justify-content: center;
+  align-items: center;
+  height: 46px;
+  font-weight: 600;
+}
+.at-contribute-cell--for .at-contribute--idle {
+  border-color: rgba(21,115,74,0.35); background: rgba(21,115,74,0.06); color: var(--agree);
+}
+.at-contribute-cell--for .at-contribute--idle:hover { background: rgba(21,115,74,0.12); border-color: rgba(21,115,74,0.5); }
+.at-contribute-cell--against .at-contribute--idle {
+  border-color: rgba(178,58,58,0.35); background: rgba(178,58,58,0.06); color: var(--disagree);
+}
+.at-contribute-cell--against .at-contribute--idle:hover { background: rgba(178,58,58,0.12); border-color: rgba(178,58,58,0.5); }
+
+.at-skip-both {
+  align-self: center;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 46px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--body);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  padding: 0 18px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  transition: border-color .12s, color .12s;
+}
+.at-skip-both:hover { border-color: var(--muted); color: var(--ink); }
+.at-skip-both:focus-visible { outline: 2px solid var(--pass); outline-offset: 2px; }
+.at-skip-both[disabled] { opacity: .55; cursor: default; }
+.at-skip-both-spacer { display: block; }
+
+/* dashed reserved slot at the top of each column */
+.at-reserve {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1.5px dashed var(--hairline);
+  border-radius: 9px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.at-reserve-glyph {
+  width: 20px; height: 20px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-weight: 700; font-size: 13px;
+}
+.at-reserve--for .at-reserve-glyph { background: rgba(21,115,74,0.15); color: var(--agree); }
+.at-reserve--against .at-reserve-glyph { background: rgba(178,58,58,0.15); color: var(--disagree); }
+
+@media (max-width: 680px) {
+  .at-contribute-row { grid-template-columns: 1fr; gap: 10px; }
+  .at-skip-both { order: 3; justify-self: stretch; text-align: center; }
+  .at-skip-both-spacer { display: none; }
+}
