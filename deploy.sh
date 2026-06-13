@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 # Deploy wiki-polis v2 on Toolforge.
-# Run from anywhere: bash ~/wiki-polis/deploy.sh
+# Run from anywhere: bash ~/wiki-polis/deploy.sh [branch] [--migrate]
+#
+# Examples:
+#   bash ~/wiki-polis/deploy.sh main --migrate   # deploy main + run migrations
+#   bash ~/wiki-polis/deploy.sh main             # deploy main, skip migrations
+#   bash ~/wiki-polis/deploy.sh feat/my-branch   # deploy a specific branch
+#   bash ~/wiki-polis/deploy.sh --migrate        # re-deploy CURRENT branch + migrate
+#
+# Without a branch argument the script stays on whatever branch is currently
+# checked out on the server — always pass "main" explicitly to deploy main.
 
 set -euo pipefail
 
