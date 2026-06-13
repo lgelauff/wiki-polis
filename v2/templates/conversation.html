@@ -82,6 +82,7 @@
   {% if conversation.phase_personal_results or conversation.phase_public_results %}{% set _ = tabs.append('results') %}{% endif %}
   {% if conversation.phase_argument_mapping %}{% set _ = tabs.append('arguments') %}{% endif %}
   {% if conversation.phase_informed_voting and conversation.phase6_polis_conversation_id %}{% set _ = tabs.append('informed-voting') %}{% endif %}
+  {% if conversation.phase_public_results and phase6_results and phase6_results.statements %}{% set _ = tabs.append('p6-results') %}{% endif %}
 
   {% if tabs | length == 0 %}
   <div class="landing-section">
@@ -102,7 +103,7 @@
     <button id="tab-btn-results" class="tab-btn{% if tabs[0] == 'results' %} tab-btn--active{% endif %}"
             role="tab" data-tab="tab-results" aria-controls="tab-results"
             aria-selected="{{ 'true' if tabs[0] == 'results' else 'false' }}"
-            tabindex="{{ '0' if tabs[0] == 'results' else '-1' }}">Results</button>
+            tabindex="{{ '0' if tabs[0] == 'results' else '-1' }}">Intermediate results</button>
     {% endif %}
     {% if 'arguments' in tabs %}
     <button id="tab-btn-arguments" class="tab-btn{% if tabs[0] == 'arguments' %} tab-btn--active{% endif %}"
@@ -115,6 +116,12 @@
             role="tab" data-tab="tab-informed-voting" aria-controls="tab-informed-voting"
             aria-selected="{{ 'true' if tabs[0] == 'informed-voting' else 'false' }}"
             tabindex="{{ '0' if tabs[0] == 'informed-voting' else '-1' }}">Informed vote</button>
+    {% endif %}
+    {% if 'p6-results' in tabs %}
+    <button id="tab-btn-p6-results" class="tab-btn{% if tabs[0] == 'p6-results' %} tab-btn--active{% endif %}"
+            role="tab" data-tab="tab-p6-results" aria-controls="tab-p6-results"
+            aria-selected="{{ 'true' if tabs[0] == 'p6-results' else 'false' }}"
+            tabindex="{{ '0' if tabs[0] == 'p6-results' else '-1' }}">Preliminary results</button>
     {% endif %}
   </div>
   {% endif %}
@@ -405,77 +412,6 @@
         <p class="muted">Results haven't been published yet. Check back soon.</p>
       {% endif %}
 
-      {# ── Phase 6 informed voting results (Surface A — preliminary) ──────── #}
-      {% if phase6_results and phase6_results.statements %}
-      <div class="results-block p6-results-block">
-        <div class="p6-results-header">
-          <p class="results-label">Informed voting results</p>
-          {% if phase6_results.is_preliminary %}
-          <span class="p6-results-badge p6-results-badge--preliminary">Preliminary</span>
-          {% endif %}
-          {% if phase6_results.p6_participants %}
-          <span class="muted" style="font-size:12px">{{ phase6_results.p6_participants }} participant{{ 's' if phase6_results.p6_participants != 1 }}</span>
-          {% endif %}
-        </div>
-        {% if not phase6_results.pg_available %}
-        <p class="muted" style="font-size:13px">Detailed vote counts are not available right now.</p>
-        {% else %}
-        <table class="p6-results-table" aria-label="Informed voting results by statement">
-          <thead>
-            <tr>
-              <th class="p6-col-stmt">Statement</th>
-              <th class="p6-col-phase" title="Phase 2 — initial voting">Initial vote</th>
-              <th class="p6-col-phase" title="Phase 6 — informed voting">Informed vote</th>
-              <th class="p6-col-shift" title="Change in agree rate">Shift</th>
-              {% if participation %}<th class="p6-col-mine">Yours</th>{% endif %}
-            </tr>
-          </thead>
-          <tbody>
-          {% for s in phase6_results.statements %}
-          <tr class="p6-results-row">
-            <td class="p6-col-stmt">{{ s.text }}</td>
-            <td class="p6-col-phase">
-              {% if s.p2 %}
-              <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}%">
-                <div class="p6-bar-agree" style="width:{{ s.p2.pct_agree }}%"></div>
-                <div class="p6-bar-disagree" style="width:{{ s.p2.pct_disagree }}%"></div>
-              </div>
-              <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree</span>
-              {% else %}<span class="muted">—</span>{% endif %}
-            </td>
-            <td class="p6-col-phase">
-              <div class="p6-vote-bar" title="Agree {{ s.p6.pct_agree }}% · Disagree {{ s.p6.pct_disagree }}%">
-                <div class="p6-bar-agree" style="width:{{ s.p6.pct_agree }}%"></div>
-                <div class="p6-bar-disagree" style="width:{{ s.p6.pct_disagree }}%"></div>
-              </div>
-              <span class="p6-bar-label">{{ s.p6.pct_agree }}% agree</span>
-            </td>
-            <td class="p6-col-shift">
-              {% if s.shift is not none %}
-              <span class="p6-shift {% if s.shift > 0 %}p6-shift--up{% elif s.shift < 0 %}p6-shift--down{% endif %}">
-                {% if s.shift > 0 %}+{% endif %}{{ s.shift }}%
-              </span>
-              {% else %}<span class="muted">—</span>{% endif %}
-            </td>
-            {% if participation %}
-            <td class="p6-col-mine">
-              {% if s.my_p6_label %}
-              <span class="p6-my-vote p6-my-vote--{{ s.my_p6_label|lower }}">{{ s.my_p6_label }}</span>
-              {% else %}<span class="muted">—</span>{% endif %}
-            </td>
-            {% endif %}
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-        {% endif %}
-        {% if not conversation.active %}
-        <p style="margin-top:1rem;font-size:13px">
-          <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">Read the full results report <span aria-hidden="true">→</span></a>
-        </p>
-        {% endif %}
-      </div>
-      {% endif %}{# end phase6_results #}
 
     </div>
   </div>
@@ -888,7 +824,8 @@
     {% endif %}
 
     {% for item in phase6_data %}
-    <div class="p6-card" data-fs-id="{{ item.fs.id }}">
+    <div class="p6-card{% if not loop.first %} p6-card--hidden{% endif %}" data-fs-id="{{ item.fs.id }}">
+      <div tabindex="-1" data-focus-anchor class="sr-only"></div>
 
       {# Card header: progress + post-vote badge #}
       <div class="p6-card-header">
@@ -965,14 +902,20 @@
 
       </div>{# end p6-card-inner #}
 
+      <div class="p6-nav">
+        <button class="p6-navbtn p6-navbtn--prev" {% if loop.first %}disabled{% endif %}>← Previous</button>
+        <span class="p6-nav-counter" aria-live="polite">{{ loop.index }} of {{ phase6_data | length }}</span>
+        <button class="p6-navbtn p6-navbtn--next" {% if loop.last %}disabled{% endif %}>Next →</button>
+      </div>
+
     </div>{# end p6-card #}
     {% endfor %}
 
   {# Done screen — shown when all cards are voted or skipped #}
   <div class="p6-done" hidden>
     <h2 class="p6-done-heading">You've completed informed voting.</h2>
-    {% if conversation.phase_personal_results or conversation.phase_public_results %}
-    <p class="p6-done-text">Preliminary results are available — see the <a href="#tab-results" data-tab="tab-results">Results tab</a>.</p>
+    {% if conversation.phase_public_results and phase6_results and phase6_results.statements %}
+    <p class="p6-done-text">See the <a href="#" onclick="document.querySelector('[data-tab=tab-p6-results]').click();return false;">Preliminary results</a> tab for the full comparison.</p>
     {% elif conversation.phase_submission or conversation.phase_argument_mapping %}
     <p class="p6-done-text">The deliberation is still open — come back if new arguments are added.</p>
     {% elif conversation.active %}
@@ -988,6 +931,83 @@
   </div>
 
   </div>{# end tab-informed-voting #}
+  {% endif %}
+
+  {% if 'p6-results' in tabs %}
+  <div id="tab-p6-results"
+       class="tab-panel{% if tabs|length > 1 and tabs[0] != 'p6-results' %} tab-panel--hidden{% endif %}"
+       role="tabpanel" aria-labelledby="tab-btn-p6-results">
+    <div class="landing-section results-section">
+      <div class="results-block p6-results-block">
+        <div class="p6-results-header">
+          <p class="results-label">Preliminary results</p>
+          {% if phase6_results.is_preliminary %}
+          <span class="p6-results-badge p6-results-badge--preliminary">Preliminary</span>
+          {% endif %}
+          {% if phase6_results.p6_participants %}
+          <span class="muted" style="font-size:12px">{{ phase6_results.p6_participants }} participant{{ 's' if phase6_results.p6_participants != 1 }}</span>
+          {% endif %}
+        </div>
+        {% if not phase6_results.pg_available %}
+        <p class="muted" style="font-size:13px">Detailed vote counts are not available right now.</p>
+        {% else %}
+        <table class="p6-results-table" aria-label="Preliminary informed voting results by statement">
+          <thead>
+            <tr>
+              <th class="p6-col-stmt">Statement</th>
+              <th class="p6-col-phase" title="Phase 2 — initial voting">Initial vote</th>
+              <th class="p6-col-phase" title="Phase 6 — informed voting">Informed vote</th>
+              <th class="p6-col-shift" title="Change in agree rate">Shift</th>
+              {% if participation %}<th class="p6-col-mine">Yours</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+          {% for s in phase6_results.statements %}
+          <tr class="p6-results-row">
+            <td class="p6-col-stmt">{{ s.text }}</td>
+            <td class="p6-col-phase">
+              {% if s.p2 %}
+              <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}%">
+                <div class="p6-bar-agree" style="width:{{ s.p2.pct_agree }}%"></div>
+                <div class="p6-bar-disagree" style="width:{{ s.p2.pct_disagree }}%"></div>
+              </div>
+              <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree</span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td class="p6-col-phase">
+              <div class="p6-vote-bar" title="Agree {{ s.p6.pct_agree }}% · Disagree {{ s.p6.pct_disagree }}%">
+                <div class="p6-bar-agree" style="width:{{ s.p6.pct_agree }}%"></div>
+                <div class="p6-bar-disagree" style="width:{{ s.p6.pct_disagree }}%"></div>
+              </div>
+              <span class="p6-bar-label">{{ s.p6.pct_agree }}% agree</span>
+            </td>
+            <td class="p6-col-shift">
+              {% if s.shift is not none %}
+              <span class="p6-shift {% if s.shift > 0 %}p6-shift--up{% elif s.shift < 0 %}p6-shift--down{% endif %}">
+                {% if s.shift > 0 %}+{% endif %}{{ s.shift }}%
+              </span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            {% if participation %}
+            <td class="p6-col-mine">
+              {% if s.my_p6_label %}
+              <span class="p6-my-vote p6-my-vote--{{ s.my_p6_label|lower }}">{{ s.my_p6_label }}</span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+        {% if not conversation.active %}
+        <p style="margin-top:1rem;font-size:13px">
+          <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">Read the final report <span aria-hidden="true">→</span></a>
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>{# end tab-p6-results #}
   {% endif %}
 
   {% if tabs | length > 1 %}
@@ -1067,27 +1087,62 @@
       return (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth';
     }
 
-    function scrollToNext(card) {
-      var cards = Array.prototype.slice.call(document.querySelectorAll('.p6-card'));
-      var idx   = cards.indexOf(card);
-      var next  = cards[idx + 1];
-      if (next) {
-        setTimeout(function () {
-          next.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
-        }, 400);
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.p6-card'));
+    var currentIdx = 0;
+
+    function showCard(idx) {
+      cards.forEach(function (c, i) {
+        c.classList.toggle('p6-card--hidden', i !== idx);
+      });
+      currentIdx = idx;
+      // Update all nav counters + button states
+      cards.forEach(function (c, i) {
+        var counter = c.querySelector('.p6-nav-counter');
+        if (counter) counter.textContent = (idx + 1) + ' of ' + cards.length;
+        var prev = c.querySelector('.p6-navbtn--prev');
+        var next = c.querySelector('.p6-navbtn--next');
+        if (prev) prev.disabled = (idx === 0);
+        if (next) next.disabled = (idx === cards.length - 1);
+      });
+      cards[idx].scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
+      // Move keyboard focus into the revealed card so AT users aren't stranded
+      var anchor = cards[idx].querySelector('[data-focus-anchor]');
+      if (anchor) anchor.focus({ preventScroll: true });
+    }
+
+    // Wire Prev/Next buttons
+    cards.forEach(function (card, i) {
+      var prev = card.querySelector('.p6-navbtn--prev');
+      var next = card.querySelector('.p6-navbtn--next');
+      if (prev) prev.addEventListener('click', function () { if (currentIdx > 0) showCard(currentIdx - 1); });
+      if (next) next.addEventListener('click', function () { if (currentIdx < cards.length - 1) showCard(currentIdx + 1); });
+    });
+
+    function advanceAfterVote() {
+      // After voting, auto-advance to next unvoted card or show done.
+      // Search forward first, then wrap around so voting out-of-order never strands the user.
+      var nextUnvoted = cards.findIndex(function (c, i) { return i > currentIdx && !c.classList.contains('p6-card--voted'); });
+      if (nextUnvoted === -1) nextUnvoted = cards.findIndex(function (c) { return !c.classList.contains('p6-card--voted'); });
+      if (nextUnvoted !== -1) {
+        setTimeout(function () { showCard(nextUnvoted); }, 400);
+      } else {
+        // All voted — show done screen
+        var all  = document.querySelectorAll('.p6-card');
+        var done = document.querySelectorAll('.p6-card--done');
+        if (done.length === all.length && doneEl) {
+          doneEl.removeAttribute('hidden');
+          setTimeout(function () { doneEl.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }); }, 400);
+        }
       }
     }
 
     function markTerminal(card) {
       card.classList.add('p6-card--done');
-      // Check if all cards are now in a terminal state
-      var all   = document.querySelectorAll('.p6-card');
-      var done  = document.querySelectorAll('.p6-card--done');
+      var all  = document.querySelectorAll('.p6-card');
+      var done = document.querySelectorAll('.p6-card--done');
       if (done.length === all.length && doneEl) {
         doneEl.removeAttribute('hidden');
-        setTimeout(function () {
-          doneEl.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
-        }, 400);
+        setTimeout(function () { doneEl.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }); }, 400);
       }
     }
 
@@ -1097,12 +1152,10 @@
       var badge = card.querySelector('.p6-voted-badge');
       if (!row) return;
 
-      // Vote buttons
       row.querySelectorAll('.btn-p6-vote').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var vote = parseInt(btn.dataset.vote, 10);
           row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = true; });
-          // pid/tid are resolved server-side from fs_id — never sent by the client.
           fetch(voteUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -1119,14 +1172,12 @@
               });
               card.classList.add('p6-card--voted');
               markTerminal(card);
-              scrollToNext(card);
+              advanceAfterVote();
             } else {
               row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = false; });
-              if (skip) skip.hidden = false;
             }
           }).catch(function () {
             row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = false; });
-            if (skip) skip.hidden = false;
             badge.removeAttribute('hidden');
             badge.textContent = 'Network error — try again';
           });

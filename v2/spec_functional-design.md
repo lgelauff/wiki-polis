@@ -158,6 +158,12 @@ The pro/con argument layer becomes visible on featured statements. Participants 
 **Toggle 5 — Informed voting**
 A second, independent voting round on the featured statements only. Arguments from Toggle 4 are shown inline so participants deliberate before casting a clean Agree / Disagree / Pass vote. The slate is clean — Phase 1 votes have no effect here, and participants who did not take part in Phase 1 can enter. This toggle requires a one-time admin initialisation step (creates a dedicated Polis conversation and seeds the featured statements) before the tab becomes visible to participants. See the organizer guide for the initialisation flow.
 
+The conversation page uses three distinct result surfaces across the deliberation lifecycle:
+
+- **Intermediate results tab** (`phase_personal_results` or `phase_public_results`) — Polis opinion-group results from the initial voting round (Phase 2).
+- **Preliminary results tab** (`phase_public_results` + informed-voting initialised + results available) — side-by-side comparison of initial vs. informed vote per statement, with the shift in agree rate. Shown only when public results are enabled; not shown to participants who have not yet cast any informed votes.
+- **Final report** (`/c/<slug>/report`, published when `closed_at` is set) — the definitive published findings after the organizer closes the consultation.
+
 All five toggles default to off and are designed to be enabled in order — each phase building on the previous. The default sequence is:
 
 1. Open submission — collect votes and statements
