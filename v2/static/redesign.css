@@ -1017,6 +1017,11 @@
   font-size: 13px;
   color: var(--muted);
 }
+/* The `display: flex` above would otherwise beat the UA [hidden] rule (equal
+   specificity), so the slot never hides when JS sets `hidden`. Restore it. */
+.at-reserve[hidden] {
+  display: none;
+}
 .at-reserve-glyph {
   width: 20px; height: 20px;
   border-radius: 5px;

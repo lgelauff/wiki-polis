@@ -2131,6 +2131,15 @@
     });
   });
 
+  // Announce a message to screen readers via the #arg-alert live region
+  // (blank-then-rAF so an identical/repeat message still re-triggers).
+  function announceArg(msg) {
+    var alertEl = document.getElementById('arg-alert');
+    if (!alertEl) return;
+    alertEl.textContent = '';
+    requestAnimationFrame(function () { alertEl.textContent = msg; });
+  }
+
   // ── Neutral "no new arguments to add" → skip every still-open side at once ──
   tab.querySelectorAll('.at-skip-both').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -2143,12 +2152,20 @@
         if (!w) return;
         var st = w.dataset.state;
         if (st === 'submitted' || st === 'skipped') return;
-        jobs.push(argFetch(pair[1], csrf).then(function (r) { if (r.ok) w.dataset.state = 'skipped'; }));
+        jobs.push(argFetch(pair[1], csrf).then(function (r) {
+          if (!r.ok) throw new Error('skip failed: ' + r.status);
+          w.dataset.state = 'skipped';
+        }));
       });
       Promise.all(jobs).then(function () {
         var anyW = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
         if (anyW) checkGateTransition(anyW);
-      }).catch(function () { btn.disabled = false; });
+      }).catch(function () {
+        // A skip POST failed (e.g. expired CSRF / closed conversation). Re-enable the
+        // button and surface the error instead of leaving it stuck disabled.
+        btn.disabled = false;
+        announceArg('Could not skip — please try again.');
+      });
     });
   });
 
@@ -2248,14 +2265,8 @@
 
       paintAllCircles();
 
-      // Announce gate unlock to screen readers (blank-then-rAF so repeat panels re-trigger)
-      var alertEl = document.getElementById('arg-alert');
-      if (alertEl) {
-        alertEl.textContent = '';
-        requestAnimationFrame(function () {
-          alertEl.textContent = 'Step 2 unlocked — you can now mark the most important arguments.';
-        });
-      }
+      // Announce gate unlock to screen readers
+      announceArg('Step 2 unlocked — you can now mark the most important arguments.');
     }
   }
 
