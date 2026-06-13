@@ -36,7 +36,7 @@ from wtforms.validators import ValidationError
 
 from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideState,
                 ArgumentVote, AuditEvent, Conversation, ConversationInvite, FeaturedStatement,
-                Participant, Participation, db)
+                Participant, Participation, StatementProvenance, StatementSimilarityScore, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
 from seed_csv import MAX_FILE_BYTES, MAX_ROWS, parse_csv_bytes, strip_formula_prefixes
@@ -1955,6 +1955,9 @@ def admin_conversation_statements(conv_id):
         fs.polis_statement_id
         for fs in FeaturedStatement.query.filter_by(conversation_id=conv_id).all()
     }
+    # Provenance (#143): which listed statements are recorded derivatives → {tid: row}.
+    all_tids = [s['tid'] for s in (list(pending) + list(approved) + list(hidden))]
+    provenance_map = _provenance_map(conv_id, all_tids)
     return render_template('admin_statements.html',
                            conversation=conv,
                            pending=pending,
@@ -1962,6 +1965,7 @@ def admin_conversation_statements(conv_id):
                            hidden=hidden,
                            settings=settings,
                            featured_tids=featured_tids,
+                           provenance_map=provenance_map,
                            phase_active=conv.phase_argument_mapping,
                            polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is',
                            max_import_rows=MAX_ROWS,
@@ -2008,10 +2012,31 @@ def admin_statement_seed(conv_id):
     text = nh3.clean(text, tags=frozenset())
     if not text or len(text) > 280:
         abort(400)
+    # Optional provenance (#143): the tid this statement corrects/derives from. When set,
+    # we need the NEW statement's tid back, so seed via add_seed_return_id and record the link.
+    derived_from = request.form.get('derived_from', type=int)
     try:
-        _polis_server_client().add_seed(conv.polis_id, text)
-        flash('Seed statement added.', 'success')
-        record_audit('statement.seed', conv_id=conv_id)   # no text (statement content)
+        if derived_from is not None:
+            # Validate the parent is a real statement in THIS conversation before recording a
+            # link — a typo'd / cross-conversation tid would otherwise store a bogus link.
+            text_map = _statement_text_map(conv.polis_id)
+            if derived_from not in text_map:
+                flash(f'Statement #{derived_from} was not found in this conversation — '
+                      'fix the "corrects" number and try again. Nothing was added.', 'error')
+                return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
+            new_tid = _polis_server_client().add_seed_return_id(conv.polis_id, text)
+            prov = record_statement_provenance(conv_id, new_tid, derived_from,
+                                               parent_text=text_map.get(derived_from), new_text=text)
+            if prov is None:
+                flash('Seed statement added, but the correction link could not be recorded.', 'warning')
+            else:
+                flash(f'Seed statement added (recorded as a correction of #{derived_from}).', 'success')
+            record_audit('statement.seed', conv_id=conv_id, target_type='statement',
+                         target_id=new_tid, derived_from=derived_from)
+        else:
+            _polis_server_client().add_seed(conv.polis_id, text)
+            flash('Seed statement added.', 'success')
+            record_audit('statement.seed', conv_id=conv_id)   # no text (statement content)
     except PolisServerError:
         current_app.logger.exception('add_seed failed')
         flash('Could not add seed statement. Check server logs for details.', 'error')
@@ -2831,6 +2856,97 @@ def record_audit(operation, *, conv_id=None, target_type=None, target_id=None,
         'audit %s', operation,
         extra={'audit': True, 'operation': operation, 'conversation_id': conv_id,
                'target_type': target_type, 'target_id': target_id, 'outcome': outcome})
+
+
+def _char_similarity(new_text, parent_text):
+    """Cheap, always-available character-level similarity (stdlib difflib; no dependency,
+    language-agnostic). 1.0 = identical, 0.0 = no overlap."""
+    import difflib
+    return round(difflib.SequenceMatcher(None, parent_text or '', new_text or '').ratio(), 4)
+
+
+def _semantic_similarity(new_text, parent_text):
+    """Seam for #207: multilingual sentence-embedding similarity. Returns None until #207
+    supplies a model — wiring it here adds the 'semantic' score with no schema/flow change.
+
+    #207 implements this by POSTing both texts to the embedding sidecar (#208, FastAPI +
+    paraphrase-multilingual-MiniLM) and returning its **cosine similarity** directly (the
+    standard metric; every scorer here returns similarity, higher = more similar). Keep it
+    best-effort: a short-timeout synchronous call that returns None on timeout/sidecar-down,
+    so the 'char' score still records and the seed never blocks.
+    """
+    return None
+
+
+# Similarity-at-creation scorers (#143/#207). Each: (new_text, parent_text) -> float | None
+# in [0, 1], higher = more similar. Best-effort — a scorer returning None or raising is
+# skipped. The 'char' fallback ships working now; #207 fills in 'semantic' (cosine).
+_SIMILARITY_SCORERS = {'char': _char_similarity, 'semantic': _semantic_similarity}
+
+
+def record_statement_provenance(conv_id, new_tid, derived_from_tid,
+                                parent_text=None, new_text=None):
+    """Record that `new_tid` is a derivative of `derived_from_tid` (#143), best-effort.
+
+    Writes one StatementProvenance row (declared link) plus a StatementSimilarityScore row
+    per scorer that yields a value. A scorer failure never blocks the link; a provenance
+    write failure is swallowed (logged). Returns the row, or None on failure.
+    """
+    try:
+        row = StatementProvenance(
+            conversation_id=conv_id, polis_statement_id=new_tid,
+            derived_from_tid=derived_from_tid, provenance_type='derivative',
+            link_method='declared')
+        db.session.add(row)
+        db.session.flush()        # need row.id for the score FKs
+        if parent_text is not None and new_text is not None:
+            for name, fn in _SIMILARITY_SCORERS.items():
+                try:
+                    value = fn(new_text, parent_text)
+                except Exception:
+                    current_app.logger.exception('similarity scorer %s failed for tid %s', name, new_tid)
+                    continue
+                if value is not None:
+                    db.session.add(StatementSimilarityScore(
+                        provenance_id=row.id, model=name, value=value))
+        db.session.commit()
+        return row
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('provenance write failed for tid %s', new_tid)
+        return None
+
+
+def _provenance_map(conv_id, tids):
+    """{tid: StatementProvenance} for the given tids in one query (bulk, like the other maps)."""
+    tids = [t for t in tids if t is not None]
+    if not tids:
+        return {}
+    rows = (StatementProvenance.query
+            .options(joinedload(StatementProvenance.scores))
+            .filter(StatementProvenance.conversation_id == conv_id,
+                    StatementProvenance.polis_statement_id.in_(tids))
+            .all())
+    return {r.polis_statement_id: r for r in rows}
+
+
+def _lineage_group(conv_id, tid):
+    """Walk `derived_from_tid` from `tid` up to its root; return [tid, parent, …, root].
+
+    The primitive the clustering/weighting consumers (#143 follow-ups) build on. Cycle-safe.
+    """
+    by_tid = {r.polis_statement_id: r.derived_from_tid
+              for r in StatementProvenance.query.filter_by(conversation_id=conv_id).all()}
+    chain, seen = [tid], {tid}
+    cur = tid
+    while cur in by_tid:
+        parent = by_tid[cur]
+        if parent in seen:          # defensive: stop on any cycle
+            break
+        chain.append(parent)
+        seen.add(parent)
+        cur = parent
+    return chain
 
 
 def create_app(test_config: dict | None = None) -> Flask:

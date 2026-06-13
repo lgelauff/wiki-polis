@@ -142,6 +142,23 @@ This seeds statements the same way the manual "add statement" form does; everyth
 [*Writing good statements*](#3-writing-good-statements) above still applies — the limits
 are deliberately low because a good seed set is ~10–15 statements, not hundreds.
 
+### Recording a correction (statement provenance)
+
+Moderators **cannot edit** an existing statement's text ([#142]); the workflow is to **hide**
+the original and **add a corrected version**. When you do, the "Add seed statement" form has an
+optional **"Corrects statement # (optional)"** field — enter the `#id` of the statement you're
+replacing. This records that the new statement is a *derivative* of the original (#143).
+
+Today this is just captured (and shown as a small `↳ #id` note next to the statement in the admin
+list, with a cheap text-similarity score, so you can verify it landed). Future work will use these
+links to cluster a statement with its derivatives and avoid over-representing the same idea in the
+presented set, and to estimate how *semantically similar* a "correction" is to the original ([#207]).
+Leave the field blank for a genuinely new statement.
+
+[#142]: https://github.com/lgelauff/wiki-polis/issues/142
+[#143]: https://github.com/lgelauff/wiki-polis/issues/143
+[#207]: https://github.com/lgelauff/wiki-polis/issues/207
+
 ## 4. Open submission and moderate
 
 Once open, participants vote and propose statements. **How strict should moderation be?**
