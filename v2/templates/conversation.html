@@ -2063,6 +2063,22 @@
     // Idle button → composing
     affordance.addEventListener('click', enterComposing);
 
+    // The dashed reserved slot in the column doubles as a click target to add
+    // your own argument for this side (opens the same composer).
+    var reserve = document.getElementById('reserve-' + wrapper.dataset.side + '-' + wrapper.dataset.fs);
+    if (reserve) {
+      reserve.removeAttribute('aria-hidden');
+      reserve.setAttribute('role', 'button');
+      reserve.setAttribute('tabindex', '0');
+      reserve.setAttribute('aria-label',
+        wrapper.dataset.side === 'pro' ? 'Add an argument for this statement'
+                                       : 'Add an argument against this statement');
+      reserve.addEventListener('click', enterComposing);
+      reserve.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enterComposing(); }
+      });
+    }
+
     // Change my mind (skipped) → composing (no API call; submitting will create the arg)
     if (changemind) changemind.addEventListener('click', enterComposing);
 
