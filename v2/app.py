@@ -906,6 +906,57 @@ def _validate_fetch_csrf():
         abort(400)
 
 
+# Minimum gap between two last_engagement writes for the same participation — a voting
+# burst should not cause a DB write per click. Minutes-level recency is ample for the
+# drop-off signal (#42).
+_ENGAGEMENT_THROTTLE_SECONDS = 60
+
+# Phase-2 statement votes reach Particiapi through the generic proxy as
+# POST api/conversations/<polis_id>/votes — match it to record last_engagement (#42).
+_PROXY_VOTE_RE = re.compile(r'^api/conversations/([^/]+)/votes/?$')
+
+
+def _touch_engagement(participation) -> None:
+    """Best-effort: bump ``Participation.last_engagement`` on a meaningful action (#42).
+
+    Records action *recency only* — never page-views, statement ids, or vote content.
+    Never blocks or fails the action; skips the write when the stored value is younger
+    than ``_ENGAGEMENT_THROTTLE_SECONDS``.
+    """
+    if participation is None:
+        return
+    now = datetime.now(timezone.utc)
+    last = participation.last_engagement
+    if last is not None:
+        if last.tzinfo is None:            # stored naive-UTC
+            last = last.replace(tzinfo=timezone.utc)
+        if (now - last).total_seconds() < _ENGAGEMENT_THROTTLE_SECONDS:
+            return
+    try:
+        participation.last_engagement = now
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('last_engagement update failed')
+
+
+def _touch_engagement_by_polis_id(polis_id: str) -> None:
+    """Resolve (conversation, current participant) → participation and touch engagement.
+
+    Used by the Particiapi proxy for Phase-2 statement votes, which have no dedicated
+    Flask handler. Best-effort: any miss (unknown conv, no participation) is silent.
+    """
+    participant = _current_participant()
+    if participant is None:
+        return
+    conv = Conversation.query.filter_by(polis_id=polis_id).first()
+    if conv is None:
+        return
+    part = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=conv.id).first()
+    _touch_engagement(part)
+
+
 def _proxy_to_particiapi(pa_path: str):
     """
     Proxy a browser request to Particiapi and return the response.
@@ -986,6 +1037,12 @@ def _proxy_to_particiapi(pa_path: str):
             samesite='Lax',
             secure=not current_app.debug,
         )
+
+    # Record meaningful-action recency for a successful Phase-2 statement vote (#42).
+    if request.method == 'POST' and 200 <= upstream.status_code < 300:
+        m = _PROXY_VOTE_RE.match(pa_path)
+        if m:
+            _touch_engagement_by_polis_id(m.group(1))
 
     return flask_resp
 
@@ -1265,6 +1322,7 @@ def conversation_statement_new(slug):
             ids.append(stmt_id)
             part.new_stmt_ids = ids
             db.session.commit()
+        _touch_engagement(part)  # meaningful action (#42)
         flask_resp = make_response(stmt_resp.content, 201)
         flask_resp.headers['Content-Type'] = 'application/json'
     else:
@@ -1925,6 +1983,54 @@ def admin_invite_remove(conv_id, invite_id):
     record_audit('invite.remove', conv_id=conv_id, target_type='invite', target_id=invite_id)
     return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
 
+# ── Admin: participants tab ───────────────────────────────────────────────
+
+@admin_bp.get('/admin/conversations/<int:conv_id>/participants')
+@login_required
+def admin_conversation_participants(conv_id):
+    """Per-conversation engagement table: who is active, who has dropped off (#42).
+
+    Local-DB only for now — per-participant statement vote counts need Polis PG access
+    (#41) and are shown as unavailable until then.
+    """
+    conv = _require_mod_for_conv(conv_id)
+
+    participations = (Participation.query
+                      .filter_by(conversation_id=conv_id)
+                      .join(Participant)
+                      .order_by(Participation.accepted_at.desc())
+                      .all())
+
+    # Arguments submitted, per participant, in this conversation.
+    arg_counts = dict(
+        db.session.query(Argument.proposer_id, db.func.count(Argument.id))
+        .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
+        .filter(FeaturedStatement.conversation_id == conv_id,
+                Argument.proposer_id.isnot(None))
+        .group_by(Argument.proposer_id)
+        .all())
+
+    # Argument votes cast, per participant, in this conversation.
+    arg_vote_counts = dict(
+        db.session.query(ArgumentVote.participant_id, db.func.count(ArgumentVote.id))
+        .join(Argument, ArgumentVote.argument_id == Argument.id)
+        .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
+        .filter(FeaturedStatement.conversation_id == conv_id)
+        .group_by(ArgumentVote.participant_id)
+        .all())
+
+    rows = [{
+        'participation':       p,
+        'participant':         p.participant,
+        'statements_submitted': len(p.new_stmt_ids or []),
+        'arguments_submitted':  arg_counts.get(p.participant_id, 0),
+        'arguments_voted':      arg_vote_counts.get(p.participant_id, 0),
+        'last_engagement':      p.last_engagement,
+    } for p in participations]
+
+    return render_template('admin_participants.html', conversation=conv, rows=rows)
+
+
 # ── Admin: Polis statement moderation ─────────────────────────────────────
 
 @admin_bp.get('/admin/conversations/<int:conv_id>/statements')
@@ -2524,6 +2630,7 @@ def argument_submit(slug, fs_id):
     state.argument_order = order
 
     db.session.commit()
+    _touch_engagement(part)  # meaningful action (#42)
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True, 'id': arg.id, 'body': body})
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
@@ -2554,6 +2661,7 @@ def argument_skip(slug, fs_id, side):
     elif not state.skipped:
         state.skipped = True
         db.session.commit()
+    _touch_engagement(part)  # meaningful action (#42)
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
@@ -2614,6 +2722,7 @@ def argument_vote(slug, arg_id):
             participant_id=part.participant_id,
         ))
         db.session.commit()
+    _touch_engagement(part)  # meaningful action (#42)
     if is_ajax:
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
@@ -2630,6 +2739,7 @@ def argument_unvote(slug, arg_id):
     if existing:
         db.session.delete(existing)
         db.session.commit()
+    _touch_engagement(part)  # meaningful action (#42)
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
@@ -2810,6 +2920,9 @@ def phase6_vote(slug):
     except requests.RequestException:
         current_app.logger.exception('Particiapi error in phase6_vote')
         abort(502)
+
+    if 200 <= upstream.status_code < 300:
+        _touch_engagement(participation)  # meaningful action (#42)
 
     resp = make_response('', upstream.status_code)
     if new_pa_cookie:
