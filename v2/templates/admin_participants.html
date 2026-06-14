@@ -12,23 +12,24 @@
 {% endblock %}
 {% block content %}
 <div class="container">
-  <h2>Participants — {{ conversation.title }}</h2>
+  <h1>Participants — {{ conversation.title }}</h1>
   <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
     {{ rows | length }} participant{{ '' if rows | length == 1 else 's' }} joined.
     Per-participant statement vote counts are not yet available (needs Polis database access — #41).
-    <strong>Last engagement</strong> is the time of each participant's most recent action
+    <strong>Last engagement</strong> is the time (UTC) of each participant's most recent action
     (vote, statement, or argument) — not page-views.
   </p>
   {% if rows %}
   <table class="admin-table">
+    <caption class="sr-only">Participants in {{ conversation.title }}, with engagement counts and last action time.</caption>
     <thead>
       <tr>
-        <th>Username</th>
-        <th>Joined</th>
-        <th>Statements submitted</th>
-        <th>Arguments submitted</th>
-        <th>Arguments voted</th>
-        <th>Last engagement</th>
+        <th scope="col">Username</th>
+        <th scope="col">Joined</th>
+        <th scope="col">Statements submitted</th>
+        <th scope="col">Arguments submitted</th>
+        <th scope="col">Arguments voted</th>
+        <th scope="col">Last engagement (UTC)</th>
       </tr>
     </thead>
     <tbody>

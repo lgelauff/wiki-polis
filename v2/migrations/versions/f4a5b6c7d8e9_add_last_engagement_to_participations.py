@@ -19,9 +19,11 @@ depends_on = None
 def upgrade():
     # Recency of a participant's most recent meaningful action (#42) — action-based, not
     # a passive last-seen. Nullable: existing rows have no recorded action yet.
-    op.add_column('participations',
-                  sa.Column('last_engagement', sa.DateTime(), nullable=True))
+    # batch_alter_table keeps downgrade working on SQLite < 3.35 (matches the chain convention).
+    with op.batch_alter_table('participations') as batch_op:
+        batch_op.add_column(sa.Column('last_engagement', sa.DateTime(), nullable=True))
 
 
 def downgrade():
-    op.drop_column('participations', 'last_engagement')
+    with op.batch_alter_table('participations') as batch_op:
+        batch_op.drop_column('last_engagement')

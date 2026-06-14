@@ -912,8 +912,10 @@ def _validate_fetch_csrf():
 _ENGAGEMENT_THROTTLE_SECONDS = 60
 
 # Phase-2 statement votes reach Particiapi through the generic proxy as
-# POST api/conversations/<polis_id>/votes — match it to record last_engagement (#42).
-_PROXY_VOTE_RE = re.compile(r'^api/conversations/([^/]+)/votes/?$')
+# PUT api/conversations/<polis_id>/votes/<tid> (the web client's addVote;
+# value in the body, statement id in the path) — match it to record last_engagement (#42).
+# The optional trailing segment also tolerates a POST .../votes form defensively.
+_PROXY_VOTE_RE = re.compile(r'^api/conversations/([^/]+)/votes(?:/[^/]+)?/?$')
 
 
 def _touch_engagement(participation) -> None:
@@ -1039,7 +1041,9 @@ def _proxy_to_particiapi(pa_path: str):
         )
 
     # Record meaningful-action recency for a successful Phase-2 statement vote (#42).
-    if request.method == 'POST' and 200 <= upstream.status_code < 300:
+    # The web client casts votes with PUT (and we tolerate POST); the GET vote-fetch
+    # path is deliberately excluded so reads don't count as engagement.
+    if request.method in ('POST', 'PUT') and 200 <= upstream.status_code < 300:
         m = _PROXY_VOTE_RE.match(pa_path)
         if m:
             _touch_engagement_by_polis_id(m.group(1))
@@ -1998,6 +2002,7 @@ def admin_conversation_participants(conv_id):
     participations = (Participation.query
                       .filter_by(conversation_id=conv_id)
                       .join(Participant)
+                      .options(joinedload(Participation.participant))
                       .order_by(Participation.accepted_at.desc())
                       .all())
 
