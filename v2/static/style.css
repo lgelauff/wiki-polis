@@ -3992,3 +3992,33 @@ a { color: var(--pass); }
 .at-reserve--for:hover { border-color: rgba(21,115,74,0.5); color: var(--agree); }
 .at-reserve--against:hover { border-color: rgba(178,58,58,0.5); color: var(--disagree); }
 .at-reserve:focus-visible { outline: 2px solid var(--pass); outline-offset: 2px; }
+
+/* Step-1 row trigger buttons — solid tinted CTAs that open the composer down in
+   the matching For/Against column. (The dashed placeholder in the column is the
+   other way in.) Hidden once that side is composing / added / skipped. */
+.at-row-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 46px;
+  border-radius: 9px;
+  border: 1px solid;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.at-row-trigger[hidden] { display: none; }
+.at-row-trigger--for {
+  border-color: rgba(21,115,74,0.35); background: rgba(21,115,74,0.06); color: var(--agree);
+}
+.at-row-trigger--for:hover { background: rgba(21,115,74,0.12); border-color: rgba(21,115,74,0.5); }
+.at-row-trigger--against {
+  border-color: rgba(178,58,58,0.35); background: rgba(178,58,58,0.06); color: var(--disagree);
+}
+.at-row-trigger--against:hover { background: rgba(178,58,58,0.12); border-color: rgba(178,58,58,0.5); }
+.at-row-trigger-spacer { display: block; }
+@media (max-width: 680px) {
+  .at-row-trigger { width: 100%; }
+}
