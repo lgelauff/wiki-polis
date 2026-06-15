@@ -534,8 +534,9 @@
       {# ── Step-1 trigger row — three plain buttons (add for / no new arguments / add against). #}
       {# The composer + status for each side live down in the matching column, not here.       #}
       <div class="at-contribute-row">
-        {% if not item.pro_gate %}
-        <button type="button" class="at-row-trigger at-row-trigger--for" data-trigger-side="pro" data-fs="{{ fs.id }}">
+        {# shown while Ready (active) and Done (greyed/used); gone once Skipped #}
+        {% if not item.pro_gate or item.pro_proposed %}
+        <button type="button" class="at-row-trigger at-row-trigger--for" data-trigger-side="pro" data-fs="{{ fs.id }}"{% if item.pro_proposed %} disabled{% endif %}>
           <span class="at-contribute-glyph" style="background:rgba(21,115,74,.15);color:var(--agree);font-weight:700" aria-hidden="true">+</span>
           Add an argument for
         </button>
@@ -551,8 +552,9 @@
         <span class="at-skip-both-spacer" aria-hidden="true"></span>
         {% endif %}
 
-        {% if not item.con_gate %}
-        <button type="button" class="at-row-trigger at-row-trigger--against" data-trigger-side="con" data-fs="{{ fs.id }}">
+        {# shown while Ready (active) and Done (greyed/used); gone once Skipped #}
+        {% if not item.con_gate or item.con_proposed %}
+        <button type="button" class="at-row-trigger at-row-trigger--against" data-trigger-side="con" data-fs="{{ fs.id }}"{% if item.con_proposed %} disabled{% endif %}>
           <span class="at-contribute-glyph" style="background:rgba(178,58,58,.15);color:var(--disagree);font-weight:700" aria-hidden="true">−</span>
           Add an argument against
         </button>
@@ -2056,7 +2058,11 @@
 
     function setState(s) {
       wrapper.dataset.state = s;
-      if (rowTrigger) rowTrigger.hidden = (s !== 'idle');
+      if (rowTrigger) {
+        // Ready → active · Adding/Done → greyed (still there) · Skipped → gone.
+        rowTrigger.hidden = (s === 'skipped');
+        rowTrigger.disabled = (s !== 'idle');
+      }
     }
 
     function enterComposing() {
