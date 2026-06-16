@@ -31,7 +31,7 @@ Assistant-agnostic: no Claude/vendor-specific syntax, no tool calls, no system-p
 
 1. **Title + one-paragraph intro** — what a Polis statement is, why form matters (atomic claims are the algorithm's input), and that this prompt helps convert their own material into good ones.
 2. **How to use** — "Copy the block below into your AI assistant, then paste your material (a document, notes, an article, a past chat — anything that captures what you want to say). The assistant will help you turn it into clean statements you can submit."
-3. **⚠️ Privacy note** — their pasted material goes to whatever third-party AI they choose; don't paste anything they wouldn't share with that provider. (Aligns with the project's privacy posture.)
+3. **Privacy framing (user-controlled pipeline).** This runs **entirely on the participant's side**: they paste into their own assistant, and **nothing reaches wiki-polis** — we never see their material, their prompts, or the drafts. The only data-sharing is between the participant and the AI provider *they* chose, which is entirely their call. Frame this as clarification/empowerment (you own this pipeline end-to-end), not a warning we impose. Only the final statements they decide to submit ever come to wiki-polis, through the normal submission form.
 4. **The prompt block** (delimited, copy-paste). It instructs the assistant to:
    - **Role:** help the user turn their material into a shortlist of good statements for a Polis-style consultation.
    - **Ingest** whatever the user pastes; ask 1–2 clarifying questions only if the material's intent is unclear.
