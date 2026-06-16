@@ -15,7 +15,7 @@ This issue is a **different surface** from #56 (in-app advising module) and #57 
 ## Deliverable
 
 A single standalone artifact: **`v2/pub_statement-helper.md`** (following the `pub_` public-doc convention). It is two things in one file:
-1. A short human intro ("what this is / how to use it / privacy").
+1. A short human intro ("what this is / how to use it").
 2. A clearly-delimited **copy-paste prompt block** the user pastes into any assistant, followed by their material.
 
 Assistant-agnostic: no Claude/vendor-specific syntax, no tool calls, no system-prompt-only assumptions — must work pasted as a plain user message into ChatGPT / Claude / Gemini / a local model.
@@ -31,8 +31,7 @@ Assistant-agnostic: no Claude/vendor-specific syntax, no tool calls, no system-p
 
 1. **Title + one-paragraph intro** — what a Polis statement is, why form matters (atomic claims are the algorithm's input), and that this prompt helps convert their own material into good ones.
 2. **How to use** — "Copy the block below into your AI assistant, then paste your material (a document, notes, an article, a past chat — anything that captures what you want to say). The assistant will help you turn it into clean statements you can submit."
-3. **Privacy framing (user-controlled pipeline).** This runs **entirely on the participant's side**: they paste into their own assistant, and **nothing reaches wiki-polis** — we never see their material, their prompts, or the drafts. The only data-sharing is between the participant and the AI provider *they* chose, which is entirely their call. Frame this as clarification/empowerment (you own this pipeline end-to-end), not a warning we impose. Only the final statements they decide to submit ever come to wiki-polis, through the normal submission form.
-4. **The prompt block** (delimited, copy-paste). It instructs the assistant to:
+3. **The prompt block** (delimited, copy-paste). It instructs the assistant to:
    - **Role:** help the user turn their material into a shortlist of good statements for a Polis-style consultation.
    - **Ingest** whatever the user pastes; ask 1–2 clarifying questions only if the material's intent is unclear.
    - **Extract** the distinct claims/opinions buried in the material.
@@ -43,8 +42,8 @@ Assistant-agnostic: no Claude/vendor-specific syntax, no tool calls, no system-p
    - **Dedupe / coverage:** merge near-duplicates; gently prompt the user to include views they *disagree* with (good sets span the spread, not one side).
    - **Output:** a numbered shortlist of clean, one-sentence statements, each ≤ ~140 chars, with a one-line "why this works / what I changed" note; then ask the user which to keep/edit. Do **not** auto-submit anywhere.
    - **Tone:** coach, don't lecture; keep it short.
-5. **Worked example** — a messy paragraph in → 3–4 atomic statements out (reuse the canonical good/bad pairs from `pub_participant-help.md`, e.g. the compound "reliable sources and disclose COI" split, and the "Shouldn't the Foundation be more transparent?" → claim rewrite).
-6. **The principles, condensed** — the bullet list from `guide_organizer.md` §3, so the artifact stands alone if separated from the repo.
+4. **Worked example** — a messy paragraph in → 3–4 atomic statements out (reuse the canonical good/bad pairs from `pub_participant-help.md`, e.g. the compound "reliable sources and disclose COI" split, and the "Shouldn't the Foundation be more transparent?" → claim rewrite).
+5. **The principles, condensed** — the bullet list from `guide_organizer.md` §3, so the artifact stands alone if separated from the repo.
 
 Keep wording assistant-agnostic and in plain language; mirror the existing copy so guidance stays consistent across surfaces.
 
