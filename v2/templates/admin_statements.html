@@ -18,6 +18,16 @@
   {% endwith %}
 
   <!-- ── Add seed statement ──────────────────────────── -->
+  {% if not seed_import_allowed %}
+  <h3 class="section-heading">Seed statements locked</h3>
+  <div class="edit-form">
+    <p class="muted" style="margin-bottom:0;font-size:13px">
+      {{ seed_import_lock_reason }} Seed statements can only be added during preparation
+      or while statement submission is open.
+    </p>
+  </div>
+  {% else %}
+
   <h3 class="section-heading">Add seed statement</h3>
   <div class="edit-form">
     <p class="muted" style="margin-bottom:.75rem;font-size:13px">
@@ -100,6 +110,7 @@
       {% endwith %}
     </form>
   </div>
+  {% endif %}
 
   <!-- ── Conversation settings ──────────────────────── -->
   <h3 class="section-heading">Moderation settings</h3>

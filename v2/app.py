@@ -1429,6 +1429,17 @@ def _import_seed_statement_texts(conv: Conversation, texts: list[str]) -> dict:
 
     return {'successes': successes, 'skipped': n_skipped, 'errors': n_errors}
 
+
+def _seed_statement_lock_reason(conv: Conversation) -> str | None:
+    """Why seed-statement controls are locked, or None when seeding is allowed."""
+    if not conv.active:
+        return 'Seed statements are locked because this conversation is permanently closed.'
+    if conv.phase_submission:
+        return None
+    if not any(getattr(conv, flag) for flag in _PHASE_FLAGS):
+        return None
+    return 'Seed statements are locked because statement submission has ended.'
+
 # ── Admin ─────────────────────────────────────────────────────────────────
 
 @admin_bp.get('/admin')
@@ -2099,6 +2110,7 @@ def admin_conversation_statements(conv_id):
     # Provenance (#143): which listed statements are recorded derivatives → {tid: row}.
     all_tids = [s['tid'] for s in (list(pending) + list(approved) + list(hidden))]
     provenance_map = _provenance_map(conv_id, all_tids)
+    seed_lock_reason = _seed_statement_lock_reason(conv)
     return render_template('admin_statements.html',
                            conversation=conv,
                            pending=pending,
@@ -2108,6 +2120,8 @@ def admin_conversation_statements(conv_id):
                            featured_tids=featured_tids,
                            provenance_map=provenance_map,
                            phase_active=conv.phase_argument_mapping,
+                           seed_import_allowed=seed_lock_reason is None,
+                           seed_import_lock_reason=seed_lock_reason,
                            polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is',
                            max_import_rows=MAX_ROWS,
                            max_import_chars=MAX_TEXT_CHARS,
@@ -2150,6 +2164,10 @@ def admin_statement_moderate(conv_id, tid):
 @login_required
 def admin_statement_seed(conv_id):
     conv = _require_mod_for_conv(conv_id)
+    lock_reason = _seed_statement_lock_reason(conv)
+    if lock_reason:
+        flash(lock_reason, 'error')
+        return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
     text = request.form.get('txt', '').strip()
     text = nh3.clean(text, tags=frozenset())
     if not text or len(text) > 280:
@@ -2190,6 +2208,10 @@ def admin_statement_seed(conv_id):
 def admin_statement_seed_import(conv_id):
     conv = _require_mod_for_conv(conv_id)
     redirect_target = url_for('admin.admin_conversation_statements', conv_id=conv_id)
+    lock_reason = _seed_statement_lock_reason(conv)
+    if lock_reason:
+        flash(lock_reason, 'error')
+        return redirect(redirect_target)
 
     f = request.files.get('csv_file')
     if not f or not f.filename:
@@ -2228,6 +2250,10 @@ def admin_statement_seed_import(conv_id):
 def admin_statement_seed_import_text(conv_id):
     conv = _require_mod_for_conv(conv_id)
     redirect_target = url_for('admin.admin_conversation_statements', conv_id=conv_id)
+    lock_reason = _seed_statement_lock_reason(conv)
+    if lock_reason:
+        flash(lock_reason, 'error')
+        return redirect(redirect_target)
     result = _parse_seed_text_lines(request.form.get('statement_texts', ''))
     if _reject_seed_import_parse_errors(result, 'Text import'):
         return redirect(redirect_target)

@@ -142,6 +142,63 @@ def test_single_statement_grammar(admin_client, conv):
     assert b'1 statement imported' in resp.data
 
 
+def test_seed_import_allowed_in_preparation(admin_client, conv):
+    with _mock_polis() as mock:
+        resp = _upload(admin_client, conv.id, b'text\nPrep seed')
+    assert resp.status_code == 200
+    mock.return_value.bulk_add_seeds.assert_called_once()
+
+
+def test_seed_import_allowed_during_submission(admin_client, conv):
+    conv.phase_submission = True
+    db.session.commit()
+    with _mock_polis() as mock:
+        resp = _upload(admin_client, conv.id, b'text\nSubmission seed')
+    assert resp.status_code == 200
+    mock.return_value.bulk_add_seeds.assert_called_once()
+
+
+def test_seed_import_locked_after_submission_phase(admin_client, conv):
+    conv.phase_personal_results = True
+    db.session.commit()
+    with _mock_polis() as mock:
+        resp = _upload(admin_client, conv.id, b'text\nToo late')
+    assert b'statement submission has ended' in resp.data.lower()
+    assert mock.return_value.bulk_add_seeds.call_args is None
+
+
+def test_text_seed_import_locked_after_submission_phase(admin_client, conv):
+    conv.phase_argument_mapping = True
+    db.session.commit()
+    with _mock_polis() as mock:
+        resp = _text_import(admin_client, conv.id, 'Too late')
+    assert b'statement submission has ended' in resp.data.lower()
+    assert mock.return_value.bulk_add_seeds.call_args is None
+
+
+def test_single_seed_locked_when_conversation_closed(admin_client, conv):
+    conv.active = False
+    db.session.commit()
+    with _mock_polis() as mock:
+        resp = admin_client.post(
+            f'/admin/conversations/{conv.id}/statements/seed',
+            data={'txt': 'Closed seed'},
+            follow_redirects=True,
+        )
+    assert b'permanently closed' in resp.data.lower()
+    mock.return_value.add_seed.assert_not_called()
+
+
+def test_statements_page_hides_seed_forms_when_locked(admin_client, conv):
+    conv.phase_cleanup = True
+    db.session.commit()
+    with _mock_polis():
+        resp = admin_client.get(f'/admin/conversations/{conv.id}/statements')
+    assert b'Seed statements locked' in resp.data
+    assert b'Add seed statement</button>' not in resp.data
+    assert b'Import seed statements from CSV' not in resp.data
+
+
 def test_text_imports_one_statement_per_non_empty_line(admin_client, conv):
     with _mock_polis() as mock:
         resp = _text_import(admin_client, conv.id, 'One\n\nTwo\n  Three  ')
