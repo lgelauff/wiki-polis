@@ -162,15 +162,44 @@ Verified live on `wiki-polis-dev` against the `wiki-polis-staging` Particiapi.
   because the staging DB was already migrated to `#236`'s schema and main-based code 500s on
   the dropped `arguments.proposer_id`.
 
-## Production rollout prerequisites
-1. **Particiapi image** — build the fork (`lgelauff/particiapi` `feat/trusted-sub-identity`)
-   into an image **off-VPS** (memory is tight, no swap, shared with prod) and pull it; don't
-   bind-mount or build on the box.
-2. **DDL** — create `particiapi_issuers` / `particiapi_users` + trigger in the **prod** Polis
-   Postgres (see prerequisite above).
-3. **Secrets** — set `TRUSTED_SUB_SECRET` on prod Particiapi and `PARTICIAPI_SUB_SECRET` on the
-   prod tool to the **same** value.
-4. **xid-version transition** — see below; decide before flipping the secret on.
+## Production rollout (step-by-step)
+
+Prod is **live** and shares the VPS with the box's memory limit, so the staging bind-mount
+trick is not the right move here — build a real image. Order matters: get the plumbing in
+place **before** the secret, so nothing changes behaviour until the last step.
+
+1. **Build the Particiapi image off-VPS.** Build the fork
+   (`github.com/lgelauff/particiapi` `feat/trusted-sub-identity`) into an image somewhere
+   other than the VPS (local / CI / ghcr) and push it to a registry the VPS can pull. Do
+   **not** build on the box (tight memory, no swap, prod alongside).
+2. **Point the prod stack at it + pull.** Update the prod `particiapp-docker` particiapi
+   service `image:` to the built tag; `docker-compose -p particiapp-docker … pull particiapi`.
+   Do **not** recreate yet.
+3. **Apply the auth-table DDL** to the **prod** Polis Postgres (`particiapi_issuers` /
+   `particiapi_users` + `create_user()` + `insert_new_uid` trigger — see prerequisite above;
+   it is missing on prod too). Idempotent; safe to run ahead of time.
+4. **Set the secrets** (still a no-op until both sides have it):
+   - prod Particiapi env `PARTICIAPI_TRUSTED_SUB_SECRET = <value>`
+   - prod tool `wiki-polis` envvar `PARTICIAPI_SUB_SECRET = <same value>`
+5. **Deploy the proxy change to prod** (`deploy.sh` of the merged identity branch on the
+   `wiki-polis` tool) and **recreate prod particiapi** with the new image.
+6. **Clear ALL sessions = log everyone out** (the step we needed on staging too). Delete the
+   Flask `sessions` table on the prod tool so every session re-derives the xid under the
+   current scheme and re-binds:
+   ```
+   python3 -c "import os;from sqlalchemy import create_engine,text;e=create_engine(os.environ['DATABASE_URL']);c=e.connect();print('cleared',c.execute(text('DELETE FROM sessions')).rowcount);c.commit()"
+   ```
+   **Do NOT** "log out" by rotating `SECRET_KEY` — it is the xid HMAC fallback key, so rotating
+   it changes every xid *again*. Clear the session store, leave the key alone.
+7. **Verify** as in staging: a user across two devices → one `particiapi_users` row (issuer
+   `wiki-polis`) → one `participant` per conversation; `/api/session` 200s; no tracebacks.
+
+### Why clearing sessions is mandatory, not optional
+The xid is the Polis identity key. If sessions from *before* the cutover survive, they carry a
+stale xid (different scheme/value) and bind to a **different** uid than fresh logins — the exact
+split we saw on staging (uid 23 vs uid 24). Clearing all sessions forces every browser to
+re-derive the current xid on next request, so everyone converges on one identity. Expect a
+one-time blip where users are asked to log in again.
 
 ## The xid-version transition (#96) — read before enabling on real data
 Because the xid is now the **Polis identity key**, **any change to the xid derivation makes
