@@ -906,9 +906,80 @@ def _validate_fetch_csrf():
         abort(400)
 
 
-def _proxy_to_particiapi(pa_path: str):
+# Minimum gap between two last_engagement writes for the same participation — a voting
+# burst should not cause a DB write per click. Minutes-level recency is ample for the
+# drop-off signal (#42).
+_ENGAGEMENT_THROTTLE_SECONDS = 60
+
+# Phase-2 statement votes reach Particiapi through the generic proxy as
+# PUT api/conversations/<polis_id>/votes/<tid> (the web client's addVote;
+# value in the body, statement id in the path) — match it to record last_engagement (#42).
+# The optional trailing segment also tolerates a POST .../votes form defensively.
+_PROXY_VOTE_RE = re.compile(r'^api/conversations/([^/]+)/votes(?:/[^/]+)?/?$')
+
+
+def _touch_engagement(participation) -> None:
+    """Best-effort: bump ``Participation.last_engagement`` on a meaningful action (#42).
+
+    Records action *recency only* — never page-views, statement ids, or vote content.
+    Never blocks or fails the action; skips the write when the stored value is younger
+    than ``_ENGAGEMENT_THROTTLE_SECONDS``.
+    """
+    if participation is None:
+        return
+    now = datetime.now(timezone.utc)
+    last = participation.last_engagement
+    if last is not None:
+        if last.tzinfo is None:            # stored naive-UTC
+            last = last.replace(tzinfo=timezone.utc)
+        if (now - last).total_seconds() < _ENGAGEMENT_THROTTLE_SECONDS:
+            return
+    try:
+        participation.last_engagement = now
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('last_engagement update failed')
+
+
+def _touch_engagement_by_polis_id(polis_id: str) -> None:
+    """Resolve (conversation, current participant) → participation and touch engagement.
+
+    Used by the Particiapi proxy for Phase-2 statement votes, which have no dedicated
+    Flask handler. Best-effort: any miss (unknown conv, no participation) is silent.
+    """
+    participant = _current_participant()
+    if participant is None:
+        return
+    conv = Conversation.query.filter_by(polis_id=polis_id).first()
+    if conv is None:
+        return
+    part = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=conv.id).first()
+    _touch_engagement(part)
+
+
+def _conversation_subject(xid: str, conv) -> str:
+    """Conversation-scoped participant subject for Particiapi's trusted-sub binding.
+
+    Keyed by the **wiki-polis conversation id** so the same person resolves to the same
+    Polis uid across devices *within* one conversation, but to a **different** uid in a
+    different conversation — no cross-conversation linkage chain (#246). Using ``conv.id``
+    (not the Polis zinvite) keeps it stable across the conversation's Phase-2 and Phase-6
+    rounds, so an individual's initial and informed votes share one uid.
+    """
+    secret = current_app.config.get('PARTICIAPI_SUB_SECRET') or current_app.config['SECRET_KEY']
+    return hmac.new(str(secret).encode(), f'{xid}:{conv.id}'.encode(), hashlib.sha256).hexdigest()
+
+
+def _proxy_to_particiapi(pa_path: str, conv=None):
     """
     Proxy a browser request to Particiapi and return the response.
+
+    When ``conv`` is given (the per-conversation proxy route), the asserted identity is
+    **conversation-scoped** and the ``pa_session`` cookie is **path-scoped to that
+    conversation**, so each conversation gets its own session/uid (no cross-conversation
+    chain). The legacy unscoped route passes ``conv=None`` (bare-xid subject, root cookie).
 
     Browser ↔ Flask proxy ↔ Particiapi:
     - The browser stores a 'pa_session' cookie (Particiapi's session, renamed to
@@ -932,15 +1003,35 @@ def _proxy_to_particiapi(pa_path: str):
 
     forwarded_cookies = {}
     pa_cookie = request.cookies.get('pa_session')
-    if pa_cookie:
+
+    # Identity binding: on the session-create call, if the user is logged in and the
+    # shared secret is configured, assert their stable identity (xid) to Particiapi so
+    # they keep the same Polis uid across devices instead of a new anonymous uid each
+    # session. Scoped to POST /api/session only — Particiapi consults the headers
+    # nowhere else, so sending the secret on other requests is pure exposure surplus.
+    _xid = session.get('xid')
+    _sub_secret = current_app.config.get('PARTICIAPI_SUB_SECRET')
+    # Conversation-scope the subject when we know the conversation, so the participant gets
+    # a different uid per conversation (no chain) while staying stable across devices in it.
+    _sub = _conversation_subject(_xid, conv) if (_xid and conv is not None) else _xid
+    _bind_identity = (
+        pa_path == 'api/session' and request.method == 'POST'
+        and bool(_sub) and bool(_sub_secret)
+    )
+
+    # On a bind we deliberately do NOT forward any existing pa_session cookie: a stale
+    # (possibly anonymous) session would make Particiapi skip the bind path and pin the
+    # user to a throwaway uid forever. Dropping it forces a clean re-bind to the xid.
+    if pa_cookie and not _bind_identity:
         forwarded_cookies['session'] = pa_cookie
 
     # HIGH-5: Only forward known safe query parameters to Particiapi.
     _ALLOWED_PARAMS = frozenset({'create', 'zinvite', 'conversation_id', 'tid'})
     params = {k: v for k, v in request.args.items() if k in _ALLOWED_PARAMS}
-    # If the web component calls POST /api/session with no existing session,
-    # Particiapi returns 403 (auth required) unless we add ?create=true.
-    if pa_path == 'api/session' and request.method == 'POST' and not pa_cookie:
+    # If the web component calls POST /api/session with no existing session (and we're
+    # not binding a stable identity), Particiapi 403s unless we add ?create=true.
+    if (pa_path == 'api/session' and request.method == 'POST'
+            and not pa_cookie and not _bind_identity):
         params['create'] = 'true'
 
     headers = {}
@@ -950,6 +1041,10 @@ def _proxy_to_particiapi(pa_path: str):
             headers['X-CSRF-Token'] = csrf
         if request.content_type:
             headers['Content-Type'] = request.content_type
+
+    if _bind_identity:
+        headers['X-Particiapi-Sub'] = _sub
+        headers['X-Particiapi-Sub-Secret'] = _sub_secret
 
     try:
         upstream = requests.request(
@@ -979,13 +1074,26 @@ def _proxy_to_particiapi(pa_path: str):
         'Content-Type', 'application/json')
 
     if 'session' in upstream.cookies:
+        # Path-scope the session cookie to this conversation's proxy base, so the browser
+        # only returns it on that conversation's calls — each conversation keeps its own
+        # session/uid (#246). The legacy unscoped route keeps the root path.
+        _cookie_path = f'/c/{conv.slug}/proxy/particiapi' if conv is not None else '/'
         flask_resp.set_cookie(
             'pa_session',
             upstream.cookies['session'],
+            path=_cookie_path,
             httponly=True,
             samesite='Lax',
             secure=not current_app.debug,
         )
+
+    # Record meaningful-action recency for a successful Phase-2 statement vote (#42).
+    # The web client casts votes with PUT (and we tolerate POST); the GET vote-fetch
+    # path is deliberately excluded so reads don't count as engagement.
+    if request.method in ('POST', 'PUT') and 200 <= upstream.status_code < 300:
+        m = _PROXY_VOTE_RE.match(pa_path)
+        if m:
+            _touch_engagement_by_polis_id(m.group(1))
 
     return flask_resp
 
@@ -1265,6 +1373,7 @@ def conversation_statement_new(slug):
             ids.append(stmt_id)
             part.new_stmt_ids = ids
             db.session.commit()
+        _touch_engagement(part)  # meaningful action (#42)
         flask_resp = make_response(stmt_resp.content, 201)
         flask_resp.headers['Content-Type'] = 'application/json'
     else:
@@ -1281,6 +1390,16 @@ def conversation_statement_new(slug):
 @login_required
 def proxy_particiapi(pa_path):
     return _proxy_to_particiapi(pa_path)
+
+
+@proxy_bp.route('/c/<slug>/proxy/particiapi/<path:pa_path>',
+                methods=['GET', 'POST', 'PUT'])
+@login_required
+def proxy_particiapi_scoped(slug, pa_path):
+    """Per-conversation proxy: conversation-scoped identity + path-scoped session cookie,
+    so a participant gets a different Polis uid per conversation (#246)."""
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    return _proxy_to_particiapi(pa_path, conv=conv)
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -1925,6 +2044,55 @@ def admin_invite_remove(conv_id, invite_id):
     record_audit('invite.remove', conv_id=conv_id, target_type='invite', target_id=invite_id)
     return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
 
+# ── Admin: participants tab ───────────────────────────────────────────────
+
+@admin_bp.get('/admin/conversations/<int:conv_id>/participants')
+@login_required
+def admin_conversation_participants(conv_id):
+    """Per-conversation engagement table: who is active, who has dropped off (#42).
+
+    Local-DB only for now — per-participant statement vote counts need Polis PG access
+    (#41) and are shown as unavailable until then.
+    """
+    conv = _require_mod_for_conv(conv_id)
+
+    participations = (Participation.query
+                      .filter_by(conversation_id=conv_id)
+                      .join(Participant)
+                      .options(joinedload(Participation.participant))
+                      .order_by(Participation.accepted_at.desc())
+                      .all())
+
+    # Arguments submitted, per participant, in this conversation.
+    arg_counts = dict(
+        db.session.query(Argument.proposer_id, db.func.count(Argument.id))
+        .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
+        .filter(FeaturedStatement.conversation_id == conv_id,
+                Argument.proposer_id.isnot(None))
+        .group_by(Argument.proposer_id)
+        .all())
+
+    # Argument votes cast, per participant, in this conversation.
+    arg_vote_counts = dict(
+        db.session.query(ArgumentVote.participant_id, db.func.count(ArgumentVote.id))
+        .join(Argument, ArgumentVote.argument_id == Argument.id)
+        .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
+        .filter(FeaturedStatement.conversation_id == conv_id)
+        .group_by(ArgumentVote.participant_id)
+        .all())
+
+    rows = [{
+        'participation':       p,
+        'participant':         p.participant,
+        'statements_submitted': len(p.new_stmt_ids or []),
+        'arguments_submitted':  arg_counts.get(p.participant_id, 0),
+        'arguments_voted':      arg_vote_counts.get(p.participant_id, 0),
+        'last_engagement':      p.last_engagement,
+    } for p in participations]
+
+    return render_template('admin_participants.html', conversation=conv, rows=rows)
+
+
 # ── Admin: Polis statement moderation ─────────────────────────────────────
 
 @admin_bp.get('/admin/conversations/<int:conv_id>/statements')
@@ -2524,6 +2692,7 @@ def argument_submit(slug, fs_id):
     state.argument_order = order
 
     db.session.commit()
+    _touch_engagement(part)  # meaningful action (#42)
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True, 'id': arg.id, 'body': body})
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
@@ -2554,6 +2723,7 @@ def argument_skip(slug, fs_id, side):
     elif not state.skipped:
         state.skipped = True
         db.session.commit()
+    _touch_engagement(part)  # meaningful action (#42)
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
@@ -2614,6 +2784,7 @@ def argument_vote(slug, arg_id):
             participant_id=part.participant_id,
         ))
         db.session.commit()
+    _touch_engagement(part)  # meaningful action (#42)
     if is_ajax:
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
@@ -2630,6 +2801,7 @@ def argument_unvote(slug, arg_id):
     if existing:
         db.session.delete(existing)
         db.session.commit()
+    _touch_engagement(part)  # meaningful action (#42)
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
@@ -2810,6 +2982,9 @@ def phase6_vote(slug):
     except requests.RequestException:
         current_app.logger.exception('Particiapi error in phase6_vote')
         abort(502)
+
+    if 200 <= upstream.status_code < 300:
+        _touch_engagement(participation)  # meaningful action (#42)
 
     resp = make_response('', upstream.status_code)
     if new_pa_cookie:
@@ -3011,6 +3186,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['OAUTH_REDIRECT_URI']  = _read_secret('oauth-redirect-uri')
     app.config['PARTICIAPI_BASE']     = (_read_secret('particiapi-base-url')
                                          or os.environ.get('PARTICIAPI_BASE_URL', 'http://localhost:8000'))
+    # Shared secret that lets the proxy assert the logged-in user's stable identity
+    # (xid) to Particiapi, so a participant keeps the same Polis uid across devices
+    # instead of a fresh anonymous one per session. Must match Particiapi's
+    # TRUSTED_SUB_SECRET. Unset → falls back to the old anonymous-per-session behaviour.
+    app.config['PARTICIAPI_SUB_SECRET'] = (_read_secret('particiapi-sub-secret')
+                                           or os.environ.get('PARTICIAPI_SUB_SECRET', ''))
     app.config['POLIS_DATABASE_URL'] = (_read_secret('polis-database-url')
                                         or os.environ.get('POLIS_DATABASE_URL', ''))
     app.config['POLIS_SERVER_URL']   = (_read_secret('polis-server-url')

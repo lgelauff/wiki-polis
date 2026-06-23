@@ -135,7 +135,7 @@
     <div class="voting-col">
 
       <pa-conversation
-        base="{{ request.url_root }}proxy/particiapi"
+        base="{{ request.url_root }}c/{{ conversation.slug }}/proxy/particiapi"
         conversation-id="{{ conversation.polis_id }}">
 
         {# ── Progress row ── #}
@@ -534,7 +534,36 @@
         <span class="at-collapse-chevron" aria-hidden="true" hidden>▼</span>
       </div>
 
-      {# ── Two-column grid ── #}
+      {# ── Step-1 trigger row — three plain buttons (add for / no new arguments / add against). #}
+      {# The composer + status for each side live down in the matching column, not here.       #}
+      <div class="at-contribute-row">
+        {# shown while Ready (active) and Done (greyed/used); gone once Skipped #}
+        {% if not item.pro_gate or item.pro_proposed %}
+        <button type="button" class="at-row-trigger at-row-trigger--for" data-trigger-side="pro" data-fs="{{ fs.id }}"{% if item.pro_proposed %} disabled{% endif %}>
+          <span class="at-contribute-glyph" style="background:rgba(21,115,74,.15);color:var(--agree);font-weight:700" aria-hidden="true">+</span>
+          Add an argument for
+        </button>
+        {% else %}<span class="at-row-trigger-spacer" aria-hidden="true"></span>{% endif %}
+
+        {% if not both_gate %}
+        <button type="button" class="at-skip-both" id="skipboth-{{ fs.id }}"
+                data-fs="{{ fs.id }}"
+                data-pro-skip-url="{{ url_for('participant.argument_skip', slug=conversation.slug, fs_id=fs.id, side='pro') }}"
+                data-con-skip-url="{{ url_for('participant.argument_skip', slug=conversation.slug, fs_id=fs.id, side='con') }}"
+                data-csrf="{{ csrf_token() }}">No new arguments to add</button>
+        {% else %}
+        <span class="at-skip-both-spacer" aria-hidden="true"></span>
+        {% endif %}
+
+        {# shown while Ready (active) and Done (greyed/used); gone once Skipped #}
+        {% if not item.con_gate or item.con_proposed %}
+        <button type="button" class="at-row-trigger at-row-trigger--against" data-trigger-side="con" data-fs="{{ fs.id }}"{% if item.con_proposed %} disabled{% endif %}>
+          <span class="at-contribute-glyph" style="background:rgba(178,58,58,.15);color:var(--disagree);font-weight:700" aria-hidden="true">−</span>
+          Add an argument against
+        </button>
+        {% else %}<span class="at-row-trigger-spacer" aria-hidden="true"></span>{% endif %}
+      </div>
+
       <div class="at-cols">
 
         {# ── For column ── #}
@@ -545,8 +574,9 @@
             <span class="at-col-count">{{ item.pro_args | length }}</span>
           </div>
 
-          {# Contribute affordance — pro (data-* attrs unchanged for JS compatibility) #}
-          <div class="contribute-wrapper"
+          {# Reader's own for-argument: placeholder → composer (opened from the row trigger or by
+             clicking the placeholder) → submitted/skipped status. Lives in-column so it aligns. #}
+          <div class="contribute-wrapper at-reserve-wrapper"
                data-state="{{ 'submitted' if item.pro_proposed else ('skipped' if item.pro_gate else 'idle') }}"
                data-side="pro"
                data-fs="{{ fs.id }}"
@@ -555,9 +585,8 @@
                data-csrf="{{ csrf_token() }}"
                data-k="{{ item.k }}"
                data-my-pseudonym="{{ participation.pseudonym }}">
-            <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--pro" type="button">
-              <span class="at-contribute-glyph" style="background:rgba(21,115,74,.15);color:var(--agree);font-weight:700" aria-hidden="true">+</span>
-              Add one for-argument, or skip
+            <button class="contribute-affordance contribute-affordance--pro" type="button" id="reserve-pro-{{ fs.id }}">
+              <span class="contribute-glyph" aria-hidden="true">+</span> Your for-argument will appear here
             </button>
             <div class="contribute-composer">
               <div class="contribute-composer-header">
@@ -583,11 +612,6 @@
               <button type="button" class="at-link contribute-changemind">change my mind</button>
             </div>
           </div>
-
-          {# Locked-state note — only when gate is closed and no cards exist yet #}
-          {% if not item.pro_gate and item.pro_args | length == 0 %}
-          <p class="at-col-note">Other arguments appear here once you've added yours or skipped — so you form your own view first.</p>
-          {% endif %}
 
           {# Argument cards — pro #}
           {% for arg in item.pro_args %}
@@ -671,8 +695,8 @@
             <span class="at-col-count">{{ item.con_args | length }}</span>
           </div>
 
-          {# Contribute affordance — con #}
-          <div class="contribute-wrapper"
+          {# Reader's own against-argument: placeholder → composer → submitted/skipped status. #}
+          <div class="contribute-wrapper at-reserve-wrapper"
                data-state="{{ 'submitted' if item.con_proposed else ('skipped' if item.con_gate else 'idle') }}"
                data-side="con"
                data-fs="{{ fs.id }}"
@@ -681,9 +705,8 @@
                data-csrf="{{ csrf_token() }}"
                data-k="{{ item.k }}"
                data-my-pseudonym="{{ participation.pseudonym }}">
-            <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--con" type="button">
-              <span class="at-contribute-glyph" style="background:rgba(178,58,58,.15);color:var(--disagree);font-weight:700" aria-hidden="true">−</span>
-              Add one against-argument, or skip
+            <button class="contribute-affordance contribute-affordance--con" type="button" id="reserve-con-{{ fs.id }}">
+              <span class="contribute-glyph" aria-hidden="true">−</span> Your against-argument will appear here
             </button>
             <div class="contribute-composer">
               <div class="contribute-composer-header">
@@ -709,11 +732,6 @@
               <button type="button" class="at-link contribute-changemind">change my mind</button>
             </div>
           </div>
-
-          {# Locked-state note — only when gate is closed and no cards exist yet #}
-          {% if not item.con_gate and item.con_args | length == 0 %}
-          <p class="at-col-note">Other arguments appear here once you've added yours or skipped — so you form your own view first.</p>
-          {% endif %}
 
           {# Argument cards — con #}
           {% for arg in item.con_args %}
@@ -2037,8 +2055,17 @@
     var skipBtn     = wrapper.querySelector('.contribute-skip-btn');
     var changemind  = wrapper.querySelector('.contribute-changemind');
 
+    // The matching row trigger button ("Add an argument for/against") — shown only while
+    // this side is idle; hidden once the reader is composing / has added / has skipped.
+    var rowTrigger = tab.querySelector('.at-row-trigger[data-trigger-side="' + wrapper.dataset.side + '"][data-fs="' + wrapper.dataset.fs + '"]');
+
     function setState(s) {
       wrapper.dataset.state = s;
+      if (rowTrigger) {
+        // Ready → active · Adding/Done → greyed (still there) · Skipped → gone.
+        rowTrigger.hidden = (s === 'skipped');
+        rowTrigger.disabled = (s !== 'idle');
+      }
     }
 
     function enterComposing() {
@@ -2046,8 +2073,11 @@
       textarea.focus();
     }
 
-    // Idle button → composing
+    // The in-column placeholder (idle affordance) opens the composer here.
     affordance.addEventListener('click', enterComposing);
+
+    // The row trigger button opens the same composer down in this column.
+    if (rowTrigger) rowTrigger.addEventListener('click', enterComposing);
 
     // Change my mind (skipped) → composing (no API call; submitting will create the arg)
     if (changemind) changemind.addEventListener('click', enterComposing);
@@ -2086,7 +2116,10 @@
           return r.json().then(function (data) {
             setState('submitted');
             // Insert the new card into the column's argument list
-            var col = wrapper.closest('.at-col');
+            var col = wrapper.closest('.at-col') || (function () {
+              var b = document.getElementById('fs-' + fsId);
+              return b ? b.querySelector('.at-col--' + (side === 'pro' ? 'for' : 'against')) : null;
+            })();
             if (!col) return;
             var colCards = col.querySelectorAll('.argument-card');
             var emptyNotice = col.querySelector('.arg-empty');
@@ -2114,6 +2147,46 @@
     });
   });
 
+  // Announce a message to screen readers via the #arg-alert live region
+  // (blank-then-rAF so an identical/repeat message still re-triggers).
+  function announceArg(msg) {
+    var alertEl = document.getElementById('arg-alert');
+    if (!alertEl) return;
+    alertEl.textContent = '';
+    requestAnimationFrame(function () { alertEl.textContent = msg; });
+  }
+
+  // ── Neutral "no new arguments to add" → skip every still-open side at once ──
+  tab.querySelectorAll('.at-skip-both').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var fsId = btn.dataset.fs;
+      var csrf = btn.dataset.csrf;
+      btn.disabled = true;
+      var jobs = [];
+      [['pro', btn.dataset.proSkipUrl], ['con', btn.dataset.conSkipUrl]].forEach(function (pair) {
+        var w = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="' + pair[0] + '"]');
+        if (!w) return;
+        var st = w.dataset.state;
+        if (st === 'submitted' || st === 'skipped') return;
+        jobs.push(argFetch(pair[1], csrf).then(function (r) {
+          if (!r.ok) throw new Error('skip failed: ' + r.status);
+          w.dataset.state = 'skipped';
+          var trig = tab.querySelector('.at-row-trigger[data-trigger-side="' + pair[0] + '"][data-fs="' + fsId + '"]');
+          if (trig) trig.hidden = true;
+        }));
+      });
+      Promise.all(jobs).then(function () {
+        var anyW = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
+        if (anyW) checkGateTransition(anyW);
+      }).catch(function () {
+        // A skip POST failed (e.g. expired CSRF / closed conversation). Re-enable the
+        // button and surface the error instead of leaving it stuck disabled.
+        btn.disabled = false;
+        announceArg('Could not skip — please try again.');
+      });
+    });
+  });
+
   // After skipping or submitting, check if both sides are now gated
   // and if so transition the two-step indicator to post-gate style.
   function checkGateTransition(wrapper) {
@@ -2121,6 +2194,14 @@
     var proW = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
     var conW = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="con"]');
     if (!proW || !conW) return;
+    // As each side completes, retire its dashed reserved slot in the column.
+    ['pro', 'con'].forEach(function (sd) {
+      var w = sd === 'pro' ? proW : conW;
+      if (w && (w.dataset.state === 'submitted' || w.dataset.state === 'skipped')) {
+        var r = document.getElementById('reserve-' + sd + '-' + fsId);
+        if (r) r.hidden = true;
+      }
+    });
     var proState = proW.dataset.state;
     var conState = conW.dataset.state;
     var bothGated = (proState === 'submitted' || proState === 'skipped')
@@ -2141,6 +2222,8 @@
 
     if (bothGated) {
       var block = document.getElementById('fs-' + fsId);
+      var skipBothBtn = document.getElementById('skipboth-' + fsId);
+      if (skipBothBtn) skipBothBtn.hidden = true;
       var kVal  = getK(proW);
       var nPro  = block ? block.querySelectorAll('.argument-card[data-side="pro"]').length : 0;
       var nCon  = block ? block.querySelectorAll('.argument-card[data-side="con"]').length : 0;
@@ -2200,14 +2283,8 @@
 
       paintAllCircles();
 
-      // Announce gate unlock to screen readers (blank-then-rAF so repeat panels re-trigger)
-      var alertEl = document.getElementById('arg-alert');
-      if (alertEl) {
-        alertEl.textContent = '';
-        requestAnimationFrame(function () {
-          alertEl.textContent = 'Step 2 unlocked — you can now mark the most important arguments.';
-        });
-      }
+      // Announce gate unlock to screen readers
+      announceArg('Step 2 unlocked — you can now mark the most important arguments.');
     }
   }
 

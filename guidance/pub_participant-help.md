@@ -13,7 +13,7 @@ build a map of where the community stands. The goal isn't the most popular opini
 to find the positions people across different viewpoints can agree on [1].
 
 Your votes are private while the conversation is running — no one sees who voted what.
-See the [privacy notice](pub_privacy.md).
+See the [privacy notice](../v2/pub_privacy.md).
 
 ## How to vote
 
@@ -24,6 +24,10 @@ See the [privacy notice](pub_privacy.md).
 
 You don't have to vote on everything. **Passing is fine** — and a Pass on a confusing or
 two-in-one statement is useful signal in itself [1].
+
+![The voting screen: one statement shown with Agree, Disagree, and Pass buttons.](assets/phase-vote.png)
+<!-- SCREENSHOT TODO: the voting card — a single statement with the Agree / Disagree / Pass controls and the progress indicator. Drop the PNG at guidance/assets/phase-vote.png -->
+*Voting: read each statement and choose Agree, Disagree, or Pass.*
 
 ## Submitting a statement
 
@@ -40,6 +44,10 @@ Anyone can add a statement; yours is reviewed before others see it. A good state
 *Bad:* "Shouldn't the Foundation be more transparent?" *(a question — rewrite as a claim)*
 *Good:* "The Wikimedia Foundation should publish a detailed annual report on how discretionary grants are allocated."
 
+![The statement composer: a text box for a new statement with a submit button.](assets/phase-submit-statement.png)
+<!-- SCREENSHOT TODO: the "propose a statement" composer open on the voting screen. Drop the PNG at guidance/assets/phase-submit-statement.png -->
+*Submitting: add your own statement — it's reviewed before others see it.*
+
 ## Writing a good argument
 
 On some statements you can add a short argument explaining your reasoning. Arguments are
@@ -53,6 +61,36 @@ read by other people; they don't change the vote map. A good argument:
 
 *Bad:* "I disagree because this would be bad for the project." *(restates the vote)*
 *Good:* "**Against:** this would hit new editors hardest — they're least likely to know the sourcing conventions and most likely to be put off by rejection."
+
+![The argument-mapping screen: a featured statement with for / against columns.](assets/phase-argument-mapping.png)
+<!-- SCREENSHOT TODO: the argument-mapping screen for a featured statement, showing the For / Against columns and the add/skip controls. Drop the PNG at guidance/assets/phase-argument-mapping.png -->
+*Argument mapping: add or weigh reasons for and against the most divisive statements.*
+
+## Seeing your results
+
+Once enough people have voted, you can see how the community's opinions cluster and where
+your own votes place you.
+
+![The personal results screen showing opinion clusters.](assets/phase-personal-results.png)
+<!-- SCREENSHOT TODO: the participant's personal/results view (opinion groups + where the participant sits). Drop the PNG at guidance/assets/phase-personal-results.png -->
+*Results: see the opinion groups and where your votes place you.*
+
+## A second round: informed voting
+
+Some conversations run a second voting round on a few key statements, this time with the
+arguments shown alongside, so you can vote again after reading the reasoning.
+
+![The informed-voting screen: a statement with its arguments shown inline.](assets/phase-informed-voting.png)
+<!-- SCREENSHOT TODO: the informed-voting (Phase 6) screen — a featured statement with its for/against arguments inline and Agree/Disagree/Pass. Drop the PNG at guidance/assets/phase-informed-voting.png -->
+*Informed voting: vote again on key statements with the arguments in view.*
+
+## Final results
+
+When the conversation closes, the published results show what the community agreed on.
+
+![The public results screen for a closed conversation.](assets/phase-public-results.png)
+<!-- SCREENSHOT TODO: the public/final results page of a closed conversation. Drop the PNG at guidance/assets/phase-public-results.png -->
+*Final results: the published outcome once the conversation has closed.*
 
 ---
 

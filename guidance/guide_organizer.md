@@ -10,7 +10,7 @@
 This guide is for **organizers**: you set up and run a consultation on wiki-polis from
 start to finish. It describes the platform as it works **today** (the four phase
 toggles); forward-looking ideas live in
-[`prop_phase-model.md`](prop_phase-model.md).
+[`prop_phase-model.md`](../v2/prop_phase-model.md).
 
 ---
 
@@ -52,7 +52,7 @@ There are two ways to advance, both in the conversation's admin panel:
 
 **Pause / Resume** is separate from phases: it temporarily disables voting without starting the identity-reveal clock, and is fully reversible. Pausing before informed voting is a good way to buy time to re-invite participants.
 
-The guards that block or warn on these transitions (hard and soft) are catalogued in [`spec_functional-design.md`](spec_functional-design.md#phase-control-and-transition-guards).
+The guards that block or warn on these transitions (hard and soft) are catalogued in [`spec_functional-design.md`](../v2/spec_functional-design.md#phase-control-and-transition-guards).
 
 ## What a statement is
 
@@ -75,7 +75,7 @@ Before writing any statements, create the conversation: give it a **title**, an
 **intro** (what the topic is and why you're asking), an optional **outro** (shown after
 a participant has voted on everything), and an **access policy** — public (any Wikimedia
 account) or invite-only (named usernames), with invites if needed. See
-[`spec_functional-design.md`](spec_functional-design.md).
+[`spec_functional-design.md`](../v2/spec_functional-design.md).
 
 ## 3. Writing good statements
 
@@ -265,8 +265,8 @@ warning. You'll see this in the server logs if it occurs.
 After a cooldown a participant may *voluntarily and permanently* attach their Wikimedia
 username to their pseudonym; that reveal is never undone. The internal link between an
 account and its pseudonym is removed within 180 days for participants who did **not** reveal.
-See the identity model in [`spec_functional-design.md`](spec_functional-design.md) and the
-[privacy statement](pub_privacy.md).
+See the identity model in [`spec_functional-design.md`](../v2/spec_functional-design.md) and the
+[privacy statement](../v2/pub_privacy.md).
 
 ---
 
