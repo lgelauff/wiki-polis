@@ -173,6 +173,24 @@ Prod is **live** and shares the VPS with the box's memory limit, so the staging 
 trick is not the right move here — build a real image. Order matters: get the plumbing in
 place **before** the secret, so nothing changes behaviour until the last step.
 
+### Which xid regime is prod in? (read this first)
+This changes the rollout materially. **Verify before assuming:**
+`git show origin/main:v2/app.py | grep -nE "_derive_xid|sha256\(.*mw_user_id"`.
+
+- **Today, prod runs `main` = plain `sha256(mw_user_id)`** (the #96 HMAC change lives on the
+  unmerged `#236` branch). The xid is therefore **stable** on prod → there is **no
+  xid-version transition**. Existing users re-bind automatically on their next `/api/session`
+  (the proxy drops the stale anonymous cookie). **Clearing sessions is optional** here — we do
+  it anyway for a clean, uniform cutover. And because the xid isn't keyed on `main`, the
+  "don't rotate `SECRET_KEY`" caveat below **does not apply** to this rollout.
+- **The unavoidable one-time effect (either regime):** before the patch, prod users were
+  *anonymous* Polis participants (no xid sent). After enabling, each becomes a **new** Polis
+  participant on first contact; their old anonymous votes orphan under the old uid. The fix is
+  **prospective**; already-fragmented data (e.g. prod zid 9) stays as-is.
+- **When `#236` merges to `main`** it flips the xid to HMAC — *that* is when the real #96
+  transition (every existing user's xid changes → re-fragment) applies, and a session clear
+  becomes **mandatory**. Handle it as part of the `#236` merge, per the section below.
+
 1. **Build the Particiapi image off-VPS.** Build the fork
    (`github.com/lgelauff/particiapi` `feat/trusted-sub-identity`) into an image somewhere
    other than the VPS (local / CI) and push to a registry the VPS can pull. Do **not** build
@@ -202,12 +220,14 @@ place **before** the secret, so nothing changes behaviour until the last step.
 7. **Verify** as in staging: a user across two devices → one `particiapi_users` row (issuer
    `wiki-polis`) → one `participant` per conversation; `/api/session` 200s; no tracebacks.
 
-### Why clearing sessions is mandatory, not optional
-The xid is the Polis identity key. If sessions from *before* the cutover survive, they carry a
-stale xid (different scheme/value) and bind to a **different** uid than fresh logins — the exact
-split we saw on staging (uid 23 vs uid 24). Clearing all sessions forces every browser to
-re-derive the current xid on next request, so everyone converges on one identity. Expect a
-one-time blip where users are asked to log in again.
+### When clearing sessions is mandatory vs optional
+Mandatory **only when the xid derivation changes** (e.g. the #236 HMAC switch): surviving
+pre-cutover sessions carry a stale xid value and bind to a **different** uid than fresh logins
+— the exact uid 23 vs uid 24 split we saw on staging. Clearing all sessions forces every browser
+to re-derive the current xid, so everyone converges on one identity.
+On a **stable-xid** rollout (today's prod, plain `sha256`) it is **optional** — handy for a
+clean uniform cutover, but users would re-bind on their own next visit anyway. Either way, expect
+a one-time blip where users are asked to log in again.
 
 ## The xid-version transition (#96) — read before enabling on real data
 Because the xid is now the **Polis identity key**, **any change to the xid derivation makes
