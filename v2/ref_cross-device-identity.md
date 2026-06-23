@@ -81,7 +81,34 @@ The VPS runs Particiapi from the **registry image**
 and the box is memory-tight (no swap, shared with prod) — so **do not build on the VPS**.
 For a staging test we **bind-mount the two patched files over the image's copies** (the
 running `:latest` image was verified byte-identical to the patch base, so the overlay is
-clean):
+clean).
+
+### How we actually got the patched image running (the working recipe)
+The image installs the package at `/app/particiapi` and runs it via
+`uwsgi --module=particiapi:create_app()` (see the Particiapi `Dockerfile`). So overlaying
+two files and recreating the container is enough — no rebuild.
+
+0. **Confirm capacity first** — `df -h /`, `docker system df`, `free -h`. Disk was fine;
+   memory was the constraint (no swap, prod on the same box) → which is *why* we don't build.
+1. **Version gate** — confirm the running image's files match the patch base, so the overlay
+   doesn't clobber newer upstream code:
+   `docker exec wiki-polis-staging_particiapi_1 sed -n '40,62p' /app/particiapi/api.py`
+   and `… cat /app/particiapi/config_defaults.py`. They were byte-identical → safe to mount.
+2. **Copy the patched files to the VPS** (`scp` the fork's `api.py` + `config_defaults.py`
+   into `~/particiapi-patch/`).
+3. **Override file** `docker-compose.patch.yaml` (below) — bind-mounts the two files
+   read-only over `/app/particiapi/...` and adds `PARTICIAPI_TRUSTED_SUB_SECRET`.
+4. **Recreate only the staging particiapi** with all three `-f` files + `-p wiki-polis-staging`
+   (command below). Scoped to the staging project → prod is untouchable.
+5. **Apply the auth-table DDL** to the staging Polis Postgres (the `particiapi_issuers` /
+   `particiapi_users` + trigger — see the prerequisite below; the bind alone 500s without it).
+6. **Verify in-container**: patched code present + secret set + healthy:
+   `docker exec … grep -c trusted_sub /app/particiapi/api.py` (>0),
+   `docker exec … sh -c '[ -n "$PARTICIAPI_TRUSTED_SUB_SECRET" ] && echo set'`,
+   `docker ps --filter name=wiki-polis-staging_particiapi_1` (`healthy`), and no tracebacks in
+   `docker logs`.
+
+The override and the two files:
 
 In `~/particiapp-docker-staging`, an extra override `docker-compose.patch.yaml`:
 ```yaml
