@@ -1,7 +1,7 @@
 """add organizer conversation role (#154)
 
-Revision ID: a4b5c6d7e8f9
-Revises: e3f4a5b6c7d8
+Revision ID: a4b5c6d7e8fa
+Revises: d7e8f9a0b1c2
 Create Date: 2026-06-23 00:00:00.000000
 
 """
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'a4b5c6d7e8f9'
-down_revision = 'e3f4a5b6c7d8'
+revision = 'a4b5c6d7e8fa'
+down_revision = 'd7e8f9a0b1c2'
 branch_labels = None
 depends_on = None
 

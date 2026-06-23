@@ -1,7 +1,7 @@
 """add participation last_engagement (#42)
 
 Revision ID: b4c5d6e7f8a9
-Revises: a4b5c6d7e8f9
+Revises: a4b5c6d7e8fa
 Create Date: 2026-06-23 00:00:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'b4c5d6e7f8a9'
-down_revision = 'a4b5c6d7e8f9'
+down_revision = 'a4b5c6d7e8fa'
 branch_labels = None
 depends_on = None
 
