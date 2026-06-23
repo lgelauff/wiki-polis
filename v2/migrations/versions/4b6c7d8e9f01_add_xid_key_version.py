@@ -17,10 +17,15 @@ depends_on = None
 
 
 def upgrade():
+    # Existing rows keep version 1 (legacy plain-sha256 xid); new rows default to 2
+    # (HMAC-keyed). Use batch mode so the default change also works on SQLite, which
+    # does not support ALTER COLUMN ... SET DEFAULT.
     op.add_column('participants', sa.Column('xid_key_version', sa.Integer(),
                                             nullable=False, server_default='1'))
-    op.alter_column('participants', 'xid_key_version', server_default='2')
+    with op.batch_alter_table('participants') as batch_op:
+        batch_op.alter_column('xid_key_version', server_default='2')
 
 
 def downgrade():
-    op.drop_column('participants', 'xid_key_version')
+    with op.batch_alter_table('participants') as batch_op:
+        batch_op.drop_column('xid_key_version')

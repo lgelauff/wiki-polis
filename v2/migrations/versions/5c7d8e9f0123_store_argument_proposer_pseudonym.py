@@ -53,6 +53,9 @@ def upgrade():
     bind = op.get_bind()
     if bind.dialect.name == 'sqlite':
         with op.batch_alter_table('arguments', recreate='always') as batch:
+            # Drop the index on proposer_id first, or batch table-recreation tries
+            # to rebuild it against the column we're about to remove.
+            batch.drop_index('ix_arguments_proposer_id')
             batch.drop_column('proposer_id')
             batch.create_unique_constraint(
                 'uq_arguments_featured_pseudonym_side',
