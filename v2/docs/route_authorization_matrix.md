@@ -21,6 +21,7 @@ between blueprints or authorization policy changes.
 | `/accept/<slug>` | GET, POST | `login_required`; invite-only conversations require an invite, existing participation, or moderator access. POST is rate-limited and creates one participation. |
 | `/accept/<slug>/pseudonyms` | GET | `login_required`, rate-limited. Conversation must exist. |
 | `/c/<slug>` | GET | `login_required`; invite-only access check; redirects non-participants to the accept flow. |
+| `/c/<slug>/statements/new` | POST | `login_required`; Flask-WTF CSRF-protected participant route. Also requires same-origin browser provenance headers, active/unpaused submission phase, current participation, and per-participant quota. |
 | `/c/<slug>/reveal` | GET, POST | `login_required`; current participant must have joined the closed conversation. POST is rate-limited, requires confirmation, and is only accepted during the reveal window. |
 | `/logout` | POST | `login_required`; clears the Flask session. |
 
@@ -28,12 +29,14 @@ between blueprints or authorization policy changes.
 
 | Routes | Methods | Authorization |
 |---|---|---|
-| `/c/<slug>/arguments/<fs_id>/submit` | POST | `login_required`; `_require_arg_participation()` requires active, unpaused, argument phase enabled, and current participant membership. |
-| `/c/<slug>/arguments/<fs_id>/<side>/skip` | POST | Same as submit; side must be `pro` or `con`. |
+| `/c/<slug>/featured-statements/<fs_id>/arguments` | POST | `login_required`; `_require_arg_participation()` requires active, unpaused, argument phase enabled, and current participant membership. |
+| `/c/<slug>/featured-statements/<fs_id>/skip/<side>` | POST | Same as submit; side must be `pro` or `con`. |
 | `/c/<slug>/arguments/<arg_id>/vote` | POST | Same as submit; also enforces side gates, vote cap, not hidden, and not own argument. |
 | `/c/<slug>/arguments/<arg_id>/unvote` | POST | Same as submit; argument must belong to a featured statement in the same conversation. |
 | `/c/<slug>/arguments/<arg_id>/hide` | POST | `login_required`; current participant must be able to moderate the conversation. |
 | `/c/<slug>/arguments/<arg_id>/unhide` | POST | Same as hide. |
+| `/c/<slug>/arguments/<fs_id>/submit` | POST | Legacy compatibility redirect to `/c/<slug>/featured-statements/<fs_id>/arguments` using HTTP 307. |
+| `/c/<slug>/arguments/<fs_id>/<side>/skip` | POST | Legacy compatibility redirect to `/c/<slug>/featured-statements/<fs_id>/skip/<side>` using HTTP 307. |
 
 ## Global-admin routes
 
@@ -77,7 +80,6 @@ the specific conversation. The shared authorization helper is
 | Routes | Methods | Authorization |
 |---|---|---|
 | `/proxy/particiapi/<path>` | GET, POST, PUT | `login_required`. Path must stay under `api/` and reject `..` segments. Unsafe methods require same-origin browser provenance headers. |
-| `/c/<slug>/statements/new` | POST | `login_required`. Manually validates Flask-WTF CSRF because it lives on the CSRF-exempt proxy blueprint, then requires same-origin browser provenance headers, active/unpaused submission phase, current participation, and per-participant quota. |
 
 ## Local-debug-only routes
 

@@ -84,7 +84,7 @@ def _make_args(fs_id, proposer_id, side, n):
 # ── Argument submission ────────────────────────────────────────────────────────
 
 def test_submit_pro_argument(auth_client, arg_conv, arg_part, fs, participant):
-    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit', data={
+    resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
         'side': 'pro', 'body': 'This is a pro argument.',
     })
     assert resp.status_code == 302
@@ -95,7 +95,7 @@ def test_submit_pro_argument(auth_client, arg_conv, arg_part, fs, participant):
 
 
 def test_submit_con_argument(auth_client, arg_conv, arg_part, fs, participant):
-    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit', data={
+    resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
         'side': 'con', 'body': 'This is a con argument.',
     })
     assert resp.status_code == 302
@@ -104,31 +104,31 @@ def test_submit_con_argument(auth_client, arg_conv, arg_part, fs, participant):
 
 
 def test_submit_invalid_side_rejected(auth_client, arg_conv, arg_part, fs):
-    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit', data={
+    resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
         'side': 'neutral', 'body': 'Text.',
     })
     assert resp.status_code == 400
 
 
 def test_submit_empty_body_rejected(auth_client, arg_conv, arg_part, fs):
-    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit', data={
+    resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
         'side': 'pro', 'body': '',
     })
     assert resp.status_code == 400
 
 
 def test_submit_body_too_long_rejected(auth_client, arg_conv, arg_part, fs):
-    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit', data={
+    resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
         'side': 'pro', 'body': 'x' * 281,
     })
     assert resp.status_code == 400
 
 
 def test_submit_duplicate_silently_redirects(auth_client, arg_conv, arg_part, fs, participant):
-    auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit', data={
+    auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
         'side': 'pro', 'body': 'First submission.',
     })
-    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit', data={
+    resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
         'side': 'pro', 'body': 'Second submission.',
     })
     assert resp.status_code == 302
@@ -138,7 +138,7 @@ def test_submit_duplicate_silently_redirects(auth_client, arg_conv, arg_part, fs
 
 def test_submit_inserts_into_side_state_order(auth_client, arg_conv, arg_part, fs, participant):
     """After submission the new argument ID appears in the participant's argument_order."""
-    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit', data={
+    resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
         'side': 'pro', 'body': 'Ordering test.',
     })
     assert resp.status_code == 302
@@ -148,6 +148,14 @@ def test_submit_inserts_into_side_state_order(auth_client, arg_conv, arg_part, f
         participant_id=participant.id, featured_statement_id=fs.id, side='pro').first()
     assert state is not None
     assert arg.id in state.argument_order
+
+
+def test_legacy_submit_url_redirects_to_featured_statement_route(auth_client, arg_conv, arg_part, fs):
+    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit',
+                            data={'side': 'pro', 'body': 'Legacy path.'})
+    assert resp.status_code == 307
+    assert resp.headers['Location'].endswith(
+        f'/c/arg-conv/featured-statements/{fs.id}/arguments')
 
 
 def test_submit_blocked_on_inactive_conv(auth_client, app, participant, fs):
@@ -160,7 +168,7 @@ def test_submit_blocked_on_inactive_conv(auth_client, app, participant, fs):
                             confirmed_by_admin=True)
     db.session.add(fs2)
     db.session.commit()
-    resp = auth_client.post(f'/c/closed-arg/arguments/{fs2.id}/submit', data={
+    resp = auth_client.post(f'/c/closed-arg/featured-statements/{fs2.id}/arguments', data={
         'side': 'pro', 'body': 'Should be blocked.',
     })
     assert resp.status_code == 403
@@ -169,7 +177,7 @@ def test_submit_blocked_on_inactive_conv(auth_client, app, participant, fs):
 # ── Skip ──────────────────────────────────────────────────────────────────────
 
 def test_skip_pro_side(auth_client, arg_conv, arg_part, fs, participant):
-    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/pro/skip')
+    resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/skip/pro')
     assert resp.status_code == 302
     state = ArgumentSideState.query.filter_by(
         participant_id=participant.id, featured_statement_id=fs.id, side='pro').first()
@@ -178,23 +186,31 @@ def test_skip_pro_side(auth_client, arg_conv, arg_part, fs, participant):
 
 
 def test_skip_invalid_side_rejected(auth_client, arg_conv, arg_part, fs):
-    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/neutral/skip')
+    resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/skip/neutral')
     assert resp.status_code == 400
 
 
 def test_skip_idempotent(auth_client, arg_conv, arg_part, fs, participant):
-    auth_client.post(f'/c/arg-conv/arguments/{fs.id}/pro/skip')
-    auth_client.post(f'/c/arg-conv/arguments/{fs.id}/pro/skip')
+    auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/skip/pro')
+    auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/skip/pro')
     assert ArgumentSideState.query.filter_by(
         participant_id=participant.id, featured_statement_id=fs.id, side='pro').count() == 1
+
+
+def test_legacy_skip_url_redirects_to_featured_statement_route(auth_client, arg_conv,
+                                                              arg_part, fs):
+    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/pro/skip')
+    assert resp.status_code == 307
+    assert resp.headers['Location'].endswith(
+        f'/c/arg-conv/featured-statements/{fs.id}/skip/pro')
 
 
 # ── Importance voting ─────────────────────────────────────────────────────────
 
 def _pass_gate(client, slug, fs_id):
     """Helper: skip both sides to pass the contribution gate."""
-    client.post(f'/c/{slug}/arguments/{fs_id}/pro/skip')
-    client.post(f'/c/{slug}/arguments/{fs_id}/con/skip')
+    client.post(f'/c/{slug}/featured-statements/{fs_id}/skip/pro')
+    client.post(f'/c/{slug}/featured-statements/{fs_id}/skip/con')
 
 
 def test_vote_blocked_before_gate(auth_client, arg_conv, arg_part, fs, app):
@@ -270,9 +286,9 @@ def test_p1_1_duplicate_ajax_submit_returns_json(auth_client, arg_conv, arg_part
     checked. Fetch follows the redirect, r.ok is true but r.json() throws, the
     .catch re-enables submitBtn and leaves the wrapper stuck in composing.
     """
-    auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit',
+    auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments',
                      data={'side': 'pro', 'body': 'First.'}, headers=AJAX)
-    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit',
+    resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments',
                             data={'side': 'pro', 'body': 'Duplicate.'}, headers=AJAX)
     assert resp.status_code == 200
     data = resp.get_json()

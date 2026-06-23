@@ -21,7 +21,7 @@ What a worker does, in a loop, through the proxy
 ------------------------------------------------
   1. auth         GET  /dev/login/dev-user-N            (needs DEV_FAKE_LOGIN=1)
   2. accept       POST /accept/<slug>                   (once, for the submit action)
-  3. discover     GET  /c/<slug>  → <pa-conversation conversation-id="...">
+  3. discover     GET  /c/<slug>  → #particiapi-client data-conversation-id
   4. pa-session   POST /proxy/particiapi/api/session?create=true  → csrf_token
   5. statements   GET  /proxy/particiapi/api/conversations/<cid>/statements/
   6. vote         PUT  /proxy/particiapi/api/conversations/<cid>/votes/<tid>
@@ -42,8 +42,9 @@ Prerequisites
   * The vote/results actions need only login, so they soak the proxy on any deployed
     instance. Auto-discovery (slug→id) and the `submit` action additionally need a
     resolvable Participation for the dev-fake user; where that isn't set up (e.g. a
-    dev-fake row whose username drifted), pass --conversation-id (read it from the
-    page's <pa-conversation conversation-id="…">) and the soak runs on vote/results.
+    dev-fake row whose username drifted), pass --conversation-id (read it from
+    the page's #particiapi-client data-conversation-id) and the soak runs on
+    vote/results.
 
 Usage
 -----
@@ -85,7 +86,7 @@ DEFAULT_BASE = os.environ.get("WIKI_POLIS_FLASK_URL", "http://127.0.0.1:5001").r
 DEV_USERS = ["dev-user-1", "dev-user-2", "dev-user-3"]  # /dev/login/<username> (DEV_FAKE_LOGIN=1)
 VOTE_VALUES = [-1, 0, 1]                                 # disagree / pass / agree
 PSEUDONYM_RE = re.compile(r"^[a-z]+-[a-z]+$")            # matches the app's _PSEUDONYM_RE shape
-CONV_ID_RE = re.compile(r'conversation-id="([^"]+)"')
+CONV_ID_RE = re.compile(r'data-conversation-id="([^"]+)"')
 CSRF_RE = re.compile(r'name="csrf_token"[^>]*value="([^"]+)"')
 
 
