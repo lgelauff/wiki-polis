@@ -52,6 +52,7 @@ _SLUG_RE         = re.compile(r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
 _PSEUDONYM_RE    = re.compile(r'^[a-z]{2,20}-[a-z]{2,20}$')
 _REDIS_RATELIMIT_SCHEMES = ('redis://', 'rediss://')
 _MIN_RATELIMIT_IDENTITY_SECRET_LEN = 32
+_MIN_STAGING_DEV_TOKEN_LEN = 32
 
 
 def _read_secret(name: str) -> str:
@@ -71,6 +72,26 @@ def _truthy(value) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _is_staging_toolforge_app(app: Flask) -> bool:
+    tool_name = (
+        os.environ.get('TOOL_NAME')
+        or os.environ.get('TOOLFORGE_TOOL_NAME')
+        or ''
+    ).strip()
+    if tool_name == 'wiki-polis-dev':
+        return True
+    if os.environ.get('WIKI_POLIS_ENV', '').strip().lower() == 'staging':
+        return True
+    hosts = app.config.get('TRUSTED_HOSTS') or []
+    if isinstance(hosts, str):
+        hosts = _split_csv(hosts)
+    return 'wiki-polis-dev.toolforge.org' in hosts
+
+
+def _staging_dev_login_token(username: str, secret: str) -> str:
+    return hmac.new(secret.encode('utf-8'), username.encode('utf-8'), hashlib.sha256).hexdigest()
 
 
 ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.strip()]
@@ -877,7 +898,7 @@ def _check_conversation_access(conversation, participant) -> None:
 
 # ── Particiapi proxy ──────────────────────────────────────────────────────────
 
-def _validate_same_origin():
+def _validate_same_origin(*, allow_missing_provenance: bool = False):
     """Abort 403 if the request does not appear to be same-origin.
     Used as a compensating control on CSRF-exempt endpoints."""
     sec_fetch = request.headers.get('Sec-Fetch-Site')
@@ -890,13 +911,15 @@ def _validate_same_origin():
         if urlparse(origin).netloc != urlparse(request.host_url).netloc:
             abort(403)
         return
+    if allow_missing_provenance:
+        return
     abort(403)
 
 
 def _validate_fetch_csrf():
     """Validate Flask-WTF CSRF for JSON/fetch routes on the exempt proxy blueprint."""
     if not current_app.config.get('WTF_CSRF_ENABLED', True):
-        return
+        return False
     token = (request.headers.get('X-CSRFToken')
              or request.headers.get('X-CSRF-Token')
              or request.form.get('csrf_token'))
@@ -904,6 +927,7 @@ def _validate_fetch_csrf():
         validate_csrf(token)
     except ValidationError:
         abort(400)
+    return True
 
 
 def _proxy_to_particiapi(pa_path: str):
@@ -1203,8 +1227,8 @@ def conversation_statement_new(slug):
     records the Polis statement ID for novelty tracking."""
     # This route lives on the CSRF-exempt proxy blueprint for historical reasons,
     # so validate Flask-WTF's token manually before same-origin checks.
-    _validate_fetch_csrf()
-    _validate_same_origin()
+    csrf_validated = _validate_fetch_csrf()
+    _validate_same_origin(allow_missing_provenance=csrf_validated)
 
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     if not conv.active or conv.paused or not conv.phase_submission:
@@ -3299,6 +3323,14 @@ def _register_routes(app: Flask) -> None:
 
     _dev_login_user = os.environ.get('DEV_LOGIN_USER', '').strip()
     _on_toolforge   = bool(os.environ.get('TOOL_TOOLFORGE_API_URL'))
+    _staging_dev_token = _read_secret('staging-dev-token')
+    _staging_dev_login_enabled = bool(
+        _on_toolforge
+        and _staging_dev_token
+        and len(_staging_dev_token) >= _MIN_STAGING_DEV_TOKEN_LEN
+        and _is_staging_toolforge_app(app)
+    )
+    app.config['STAGING_DEV_LOGIN'] = _staging_dev_login_enabled
 
     if app.debug:
         import pathlib
@@ -3363,15 +3395,22 @@ def _register_routes(app: Flask) -> None:
             'DEV_FAKE_LOGIN ignored because fake login is only allowed in local debug mode'
         )
     app.config['DEV_FAKE_LOGIN'] = _fake_login_enabled
-    app.config['DEV_TEST_USERS'] = _DEV_TEST_USERS if _fake_login_enabled else []
+    app.config['DEV_TEST_USERS'] = (
+        _DEV_TEST_USERS if (_fake_login_enabled or _staging_dev_login_enabled) else []
+    )
 
-    if _fake_login_enabled:
+    if _fake_login_enabled or _staging_dev_login_enabled:
         @app.get('/dev/login/<username>')
         @limiter.limit('30 per minute')
         def dev_fake_login(username):
             user = next((u for u in _DEV_TEST_USERS if u['username'] == username), None)
             if user is None:
                 return 'Unknown test user', 404
+            if _staging_dev_login_enabled and not _fake_login_enabled:
+                supplied = request.args.get('token', '')
+                expected = _staging_dev_login_token(username, _staging_dev_token)
+                if not hmac.compare_digest(supplied, expected):
+                    abort(403)
             xid = hashlib.sha256(f'dev-fake-{username}'.encode()).hexdigest()
             participant = Participant.query.filter_by(mw_user_id=user['mw_user_id']).first()
             if participant is None:

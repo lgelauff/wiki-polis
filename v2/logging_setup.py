@@ -20,13 +20,20 @@ Design notes from the expert review:
 
 import json
 import logging
+import os
+import queue
 import re
+import threading
+from copy import copy
 from datetime import datetime, timezone
 
+import requests
 from flask import g, has_request_context
 from sqlalchemy.engine import make_url  # noqa: F401  (re-exported for callers/tests)
 
 _HANDLER_NAME = 'wikipolis-stderr'
+_LOKI_HANDLER_NAME = 'wikipolis-loki'
+_LOKI_LABEL_DENYLIST = {'request_id', 'participant_id'}
 _factory_installed = False
 
 # Minimal redaction (full catalogue is Plan 3). Each entry scrubs a concrete high-risk
@@ -87,6 +94,116 @@ class RedactingTextFormatter(logging.Formatter):
         return _redact(super().format(record))
 
 
+class RedactingLokiQueueHandler(logging.Handler):
+    """Asynchronous Loki sender that formats records with the configured redactor."""
+
+    def __init__(self, url: str, labels: dict[str, str], auth=None,
+                 timeout: float = 2.0, max_queue: int = 1000):
+        super().__init__(level=logging.INFO)
+        self.url = _loki_push_url(url)
+        self.labels = labels
+        self.auth = auth
+        self.timeout = timeout
+        self.dropped = 0
+        self._queue: queue.Queue[logging.LogRecord] = queue.Queue(maxsize=max_queue)
+        self._stop = threading.Event()
+        self._worker = threading.Thread(
+            target=self._run,
+            name='wiki-polis-loki-logger',
+            daemon=True,
+        )
+        self._worker.start()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self._queue.put_nowait(copy(record))
+        except queue.Full:
+            self.dropped += 1
+
+    def _run(self) -> None:
+        while not self._stop.is_set() or not self._queue.empty():
+            try:
+                record = self._queue.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            try:
+                self._post_record(record)
+            finally:
+                self._queue.task_done()
+
+    def _post_record(self, record: logging.LogRecord) -> None:
+        try:
+            line = self.format(record)
+            payload = {
+                'streams': [{
+                    'stream': self.labels,
+                    'values': [[str(int(record.created * 1_000_000_000)), line]],
+                }],
+            }
+            resp = requests.post(
+                self.url,
+                json=payload,
+                auth=self.auth,
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
+        except Exception:
+            self.handleError(record)
+
+    def close(self) -> None:
+        self._stop.set()
+        if self._worker.is_alive():
+            self._worker.join(timeout=self.timeout + 0.5)
+        super().close()
+
+
+def _loki_push_url(url: str) -> str:
+    url = (url or '').rstrip('/')
+    if url.endswith('/loki/api/v1/push'):
+        return url
+    return f'{url}/loki/api/v1/push'
+
+
+def _loki_labels(app, on_toolforge: bool) -> dict[str, str]:
+    labels = {}
+    for part in (app.config.get('LOKI_LABELS') or os.environ.get('LOKI_LABELS', '')).split(','):
+        key, _, value = part.partition('=')
+        key = key.strip()
+        value = value.strip()
+        if (key and value and key not in _LOKI_LABEL_DENYLIST
+                and re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', key)):
+            labels[key] = value
+    labels['env'] = (
+        app.config.get('WIKI_POLIS_ENV')
+        or os.environ.get('WIKI_POLIS_ENV')
+        or ('toolforge' if on_toolforge else 'local')
+    )
+    labels['service'] = 'wiki-polis'
+    return labels
+
+
+def _install_loki_handler(root: logging.Logger, app, on_toolforge: bool) -> None:
+    url = (app.config.get('LOKI_URL') or os.environ.get('LOKI_URL', '')).strip()
+    if not url:
+        return
+    username = app.config.get('LOKI_USERNAME') or os.environ.get('LOKI_USERNAME', '')
+    password = app.config.get('LOKI_PASSWORD') or os.environ.get('LOKI_PASSWORD', '')
+    auth = (username, password) if username and password else None
+    timeout = float(app.config.get('LOKI_TIMEOUT') or os.environ.get('LOKI_TIMEOUT', 2.0))
+    max_queue = int(app.config.get('LOKI_QUEUE_SIZE') or os.environ.get('LOKI_QUEUE_SIZE', 1000))
+
+    handler = RedactingLokiQueueHandler(
+        url,
+        _loki_labels(app, on_toolforge),
+        auth=auth,
+        timeout=timeout,
+        max_queue=max_queue,
+    )
+    handler.name = _LOKI_HANDLER_NAME
+    handler.setFormatter(RedactingJsonFormatter())
+    root.addHandler(handler)
+
+
 def _install_record_factory() -> None:
     """Wrap the LogRecord factory once to stamp request_id + participant_id on every record."""
     global _factory_installed
@@ -116,8 +233,10 @@ def configure_logging(app, on_toolforge: bool = False) -> None:
     root = logging.getLogger()
     # Idempotent: remove only OUR previously-installed handler — never clear all root
     # handlers (that would drop pytest's caplog handler mid-test).
-    for handler in [h for h in root.handlers if getattr(h, 'name', None) == _HANDLER_NAME]:
+    for handler in [h for h in root.handlers
+                    if getattr(h, 'name', None) in (_HANDLER_NAME, _LOKI_HANDLER_NAME)]:
         root.removeHandler(handler)
+        handler.close()
 
     root.setLevel(logging.INFO if on_toolforge else logging.DEBUG)
 
@@ -143,3 +262,4 @@ def configure_logging(app, on_toolforge: bool = False) -> None:
         handler.setFormatter(RedactingTextFormatter(
             '%(asctime)s %(levelname)s [%(request_id)s pid=%(participant_id)s] %(name)s: %(message)s'))
     root.addHandler(handler)
+    _install_loki_handler(root, app, on_toolforge)

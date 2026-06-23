@@ -66,6 +66,7 @@ detects that in a preflight probe and exits 2 rather than firing traffic that al
 bounces to /login.
 """
 import argparse
+import html
 import os
 import random
 import re
@@ -87,6 +88,16 @@ VOTE_VALUES = [-1, 0, 1]                                 # disagree / pass / agr
 PSEUDONYM_RE = re.compile(r"^[a-z]+-[a-z]+$")            # matches the app's _PSEUDONYM_RE shape
 CONV_ID_RE = re.compile(r'conversation-id="([^"]+)"')
 CSRF_RE = re.compile(r'name="csrf_token"[^>]*value="([^"]+)"')
+FETCH_CSRF_RE = re.compile(r"var csrfToken = '([^']+)'")
+
+
+def extract_csrf_token(markup):
+    """Return a Flask-WTF token from conversation or form markup, if present."""
+    for pattern in (FETCH_CSRF_RE, CSRF_RE):
+        m = pattern.search(markup or "")
+        if m:
+            return html.unescape(m.group(1))
+    return None
 
 
 class Health:
@@ -161,6 +172,7 @@ class Worker:
         self.s.verify = not args.insecure
         self.origin = _origin(args.base_url)
         self.pa_csrf = None
+        self.submit_csrf = args.csrf_token
         self.tids = []
         self.cid = args.conversation_id
         self.n_submit = 0
@@ -224,6 +236,7 @@ class Worker:
         if self.cid:
             return True
         r = self._req("discover", "GET", f"/c/{self.args.slug}", health={"allow_status": (302,)})
+        self.submit_csrf = self.submit_csrf or extract_csrf_token(r.text)
         m = CONV_ID_RE.search(r.text or "")
         if m:
             self.cid = m.group(1)
@@ -250,6 +263,18 @@ class Worker:
                 self.tids = []
 
     # ── actions ──────────────────────────────────────────────────────────────
+    def ensure_submit_csrf(self):
+        if self.submit_csrf:
+            return True
+        r = self._req("csrf", "GET", f"/c/{self.args.slug}", health={"allow_status": (302,)})
+        if r.ok:
+            self.submit_csrf = extract_csrf_token(r.text)
+        if self.submit_csrf:
+            return True
+        self.health._fail("submit", "GET", f"/c/{self.args.slug}",
+                          r.status_code, "could not extract Flask CSRF token")
+        return False
+
     def act_vote(self):
         if not self.tids:
             self.refresh_tids()
@@ -263,13 +288,16 @@ class Worker:
         self._proxy("results", "GET", f"api/conversations/{self.cid}/results/")
 
     def act_submit(self):
+        if not self.ensure_submit_csrf():
+            return
         self.n_submit += 1
         text = f"{self.args.submit_text_prefix} w{self.idx} #{self.n_submit} — synthetic statement"
         # 403 quota_exceeded and 404 (no participation) are acceptable, not failures.
         # 201 created; 403 quota_exceeded; 401/404 no Participation — all acceptable.
         self._req("submit", "POST", f"/c/{self.args.slug}/statements/new",
                   json={"text": text}, headers={"Origin": self.origin,
-                  "Referer": f"{self.args.base_url}/c/{self.args.slug}"},
+                  "Referer": f"{self.args.base_url}/c/{self.args.slug}",
+                  "X-CSRFToken": self.submit_csrf},
                   health={"allow_status": (401, 403, 404)})
 
     # ── loop ─────────────────────────────────────────────────────────────────
@@ -316,6 +344,7 @@ def parse_args(argv=None):
     p.add_argument("--actions", default="vote,results,submit",
                    help="comma list with optional weights, e.g. 'vote:5,results:2,submit:1'")
     p.add_argument("--session-cookie", help="raw Cookie header to use instead of dev-fake-login")
+    p.add_argument("--csrf-token", help="precomputed Flask CSRF token for statement submission")
     p.add_argument("--submit-text-prefix", default="[synthetic]", help="tag for submitted statements")
     p.add_argument("--insecure", action="store_true", help="skip TLS verification")
     p.add_argument("--dry-run", action="store_true",

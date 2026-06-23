@@ -270,3 +270,39 @@ def test_statement_new_accepts_valid_manual_csrf_when_csrf_enabled(csrf_enabled_
                            json={'text': 'A token-backed idea'})
 
     assert resp.status_code == 201
+
+
+def test_statement_new_allows_missing_provenance_after_valid_manual_csrf(csrf_enabled_app):
+    """Safari-style fetches may omit Fetch Metadata; the CSRF token remains required."""
+    client = csrf_enabled_app.test_client()
+    p = Participant(mw_user_id=30303, mw_username='csrfonly', xid='e' * 64)
+    conv = Conversation(slug='csrf-only', polis_id='csrfonlyxx', title='CSRF Only',
+                        active=True, access_policy='public', phase_submission=True,
+                        argument_vote_data={'new_stmt_max': 3})
+    db.session.add_all([p, conv])
+    db.session.commit()
+    db.session.add(Participation(participant_id=p.id,
+                                 conversation_id=conv.id,
+                                 pseudonym='csrf-only'))
+    db.session.commit()
+    with client.session_transaction() as sess:
+        sess['username'] = p.mw_username
+        sess['xid'] = p.xid
+
+    page = client.get('/c/csrf-only')
+    token_match = re.search(rb"var csrfToken = '([^']+)'", page.data)
+    assert token_match is not None
+    csrf_token = token_match.group(1).decode()
+
+    sess_resp = _fake_upstream(cookies={'session': 'NEWPA'})
+    sess_resp.ok = True
+    sess_resp.json = lambda: {'csrf_token': 'TOK'}
+    stmt_resp = _fake_upstream(status_code=201, content=b'{"id":557}')
+    stmt_resp.json = lambda: {'id': 557}
+
+    with patch('app.requests.post', side_effect=[sess_resp, stmt_resp]):
+        resp = client.post('/c/csrf-only/statements/new',
+                           headers={'X-CSRFToken': csrf_token},
+                           json={'text': 'A CSRF-backed browser submit'})
+
+    assert resp.status_code == 201

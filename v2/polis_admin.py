@@ -709,6 +709,14 @@ class PolisServerClient:
                 conn.commit()
             finally:
                 conn.close()
+        except psycopg2.errors.InsufficientPrivilege:
+            logger.exception(
+                'queue_math_recompute lacks worker_tasks privileges for %s; '
+                'grant INSERT on worker_tasks and USAGE on its sequence to the '
+                'POLIS_DATABASE_URL role',
+                zinvite,
+            )
+            return False
         except Exception:
             logger.exception('queue_math_recompute failed for %s', zinvite)
             return False
