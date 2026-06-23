@@ -1,9 +1,14 @@
 """Tests for the argument mapping layer: submit, skip, vote, admin featured."""
+import os
+
 import pytest
 
 from db import (Argument, ArgumentSideState, ArgumentVote, Conversation,
                 FeaturedStatement, Participant, Participation, db)
 from tests.conftest import login
+
+_CONVERSATION_TEMPLATE = os.path.join(
+    os.path.dirname(__file__), os.pardir, 'templates', 'conversation.html')
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -202,6 +207,32 @@ def test_legacy_skip_url_redirects_to_featured_statement_route(auth_client, arg_
     assert resp.status_code == 307
     assert resp.headers['Location'].endswith(
         f'/c/arg-conv/featured-statements/{fs.id}/skip/pro')
+
+
+def test_argument_tab_renders_direct_skip_controls(auth_client, arg_conv, arg_part, fs):
+    resp = auth_client.get('/c/arg-conv')
+    assert resp.status_code == 200
+    html = resp.data.decode()
+    assert html.count('class="at-direct-skip contribute-direct-skip"') == 2
+    assert '/help/arguments' in html
+    assert 'Add one for-argument, or skip' not in html
+    assert 'Add one against-argument, or skip' not in html
+
+
+def test_all_complete_state_requires_side_contribution_states():
+    template = open(_CONVERSATION_TEMPLATE, encoding='utf-8').read()
+    assert 'function sideContributionDone(wrapper)' in template
+    assert '!sideContributionDone(proWrapper)' in template
+    assert '!sideContributionDone(conWrapper)' in template
+
+
+def test_all_done_interlude_copy_is_not_reversibility_copy(
+        auth_client, arg_conv, arg_part, fs):
+    resp = auth_client.get('/c/arg-conv')
+    assert resp.status_code == 200
+    html = resp.data.decode()
+    assert 'Nice work. Review the importance choices below where they are available.' in html
+    assert 'Nothing is locked in' not in html
 
 
 # ── Importance voting ─────────────────────────────────────────────────────────

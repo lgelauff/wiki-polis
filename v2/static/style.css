@@ -335,6 +335,20 @@ header {
 @media (max-width: 600px) {
   .home-container { padding: 0 1rem; }
   .conv-card { padding: 12px 14px; }
+  a.conv-card {
+    position: relative;
+    padding-right: 42px;
+  }
+  a.conv-card::after {
+    content: '\203A';
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--pass);
+    font-size: 22px;
+    line-height: 1;
+  }
   .conv-card-action { display: none; }
 }
 
@@ -2338,11 +2352,13 @@ a { color: var(--pass); }
 
 /* Contribute affordance — state machine via data-state attribute */
 .contribute-wrapper .contribute-affordance,
+.contribute-wrapper .contribute-direct-skip,
 .contribute-wrapper .contribute-composer,
 .contribute-wrapper .contribute-submitted,
 .contribute-wrapper .contribute-skipped { display: none; }
 
 .contribute-wrapper[data-state="idle"]      .contribute-affordance { display: flex; }
+.contribute-wrapper[data-state="idle"]      .contribute-direct-skip { display: inline-flex; }
 .contribute-wrapper[data-state="composing"] .contribute-composer   { display: block; }
 .contribute-wrapper[data-state="submitted"] .contribute-submitted  { display: flex; }
 .contribute-wrapper[data-state="skipped"]   .contribute-skipped    { display: flex; }
@@ -2432,6 +2448,12 @@ a { color: var(--pass); }
 
 .arg-col--pro .contribute-composer-label { color: var(--agree); }
 .arg-col--con .contribute-composer-label { color: var(--disagree); }
+
+.contribute-help-link {
+  font-size: 12px;
+  color: var(--pass);
+  white-space: nowrap;
+}
 
 .contribute-charcount {
   font-family: var(--mono);
@@ -3420,6 +3442,29 @@ a { color: var(--pass); }
   font-family: var(--sans);
 }
 .at-contribute--idle:hover { border-color: var(--muted); color: var(--body); }
+.at-direct-skip {
+  align-items: center;
+  min-height: 32px;
+  margin: -6px 0 12px 1px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pass);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.at-direct-skip:hover { color: var(--blue-dark); text-decoration: underline; text-underline-offset: 3px; }
+.at-direct-skip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.at-direct-skip:disabled {
+  color: var(--muted);
+  cursor: wait;
+  text-decoration: none;
+}
 .at-contribute--done {
   border: 1.5px solid var(--ink);
   background: var(--surface2);

@@ -1929,6 +1929,17 @@ def proxy_particiapi(pa_path):
 # nh3 tag allowlist for CSV import sanitisation — no HTML tags permitted.
 _NH3_NO_TAGS: frozenset[str] = frozenset()
 
+
+@participant_bp.get('/help/statements')
+def statement_guidance():
+    return render_template('guidance_statement.html')
+
+
+@participant_bp.get('/help/arguments')
+def argument_guidance():
+    return render_template('guidance_argument.html')
+
+
 # ── Admin ─────────────────────────────────────────────────────────────────
 
 @admin_bp.get('/admin')

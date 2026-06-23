@@ -133,6 +133,13 @@ def test_home_output_symbols_expose_state_and_labels(auth_client, conv, particip
     assert 'aria-label="After Explore phase: topic and participant clustering"' in html
 
 
+def test_mobile_home_cards_keep_visible_tap_affordance():
+    css = open(_STYLE_CSS, encoding='utf-8').read()
+    assert '.conv-card-action { display: none; }' in css
+    assert 'a.conv-card::after' in css
+    assert "content: '\\203A';" in css
+
+
 # ── Name/role/value affordances (4.1.2 / 1.3.1) ────────────────────────────────
 
 def test_composer_textareas_have_accessible_names(auth_client, conv, participation):
@@ -142,6 +149,7 @@ def test_composer_textareas_have_accessible_names(auth_client, conv, participati
     assert resp.status_code == 200
     assert b'aria-labelledby="composer-suggest-title"' in resp.data
     assert b'aria-labelledby="composer-newstmt-title"' in resp.data
+    assert b'/help/statements' in resp.data
 
 
 def test_progressbar_has_static_valuenow(auth_client, conv, participation):
@@ -153,6 +161,7 @@ def test_progressbar_has_static_valuenow(auth_client, conv, participation):
     bar = re.search(rb'role="progressbar"[^>]*>', resp.data)
     assert bar, 'progressbar not rendered'
     assert b'aria-valuenow=' in bar.group(0)
+    assert b'<span class="vote-progress-label">voted</span>' in resp.data
 
 
 # ── The high-value coupling guard ──────────────────────────────────────────────

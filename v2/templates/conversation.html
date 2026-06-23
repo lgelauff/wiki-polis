@@ -153,6 +153,7 @@
             <span id="votes-done" class="vote-progress-voted">0</span>
             <span class="vote-progress-sep"> / </span>
             <span id="votes-total">?</span>
+            <span class="vote-progress-label">voted</span>
           </span>
           <div class="vote-progress-bar-wrap">
             <div class="vote-progress-bar" id="vote-progress-bar"
@@ -269,7 +270,7 @@
           <div class="v2-composer-header">
             <div>
               <div class="v2-composer-title" id="composer-suggest-title">Suggest different wording</div>
-              <div class="v2-composer-helper" id="composer-suggest-helper">Stays close to the same idea — just a clearer or fairer phrasing.</div>
+              <div class="v2-composer-helper" id="composer-suggest-helper">Stays close to the same idea — just a clearer or fairer phrasing. <a href="{{ url_for('participant.statement_guidance') }}">Writing tips</a></div>
             </div>
             <span class="propose-charcount"><span id="suggest-len">0</span> / 280</span>
           </div>
@@ -290,7 +291,7 @@
           <div class="v2-composer-header">
             <div>
               <div class="v2-composer-title" id="composer-newstmt-title">Propose a new statement</div>
-              <div class="v2-composer-helper" id="composer-newstmt-helper">A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool.</div>
+              <div class="v2-composer-helper" id="composer-newstmt-helper">A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool. <a href="{{ url_for('participant.statement_guidance') }}">Writing tips</a></div>
             </div>
             <span class="propose-charcount"><span id="newstmt-len">0</span> / 280</span>
           </div>
@@ -463,7 +464,7 @@
           </svg>
         </span>
         <h2 class="interlude-title">You've been through all of them</h2>
-        <p class="interlude-sub">Nothing is locked in — you can still adjust your priorities below.</p>
+        <p class="interlude-sub">Nice work. Review the importance choices below where they are available.</p>
       </div>
     </div>
 
@@ -553,12 +554,14 @@
                data-my-pseudonym="{{ participation.pseudonym }}">
             <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--pro" type="button">
               <span class="at-contribute-glyph" style="background:rgba(21,115,74,.15);color:var(--agree);font-weight:700" aria-hidden="true">+</span>
-              Add one for-argument, or skip
+              Add one for-argument
             </button>
+            <button class="at-direct-skip contribute-direct-skip" type="button">Nothing to add</button>
             <div class="contribute-composer">
               <div class="contribute-composer-header">
                 <span class="contribute-glyph filled">+</span>
                 <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-pro">Your for-argument · one sentence, one claim</span>
+                <a class="contribute-help-link" href="{{ url_for('participant.argument_guidance') }}">Argument tips</a>
                 <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
               </div>
               <textarea class="contribute-textarea" maxlength="280" rows="3"
@@ -679,12 +682,14 @@
                data-my-pseudonym="{{ participation.pseudonym }}">
             <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--con" type="button">
               <span class="at-contribute-glyph" style="background:rgba(178,58,58,.15);color:var(--disagree);font-weight:700" aria-hidden="true">−</span>
-              Add one against-argument, or skip
+              Add one against-argument
             </button>
+            <button class="at-direct-skip contribute-direct-skip" type="button">Nothing to add</button>
             <div class="contribute-composer">
               <div class="contribute-composer-header">
                 <span class="contribute-glyph filled">−</span>
                 <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-con">Your against-argument · one sentence, one claim</span>
+                <a class="contribute-help-link" href="{{ url_for('participant.argument_guidance') }}">Argument tips</a>
                 <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
               </div>
               <textarea class="contribute-textarea" maxlength="280" rows="3"
@@ -1873,16 +1878,23 @@
   var currentIdx = 0;
 
   // Completion state per panel: 'none' | 'half' | 'complete'
+  function sideContributionDone(wrapper) {
+    if (!wrapper) return false;
+    var state = wrapper.dataset.state;
+    return state === 'submitted' || state === 'skipped';
+  }
+
   function getPanelState(panel) {
     if (!panel) return 'none';
     var bothGate = panel.dataset.bothGate === 'true';
     var proReady = panel.dataset.proVoteReady === 'true';
     var conReady = panel.dataset.conVoteReady === 'true';
-    if (!bothGate) return 'none';
-    // half = both_gate true but prioritise not yet fully voted on at least one side
     var fsId = panel.id.replace('fs-', '');
-    var wrapper = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
-    var k = wrapper ? parseInt(wrapper.dataset.k || '2', 10) : 2;
+    var proWrapper = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
+    var conWrapper = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="con"]');
+    if (!bothGate || !sideContributionDone(proWrapper) || !sideContributionDone(conWrapper)) return 'none';
+    // half = both_gate true but prioritise not yet fully voted on at least one side
+    var k = proWrapper ? parseInt(proWrapper.dataset.k || '2', 10) : 2;
     var pickedPro = panel.querySelectorAll('.argument-card[data-side="pro"][data-picked="true"]').length;
     var pickedCon = panel.querySelectorAll('.argument-card[data-side="con"][data-picked="true"]').length;
     // A side is "done" if: not vote-ready (volume gate not met, nothing to pick) OR picks == k
@@ -2181,6 +2193,7 @@
     var ccLen       = wrapper.querySelector('.cc-len');
     var submitBtn   = wrapper.querySelector('.contribute-submit-btn');
     var skipBtn     = wrapper.querySelector('.contribute-skip-btn');
+    var directSkip  = wrapper.querySelector('.contribute-direct-skip');
     var changemind  = wrapper.querySelector('.contribute-changemind');
 
     function setState(s) {
@@ -2205,17 +2218,25 @@
       submitBtn.disabled = len === 0;
     });
 
-    // Skip button → skip API call → skipped state
-    skipBtn.addEventListener('click', function () {
+    function performSkip(trigger) {
       var url   = wrapper.dataset.skipUrl;
       var csrf  = wrapper.dataset.csrf;
+      if (trigger) trigger.disabled = true;
       argFetch(url, csrf).then(function (r) {
         if (r.ok) {
           setState('skipped');
           checkGateTransition(wrapper);
+        } else if (trigger) {
+          trigger.disabled = false;
         }
+      }).catch(function () {
+        if (trigger) trigger.disabled = false;
       });
-    });
+    }
+
+    // Skip buttons → skip API call → skipped state
+    skipBtn.addEventListener('click', function () { performSkip(skipBtn); });
+    if (directSkip) directSkip.addEventListener('click', function () { performSkip(directSkip); });
 
     // Submit button → argument submit API → submitted state + insert card
     submitBtn.addEventListener('click', function () {
