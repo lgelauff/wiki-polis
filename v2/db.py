@@ -10,7 +10,7 @@ db = SQLAlchemy()
 # because SQLite and MySQL both ignore DateTime(timezone=True).
 
 ACCESS_POLICIES = ('public', 'invite_only')
-ADMIN_ROLES     = ('moderator',)   # conversation-scoped only; site-wide access is Participant.is_global_admin
+ADMIN_ROLES     = ('moderator', 'organizer')   # conversation-scoped; site-wide access is Participant.is_global_admin
 ARGUMENT_SIDES  = ('pro', 'con')
 
 

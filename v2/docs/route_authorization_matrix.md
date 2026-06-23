@@ -41,10 +41,11 @@ between blueprints or authorization policy changes.
 |---|---|---|
 | `/admin` | GET | `login_required` and `admin_required`. |
 | `/admin/conversations/new` | POST | `login_required` and `admin_required`. |
-| `/admin/conversations/<conv_id>/edit` | POST | `login_required` and `admin_required`. |
+| `/admin/conversations/<conv_id>/edit` | POST | Conversation organizer or global admin. |
 | `/admin/conversations/<conv_id>/pause` | POST | `login_required` and `admin_required`. |
 | `/admin/conversations/<conv_id>/close` | POST | `login_required` and `admin_required`. |
 | `/admin/conversations/<conv_id>/phases` | POST | `login_required` and `admin_required`. |
+| `/admin/conversations/<conv_id>/phase/advance` | POST | Conversation organizer or global admin. |
 | `/admin/global-admins/add` | POST | `login_required` and `admin_required`. |
 | `/admin/global-admins/<participant_id>/remove` | POST | `login_required` and `admin_required`. |
 | `/admin/roles/add` | POST | `login_required` and `admin_required`. |

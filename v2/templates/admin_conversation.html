@@ -9,7 +9,7 @@
   <div class="role-bar-inner">
     <span class="role-chip {% if is_admin %}role-chip--admin{% endif %}"
           title="Your assigned role on this platform">
-      <span class="role-chip-dot"></span>{{ 'Global admin' if is_admin else 'Moderator' }}
+      <span class="role-chip-dot"></span>{{ role_label }}
     </span>
     <span class="role-bar-context">managing&nbsp;<strong>{{ conversation.title }}</strong></span>
     <span class="role-bar-spacer"></span>
@@ -215,7 +215,7 @@
     {# ── Guided move-on (mode-guided-part) ──────────────────────────────── #}
     <div class="mode-guided-part">
       {% if transition %}
-        {% if is_admin %}
+        {% if can_organize %}
         {# At-a-glance readiness summary in the hero — machine-checkable conditions
            that are currently unmet block the move. #}
         {% set unmet = transition.preconditions | selectattr('met', 'equalto', false) | list | length %}
@@ -309,9 +309,9 @@
         </script>
         {% else %}
         {# Moderator: read-only — cannot move phases. #}
-        <p class="muted" style="font-size:13px;margin-top:14px">Only a site admin can change phases.</p>
+        <p class="muted" style="font-size:13px;margin-top:14px">Only an organizer or site admin can change phases.</p>
         <button type="button" class="btn-small" disabled
-                title="Only a site admin can change phases">Move on to {{ transition.target.label }} →</button>
+                title="Only an organizer or site admin can change phases">Move on to {{ transition.target.label }} →</button>
         {% endif %}
       {% elif not linear_phase_state %}
         <p class="muted" style="margin-top:14px;font-size:13px">
@@ -404,12 +404,12 @@
     </div>
   </div>
 
-  {# ── Moderators — roster visible to anyone managing the conversation;
+  {# ── Conversation roles — roster visible to anyone managing the conversation;
      adding / removing is global-admin only (can_manage_roles). ── #}
   <div class="console-section">
-    <div class="console-section-label">Moderators</div>
+    <div class="console-section-label">Conversation roles</div>
     <details class="phase-advanced">
-      <summary>Moderators{% if conv_roles %} ({{ conv_roles | length }}){% endif %}</summary>
+      <summary>Roles{% if conv_roles %} ({{ conv_roles | length }}){% endif %}</summary>
       {% if conv_roles %}
       <table class="admin-table" style="margin-top:.75rem">
         <thead><tr><th>Participant</th><th>Role</th><th></th></tr></thead>
@@ -432,7 +432,7 @@
         </tbody>
       </table>
       {% else %}
-      <p class="muted" style="margin:.75rem 0;font-size:14px">No moderators assigned.</p>
+      <p class="muted" style="margin:.75rem 0;font-size:14px">No conversation roles assigned.</p>
       {% endif %}
 
       {% if can_manage_roles %}
@@ -453,13 +453,13 @@
             </select>
           </label>
         </div>
-        <button type="submit">Add moderator</button>
+        <button type="submit">Add role</button>
       </form>
       {% endif %}
     </details>
   </div>
 
-  {% if is_admin %}
+  {% if can_organize %}
   {# ── Configuration — settings (inline; no separate page yet) ── #}
   <div class="console-section">
     <div class="console-section-label">Configuration</div>
@@ -497,7 +497,9 @@
       </form>
     </details>
   </div>
+  {% endif %}{# can_organize #}
 
+  {% if is_admin %}
   {# ── Danger zone ──────────────────────────────────────────────────────── #}
   <div class="console-section">
     <div class="console-section-label" style="color:var(--disagree)">Ending the consultation</div>

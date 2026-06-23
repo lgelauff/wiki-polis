@@ -12,7 +12,7 @@
   (`datetime.now(timezone.utc)` on write); SQLite and MySQL both ignore
   `DateTime(timezone=True)`.
 - **Enumerations:** `ACCESS_POLICIES = ('public', 'invite_only')`;
-  `ADMIN_ROLES = ('moderator',)` — conversation-scoped only, site-wide admin is
+  `ADMIN_ROLES = ('moderator', 'organizer')` — conversation-scoped only, site-wide admin is
   `Participant.is_global_admin`; `ARGUMENT_SIDES = ('pro', 'con')`.
 - **Store:** MariaDB (ToolsDB) in production, SQLite in dev.
 

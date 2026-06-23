@@ -109,6 +109,21 @@ def test_edit_conversation_missing_title_flashes(admin_client, conv):
     assert conv.title == 'Admin Test Conv'          # unchanged
 
 
+def test_organizer_can_edit_conversation_settings(client, conv, participant):
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='organizer'))
+    db.session.commit()
+    login(client, 'testuser')
+    resp = client.post(f'/admin/conversations/{conv.id}/edit', data={
+        'title': 'Organizer Updated',
+        'access_policy': 'invite_only',
+    })
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.title == 'Organizer Updated'
+    assert conv.access_policy == 'invite_only'
+
+
 # ── Phase toggles ─────────────────────────────────────────────────────────────
 
 def test_phase_toggles_on(admin_client, conv):
@@ -235,7 +250,7 @@ def test_move_forbidden_for_regular_participant(auth_client, conv):
 
 
 def test_move_forbidden_for_moderator(client, conv, participant):
-    """Phase control is global-admin only — a moderator cannot move phases."""
+    """Phase control is organizer-or-above — a moderator cannot move phases."""
     db.session.add(AdminRole(participant_id=participant.id,
                              conversation_id=conv.id, role='moderator'))
     db.session.commit()
@@ -245,6 +260,43 @@ def test_move_forbidden_for_moderator(client, conv, participant):
     assert resp.status_code == 403
     db.session.refresh(conv)
     assert conv.phase_submission is False
+
+
+def test_organizer_can_advance_phase(client, conv, participant):
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='organizer'))
+    db.session.commit()
+    login(client, 'testuser')
+    with patch('app.PolisServerClient.set_vis_type'):
+        resp = client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                           data=_checks_for(conv))
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.phase_submission is True
+
+
+def test_organizer_cannot_use_advanced_phase_toggles(client, conv, participant):
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='organizer'))
+    db.session.commit()
+    login(client, 'testuser')
+    resp = client.post(f'/admin/conversations/{conv.id}/phases',
+                       data={'phase_submission': '1'})
+    assert resp.status_code == 403
+    db.session.refresh(conv)
+    assert conv.phase_submission is False
+
+
+def test_organizer_sees_guided_not_advanced_phase_controls(client, conv, participant):
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='organizer'))
+    db.session.commit()
+    login(client, 'testuser')
+    resp = client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'Organizer' in resp.data
+    assert b'phase/advance' in resp.data
+    assert f'/admin/conversations/{conv.id}/phases'.encode() not in resp.data
 
 
 def test_moderator_sees_readonly_stepper(client, conv, participant):
@@ -271,7 +323,7 @@ def test_moderator_sees_roster_readonly(client, conv, participant):
     resp = client.get(f'/admin/conversations/{conv.id}')
     assert resp.status_code == 200
     assert b'testuser' in resp.data                  # roster lists the moderator
-    assert b'Add moderator' not in resp.data         # cannot manage roles
+    assert b'Add role' not in resp.data              # cannot manage roles
     assert b'Save settings' not in resp.data         # no settings form
     assert b'roles/' not in resp.data                # no add/remove role actions
 
@@ -1103,6 +1155,22 @@ def test_grant_moderator_role(admin_client, admin_participant, conv, participant
     assert role is not None
 
 
+def test_grant_organizer_role(admin_client, admin_participant, conv, participant):
+    resp = admin_client.post('/admin/roles/add', data={
+        'participant_id': participant.id,
+        'conversation_id': conv.id,
+        'role': 'organizer',
+        'redirect_to': f'/admin/conversations/{conv.id}',
+    })
+    assert resp.status_code == 302
+    role = AdminRole.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        role='organizer',
+    ).first()
+    assert role is not None
+
+
 def test_grant_invalid_role_rejected(admin_client, participant):
     resp = admin_client.post('/admin/roles/add', data={
         'participant_id': participant.id,
@@ -1135,7 +1203,7 @@ def test_scoped_moderator_cannot_see_global_role_controls(client, conv, particip
     assert resp.status_code == 200
     assert b'testuser' in resp.data
     assert b'otheruser' not in resp.data
-    assert b'Add moderator' not in resp.data
+    assert b'Add role' not in resp.data
     assert b'class="btn-small btn-danger">remove</button>' not in resp.data
 
 

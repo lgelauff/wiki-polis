@@ -819,6 +819,28 @@ def _can_moderate(conversation, participant: 'Participant | None' = None) -> boo
     ).first() is not None
 
 
+def _can_organize(conversation, participant: 'Participant | None' = None) -> bool:
+    if _is_global_admin(participant):
+        return True
+    if participant is None:
+        participant = _current_participant()
+    if participant is None:
+        return False
+    return AdminRole.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conversation.id,
+        role='organizer',
+    ).first() is not None
+
+
+def _conversation_role_label(conversation, participant: 'Participant | None' = None) -> str:
+    if _is_global_admin(participant):
+        return 'Global admin'
+    if _can_organize(conversation, participant):
+        return 'Organizer'
+    return 'Moderator'
+
+
 def admin_required(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
@@ -848,6 +870,14 @@ def _require_mod_for_conv(conv_id: int) -> 'Conversation':
     """Return conversation or abort 403 if the current user can't moderate it."""
     conv = Conversation.query.get_or_404(conv_id)
     if not _can_moderate(conv):
+        abort(403)
+    return conv
+
+
+def _require_organizer_for_conv(conv_id: int) -> 'Conversation':
+    """Return conversation or abort 403 if the current user can't organize it."""
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _can_organize(conv):
         abort(403)
     return conv
 
@@ -1473,6 +1503,7 @@ def admin_conversation_detail(conv_id):
     )
     invite_count      = ConversationInvite.query.filter_by(conversation_id=conv_id).count()
     participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
+    can_organize      = _can_organize(conv)
     client            = _polis_server_client()
     polis_stats       = client.get_polis_stats(conv.polis_id)
     # Informed-voting round-2 tiles render whenever that phase is active (its flag is
@@ -1507,6 +1538,8 @@ def admin_conversation_detail(conv_id):
                            reveal=reveal,
                            admin_roles=ADMIN_ROLES,
                            can_manage_roles=can_manage_roles,
+                           can_organize=can_organize,
+                           role_label=_conversation_role_label(conv),
                            phase_sequence=PHASE_SEQUENCE,
                            current_stage_index=_current_stage_index(conv),
                            active_stage_indices=[i for i, s in enumerate(PHASE_SEQUENCE)
@@ -1559,9 +1592,8 @@ def admin_conversation_new():
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/edit')
 @login_required
-@admin_required
 def admin_conversation_edit(conv_id):
-    conv   = Conversation.query.get_or_404(conv_id)
+    conv   = _require_organizer_for_conv(conv_id)
     fields = _parse_conversation_form()
 
     if not fields['title']:
@@ -1653,7 +1685,6 @@ def admin_conversation_phases(conv_id):
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/phase/advance')
 @login_required
-@admin_required                      # guided forward move — global admin (later: organizer)
 def admin_conversation_advance(conv_id):
     """Guided 'Move on' phase transition (#156). The organizer must affirm every
     precondition (one checkbox each) before this is accepted; the route re-enforces
@@ -1665,7 +1696,7 @@ def admin_conversation_advance(conv_id):
     The Informed-voting transition runs Phase 6 init atomically; the Public-results
     transition auto-closes the conversation (starting the identity-reveal window).
     """
-    conv = Conversation.query.get_or_404(conv_id)
+    conv = _require_organizer_for_conv(conv_id)
     redirect_to = redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
     ctx = _transition_context(conv)
