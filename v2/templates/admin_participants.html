@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Participants — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block header_mode %}{% if is_admin %}header--admin{% endif %}{% endblock %}
+{% block header_crumb %}
+<span class="header-crumb">
+  <span class="header-crumb-sep">/</span>
+  {% if is_admin %}<a href="{{ url_for('admin.admin') }}">Admin</a><span class="header-crumb-sep">/</span>{% endif %}
+  <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ conversation.title | truncate(20, True, '…') }}</a>
+  <span class="header-crumb-sep">/</span>
+  <span>Participants</span>
+</span>
+{% endblock %}
+{% block content %}
+<div class="container">
+  <h1>Participants — {{ conversation.title }}</h1>
+  <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
+    {{ rows | length }} participant{{ '' if rows | length == 1 else 's' }} joined.
+    Per-participant statement vote counts are not yet available (needs Polis database access — #41).
+    <strong>Last engagement</strong> is the time (UTC) of each participant's most recent action
+    (vote, statement, or argument) — not page-views.
+  </p>
+  {% if rows %}
+  <table class="admin-table">
+    <caption class="sr-only">Participants in {{ conversation.title }}, with engagement counts and last action time.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Username</th>
+        <th scope="col">Joined</th>
+        <th scope="col">Statements submitted</th>
+        <th scope="col">Arguments submitted</th>
+        <th scope="col">Arguments voted</th>
+        <th scope="col">Last engagement (UTC)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.participant.mw_username }}</td>
+        <td style="white-space:nowrap">{{ row.participation.accepted_at.strftime('%Y-%m-%d') }}</td>
+        <td>{{ row.statements_submitted }}</td>
+        <td>{{ row.arguments_submitted }}</td>
+        <td>{{ row.arguments_voted }}</td>
+        <td style="white-space:nowrap">{{ row.last_engagement.strftime('%Y-%m-%d %H:%M') if row.last_engagement else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No participants yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

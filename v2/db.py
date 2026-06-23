@@ -113,6 +113,11 @@ class Participation(db.Model):
     # Nullified automatically 60 days after conversation close (data minimisation).
     public_username   = db.Column(db.String(255), nullable=True)
     revealed_at       = db.Column(db.DateTime, nullable=True)
+    # Recency of this participant's most recent *meaningful action* in the conversation
+    # (statement vote/submission, argument submit/vote/skip, phase-6 vote) — NOT a passive
+    # last-seen / page-view timestamp (see #42). Drives the admin participants tab's drop-off
+    # signal; updated best-effort + throttled in the action handlers.
+    last_engagement   = db.Column(db.DateTime, nullable=True)
     # Polis statement IDs of entirely new statements submitted by this participant.
     # Quota = len(new_stmt_ids). Slots consumed at submit time; never returned.
     new_stmt_ids      = db.Column(db.JSON, nullable=False, default=list)

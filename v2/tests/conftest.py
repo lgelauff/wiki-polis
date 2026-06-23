@@ -29,6 +29,11 @@ def app(tmp_path):
         'TRUST_PROXY_HEADERS': '',
         'TOOL_TOOLFORGE_API_URL': '',
         'TOOL_REDIS_URI': '',
+        # Neutralise the developer .env (app.py auto-loads it) so the test app is hermetic:
+        # tests that need Polis configured set these on app.config explicitly, and the rest
+        # must see them unset regardless of the local machine (else phase-stats tests flake).
+        'POLIS_DATABASE_URL': '',
+        'POLIS_SERVER_URL': '',
     }
     with patch.dict(os.environ, env_overrides, clear=False):
         a = create_app({
