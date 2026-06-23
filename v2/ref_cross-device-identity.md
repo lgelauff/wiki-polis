@@ -254,3 +254,32 @@ uid). The bare-`sha256` → HMAC change (#96) is exactly such a change. Two opti
 - The xid (even HMAC-keyed) is stored in Polis (`particiapi_users.subject`) — the store now
   holds a per-deployment-stable link to the user; the brute-force exposure is reduced by the
   key but not eliminated. Coordinate with [#96](https://github.com/lgelauff/wiki-polis/issues/96).
+
+## Privacy posture & its limits
+Making identity stable across devices necessarily creates a **stable per-person identifier**,
+so it's worth being honest about what that does and does not protect.
+
+**Why it's acceptable here:**
+- The subject resolves to the **Wikimedia account**, which is itself a **pseudonym** for most
+  users — so the identification ceiling is a pseudonym, not a legal identity. Cross-conversation
+  linkage under a stable pseudonym is consistent with how Wikimedia already works (edits are
+  publicly linked under a username).
+- The `uid`/`subject` linkage lives **only in the Polis DB**. The *visible* layer stays
+  per-conversation **coolname pseudonyms**, which are not linked across conversations and not
+  tied to the Wikimedia name. Voting stays pseudonymous to other participants.
+
+**But it is not perfect — this is operational protection, not cryptographic unlinkability:**
+- An operator / anyone with **DB or exported-dataset access can link a person's participation
+  across all conversations** (one stable `uid`), and on prod can **confirm which Wikimedia
+  accounts participated** (subject = `sha256(mw_user_id)`, and Wikimedia IDs are enumerable, so
+  the subject is recomputable — #96). "Which editors engaged with contentious topic X" is
+  derivable by a DB holder. The HMAC variant (#236) raises that bar but then makes
+  `TRUSTED_SUB_SECRET` a deanonymisation key that must be guarded like PII.
+- The pseudonymity of the *visible* layer therefore depends on a **guardrail being maintained**:
+  the dataset/report export and any public results MUST exclude `uid`/`subject`/`issuer`
+  (tracked on #226). If that ever slips, the cross-conversation + Wikimedia-pseudonym link
+  becomes public, not operator-internal.
+
+In short: acceptable given the Wikimedia-pseudonym model and internal-only handling, but it
+trades away cross-conversation unlinkability at the operator level and leans on export hygiene
+and secret handling rather than on a structural guarantee.
