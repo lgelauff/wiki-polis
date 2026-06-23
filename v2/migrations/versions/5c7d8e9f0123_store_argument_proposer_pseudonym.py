@@ -62,8 +62,10 @@ def upgrade():
                 ['featured_statement_id', 'proposer_pseudonym', 'side'],
             )
     else:
-        op.drop_index('ix_arguments_proposer_id', table_name='arguments')
+        # Drop the FK before its backing index — MySQL refuses to drop an index
+        # that is still needed by a foreign-key constraint (error 1553).
         _drop_fk_for_column('arguments', 'proposer_id')
+        op.drop_index('ix_arguments_proposer_id', table_name='arguments')
         _drop_unique_for_columns(
             'arguments',
             ['featured_statement_id', 'proposer_id', 'side'],
