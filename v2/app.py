@@ -52,6 +52,7 @@ _SLUG_RE         = re.compile(r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
 _PSEUDONYM_RE    = re.compile(r'^[a-z]{2,20}-[a-z]{2,20}$')
 _REDIS_RATELIMIT_SCHEMES = ('redis://', 'rediss://')
 _MIN_RATELIMIT_IDENTITY_SECRET_LEN = 32
+_XID_HMAC_VERSION = 2
 
 
 def _read_secret(name: str) -> str:
@@ -73,11 +74,24 @@ def _truthy(value) -> bool:
     return str(value or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+def _derive_xid(subject: str) -> str:
+    """Keyed participant xid derivation (#96).
+
+    Version 1 used plain sha256(mw_user_id), which is enumerable because Wikimedia
+    user ids are sequential. HMAC keeps the live Particiapi identifier stable within
+    one deployment without making it recomputable from public user ids.
+    """
+    secret = current_app.config.get('XID_HASH_SECRET') or current_app.config['SECRET_KEY']
+    return hmac.new(str(secret).encode(), str(subject).encode(), hashlib.sha256).hexdigest()
+
+
 ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.strip()]
 
 _REVEAL_COOLDOWN_DAYS = 30   # days after close before reveal window opens
 _REVEAL_WINDOW_DAYS   = 30   # days participants may opt in once the window opens
 _MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
+_DEMO_MW_ID_MIN = -2_000_000_000
+_DEMO_MW_ID_MAX = -1_000_000_000
 
 # ── Phase 6 results ───────────────────────────────────────────────────────────
 
@@ -536,7 +550,7 @@ def _featured_counts(conv):
 def _argument_stats(conv):
     """Argument-phase aggregates for one conversation (Flask DB only).
 
-    Counts human-authored, visible arguments — seeds (NULL proposer_id) and
+    Counts human-authored, visible arguments — seeds (NULL proposer_pseudonym) and
     hidden/moderated arguments are excluded — plus the distinct participants
     who contributed or rated arguments.
     """
@@ -544,10 +558,10 @@ def _argument_stats(conv):
                .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
                .filter(FeaturedStatement.conversation_id == conv.id,
                        Argument.hidden.is_(False),
-                       Argument.proposer_id.isnot(None)))
+                       Argument.proposer_pseudonym.isnot(None)))
     by_side = dict(visible.with_entities(Argument.side, db.func.count(Argument.id))
                           .group_by(Argument.side).all())
-    n_contributors = (visible.with_entities(db.func.count(db.distinct(Argument.proposer_id)))
+    n_contributors = (visible.with_entities(db.func.count(db.distinct(Argument.proposer_pseudonym)))
                              .scalar() or 0)
     n_raters = (db.session.query(db.func.count(db.distinct(ArgumentVote.participant_id)))
                 .join(Argument, ArgumentVote.argument_id == Argument.id)
@@ -727,11 +741,15 @@ def _valid_slug(v: str) -> bool:
 
 def _parse_conversation_form() -> dict:
     raw_policy = request.form.get('access_policy', 'public').strip()
+    eligibility_event_id = request.form.get('eligibility_event_id', '').strip()
+    eligibility_label = request.form.get('eligibility_label', '').strip()
     return {
         'title':         request.form.get('title', '').strip(),
         'intro_text':    _sanitise_text(request.form.get('intro_text', '')),
         'outro_text':    _sanitise_text(request.form.get('outro_text', '')),
         'access_policy': raw_policy if raw_policy in ACCESS_POLICIES else 'public',
+        'eligibility_event_id': eligibility_event_id[:80] or None,
+        'eligibility_label': eligibility_label[:255] or None,
     }
 
 
@@ -752,6 +770,75 @@ def _current_participant() -> 'Participant | None':
     return g.participant
 
 
+def _is_demo_session() -> bool:
+    return bool(session.get('demo_conversation_id') and session.get('xid'))
+
+
+def _demo_bound_conversation_id() -> int | None:
+    value = session.get('demo_conversation_id')
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _demo_pseudonym() -> str:
+    for _ in range(50):
+        name = f"demo-{secrets.token_hex(4)}"
+        if Participation.query.filter_by(pseudonym=name).first() is None:
+            return name
+    return f"demo-{secrets.token_hex(8)}"
+
+
+def _ensure_demo_participation(conversation) -> 'Participation':
+    """Create or return a session-scoped synthetic participant for one demo conversation."""
+    if conversation.access_policy != 'demo':
+        abort(404)
+    bound = _demo_bound_conversation_id()
+    if bound is not None and bound != conversation.id:
+        abort(403)
+
+    participant = _current_participant()
+    if participant and participant.is_demo:
+        part = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conversation.id,
+        ).first()
+        if part:
+            session.pop('username', None)
+            return part
+
+    for _ in range(20):
+        token = secrets.token_hex(4)
+        participant = Participant(
+            mw_user_id=random.randint(_DEMO_MW_ID_MIN, _DEMO_MW_ID_MAX),
+            mw_username=f'Demo-guest-{token}',
+            xid=secrets.token_hex(32),
+            xid_key_version=_XID_HMAC_VERSION,
+            is_demo=True,
+        )
+        db.session.add(participant)
+        try:
+            db.session.flush()
+        except IntegrityError:
+            db.session.rollback()
+            continue
+        part = Participation(
+            participant_id=participant.id,
+            conversation_id=conversation.id,
+            pseudonym=_demo_pseudonym(),
+            eligibility_status='not_required',
+        )
+        db.session.add(part)
+        db.session.commit()
+        session['xid'] = participant.xid
+        session['demo_conversation_id'] = conversation.id
+        session.pop('username', None)
+        session['emailable'] = False
+        return part
+    abort(503)
+
+
 def _is_emailable(username: str) -> bool:
     try:
         resp = requests.get(
@@ -766,6 +853,48 @@ def _is_emailable(username: str) -> bool:
         return 'emailable' in user
     except Exception:
         return False
+
+
+def _eligibility_detail(payload: dict, *, reason: str | None = None) -> dict:
+    """Small non-PII detail blob for cached AccountEligibility verdicts (#146)."""
+    detail = {}
+    if reason:
+        detail['reason'] = reason
+    for key in ('reason', 'message', 'event', 'criteria', 'failed', 'rules'):
+        value = payload.get(key)
+        if value not in (None, ''):
+            detail[key] = value
+    return detail
+
+
+def _check_join_eligibility(conversation, participant) -> tuple[bool, str, dict]:
+    """Return (allowed, status, detail) for the optional join-time gate (#146).
+
+    The expected sidecar/tool contract is AccountEligibility-style JSON:
+    GET <ACCOUNT_ELIGIBILITY_URL>?user=<mw_username>&event=<event_id>&format=json
+    returning at least {"eligible": true|false}. Extra non-PII fields such as
+    reason/criteria/rules are cached for admin/debug display.
+    """
+    event_id = (conversation.eligibility_event_id or '').strip()
+    if not event_id:
+        return True, 'not_required', {}
+    endpoint = current_app.config.get('ACCOUNT_ELIGIBILITY_URL', '').strip()
+    if not endpoint:
+        return False, 'unavailable', {'reason': 'eligibility checker is not configured'}
+    try:
+        resp = requests.get(
+            endpoint,
+            params={'user': participant.mw_username, 'event': event_id, 'format': 'json'},
+            headers={'User-Agent': _MW_USER_AGENT},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception:
+        current_app.logger.exception('eligibility check failed for event %s', event_id)
+        return False, 'unavailable', {'reason': 'eligibility checker is unavailable'}
+    allowed = bool(payload.get('eligible'))
+    return allowed, 'eligible' if allowed else 'ineligible', _eligibility_detail(payload)
 
 
 def _generate_pseudonyms(count: int = 5) -> list[str]:
@@ -852,6 +981,12 @@ def _require_mod_for_conv(conv_id: int) -> 'Conversation':
 
 
 def _check_conversation_access(conversation, participant) -> None:
+    if _is_demo_session():
+        if conversation.access_policy == 'demo' and _demo_bound_conversation_id() == conversation.id:
+            return
+        abort(403)
+    if conversation.access_policy == 'demo':
+        return
     if conversation.access_policy != 'invite_only':
         return
     if participant:
@@ -904,6 +1039,35 @@ def _validate_fetch_csrf():
         validate_csrf(token)
     except ValidationError:
         abort(400)
+
+
+def _demo_proxy_allowed(pa_path: str, method: str) -> bool:
+    conv_id = _demo_bound_conversation_id()
+    if conv_id is None:
+        return False
+    conv = db.session.get(Conversation, conv_id)
+    if conv is None or conv.access_policy != 'demo':
+        return False
+    if pa_path == 'api/session' and method in ('GET', 'POST'):
+        return True
+    prefix = f'api/conversations/{conv.polis_id}/'
+    if method == 'GET' and pa_path.startswith(prefix):
+        return True
+    if method == 'PUT' and pa_path.startswith(prefix + 'votes/'):
+        return True
+    return False
+
+
+def _proxy_auth_response(pa_path: str):
+    if 'username' in session:
+        return None
+    if _is_demo_session():
+        if _demo_proxy_allowed(pa_path, request.method):
+            return None
+        abort(403)
+    if not request.path.startswith('/proxy/'):
+        session['next'] = request.path
+    return redirect(url_for('login'))
 
 
 def _proxy_to_particiapi(pa_path: str):
@@ -1089,18 +1253,6 @@ def _build_featured_data(conv, participation, can_mod=False):
     voted_ids = {av.argument_id for av in
                  ArgumentVote.query.filter_by(participant_id=pid).all()}
 
-    # Proposer pseudonyms: one query for all proposers across all FSs.
-    all_proposer_ids = {a.proposer_id for fs in fss for a in fs.arguments
-                        if a.proposer_id is not None}
-    if all_proposer_ids:
-        proposer_parts = Participation.query.filter(
-            Participation.participant_id.in_(all_proposer_ids),
-            Participation.conversation_id == conv.id,
-        ).all()
-        proposer_pseudonym_map = {p.participant_id: p.pseudonym for p in proposer_parts}
-    else:
-        proposer_pseudonym_map = {}
-
     result = []
     for fs in fss:
         pro_args = [a for a in fs.arguments if a.side == 'pro' and (can_mod or not a.hidden)]
@@ -1114,9 +1266,11 @@ def _build_featured_data(conv, participation, can_mod=False):
             return [arg_map[aid] for aid in state.argument_order if aid in arg_map]
 
         pro_proposed = Argument.query.filter_by(
-            proposer_id=pid, featured_statement_id=fs.id, side='pro').first()
+            proposer_pseudonym=participation.pseudonym,
+            featured_statement_id=fs.id, side='pro').first()
         con_proposed = Argument.query.filter_by(
-            proposer_id=pid, featured_statement_id=fs.id, side='con').first()
+            proposer_pseudonym=participation.pseudonym,
+            featured_statement_id=fs.id, side='con').first()
 
         ordered_pro = _ordered(pro_args, pro_state)
         ordered_con = _ordered(con_args, con_state)
@@ -1142,7 +1296,6 @@ def _build_featured_data(conv, participation, can_mod=False):
             'k': int((conv.argument_vote_data or {}).get('K', 2)),
             'pro_voted_count': pro_voted_count,
             'con_voted_count': con_voted_count,
-            'proposer_pseudonyms': proposer_pseudonym_map,
         })
 
     random.Random(pid).shuffle(result)
@@ -1151,6 +1304,8 @@ def _build_featured_data(conv, participation, can_mod=False):
 def _require_arg_participation(slug):
     """Return (conv, participation) or abort. Checks active + argument phase."""
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    if conv.access_policy == 'demo':
+        abort(403)
     if not conv.active or conv.paused or not conv.phase_argument_mapping:
         abort(403)
     participant = _current_participant()
@@ -1207,6 +1362,8 @@ def conversation_statement_new(slug):
     _validate_same_origin()
 
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    if conv.access_policy == 'demo':
+        abort(403)
     if not conv.active or conv.paused or not conv.phase_submission:
         abort(403)
     participant = _current_participant()
@@ -1227,6 +1384,32 @@ def conversation_statement_new(slug):
     text = (body.get('text') or '').strip()
     if not text or len(text) > 280:
         abort(400)
+    derived_from = body.get('derived_from')
+    if derived_from in ('', None):
+        derived_from = None
+    if derived_from is not None and not isinstance(derived_from, int):
+        abort(400)
+    parent_text = None
+    if derived_from is not None:
+        try:
+            text_map = _statement_text_map(conv.polis_id)
+        except PolisParticipantError:
+            current_app.logger.exception('could not load statements for derivative parent')
+            abort(502)
+        parent_text = text_map.get(derived_from)
+        if parent_text is None:
+            return jsonify({'error': 'unknown_parent_statement'}), 400
+        scores = _statement_similarity_scores(text, parent_text)
+        model, score = _preferred_similarity_score(scores)
+        threshold = _derivative_similarity_threshold()
+        if threshold and score is not None and score < threshold:
+            return jsonify({
+                'error': 'derivative_similarity_too_low',
+                'message': 'This looks like a different claim. Revise it closer to the original, or submit it as a new statement instead.',
+                'model': model,
+                'similarity': score,
+                'threshold': threshold,
+            }), 409
 
     # Get CSRF token for this Particiapi session, then submit the statement.
     pa_cookie = request.cookies.get('pa_session')
@@ -1265,6 +1448,9 @@ def conversation_statement_new(slug):
             ids.append(stmt_id)
             part.new_stmt_ids = ids
             db.session.commit()
+            if derived_from is not None:
+                record_statement_provenance(conv.id, stmt_id, derived_from,
+                                            parent_text=parent_text, new_text=text)
         flask_resp = make_response(stmt_resp.content, 201)
         flask_resp.headers['Content-Type'] = 'application/json'
     else:
@@ -1278,8 +1464,11 @@ def conversation_statement_new(slug):
 
 @proxy_bp.route('/proxy/particiapi/<path:pa_path>',
                 methods=['GET', 'POST', 'PUT'])
-@login_required
+@limiter.limit('180 per minute')
 def proxy_particiapi(pa_path):
+    auth_resp = _proxy_auth_response(pa_path)
+    if auth_resp is not None:
+        return auth_resp
     return _proxy_to_particiapi(pa_path)
 
 admin_bp = Blueprint('admin', __name__)
@@ -1419,6 +1608,11 @@ def admin_conversation_edit(conv_id):
     conv.title         = fields['title']
     conv.intro_text    = fields['intro_text']
     conv.outro_text    = fields['outro_text']
+    if conv.access_policy == 'demo':
+        fields['access_policy'] = 'demo'
+    elif fields['access_policy'] == 'demo':
+        flash('Demo mode is fixed at creation and cannot be enabled on an existing consultation.', 'error')
+        fields['access_policy'] = conv.access_policy
     conv.access_policy = fields['access_policy']
     db.session.commit()
     record_audit('conversation.edit', conv_id=conv.id)
@@ -2209,10 +2403,13 @@ def admin_conversation_featured(conv_id):
     candidates   = _polis_server_client().get_featured_candidates(conv.polis_id)
     if candidates is not None:
         candidates = [c for c in candidates if c['tid'] not in confirmed_tids]
+    candidate_tids = [c['tid'] for c in candidates] if candidates else []
+    provenance_map = _provenance_map(conv_id, list(confirmed_tids) + candidate_tids)
     return render_template('admin_featured.html',
                            conversation=conv,
                            confirmed=confirmed,
                            candidates=candidates,
+                           provenance_map=provenance_map,
                            phase_active=conv.phase_argument_mapping)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/featured/confirm')
@@ -2292,6 +2489,8 @@ def admin_argument_delete(conv_id, arg_id):
 @login_required
 def accept(slug):
     conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+    if conv.access_policy == 'demo':
+        return redirect(url_for('participant.conversation', slug=slug))
     participant = _current_participant()
     _check_conversation_access(conv, participant)
     if participant and Participation.query.filter_by(
@@ -2310,6 +2509,8 @@ def accept(slug):
 @limiter.limit('10 per minute')
 def accept_post(slug):
     conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+    if conv.access_policy == 'demo':
+        return redirect(url_for('participant.conversation', slug=slug))
     participant = _current_participant()
     if participant is None:
         abort(404)
@@ -2326,12 +2527,25 @@ def accept_post(slug):
     if not _PSEUDONYM_RE.match(pseudonym):
         abort(400)
 
+    allowed, eligibility_status, eligibility_detail = _check_join_eligibility(conv, participant)
+    if not allowed:
+        return make_response(render_template(
+            'forbidden_eligibility.html',
+            conversation=conv,
+            status=eligibility_status,
+            detail=eligibility_detail,
+        ), 403)
+
     db.session.add(Participation(
         participant_id=participant.id,
         conversation_id=conv.id,
         pseudonym=pseudonym,
         notify_email=bool(request.form.get('notify_email')) and emailable,
         notify_talk_page=bool(request.form.get('notify_talk_page')),
+        eligibility_status=eligibility_status,
+        eligibility_checked_at=datetime.now(timezone.utc)
+        if eligibility_status != 'not_required' else None,
+        eligibility_detail=eligibility_detail or None,
     ))
     try:
         db.session.commit()
@@ -2355,14 +2569,28 @@ def accept_pseudonyms(slug):
 # ── Conversation ─────────────────────────────────────────────────────────
 
 @participant_bp.get('/c/<slug>')
-@login_required
+@limiter.limit('120 per minute')
 def conversation(slug):
-    conv        = Conversation.query.filter_by(slug=slug).first_or_404()
-    participant = _current_participant()
+    conv        = Conversation.query.filter_by(slug=slug).first()
+    if conv is None:
+        if 'username' not in session and not _is_demo_session():
+            session['next'] = request.path
+            return redirect(url_for('login'))
+        abort(404)
+    if conv.access_policy == 'demo':
+        participation = _ensure_demo_participation(conv)
+        participant = participation.participant
+    else:
+        if _is_demo_session():
+            abort(403)
+        if 'username' not in session:
+            session['next'] = request.path
+            return redirect(url_for('login'))
+        participant = _current_participant()
     _check_conversation_access(conv, participant)
 
-    participation = None
-    if participant:
+    participation = locals().get('participation')
+    if participation is None and participant:
         participation = Participation.query.filter_by(
             participant_id=participant.id,
             conversation_id=conv.id,
@@ -2464,6 +2692,7 @@ def conversation(slug):
                            reveal_state=reveal_state,
                            reveal_opens_at=reveal_opens_at,
                            reveal=reveal,
+                           demo_mode=conv.access_policy == 'demo',
                            featured_data=featured_data,
                            new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10,
                            new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
@@ -2485,7 +2714,7 @@ def argument_submit(slug, fs_id):
         abort(400)
 
     existing = Argument.query.filter_by(
-        proposer_id=part.participant_id,
+        proposer_pseudonym=part.pseudonym,
         featured_statement_id=fs_id,
         side=side,
     ).first()
@@ -2496,7 +2725,7 @@ def argument_submit(slug, fs_id):
 
     arg = Argument(
         featured_statement_id=fs_id,
-        proposer_id=part.participant_id,
+        proposer_pseudonym=part.pseudonym,
         body=body,
         side=side,
     )
@@ -2574,10 +2803,10 @@ def argument_vote(slug, arg_id):
         participant_id=part.participant_id,
         featured_statement_id=fs.id, side='con').first()
     pro_proposed = Argument.query.filter_by(
-        proposer_id=part.participant_id,
+        proposer_pseudonym=part.pseudonym,
         featured_statement_id=fs.id, side='pro').first()
     con_proposed = Argument.query.filter_by(
-        proposer_id=part.participant_id,
+        proposer_pseudonym=part.pseudonym,
         featured_statement_id=fs.id, side='con').first()
     pro_gate = bool(pro_proposed or (pro_state and pro_state.skipped))
     con_gate = bool(con_proposed or (con_state and con_state.skipped))
@@ -2721,7 +2950,6 @@ def reveal_identity_post(slug):
 # ── Phase 6 vote ──────────────────────────────────────────────────────────────
 
 @participant_bp.post('/c/<slug>/phase6/vote')
-@login_required
 @limiter.limit('30 per minute')
 def phase6_vote(slug):
     """Submit a Phase 6 (informed voting) vote for a featured statement.
@@ -2737,6 +2965,12 @@ def phase6_vote(slug):
 
     # Only accept votes on active, unpaused consultations.
     if not conv.active or conv.paused:
+        abort(403)
+
+    if _is_demo_session():
+        if _demo_bound_conversation_id() != conv.id or conv.access_policy != 'demo':
+            abort(403)
+    elif 'username' not in session:
         abort(403)
 
     participant = _current_participant()
@@ -2866,22 +3100,67 @@ def _char_similarity(new_text, parent_text):
 
 
 def _semantic_similarity(new_text, parent_text):
-    """Seam for #207: multilingual sentence-embedding similarity. Returns None until #207
-    supplies a model — wiring it here adds the 'semantic' score with no schema/flow change.
+    """Semantic scorer (#207) backed by the optional embedding sidecar (#208).
 
-    #207 implements this by POSTing both texts to the embedding sidecar (#208, FastAPI +
-    paraphrase-multilingual-MiniLM) and returning its **cosine similarity** directly (the
-    standard metric; every scorer here returns similarity, higher = more similar). Keep it
-    best-effort: a short-timeout synchronous call that returns None on timeout/sidecar-down,
-    so the 'char' score still records and the seed never blocks.
+    Contract: POST STATEMENT_SIMILARITY_URL with
+    {"source": parent_text, "candidate": new_text}; response {"similarity": float}.
+    The call is best-effort and short-timeout; absent config or sidecar failure returns
+    None so the always-available char score remains the fallback.
     """
-    return None
+    url = current_app.config.get('STATEMENT_SIMILARITY_URL', '').strip()
+    if not url:
+        return None
+    timeout = float(current_app.config.get('STATEMENT_SIMILARITY_TIMEOUT', 1.5))
+    try:
+        resp = requests.post(
+            url,
+            json={'source': parent_text or '', 'candidate': new_text or ''},
+            headers={'User-Agent': _MW_USER_AGENT},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        raw = payload.get('similarity', payload.get('score'))
+        value = float(raw)
+    except Exception:
+        current_app.logger.exception('semantic similarity sidecar failed')
+        return None
+    return round(max(0.0, min(1.0, value)), 4)
 
 
 # Similarity-at-creation scorers (#143/#207). Each: (new_text, parent_text) -> float | None
 # in [0, 1], higher = more similar. Best-effort — a scorer returning None or raising is
 # skipped. The 'char' fallback ships working now; #207 fills in 'semantic' (cosine).
 _SIMILARITY_SCORERS = {'char': _char_similarity, 'semantic': _semantic_similarity}
+
+
+def _statement_similarity_scores(new_text, parent_text) -> dict[str, float]:
+    scores = {}
+    for name, fn in _SIMILARITY_SCORERS.items():
+        try:
+            value = fn(new_text, parent_text)
+        except Exception:
+            current_app.logger.exception('similarity scorer %s failed', name)
+            continue
+        if value is not None:
+            scores[name] = value
+    return scores
+
+
+def _preferred_similarity_score(scores: dict[str, float]) -> tuple[str | None, float | None]:
+    if 'semantic' in scores:
+        return 'semantic', scores['semantic']
+    if 'char' in scores:
+        return 'char', scores['char']
+    return None, None
+
+
+def _derivative_similarity_threshold() -> float:
+    raw = current_app.config.get('STATEMENT_DERIVATIVE_MIN_SIMILARITY', 0)
+    try:
+        return max(0.0, min(1.0, float(raw)))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def record_statement_provenance(conv_id, new_tid, derived_from_tid,
@@ -2900,15 +3179,9 @@ def record_statement_provenance(conv_id, new_tid, derived_from_tid,
         db.session.add(row)
         db.session.flush()        # need row.id for the score FKs
         if parent_text is not None and new_text is not None:
-            for name, fn in _SIMILARITY_SCORERS.items():
-                try:
-                    value = fn(new_text, parent_text)
-                except Exception:
-                    current_app.logger.exception('similarity scorer %s failed for tid %s', name, new_tid)
-                    continue
-                if value is not None:
-                    db.session.add(StatementSimilarityScore(
-                        provenance_id=row.id, model=name, value=value))
+            for name, value in _statement_similarity_scores(new_text, parent_text).items():
+                db.session.add(StatementSimilarityScore(
+                    provenance_id=row.id, model=name, value=value))
         db.session.commit()
         return row
     except Exception:
@@ -2995,6 +3268,12 @@ def create_app(test_config: dict | None = None) -> Flask:
             )
         _secret_key = 'dev-insecure-key'
     app.config['SECRET_KEY'] = _secret_key
+    app.config['XID_HASH_SECRET'] = (
+        (test_config or {}).get('XID_HASH_SECRET')
+        or _read_secret('xid-hash-secret')
+        or os.environ.get('XID_HASH_SECRET', '')
+        or _secret_key
+    )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SQLALCHEMY_ENGINE_OPTIONS']      = {'pool_recycle': 280, 'pool_pre_ping': True}
 
@@ -3019,6 +3298,20 @@ def create_app(test_config: dict | None = None) -> Flask:
                                         or os.environ.get('POLIS_ADMIN_EMAIL', ''))
     app.config['POLIS_ADMIN_PASSWORD'] = (_read_secret('polis-admin-password')
                                           or os.environ.get('POLIS_ADMIN_PASSWORD', ''))
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = (
+        _read_secret('account-eligibility-url')
+        or os.environ.get('ACCOUNT_ELIGIBILITY_URL', '')
+    )
+    app.config['STATEMENT_SIMILARITY_URL'] = (
+        _read_secret('statement-similarity-url')
+        or os.environ.get('STATEMENT_SIMILARITY_URL', '')
+    )
+    app.config['STATEMENT_SIMILARITY_TIMEOUT'] = (
+        os.environ.get('STATEMENT_SIMILARITY_TIMEOUT', '1.5')
+    )
+    app.config['STATEMENT_DERIVATIVE_MIN_SIMILARITY'] = (
+        os.environ.get('STATEMENT_DERIVATIVE_MIN_SIMILARITY', '0')
+    )
 
     # Apply test overrides before extensions are initialised so SESSION_TYPE,
     # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
@@ -3328,17 +3621,19 @@ def _register_routes(app: Flask) -> None:
         @limiter.limit('20 per minute')
         def dev_login():
             username = _dev_login_user
-            xid = hashlib.sha256(f'dev-{username}'.encode()).hexdigest()
+            xid = _derive_xid(f'dev:{username}')
             participant = Participant.query.filter_by(mw_username=username).first()
             if participant is None:
                 participant = Participant(
                     mw_user_id=abs(hash(username)) % 10**9,
                     mw_username=username,
                     xid=xid,
+                    xid_key_version=_XID_HMAC_VERSION,
                 )
                 db.session.add(participant)
             else:
                 participant.xid = xid
+                participant.xid_key_version = _XID_HMAC_VERSION
             db.session.commit()
             session['username']  = username
             session['xid']       = xid
@@ -3372,18 +3667,20 @@ def _register_routes(app: Flask) -> None:
             user = next((u for u in _DEV_TEST_USERS if u['username'] == username), None)
             if user is None:
                 return 'Unknown test user', 404
-            xid = hashlib.sha256(f'dev-fake-{username}'.encode()).hexdigest()
+            xid = _derive_xid(f'dev-fake:{user["mw_user_id"]}:{username}')
             participant = Participant.query.filter_by(mw_user_id=user['mw_user_id']).first()
             if participant is None:
                 participant = Participant(
                     mw_user_id=user['mw_user_id'],
                     mw_username=username,
                     xid=xid,
+                    xid_key_version=_XID_HMAC_VERSION,
                 )
                 db.session.add(participant)
             else:
                 participant.mw_username = username
                 participant.xid = xid
+                participant.xid_key_version = _XID_HMAC_VERSION
             db.session.commit()
             session['username']  = username
             session['xid']       = xid
@@ -3397,7 +3694,8 @@ def _register_routes(app: Flask) -> None:
         dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
         if 'username' not in session:
             public_convos = (Conversation.query
-                             .filter_by(active=True, paused=False, access_policy='public')
+                             .filter_by(active=True, paused=False)
+                             .filter(Conversation.access_policy.in_(('public', 'demo')))
                              .order_by(Conversation.created_at.desc())
                              .all())
             return render_template('home.html',
@@ -3574,16 +3872,18 @@ def _register_routes(app: Flask) -> None:
         if not username or not mw_user_id:
             return redirect(url_for('index'))
 
-        xid = hashlib.sha256(str(mw_user_id).encode()).hexdigest()
+        xid = _derive_xid(f'mw:{mw_user_id}')
 
         participant = Participant.query.filter_by(mw_user_id=mw_user_id).first()
         if participant is None:
-            participant = Participant(mw_user_id=mw_user_id, mw_username=username, xid=xid)
+            participant = Participant(mw_user_id=mw_user_id, mw_username=username, xid=xid,
+                                      xid_key_version=_XID_HMAC_VERSION)
             db.session.add(participant)
         elif participant.mw_username != username:
             participant.mw_username = username
         if participant.xid != xid:
             participant.xid = xid
+            participant.xid_key_version = _XID_HMAC_VERSION
         db.session.commit()
 
         next_url = session.pop('next', None)

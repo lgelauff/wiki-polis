@@ -11,6 +11,7 @@ from unittest.mock import patch
 import pytest
 from cachelib.file import FileSystemCache
 
+import app as app_module
 from app import create_app
 from db import Participant, db
 
@@ -52,7 +53,9 @@ def test_dev_fake_login_creates_participant(fake_login_app):
         p = Participant.query.filter_by(mw_user_id=-1).first()
         assert p is not None
         assert p.mw_username == 'dev-user-1'
-        assert p.xid == hashlib.sha256(b'dev-fake-dev-user-1').hexdigest()
+        assert p.xid == app_module._derive_xid('dev-fake:-1:dev-user-1')
+        assert p.xid_key_version == app_module._XID_HMAC_VERSION
+        assert p.xid != hashlib.sha256(b'dev-fake-dev-user-1').hexdigest()
 
 
 def test_dev_fake_login_syncs_drifted_username(fake_login_app):
@@ -69,7 +72,8 @@ def test_dev_fake_login_syncs_drifted_username(fake_login_app):
         rows = Participant.query.filter_by(mw_user_id=-2).all()
         assert len(rows) == 1
         assert rows[0].mw_username == 'dev-user-2'
-        assert rows[0].xid == hashlib.sha256(b'dev-fake-dev-user-2').hexdigest()
+        assert rows[0].xid == app_module._derive_xid('dev-fake:-2:dev-user-2')
+        assert rows[0].xid_key_version == app_module._XID_HMAC_VERSION
         # The row now matches both legacy username checks and stable xid session lookup.
         assert Participant.query.filter_by(mw_username='dev-user-2').first() is not None
 

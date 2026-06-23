@@ -68,12 +68,16 @@ def test_argument_mapping_counts_pro_con_contributors_raters(admin_client, conv)
     db.session.add(fs)
     db.session.commit()
 
-    p1, p2 = _participant(101, 'contrib1'), _participant(102, 'contrib2')
-    pro1 = Argument(featured_statement_id=fs.id, proposer_id=p1.id, body='pro a', side='pro')
-    pro2 = Argument(featured_statement_id=fs.id, proposer_id=p2.id, body='pro b', side='pro')
-    con1 = Argument(featured_statement_id=fs.id, proposer_id=p1.id, body='con a', side='con')
-    seed = Argument(featured_statement_id=fs.id, proposer_id=None, body='seed', side='pro')
-    hidden = Argument(featured_statement_id=fs.id, proposer_id=p2.id, body='bad', side='con',
+    pro1 = Argument(featured_statement_id=fs.id, proposer_pseudonym='contrib-one',
+                    body='pro a', side='pro')
+    pro2 = Argument(featured_statement_id=fs.id, proposer_pseudonym='contrib-two',
+                    body='pro b', side='pro')
+    con1 = Argument(featured_statement_id=fs.id, proposer_pseudonym='contrib-one',
+                    body='con a', side='con')
+    seed = Argument(featured_statement_id=fs.id, proposer_pseudonym=None,
+                    body='seed', side='pro')
+    hidden = Argument(featured_statement_id=fs.id, proposer_pseudonym='contrib-two',
+                      body='bad', side='con',
                       hidden=True)
     db.session.add_all([pro1, pro2, con1, seed, hidden])
     db.session.commit()
@@ -100,10 +104,9 @@ def test_argument_mapping_raters_exclude_hidden_only_voters(admin_client, conv):
     db.session.add(fs)
     db.session.commit()
 
-    author = _participant(201, 'author')
-    visible = Argument(featured_statement_id=fs.id, proposer_id=author.id,
+    visible = Argument(featured_statement_id=fs.id, proposer_pseudonym='author-fox',
                        body='visible', side='pro')
-    hidden = Argument(featured_statement_id=fs.id, proposer_id=author.id,
+    hidden = Argument(featured_statement_id=fs.id, proposer_pseudonym='author-fox',
                       body='moderated', side='con', hidden=True)
     db.session.add_all([visible, hidden])
     db.session.commit()
@@ -187,8 +190,7 @@ def test_multi_phase_renders_a_group_per_active_phase(admin_client, conv):
                            confirmed_by_admin=True, phase6_polis_statement_id=0)
     db.session.add(fs)
     db.session.commit()
-    author = _participant(301, 'c1')
-    db.session.add(Argument(featured_statement_id=fs.id, proposer_id=author.id,
+    db.session.add(Argument(featured_statement_id=fs.id, proposer_pseudonym='author-fox',
                             body='pro a', side='pro'))
     db.session.commit()
 

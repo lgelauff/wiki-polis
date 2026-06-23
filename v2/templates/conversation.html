@@ -8,6 +8,9 @@
 </span>
 {% endblock %}
 {% block head %}
+{% if conversation.access_policy == 'demo' %}
+<meta name="robots" content="noindex,nofollow">
+{% endif %}
 {% if conversation.active and not conversation.paused and conversation.phase_submission %}
 <script type="importmap" nonce="{{ csp_nonce }}">
 {"imports": {"@particiapp/particiapp-web-client": "{{ url_for('static', filename='particiapp-web-client.js') }}?v={{ git_version }}"}}
@@ -20,6 +23,12 @@
 <div class="container">
 
   <h1 class="sr-only">{{ conversation.title }}</h1>
+
+  {% if demo_mode %}
+  <div class="landing-section" style="margin-bottom:1rem">
+    <p class="muted"><strong>Demo</strong> — anonymous vote-only participation. Responses are not part of a real consultation and may be cleared.</p>
+  </div>
+  {% endif %}
 
   {% if conversation.intro_text %}
   <div class="intro-text">
@@ -193,7 +202,7 @@
         </div>
 
         {# ── V2 Option Triad — always rendered, dimmed pre-vote, active post-vote ── #}
-        <div class="v2-triad" id="v2-triad">
+        <div class="v2-triad" id="v2-triad" {% if demo_mode %}hidden{% endif %}>
           <div class="v2-triad-label" id="v2-triad-label" aria-live="polite">After you vote, you can&hellip;</div>
           <div class="v2-triad-grid" role="group" aria-labelledby="v2-triad-label">
 
@@ -588,7 +597,7 @@
 
           {# Argument cards — pro #}
           {% for arg in item.pro_args %}
-          {% set is_own = arg.proposer_id == participation.participant_id %}
+          {% set is_own = arg.proposer_pseudonym == participation.pseudonym %}
           {% set is_picked = arg.id in item.voted_ids %}
           {% set pro_can_vote = both_gate and pro_vote_ready and not arg.hidden %}
           {% set pro_limit_reached = pro_can_vote and item.pro_voted_count >= item.k and not is_picked %}
@@ -714,7 +723,7 @@
 
           {# Argument cards — con #}
           {% for arg in item.con_args %}
-          {% set is_own = arg.proposer_id == participation.participant_id %}
+          {% set is_own = arg.proposer_pseudonym == participation.pseudonym %}
           {% set is_picked = arg.id in item.voted_ids %}
           {% set con_can_vote = both_gate and con_vote_ready and not arg.hidden %}
           {% set con_limit_reached = con_can_vote and item.con_voted_count >= item.k and not is_picked %}
@@ -1243,6 +1252,7 @@
   var LABELS = { agree: 'AGREE', neutral: 'PASS', disagree: 'DISAGREE' };
   var NEW_STMT_UNLOCK_AT = {{ new_stmt_unlock_at | default(10) }};
   var NEW_STMT_MAX  = {{ new_stmt_max | default(3) }};
+  var DEMO_MODE = {{ demo_mode | tojson }};
   var NEW_STMT_USED = {{ new_stmt_ids | length }};
   var originalStmtText = '';
   var newstmtOrigin = 'voted'; // 'voted' | 'alldone' — tracks where composer was opened from
@@ -1368,6 +1378,11 @@
     votedLabel.textContent = LABELS[voteType];
     votedBadge.dataset.type = voteType;
 
+    if (DEMO_MODE) {
+      triad.hidden = true;
+      return;
+    }
+
     triad.hidden = false;
     triadLabel.textContent = 'What now?';
     triad.classList.add('v2-triad--active');
@@ -1403,6 +1418,55 @@
         + (ev.error && ev.error.message ? ': ' + ev.error.message : '') + '.';
     }, { once: true });
     pvbEl.click();
+  }
+
+  function noteSubmittedStatement(data) {
+    if (data && data.id != null) {
+      var tid = Number(data.id);
+      mySubmittedStmtIds.add(tid);
+      try { conv.client.participant.votes.add(tid); } catch (e) {}
+    }
+  }
+
+  function submitStatementFetch(text, derivedFrom, submitBtn, composerEl, afterSuccess) {
+    submitBtn.disabled = true;
+    var csrfToken = '{{ csrf_token() }}';
+    var payload = { text: text };
+    if (derivedFrom != null) payload.derived_from = derivedFrom;
+    fetch('{{ url_for("proxy.conversation_statement_new", slug=conversation.slug) }}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'fetch',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify(payload),
+    }).then(function (resp) {
+      if (resp.ok) {
+        resp.json().then(noteSubmittedStatement);
+        composerEl.hidden = true;
+        proposeSubmitted.hidden = false;
+        NEW_STMT_USED++;
+        updateNewstmtCard();
+        afterSuccess();
+      } else {
+        resp.json().catch(function () { return {}; }).then(function (data) {
+          submitBtn.disabled = false;
+          convError.hidden = false;
+          if (data && data.error === 'derivative_similarity_too_low') {
+            convErrorMsg.textContent = data.message || 'This looks like a different claim. Revise it closer to the original, or submit it as a new statement instead.';
+          } else if (resp.status === 403) {
+            convErrorMsg.textContent = 'You have reached the proposal limit for this consultation.';
+          } else {
+            convErrorMsg.textContent = 'Could not submit statement. Please try again.';
+          }
+        });
+      }
+    }).catch(function () {
+      submitBtn.disabled = false;
+      convError.hidden = false;
+      convErrorMsg.textContent = 'Network error. Please try again.';
+    });
   }
 
   // ── Vote buttons ──────────────────────────────────────────────────────────────
@@ -1520,7 +1584,9 @@
   suggestSubmit.addEventListener('click', function () {
     var val = suggestInput.value.trim();
     if (!val || val === originalStmtText.trim()) return;
-    submitComposer(pvbSubmitSuggest, suggestSubmit, composerSuggest);
+    submitStatementFetch(val, lastVoteStmtId, suggestSubmit, composerSuggest, function () {
+      setTimeout(enterIdle, 1200);
+    });
   });
 
   // ── New statement composer ────────────────────────────────────────────────────
@@ -1542,46 +1608,12 @@
   newstmtSubmit.addEventListener('click', function () {
     var text = newstmtInput.value.trim();
     if (!text) return;
-    newstmtSubmit.disabled = true;
-    var csrfToken = '{{ csrf_token() }}';
-    fetch('{{ url_for("proxy.conversation_statement_new", slug=conversation.slug) }}', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'fetch',
-        'X-CSRFToken': csrfToken
-      },
-      body: JSON.stringify({ text: text }),
-    }).then(function (resp) {
-      if (resp.ok) {
-        resp.json().then(function (data) {
-          if (data && data.id != null) {
-            var tid = Number(data.id);
-            mySubmittedStmtIds.add(tid);
-            // Mark as voted in the web component so it never appears in the queue
-            try { conv.client.participant.votes.add(tid); } catch (e) {}
-          }
-        });
-        composerNewstmt.hidden  = true;
-        proposeSubmitted.hidden = false;
-        NEW_STMT_USED++;
-        updateNewstmtCard();
-        if (newstmtOrigin === 'alldone') {
-          setTimeout(enterAllDone, 1200);
-        } else {
-          setTimeout(enterIdle, 1200);
-        }
+    submitStatementFetch(text, null, newstmtSubmit, composerNewstmt, function () {
+      if (newstmtOrigin === 'alldone') {
+        setTimeout(enterAllDone, 1200);
       } else {
-        newstmtSubmit.disabled = false;
-        convError.hidden = false;
-        convErrorMsg.textContent = resp.status === 403
-          ? 'You have reached the proposal limit for this consultation.'
-          : 'Could not submit statement. Please try again.';
+        setTimeout(enterIdle, 1200);
       }
-    }).catch(function () {
-      newstmtSubmit.disabled = false;
-      convError.hidden = false;
-      convErrorMsg.textContent = 'Network error. Please try again.';
     });
   });
 

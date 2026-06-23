@@ -65,14 +65,13 @@ def other_part(app, other_participant, arg_conv):
     return p
 
 
-def _make_args(fs_id, proposer_id, side, n):
-    """Insert n arguments for a given proposer/side combo (uses different proposers for n>1)."""
+def _make_args(fs_id, proposer_pseudonym, side, n):
+    """Insert n seeded arguments for a side."""
     args = []
     for i in range(n):
-        # Use distinct proposer IDs so uniqueness constraint is satisfied.
         a = Argument(
             featured_statement_id=fs_id,
-            proposer_id=None,   # seeded — exempt from unique constraint
+            proposer_pseudonym=None,   # seeded — exempt from unique constraint
             body=f'Argument {i}',
             side=side,
         )
@@ -89,7 +88,7 @@ def test_submit_pro_argument(auth_client, arg_conv, arg_part, fs, participant):
     })
     assert resp.status_code == 302
     arg = Argument.query.filter_by(
-        proposer_id=participant.id, featured_statement_id=fs.id, side='pro').first()
+        proposer_pseudonym=arg_part.pseudonym, featured_statement_id=fs.id, side='pro').first()
     assert arg is not None
     assert arg.body == 'This is a pro argument.'
 
@@ -100,7 +99,7 @@ def test_submit_con_argument(auth_client, arg_conv, arg_part, fs, participant):
     })
     assert resp.status_code == 302
     assert Argument.query.filter_by(
-        proposer_id=participant.id, featured_statement_id=fs.id, side='con').first()
+        proposer_pseudonym=arg_part.pseudonym, featured_statement_id=fs.id, side='con').first()
 
 
 def test_submit_invalid_side_rejected(auth_client, arg_conv, arg_part, fs):
@@ -133,7 +132,7 @@ def test_submit_duplicate_silently_redirects(auth_client, arg_conv, arg_part, fs
     })
     assert resp.status_code == 302
     assert Argument.query.filter_by(
-        proposer_id=participant.id, featured_statement_id=fs.id, side='pro').count() == 1
+        proposer_pseudonym=arg_part.pseudonym, featured_statement_id=fs.id, side='pro').count() == 1
 
 
 def test_submit_inserts_into_side_state_order(auth_client, arg_conv, arg_part, fs, participant):
@@ -143,7 +142,7 @@ def test_submit_inserts_into_side_state_order(auth_client, arg_conv, arg_part, f
     })
     assert resp.status_code == 302
     arg = Argument.query.filter_by(
-        proposer_id=participant.id, featured_statement_id=fs.id, side='pro').first()
+        proposer_pseudonym=arg_part.pseudonym, featured_statement_id=fs.id, side='pro').first()
     state = ArgumentSideState.query.filter_by(
         participant_id=participant.id, featured_statement_id=fs.id, side='pro').first()
     assert state is not None
@@ -237,7 +236,7 @@ def test_vote_k_cap_enforced(auth_client, arg_conv, arg_part, fs,
 def test_vote_own_argument_allowed(auth_client, arg_conv, arg_part, fs,
                                    participant, app):
     _pass_gate(auth_client, 'arg-conv', fs.id)
-    own = Argument(featured_statement_id=fs.id, proposer_id=participant.id,
+    own = Argument(featured_statement_id=fs.id, proposer_pseudonym=arg_part.pseudonym,
                    body='My argument.', side='pro')
     db.session.add(own)
     db.session.commit()
@@ -307,7 +306,7 @@ def test_moderator_can_delete_argument(admin_client, arg_conv, arg_part, fs,
                                        admin_participant, app):
     db.session.add(Participation(participant_id=admin_participant.id,
                                  conversation_id=arg_conv.id, pseudonym='admin-fox'))
-    arg = Argument(featured_statement_id=fs.id, proposer_id=None,
+    arg = Argument(featured_statement_id=fs.id, proposer_pseudonym=None,
                    body='To be deleted.', side='pro')
     db.session.add(arg)
     db.session.commit()
@@ -318,7 +317,7 @@ def test_moderator_can_delete_argument(admin_client, arg_conv, arg_part, fs,
 
 
 def test_participant_cannot_delete_argument(auth_client, arg_conv, arg_part, fs, app):
-    arg = Argument(featured_statement_id=fs.id, proposer_id=None,
+    arg = Argument(featured_statement_id=fs.id, proposer_pseudonym=None,
                    body='Should survive.', side='pro')
     db.session.add(arg)
     db.session.commit()
@@ -331,7 +330,7 @@ def test_participant_cannot_delete_argument(auth_client, arg_conv, arg_part, fs,
 # ── Argument hide / unhide ────────────────────────────────────────────────────
 
 def _make_visible_arg(fs_id, side='pro'):
-    arg = Argument(featured_statement_id=fs_id, proposer_id=None,
+    arg = Argument(featured_statement_id=fs_id, proposer_pseudonym=None,
                    body='Visible argument.', side=side)
     db.session.add(arg)
     db.session.commit()
@@ -353,7 +352,7 @@ def test_moderator_can_unhide_argument(admin_client, arg_conv, arg_part, fs,
                                        admin_participant, app):
     db.session.add(Participation(participant_id=admin_participant.id,
                                  conversation_id=arg_conv.id, pseudonym='admin-fox'))
-    arg = Argument(featured_statement_id=fs.id, proposer_id=None,
+    arg = Argument(featured_statement_id=fs.id, proposer_pseudonym=None,
                    body='Was hidden.', side='pro', hidden=True)
     db.session.add(arg)
     db.session.commit()
@@ -383,7 +382,7 @@ def test_hide_argument_wrong_conversation_returns_404(admin_client, arg_conv,
                                  polis_statement_id=88, confirmed_by_admin=True)
     db.session.add(other_fs)
     db.session.flush()
-    arg = Argument(featured_statement_id=other_fs.id, proposer_id=None,
+    arg = Argument(featured_statement_id=other_fs.id, proposer_pseudonym=None,
                    body='Belongs to other conv.', side='pro')
     db.session.add(arg)
     db.session.commit()
@@ -397,7 +396,7 @@ def test_vote_on_hidden_argument_blocked(auth_client, arg_conv, arg_part, fs,
                                          participant, app):
     _pass_gate(auth_client, 'arg-conv', fs.id)
     _make_args(fs.id, None, 'pro', 3)
-    hidden_arg = Argument(featured_statement_id=fs.id, proposer_id=None,
+    hidden_arg = Argument(featured_statement_id=fs.id, proposer_pseudonym=None,
                           body='Hidden.', side='pro', hidden=True)
     db.session.add(hidden_arg)
     db.session.commit()
@@ -419,7 +418,7 @@ def test_unvote_wrong_conversation_returns_404(auth_client, arg_conv, arg_part,
                                  polis_statement_id=99, confirmed_by_admin=True)
     db.session.add(other_fs)
     db.session.commit()
-    arg = Argument(featured_statement_id=other_fs.id, proposer_id=None,
+    arg = Argument(featured_statement_id=other_fs.id, proposer_pseudonym=None,
                    body='Other conv arg.', side='pro')
     db.session.add(arg)
     db.session.commit()
@@ -435,6 +434,17 @@ def test_admin_featured_page_accessible(admin_client, arg_conv, admin_participan
                   conversation_id=arg_conv.id, pseudonym='admin-fox2')
     resp = admin_client.get(f'/admin/conversations/{arg_conv.id}/featured')
     assert resp.status_code == 200
+
+
+def test_admin_featured_page_shows_statement_provenance(admin_client, arg_conv, fs, app):
+    from app import record_statement_provenance
+    record_statement_provenance(arg_conv.id, fs.polis_statement_id, 7,
+                                parent_text='old statement', new_text='new statement')
+
+    resp = admin_client.get(f'/admin/conversations/{arg_conv.id}/featured')
+
+    assert resp.status_code == 200
+    assert '↳ #7'.encode() in resp.data
 
 
 def test_admin_featured_add_by_tid(admin_client, arg_conv, admin_participant):

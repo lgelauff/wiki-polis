@@ -151,6 +151,39 @@ def test_proxy_strips_unknown_query_params(auth_client):
     assert req.call_args.kwargs['params'] == {'zinvite': 'ok', 'tid': '3'}
 
 
+def test_demo_proxy_allows_bound_vote_endpoint(client):
+    conv = Conversation(slug='demo-proxy', polis_id='demoproxy1', title='Demo',
+                        active=True, access_policy='demo', phase_submission=True)
+    db.session.add(conv)
+    db.session.commit()
+    client.get('/c/demo-proxy')
+
+    up = _fake_upstream()
+    with patch('app.requests.request', return_value=up) as req:
+        resp = client.put('/proxy/particiapi/api/conversations/demoproxy1/votes/7',
+                          headers={'Sec-Fetch-Site': 'same-origin'},
+                          json={'value': 1})
+
+    assert resp.status_code == 200
+    assert req.called
+
+
+def test_demo_proxy_blocks_statement_write_endpoint(client):
+    conv = Conversation(slug='demo-proxy2', polis_id='demoproxy2', title='Demo',
+                        active=True, access_policy='demo', phase_submission=True)
+    db.session.add(conv)
+    db.session.commit()
+    client.get('/c/demo-proxy2')
+
+    with patch('app.requests.request') as req:
+        resp = client.post('/proxy/particiapi/api/conversations/demoproxy2/statements/',
+                           headers={'Sec-Fetch-Site': 'same-origin'},
+                           json={'text': 'blocked'})
+
+    assert resp.status_code == 403
+    req.assert_not_called()
+
+
 def test_statement_new_enforces_quota(auth_client, participant):
     conv = Conversation(slug='q', polis_id='qxxxxxxxxx', title='Q', active=True,
                         access_policy='public', phase_submission=True,
