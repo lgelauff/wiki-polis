@@ -399,8 +399,11 @@
         <div class="manage-card-title">Featured statements</div>
         <div class="manage-card-desc">Curate the set for arguments &amp; informed voting</div>
       </a>
-      {# TODO(#165/#42): a 'Statistics' manage-card linking to a per-conversation
-         stats page goes here once that page exists. #}
+      <a class="manage-card" href="{{ url_for('admin.admin_conversation_participants', conv_id=conversation.id) }}">
+        <div class="manage-card-top"><span class="manage-card-count">{{ participant_count }} joined</span></div>
+        <div class="manage-card-title">Participants</div>
+        <div class="manage-card-desc">Review per-participant engagement and drop-off signals</div>
+      </a>
     </div>
   </div>
 

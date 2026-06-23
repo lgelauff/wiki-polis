@@ -79,6 +79,7 @@ ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.st
 _REVEAL_COOLDOWN_DAYS = 30   # days after close before reveal window opens
 _REVEAL_WINDOW_DAYS   = 30   # days participants may opt in once the window opens
 _MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
+_LAST_ENGAGEMENT_THROTTLE = timedelta(minutes=5)
 
 # ── Phase 6 results ───────────────────────────────────────────────────────────
 
@@ -713,6 +714,27 @@ def _safe_redirect(target: str, fallback: str) -> str:
     return fallback
 
 
+def _touch_last_engagement(participation: 'Participation | None', *, commit: bool = False) -> bool:
+    """Update meaningful-action recency, throttled and best-effort."""
+    if participation is None:
+        return False
+    now = datetime.now(timezone.utc)
+    last = participation.last_engagement
+    if last is not None and last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    if last is not None and now - last < _LAST_ENGAGEMENT_THROTTLE:
+        return False
+    participation.last_engagement = now
+    if commit:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('last_engagement update failed')
+            return False
+    return True
+
+
 def _sanitise_text(html: str) -> str:
     return nh3.clean(html or '', tags=_TEXT_ALLOWED_TAGS,
                      attributes=_TEXT_ALLOWED_ATTRS, strip_comments=True)
@@ -1005,6 +1027,18 @@ def _proxy_to_particiapi(pa_path: str):
         flask_resp.headers['Content-Type'] = 'application/json'
         return flask_resp
 
+    vote_match = re.match(r'^api/conversations/([^/]+)/votes(?:/\d+)?/?$', pa_path)
+    if upstream.ok and request.method in ('POST', 'PUT') and vote_match:
+        participant = _current_participant()
+        if participant:
+            conv = Conversation.query.filter_by(polis_id=vote_match.group(1)).first()
+            if conv:
+                part = Participation.query.filter_by(
+                    participant_id=participant.id,
+                    conversation_id=conv.id,
+                ).first()
+                _touch_last_engagement(part, commit=True)
+
     flask_resp = make_response(upstream.content, upstream.status_code)
     flask_resp.headers['Content-Type'] = upstream.headers.get(
         'Content-Type', 'application/json')
@@ -1295,7 +1329,8 @@ def conversation_statement_new(slug):
             ids = list(part.new_stmt_ids or [])
             ids.append(stmt_id)
             part.new_stmt_ids = ids
-            db.session.commit()
+        _touch_last_engagement(part)
+        db.session.commit()
         flask_resp = make_response(stmt_resp.content, 201)
         flask_resp.headers['Content-Type'] = 'application/json'
     else:
@@ -1547,6 +1582,60 @@ def admin_conversation_detail(conv_id):
                            linear_phase_state=_is_linear_phase_state(conv),
                            advance_target_index=_advance_target_index(conv),
                            transition=_transition_context(conv))
+
+
+@admin_bp.get('/admin/conversations/<int:conv_id>/participants')
+@login_required
+def admin_conversation_participants(conv_id):
+    conv = _require_mod_for_conv(conv_id)
+    participations = (Participation.query
+                      .join(Participant)
+                      .filter(Participation.conversation_id == conv_id)
+                      .options(joinedload(Participation.participant))
+                      .order_by(Participant.mw_username)
+                      .all())
+
+    submitted_counts = dict(
+        db.session.query(Argument.proposer_id, db.func.count(Argument.id))
+        .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
+        .filter(FeaturedStatement.conversation_id == conv_id,
+                Argument.proposer_id.isnot(None))
+        .group_by(Argument.proposer_id)
+        .all()
+    )
+    voted_counts = dict(
+        db.session.query(ArgumentVote.participant_id, db.func.count(ArgumentVote.id))
+        .join(Argument, ArgumentVote.argument_id == Argument.id)
+        .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
+        .filter(FeaturedStatement.conversation_id == conv_id)
+        .group_by(ArgumentVote.participant_id)
+        .all()
+    )
+
+    client = _polis_server_client()
+    statement_progress_unavailable = bool(current_app.config.get('POLIS_DATABASE_URL'))
+    rows = []
+    for part in participations:
+        progress_row = None
+        if current_app.config.get('POLIS_DATABASE_URL'):
+            progress = client.get_statement_progress_bulk([conv.polis_id], part.participant.xid)
+            if progress is not None:
+                statement_progress_unavailable = False
+                progress_row = progress.get(conv.polis_id)
+        rows.append({
+            'participation': part,
+            'participant': part.participant,
+            'statement_progress': progress_row,
+            'arguments_submitted': int(submitted_counts.get(part.participant_id, 0)),
+            'arguments_voted': int(voted_counts.get(part.participant_id, 0)),
+        })
+
+    return render_template(
+        'admin_participants.html',
+        conversation=conv,
+        rows=rows,
+        statement_progress_unavailable=statement_progress_unavailable,
+    )
 
 @admin_bp.post('/admin/conversations/new')
 @login_required
@@ -2640,6 +2729,7 @@ def argument_submit(slug, fs_id):
     order.insert(random.randint(0, len(order)), arg.id)
     state.argument_order = order
 
+    _touch_last_engagement(part)
     db.session.commit()
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True, 'id': arg.id, 'body': body})
@@ -2667,10 +2757,14 @@ def argument_skip(slug, fs_id, side):
             skipped=True,
         )
         db.session.add(state)
+        _touch_last_engagement(part)
         db.session.commit()
     elif not state.skipped:
         state.skipped = True
+        _touch_last_engagement(part)
         db.session.commit()
+    else:
+        _touch_last_engagement(part, commit=True)
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
@@ -2730,6 +2824,7 @@ def argument_vote(slug, arg_id):
             argument_id=arg_id,
             participant_id=part.participant_id,
         ))
+        _touch_last_engagement(part)
         db.session.commit()
     if is_ajax:
         return jsonify({'ok': True})
@@ -2746,6 +2841,7 @@ def argument_unvote(slug, arg_id):
         participant_id=part.participant_id, argument_id=arg_id).first()
     if existing:
         db.session.delete(existing)
+        _touch_last_engagement(part)
         db.session.commit()
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
@@ -2929,6 +3025,8 @@ def phase6_vote(slug):
         abort(502)
 
     resp = make_response('', upstream.status_code)
+    if upstream.ok:
+        _touch_last_engagement(participation, commit=True)
     if new_pa_cookie:
         resp.set_cookie('pa_session', new_pa_cookie, httponly=True,
                         samesite='Lax', secure=not current_app.debug)

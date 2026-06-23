@@ -644,6 +644,17 @@ class PolisServerClient:
         Returns dict[zinvite → n_remaining], or None if Postgres is unavailable.
         Conversations where the participant has no Polis record are absent from the dict.
         """
+        progress = self.get_statement_progress_bulk(zinvites, xid)
+        if progress is None:
+            return None
+        return {zinvite: row['remaining'] for zinvite, row in progress.items()}
+
+    def get_statement_progress_bulk(
+        self,
+        zinvites: list[str],
+        xid: str,
+    ) -> dict[str, dict] | None:
+        """Return statement vote progress per conversation for one participant."""
         if not self._db_url or not zinvites or not xid:
             return None
         safe = [z for z in zinvites if _SAFE_ZINVITE.match(z or '')]
@@ -652,11 +663,18 @@ class PolisServerClient:
         rows = self._pg_query(
             _STATEMENTS_REMAINING_BULK_SQL,
             (safe, xid),
-            'get_statements_remaining_bulk',
+            'get_statement_progress_bulk',
         )
         if rows is None:
             return None
-        return {r[0]: int(r[3]) for r in rows}
+        return {
+            r[0]: {
+                'total': int(r[1]),
+                'voted': int(r[2]),
+                'remaining': int(r[3]),
+            }
+            for r in rows
+        }
 
     def get_personal_votes(
         self,

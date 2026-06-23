@@ -94,6 +94,16 @@ def test_submit_pro_argument(auth_client, arg_conv, arg_part, fs, participant):
     assert arg.body == 'This is a pro argument.'
 
 
+def test_submit_updates_last_engagement(auth_client, arg_conv, arg_part, fs):
+    assert arg_part.last_engagement is None
+    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit', data={
+        'side': 'pro', 'body': 'This is a pro argument.',
+    })
+    assert resp.status_code == 302
+    db.session.refresh(arg_part)
+    assert arg_part.last_engagement is not None
+
+
 def test_submit_con_argument(auth_client, arg_conv, arg_part, fs, participant):
     resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit', data={
         'side': 'con', 'body': 'This is a con argument.',

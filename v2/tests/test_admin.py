@@ -1,7 +1,7 @@
 """Tests for admin conversation management, roles, and phase toggles."""
 import re
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -1231,6 +1231,57 @@ def test_remove_invite(admin_client, conv):
     assert db.session.get(ConversationInvite, inv.id) is None
 
 
+def test_participants_page_shows_engagement_metrics(app, admin_client, conv, participant):
+    from db import Argument, ArgumentVote, Participation
+
+    app.config['POLIS_DATABASE_URL'] = 'postgres://stats.example/db'
+    other = Participant(mw_user_id=44444, mw_username='otheruser', xid='u' * 64)
+    db.session.add(other)
+    db.session.flush()
+    part = Participation(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        pseudonym='test-lion',
+        last_engagement=datetime(2026, 6, 23, 12, 30, tzinfo=timezone.utc),
+    )
+    other_part = Participation(
+        participant_id=other.id,
+        conversation_id=conv.id,
+        pseudonym='other-lion',
+    )
+    db.session.add_all([part, other_part])
+    db.session.flush()
+    fs = FeaturedStatement(
+        conversation_id=conv.id,
+        polis_statement_id=7,
+        statement_text='Featured',
+        confirmed_by_admin=True,
+    )
+    db.session.add(fs)
+    db.session.flush()
+    arg = Argument(featured_statement_id=fs.id, proposer_id=participant.id,
+                   body='Useful because...', side='pro')
+    db.session.add(arg)
+    db.session.flush()
+    db.session.add(ArgumentVote(argument_id=arg.id, participant_id=participant.id))
+    db.session.commit()
+
+    server = MagicMock()
+    server.get_statement_progress_bulk.return_value = {
+        conv.polis_id: {'total': 5, 'voted': 3, 'remaining': 2},
+    }
+    with patch('app._polis_server_client', return_value=server):
+        resp = admin_client.get(f'/admin/conversations/{conv.id}/participants')
+
+    assert resp.status_code == 200
+    page = resp.data.decode()
+    assert 'testuser' in page
+    assert '3 / 5' in page
+    assert re.search(r'<td>\s*2\s*</td>', page)
+    assert re.search(r'<td>\s*1\s*</td>', page)
+    assert '2026-06-23 12:30' in page
+
+
 # ── Template-render smoke test (#92 blueprint extraction) ───────────────────────
 # The admin routes moved onto Blueprint('admin'), so every `url_for('admin…')` in the
 # admin templates was requalified to `url_for('admin.admin…')`. The rest of this suite
@@ -1242,6 +1293,7 @@ def test_admin_template_pages_render(admin_client, conv):
     # Pure-DB pages — no backend needed.
     assert admin_client.get(f'/admin/conversations/{conv.id}').status_code == 200
     assert admin_client.get(f'/admin/conversations/{conv.id}/invites').status_code == 200
+    assert admin_client.get(f'/admin/conversations/{conv.id}/participants').status_code == 200
 
     # Statements page pulls from Polis; stub both clients so it renders offline.
     from unittest.mock import MagicMock

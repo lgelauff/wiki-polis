@@ -45,13 +45,14 @@ str(10)='en' (BCP-47) · `intro_text` / `outro_text` (sanitised HTML, nullable) 
 `id` PK · `participant_id` FK→participants (**RESTRICT**) · `conversation_id`
 FK→conversations (CASCADE) · `pseudonym` str(80) · `accepted_at` · `notify_email`
 bool=F · `notify_talk_page` bool=F · `public_username` (nullable) · `revealed_at`
-(nullable) · `new_stmt_ids` JSON=[].
+(nullable) · `new_stmt_ids` JSON=[] · `last_engagement` nullable.
 - **Constraints:** unique `(participant_id, conversation_id)`; unique `pseudonym`
   (platform-wide, never reused/deleted); check `pseudonym = LOWER(pseudonym)`.
 - `public_username` / `revealed_at` record the opt-in reveal. Per D-PRIV, a reveal is
   **permanent** and is not nullified by the app.
 - `new_stmt_ids` = Polis statement IDs of new statements this participant submitted;
   quota used = `len(new_stmt_ids)`, slots consumed at submit time and never returned.
+- `last_engagement` records recent meaningful actions only; passive page views are not tracked.
 
 ### `conversation_invites`
 `id` PK · `conversation_id` FK (CASCADE) · `mw_username` · `created_at`. Unique
