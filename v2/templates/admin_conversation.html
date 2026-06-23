@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block header_mode %}header--admin{% endblock %}
+{% block header_mode %}{% if is_admin %}header--admin{% endif %}{% endblock %}
 {% block header_crumb %}
 <span class="header-crumb">
   <span class="header-crumb-sep">/</span>
