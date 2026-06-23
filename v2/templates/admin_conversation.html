@@ -550,15 +550,39 @@
         </form>
       </div>
       {% endif %}
-      {# TODO(#145): a 'Delete consultation' danger-row (disabled with an inline
-         reason when participation exists) goes here. Needs a delete route + a
-         no-valid-votes guard. #}
+      <div class="danger-row">
+        <div class="danger-row-main">
+          <div class="danger-row-title">Delete empty consultation</div>
+          <div class="danger-row-desc">
+            Deletes the local consultation after deactivating and hiding it in Polis.
+            {% if delete_vote_count is none %}
+              Disabled because Polis vote data could not be verified.
+            {% elif delete_vote_count == 0 %}
+              Available because Polis has no valid votes for this consultation.
+            {% else %}
+              Disabled because Polis has {{ delete_vote_count }} valid vote{{ 's' if delete_vote_count != 1 }}.
+            {% endif %}
+          </div>
+        </div>
+        <form id="delete-conversation-form" method="post"
+              action="{{ url_for('admin.admin_conversation_delete', conv_id=conversation.id) }}" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-small btn-danger"
+                  {% if delete_vote_count != 0 %}disabled aria-disabled="true"{% endif %}>
+            Delete consultation
+          </button>
+        </form>
+      </div>
     </div>
   </div>
   <script nonce="{{ csp_nonce }}">
     var cf = document.getElementById('close-permanently-form');
     if (cf) cf.addEventListener('submit', function (e) {
       if (!confirm('Close this consultation permanently?\n\nThis cannot be undone and starts the identity reveal timeline.')) e.preventDefault();
+    });
+    var df = document.getElementById('delete-conversation-form');
+    if (df) df.addEventListener('submit', function (e) {
+      if (!confirm('Delete this consultation?\n\nThis removes local wiki-polis records after hiding the Polis conversation. This cannot be undone.')) e.preventDefault();
     });
   </script>
   {% endif %}{# is_admin #}

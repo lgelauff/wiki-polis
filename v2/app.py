@@ -1530,6 +1530,58 @@ def _seed_statement_lock_reason(conv: Conversation) -> str | None:
         return None
     return 'Seed statements are locked because statement submission has ended.'
 
+
+def _delete_local_conversation(conv: Conversation) -> None:
+    """Delete local rows owned by a conversation after external deletion guards pass."""
+    conv_id = conv.id
+    featured_ids = [
+        row[0] for row in db.session.query(FeaturedStatement.id)
+        .filter_by(conversation_id=conv_id)
+        .all()
+    ]
+    if featured_ids:
+        arg_ids = [
+            row[0] for row in db.session.query(Argument.id)
+            .filter(Argument.featured_statement_id.in_(featured_ids))
+            .all()
+        ]
+        if arg_ids:
+            ArgumentVote.query.filter(
+                ArgumentVote.argument_id.in_(arg_ids)
+            ).delete(synchronize_session=False)
+            Argument.query.filter(
+                Argument.id.in_(arg_ids)
+            ).delete(synchronize_session=False)
+        ArgumentSideState.query.filter(
+            ArgumentSideState.featured_statement_id.in_(featured_ids)
+        ).delete(synchronize_session=False)
+        FeaturedStatement.query.filter(
+            FeaturedStatement.id.in_(featured_ids)
+        ).delete(synchronize_session=False)
+
+    provenance_ids = [
+        row[0] for row in db.session.query(StatementProvenance.id)
+        .filter_by(conversation_id=conv_id)
+        .all()
+    ]
+    if provenance_ids:
+        StatementSimilarityScore.query.filter(
+            StatementSimilarityScore.provenance_id.in_(provenance_ids)
+        ).delete(synchronize_session=False)
+        StatementProvenance.query.filter(
+            StatementProvenance.id.in_(provenance_ids)
+        ).delete(synchronize_session=False)
+
+    ConversationBan.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
+    ConversationInvite.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
+    AdminRole.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
+    Participation.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
+    AuditEvent.query.filter_by(conversation_id=conv_id).update(
+        {'conversation_id': None},
+        synchronize_session=False,
+    )
+    db.session.delete(conv)
+
 # ── Admin ─────────────────────────────────────────────────────────────────
 
 @admin_bp.get('/admin')
@@ -1566,6 +1618,7 @@ def admin_conversation_detail(conv_id):
     can_organize      = _can_organize(conv)
     client            = _polis_server_client()
     polis_stats       = client.get_polis_stats(conv.polis_id)
+    delete_vote_count = client.get_valid_vote_count(conv.polis_id) if _is_global_admin() else None
     # Informed-voting round-2 tiles render whenever that phase is active (its flag is
     # on) — including alongside other phases in advanced mode — so fetch the phase-6
     # stats and gate the warning on the flag itself.
@@ -1596,6 +1649,7 @@ def admin_conversation_detail(conv_id):
                            polis_stats_unavailable=polis_stats_unavailable,
                            phase6_results=phase6_results,
                            reveal=reveal,
+                           delete_vote_count=delete_vote_count,
                            admin_roles=ADMIN_ROLES,
                            can_manage_roles=can_manage_roles,
                            can_organize=can_organize,
@@ -1811,6 +1865,41 @@ def admin_conversation_close(conv_id):
     db.session.commit()
     record_audit('conversation.close', conv_id=conv.id)
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/delete')
+@login_required
+@admin_required
+def admin_conversation_delete(conv_id):
+    conv = Conversation.query.get_or_404(conv_id)
+    client = _polis_server_client()
+    valid_vote_count = client.get_valid_vote_count(conv.polis_id)
+    if valid_vote_count is None:
+        flash('Cannot delete this conversation because Polis vote data could not be verified.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    if valid_vote_count != 0:
+        flash(
+            f'Cannot delete this conversation because it has {valid_vote_count} valid vote'
+            f'{"s" if valid_vote_count != 1 else ""}.',
+            'error',
+        )
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    try:
+        client.close_and_hide_conversation(conv.polis_id)
+    except PolisServerError:
+        current_app.logger.exception('Polis conversation close/hide failed')
+        flash('Could not hide the Polis conversation. Nothing was deleted.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    slug = conv.slug
+    polis_id = conv.polis_id
+    record_audit('conversation.delete', conv_id=conv.id, target_type='conversation',
+                 target_id=conv.id, valid_vote_count=valid_vote_count)
+    _delete_local_conversation(conv)
+    db.session.commit()
+    current_app.logger.info('deleted empty conversation slug=%s polis_id=%s', slug, polis_id)
+    flash('Conversation deleted.', 'success')
+    return redirect(url_for('admin.admin'))
 
 def _sync_vis_type(conv) -> bool:
     """Mirror the results phases onto Polis's vis_type, which gates GET /results/

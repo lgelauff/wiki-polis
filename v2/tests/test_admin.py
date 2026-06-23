@@ -1390,3 +1390,45 @@ def test_phases_toggle_mirrors_results_into_polis_vis_type(admin_client, conv):
         admin_client.post(f'/admin/conversations/{conv.id}/phases',
                           data={'phase_submission': 'on'})
     server2.set_vis_type.assert_called_once_with('adm1234567', 0)
+
+
+def test_delete_conversation_button_disabled_without_vote_count(admin_client, conv):
+    server = MagicMock()
+    server.get_polis_stats.return_value = None
+    server.get_valid_vote_count.return_value = None
+
+    with patch('app._polis_server_client', return_value=server):
+        page = admin_client.get(f'/admin/conversations/{conv.id}').data.decode()
+
+    assert 'Delete empty consultation' in page
+    assert 'Polis vote data could not be verified' in page
+    assert 'disabled aria-disabled="true"' in page
+
+
+def test_delete_conversation_blocked_when_valid_votes_exist(admin_client, conv):
+    server = MagicMock()
+    server.get_valid_vote_count.return_value = 2
+
+    with patch('app._polis_server_client', return_value=server):
+        resp = admin_client.post(
+            f'/admin/conversations/{conv.id}/delete',
+            follow_redirects=True,
+        )
+
+    assert resp.status_code == 200
+    assert db.session.get(Conversation, conv.id) is not None
+    server.close_and_hide_conversation.assert_not_called()
+    assert b'2 valid votes' in resp.data
+
+
+def test_delete_conversation_with_zero_valid_votes(admin_client, conv):
+    server = MagicMock()
+    server.get_valid_vote_count.return_value = 0
+
+    with patch('app._polis_server_client', return_value=server):
+        resp = admin_client.post(f'/admin/conversations/{conv.id}/delete')
+
+    assert resp.status_code == 302
+    assert resp.headers['Location'].endswith('/admin')
+    assert db.session.get(Conversation, conv.id) is None
+    server.close_and_hide_conversation.assert_called_once_with('adm1234567')
