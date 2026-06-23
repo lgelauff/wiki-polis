@@ -56,15 +56,22 @@ detail that matters for agents is **how to use tier 3 responsibly**, below.
 **Leave the staging database in a decent state for the next user.** Staging is shared, so a
 broken DB blocks everyone after you.
 
-- If you **cause or hit a database error** — a half-applied or failed migration, a phantom
-  `alembic_version`, a schema/column mismatch, corrupt rows — **fix it before you leave.** Do
-  not walk away from a broken staging DB.
-- Recovery moves are documented in `v2/guide_runbook.md` → *Staging MySQL + Alembic gotchas*
-  (query staging MySQL via SQLAlchemy, repair a phantom `alembic_version`, re-run
-  `flask db upgrade`).
-- If the DB is broken **beyond a clean fix**, say so explicitly and stop — don't leave it
-  silently broken or paper over it. Staging is meant to be rebuildable from the runbook; flag it
-  so it can be reset, rather than letting the next user discover it the hard way.
+If you cause or hit a database error — a half-applied or failed migration, a phantom
+`alembic_version`, a schema/column mismatch, corrupt rows — follow this order. **It is bounded:
+"don't walk away" means don't leave it *silently* broken; it does NOT mean keep trying forever.**
+
+1. **Attempt the documented recovery once or twice.** The known-good moves are in
+   `v2/guide_runbook.md` → *Staging MySQL + Alembic gotchas* (query staging MySQL via SQLAlchemy,
+   repair a phantom `alembic_version`, re-run `flask db upgrade`). If a couple of targeted
+   attempts fix it, you're done.
+2. **If that doesn't resolve it, stop digging.** Do **not** keep improvising fixes against a live
+   shared DB — repeated blind attempts can make it worse. Two or three failed recovery attempts
+   is your signal to escalate, not to keep going.
+3. **Reset rather than nurse a hopeless DB.** Staging is **meant to be rebuildable** from the
+   runbook — a clean reset is a perfectly good outcome, often better than a half-repaired DB.
+4. **Escalate clearly.** Tell the user plainly: what broke, what you tried, and that it needs a
+   reset (or their input). The failure mode to avoid is *silent* breakage — not "I couldn't fix
+   it." Flagging a broken DB you can't safely fix is the correct, expected ending, not a failure.
 - When you're done, **restore the deployed branch** (`bash ~/wiki-polis/deploy.sh main`) unless
   the user wants your branch left up.
 
