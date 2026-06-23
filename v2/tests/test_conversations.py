@@ -61,6 +61,17 @@ def test_accept_get_renders_pseudonym_options(auth_client, conv):
     assert b'pseudonym' in resp.data.lower()
 
 
+def test_accept_get_uses_concise_pseudonym_setup_copy(auth_client, conv):
+    resp = auth_client.get('/accept/test-conv')
+    assert resp.status_code == 200
+    html = resp.data.decode()
+    assert 'Choose a pseudonym' in html
+    assert 'Pick the name you will use in this consultation.' in html
+    assert 'Quick setup before you start' not in html
+    assert 'Privacy &amp; data handling' in html
+    assert 'id="accept-privacy-note"' in html
+
+
 def test_accept_get_already_joined_redirects(auth_client, conv, participation):
     resp = auth_client.get('/accept/test-conv')
     assert resp.status_code == 302
