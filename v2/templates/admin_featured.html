@@ -40,6 +40,13 @@
         <td style="white-space:nowrap;vertical-align:top">{{ fs.polis_statement_id }}</td>
         <td style="font-size:13px;vertical-align:top">
           <div style="margin-bottom:0.5rem">{{ fs.statement_text or '—' }}</div>
+          {%- set prov = provenance_map.get(fs.polis_statement_id) %}
+          {% if prov %}<div style="margin-bottom:0.5rem">
+            <span class="prov-badge"
+                  title="Derived from statement #{{ prov.derived_from_tid }}. Similarity 1.00 = identical.{% for sc in prov.scores %} {{ sc.model }} {{ '%.2f'|format(sc.value) }}.{% endfor %}">
+              <span class="sr-only">derived from statement {{ prov.derived_from_tid }}, </span>↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}
+            </span>
+          </div>{% endif %}
           <div style="border-top:1px solid var(--hairline);padding-top:0.4rem;margin-top:0.1rem">
             <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Arguments</span>
             {% if fs.arguments %}
@@ -47,7 +54,7 @@
             <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin-top:4px;font-size:12px">
               <span style="color:var(--muted);min-width:2rem;flex-shrink:0">{{ arg.side }}</span>
               <span style="flex:1;min-width:120px;color:var(--body)">{{ arg.body }}</span>
-              <span style="color:var(--muted);white-space:nowrap">{{ arg.proposer.mw_username if arg.proposer else '—' }}</span>
+              <span style="color:var(--muted);white-space:nowrap">{{ arg.proposer_pseudonym or '—' }}</span>
               <span style="color:var(--muted);white-space:nowrap">{{ arg.created_at.strftime('%Y-%m-%d') if arg.created_at else '' }}</span>
               <form method="post"
                     action="{{ url_for('admin.admin_argument_delete', conv_id=conversation.id, arg_id=arg.id) }}"
@@ -109,7 +116,16 @@
       {% for c in candidates %}
       <tr>
         <td>{{ c.tid }}</td>
-        <td style="font-size:13px">{{ c.text }}</td>
+        <td style="font-size:13px">
+          {{ c.text }}
+          {%- set prov = provenance_map.get(c.tid) %}
+          {% if prov %}<div style="margin-top:0.35rem">
+            <span class="prov-badge"
+                  title="Derived from statement #{{ prov.derived_from_tid }}. Similarity 1.00 = identical.{% for sc in prov.scores %} {{ sc.model }} {{ '%.2f'|format(sc.value) }}.{% endfor %}">
+              <span class="sr-only">derived from statement {{ prov.derived_from_tid }}, </span>↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}
+            </span>
+          </div>{% endif %}
+        </td>
         <td>{{ '✓' if c.is_seed else '' }}</td>
         <td>{{ c.n_agree }}</td>
         <td>{{ c.n_disagree }}</td>

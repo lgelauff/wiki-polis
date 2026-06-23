@@ -68,7 +68,7 @@ def fs(app, conv):
 
 def _args(fs_id, side, n):
     for i in range(n):
-        db.session.add(Argument(featured_statement_id=fs_id, proposer_id=None,
+        db.session.add(Argument(featured_statement_id=fs_id, proposer_pseudonym=None,
                                 body=f'{side} {i}', side=side))
     db.session.commit()
     return Argument.query.filter_by(featured_statement_id=fs_id, side=side).all()

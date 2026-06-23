@@ -60,6 +60,7 @@
           <select name="access_policy">
             <option value="public">public</option>
             <option value="invite_only">invite_only</option>
+            <option value="demo">demo</option>
           </select>
         </label>
         <label>Route
@@ -68,6 +69,14 @@
             <option value="{{ key }}">{{ route.label }}</option>
             {% endfor %}
           </select>
+        </label>
+        <label>Eligibility event ID
+          <input type="text" name="eligibility_event_id" maxlength="80"
+                 placeholder="optional AccountEligibility event">
+        </label>
+        <label>Eligibility label
+          <input type="text" name="eligibility_label" maxlength="255"
+                 placeholder="optional criteria summary">
         </label>
       </div>
       <div class="edit-row-texts">

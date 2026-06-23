@@ -134,6 +134,7 @@
             <div class="conv-card-left">
               <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
               <h3 class="conv-card-title">{{ c.title }}</h3>
+              {% if c.access_policy == 'demo' %}<span class="conv-card-badge" aria-hidden="true">Demo</span>{% endif %}
             </div>
             <span class="conv-card-action" aria-hidden="true">JOIN →</span>
           </a>

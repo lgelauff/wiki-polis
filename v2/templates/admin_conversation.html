@@ -518,10 +518,18 @@
           </label>
           <label>Access policy
             <select name="access_policy">
-              {% for p in ['public', 'invite_only'] %}
+              {% for p in ['public', 'invite_only', 'demo'] %}
               <option value="{{ p }}" {% if conversation.access_policy == p %}selected{% endif %}>{{ p }}</option>
               {% endfor %}
             </select>
+          </label>
+          <label>Eligibility event ID
+            <input type="text" name="eligibility_event_id" maxlength="80"
+                   value="{{ conversation.eligibility_event_id or '' }}">
+          </label>
+          <label>Eligibility label
+            <input type="text" name="eligibility_label" maxlength="255"
+                   value="{{ conversation.eligibility_label or '' }}">
           </label>
         </div>
         <div class="edit-row-texts">
