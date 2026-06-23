@@ -262,7 +262,7 @@
           <div class="v2-composer-header">
             <div>
               <div class="v2-composer-title" id="composer-suggest-title">Suggest different wording</div>
-              <div class="v2-composer-helper" id="composer-suggest-helper">Stays close to the same idea — just a clearer or fairer phrasing.</div>
+              <div class="v2-composer-helper" id="composer-suggest-helper">Stays close to the same idea — just a clearer or fairer phrasing. <a href="{{ url_for('participant.statement_guidance') }}">Writing tips</a></div>
             </div>
             <span class="propose-charcount"><span id="suggest-len">0</span> / 280</span>
           </div>
@@ -283,7 +283,7 @@
           <div class="v2-composer-header">
             <div>
               <div class="v2-composer-title" id="composer-newstmt-title">Propose a new statement</div>
-              <div class="v2-composer-helper" id="composer-newstmt-helper">A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool.</div>
+              <div class="v2-composer-helper" id="composer-newstmt-helper">A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool. <a href="{{ url_for('participant.statement_guidance') }}">Writing tips</a></div>
             </div>
             <span class="propose-charcount"><span id="newstmt-len">0</span> / 280</span>
           </div>
@@ -562,6 +562,7 @@
               <div class="contribute-composer-header">
                 <span class="contribute-glyph filled">+</span>
                 <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-pro">Your for-argument · one sentence, one claim</span>
+                <a class="contribute-help-link" href="{{ url_for('participant.argument_guidance') }}">Argument tips</a>
                 <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
               </div>
               <textarea class="contribute-textarea" maxlength="280" rows="3"
@@ -689,6 +690,7 @@
               <div class="contribute-composer-header">
                 <span class="contribute-glyph filled">−</span>
                 <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-con">Your against-argument · one sentence, one claim</span>
+                <a class="contribute-help-link" href="{{ url_for('participant.argument_guidance') }}">Argument tips</a>
                 <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
               </div>
               <textarea class="contribute-textarea" maxlength="280" rows="3"

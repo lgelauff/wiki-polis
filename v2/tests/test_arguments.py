@@ -199,6 +199,7 @@ def test_argument_tab_renders_direct_skip_controls(auth_client, arg_conv, arg_pa
     assert resp.status_code == 200
     html = resp.data.decode()
     assert html.count('class="at-direct-skip contribute-direct-skip"') == 2
+    assert '/help/arguments' in html
     assert 'Add one for-argument, or skip' not in html
     assert 'Add one against-argument, or skip' not in html
 

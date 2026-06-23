@@ -133,6 +133,7 @@ def test_composer_textareas_have_accessible_names(auth_client, conv, participati
     assert resp.status_code == 200
     assert b'aria-labelledby="composer-suggest-title"' in resp.data
     assert b'aria-labelledby="composer-newstmt-title"' in resp.data
+    assert b'/help/statements' in resp.data
 
 
 def test_progressbar_has_static_valuenow(auth_client, conv, participation):

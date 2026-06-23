@@ -1288,6 +1288,17 @@ admin_bp = Blueprint('admin', __name__)
 _NH3_NO_TAGS: frozenset[str] = frozenset()
 participant_bp = Blueprint('participant', __name__)
 
+
+@participant_bp.get('/help/statements')
+def statement_guidance():
+    return render_template('guidance_statement.html')
+
+
+@participant_bp.get('/help/arguments')
+def argument_guidance():
+    return render_template('guidance_argument.html')
+
+
 # ── Admin ─────────────────────────────────────────────────────────────────
 
 @admin_bp.get('/admin')

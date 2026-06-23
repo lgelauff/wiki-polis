@@ -123,6 +123,16 @@ def test_accept_pseudonyms_endpoint_returns_list(auth_client, conv):
         assert '-' in name
 
 
+@pytest.mark.parametrize(('path', 'heading'), [
+    ('/help/statements', b'Writing good statements'),
+    ('/help/arguments', b'Writing good arguments'),
+])
+def test_guidance_pages_are_public(client, path, heading):
+    resp = client.get(path)
+    assert resp.status_code == 200
+    assert heading in resp.data
+
+
 # ── Conversation page ─────────────────────────────────────────────────────────
 
 def test_conversation_without_participation_redirects_to_accept(auth_client, conv):
