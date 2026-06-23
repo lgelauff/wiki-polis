@@ -1318,6 +1318,31 @@ def test_admin_can_ban_and_unban_participant(admin_client, conv, participant):
     assert ban.lift_summary == 'resolved'
 
 
+def test_public_ban_log_uses_pseudonym_and_hides_reason(client, admin_client,
+                                                        conv, participant):
+    from db import Participation
+
+    db.session.add(Participation(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        pseudonym='public-lion',
+    ))
+    db.session.commit()
+
+    admin_client.post(
+        f'/admin/conversations/{conv.id}/participants/{participant.id}/ban',
+        data={'summary': 'private reason'},
+    )
+
+    resp = client.get(f'/c/{conv.slug}/moderation-log')
+    assert resp.status_code == 200
+    page = resp.data.decode()
+    assert 'Banned' in page
+    assert 'public-lion' in page
+    assert 'private reason' not in page
+    assert participant.mw_username not in page
+
+
 # ── Template-render smoke test (#92 blueprint extraction) ───────────────────────
 # The admin routes moved onto Blueprint('admin'), so every `url_for('admin…')` in the
 # admin templates was requalified to `url_for('admin.admin…')`. The rest of this suite

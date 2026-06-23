@@ -1651,6 +1651,52 @@ def _flag_rows_for_admin(conv: Conversation) -> list[dict]:
         })
     return rows
 
+
+def _conversation_ban_log_rows(conv: Conversation) -> list[dict]:
+    events = (AuditEvent.query
+              .filter(AuditEvent.conversation_id == conv.id,
+                      AuditEvent.operation.in_(('participant.ban', 'participant.unban')))
+              .order_by(AuditEvent.ts.desc())
+              .all())
+    target_ids = []
+    actor_ids = []
+    for event in events:
+        try:
+            target_ids.append(int(event.target_id))
+        except (TypeError, ValueError):
+            pass
+        if event.actor_participant_id:
+            actor_ids.append(event.actor_participant_id)
+
+    pseudonyms = {
+        p.participant_id: p.pseudonym
+        for p in Participation.query.filter(
+            Participation.conversation_id == conv.id,
+            Participation.participant_id.in_(target_ids or [-1]),
+        ).all()
+    }
+    actors = {
+        p.id: p.mw_username
+        for p in Participant.query.filter(
+            Participant.id.in_(actor_ids or [-1]),
+        ).all()
+    }
+
+    rows = []
+    for event in events:
+        try:
+            target_id = int(event.target_id)
+        except (TypeError, ValueError):
+            target_id = None
+        rows.append({
+            'action': 'Unbanned' if event.operation == 'participant.unban' else 'Banned',
+            'ts': event.ts,
+            'pseudonym': pseudonyms.get(target_id, 'participant'),
+            'actor': actors.get(event.actor_participant_id, 'administrator'),
+            'scope': 'conversation',
+        })
+    return rows
+
 # ── Admin ─────────────────────────────────────────────────────────────────
 
 @admin_bp.get('/admin')
@@ -2911,6 +2957,11 @@ def conversation(slug):
     if conv.phase_argument_mapping and participation:
         featured_data = _build_featured_data(conv, participation, can_mod=can_mod)
 
+    moderation_log_count = AuditEvent.query.filter(
+        AuditEvent.conversation_id == conv.id,
+        AuditEvent.operation.in_(('participant.ban', 'participant.unban')),
+    ).count()
+
     # Phase 6 — build card data: each confirmed featured statement with its
     # top-10 visible arguments per side, sorted by usefulness vote count.
     # Eager-load arguments + votes to avoid N+1 queries.
@@ -2977,7 +3028,18 @@ def conversation(slug):
                            new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
                            new_stmt_ids=participation.new_stmt_ids if participation else [],
                            phase6_data=phase6_data,
-                           phase6_results=phase6_results)
+                           phase6_results=phase6_results,
+                           moderation_log_count=moderation_log_count)
+
+
+@participant_bp.get('/c/<slug>/moderation-log')
+def conversation_moderation_log(slug):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    return render_template(
+        'moderation_log.html',
+        conversation=conv,
+        rows=_conversation_ban_log_rows(conv),
+    )
 
 # ── Arguments ────────────────────────────────────────────────────────────
 

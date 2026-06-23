@@ -1220,6 +1220,12 @@
   {% endif %}{# end tabs | length > 0 #}
   {% endif %}{# end active/paused/else #}
 
+  {% if moderation_log_count %}
+  <p class="muted" style="font-size:13px;margin-top:1.5rem">
+    <a href="{{ url_for('participant.conversation_moderation_log', slug=conversation.slug) }}">Moderation log</a>
+  </p>
+  {% endif %}
+
   {% if conversation.outro_text %}
   <div class="outro-text">
     {{ conversation.outro_text | safe }}

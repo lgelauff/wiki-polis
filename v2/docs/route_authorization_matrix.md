@@ -12,6 +12,7 @@ between blueprints or authorization policy changes.
 | `/login` | GET | Public, rate-limited. Starts Wikimedia OAuth or local dev login when explicitly configured. |
 | `/oauth-callback` | GET | Public, rate-limited. Requires matching OAuth state and PKCE verifier from the browser session. |
 | `/health` | GET | Public, limiter-exempt. Returns DB and Particiapi reachability only. |
+| `/c/<slug>/moderation-log` | GET | Public. Shows conversation-level ban/unban events with pseudonyms and moderator names, excluding private reasons. |
 | `/static/*` | GET | Public static assets. |
 
 ## Participant routes
