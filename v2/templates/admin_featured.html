@@ -29,6 +29,8 @@
     <p class="muted" style="font-size:13px;margin-bottom:0">
       System suggestions are ranked candidates from the Polis data. Manual TID adds are for
       known statements that should be included even if they are not surfaced by the suggestion query.
+      Arguments are visible by default; hide individual arguments here when they need moderation,
+      and unhide them after review.
     </p>
   </div>
 
@@ -64,9 +66,19 @@
             {% for arg in fs.arguments %}
             <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin-top:4px;font-size:12px">
               <span style="color:var(--muted);min-width:2rem;flex-shrink:0">{{ arg.side }}</span>
+              {% if arg.hidden %}
+              <span style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:999px;padding:1px 6px;font-size:11px">hidden</span>
+              {% endif %}
               <span style="flex:1;min-width:120px;color:var(--body)">{{ arg.body }}</span>
               <span style="color:var(--muted);white-space:nowrap">{{ arg.proposer.mw_username if arg.proposer else '—' }}</span>
               <span style="color:var(--muted);white-space:nowrap">{{ arg.created_at.strftime('%Y-%m-%d') if arg.created_at else '' }}</span>
+              <form method="post"
+                    action="{{ url_for('admin.admin_argument_moderate', conv_id=conversation.id, arg_id=arg.id) }}"
+                    style="display:inline;flex-shrink:0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="hidden" value="{{ '0' if arg.hidden else '1' }}">
+                <button type="submit" class="btn-small">{{ 'unhide' if arg.hidden else 'hide' }}</button>
+              </form>
               <form method="post"
                     action="{{ url_for('admin.admin_argument_delete', conv_id=conversation.id, arg_id=arg.id) }}"
                     style="display:inline;flex-shrink:0">

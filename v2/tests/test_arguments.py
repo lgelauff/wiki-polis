@@ -393,6 +393,29 @@ def test_participant_cannot_delete_argument(auth_client, arg_conv, arg_part, fs,
     assert db.session.get(Argument, arg.id) is not None
 
 
+def test_admin_can_hide_and_unhide_argument_from_featured_page(admin_client, arg_conv, fs):
+    arg = Argument(featured_statement_id=fs.id, proposer_id=None,
+                   body='Needs review.', side='pro')
+    db.session.add(arg)
+    db.session.commit()
+
+    hide_resp = admin_client.post(
+        f'/admin/conversations/{arg_conv.id}/arguments/{arg.id}/moderate',
+        data={'hidden': '1'},
+    )
+    assert hide_resp.status_code == 302
+    db.session.refresh(arg)
+    assert arg.hidden is True
+
+    unhide_resp = admin_client.post(
+        f'/admin/conversations/{arg_conv.id}/arguments/{arg.id}/moderate',
+        data={'hidden': '0'},
+    )
+    assert unhide_resp.status_code == 302
+    db.session.refresh(arg)
+    assert arg.hidden is False
+
+
 # ── Argument hide / unhide ────────────────────────────────────────────────────
 
 def _make_visible_arg(fs_id, side='pro'):

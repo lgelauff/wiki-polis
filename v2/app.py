@@ -2580,6 +2580,20 @@ def admin_argument_delete(conv_id, arg_id):
                  featured_statement_id=fs_id)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
 
+@admin_bp.post('/admin/conversations/<int:conv_id>/arguments/<int:arg_id>/moderate')
+@login_required
+def admin_argument_moderate(conv_id, arg_id):
+    conv = _require_mod_for_conv(conv_id)
+    arg  = Argument.query.filter_by(id=arg_id).first_or_404()
+    FeaturedStatement.query.filter_by(
+        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+    hidden = request.form.get('hidden') == '1'
+    arg.hidden = hidden
+    db.session.commit()
+    record_audit('argument.moderate', conv_id=conv_id, target_type='argument',
+                 target_id=arg_id, hidden=hidden)
+    return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
+
 
 # ── Accept ───────────────────────────────────────────────────────────────
 
