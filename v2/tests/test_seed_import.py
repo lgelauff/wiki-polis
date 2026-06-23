@@ -32,6 +32,14 @@ def _upload(client, conv_id, content: bytes, filename='statements.csv',
     )
 
 
+def _text_import(client, conv_id, text: str):
+    return client.post(
+        f'/admin/conversations/{conv_id}/statements/seed/import-text',
+        data={'statement_texts': text},
+        follow_redirects=True,
+    )
+
+
 def _mock_polis(add_seed_side_effect=None, existing_statements=None):
     """Return a context manager that patches _polis_server_client."""
     mock_client = MagicMock()
@@ -132,6 +140,46 @@ def test_single_statement_grammar(admin_client, conv):
     with _mock_polis():
         resp = _upload(admin_client, conv.id, b'text\nOnly one')
     assert b'1 statement imported' in resp.data
+
+
+def test_text_imports_one_statement_per_non_empty_line(admin_client, conv):
+    with _mock_polis() as mock:
+        resp = _text_import(admin_client, conv.id, 'One\n\nTwo\n  Three  ')
+    assert b'3 statements imported' in resp.data
+    assert mock.return_value.bulk_add_seeds.call_args[0][1] == ['One', 'Two', 'Three']
+
+
+def test_text_import_rejects_overlong_line(admin_client, conv):
+    long_text = 'x' * 281
+    with _mock_polis() as mock:
+        resp = _text_import(admin_client, conv.id, f'Good\n{long_text}')
+    assert b'Row 2' in resp.data
+    assert b'too long' in resp.data.lower()
+    assert mock.return_value.bulk_add_seeds.call_count == 0
+
+
+def test_text_import_enforces_row_limit(admin_client, conv):
+    from seed_csv import MAX_ROWS
+    rows = '\n'.join(f'Statement {i}' for i in range(MAX_ROWS + 1))
+    with _mock_polis() as mock:
+        resp = _text_import(admin_client, conv.id, rows)
+    assert b'rejected' in resp.data.lower()
+    assert str(MAX_ROWS + 1).encode() in resp.data
+    assert mock.return_value.bulk_add_seeds.call_args is None
+
+
+def test_text_import_sanitizes_and_deduplicates(admin_client, conv):
+    existing = [{'txt': 'Already there', 'mod': 1, 'is_seed': True,
+                 'tid': 1, 'agree_count': 0, 'disagree_count': 0, 'pass_count': 0}]
+    with _mock_polis(existing_statements=([], existing, [])) as mock:
+        resp = _text_import(
+            admin_client,
+            conv.id,
+            '<b>Hello</b>\nHello\n&equals;SUM(A1)\nAlready there',
+        )
+    assert b'already exists' in resp.data.lower()
+    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
+    assert texts_sent == ['Hello', 'SUM(A1)']
 
 
 def test_header_only_no_data_rows(admin_client, conv):

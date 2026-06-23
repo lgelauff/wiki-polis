@@ -42,6 +42,26 @@
     </form>
   </div>
 
+  <!-- ── Bulk text import ──────────────────────────────── -->
+  <h3 class="section-heading">Import seed statements from text</h3>
+  <div class="edit-form">
+    <p class="muted" style="margin-bottom:.75rem;font-size:13px">
+      Paste one statement per line. Blank lines are ignored. Maximum {{ max_import_rows }}
+      statements per import and {{ max_import_chars }} characters per statement.
+    </p>
+    <form method="post"
+          action="{{ url_for('admin.admin_statement_seed_import_text', conv_id=conversation.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Statements
+        <textarea name="statement_texts" rows="8" maxlength="{{ max_import_rows * (max_import_chars + 1) }}"
+                  placeholder="First statement&#10;Second statement&#10;Third statement"></textarea>
+      </label>
+      <div style="margin-top:.75rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+        <button type="submit">Import statements</button>
+      </div>
+    </form>
+  </div>
+
   <!-- ── Bulk CSV import ───────────────────────────────── -->
   <h3 class="section-heading">Import seed statements from CSV</h3>
   <div class="edit-form">

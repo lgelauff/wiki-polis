@@ -39,7 +39,8 @@ from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideS
                 Participant, Participation, StatementProvenance, StatementSimilarityScore, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
-from seed_csv import MAX_FILE_BYTES, MAX_ROWS, parse_csv_bytes, strip_formula_prefixes
+from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
+                      RowError, parse_csv_bytes, strip_formula_prefixes)
 from logging_setup import configure_logging
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
@@ -1288,6 +1289,146 @@ admin_bp = Blueprint('admin', __name__)
 _NH3_NO_TAGS: frozenset[str] = frozenset()
 participant_bp = Blueprint('participant', __name__)
 
+
+def _parse_seed_text_lines(raw_text: str) -> ParseResult:
+    """Parse textarea seed import: one non-empty line per candidate statement."""
+    result = ParseResult()
+    seen: set[str] = set()
+    non_empty_rows: list[tuple[int, str]] = [
+        (idx, line.strip())
+        for idx, line in enumerate((raw_text or '').splitlines(), start=1)
+        if line.strip()
+    ]
+    if len(non_empty_rows) > MAX_ROWS:
+        for idx, _line in non_empty_rows[MAX_ROWS:]:
+            result.errors.append(RowError(
+                idx,
+                f'skipped — import limit of {MAX_ROWS} rows reached',
+                limit_skipped=True,
+            ))
+        non_empty_rows = non_empty_rows[:MAX_ROWS]
+
+    for idx, text in non_empty_rows:
+        if len(text) > MAX_TEXT_CHARS:
+            result.errors.append(RowError(
+                idx,
+                f'text is too long ({len(text)} characters; max {MAX_TEXT_CHARS})',
+            ))
+            continue
+        if text in seen:
+            result.errors.append(RowError(idx, 'duplicate — already added from an earlier row'))
+            continue
+        seen.add(text)
+        result.texts.append(text)
+    return result
+
+
+def _reject_seed_import_parse_errors(result: ParseResult, source_label: str) -> bool:
+    """Flash parse errors and return True when an import should stop before Polis I/O."""
+    limit_skipped = [e for e in result.errors if e.limit_skipped]
+    if limit_skipped:
+        total_rows = len(result.texts) + len(result.errors)
+        current_app.logger.warning(
+            '%s import rejected — row limit exceeded: %d rows, max %d',
+            source_label,
+            total_rows,
+            MAX_ROWS,
+        )
+        flash(
+            f'✗ Import rejected — {source_label.lower()} contains {total_rows} rows, '
+            f'maximum is {MAX_ROWS}. Reduce it and try again. '
+            f'(Parse errors may also be present — fix both before trying again.)',
+            'import_result',
+        )
+        return True
+
+    parse_errors = [e for e in result.errors if not e.limit_skipped]
+    if parse_errors:
+        for err in parse_errors:
+            flash(f'Row {err.row}: {err.reason}.', 'import_row_error')
+        flash('✗ Import rejected — fix errors and try again', 'import_result')
+        return True
+    return False
+
+
+def _import_seed_statement_texts(conv: Conversation, texts: list[str]) -> dict:
+    """Shared post-parse seed import pipeline: sanitize, dedup, bulk-add, report."""
+    seen_sanitised: set[str] = set()
+    sanitised_texts: list[str] = []
+    for raw_text in texts:
+        san = nh3.clean(raw_text, tags=_NH3_NO_TAGS)
+        # Re-apply formula-prefix stripping: nh3 decodes HTML entities (e.g.
+        # &equals; -> =) which can reintroduce leading formula chars.
+        san = strip_formula_prefixes(san).strip()
+        san_key = san.casefold()
+        if not san or san_key in seen_sanitised:
+            continue  # drop empty-after-nh3 and nh3-induced within-batch dupes
+        seen_sanitised.add(san_key)
+        sanitised_texts.append(san)
+
+    existing_texts: set[str] = set()
+    dedup_check_failed = False
+    try:
+        rows = _polis_server_client().get_statements(conv.polis_id)
+        if rows is not None:
+            pending, approved, hidden = rows
+            for stmt in pending + approved + hidden:
+                existing_texts.add(stmt['txt'].strip().casefold())
+    except Exception:
+        current_app.logger.exception('Could not fetch existing statements for dedup check')
+        dedup_check_failed = True
+
+    dedup_errors = []
+    clean_texts = []
+    for sanitised in sanitised_texts:
+        if sanitised.casefold() in existing_texts:
+            dedup_errors.append(
+                f'"{sanitised[:60]}{"…" if len(sanitised) > 60 else ""}" — already exists in this conversation'
+            )
+        else:
+            clean_texts.append(sanitised)
+
+    successes = 0
+    polis_skipped = []  # Polis rejected these — likely already exist
+    polis_errors = []  # Polis login or unexpected failure
+    if clean_texts:
+        try:
+            successes, failures = _polis_server_client().bulk_add_seeds(conv.polis_id, clean_texts)
+            for text, exc in failures:
+                current_app.logger.warning('Polis rejected imported row (%s, may already exist): %s',
+                                           type(exc).__name__, exc)
+                polis_skipped.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
+        except PolisServerError:
+            current_app.logger.exception('Polis login failed during bulk import')
+            polis_errors = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
+
+    if dedup_check_failed:
+        flash('Could not check for existing statements — some may be duplicates. Check server logs.', 'warning')
+
+    for msg in dedup_errors:
+        flash(f'Skipped — {msg}.', 'warning')
+    for msg in polis_skipped:
+        flash(f'Already in Polis, skipped: {msg}.', 'warning')
+    for msg in polis_errors:
+        flash(f'Could not send to Polis: {msg}.', 'error')
+    if not successes and not dedup_errors and not polis_skipped and not polis_errors:
+        flash('No statements were imported — there were no valid rows.', 'warning')
+
+    n_skipped = len(dedup_errors) + len(polis_skipped)
+    n_errors = len(polis_errors)
+    if successes and not n_skipped:
+        flash(f'✓ {successes} statement{"s" if successes != 1 else ""} imported', 'import_result')
+    elif successes:
+        flash(f'✓ {successes} imported — ⚠ {n_skipped} skipped', 'import_result')
+    elif n_errors:
+        flash('✗ Import failed — could not reach Polis. Check server logs.', 'import_result')
+    elif n_skipped:
+        flash(f'⚠ 0 imported — {n_skipped} already existed in Polis', 'import_result')
+    else:
+        flash('⚠ 0 imported — Polis returned no result', 'import_result')
+
+    return {'successes': successes, 'skipped': n_skipped, 'errors': n_errors}
+
 # ── Admin ─────────────────────────────────────────────────────────────────
 
 @admin_bp.get('/admin')
@@ -1969,6 +2110,7 @@ def admin_conversation_statements(conv_id):
                            phase_active=conv.phase_argument_mapping,
                            polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is',
                            max_import_rows=MAX_ROWS,
+                           max_import_chars=MAX_TEXT_CHARS,
                            max_import_kb=MAX_FILE_BYTES // 1024)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
@@ -2070,113 +2212,31 @@ def admin_statement_seed_import(conv_id):
         flash('✗ Import failed', 'import_result')
         return redirect(redirect_target)
 
-    # Reject if the file exceeds the row limit — partial imports are confusing.
-    limit_skipped = [e for e in result.errors if e.limit_skipped]
-    if limit_skipped:
-        total_rows = len(result.texts) + len(result.errors)
-        current_app.logger.warning(
-            'CSV import rejected — row limit exceeded: %d rows, max %d (conv %s)',
-            total_rows, MAX_ROWS, conv.polis_id,
-        )
-        flash(
-            f'✗ Import rejected — file contains {total_rows} rows, maximum is {MAX_ROWS}. '
-            f'Reduce the file and re-upload. '
-            f'(Parse errors may also be present — fix both before re-uploading.)',
-            'import_result',
-        )
+    if _reject_seed_import_parse_errors(result, 'CSV file'):
         return redirect(redirect_target)
 
-    # Reject the entire batch if any row has a parse error — partial imports
-    # are confusing and hard to reconcile.
-    parse_errors = [e for e in result.errors if not e.limit_skipped]
-    if parse_errors:
-        for err in parse_errors:
-            flash(f'Row {err.row}: {err.reason}.', 'import_row_error')
-        flash('✗ Import rejected — fix errors and re-upload', 'import_result')
-        return redirect(redirect_target)
-
-    # Sanitize all texts with nh3 first, then re-strip formula prefixes that
-    # HTML-entity encoding could have reintroduced (e.g. &equals; → =).
-    # Filter empty strings that result from nh3 stripping all-tag content.
-    seen_sanitised: set[str] = set()
-    sanitised_texts: list[str] = []
-    for raw_text in result.texts:
-        san = nh3.clean(raw_text, tags=_NH3_NO_TAGS)
-        # Re-apply formula-prefix stripping: nh3 decodes HTML entities (e.g.
-        # &equals; → =) which can reintroduce leading formula chars.
-        san = strip_formula_prefixes(san).strip()
-        if not san or san in seen_sanitised:
-            continue  # drop empty-after-nh3 and nh3-induced within-batch dupes
-        seen_sanitised.add(san)
-        sanitised_texts.append(san)
-
-    # Check for duplicates against statements already in Polis.
-    existing_texts: set[str] = set()
-    dedup_check_failed = False
-    try:
-        rows = _polis_server_client().get_statements(conv.polis_id)
-        if rows is not None:
-            pending, approved, hidden = rows
-            for stmt in pending + approved + hidden:
-                existing_texts.add(stmt['txt'].strip().casefold())
-    except Exception:
-        current_app.logger.exception('Could not fetch existing statements for dedup check')
-        dedup_check_failed = True
-
-    dedup_errors = []
-    clean_texts  = []
-    for sanitised in sanitised_texts:
-        if sanitised.casefold() in existing_texts:
-            dedup_errors.append(f'"{sanitised[:60]}{"…" if len(sanitised) > 60 else ""}" — already exists in this conversation')
-        else:
-            clean_texts.append(sanitised)
-
-    successes     = 0
-    polis_skipped = []  # Polis rejected these — likely already exist
-    polis_errors  = []  # Polis login or unexpected failure
-    if clean_texts:
-        try:
-            successes, failures = _polis_server_client().bulk_add_seeds(conv.polis_id, clean_texts)
-            for text, exc in failures:
-                current_app.logger.warning('Polis rejected imported row (%s, may already exist): %s',
-                                           type(exc).__name__, exc)
-                polis_skipped.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
-        except PolisServerError:
-            current_app.logger.exception('Polis login failed during bulk import')
-            polis_errors = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
-
-    if dedup_check_failed:
-        flash('Could not check for existing statements — some may be duplicates. Check server logs.', 'warning')
-
-    for msg in dedup_errors:
-        flash(f'Skipped — {msg}.', 'warning')
-    for msg in polis_skipped:
-        flash(f'Already in Polis, skipped: {msg}.', 'warning')
-    for msg in polis_errors:
-        flash(f'Could not send to Polis: {msg}.', 'error')
-    if not successes and not result.errors and not dedup_errors and not polis_skipped and not polis_errors:
-        flash('No statements were imported — the file had no valid rows.', 'warning')
-
-    # Persistent inline result near the upload button.
-    n_skipped = len(dedup_errors) + len(polis_skipped)
-    n_errors   = len(polis_errors)
-    # Note: polis_errors is only set in the except-PolisServerError branch, which
-    # means successes == 0 whenever polis_errors is non-empty. The two cannot
-    # coexist; n_errors is checked last to keep the ladder exhaustive.
-    if successes and not n_skipped:
-        flash(f'✓ {successes} statement{"s" if successes != 1 else ""} imported', 'import_result')
-    elif successes:
-        flash(f'✓ {successes} imported — ⚠ {n_skipped} skipped', 'import_result')
-    elif n_errors:
-        flash('✗ Import failed — could not reach Polis. Check server logs.', 'import_result')
-    elif n_skipped:
-        flash(f'⚠ 0 imported — {n_skipped} already existed in Polis', 'import_result')
-    else:
-        flash('⚠ 0 imported — Polis returned no result', 'import_result')
-
-    if successes:
+    summary = _import_seed_statement_texts(conv, result.texts)
+    if summary['successes']:
         record_audit('statement.seed_import', conv_id=conv_id,
-                     imported=successes, skipped=n_skipped, errors=n_errors)
+                     imported=summary['successes'], skipped=summary['skipped'],
+                     errors=summary['errors'])
+    return redirect(redirect_target)
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed/import-text')
+@login_required
+@limiter.limit('5 per minute')
+def admin_statement_seed_import_text(conv_id):
+    conv = _require_mod_for_conv(conv_id)
+    redirect_target = url_for('admin.admin_conversation_statements', conv_id=conv_id)
+    result = _parse_seed_text_lines(request.form.get('statement_texts', ''))
+    if _reject_seed_import_parse_errors(result, 'Text import'):
+        return redirect(redirect_target)
+
+    summary = _import_seed_statement_texts(conv, result.texts)
+    if summary['successes']:
+        record_audit('statement.seed_import_text', conv_id=conv_id,
+                     imported=summary['successes'], skipped=summary['skipped'],
+                     errors=summary['errors'])
     return redirect(redirect_target)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/strict-moderation')
