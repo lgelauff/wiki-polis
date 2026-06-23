@@ -12,6 +12,7 @@ between blueprints or authorization policy changes.
 | `/login` | GET | Public, rate-limited. Starts Wikimedia OAuth or local dev login when explicitly configured. |
 | `/oauth-callback` | GET | Public, rate-limited. Requires matching OAuth state and PKCE verifier from the browser session. |
 | `/health` | GET | Public, limiter-exempt. Returns DB and Particiapi reachability only. |
+| `/c/<slug>/moderation-log` | GET | Public. Shows conversation-level ban/unban events with pseudonyms and moderator names, excluding private reasons. |
 | `/static/*` | GET | Public static assets. |
 
 ## Participant routes
@@ -37,6 +38,8 @@ between blueprints or authorization policy changes.
 | `/c/<slug>/arguments/<arg_id>/unhide` | POST | Same as hide. |
 | `/c/<slug>/arguments/<fs_id>/submit` | POST | Legacy compatibility redirect to `/c/<slug>/featured-statements/<fs_id>/arguments` using HTTP 307. |
 | `/c/<slug>/arguments/<fs_id>/<side>/skip` | POST | Legacy compatibility redirect to `/c/<slug>/featured-statements/<fs_id>/skip/<side>` using HTTP 307. |
+| `/c/<slug>/arguments/<arg_id>/flag` | POST | Same as submit; category is allowlisted and optional note is HTML-stripped before creating an open moderation flag. |
+| `/c/<slug>/statements/<tid>/flag` | POST | `login_required`; current participant must have joined the active, unpaused conversation and must not be banned. Category is allowlisted and optional note is HTML-stripped. |
 
 ## Global-admin routes
 
@@ -44,10 +47,12 @@ between blueprints or authorization policy changes.
 |---|---|---|
 | `/admin` | GET | `login_required` and `admin_required`. |
 | `/admin/conversations/new` | POST | `login_required` and `admin_required`. |
-| `/admin/conversations/<conv_id>/edit` | POST | `login_required` and `admin_required`. |
+| `/admin/conversations/<conv_id>/edit` | POST | Conversation organizer or global admin. |
 | `/admin/conversations/<conv_id>/pause` | POST | `login_required` and `admin_required`. |
 | `/admin/conversations/<conv_id>/close` | POST | `login_required` and `admin_required`. |
+| `/admin/conversations/<conv_id>/delete` | POST | `login_required` and `admin_required`; re-checks authoritative Polis latest-vote count and only deletes when it is exactly zero. |
 | `/admin/conversations/<conv_id>/phases` | POST | `login_required` and `admin_required`. |
+| `/admin/conversations/<conv_id>/phase/advance` | POST | Conversation organizer or global admin. |
 | `/admin/global-admins/add` | POST | `login_required` and `admin_required`. |
 | `/admin/global-admins/<participant_id>/remove` | POST | `login_required` and `admin_required`. |
 | `/admin/roles/add` | POST | `login_required` and `admin_required`. |
@@ -65,6 +70,11 @@ the specific conversation. The shared authorization helper is
 | `/admin/conversations/<conv_id>/invites` | GET | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/invites/add` | POST | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/invites/<invite_id>/remove` | POST | Conversation moderator or global admin. |
+| `/admin/conversations/<conv_id>/participants` | GET | Conversation moderator or global admin. |
+| `/admin/conversations/<conv_id>/participants/<participant_id>/ban` | POST | Conversation moderator or global admin. |
+| `/admin/conversations/<conv_id>/participants/<participant_id>/unban` | POST | Conversation moderator or global admin. |
+| `/admin/conversations/<conv_id>/flags` | GET | Conversation moderator or global admin. |
+| `/admin/conversations/<conv_id>/flags/<flag_id>/resolve` | POST | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/statements` | GET | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/statements/<tid>/moderate` | POST | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/statements/seed` | POST | Conversation moderator or global admin. |
@@ -74,6 +84,7 @@ the specific conversation. The shared authorization helper is
 | `/admin/conversations/<conv_id>/featured/add` | POST | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/featured/<fs_id>/remove` | POST | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/arguments/<arg_id>/delete` | POST | Conversation moderator or global admin. |
+| `/admin/conversations/<conv_id>/arguments/<arg_id>/moderate` | POST | Conversation moderator or global admin. Sets the local argument hidden/unhidden state. |
 
 ## Particiapi bridge
 

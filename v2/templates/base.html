@@ -11,9 +11,9 @@
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
-  <header>
+  <header class="site-header {% if request.blueprint == 'admin' %}site-header--admin{% else %}site-header--participant{% endif %}">
     <div class="header-inner">
-      <div style="display:flex;align-items:center;gap:14px">
+      <div class="header-left">
         <a href="{{ url_for('index') }}" class="header-logo">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="1" stroke-linecap="round"
@@ -24,6 +24,9 @@
           </svg>
           <span class="header-title">wiki-polis</span>
         </a>
+        {% if request.blueprint == 'admin' %}
+          <span class="header-mode-badge">Admin</span>
+        {% endif %}
         {% block header_crumb %}{% endblock %}
       </div>
 

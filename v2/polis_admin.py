@@ -189,6 +189,13 @@ _POLIS_STATS_SQL = """
     FROM vs, ss
 """
 
+_VALID_VOTE_COUNT_SQL = """
+    WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s)
+    SELECT COUNT(*)::int
+    FROM votes_latest_unique v, z
+    WHERE v.zid = z.zid
+"""
+
 
 # ── Participant client ────────────────────────────────────────────────────────
 
@@ -371,6 +378,29 @@ class PolisServerClient:
         if not resp.ok:
             raise PolisServerError(
                 f'Polis vis_type update failed (HTTP {resp.status_code}): '
+                f'{resp.text[:300]}'
+            )
+
+    def close_and_hide_conversation(self, conversation_id: str) -> None:
+        """Deactivate a Polis conversation and hide results before local deletion."""
+        sess, auth_headers = self._login()
+        headers = {**self._HEADERS, **auth_headers}
+        try:
+            resp = sess.put(
+                f'{self._base}/api/v3/conversations',
+                json={
+                    'conversation_id': conversation_id,
+                    'is_active': False,
+                    'vis_type': 0,
+                },
+                headers=headers,
+                timeout=10,
+            )
+        except requests.RequestException as exc:
+            raise PolisServerError(str(exc)) from exc
+        if not resp.ok:
+            raise PolisServerError(
+                f'Polis conversation close/hide failed (HTTP {resp.status_code}): '
                 f'{resp.text[:300]}'
             )
 
@@ -565,6 +595,20 @@ class PolisServerClient:
         except (ValueError, IndexError):
             return None
 
+    def get_valid_vote_count(self, zinvite: str) -> int | None:
+        """Return latest valid Polis vote rows for one conversation.
+
+        Uses votes_latest_unique so one participant contributes at most one current
+        vote per statement. Returns None if Postgres is unavailable.
+        """
+        if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
+            return None
+        rows = self._pg_query(_VALID_VOTE_COUNT_SQL, (zinvite,),
+                              'get_valid_vote_count')
+        if rows is None:
+            return None
+        return int(rows[0][0]) if rows else 0
+
     def get_phase6_vote_counts(
         self,
         zinvite: str,
@@ -644,6 +688,17 @@ class PolisServerClient:
         Returns dict[zinvite → n_remaining], or None if Postgres is unavailable.
         Conversations where the participant has no Polis record are absent from the dict.
         """
+        progress = self.get_statement_progress_bulk(zinvites, xid)
+        if progress is None:
+            return None
+        return {zinvite: row['remaining'] for zinvite, row in progress.items()}
+
+    def get_statement_progress_bulk(
+        self,
+        zinvites: list[str],
+        xid: str,
+    ) -> dict[str, dict] | None:
+        """Return statement vote progress per conversation for one participant."""
         if not self._db_url or not zinvites or not xid:
             return None
         safe = [z for z in zinvites if _SAFE_ZINVITE.match(z or '')]
@@ -652,11 +707,18 @@ class PolisServerClient:
         rows = self._pg_query(
             _STATEMENTS_REMAINING_BULK_SQL,
             (safe, xid),
-            'get_statements_remaining_bulk',
+            'get_statement_progress_bulk',
         )
         if rows is None:
             return None
-        return {r[0]: int(r[3]) for r in rows}
+        return {
+            r[0]: {
+                'total': int(r[1]),
+                'voted': int(r[2]),
+                'remaining': int(r[3]),
+            }
+            for r in rows
+        }
 
     def get_personal_votes(
         self,

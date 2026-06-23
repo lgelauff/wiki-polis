@@ -1,4 +1,13 @@
 {% extends "base.html" %}
+{% block title %}Manage {{ conversation.title }} — wiki-polis{% endblock %}
+{% block header_crumb %}
+<nav class="header-crumb" aria-label="Admin breadcrumb">
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
+  <span class="header-crumb-sep">/</span>
+  <span>{{ conversation.title | truncate(34, True, '…') }}</span>
+</nav>
+{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='redesign.css') }}?v={{ git_version }}">
 {% endblock %}
@@ -9,23 +18,19 @@
   <div class="role-bar-inner">
     <span class="role-chip {% if is_admin %}role-chip--admin{% endif %}"
           title="Your assigned role on this platform">
-      <span class="role-chip-dot"></span>{{ 'Global admin' if is_admin else 'Moderator' }}
+      <span class="role-chip-dot"></span>{{ role_label }}
     </span>
     <span class="role-bar-context">managing&nbsp;<strong>{{ conversation.title }}</strong></span>
     <span class="role-bar-spacer"></span>
     {# View as participant — just a shortcut link to the participant view (not impersonation). #}
     <a class="view-as-btn" href="{{ url_for('participant.conversation', slug=conversation.slug) }}">
-      View as participant
+      View as participant →
     </a>
   </div>
 </div>
 
 {# base.html already provides <main id="main">; don't nest a second one. #}
 <div class="console">
-
-  <p class="muted" style="margin-bottom:1rem">
-    <a href="{{ url_for('admin.admin') }}">← admin panel</a>
-  </p>
 
   {# ── Consultation header ──────────────────────────────────────────────── #}
   <div class="console-head">
@@ -218,7 +223,7 @@
     {# ── Guided move-on (mode-guided-part) ──────────────────────────────── #}
     <div class="mode-guided-part">
       {% if transition %}
-        {% if is_admin %}
+        {% if can_organize %}
         {# At-a-glance readiness summary in the hero — machine-checkable conditions
            that are currently unmet block the move. #}
         {% set unmet = transition.preconditions | selectattr('met', 'equalto', false) | list | length %}
@@ -305,9 +310,9 @@
         </script>
         {% else %}
         {# Moderator: read-only — cannot move phases. #}
-        <p class="muted" style="font-size:13px;margin-top:14px">Only a site admin can change phases.</p>
+        <p class="muted" style="font-size:13px;margin-top:14px">Only an organizer or site admin can change phases.</p>
         <button type="button" class="btn-small" disabled
-                title="Only a site admin can change phases">Move on to {{ transition.target.label }} →</button>
+                title="Only an organizer or site admin can change phases">Move on to {{ transition.target.label }} →</button>
         {% endif %}
       {% elif not linear_phase_state %}
         <p class="muted" style="margin-top:14px;font-size:13px">
@@ -435,17 +440,25 @@
         <div class="manage-card-title">Featured statements</div>
         <div class="manage-card-desc">Curate the set for arguments &amp; informed voting</div>
       </a>
-      {# TODO(#165/#42): a 'Statistics' manage-card linking to a per-conversation
-         stats page goes here once that page exists. #}
+      <a class="manage-card" href="{{ url_for('admin.admin_conversation_participants', conv_id=conversation.id) }}">
+        <div class="manage-card-top"><span class="manage-card-count">{{ participant_count }} joined</span></div>
+        <div class="manage-card-title">Participants</div>
+        <div class="manage-card-desc">Review per-participant engagement and drop-off signals</div>
+      </a>
+      <a class="manage-card" href="{{ url_for('admin.admin_conversation_flags', conv_id=conversation.id) }}">
+        <div class="manage-card-top"><span class="manage-card-count">{{ open_flag_count }} open</span></div>
+        <div class="manage-card-title">Moderation queue</div>
+        <div class="manage-card-desc">Review participant flags for statements and arguments</div>
+      </a>
     </div>
   </div>
 
-  {# ── Moderators — roster visible to anyone managing the conversation;
+  {# ── Conversation roles — roster visible to anyone managing the conversation;
      adding / removing is global-admin only (can_manage_roles). ── #}
   <div class="console-section">
-    <div class="console-section-label">Moderators</div>
+    <div class="console-section-label">Conversation roles</div>
     <details class="phase-advanced">
-      <summary>Moderators{% if conv_roles %} ({{ conv_roles | length }}){% endif %}</summary>
+      <summary>Roles{% if conv_roles %} ({{ conv_roles | length }}){% endif %}</summary>
       {% if conv_roles %}
       <table class="admin-table" style="margin-top:.75rem">
         <thead><tr><th>Participant</th><th>Role</th><th></th></tr></thead>
@@ -468,7 +481,7 @@
         </tbody>
       </table>
       {% else %}
-      <p class="muted" style="margin:.75rem 0;font-size:14px">No moderators assigned.</p>
+      <p class="muted" style="margin:.75rem 0;font-size:14px">No conversation roles assigned.</p>
       {% endif %}
 
       {% if can_manage_roles %}
@@ -489,13 +502,13 @@
             </select>
           </label>
         </div>
-        <button type="submit">Add moderator</button>
+        <button type="submit">Add role</button>
       </form>
       {% endif %}
     </details>
   </div>
 
-  {% if is_admin %}
+  {% if can_organize %}
   {# ── Configuration — settings (inline; no separate page yet) ── #}
   <div class="console-section">
     <div class="console-section-label">Configuration</div>
@@ -569,7 +582,9 @@
       </form>
     </details>
   </div>
+  {% endif %}{# can_organize #}
 
+  {% if is_admin %}
   {# ── Danger zone ──────────────────────────────────────────────────────── #}
   <div class="console-section">
     <div class="console-section-label" style="color:var(--disagree)">Ending the consultation</div>
@@ -638,15 +653,39 @@
         {% endif %}
       </div>
       {% endif %}
-      {# TODO(#145): a 'Delete consultation' danger-row (disabled with an inline
-         reason when participation exists) goes here. Needs a delete route + a
-         no-valid-votes guard. #}
+      <div class="danger-row">
+        <div class="danger-row-main">
+          <div class="danger-row-title">Delete empty consultation</div>
+          <div class="danger-row-desc">
+            Deletes the local consultation after deactivating and hiding it in Polis.
+            {% if delete_vote_count is none %}
+              Disabled because Polis vote data could not be verified.
+            {% elif delete_vote_count == 0 %}
+              Available because Polis has no valid votes for this consultation.
+            {% else %}
+              Disabled because Polis has {{ delete_vote_count }} valid vote{{ 's' if delete_vote_count != 1 }}.
+            {% endif %}
+          </div>
+        </div>
+        <form id="delete-conversation-form" method="post"
+              action="{{ url_for('admin.admin_conversation_delete', conv_id=conversation.id) }}" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-small btn-danger"
+                  {% if delete_vote_count != 0 %}disabled aria-disabled="true"{% endif %}>
+            Delete consultation
+          </button>
+        </form>
+      </div>
     </div>
   </div>
   <script nonce="{{ csp_nonce }}">
     var cf = document.getElementById('close-permanently-form');
     if (cf) cf.addEventListener('submit', function (e) {
       if (!confirm('Publish the final report?\n\nThis freezes report exclusions, closes the consultation, and starts the identity reveal timeline.')) e.preventDefault();
+    });
+    var df = document.getElementById('delete-conversation-form');
+    if (df) df.addEventListener('submit', function (e) {
+      if (!confirm('Delete this consultation?\n\nThis removes local wiki-polis records after hiding the Polis conversation. This cannot be undone.')) e.preventDefault();
     });
   </script>
   {% endif %}{# is_admin #}

@@ -10,8 +10,11 @@ db = SQLAlchemy()
 # because SQLite and MySQL both ignore DateTime(timezone=True).
 
 ACCESS_POLICIES = ('public', 'invite_only', 'demo')
-ADMIN_ROLES     = ('moderator',)   # conversation-scoped only; site-wide access is Participant.is_global_admin
+ADMIN_ROLES     = ('moderator', 'organizer')   # conversation-scoped; site-wide access is Participant.is_global_admin
 ARGUMENT_SIDES  = ('pro', 'con')
+FLAG_CONTENT_TYPES = ('statement', 'argument')
+FLAG_CATEGORIES = ('personal_attack', 'privacy', 'off_topic', 'other')
+FLAG_STATUSES = ('open', 'resolved')
 
 
 class Participant(db.Model):
@@ -131,6 +134,7 @@ class Participation(db.Model):
     # Polis statement IDs of entirely new statements submitted by this participant.
     # Quota = len(new_stmt_ids). Slots consumed at submit time; never returned.
     new_stmt_ids      = db.Column(db.JSON, nullable=False, default=list)
+    last_engagement   = db.Column(db.DateTime, nullable=True)
     # Phase 6 card display order: list of FeaturedStatement IDs in the order shown to
     # this participant. Set once on first visit to the informed-voting tab; stable across
     # reloads. Same pattern as ArgumentSideState.argument_order.
@@ -143,6 +147,55 @@ class Participation(db.Model):
 
     participant  = db.relationship('Participant', back_populates='participations')
     conversation = db.relationship('Conversation', back_populates='participations')
+
+
+class ConversationBan(db.Model):
+    __tablename__ = 'conversation_bans'
+
+    id              = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
+    participant_id  = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='CASCADE'), nullable=False)
+    banned_by_id    = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
+    summary         = db.Column(db.Text, nullable=True)
+    created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    lifted_at       = db.Column(db.DateTime, nullable=True)
+    lifted_by_id    = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
+    lift_summary    = db.Column(db.Text, nullable=True)
+
+    conversation = db.relationship('Conversation')
+    participant  = db.relationship('Participant', foreign_keys=[participant_id])
+    banned_by    = db.relationship('Participant', foreign_keys=[banned_by_id])
+    lifted_by    = db.relationship('Participant', foreign_keys=[lifted_by_id])
+
+
+class ContentFlag(db.Model):
+    __tablename__ = 'content_flags'
+    __table_args__ = (
+        db.CheckConstraint(
+            "((content_type = 'statement' AND statement_tid IS NOT NULL AND argument_id IS NULL) "
+            "OR (content_type = 'argument' AND argument_id IS NOT NULL AND statement_tid IS NULL))",
+            name='content_flag_target_check',
+        ),
+    )
+
+    id              = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
+    participant_id  = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
+    content_type    = db.Column(db.Enum(*FLAG_CONTENT_TYPES, name='flag_content_type'), nullable=False)
+    statement_tid   = db.Column(db.Integer, nullable=True)
+    argument_id     = db.Column(db.Integer, db.ForeignKey('arguments.id', ondelete='CASCADE'), nullable=True)
+    category        = db.Column(db.Enum(*FLAG_CATEGORIES, name='flag_category'), nullable=False)
+    detail          = db.Column(db.Text, nullable=True)
+    status          = db.Column(db.Enum(*FLAG_STATUSES, name='flag_status'), nullable=False, default='open')
+    created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    resolved_at     = db.Column(db.DateTime, nullable=True)
+    resolved_by_id  = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
+    resolution_note = db.Column(db.Text, nullable=True)
+
+    conversation = db.relationship('Conversation')
+    participant  = db.relationship('Participant', foreign_keys=[participant_id])
+    argument     = db.relationship('Argument')
+    resolved_by  = db.relationship('Participant', foreign_keys=[resolved_by_id])
 
 
 class ConversationInvite(db.Model):
@@ -366,6 +419,12 @@ class StatementSimilarityScore(db.Model):
 # Cover the highest-volume lookup patterns in the argument mapping flow.
 db.Index('ix_participations_participant_id', Participation.participant_id)
 db.Index('ix_participations_conversation_id', Participation.conversation_id)
+db.Index('ix_conversation_bans_conversation_participant',
+         ConversationBan.conversation_id, ConversationBan.participant_id)
+db.Index('ix_content_flags_conversation_status',
+         ContentFlag.conversation_id, ContentFlag.status, ContentFlag.created_at)
+db.Index('ix_content_flags_argument_id', ContentFlag.argument_id)
+db.Index('ix_content_flags_statement_tid', ContentFlag.conversation_id, ContentFlag.statement_tid)
 db.Index('ix_arguments_featured_statement_id', Argument.featured_statement_id)
 db.Index('ix_arguments_proposer_pseudonym', Argument.proposer_pseudonym)
 db.Index('ix_argument_votes_argument_id', ArgumentVote.argument_id)

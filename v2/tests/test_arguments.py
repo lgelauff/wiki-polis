@@ -3,8 +3,8 @@ import os
 
 import pytest
 
-from db import (Argument, ArgumentSideState, ArgumentVote, Conversation,
-                FeaturedStatement, Participant, Participation, db)
+from db import (Argument, ArgumentSideState, ArgumentVote, ContentFlag, Conversation,
+                ConversationBan, FeaturedStatement, Participant, Participation, db)
 from tests.conftest import login
 
 _CONVERSATION_TEMPLATE = os.path.join(
@@ -98,6 +98,16 @@ def test_submit_pro_argument(auth_client, arg_conv, arg_part, fs, participant):
     assert arg.body == 'This is a pro argument.'
 
 
+def test_submit_updates_last_engagement(auth_client, arg_conv, arg_part, fs):
+    assert arg_part.last_engagement is None
+    resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
+        'side': 'pro', 'body': 'This is a pro argument.',
+    })
+    assert resp.status_code == 302
+    db.session.refresh(arg_part)
+    assert arg_part.last_engagement is not None
+
+
 def test_submit_con_argument(auth_client, arg_conv, arg_part, fs, participant):
     resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
         'side': 'con', 'body': 'This is a con argument.',
@@ -176,6 +186,61 @@ def test_submit_blocked_on_inactive_conv(auth_client, app, participant, fs):
         'side': 'pro', 'body': 'Should be blocked.',
     })
     assert resp.status_code == 403
+
+
+def test_banned_participant_cannot_submit_argument(auth_client, arg_conv, arg_part, fs, participant):
+    db.session.add(ConversationBan(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        summary='spam',
+    ))
+    db.session.commit()
+    resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
+        'side': 'pro', 'body': 'Should be blocked.',
+    })
+    assert resp.status_code == 403
+    assert Argument.query.filter_by(
+        proposer_pseudonym=arg_part.pseudonym,
+        featured_statement_id=fs.id,
+    ).first() is None
+
+
+def test_banned_participant_cannot_submit_statement_or_proxy_vote(auth_client, participant):
+    conv = Conversation(
+        slug='ban-write',
+        polis_id='ban1234567',
+        title='Ban Write',
+        active=True,
+        access_policy='public',
+        phase_submission=True,
+    )
+    db.session.add(conv)
+    db.session.flush()
+    db.session.add(Participation(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        pseudonym='ban-fox',
+    ))
+    db.session.add(ConversationBan(
+        conversation_id=conv.id,
+        participant_id=participant.id,
+        summary='blocked',
+    ))
+    db.session.commit()
+
+    stmt_resp = auth_client.post(
+        '/c/ban-write/statements/new',
+        json={'text': 'Should be blocked.'},
+        headers={'Sec-Fetch-Site': 'same-origin'},
+    )
+    vote_resp = auth_client.put(
+        '/proxy/particiapi/api/conversations/ban1234567/votes/1',
+        json={'value': -1},
+        headers={'Sec-Fetch-Site': 'same-origin'},
+    )
+
+    assert stmt_resp.status_code == 403
+    assert vote_resp.status_code == 403
 
 
 # ── Skip ──────────────────────────────────────────────────────────────────────
@@ -374,6 +439,29 @@ def test_participant_cannot_delete_argument(auth_client, arg_conv, arg_part, fs,
     assert db.session.get(Argument, arg.id) is not None
 
 
+def test_admin_can_hide_and_unhide_argument_from_featured_page(admin_client, arg_conv, fs):
+    arg = Argument(featured_statement_id=fs.id, proposer_pseudonym=None,
+                   body='Needs review.', side='pro')
+    db.session.add(arg)
+    db.session.commit()
+
+    hide_resp = admin_client.post(
+        f'/admin/conversations/{arg_conv.id}/arguments/{arg.id}/moderate',
+        data={'hidden': '1'},
+    )
+    assert hide_resp.status_code == 302
+    db.session.refresh(arg)
+    assert arg.hidden is True
+
+    unhide_resp = admin_client.post(
+        f'/admin/conversations/{arg_conv.id}/arguments/{arg.id}/moderate',
+        data={'hidden': '0'},
+    )
+    assert unhide_resp.status_code == 302
+    db.session.refresh(arg)
+    assert arg.hidden is False
+
+
 # ── Argument hide / unhide ────────────────────────────────────────────────────
 
 def _make_visible_arg(fs_id, side='pro'):
@@ -415,6 +503,58 @@ def test_participant_cannot_hide_argument(auth_client, arg_conv, arg_part, fs, a
     assert resp.status_code == 403
     db.session.refresh(arg)
     assert arg.hidden is False
+
+
+def test_participant_can_flag_argument(auth_client, arg_conv, arg_part, fs, participant):
+    arg = _make_visible_arg(fs.id)
+    resp = auth_client.post(
+        f'/c/arg-conv/arguments/{arg.id}/flag',
+        data={'category': 'personal_attack', 'detail': '<b>bad</b>'},
+    )
+    assert resp.status_code == 302
+    flag = ContentFlag.query.filter_by(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        content_type='argument',
+        argument_id=arg.id,
+    ).first()
+    assert flag is not None
+    assert flag.category == 'personal_attack'
+    assert flag.detail == 'bad'
+
+
+def test_participant_argument_flag_dedupes_open_flags(auth_client, arg_conv,
+                                                      arg_part, fs, participant):
+    arg = _make_visible_arg(fs.id)
+    for _ in range(2):
+        resp = auth_client.post(
+            f'/c/arg-conv/arguments/{arg.id}/flag',
+            data={'category': 'off_topic'},
+        )
+        assert resp.status_code == 302
+    assert ContentFlag.query.filter_by(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        content_type='argument',
+        argument_id=arg.id,
+        category='off_topic',
+    ).count() == 1
+
+
+def test_participant_can_flag_statement(auth_client, arg_conv, arg_part, participant):
+    resp = auth_client.post(
+        '/c/arg-conv/statements/42/flag',
+        data={'category': 'privacy', 'detail': 'Personal details'},
+    )
+    assert resp.status_code == 302
+    flag = ContentFlag.query.filter_by(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        content_type='statement',
+        statement_tid=42,
+    ).first()
+    assert flag is not None
+    assert flag.category == 'privacy'
 
 
 def test_hide_argument_wrong_conversation_returns_404(admin_client, arg_conv,

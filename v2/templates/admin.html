@@ -1,4 +1,11 @@
 {% extends "base.html" %}
+{% block title %}Admin panel — wiki-polis{% endblock %}
+{% block header_crumb %}
+<nav class="header-crumb" aria-label="Admin breadcrumb">
+  <span class="header-crumb-sep">/</span>
+  <span>Admin panel</span>
+</nav>
+{% endblock %}
 {% block content %}
 
 <div class="container">
@@ -95,8 +102,8 @@
   <h3 class="section-heading">Global admins</h3>
   <p class="muted" style="font-size:13px;margin-bottom:.75rem">
     Global admins have platform-wide access to all conversations and settings.
-    To assign a moderator to a specific conversation, use
-    <strong>manage → moderators</strong> on that conversation.
+    To assign a moderator or organizer to a specific conversation, use
+    <strong>manage → conversation roles</strong> on that conversation.
   </p>
 
   {% if global_admins %}
