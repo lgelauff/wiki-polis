@@ -93,9 +93,10 @@ services:
       - /home/<user>/particiapi-patch/api.py:/app/particiapi/api.py:ro
       - /home/<user>/particiapi-patch/config_defaults.py:/app/particiapi/config_defaults.py:ro
 ```
-Recreate only that service, scoped to the staging project (never touches prod):
+Recreate only that service, scoped to the staging project (never touches prod). The VPS has
+**Compose v1**, so it's `docker-compose` (hyphenated), not `docker compose`:
 ```
-docker compose -p wiki-polis-staging \
+docker-compose -p wiki-polis-staging \
   -f docker-compose.yaml -f docker-compose.staging.yaml -f docker-compose.patch.yaml \
   up -d particiapi
 ```
@@ -106,13 +107,59 @@ containers / projects / databases.)
 A durable deploy (prod) should instead build the fork into an image off-VPS (e.g. ghcr)
 and pull it, rather than rely on the bind-mount.
 
+### Prerequisite: Particiapi auth tables must exist in Polis Postgres
+`get_or_create_uid` writes to `particiapi_issuers` / `particiapi_users` and relies on the
+`insert_new_uid` trigger → `create_user()`. A stack that has only ever run the **anonymous**
+path (`AUTHENTICATION_DISABLED=True`) **never created these** — `session_()` will 500 with
+`relation "public.particiapi_issuers" does not exist`. Apply the DDL from the Particiapi
+`schema.sql` (function + two tables + trigger) to the Polis Postgres before enabling the
+secret. This was missing on staging and is **almost certainly missing on prod too**.
+
 ## Verify (the case no unit test covers)
 On a second device that **already holds a stale anonymous `pa_session`**, log in and
 confirm you land on the **same uid/pid with the prior votes** — not a fresh anonymous
-split. Check `particiapi_issuers` has the `wiki-polis` issuer resolving one uid for the xid.
+split. Check `particiapi_users` has the `wiki-polis` issuer resolving **one** uid for the xid,
+and that a second browser's votes accrue to that uid's single `participant` (no new pid).
+
+## Staging validation — PASSED (2026-06-23)
+Verified live on `wiki-polis-dev` against the `wiki-polis-staging` Particiapi.
+- Same Wikimedia user across incognito-Chrome + phone-Chrome → **one** Polis identity
+  (`particiapi_users` uid 24, issuer `wiki-polis`) → **one** participant (`pid 12`), votes
+  accumulating on it across browsers (no fragmentation). Pre-fix, each session was a new pid.
+- **Gotchas found (now in this doc):** (1) the missing `particiapi_*` auth tables (above);
+  (2) testing on the **`#236` branch** (which bundles the #96 HMAC xid change) while a browser
+  still held a session from a **main-based** deploy → the xid differed across the two schemes
+  and produced a transient second identity (uid 23). Not a flaw in the binding — it's the
+  xid-version transition (see below). Clearing sessions / re-login resolved it.
+- Note: staging had to run the proxy change **on top of `#236`** (`test/identity-on-236`),
+  because the staging DB was already migrated to `#236`'s schema and main-based code 500s on
+  the dropped `arguments.proposer_id`.
+
+## Production rollout prerequisites
+1. **Particiapi image** — build the fork (`lgelauff/particiapi` `feat/trusted-sub-identity`)
+   into an image **off-VPS** (memory is tight, no swap, shared with prod) and pull it; don't
+   bind-mount or build on the box.
+2. **DDL** — create `particiapi_issuers` / `particiapi_users` + trigger in the **prod** Polis
+   Postgres (see prerequisite above).
+3. **Secrets** — set `TRUSTED_SUB_SECRET` on prod Particiapi and `PARTICIAPI_SUB_SECRET` on the
+   prod tool to the **same** value.
+4. **xid-version transition** — see below; decide before flipping the secret on.
+
+## The xid-version transition (#96) — read before enabling on real data
+Because the xid is now the **Polis identity key**, **any change to the xid derivation makes
+every existing user a brand-new Polis participant** (their prior votes orphan under the old
+uid). The bare-`sha256` → HMAC change (#96) is exactly such a change. Two options:
+- **Simple (testing / pre-launch, disposable data):** flip the scheme and **log everyone out**
+  — clear the Flask `sessions` table so all sessions re-derive under the new scheme. Do **not**
+  rotate `SECRET_KEY` to log people out: it's the xid HMAC fallback key, so rotating it changes
+  every xid *again*. Old votes are abandoned; everyone restarts as a fresh participant.
+- **Preserving (real deliberation data):** keep both xid versions resolvable (a mapping or a
+  dual-lookup) so a user's old and new xids resolve to the same Polis uid. Larger change; tracked
+  with [#96](https://github.com/lgelauff/wiki-polis/issues/96).
 
 ## Not addressed
-- **Backfill** of already-fragmented data (e.g. zid 9) — the fix is **prospective only**;
+- **Backfill** of already-fragmented data (e.g. prod zid 9) — the fix is **prospective only**;
   there is no anon-uid → Wikimedia-identity mapping to merge pre-cutover votes.
-- **Keyed subject** `HMAC(server_secret, mw_user_id)` instead of the brute-forceable bare
-  sha256 xid — defence-in-depth, tracked on [#96](https://github.com/lgelauff/wiki-polis/issues/96).
+- The xid (even HMAC-keyed) is stored in Polis (`particiapi_users.subject`) — the store now
+  holds a per-deployment-stable link to the user; the brute-force exposure is reduced by the
+  key but not eliminated. Coordinate with [#96](https://github.com/lgelauff/wiki-polis/issues/96).
