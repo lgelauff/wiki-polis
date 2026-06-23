@@ -281,6 +281,47 @@ header {
   border-color: var(--accent);
 }
 
+.content-flag {
+  display: inline-block;
+  position: relative;
+  margin-left: 6px;
+  font-size: 12px;
+}
+
+.content-flag summary {
+  cursor: pointer;
+  color: var(--muted);
+  list-style: none;
+}
+
+.content-flag summary::-webkit-details-marker {
+  display: none;
+}
+
+.content-flag[open] summary {
+  color: var(--ink);
+}
+
+.content-flag form {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  top: 1.6rem;
+  width: 220px;
+  padding: .65rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  box-shadow: 0 12px 28px -18px rgba(0, 0, 0, .35);
+}
+
+.content-flag select,
+.content-flag textarea {
+  width: 100%;
+  margin-bottom: .4rem;
+  font-size: 12px;
+}
+
 /* ── Main container ── */
 
 .container {

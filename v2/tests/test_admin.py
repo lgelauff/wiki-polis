@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from db import AdminRole, Conversation, ConversationInvite, Participant, db
+from db import AdminRole, ContentFlag, Conversation, ConversationInvite, Participant, db
 from polis_admin import PolisServerError
 from tests.conftest import login
 
@@ -1330,6 +1330,7 @@ def test_admin_template_pages_render(admin_client, conv):
     assert admin_client.get(f'/admin/conversations/{conv.id}').status_code == 200
     assert admin_client.get(f'/admin/conversations/{conv.id}/invites').status_code == 200
     assert admin_client.get(f'/admin/conversations/{conv.id}/participants').status_code == 200
+    assert admin_client.get(f'/admin/conversations/{conv.id}/flags').status_code == 200
 
     # Statements page pulls from Polis; stub both clients so it renders offline.
     from unittest.mock import MagicMock
@@ -1432,3 +1433,32 @@ def test_delete_conversation_with_zero_valid_votes(admin_client, conv):
     assert resp.headers['Location'].endswith('/admin')
     assert db.session.get(Conversation, conv.id) is None
     server.close_and_hide_conversation.assert_called_once_with('adm1234567')
+
+
+def test_admin_flag_queue_resolves_statement_flag(admin_client, conv, participant):
+    flag = ContentFlag(
+        conversation_id=conv.id,
+        participant_id=participant.id,
+        content_type='statement',
+        statement_tid=7,
+        category='privacy',
+        detail='Names a private person.',
+        status='open',
+    )
+    db.session.add(flag)
+    db.session.commit()
+
+    with patch('app._statement_text_map', return_value={7: 'Statement text'}):
+        page = admin_client.get(f'/admin/conversations/{conv.id}/flags').data.decode()
+    assert 'Statement text' in page
+    assert 'Privacy violation' in page
+
+    resp = admin_client.post(
+        f'/admin/conversations/{conv.id}/flags/{flag.id}/resolve',
+        data={'resolution_note': 'handled'},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    db.session.refresh(flag)
+    assert flag.status == 'resolved'
+    assert flag.resolution_note == 'handled'

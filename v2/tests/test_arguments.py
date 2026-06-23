@@ -1,8 +1,8 @@
 """Tests for the argument mapping layer: submit, skip, vote, admin featured."""
 import pytest
 
-from db import (Argument, ArgumentSideState, ArgumentVote, Conversation, ConversationBan,
-                FeaturedStatement, Participant, Participation, db)
+from db import (Argument, ArgumentSideState, ArgumentVote, ContentFlag, Conversation,
+                ConversationBan, FeaturedStatement, Participant, Participation, db)
 from tests.conftest import login
 
 
@@ -457,6 +457,58 @@ def test_participant_cannot_hide_argument(auth_client, arg_conv, arg_part, fs, a
     assert resp.status_code == 403
     db.session.refresh(arg)
     assert arg.hidden is False
+
+
+def test_participant_can_flag_argument(auth_client, arg_conv, arg_part, fs, participant):
+    arg = _make_visible_arg(fs.id)
+    resp = auth_client.post(
+        f'/c/arg-conv/arguments/{arg.id}/flag',
+        data={'category': 'personal_attack', 'detail': '<b>bad</b>'},
+    )
+    assert resp.status_code == 302
+    flag = ContentFlag.query.filter_by(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        content_type='argument',
+        argument_id=arg.id,
+    ).first()
+    assert flag is not None
+    assert flag.category == 'personal_attack'
+    assert flag.detail == 'bad'
+
+
+def test_participant_argument_flag_dedupes_open_flags(auth_client, arg_conv,
+                                                      arg_part, fs, participant):
+    arg = _make_visible_arg(fs.id)
+    for _ in range(2):
+        resp = auth_client.post(
+            f'/c/arg-conv/arguments/{arg.id}/flag',
+            data={'category': 'off_topic'},
+        )
+        assert resp.status_code == 302
+    assert ContentFlag.query.filter_by(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        content_type='argument',
+        argument_id=arg.id,
+        category='off_topic',
+    ).count() == 1
+
+
+def test_participant_can_flag_statement(auth_client, arg_conv, arg_part, participant):
+    resp = auth_client.post(
+        '/c/arg-conv/statements/42/flag',
+        data={'category': 'privacy', 'detail': 'Personal details'},
+    )
+    assert resp.status_code == 302
+    flag = ContentFlag.query.filter_by(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        content_type='statement',
+        statement_tid=42,
+    ).first()
+    assert flag is not None
+    assert flag.category == 'privacy'
 
 
 def test_hide_argument_wrong_conversation_returns_404(admin_client, arg_conv,

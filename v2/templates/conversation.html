@@ -10,6 +10,25 @@
   {% endif %}
 </nav>
 {% endblock %}
+{% macro content_flag_form(action, uid, label) -%}
+<details class="content-flag">
+  <summary aria-label="Flag {{ label }} for moderator review">flag</summary>
+  <form method="post" action="{{ action }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="sr-only" for="flag-category-{{ uid }}">Reason</label>
+    <select id="flag-category-{{ uid }}" name="category" required>
+      <option value="personal_attack">Personal attack</option>
+      <option value="privacy">Privacy violation</option>
+      <option value="off_topic">Off-topic</option>
+      <option value="other">Other</option>
+    </select>
+    <label class="sr-only" for="flag-detail-{{ uid }}">Details</label>
+    <textarea id="flag-detail-{{ uid }}" name="detail" rows="2" maxlength="1000"
+              placeholder="Optional details"></textarea>
+    <button type="submit" class="btn-small">Send</button>
+  </form>
+</details>
+{%- endmacro %}
 {% block head %}
 {% if conversation.active and not conversation.paused and conversation.phase_submission %}
 <script type="importmap" nonce="{{ csp_nonce }}">
@@ -499,6 +518,7 @@
           <p class="at-stmt">{{ item.text }}</p>
           {# One-line summary shown only when collapsed after all-done #}
           <p class="at-stmt-summary" aria-hidden="true">{{ item.text | truncate(80, True) }}</p>
+          {{ content_flag_form(url_for('participant.statement_flag', slug=conversation.slug, tid=fs.polis_statement_id), 'statement-' ~ fs.id, 'statement') }}
         </div>
 
         {# Two-step indicator — hidden when collapsed #}
@@ -633,6 +653,9 @@
                 </span>
                 {% if is_own %}<span class="at-yours argument-yours">YOURS</span>{% endif %}
                 {% if arg.hidden %}<span class="at-hidden-badge argument-hidden-badge">HIDDEN</span>{% endif %}
+                {% if not arg.hidden and not can_moderate %}
+                {{ content_flag_form(url_for('participant.argument_flag', slug=conversation.slug, arg_id=arg.id), 'argument-pro-' ~ arg.id, 'argument') }}
+                {% endif %}
                 {% if can_moderate %}
                 <span style="display:inline-flex;gap:4px;margin-left:auto">
                   {% if arg.hidden %}
@@ -759,6 +782,9 @@
                 </span>
                 {% if is_own %}<span class="at-yours argument-yours">YOURS</span>{% endif %}
                 {% if arg.hidden %}<span class="at-hidden-badge argument-hidden-badge">HIDDEN</span>{% endif %}
+                {% if not arg.hidden and not can_moderate %}
+                {{ content_flag_form(url_for('participant.argument_flag', slug=conversation.slug, arg_id=arg.id), 'argument-con-' ~ arg.id, 'argument') }}
+                {% endif %}
                 {% if can_moderate %}
                 <span style="display:inline-flex;gap:4px;margin-left:auto">
                   {% if arg.hidden %}

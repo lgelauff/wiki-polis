@@ -34,10 +34,10 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from wtforms.validators import ValidationError
 
-from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideState,
-                ArgumentVote, AuditEvent, Conversation, ConversationBan, ConversationInvite,
-                FeaturedStatement, Participant, Participation, StatementProvenance,
-                StatementSimilarityScore, db)
+from db import (ACCESS_POLICIES, ADMIN_ROLES, FLAG_CATEGORIES, AdminRole, Argument,
+                ArgumentSideState, ArgumentVote, AuditEvent, ContentFlag, Conversation,
+                ConversationBan, ConversationInvite, FeaturedStatement, Participant,
+                Participation, StatementProvenance, StatementSimilarityScore, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
 from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
@@ -1377,6 +1377,12 @@ admin_bp = Blueprint('admin', __name__)
 
 # nh3 tag allowlist for CSV import sanitisation — no HTML tags permitted.
 _NH3_NO_TAGS: frozenset[str] = frozenset()
+_FLAG_CATEGORY_LABELS = {
+    'personal_attack': 'Personal attack',
+    'privacy': 'Privacy violation',
+    'off_topic': 'Off-topic',
+    'other': 'Other',
+}
 participant_bp = Blueprint('participant', __name__)
 
 
@@ -1534,6 +1540,7 @@ def _seed_statement_lock_reason(conv: Conversation) -> str | None:
 def _delete_local_conversation(conv: Conversation) -> None:
     """Delete local rows owned by a conversation after external deletion guards pass."""
     conv_id = conv.id
+    ContentFlag.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
     featured_ids = [
         row[0] for row in db.session.query(FeaturedStatement.id)
         .filter_by(conversation_id=conv_id)
@@ -1582,6 +1589,68 @@ def _delete_local_conversation(conv: Conversation) -> None:
     )
     db.session.delete(conv)
 
+
+def _parse_content_flag_form() -> tuple[str, str | None]:
+    category = (request.form.get('category') or '').strip()
+    if category not in FLAG_CATEGORIES:
+        abort(400)
+    detail = nh3.clean((request.form.get('detail') or '').strip(),
+                       tags=_NH3_NO_TAGS)[:1000]
+    return category, detail or None
+
+
+def _existing_open_flag(
+    conv_id: int,
+    participant_id: int,
+    content_type: str,
+    category: str,
+    *,
+    statement_tid: int | None = None,
+    argument_id: int | None = None,
+) -> ContentFlag | None:
+    query = ContentFlag.query.filter_by(
+        conversation_id=conv_id,
+        participant_id=participant_id,
+        content_type=content_type,
+        category=category,
+        status='open',
+    )
+    if content_type == 'statement':
+        query = query.filter_by(statement_tid=statement_tid)
+    else:
+        query = query.filter_by(argument_id=argument_id)
+    return query.first()
+
+
+def _flag_rows_for_admin(conv: Conversation) -> list[dict]:
+    flags = (ContentFlag.query
+             .filter_by(conversation_id=conv.id)
+             .options(joinedload(ContentFlag.argument))
+             .order_by(ContentFlag.status, ContentFlag.created_at.desc())
+             .all())
+    statement_tids = [f.statement_tid for f in flags if f.content_type == 'statement']
+    statement_texts = {}
+    if statement_tids:
+        try:
+            statement_texts = _statement_text_map(conv.polis_id)
+        except PolisParticipantError:
+            statement_texts = {}
+    rows = []
+    for flag in flags:
+        if flag.content_type == 'argument':
+            target_text = flag.argument.body if flag.argument else 'Argument removed'
+            target_label = f'Argument #{flag.argument_id}'
+        else:
+            target_text = statement_texts.get(flag.statement_tid, 'Statement text unavailable')
+            target_label = f'Statement #{flag.statement_tid}'
+        rows.append({
+            'flag': flag,
+            'category_label': _FLAG_CATEGORY_LABELS.get(flag.category, flag.category),
+            'target_label': target_label,
+            'target_text': target_text,
+        })
+    return rows
+
 # ── Admin ─────────────────────────────────────────────────────────────────
 
 @admin_bp.get('/admin')
@@ -1615,6 +1684,10 @@ def admin_conversation_detail(conv_id):
     )
     invite_count      = ConversationInvite.query.filter_by(conversation_id=conv_id).count()
     participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
+    open_flag_count   = ContentFlag.query.filter_by(
+        conversation_id=conv_id,
+        status='open',
+    ).count()
     can_organize      = _can_organize(conv)
     client            = _polis_server_client()
     polis_stats       = client.get_polis_stats(conv.polis_id)
@@ -1644,6 +1717,7 @@ def admin_conversation_detail(conv_id):
                            participants=participants,
                            invite_count=invite_count,
                            participant_count=participant_count,
+                           open_flag_count=open_flag_count,
                            polis_stats=polis_stats,
                            phase_stat_groups=_phase_stat_groups(conv, polis_stats, phase6_stats),
                            polis_stats_unavailable=polis_stats_unavailable,
@@ -1723,6 +1797,42 @@ def admin_conversation_participants(conv_id):
         rows=rows,
         statement_progress_unavailable=statement_progress_unavailable,
     )
+
+
+@admin_bp.get('/admin/conversations/<int:conv_id>/flags')
+@login_required
+def admin_conversation_flags(conv_id):
+    conv = _require_mod_for_conv(conv_id)
+    rows = _flag_rows_for_admin(conv)
+    open_count = sum(1 for row in rows if row['flag'].status == 'open')
+    return render_template(
+        'admin_flags.html',
+        conversation=conv,
+        rows=rows,
+        open_count=open_count,
+    )
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/flags/<int:flag_id>/resolve')
+@login_required
+def admin_flag_resolve(conv_id, flag_id):
+    conv = _require_mod_for_conv(conv_id)
+    flag = ContentFlag.query.filter_by(
+        id=flag_id,
+        conversation_id=conv.id,
+    ).first_or_404()
+    note = nh3.clean((request.form.get('resolution_note') or '').strip(),
+                     tags=_NH3_NO_TAGS)[:1000]
+    actor = _current_participant()
+    flag.status = 'resolved'
+    flag.resolved_at = datetime.now(timezone.utc)
+    flag.resolved_by_id = actor.id if actor else None
+    flag.resolution_note = note or None
+    db.session.commit()
+    record_audit('content_flag.resolve', conv_id=conv.id, target_type='content_flag',
+                 target_id=flag.id, content_type=flag.content_type)
+    flash('Flag marked resolved.', 'success')
+    return redirect(url_for('admin.admin_conversation_flags', conv_id=conv.id))
 
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/participants/<int:participant_id>/ban')
@@ -3064,6 +3174,90 @@ def argument_unhide(slug, arg_id):
     arg.hidden = False
     db.session.commit()
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+
+
+@participant_bp.post('/c/<slug>/arguments/<int:arg_id>/flag')
+@login_required
+@limiter.limit('10 per minute')
+def argument_flag(slug, arg_id):
+    conv, part = _require_arg_participation(slug)
+    arg = Argument.query.filter_by(id=arg_id).first_or_404()
+    FeaturedStatement.query.filter_by(
+        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+    if arg.hidden:
+        flash('This argument is already under moderator review.', 'info')
+        return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+    category, detail = _parse_content_flag_form()
+    if not _existing_open_flag(
+        conv.id,
+        part.participant_id,
+        'argument',
+        category,
+        argument_id=arg.id,
+    ):
+        db.session.add(ContentFlag(
+            conversation_id=conv.id,
+            participant_id=part.participant_id,
+            content_type='argument',
+            argument_id=arg.id,
+            category=category,
+            detail=detail,
+            status='open',
+        ))
+        db.session.commit()
+        record_audit('content_flag.create', conv_id=conv.id, target_type='argument',
+                     target_id=arg.id, category=category)
+    flash('Thanks - this has been sent to the moderator for review.', 'success')
+    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+
+
+@participant_bp.post('/c/<slug>/statements/<int:tid>/flag')
+@login_required
+@limiter.limit('10 per minute')
+def statement_flag(slug, tid):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    if not conv.active or conv.paused:
+        abort(403)
+    participant = _current_participant()
+    if participant is None:
+        abort(403)
+    part = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first_or_404()
+    _abort_if_banned(conv, participant)
+
+    statements = _polis_server_client().get_statements(conv.polis_id)
+    if statements is not None:
+        all_statements = [s for group in statements for s in group]
+        matching = [s for s in all_statements if s.get('tid') == tid]
+        if not matching:
+            abort(404)
+        if matching[0].get('is_seed'):
+            abort(400)
+
+    category, detail = _parse_content_flag_form()
+    if not _existing_open_flag(
+        conv.id,
+        part.participant_id,
+        'statement',
+        category,
+        statement_tid=tid,
+    ):
+        db.session.add(ContentFlag(
+            conversation_id=conv.id,
+            participant_id=part.participant_id,
+            content_type='statement',
+            statement_tid=tid,
+            category=category,
+            detail=detail,
+            status='open',
+        ))
+        db.session.commit()
+        record_audit('content_flag.create', conv_id=conv.id, target_type='statement',
+                     target_id=tid, category=category)
+    flash('Thanks - this has been sent to the moderator for review.', 'success')
+    return redirect(url_for('participant.conversation', slug=slug) + '#tab-vote')
 
 # ── Identity reveal ───────────────────────────────────────────────────────
 

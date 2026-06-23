@@ -62,6 +62,18 @@ bool=F · `notify_talk_page` bool=F · `public_username` (nullable) · `revealed
 - Active ban = `lifted_at IS NULL`. Bans are conversation-scoped; existing content
   remains and is handled separately by moderation.
 
+### `content_flags`
+`id` PK · `conversation_id` FK (CASCADE) · `participant_id` FK→participants
+(**SET NULL**) · `content_type` enum(`statement`, `argument`) · `statement_tid`
+nullable · `argument_id` FK→arguments (CASCADE) nullable · `category`
+enum(`personal_attack`, `privacy`, `off_topic`, `other`) · `detail` nullable ·
+`status` enum(`open`, `resolved`) · `created_at` · `resolved_at` nullable ·
+`resolved_by_id` FK→participants (**SET NULL**) · `resolution_note` nullable.
+- Target invariant: statement flags store `statement_tid` and no `argument_id`;
+  argument flags store `argument_id` and no `statement_tid`.
+- The admin queue does not display flagger identity; moderators review the target,
+  reason, optional note, and timestamp.
+
 ### `conversation_invites`
 `id` PK · `conversation_id` FK (CASCADE) · `mw_username` · `created_at`. Unique
 `(conversation_id, mw_username)`.
