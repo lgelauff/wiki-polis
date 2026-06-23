@@ -21,8 +21,8 @@ import nh3
 import requests
 from dotenv import load_dotenv
 from flask import (Blueprint, Flask, abort, current_app, flash, g, jsonify,
-                   make_response, redirect, render_template, request, session,
-                   url_for)
+                   has_request_context, make_response, redirect, render_template,
+                   request, session, url_for)
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
@@ -99,6 +99,21 @@ class Phase6ResultsFilter:
     @classmethod
     def empty(cls) -> 'Phase6ResultsFilter':
         return cls(excluded_tids=frozenset(), excluded_pids=frozenset())
+
+    def to_snapshot(self) -> dict:
+        return {
+            'excluded_tids': sorted(int(tid) for tid in self.excluded_tids),
+            'excluded_pids': sorted(int(pid) for pid in self.excluded_pids),
+        }
+
+    @classmethod
+    def from_snapshot(cls, data) -> 'Phase6ResultsFilter':
+        if not isinstance(data, dict):
+            return cls.empty()
+        return cls(
+            excluded_tids=frozenset(int(tid) for tid in data.get('excluded_tids', [])),
+            excluded_pids=frozenset(int(pid) for pid in data.get('excluded_pids', [])),
+        )
 
 
 def _vote_label(vote: int | None) -> str | None:
@@ -297,6 +312,39 @@ def _build_phase6_results(
         'clusters':              clusters,
         'pg_available':          pg_available,
     }
+
+
+def _current_phase6_results_filter(conv) -> Phase6ResultsFilter:
+    """Build the current moderation filter for Phase 6 report surfaces.
+
+    Hidden Phase 6 statements are sourced from the Polis stats DB when available.
+    Participant exclusions are reserved for #60; the field is intentionally present
+    in snapshots now so final reports do not need another schema change later.
+    """
+    excluded_tids: set[int] = set()
+    if conv.phase6_polis_conversation_id:
+        try:
+            rows = _polis_server_client().get_statements(conv.phase6_polis_conversation_id)
+        except Exception:
+            current_app.logger.exception(
+                'Could not build Phase 6 report filter for %s', conv.slug)
+            rows = None
+        if rows:
+            _, _, hidden = rows
+            excluded_tids = {
+                int(row['tid']) for row in hidden
+                if row.get('tid') is not None
+            }
+    return Phase6ResultsFilter(excluded_tids=frozenset(excluded_tids),
+                               excluded_pids=frozenset())
+
+
+def _snapshot_report_filter(conv) -> Phase6ResultsFilter:
+    filt = _current_phase6_results_filter(conv)
+    conv.report_filter_snapshot = filt.to_snapshot()
+    return filt
+
+
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
 
@@ -358,13 +406,67 @@ PHASE_SEQUENCE = [
     {'key': 'public_results',     'label': 'Report',             'flag': 'phase_public_results',
      'effect': 'everyone can see the full aggregate results'},
 ]
+_PHASE_BY_KEY = {stage['key']: stage for stage in PHASE_SEQUENCE}
+
+PHASE_ROUTES = {
+    'default_7': {
+        'label': 'Default 7-step path',
+        'description': 'Explore, featured selection, arguments, cleanup, informed vote, report.',
+        'keys': [
+            'preparation', 'submission', 'featured_selection', 'argument_mapping',
+            'cleanup', 'informed_voting', 'public_results',
+        ],
+    },
+    'no_informed_vote': {
+        'label': 'Arguments, no informed vote',
+        'description': 'Explore, feature statements, map arguments, then publish a report.',
+        'keys': [
+            'preparation', 'submission', 'featured_selection', 'argument_mapping',
+            'cleanup', 'public_results',
+        ],
+    },
+    'short_results': {
+        'label': 'Short path to report',
+        'description': 'Explore, curate featured statements, then publish results.',
+        'keys': ['preparation', 'submission', 'featured_selection', 'public_results'],
+    },
+}
+_DEFAULT_PHASE_ROUTE = 'default_7'
 _PHASE_FLAGS = [s['flag'] for s in PHASE_SEQUENCE if s['flag']]
+_ACTIVE_PHASE_KEYS = {'submission', 'argument_mapping', 'informed_voting'}
+
+
+def _valid_phase_route(value: str | None) -> str:
+    value = (value or _DEFAULT_PHASE_ROUTE).strip()
+    return value if value in PHASE_ROUTES else _DEFAULT_PHASE_ROUTE
+
+
+def _phase_sequence_for(conv) -> list[dict]:
+    route = _valid_phase_route(getattr(conv, 'phase_route', _DEFAULT_PHASE_ROUTE))
+    return [_PHASE_BY_KEY[key] for key in PHASE_ROUTES[route]['keys']]
+
+
+def _phase_flags_for(conv) -> list[str]:
+    return [s['flag'] for s in _phase_sequence_for(conv) if s['flag']]
+
+
+def _route_has_phase(conv, key: str) -> bool:
+    return any(stage['key'] == key for stage in _phase_sequence_for(conv))
+
+
+def _in_cleanup_window(conv) -> bool:
+    return (
+        bool(conv.active)
+        and not bool(conv.phase_informed_voting)
+        and bool(conv.phase_public_results)
+        and conv.closed_at is None
+    )
 
 
 def _current_stage_index(conv) -> int:
     """Furthest-along stage whose flag is on; 0 (preparation) if none on."""
     idx = 0
-    for i, stage in enumerate(PHASE_SEQUENCE):
+    for i, stage in enumerate(_phase_sequence_for(conv)):
         if stage['flag'] and getattr(conv, stage['flag']):
             idx = i
     return idx
@@ -373,15 +475,15 @@ def _current_stage_index(conv) -> int:
 def _active_phases(conv) -> set:
     """Return the set of currently-active phase keys for a conversation.
 
-    Uses PHASE_SEQUENCE flag names as keys. Also adds 'cleanup_window' (inferred:
-    informed_voting on, not yet closed) and 'closed'. Multiple keys are possible
+    Uses route flag names as keys. Also adds 'cleanup_window' (inferred:
+    final report pending after participant activity ends) and 'closed'. Multiple keys are possible
     when the conversation is in advanced/non-linear mode.
     """
-    phases = {s['key'] for s in PHASE_SEQUENCE if s['flag'] and getattr(conv, s['flag'])}
+    phases = {s['key'] for s in _phase_sequence_for(conv) if s['flag'] and getattr(conv, s['flag'])}
     if not phases and not conv.closed_at:
         phases.add('preparation')
-    if conv.phase_informed_voting and not conv.closed_at:
-        phases.add('cleanup_window')   # inferred: after IV, before publish
+    if _in_cleanup_window(conv):
+        phases.add('cleanup_window')
     if conv.closed_at:
         phases.add('closed')
     return phases
@@ -389,7 +491,7 @@ def _active_phases(conv) -> set:
 
 def _is_linear_phase_state(conv) -> bool:
     """True if at most one phase flag is on — the simple-mode invariant."""
-    return sum(1 for f in _PHASE_FLAGS if getattr(conv, f)) <= 1
+    return sum(1 for f in _phase_flags_for(conv) if getattr(conv, f)) <= 1
 
 
 def _advance_target_index(conv) -> int | None:
@@ -399,8 +501,9 @@ def _advance_target_index(conv) -> int | None:
     to the final stage (public results) — closed consultations skip the
     intermediate steps. Returns None when already at/after the target.
     """
+    sequence = _phase_sequence_for(conv)
     i = _current_stage_index(conv)
-    last = len(PHASE_SEQUENCE) - 1
+    last = len(sequence) - 1
     target = last if not conv.active else i + 1
     return target if target > i and target <= last else None
 
@@ -412,8 +515,9 @@ def _advance_confirm_message(conv) -> str:
     target = _advance_target_index(conv)
     if target is None:
         return ''
-    nxt = PHASE_SEQUENCE[target]
-    cur = PHASE_SEQUENCE[i]
+    sequence = _phase_sequence_for(conv)
+    nxt = sequence[target]
+    cur = sequence[i]
     parts = [f'Move to “{nxt["label"]}”? Participants: {nxt["effect"]}.']
     if cur['flag']:
         parts.append(f'This closes the current phase ({cur["effect"]}).')
@@ -424,11 +528,11 @@ def _advance_confirm_message(conv) -> str:
 # Guided phase transitions (#156). Keyed by the TARGET stage. Each transition lists
 # the preconditions the organizer must affirm (one checkbox each) before the "Move on"
 # button enables. `check` (optional) names a machine-verifiable predicate, shown met/
-# unmet and enforced server-side. Behavioural flags: runs_phase6_init, auto_close,
-# show_pause.
+# unmet and enforced server-side. Behavioural flags: runs_phase6_init, show_pause.
 PHASE_TRANSITIONS = {
     'submission': {'preconditions': [
-        {'id': 'seeds',       'label': 'Enough seed statements added (the voting loop isn’t empty)'},
+        {'id': 'seeds',       'label': 'Enough seed statements added (the voting loop isn’t empty)',
+         'recommendation': 'seed_statements'},
         {'id': 'intro',       'label': 'Intro text / topic framing finalized'},
         {'id': 'access',      'label': 'Access policy (public / invite-only) set correctly'},
         {'id': 'modpolicy',   'label': 'Moderation policy decided and configured'},
@@ -454,24 +558,78 @@ PHASE_TRANSITIONS = {
         {'id': 'ready_moderate', 'label': 'I’m ready to review and moderate the arguments before the informed vote'},
     ]},
     'informed_voting': {'runs_phase6_init': True, 'show_pause': True, 'preconditions': [
-        {'id': 'args_modded', 'label': 'I’ve reviewed all arguments and removed those against moderation expectations'},
+        {'id': 'args_modded', 'label': 'I’ve reviewed all arguments and removed those against moderation expectations',
+         'recommendation': 'arguments_per_featured'},
         {'id': 'reinvite',    'label': 'I’m ready to invite participants back for the informed voting phase'},
         {'id': 'newcomers',   'label': 'I understand participants who didn’t take part earlier can join this round'},
     ]},
-    'public_results': {'auto_close': True, 'preconditions': [
+    'public_results': {'preconditions': [
         {'id': 'ran_long',    'label': 'The informed voting round has run long enough / had enough participation'},
-        {'id': 'public',      'label': 'I understand full aggregate results become public to everyone'},
+        {'id': 'public',      'label': 'I understand participant activity ends and preliminary results remain visible'},
         {'id': 'no_identity', 'label': 'I understand results won’t expose individual identities (aggregate only)'},
-        {'id': 'disclosure',  'label': 'I understand participants can now begin disclosing their identities'},
-        {'id': 'inform',      'label': 'I’m ready to inform participants of the results and that they may disclose'},
-        {'id': 'final',       'label': 'I understand this is the final phase and closes the consultation'},
+        {'id': 'disclosure',  'label': 'I understand identity disclosure does not start until final publication'},
+        {'id': 'inform',      'label': 'I’m ready to enter the organizer cleanup window'},
+        {'id': 'final',       'label': 'I understand publishing the final report is a separate irreversible action'},
     ]},
 }
 
-# Recommended number of featured statements. Advisory only (Phase 6 needs ≥1); the
-# ideal count depends on topic complexity — surfaced to the organizer as guidance.
-# TODO: make this per-conversation configurable when complexity tiers land.
-_RECOMMENDED_FEATURED = 15
+# Recommended quantities are advisory unless a transition has a separate machine
+# check. Organizers can choose a tier and override individual values per conversation.
+_RECOMMENDATION_TIERS = {
+    'simple': {
+        'label': 'Simple topic',
+        'seed_statements': 5,
+        'featured_statements': 8,
+        'arguments_per_featured': 2,
+        'votes_per_statement': 25,
+    },
+    'medium': {
+        'label': 'Medium topic',
+        'seed_statements': 8,
+        'featured_statements': 15,
+        'arguments_per_featured': 3,
+        'votes_per_statement': 50,
+    },
+    'complex': {
+        'label': 'Complex topic',
+        'seed_statements': 12,
+        'featured_statements': 24,
+        'arguments_per_featured': 4,
+        'votes_per_statement': 75,
+    },
+}
+_DEFAULT_RECOMMENDATION_TIER = 'medium'
+_RECOMMENDATION_LABELS = {
+    'seed_statements': 'seed statements before Explore opens',
+    'featured_statements': 'featured statements for argument mapping',
+    'arguments_per_featured': 'arguments per featured statement',
+    'votes_per_statement': 'votes per statement before advancing',
+}
+_RECOMMENDED_FEATURED = _RECOMMENDATION_TIERS[_DEFAULT_RECOMMENDATION_TIER]['featured_statements']
+
+
+def _recommendation_profile(conv) -> dict:
+    raw = getattr(conv, 'recommended_quantities', None) or {}
+    tier = raw.get('tier', _DEFAULT_RECOMMENDATION_TIER)
+    if tier not in _RECOMMENDATION_TIERS:
+        tier = _DEFAULT_RECOMMENDATION_TIER
+    profile = dict(_RECOMMENDATION_TIERS[tier])
+    profile['tier'] = tier
+    for key in _RECOMMENDATION_LABELS:
+        value = raw.get(key)
+        if isinstance(value, int) and value > 0:
+            profile[key] = value
+    return profile
+
+
+def _recommended_quantity(conv, key: str) -> int:
+    return int(_recommendation_profile(conv).get(key, 0))
+
+
+def _recommendation_note(conv, key: str) -> str | None:
+    value = _recommended_quantity(conv, key)
+    label = _RECOMMENDATION_LABELS.get(key)
+    return f'{value} recommended {label}' if value and label else None
 
 
 def _check_confirmed_featured(conv):
@@ -480,7 +638,8 @@ def _check_confirmed_featured(conv):
     selected count against the recommended target so the organizer can judge coverage."""
     n = (FeaturedStatement.query
          .filter_by(conversation_id=conv.id, confirmed_by_admin=True).count())
-    note = f'{n} selected, {_RECOMMENDED_FEATURED} recommended' if n > 0 else None
+    recommended = _recommended_quantity(conv, 'featured_statements')
+    note = f'{n} selected, {recommended} recommended' if n > 0 else None
     return n > 0, note
 
 
@@ -500,20 +659,22 @@ def _transition_context(conv):
     target = _advance_target_index(conv)
     if target is None:
         return None
-    cur = PHASE_SEQUENCE[_current_stage_index(conv)]
-    nxt = PHASE_SEQUENCE[target]
+    sequence = _phase_sequence_for(conv)
+    cur = sequence[_current_stage_index(conv)]
+    nxt = sequence[target]
     cfg = PHASE_TRANSITIONS.get(nxt['key'], {})
     preconds = []
     for p in cfg.get('preconditions', []):
         met, note = None, None
         if p.get('check'):
             met, note = _PRECONDITION_CHECKS[p['check']](conv)
+        elif p.get('recommendation'):
+            note = _recommendation_note(conv, p['recommendation'])
         preconds.append({**p, 'met': met, 'note': note})
     # Consequence text — what opens, what closes, irreversibility.
     consequence = {
         'opens':  nxt['effect'],
         'closes': cur['effect'] if cur['flag'] else None,
-        'auto_close': bool(cfg.get('auto_close')),
     }
     return {
         'target': nxt,
@@ -522,8 +683,274 @@ def _transition_context(conv):
         'consequence': consequence,
         'runs_phase6_init': bool(cfg.get('runs_phase6_init')),
         'show_pause': bool(cfg.get('show_pause')),
-        'auto_close': bool(cfg.get('auto_close')),
     }
+
+
+def _is_schedulable_transition(ctx: dict | None) -> bool:
+    if not ctx:
+        return False
+    source = ctx['source']['key']
+    target = ctx['target']['key']
+    return source in _ACTIVE_PHASE_KEYS and target not in _ACTIVE_PHASE_KEYS
+
+
+def _clear_scheduled_transition(conv) -> None:
+    conv.scheduled_transition_at = None
+    conv.scheduled_transition_target = None
+    conv.scheduled_transition_frozen = False
+
+
+def _normalise_utc(value: datetime | None) -> datetime | None:
+    if not value:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _parse_utc_timestamp(value: str) -> datetime | None:
+    raw = (value or '').strip()
+    if not raw:
+        return None
+    if raw.endswith('Z'):
+        raw = raw[:-1] + '+00:00'
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _format_countdown(target: datetime | None) -> str | None:
+    target = _normalise_utc(target)
+    if target is None:
+        return None
+    delta = target - datetime.now(timezone.utc)
+    if delta.total_seconds() <= 0:
+        return 'due now'
+    days = delta.days
+    hours, rem = divmod(delta.seconds, 3600)
+    minutes = rem // 60
+    if days:
+        return f'{days}d {hours}h'
+    if hours:
+        return f'{hours}h {minutes}m'
+    return f'{minutes}m'
+
+
+def _schedule_context(conv) -> dict:
+    ctx = _transition_context(conv)
+    scheduled_at = _normalise_utc(conv.scheduled_transition_at)
+    return {
+        'transition': ctx,
+        'can_schedule': _is_schedulable_transition(ctx),
+        'scheduled_at': scheduled_at,
+        'scheduled_target': conv.scheduled_transition_target,
+        'scheduled_label': next(
+            (stage['label'] for stage in _phase_sequence_for(conv)
+             if stage['key'] == conv.scheduled_transition_target),
+            conv.scheduled_transition_target,
+        ),
+        'frozen': bool(conv.scheduled_transition_frozen),
+        'countdown': _format_countdown(scheduled_at),
+    }
+
+
+def _apply_phase_transition(conv, ctx: dict) -> tuple[str, str]:
+    cur, nxt = ctx['source'], ctx['target']
+    if cur['flag']:
+        setattr(conv, cur['flag'], False)
+    setattr(conv, nxt['flag'], True)
+    _clear_scheduled_transition(conv)
+    return cur['key'], nxt['key']
+
+
+def _publish_final_report(conv) -> Phase6ResultsFilter:
+    conv.phase_public_results = True
+    conv.active = False
+    conv.paused = False
+    conv.closed_at = datetime.now(timezone.utc)
+    _clear_scheduled_transition(conv)
+    return _snapshot_report_filter(conv)
+
+
+def _process_due_scheduled_transitions(now: datetime | None = None) -> dict:
+    now = now or datetime.now(timezone.utc)
+    due = Conversation.query.filter(
+        Conversation.active.is_(True),
+        Conversation.scheduled_transition_at.isnot(None),
+        Conversation.scheduled_transition_frozen.is_(False),
+    ).all()
+    fired = aborted = skipped = 0
+    for conv in due:
+        scheduled_at = _normalise_utc(conv.scheduled_transition_at)
+        if scheduled_at is None or scheduled_at > now:
+            skipped += 1
+            continue
+        ctx = _transition_context(conv)
+        if (
+            not _is_schedulable_transition(ctx)
+            or conv.scheduled_transition_target != ctx['target']['key']
+            or any(p.get('met') is False for p in ctx['preconditions'])
+        ):
+            conv.scheduled_transition_frozen = True
+            db.session.commit()
+            record_audit('phase.schedule.abort', conv_id=conv.id,
+                         target_type='phase',
+                         target_id=conv.scheduled_transition_target,
+                         outcome='blocked')
+            aborted += 1
+            continue
+        source, target = _apply_phase_transition(conv, ctx)
+        db.session.commit()
+        record_audit('phase.schedule.fire', conv_id=conv.id,
+                     target_type='phase', target_id=target,
+                     from_phase=source)
+        if not _sync_vis_type(conv):
+            current_app.logger.warning(
+                'Scheduled phase transition fired for %s but vis_type sync failed',
+                conv.slug)
+        fired += 1
+    return {'fired': fired, 'aborted': aborted, 'skipped': skipped}
+
+
+OUTPUT_DEFINITIONS = [
+    {
+        'key': 'initial-clustering',
+        'label': 'Initial clustering',
+        'short_label': 'Clusters',
+        'phase': 'Explore',
+        'tooltip': 'After Explore phase: topic and participant clustering',
+        'method': (
+            'Votes from the Explore phase are grouped with Polis clustering. '
+            'The page focuses first on consensus statements and breaking points; '
+            'cluster details are shown only when the data is stable enough.'
+        ),
+        'status': 'provisional',
+        'symbol': 'initial-clustering',
+        'pending': (
+            'Initial clustering becomes available after Explore closes. It will show '
+            'which statements mostly united participants and which statements split them.'
+        ),
+    },
+    {
+        'key': 'argument-map',
+        'label': 'Argument map',
+        'short_label': 'Arguments',
+        'phase': 'Arguments',
+        'tooltip': 'After Arguments phase: argument mapping',
+        'method': (
+            'Featured statements are paired with pro and con arguments submitted by '
+            'participants, then ordered by participant argument votes.'
+        ),
+        'status': 'provisional',
+        'symbol': 'argument-map',
+        'pending': (
+            'The argument map opens when featured statements are visible for argument '
+            'mapping. It will collect the strongest pro and con reasoning for each featured statement.'
+        ),
+    },
+    {
+        'key': 'preliminary-results',
+        'label': 'Preliminary results',
+        'short_label': 'Prelim',
+        'phase': 'Informed vote',
+        'tooltip': 'After Informed Vote and closing: preliminary results',
+        'method': (
+            'Informed-voting tallies are computed from the Phase 6 Polis round and '
+            'shown as a live, lighter-weight preview before the final report is published.'
+        ),
+        'status': 'provisional',
+        'symbol': 'preliminary-results',
+        'pending': (
+            'Preliminary results become available once informed voting is running. '
+            'They are useful for orientation but can still change before publication.'
+        ),
+    },
+    {
+        'key': 'report',
+        'label': 'Report',
+        'short_label': 'Report',
+        'phase': 'Publish',
+        'tooltip': 'After closing and organizer confirmation: report',
+        'method': (
+            'The report uses the informed-voting tallies frozen at publication time, '
+            'with moderation exclusions snapshotted so later cleanup cannot silently alter it.'
+        ),
+        'status': 'final',
+        'symbol': 'report',
+        'pending': (
+            'The final report is published after the organizer completes cleanup. '
+            'Publication freezes the report filter and starts the identity-reveal window.'
+        ),
+    },
+    {
+        'key': 'dataset',
+        'label': 'Dataset',
+        'short_label': 'Dataset',
+        'phase': 'Opt-in identity window',
+        'tooltip': 'After the opt-in identity window: download of the raw pseudonymous dataset',
+        'method': (
+            'The dataset is the raw pseudonymous results export for external analysis. '
+            'It never exposes xid or Wikimedia user IDs.'
+        ),
+        'status': 'provisional',
+        'symbol': 'dataset',
+        'pending': (
+            'The dataset finalizes after the opt-in identity window and post-close processing settle. '
+            'Until then, re-exports may differ.'
+        ),
+    },
+]
+
+
+def _output_ready(conv, key: str) -> bool:
+    phases = _active_phases(conv)
+    if key == 'initial-clustering':
+        return bool(phases & {
+            'featured_selection', 'argument_mapping', 'cleanup', 'informed_voting',
+            'public_results', 'cleanup_window', 'closed',
+        })
+    if key == 'argument-map':
+        return bool(phases & {'argument_mapping', 'cleanup', 'informed_voting',
+                              'public_results', 'cleanup_window', 'closed'})
+    if key == 'preliminary-results':
+        return bool(phases & {'informed_voting', 'public_results',
+                              'cleanup_window', 'closed'})
+    if key == 'report':
+        return bool(conv.closed_at)
+    if key == 'dataset':
+        reveal = _reveal_context(conv, participation=None)
+        return bool(reveal and reveal['state'] == 'expired')
+    return False
+
+
+def _output_href(conv, key: str) -> str:
+    if key == 'report':
+        return url_for('participant.conversation_report', slug=conv.slug)
+    return url_for('participant.conversation_output', slug=conv.slug, output_key=key)
+
+
+def _output_items(conv) -> list[dict]:
+    items = []
+    for definition in OUTPUT_DEFINITIONS:
+        ready = _output_ready(conv, definition['key'])
+        status = definition['status']
+        if definition['key'] == 'dataset' and ready:
+            status = 'final'
+        item = {
+            **definition,
+            'ready': ready,
+            'status': status,
+            'state': 'ready' if ready else 'pending',
+            'href': _output_href(conv, definition['key']),
+        }
+        items.append(item)
+    return items
+
+
+def _output_definition(output_key: str) -> dict | None:
+    return next((item for item in OUTPUT_DEFINITIONS if item['key'] == output_key), None)
 
 
 def _featured_counts(conv):
@@ -597,7 +1024,8 @@ def _phase_tiles(conv, key, polis_stats, phase6_stats=None,
     elif key == 'featured_selection':
         confirmed, _ = get_featured_counts()
         tiles.append({'value': confirmed, 'label': 'featured selected',
-                      'note': '{} recommended'.format(_RECOMMENDED_FEATURED)})
+                      'note': '{} recommended'.format(
+                          _recommended_quantity(conv, 'featured_statements'))})
         if polis_stats:
             tiles.append({'value': polis_stats['n_statements'],   'label': 'candidate statements'})
             tiles.append({'value': polis_stats['n_participants'], 'label': 'participants'})
@@ -658,11 +1086,11 @@ def _phase_stat_groups(conv, polis_stats, phase6_stats=None):
         return cache['arguments']
 
     return [
-        {'key':   PHASE_SEQUENCE[i]['key'],
-         'label': PHASE_SEQUENCE[i]['label'],
-         'tiles': _phase_tiles(conv, PHASE_SEQUENCE[i]['key'], polis_stats, phase6_stats,
+        {'key':   _phase_sequence_for(conv)[i]['key'],
+         'label': _phase_sequence_for(conv)[i]['label'],
+         'tiles': _phase_tiles(conv, _phase_sequence_for(conv)[i]['key'], polis_stats, phase6_stats,
                                featured_counts, argument_stats)}
-        for i in [j for j, s in enumerate(PHASE_SEQUENCE) if s['key'] in _active_phases(conv)]
+        for i in [j for j, s in enumerate(_phase_sequence_for(conv)) if s['key'] in _active_phases(conv)]
     ]
 
 
@@ -1287,12 +1715,14 @@ def admin():
                            conversations=conversations,
                            participants=participants,
                            global_admins=global_admins,
+                           phase_routes=PHASE_ROUTES,
                            )
 
 @admin_bp.get('/admin/conversations/<int:conv_id>')
 @login_required
 def admin_conversation_detail(conv_id):
     conv       = _require_mod_for_conv(conv_id)
+    phase_sequence = _phase_sequence_for(conv)
     conv_roles = (AdminRole.query
                    .filter_by(conversation_id=conv_id)
                    .all())
@@ -1309,7 +1739,8 @@ def admin_conversation_detail(conv_id):
     # on) — including alongside other phases in advanced mode — so fetch the phase-6
     # stats and gate the warning on the flag itself.
     phase6_stats      = (client.get_polis_stats(conv.phase6_polis_conversation_id)
-                         if conv.phase_informed_voting and conv.phase6_polis_conversation_id
+                         if (conv.phase_informed_voting or _in_cleanup_window(conv))
+                         and conv.phase6_polis_conversation_id
                          else None)
     # Loud warning only when Polis PG is configured but unreachable — never when it is
     # deliberately not wired (local/dev), where None is expected. Unavailable if the
@@ -1318,10 +1749,12 @@ def admin_conversation_detail(conv_id):
     polis_pg_configured     = bool(current_app.config.get('POLIS_DATABASE_URL'))
     polis_stats_unavailable = polis_pg_configured and (
         polis_stats is None
-        or (conv.phase_informed_voting and conv.phase6_polis_conversation_id
+        or ((conv.phase_informed_voting or _in_cleanup_window(conv))
+            and conv.phase6_polis_conversation_id
             and phase6_stats is None))
     phase6_results    = (_build_phase6_results(conv, participation=None)
-                         if conv.phase_informed_voting and conv.phase6_polis_conversation_id
+                         if (conv.phase_informed_voting or _in_cleanup_window(conv))
+                         and conv.phase6_polis_conversation_id
                          else None)
     reveal            = _reveal_context(conv, participation=None)
     return render_template('admin_conversation.html',
@@ -1337,13 +1770,19 @@ def admin_conversation_detail(conv_id):
                            reveal=reveal,
                            admin_roles=ADMIN_ROLES,
                            can_manage_roles=can_manage_roles,
-                           phase_sequence=PHASE_SEQUENCE,
+                           phase_sequence=phase_sequence,
                            current_stage_index=_current_stage_index(conv),
-                           active_stage_indices=[i for i, s in enumerate(PHASE_SEQUENCE)
+                           active_stage_indices=[i for i, s in enumerate(phase_sequence)
                                                   if s['key'] in _active_phases(conv)],
                            linear_phase_state=_is_linear_phase_state(conv),
                            advance_target_index=_advance_target_index(conv),
-                           transition=_transition_context(conv))
+                           transition=_transition_context(conv),
+                           phase_routes=PHASE_ROUTES,
+                           recommendation_tiers=_RECOMMENDATION_TIERS,
+                           recommendation_labels=_RECOMMENDATION_LABELS,
+                           recommendation_profile=_recommendation_profile(conv),
+                           schedule=_schedule_context(conv),
+                           cleanup_window=_in_cleanup_window(conv))
 
 @admin_bp.post('/admin/conversations/new')
 @login_required
@@ -1351,6 +1790,7 @@ def admin_conversation_detail(conv_id):
 def admin_conversation_new():
     slug   = request.form.get('slug', '').strip().lower()
     fields = _parse_conversation_form()
+    phase_route = _valid_phase_route(request.form.get('phase_route'))
 
     if not fields['title']:
         flash('Title is required.', 'error')
@@ -1381,7 +1821,8 @@ def admin_conversation_new():
                 'Pass a polis_id manually or set the env vars.'
             )))
 
-    conv = Conversation(slug=slug, active=True, polis_id=polis_id, **fields)
+    conv = Conversation(slug=slug, active=True, polis_id=polis_id,
+                        phase_route=phase_route, **fields)
     db.session.add(conv)
     db.session.commit()
     record_audit('conversation.create', conv_id=conv.id, slug=slug)
@@ -1425,11 +1866,82 @@ def admin_conversation_close(conv_id):
     conv = Conversation.query.get_or_404(conv_id)
     if not conv.active:
         abort(400)
-    conv.active    = False
-    conv.paused    = False
-    conv.closed_at = datetime.now(timezone.utc)
+    if _in_cleanup_window(conv):
+        required = {
+            'cleanup_reviewed_results',
+            'cleanup_moderated_flagged',
+            'cleanup_reviewed_exclusions',
+            'cleanup_report_intro',
+        }
+        if any(request.form.get(field) != 'on' for field in required):
+            flash('Complete every cleanup checklist item before publishing the final report.', 'error')
+            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+        if _route_has_phase(conv, 'informed_voting') and not conv.phase6_polis_conversation_id:
+            flash('Phase 6 must be initialised before publishing the final report.', 'error')
+            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    filt = _publish_final_report(conv)
     db.session.commit()
-    record_audit('conversation.close', conv_id=conv.id)
+    record_audit('conversation.close', conv_id=conv.id,
+                 excluded_tids=len(filt.excluded_tids),
+                 excluded_pids=len(filt.excluded_pids))
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/recommendations')
+@login_required
+@admin_required
+def admin_conversation_recommendations(conv_id):
+    conv = Conversation.query.get_or_404(conv_id)
+    tier = request.form.get('tier', _DEFAULT_RECOMMENDATION_TIER)
+    if tier not in _RECOMMENDATION_TIERS:
+        tier = _DEFAULT_RECOMMENDATION_TIER
+    config = {'tier': tier}
+    for key in _RECOMMENDATION_LABELS:
+        value = request.form.get(key, type=int)
+        if value is not None and value > 0:
+            config[key] = min(value, 999)
+    conv.recommended_quantities = config
+    db.session.commit()
+    record_audit('recommendations.set', conv_id=conv.id, tier=tier)
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/phase/schedule')
+@login_required
+@admin_required
+def admin_conversation_phase_schedule(conv_id):
+    conv = Conversation.query.get_or_404(conv_id)
+    action = request.form.get('action', 'set')
+    if action == 'cancel':
+        _clear_scheduled_transition(conv)
+        db.session.commit()
+        record_audit('phase.schedule.cancel', conv_id=conv.id)
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    if action in ('freeze', 'unfreeze') and conv.scheduled_transition_at:
+        conv.scheduled_transition_frozen = action == 'freeze'
+        db.session.commit()
+        record_audit(f'phase.schedule.{action}', conv_id=conv.id,
+                     target_type='phase',
+                     target_id=conv.scheduled_transition_target)
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    ctx = _transition_context(conv)
+    if not _is_schedulable_transition(ctx):
+        flash('Only active-to-passive wind-down transitions can be scheduled.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    scheduled_at = _parse_utc_timestamp(request.form.get('scheduled_at', ''))
+    if scheduled_at is None:
+        flash('Enter a valid UTC timestamp.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    if scheduled_at <= datetime.now(timezone.utc):
+        flash('Scheduled transition time must be in the future.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    conv.scheduled_transition_at = scheduled_at
+    conv.scheduled_transition_target = ctx['target']['key']
+    conv.scheduled_transition_frozen = False
+    db.session.commit()
+    record_audit('phase.schedule.set', conv_id=conv.id,
+                 target_type='phase', target_id=ctx['target']['key'])
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 def _sync_vis_type(conv) -> bool:
@@ -1493,7 +2005,8 @@ def admin_conversation_advance(conv_id):
     Active conversation → one step forward; closed → jump to public results. Backward
     / custom-state repair is an advanced-mode action, so a non-linear state is refused.
     The Informed-voting transition runs Phase 6 init atomically; the Public-results
-    transition auto-closes the conversation (starting the identity-reveal window).
+    transition to Report ends participant activity and enters the cleanup window;
+    the separate publish action stamps closed_at and starts the identity-reveal window.
     """
     conv = Conversation.query.get_or_404(conv_id)
     redirect_to = redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
@@ -1538,15 +2051,7 @@ def admin_conversation_advance(conv_id):
                 flash(sync_msg, 'error')
                 return redirect_to
 
-    cur, nxt = ctx['source'], ctx['target']
-    if cur['flag']:                               # preparation has flag=None
-        setattr(conv, cur['flag'], False)
-    setattr(conv, nxt['flag'], True)
-
-    if ctx['auto_close'] and conv.closed_at is None:
-        conv.active    = False
-        conv.paused    = False
-        conv.closed_at = datetime.now(timezone.utc)
+    source_key, target_key = _apply_phase_transition(conv, ctx)
 
     slug = conv.slug                              # capture before any rollback expires it
     try:
@@ -1580,15 +2085,14 @@ def admin_conversation_advance(conv_id):
             flash('Could not move on — a database error occurred. Please try again.', 'error')
         return redirect_to
 
-    record_audit('phase.advance', conv_id=conv.id, target_type='phase', target_id=nxt['key'],
-                 from_phase=cur['key'], phase6_created=bool(created_p6),
-                 auto_closed=bool(ctx['auto_close']))
+    record_audit('phase.advance', conv_id=conv.id, target_type='phase', target_id=target_key,
+                 from_phase=source_key, phase6_created=bool(created_p6))
 
     if not _sync_vis_type(conv):
         flash('Phase moved, but updating results visibility in Polis failed.', 'error')
     if sync_msg:                                  # re-entry re-synced round 6 (#175)
         flash(sync_msg, 'warning' if 'check manually' in sync_msg else 'success')
-    flash(f'Moved to: {nxt["label"]}.', 'success')
+    flash(f'Moved to: {ctx["target"]["label"]}.', 'success')
     return redirect_to
 
 
@@ -2451,7 +2955,32 @@ def conversation(slug):
                            new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
                            new_stmt_ids=participation.new_stmt_ids if participation else [],
                            phase6_data=phase6_data,
-                           phase6_results=phase6_results)
+                           phase6_results=phase6_results,
+                           output_items=_output_items(conv))
+
+
+@participant_bp.get('/c/<slug>/outputs/<output_key>')
+@login_required
+def conversation_output(slug, output_key):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        return redirect(url_for('participant.accept', slug=slug))
+    definition = _output_definition(output_key)
+    if definition is None:
+        abort(404)
+    items = _output_items(conv)
+    output = next(item for item in items if item['key'] == output_key)
+    return render_template('output.html',
+                           conversation=conv,
+                           participation=participation,
+                           output=output,
+                           output_items=items)
 
 # ── Arguments ────────────────────────────────────────────────────────────
 
@@ -2842,7 +3371,7 @@ def record_audit(operation, *, conv_id=None, target_type=None, target_id=None,
     this contract is the control (enforced by tests).
     """
     actor = getattr(g.get('participant'), 'id', None)
-    if actor is None and session.get('username'):
+    if actor is None and has_request_context() and session.get('username'):
         # Authenticated admin with no Participant row (env-listed ADMIN_USERS superadmin).
         # Mark the row so a NULL actor is explained, not ambiguous — without storing the
         # username (PII). See _is_global_admin's ADMIN_USERS branch.
@@ -3150,6 +3679,16 @@ def create_app(test_config: dict | None = None) -> Flask:
             _upgrade()
             click.echo('Database migrated to head revision.')
 
+    @app.cli.command('process-phase-schedules')
+    def process_phase_schedules_cmd():
+        """Fire due scheduled active-to-passive phase transitions."""
+        result = _process_due_scheduled_transitions()
+        click.echo(
+            'Scheduled transitions: '
+            f'{result["fired"]} fired, {result["aborted"]} aborted, '
+            f'{result["skipped"]} not due.'
+        )
+
     @app.before_request
     def _set_csp_nonce():
         g.csp_nonce = secrets.token_urlsafe(16)
@@ -3284,7 +3823,9 @@ def conversation_report(slug):
     if conv.phase_personal_results and not conv.phase_public_results and not participant:
         return redirect(url_for('participant.login') + f'?next={request.path}')
 
-    phase6_results = _build_phase6_results(conv, participation=None)  # aggregate only
+    report_filter = Phase6ResultsFilter.from_snapshot(conv.report_filter_snapshot)
+    phase6_results = _build_phase6_results(
+        conv, participation=None, results_filter=report_filter)  # aggregate only
 
     reveal = _reveal_context(conv, participation)
     return render_template(
@@ -3292,6 +3833,7 @@ def conversation_report(slug):
         conversation=conv,
         participation=participation,
         phase6_results=phase6_results,
+        output_context=next(item for item in _output_items(conv) if item['key'] == 'report'),
         reveal=reveal,
         reveal_state=reveal['state'] if reveal else None,
     )
@@ -3464,6 +4006,7 @@ def _register_routes(app: Flask) -> None:
                 conv.polis_id) if conv.polis_id else None
             signals_map[conv.id] = {
                 'phases':               _active_phases(conv),
+                'outputs':              _output_items(conv),
                 'statements_remaining': remaining,
                 'reveal':               reveal,
             }

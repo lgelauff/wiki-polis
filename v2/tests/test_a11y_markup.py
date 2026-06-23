@@ -121,6 +121,18 @@ def test_home_pseudonym_announced_with_context(auth_client, conv, participation)
     assert '<span class="conv-card-badge" aria-hidden="true">happy-fox</span>' in html
 
 
+def test_home_output_symbols_expose_state_and_labels(auth_client, conv, participation):
+    conv.phase_personal_results = True
+    db.session.commit()
+    resp = auth_client.get('/')
+    assert resp.status_code == 200
+    html = resp.data.decode()
+    assert 'class="conv-output-grid"' in html
+    assert 'data-state="ready"' in html
+    assert 'data-state="pending"' in html
+    assert 'aria-label="After Explore phase: topic and participant clustering"' in html
+
+
 # ── Name/role/value affordances (4.1.2 / 1.3.1) ────────────────────────────────
 
 def test_composer_textareas_have_accessible_names(auth_client, conv, participation):

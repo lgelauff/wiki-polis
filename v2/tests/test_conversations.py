@@ -1,4 +1,7 @@
 """Tests for the conversation listing, accept, and participation flows."""
+from datetime import datetime, timezone
+from unittest.mock import patch
+
 import pytest
 
 from db import (Conversation, ConversationInvite, Participant, Participation,
@@ -261,6 +264,30 @@ def test_recompute_rate_limited_within_cooldown(auth_client, conv, participation
     assert resp.status_code == 200
     assert recompute_called == []
     assert b'enough votes' in resp.data  # falls back to normal message
+
+
+def test_report_route_uses_filter_snapshot(client, conv):
+    from app import Phase6ResultsFilter
+    conv.active = False
+    conv.phase_public_results = True
+    conv.closed_at = datetime.now(timezone.utc)
+    conv.phase6_polis_conversation_id = 'p6conv1234'
+    conv.report_filter_snapshot = {'excluded_tids': [42], 'excluded_pids': [7]}
+    db.session.commit()
+    seen = {}
+
+    def fake_build(_conv, participation, results_filter=None):
+        seen['filter'] = results_filter
+        return None
+
+    with patch('app._build_phase6_results', side_effect=fake_build):
+        resp = client.get('/c/test-conv/report')
+
+    assert resp.status_code == 200
+    assert seen['filter'] == Phase6ResultsFilter(
+        excluded_tids=frozenset({42}),
+        excluded_pids=frozenset({7}),
+    )
 
 
 # ── Access control ────────────────────────────────────────────────────────────

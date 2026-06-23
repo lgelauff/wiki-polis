@@ -19,6 +19,15 @@
   </div>
   {% endif %}
 
+  {% if conversation.scheduled_transition_at and conversation.scheduled_transition_target and not conversation.scheduled_transition_frozen %}
+  <div class="landing-section output-context">
+    <p class="muted" style="margin:0">
+      Next phase change scheduled for
+      <strong>{{ conversation.scheduled_transition_at.strftime('%Y-%m-%d %H:%M') }} UTC</strong>.
+    </p>
+  </div>
+  {% endif %}
+
   {% if not conversation.active %}
   {% from '_reveal_timeline.html' import reveal_timeline with context %}
   <div class="landing-section">
