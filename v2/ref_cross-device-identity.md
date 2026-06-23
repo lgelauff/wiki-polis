@@ -149,10 +149,15 @@ split. Check `particiapi_users` has the `wiki-polis` issuer resolving **one** ui
 and that a second browser's votes accrue to that uid's single `participant` (no new pid).
 
 ## Staging validation — PASSED (2026-06-23)
-Verified live on `wiki-polis-dev` against the `wiki-polis-staging` Particiapi.
+Verified live on `wiki-polis-dev` against the `wiki-polis-staging` Particiapi, **both** the
+bind-mount (code logic) **and** the built ghcr image (the real prod deploy path).
 - Same Wikimedia user across incognito-Chrome + phone-Chrome → **one** Polis identity
   (`particiapi_users` uid 24, issuer `wiki-polis`) → **one** participant (`pid 12`), votes
   accumulating on it across browsers (no fragmentation). Pre-fix, each session was a new pid.
+- **Built-image dry-run:** swapped staging from the bind-mount to
+  `ghcr.io/lgelauff/particiapi:trusted-sub` (linux/amd64, public) — healthy, patch baked in,
+  secret wired, and a live vote consolidated onto uid 24's single participant. This is the
+  exact build → push → pull → run path prod will use.
 - **Gotchas found (now in this doc):** (1) the missing `particiapi_*` auth tables (above);
   (2) testing on the **`#236` branch** (which bundles the #96 HMAC xid change) while a browser
   still held a session from a **main-based** deploy → the xid differed across the two schemes
@@ -170,8 +175,11 @@ place **before** the secret, so nothing changes behaviour until the last step.
 
 1. **Build the Particiapi image off-VPS.** Build the fork
    (`github.com/lgelauff/particiapi` `feat/trusted-sub-identity`) into an image somewhere
-   other than the VPS (local / CI / ghcr) and push it to a registry the VPS can pull. Do
-   **not** build on the box (tight memory, no swap, prod alongside).
+   other than the VPS (local / CI) and push to a registry the VPS can pull. Do **not** build
+   on the box (tight memory, no swap, prod alongside). The staging dry-run used
+   **`ghcr.io/lgelauff/particiapi:trusted-sub`** (public, `linux/amd64` — the VPS is x86_64;
+   build with `docker buildx build --platform linux/amd64 … --push` from an arm64 Mac).
+   Rebuild a fresh tag for prod (CI workflow is a TODO) rather than reusing a hand-built one.
 2. **Point the prod stack at it + pull.** Update the prod `particiapp-docker` particiapi
    service `image:` to the built tag; `docker-compose -p particiapp-docker … pull particiapi`.
    Do **not** recreate yet.
