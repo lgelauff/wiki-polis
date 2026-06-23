@@ -135,7 +135,7 @@
     <div class="voting-col">
 
       <pa-conversation
-        base="{{ request.url_root }}proxy/particiapi"
+        base="{{ request.url_root }}c/{{ conversation.slug }}/proxy/particiapi"
         conversation-id="{{ conversation.polis_id }}">
 
         {# ── Progress row ── #}
