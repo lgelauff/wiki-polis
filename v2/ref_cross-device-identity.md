@@ -292,6 +292,12 @@ and secret handling rather than on a structural guarantee.
 
 ## Conversation-scoped identity (#246, PR #247) — removes the cross-conversation chain
 
+> **Status: rolled out & verified on production 2026-06-23.** `main` (`8ebeb4b`) deployed to the
+> `wiki-polis` tool via `deploy.sh --migrate` (the only schema change in that deploy was #221's
+> `last_engagement` migration `f4a5b6c7d8e9`; #246 itself adds none), and all sessions cleared. No
+> Particiapi change and no Polis-Postgres DDL — the trusted-sub plumbing from #245 is reused as-is.
+> Behaviour confirmed on staging (below); prod runs the identical server-side code path.
+
 #245 above used the **bare xid** as the trusted subject, giving one person **one uid across all
 conversations**. That is a cross-conversation linkage chain at the Polis layer. #246 scopes the
 subject **per conversation** so the chain no longer exists, while keeping the cross-device
@@ -322,8 +328,9 @@ stability #245 bought.
 bound to the same participant (one uid, identical subject `32b6…`); *test1* bound to a **different**
 uid + subject. Two independent sessions deriving the identical subject confirms determinism.
 
-**Prod cutover (clean, no grandfather).** Deploy PR #247 to prod, then clear sessions exactly as in
-the [Production rollout](#production-rollout-step-by-step) recipe above
-(`DELETE FROM sessions` on the app DB) so everyone re-binds per-conversation. The per-person uids
-minted by #245 on prod orphan the same way the stale staging rows did — acceptable (~1 day of test
-data, no anon→identity merge exists anyway).
+**Prod cutover (clean, no grandfather) — DONE 2026-06-23.** Deployed PR #247 (as part of the `main`
+deploy) and cleared sessions exactly as in the [Production rollout](#production-rollout-step-by-step)
+recipe above (`DELETE FROM sessions` on the app DB — run with the venv interpreter inside the
+webservice shell so `sqlalchemy`/`DATABASE_URL` are present), so everyone re-binds per-conversation.
+The per-person uid minted by #245 on prod (uid 57, subject `480f…`) orphans the same way the stale
+staging rows did — acceptable (~1 day of test data, no anon→identity merge exists anyway).
