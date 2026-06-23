@@ -144,6 +144,7 @@ def test_progressbar_has_static_valuenow(auth_client, conv, participation):
     bar = re.search(rb'role="progressbar"[^>]*>', resp.data)
     assert bar, 'progressbar not rendered'
     assert b'aria-valuenow=' in bar.group(0)
+    assert b'<span class="vote-progress-label">voted</span>' in resp.data
 
 
 # ── The high-value coupling guard ──────────────────────────────────────────────
