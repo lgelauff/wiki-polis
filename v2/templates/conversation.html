@@ -554,8 +554,9 @@
                data-my-pseudonym="{{ participation.pseudonym }}">
             <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--pro" type="button">
               <span class="at-contribute-glyph" style="background:rgba(21,115,74,.15);color:var(--agree);font-weight:700" aria-hidden="true">+</span>
-              Add one for-argument, or skip
+              Add one for-argument
             </button>
+            <button class="at-direct-skip contribute-direct-skip" type="button">Nothing to add</button>
             <div class="contribute-composer">
               <div class="contribute-composer-header">
                 <span class="contribute-glyph filled">+</span>
@@ -680,8 +681,9 @@
                data-my-pseudonym="{{ participation.pseudonym }}">
             <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--con" type="button">
               <span class="at-contribute-glyph" style="background:rgba(178,58,58,.15);color:var(--disagree);font-weight:700" aria-hidden="true">−</span>
-              Add one against-argument, or skip
+              Add one against-argument
             </button>
+            <button class="at-direct-skip contribute-direct-skip" type="button">Nothing to add</button>
             <div class="contribute-composer">
               <div class="contribute-composer-header">
                 <span class="contribute-glyph filled">−</span>
@@ -2032,6 +2034,7 @@
     var ccLen       = wrapper.querySelector('.cc-len');
     var submitBtn   = wrapper.querySelector('.contribute-submit-btn');
     var skipBtn     = wrapper.querySelector('.contribute-skip-btn');
+    var directSkip  = wrapper.querySelector('.contribute-direct-skip');
     var changemind  = wrapper.querySelector('.contribute-changemind');
 
     function setState(s) {
@@ -2056,17 +2059,25 @@
       submitBtn.disabled = len === 0;
     });
 
-    // Skip button → skip API call → skipped state
-    skipBtn.addEventListener('click', function () {
+    function performSkip(trigger) {
       var url   = wrapper.dataset.skipUrl;
       var csrf  = wrapper.dataset.csrf;
+      if (trigger) trigger.disabled = true;
       argFetch(url, csrf).then(function (r) {
         if (r.ok) {
           setState('skipped');
           checkGateTransition(wrapper);
+        } else if (trigger) {
+          trigger.disabled = false;
         }
+      }).catch(function () {
+        if (trigger) trigger.disabled = false;
       });
-    });
+    }
+
+    // Skip buttons → skip API call → skipped state
+    skipBtn.addEventListener('click', function () { performSkip(skipBtn); });
+    if (directSkip) directSkip.addEventListener('click', function () { performSkip(directSkip); });
 
     // Submit button → argument submit API → submitted state + insert card
     submitBtn.addEventListener('click', function () {
