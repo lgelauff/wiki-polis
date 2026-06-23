@@ -169,6 +169,13 @@ bind-mount (code logic) **and** the built ghcr image (the real prod deploy path)
 
 ## Production rollout (step-by-step)
 
+> **Status: rolled out & verified on production 2026-06-23.** DDL applied to the prod
+> Polis Postgres, prod Particiapi swapped to `ghcr.io/lgelauff/particiapi:trusted-sub`,
+> `PARTICIAPI_TRUSTED_SUB_SECRET`/`PARTICIAPI_SUB_SECRET` set, `main` deployed, all
+> sessions cleared. Bind confirmed: a logged-in vote produced a single `wiki-polis`
+> issuer → uid → one participant. The steps below are the runbook (re-usable / for a
+> rebuild).
+
 Prod is **live** and shares the VPS with the box's memory limit, so the staging bind-mount
 trick is not the right move here — build a real image. Order matters: get the plumbing in
 place **before** the secret, so nothing changes behaviour until the last step.
