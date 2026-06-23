@@ -1,12 +1,13 @@
-"""Direct tests for the proxy + statement-submit blueprint (issue #91, step 7).
+"""Direct tests for the Particiapi proxy and statement-submit bridge.
 
 These cover the security-critical behaviours the main suite does NOT exercise. The
 shared `app` fixture runs with `WTF_CSRF_ENABLED=False`, so it cannot catch a broken
 `csrf.exempt(proxy_bp)` — yet CSRF exemption (with same-origin as the compensating
 control) is the core proxy security posture. These tests lock the expected boundary:
 
-- CSRF exemption is active on the blueprint, with manual CSRF on the
-  first-party statement-submit route;
+- CSRF exemption is active on the generic proxy blueprint only;
+- first-party statement submit is a participant route with normal CSRF plus the
+  same-origin provenance check;
 - the same-origin check still gates state-changing requests and fails closed
   when browser provenance headers are missing;
 - the pa_session <-> session cookie rename is preserved in both directions;
@@ -59,8 +60,7 @@ def csrf_client(csrf_enabled_app):
     return csrf_enabled_app.test_client()
 
 
-@pytest.mark.parametrize('path', ['/proxy/particiapi/api/foo',
-                                  '/c/any-slug/statements/new'])
+@pytest.mark.parametrize('path', ['/proxy/particiapi/api/foo'])
 def test_blueprint_routes_are_csrf_exempt(csrf_client, path):
     # No CSRF token, not logged in. If the blueprint were NOT exempt, Flask-WTF would
     # reject at before_request with 400 'CSRF token missing'. Because it IS exempt the
@@ -132,7 +132,7 @@ def test_proxy_post_allows_same_origin(auth_client):
     assert resp.status_code == 200
 
 
-# ── statement-submit route on the blueprint ──────────────────────────────────────
+# ── statement-submit participant route ────────────────────────────────────────────
 
 def test_proxy_rejects_path_traversal_and_non_api(auth_client):
     # CRIT-1 guard: only /api/ paths, no '..' segments — must never reach upstream.
@@ -210,7 +210,7 @@ def test_statement_new_happy_path_records_polis_id(auth_client, participant):
                for c in resp.headers.getlist('Set-Cookie'))
 
 
-def test_statement_new_requires_manual_csrf_when_csrf_enabled(csrf_enabled_app):
+def test_statement_new_requires_csrf_when_csrf_enabled(csrf_enabled_app):
     client = csrf_enabled_app.test_client()
     p = Participant(mw_user_id=10101, mw_username='csrfuser', xid='c' * 64)
     conv = Conversation(slug='csrf-sub', polis_id='csrfxxxxxx', title='CSRF',
@@ -234,7 +234,7 @@ def test_statement_new_requires_manual_csrf_when_csrf_enabled(csrf_enabled_app):
     post.assert_not_called()
 
 
-def test_statement_new_accepts_valid_manual_csrf_when_csrf_enabled(csrf_enabled_app):
+def test_statement_new_accepts_valid_csrf_when_csrf_enabled(csrf_enabled_app):
     client = csrf_enabled_app.test_client()
     p = Participant(mw_user_id=20202, mw_username='csrfok', xid='d' * 64)
     conv = Conversation(slug='csrf-ok', polis_id='csrfokxxxx', title='CSRF OK',

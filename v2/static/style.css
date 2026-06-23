@@ -543,8 +543,6 @@ h3.conv-card-title-wrap {
   margin: 0 auto;
 }
 
-pa-conversation:state(loading) { opacity: 0.5; }
-
 /* ── Progress row ── */
 
 .vote-progress-row {
@@ -615,10 +613,8 @@ pa-conversation:state(loading) { opacity: 0.5; }
   margin-bottom: 0;
 }
 
-/* In voted state, hide the live statement and vote buttons via parent class.
-   Using CSS (not just hidden attr) because pa-statement may re-show itself
-   when it receives the next statement from the web component. */
-.statement-card--voted pa-statement   { display: none !important; }
+/* In voted state, hide the live statement and vote buttons via parent class. */
+.statement-card--voted .statement-text { display: none !important; }
 .statement-card--voted .vote-choice-row { display: none !important; }
 .statement-card--voted .stmt-meta-right { visibility: hidden; }
 
@@ -668,8 +664,14 @@ pa-conversation:state(loading) { opacity: 0.5; }
   color: var(--muted);
 }
 
-/* pa-statement text sizing */
-pa-statement { display: block; }
+.statement-text {
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.28;
+  color: var(--text);
+  margin: 0;
+  text-wrap: pretty;
+}
 
 /* ── Voted badge ── */
 
@@ -763,8 +765,6 @@ pa-statement { display: block; }
 .vote-dot--agree    { background: var(--agree); }
 .vote-dot--pass     { background: var(--pass); }
 .vote-dot--disagree { background: var(--disagree); }
-
-pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
 
 /* ── Propose affordance (3 states) ── */
 
@@ -1178,20 +1178,6 @@ pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
   .v2-triad-grid { grid-template-columns: 1fr; }
   .v2-composer-footer { flex-direction: column; align-items: flex-start; gap: 10px; }
   .v2-composer-btns { width: 100%; justify-content: flex-end; }
-}
-
-/* ── Hidden pa-vote-button/pa-submit-button for API submission ── */
-
-.pvb-hidden {
-  /* These pa-* elements exist only so JS can fire them at the API via .click()
-     (which works on display:none elements). They must NOT be visually-hidden
-     (clip/sr-only), because that keeps them in the a11y tree + tab order — a
-     screen-reader/keyboard user would otherwise hit phantom Agree/Pass/Disagree
-     + submit controls duplicating the visible UI. display:none removes them
-     from layout, the a11y tree, and the tab order while keeping .click() working.
-     NOTE: this whole rule (and the .pvb-hidden span) goes away with #159, which
-     drops the pa-* proxy and talks to Particiapi directly — remove it then. */
-  display: none;
 }
 
 /* ── Statement display ── */

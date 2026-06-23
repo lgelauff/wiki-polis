@@ -27,12 +27,11 @@ from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_wtf.csrf import CSRFProtect, validate_csrf
+from flask_wtf.csrf import CSRFProtect
 from sqlalchemy import text as _sa_text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
-from wtforms.validators import ValidationError
 
 from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideState,
                 ArgumentVote, AuditEvent, Conversation, ConversationInvite, FeaturedStatement,
@@ -893,19 +892,6 @@ def _validate_same_origin():
     abort(403)
 
 
-def _validate_fetch_csrf():
-    """Validate Flask-WTF CSRF for JSON/fetch routes on the exempt proxy blueprint."""
-    if not current_app.config.get('WTF_CSRF_ENABLED', True):
-        return
-    token = (request.headers.get('X-CSRFToken')
-             or request.headers.get('X-CSRF-Token')
-             or request.form.get('csrf_token'))
-    try:
-        validate_csrf(token)
-    except ValidationError:
-        abort(400)
-
-
 def _proxy_to_particiapi(pa_path: str):
     """
     Proxy a browser request to Particiapi and return the response.
@@ -1188,22 +1174,21 @@ def _fetch_statement_text(conv_polis_id: str, tid: int) -> str:
         return ''
 
 
-# ── Proxy + statement-submit blueprint (issue #91, step 7) ──────────────────
-# The security-sensitive cluster: both routes are CSRF-exempt with
-# _validate_same_origin() as the compensating control, and both bridge the
-# browser's renamed 'pa_session' cookie to Particiapi's 'session'. They live on a
-# blueprint (CSRF-exempted in create_app via csrf.exempt(proxy_bp)) instead of the
-# _register_routes closure. Behaviour is byte-identical to the prior inline routes.
+# ── Particiapi proxy + participant statement submit ──────────────────────────
+# The generic Particiapi proxy is CSRF-exempt with _validate_same_origin() as the
+# compensating control and bridges the browser's renamed 'pa_session' cookie to
+# Particiapi's 'session'. First-party statement submission lives on
+# participant_bp so Flask-WTF validates CSRF normally, while the same-origin
+# provenance check remains as an extra browser-request guard.
 proxy_bp = Blueprint('proxy', __name__)
+admin_bp = Blueprint('admin', __name__)
+participant_bp = Blueprint('participant', __name__)
 
-@proxy_bp.post('/c/<slug>/statements/new')
+@participant_bp.post('/c/<slug>/statements/new')
 @login_required
 def conversation_statement_new(slug):
     """Submit an entirely new statement; enforces per-participant quota and
     records the Polis statement ID for novelty tracking."""
-    # This route lives on the CSRF-exempt proxy blueprint for historical reasons,
-    # so validate Flask-WTF's token manually before same-origin checks.
-    _validate_fetch_csrf()
     _validate_same_origin()
 
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
@@ -1282,11 +1267,8 @@ def conversation_statement_new(slug):
 def proxy_particiapi(pa_path):
     return _proxy_to_particiapi(pa_path)
 
-admin_bp = Blueprint('admin', __name__)
-
 # nh3 tag allowlist for CSV import sanitisation — no HTML tags permitted.
 _NH3_NO_TAGS: frozenset[str] = frozenset()
-participant_bp = Blueprint('participant', __name__)
 
 # ── Admin ─────────────────────────────────────────────────────────────────
 
@@ -2475,6 +2457,12 @@ def conversation(slug):
 
 @participant_bp.post('/c/<slug>/arguments/<int:fs_id>/submit')
 @login_required
+def argument_submit_legacy(slug, fs_id):
+    return redirect(url_for('participant.argument_submit', slug=slug, fs_id=fs_id),
+                    code=307)
+
+@participant_bp.post('/c/<slug>/featured-statements/<int:fs_id>/arguments')
+@login_required
 def argument_submit(slug, fs_id):
     conv, part = _require_arg_participation(slug)
     FeaturedStatement.query.filter_by(
@@ -2491,7 +2479,13 @@ def argument_submit(slug, fs_id):
     ).first()
     if existing:
         if request.headers.get('X-Requested-With') == 'fetch':
-            return jsonify({'ok': True, 'id': existing.id, 'body': existing.body})
+            return jsonify({
+                'ok': True,
+                'id': existing.id,
+                'body': existing.body,
+                'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=existing.id),
+                'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=existing.id),
+            })
         return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
     arg = Argument(
@@ -2525,10 +2519,22 @@ def argument_submit(slug, fs_id):
 
     db.session.commit()
     if request.headers.get('X-Requested-With') == 'fetch':
-        return jsonify({'ok': True, 'id': arg.id, 'body': body})
+        return jsonify({
+            'ok': True,
+            'id': arg.id,
+            'body': body,
+            'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=arg.id),
+            'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=arg.id),
+        })
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
 @participant_bp.post('/c/<slug>/arguments/<int:fs_id>/<side>/skip')
+@login_required
+def argument_skip_legacy(slug, fs_id, side):
+    return redirect(url_for('participant.argument_skip', slug=slug, fs_id=fs_id, side=side),
+                    code=307)
+
+@participant_bp.post('/c/<slug>/featured-statements/<int:fs_id>/skip/<side>')
 @login_required
 def argument_skip(slug, fs_id, side):
     conv, part = _require_arg_participation(slug)
@@ -2797,8 +2803,7 @@ def phase6_vote(slug):
 
     vote_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
 
-    # Particiapi vote endpoint: PUT /api/conversations/{id}/votes/{tid} with {value: N}
-    # (matches particiapp-web-client.js line 840-841)
+    # Particiapi vote endpoint: PUT /api/conversations/{id}/votes/{tid} with {value: N}.
     try:
         upstream = requests.put(
             f'{base}/api/conversations/{polis_conv_id}/votes/{tid}',
@@ -3219,9 +3224,8 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     _register_routes(app)
 
-    # Proxy + statement-submit blueprint (#91). Both routes are CSRF-exempt with
-    # _validate_same_origin() as the compensating control; exempt the whole
-    # blueprint explicitly rather than per-route.
+    # Generic Particiapi proxy: CSRF-exempt with _validate_same_origin() as the
+    # compensating control; first-party statement submission is on participant_bp.
     app.register_blueprint(proxy_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(participant_bp)
@@ -3299,29 +3303,6 @@ def _register_routes(app: Flask) -> None:
 
     _dev_login_user = os.environ.get('DEV_LOGIN_USER', '').strip()
     _on_toolforge   = bool(os.environ.get('TOOL_TOOLFORGE_API_URL'))
-
-    if app.debug:
-        import pathlib
-        from flask import send_file as _send_file
-
-        # Resolve particiapp-web-components.js once at startup.
-        # Default: sibling repo layout (particiapp-docker/ next to wiki-polis/).
-        # Override with PARTICIAPP_WEB_COMPONENTS=/abs/path/to/file.js in .env.
-        _WC_DEFAULT = (pathlib.Path(__file__).parent.parent.parent /
-                       'particiapp-docker/subprojects'
-                       '/particiapp-web-components/particiapp-web-components.js')
-        _WC_PATH = pathlib.Path(
-            os.environ.get('PARTICIAPP_WEB_COMPONENTS', str(_WC_DEFAULT))
-        ).resolve()
-
-        @app.before_request
-        def _dev_serve_webcomponents():
-            if request.path == '/static/particiapp-web-components.js':
-                if _WC_PATH.exists():
-                    return _send_file(_WC_PATH, mimetype='application/javascript')
-                app.logger.warning(
-                    'particiapp-web-components.js not found at %s — '
-                    'set PARTICIAPP_WEB_COMPONENTS in .env', _WC_PATH)
 
     if app.debug and _dev_login_user and not _on_toolforge:
         @app.get('/dev-login')
