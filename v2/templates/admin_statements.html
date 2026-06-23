@@ -1,12 +1,20 @@
 {% extends "base.html" %}
+{% block title %}Statements — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block header_crumb %}
+<nav class="header-crumb" aria-label="Admin breadcrumb">
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ conversation.title | truncate(28, True, '…') }}</a>
+  <span class="header-crumb-sep">/</span>
+  <span>Statements</span>
+</nav>
+{% endblock %}
 {% block content %}
 
 <div class="container">
 
   <h2>Statements — {{ conversation.title }}</h2>
-  <p class="muted" style="margin-bottom:1.5rem">
-    <a href="{{ url_for('admin.admin') }}">← admin</a>
-  </p>
 
   <div class="landing-section" style="margin-bottom:1.5rem">
     <h3 style="font-size:16px;margin-bottom:.5rem">How statement management works</h3>

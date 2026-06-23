@@ -1,4 +1,13 @@
 {% extends "base.html" %}
+{% block title %}Manage {{ conversation.title }} — wiki-polis{% endblock %}
+{% block header_crumb %}
+<nav class="header-crumb" aria-label="Admin breadcrumb">
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
+  <span class="header-crumb-sep">/</span>
+  <span>{{ conversation.title | truncate(34, True, '…') }}</span>
+</nav>
+{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='redesign.css') }}?v={{ git_version }}">
 {% endblock %}
@@ -15,17 +24,13 @@
     <span class="role-bar-spacer"></span>
     {# View as participant — just a shortcut link to the participant view (not impersonation). #}
     <a class="view-as-btn" href="{{ url_for('participant.conversation', slug=conversation.slug) }}">
-      View as participant
+      View as participant →
     </a>
   </div>
 </div>
 
 {# base.html already provides <main id="main">; don't nest a second one. #}
 <div class="console">
-
-  <p class="muted" style="margin-bottom:1rem">
-    <a href="{{ url_for('admin.admin') }}">← admin panel</a>
-  </p>
 
   {# ── Consultation header ──────────────────────────────────────────────── #}
   <div class="console-head">

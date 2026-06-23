@@ -1342,6 +1342,28 @@ def test_admin_template_pages_render(admin_client, conv):
     assert resp.status_code == 200
 
 
+def test_admin_mode_header_and_participant_manage_shortcut(admin_client, conv, admin_participant):
+    from db import Participation
+
+    db.session.add(Participation(
+        participant_id=admin_participant.id,
+        conversation_id=conv.id,
+        pseudonym='admin-mode',
+    ))
+    db.session.commit()
+
+    admin_page = admin_client.get(f'/admin/conversations/{conv.id}').data.decode()
+    assert 'site-header--admin' in admin_page
+    assert '<span class="header-mode-badge">Admin</span>' in admin_page
+    assert 'aria-label="Admin breadcrumb"' in admin_page
+    assert 'View as participant' in admin_page
+
+    participant_page = admin_client.get(f'/c/{conv.slug}').data.decode()
+    assert 'site-header--participant' in participant_page
+    assert 'header-mode-badge' not in participant_page
+    assert f'href="/admin/conversations/{conv.id}">Manage</a>' in participant_page
+
+
 def test_phases_toggle_mirrors_results_into_polis_vis_type(admin_client, conv):
     """Enabling a results phase must flip Polis `vis_type` on (1); turning both results
     phases off flips it back to 0 — otherwise GET /results/ stays empty regardless of votes."""

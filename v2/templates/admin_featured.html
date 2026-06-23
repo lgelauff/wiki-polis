@@ -1,13 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Featured statements — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block header_crumb %}
+<nav class="header-crumb" aria-label="Admin breadcrumb">
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ conversation.title | truncate(28, True, '…') }}</a>
+  <span class="header-crumb-sep">/</span>
+  <span>Featured</span>
+</nav>
+{% endblock %}
 {% block content %}
 
 <div class="container">
 
   <h2>Featured statements — {{ conversation.title }}</h2>
-  <p class="muted" style="margin-bottom:1.5rem">
-    <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">← conversation</a>
-  </p>
 
   <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
     Featured statements appear in the argument mapping tab. Participants submit a pro and con
