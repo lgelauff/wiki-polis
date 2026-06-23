@@ -59,6 +59,14 @@ class Conversation(db.Model):
     access_policy = db.Column(db.String(20), nullable=False, default='public')
     created_at   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     closed_at    = db.Column(db.DateTime, nullable=True)   # set on permanent close; drives reveal timeline (irreversible)
+    phase_route   = db.Column(db.String(32), nullable=False, default='default_7',
+                              server_default='default_7')
+    recommended_quantities = db.Column(db.JSON, nullable=True, default=dict)
+    scheduled_transition_at = db.Column(db.DateTime, nullable=True)
+    scheduled_transition_target = db.Column(db.String(32), nullable=True)
+    scheduled_transition_frozen = db.Column(db.Boolean, nullable=False, default=False,
+                                            server_default=sa.false())
+    report_filter_snapshot = db.Column(db.JSON, nullable=True)
 
     # Phase toggles — each controls whether that phase is available to participants.
     # Independent, default off; admin sets them via the conversation panel.

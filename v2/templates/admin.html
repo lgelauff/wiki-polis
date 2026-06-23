@@ -62,6 +62,13 @@
             <option value="invite_only">invite_only</option>
           </select>
         </label>
+        <label>Route
+          <select name="phase_route">
+            {% for key, route in phase_routes.items() %}
+            <option value="{{ key }}">{{ route.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
       </div>
       <div class="edit-row-texts">
         <label>Intro text (HTML, optional)

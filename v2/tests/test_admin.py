@@ -1,6 +1,6 @@
 """Tests for admin conversation management, roles, and phase toggles."""
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -54,6 +54,19 @@ def test_create_conversation(app, admin_client):
     assert conv.title == 'New Conversation'
     assert conv.polis_id == 'newpolis12'
     assert conv.active is True
+
+
+def test_create_conversation_stores_selected_phase_route(admin_client):
+    resp = admin_client.post('/admin/conversations/new', data={
+        'slug': 'short-route',
+        'polis_id': 'shr1234567',
+        'title': 'Short Route',
+        'access_policy': 'public',
+        'phase_route': 'short_results',
+    })
+    assert resp.status_code == 302
+    conv = Conversation.query.filter_by(slug='short-route').first()
+    assert conv.phase_route == 'short_results'
 
 
 def test_create_conversation_invalid_slug_rejected(admin_client):
@@ -583,16 +596,17 @@ def test_reentry_resyncs_instead_of_reinitialising(admin_client, conv):
     assert conv.phase6_polis_conversation_id == 'r6'   # unchanged
 
 
-def test_move_to_public_results_auto_closes(admin_client, conv):
-    """The final transition opens public results and permanently closes the
-    conversation, starting the identity-reveal flow."""
+def test_move_to_public_results_enters_cleanup_window(admin_client, conv):
+    """The final guided transition ends informed voting but does not stamp
+    closed_at; publication is a separate cleanup-window action."""
     conv.phase_informed_voting = True
     db.session.commit()
     _move(admin_client, conv)
     db.session.refresh(conv)
     assert conv.phase_public_results is True
-    assert conv.active is False
-    assert conv.closed_at is not None
+    assert conv.phase_informed_voting is False
+    assert conv.active is True
+    assert conv.closed_at is None
 
 
 def test_move_on_closed_conversation_jumps_to_public_results(admin_client, conv):
@@ -704,6 +718,22 @@ def test_featured_check_shows_selected_count_and_recommendation(admin_client, co
     resp = admin_client.get(f'/admin/conversations/{conv.id}')
     assert resp.status_code == 200
     assert b'2 selected, 15 recommended' in resp.data
+
+
+def test_recommendation_override_updates_featured_guidance(admin_client, conv):
+    conv.phase_personal_results = True
+    db.session.commit()
+    _add_featured(conv)
+    admin_client.post(f'/admin/conversations/{conv.id}/recommendations', data={
+        'tier': 'complex',
+        'seed_statements': '11',
+        'featured_statements': '21',
+        'arguments_per_featured': '4',
+        'votes_per_statement': '60',
+    })
+    resp = admin_client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'1 selected, 21 recommended' in resp.data
 
 
 def test_featured_check_zero_confirmed_suppresses_count(admin_client, conv):
@@ -1069,6 +1099,72 @@ def test_close_conversation_sets_closed_at(admin_client, conv):
     assert conv.active is False
     assert conv.paused is False
     assert conv.closed_at is not None
+    assert conv.report_filter_snapshot == {'excluded_tids': [], 'excluded_pids': []}
+
+
+def test_publish_final_report_requires_cleanup_checklist(admin_client, conv):
+    conv.phase_public_results = True
+    conv.phase6_polis_conversation_id = 'p6conv1234'
+    db.session.commit()
+
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/close',
+                             data={'cleanup_reviewed_results': 'on'},
+                             follow_redirects=True)
+    assert resp.status_code == 200
+    assert b'Complete every cleanup checklist' in resp.data
+    db.session.refresh(conv)
+    assert conv.active is True
+    assert conv.closed_at is None
+
+
+def test_publish_final_report_snapshots_phase6_filter(admin_client, conv):
+    conv.phase_public_results = True
+    conv.phase6_polis_conversation_id = 'p6conv1234'
+    db.session.commit()
+    data = {
+        'cleanup_reviewed_results': 'on',
+        'cleanup_moderated_flagged': 'on',
+        'cleanup_reviewed_exclusions': 'on',
+        'cleanup_report_intro': 'on',
+    }
+    with patch('app.PolisServerClient.get_statements',
+               return_value=([], [], [{'tid': 42, 'txt': 'hidden'}])):
+        resp = admin_client.post(f'/admin/conversations/{conv.id}/close', data=data)
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.active is False
+    assert conv.closed_at is not None
+    assert conv.report_filter_snapshot == {'excluded_tids': [42], 'excluded_pids': []}
+
+
+def test_schedule_active_to_passive_transition(admin_client, conv):
+    conv.phase_submission = True
+    db.session.commit()
+    when = (datetime.now(timezone.utc) + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/phase/schedule',
+                             data={'scheduled_at': when})
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.scheduled_transition_target == 'featured_selection'
+    assert conv.scheduled_transition_at is not None
+    assert conv.scheduled_transition_frozen is False
+
+
+def test_due_schedule_fires_and_clears(app, admin_client, conv):
+    import app as app_module
+    conv.phase_submission = True
+    conv.scheduled_transition_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    conv.scheduled_transition_target = 'featured_selection'
+    db.session.commit()
+
+    with patch('app.PolisServerClient.set_vis_type', return_value=True):
+        result = app_module._process_due_scheduled_transitions()
+
+    assert result['fired'] == 1
+    db.session.refresh(conv)
+    assert conv.phase_submission is False
+    assert conv.phase_personal_results is True
+    assert conv.scheduled_transition_at is None
 
 
 def test_close_already_closed_rejected(admin_client, conv):

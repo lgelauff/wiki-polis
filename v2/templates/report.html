@@ -33,6 +33,26 @@
     <span class="report-badge">Final</span>
   </div>
 
+  {% if output_context %}
+  <div class="report-section output-context">
+    <h2 class="report-section-heading">How to read this output</h2>
+    <dl class="output-context-grid">
+      <div>
+        <dt>Produced from</dt>
+        <dd>{{ output_context.phase }}</dd>
+      </div>
+      <div>
+        <dt>Status</dt>
+        <dd>Final · frozen at publication</dd>
+      </div>
+      <div>
+        <dt>Method</dt>
+        <dd>{{ output_context.method }}</dd>
+      </div>
+    </dl>
+  </div>
+  {% endif %}
+
   {# ── Introduction ─────────────────────────────────────────────────────────── #}
   <div class="report-section">
     <h2 class="report-section-heading">Introduction</h2>
