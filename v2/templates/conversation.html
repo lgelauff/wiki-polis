@@ -1726,16 +1726,23 @@
   var currentIdx = 0;
 
   // Completion state per panel: 'none' | 'half' | 'complete'
+  function sideContributionDone(wrapper) {
+    if (!wrapper) return false;
+    var state = wrapper.dataset.state;
+    return state === 'submitted' || state === 'skipped';
+  }
+
   function getPanelState(panel) {
     if (!panel) return 'none';
     var bothGate = panel.dataset.bothGate === 'true';
     var proReady = panel.dataset.proVoteReady === 'true';
     var conReady = panel.dataset.conVoteReady === 'true';
-    if (!bothGate) return 'none';
-    // half = both_gate true but prioritise not yet fully voted on at least one side
     var fsId = panel.id.replace('fs-', '');
-    var wrapper = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
-    var k = wrapper ? parseInt(wrapper.dataset.k || '2', 10) : 2;
+    var proWrapper = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
+    var conWrapper = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="con"]');
+    if (!bothGate || !sideContributionDone(proWrapper) || !sideContributionDone(conWrapper)) return 'none';
+    // half = both_gate true but prioritise not yet fully voted on at least one side
+    var k = proWrapper ? parseInt(proWrapper.dataset.k || '2', 10) : 2;
     var pickedPro = panel.querySelectorAll('.argument-card[data-side="pro"][data-picked="true"]').length;
     var pickedCon = panel.querySelectorAll('.argument-card[data-side="con"][data-picked="true"]').length;
     // A side is "done" if: not vote-ready (volume gate not met, nothing to pick) OR picks == k
