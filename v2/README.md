@@ -16,8 +16,8 @@ The live wiki-polis app. Replaces the retired hosted pol.is embed with a self-ho
 | `guide_deployment.md` | Step-by-step deployment guide (Toolforge + Cloud VPS) |
 | `guide_runbook.md` | Operator runbook — day-2 operations |
 | `pub_privacy.md` | Privacy & data-handling statement (draft, pre-publication) |
-| `guide_organizer.md` | How to run a consultation (AI draft, unreviewed) |
-| `pub_participant-help.md` | Participant help — voting, statements, arguments (AI draft, pre-publication) |
+
+> The organizer guide and participant help now live in [`/guidance`](../guidance/) (`guide_organizer.md`, `pub_participant-help.md`).
 
 ## Directories
 
