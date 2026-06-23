@@ -54,13 +54,21 @@ bool=F · `notify_talk_page` bool=F · `public_username` (nullable) · `revealed
   quota used = `len(new_stmt_ids)`, slots consumed at submit time and never returned.
 - `last_engagement` records recent meaningful actions only; passive page views are not tracked.
 
+### `conversation_bans`
+`id` PK · `conversation_id` FK (CASCADE) · `participant_id` FK (CASCADE) ·
+`banned_by_id` FK→participants (**SET NULL**) · `summary` · `created_at` ·
+`lifted_at` nullable · `lifted_by_id` FK→participants (**SET NULL**) ·
+`lift_summary`.
+- Active ban = `lifted_at IS NULL`. Bans are conversation-scoped; existing content
+  remains and is handled separately by moderation.
+
 ### `conversation_invites`
 `id` PK · `conversation_id` FK (CASCADE) · `mw_username` · `created_at`. Unique
 `(conversation_id, mw_username)`.
 
 ### `admin_roles`
 `id` PK · `participant_id` FK (CASCADE) · `conversation_id` FK (CASCADE) · `role`
-enum(`moderator`) · `granted_at` · `granted_by` FK→participants (**SET NULL**). Unique
+enum(`moderator`, `organizer`) · `granted_at` · `granted_by` FK→participants (**SET NULL**). Unique
 `(participant_id, conversation_id, role)`.
 
 ### `featured_statements`

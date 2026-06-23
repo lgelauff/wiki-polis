@@ -1,7 +1,7 @@
 """Tests for the argument mapping layer: submit, skip, vote, admin featured."""
 import pytest
 
-from db import (Argument, ArgumentSideState, ArgumentVote, Conversation,
+from db import (Argument, ArgumentSideState, ArgumentVote, Conversation, ConversationBan,
                 FeaturedStatement, Participant, Participation, db)
 from tests.conftest import login
 
@@ -174,6 +174,61 @@ def test_submit_blocked_on_inactive_conv(auth_client, app, participant, fs):
         'side': 'pro', 'body': 'Should be blocked.',
     })
     assert resp.status_code == 403
+
+
+def test_banned_participant_cannot_submit_argument(auth_client, arg_conv, arg_part, fs, participant):
+    db.session.add(ConversationBan(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        summary='spam',
+    ))
+    db.session.commit()
+    resp = auth_client.post(f'/c/arg-conv/arguments/{fs.id}/submit', data={
+        'side': 'pro', 'body': 'Should be blocked.',
+    })
+    assert resp.status_code == 403
+    assert Argument.query.filter_by(
+        proposer_id=participant.id,
+        featured_statement_id=fs.id,
+    ).first() is None
+
+
+def test_banned_participant_cannot_submit_statement_or_proxy_vote(auth_client, participant):
+    conv = Conversation(
+        slug='ban-write',
+        polis_id='ban1234567',
+        title='Ban Write',
+        active=True,
+        access_policy='public',
+        phase_submission=True,
+    )
+    db.session.add(conv)
+    db.session.flush()
+    db.session.add(Participation(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        pseudonym='ban-fox',
+    ))
+    db.session.add(ConversationBan(
+        conversation_id=conv.id,
+        participant_id=participant.id,
+        summary='blocked',
+    ))
+    db.session.commit()
+
+    stmt_resp = auth_client.post(
+        '/c/ban-write/statements/new',
+        json={'text': 'Should be blocked.'},
+        headers={'Sec-Fetch-Site': 'same-origin'},
+    )
+    vote_resp = auth_client.put(
+        '/proxy/particiapi/api/conversations/ban1234567/votes/1',
+        json={'value': -1},
+        headers={'Sec-Fetch-Site': 'same-origin'},
+    )
+
+    assert stmt_resp.status_code == 403
+    assert vote_resp.status_code == 403
 
 
 # ── Skip ──────────────────────────────────────────────────────────────────────

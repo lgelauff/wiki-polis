@@ -35,8 +35,9 @@ from sqlalchemy.orm import joinedload
 from wtforms.validators import ValidationError
 
 from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideState,
-                ArgumentVote, AuditEvent, Conversation, ConversationInvite, FeaturedStatement,
-                Participant, Participation, StatementProvenance, StatementSimilarityScore, db)
+                ArgumentVote, AuditEvent, Conversation, ConversationBan, ConversationInvite,
+                FeaturedStatement, Participant, Participation, StatementProvenance,
+                StatementSimilarityScore, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
 from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
@@ -904,6 +905,21 @@ def _require_organizer_for_conv(conv_id: int) -> 'Conversation':
     return conv
 
 
+def _active_conversation_ban(conversation, participant: 'Participant | None'):
+    if participant is None:
+        return None
+    return ConversationBan.query.filter_by(
+        conversation_id=conversation.id,
+        participant_id=participant.id,
+        lifted_at=None,
+    ).first()
+
+
+def _abort_if_banned(conversation, participant: 'Participant | None') -> None:
+    if _active_conversation_ban(conversation, participant):
+        abort(403)
+
+
 def _check_conversation_access(conversation, participant) -> None:
     if conversation.access_policy != 'invite_only':
         return
@@ -995,6 +1011,13 @@ def _proxy_to_particiapi(pa_path: str):
     # Particiapi returns 403 (auth required) unless we add ?create=true.
     if pa_path == 'api/session' and request.method == 'POST' and not pa_cookie:
         params['create'] = 'true'
+
+    interaction_match = re.match(r'^api/conversations/([^/]+)/(votes(?:/\d+)?|statements/?)(?:/)?$', pa_path)
+    if request.method in ('POST', 'PUT') and interaction_match:
+        participant = _current_participant()
+        conv = Conversation.query.filter_by(polis_id=interaction_match.group(1)).first()
+        if conv:
+            _abort_if_banned(conv, participant)
 
     headers = {}
     if request.method in ('POST', 'PUT'):
@@ -1225,6 +1248,7 @@ def _require_arg_participation(slug):
         participant_id=participant.id,
         conversation_id=conv.id,
     ).first_or_404()
+    _abort_if_banned(conv, participant)
     return conv, part
 
 def _backfill_statement_texts(conv, confirmed: list) -> bool:
@@ -1283,6 +1307,7 @@ def conversation_statement_new(slug):
     part = Participation.query.filter_by(
         participant_id=participant.id, conversation_id=conv.id,
     ).with_for_update().first_or_404()
+    _abort_if_banned(conv, participant)
 
     new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
     if len(part.new_stmt_ids or []) >= new_stmt_max:
@@ -1614,6 +1639,13 @@ def admin_conversation_participants(conv_id):
 
     client = _polis_server_client()
     statement_progress_unavailable = bool(current_app.config.get('POLIS_DATABASE_URL'))
+    active_bans = {
+        ban.participant_id: ban
+        for ban in ConversationBan.query.filter_by(
+            conversation_id=conv_id,
+            lifted_at=None,
+        ).all()
+    }
     rows = []
     for part in participations:
         progress_row = None
@@ -1628,6 +1660,7 @@ def admin_conversation_participants(conv_id):
             'statement_progress': progress_row,
             'arguments_submitted': int(submitted_counts.get(part.participant_id, 0)),
             'arguments_voted': int(voted_counts.get(part.participant_id, 0)),
+            'active_ban': active_bans.get(part.participant_id),
         })
 
     return render_template(
@@ -1636,6 +1669,62 @@ def admin_conversation_participants(conv_id):
         rows=rows,
         statement_progress_unavailable=statement_progress_unavailable,
     )
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/participants/<int:participant_id>/ban')
+@login_required
+def admin_participant_ban(conv_id, participant_id):
+    conv = _require_mod_for_conv(conv_id)
+    Participation.query.filter_by(
+        conversation_id=conv_id,
+        participant_id=participant_id,
+    ).first_or_404()
+    existing = ConversationBan.query.filter_by(
+        conversation_id=conv_id,
+        participant_id=participant_id,
+        lifted_at=None,
+    ).first()
+    if existing:
+        flash('Participant is already banned from this conversation.', 'warning')
+        return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
+
+    summary = nh3.clean((request.form.get('summary') or '').strip(), tags=_NH3_NO_TAGS)[:1000]
+    actor = _current_participant()
+    ban = ConversationBan(
+        conversation_id=conv_id,
+        participant_id=participant_id,
+        banned_by_id=actor.id if actor else None,
+        summary=summary or None,
+    )
+    db.session.add(ban)
+    db.session.commit()
+    record_audit('participant.ban', conv_id=conv.id, target_type='participant',
+                 target_id=participant_id, scope='conversation',
+                 summary_present=bool(summary))
+    flash('Participant banned from this conversation.', 'success')
+    return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/participants/<int:participant_id>/unban')
+@login_required
+def admin_participant_unban(conv_id, participant_id):
+    conv = _require_mod_for_conv(conv_id)
+    ban = ConversationBan.query.filter_by(
+        conversation_id=conv_id,
+        participant_id=participant_id,
+        lifted_at=None,
+    ).first_or_404()
+    summary = nh3.clean((request.form.get('summary') or '').strip(), tags=_NH3_NO_TAGS)[:1000]
+    actor = _current_participant()
+    ban.lifted_at = datetime.now(timezone.utc)
+    ban.lifted_by_id = actor.id if actor else None
+    ban.lift_summary = summary or None
+    db.session.commit()
+    record_audit('participant.unban', conv_id=conv.id, target_type='participant',
+                 target_id=participant_id, scope='conversation',
+                 summary_present=bool(summary))
+    flash('Participant unbanned from this conversation.', 'success')
+    return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/new')
 @login_required
@@ -2963,6 +3052,7 @@ def phase6_vote(slug):
     ).first()
     if not participation:
         abort(403)
+    _abort_if_banned(conv, participant)
 
     if not conv.phase_informed_voting or not conv.phase6_polis_conversation_id:
         abort(404)

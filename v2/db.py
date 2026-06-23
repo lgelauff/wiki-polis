@@ -126,6 +126,25 @@ class Participation(db.Model):
     conversation = db.relationship('Conversation', back_populates='participations')
 
 
+class ConversationBan(db.Model):
+    __tablename__ = 'conversation_bans'
+
+    id              = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
+    participant_id  = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='CASCADE'), nullable=False)
+    banned_by_id    = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
+    summary         = db.Column(db.Text, nullable=True)
+    created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    lifted_at       = db.Column(db.DateTime, nullable=True)
+    lifted_by_id    = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
+    lift_summary    = db.Column(db.Text, nullable=True)
+
+    conversation = db.relationship('Conversation')
+    participant  = db.relationship('Participant', foreign_keys=[participant_id])
+    banned_by    = db.relationship('Participant', foreign_keys=[banned_by_id])
+    lifted_by    = db.relationship('Participant', foreign_keys=[lifted_by_id])
+
+
 class ConversationInvite(db.Model):
     __tablename__  = 'conversation_invites'
     __table_args__ = (db.UniqueConstraint('conversation_id', 'mw_username'),)
@@ -347,6 +366,8 @@ class StatementSimilarityScore(db.Model):
 # Cover the highest-volume lookup patterns in the argument mapping flow.
 db.Index('ix_participations_participant_id', Participation.participant_id)
 db.Index('ix_participations_conversation_id', Participation.conversation_id)
+db.Index('ix_conversation_bans_conversation_participant',
+         ConversationBan.conversation_id, ConversationBan.participant_id)
 db.Index('ix_arguments_featured_statement_id', Argument.featured_statement_id)
 db.Index('ix_arguments_proposer_id', Argument.proposer_id)
 db.Index('ix_argument_votes_argument_id', ArgumentVote.argument_id)

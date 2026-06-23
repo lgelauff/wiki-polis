@@ -1282,6 +1282,42 @@ def test_participants_page_shows_engagement_metrics(app, admin_client, conv, par
     assert '2026-06-23 12:30' in page
 
 
+def test_admin_can_ban_and_unban_participant(admin_client, conv, participant):
+    from db import ConversationBan, Participation
+
+    db.session.add(Participation(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        pseudonym='ban-lion',
+    ))
+    db.session.commit()
+
+    ban_resp = admin_client.post(
+        f'/admin/conversations/{conv.id}/participants/{participant.id}/ban',
+        data={'summary': '<b>spam</b>'},
+        follow_redirects=True,
+    )
+    ban = ConversationBan.query.filter_by(
+        conversation_id=conv.id,
+        participant_id=participant.id,
+        lifted_at=None,
+    ).first()
+    assert ban_resp.status_code == 200
+    assert ban is not None
+    assert ban.summary == 'spam'
+    assert b'Banned' in ban_resp.data
+
+    unban_resp = admin_client.post(
+        f'/admin/conversations/{conv.id}/participants/{participant.id}/unban',
+        data={'summary': 'resolved'},
+        follow_redirects=True,
+    )
+    db.session.refresh(ban)
+    assert unban_resp.status_code == 200
+    assert ban.lifted_at is not None
+    assert ban.lift_summary == 'resolved'
+
+
 # ── Template-render smoke test (#92 blueprint extraction) ───────────────────────
 # The admin routes moved onto Blueprint('admin'), so every `url_for('admin…')` in the
 # admin templates was requalified to `url_for('admin.admin…')`. The rest of this suite

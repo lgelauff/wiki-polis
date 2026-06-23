@@ -64,6 +64,8 @@ the specific conversation. The shared authorization helper is
 | `/admin/conversations/<conv_id>/invites/add` | POST | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/invites/<invite_id>/remove` | POST | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/participants` | GET | Conversation moderator or global admin. |
+| `/admin/conversations/<conv_id>/participants/<participant_id>/ban` | POST | Conversation moderator or global admin. |
+| `/admin/conversations/<conv_id>/participants/<participant_id>/unban` | POST | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/statements` | GET | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/statements/<tid>/moderate` | POST | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/statements/seed` | POST | Conversation moderator or global admin. |

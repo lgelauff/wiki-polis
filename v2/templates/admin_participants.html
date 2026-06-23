@@ -32,6 +32,7 @@
         <th>Arguments submitted</th>
         <th>Arguments voted</th>
         <th>Last engagement</th>
+        <th>Access</th>
       </tr>
     </thead>
     <tbody>
@@ -62,10 +63,34 @@
             <span class="muted">No actions yet</span>
           {% endif %}
         </td>
+        <td style="min-width:210px">
+          {% if row.active_ban %}
+            <div style="font-size:13px;margin-bottom:.5rem">
+              <strong>Banned</strong>
+              <span class="muted">since {{ row.active_ban.created_at.strftime('%Y-%m-%d') }}</span>
+              {% if row.active_ban.summary %}
+                <div class="muted" style="margin-top:.25rem">{{ row.active_ban.summary }}</div>
+              {% endif %}
+            </div>
+            <form method="post"
+                  action="{{ url_for('admin.admin_participant_unban', conv_id=conversation.id, participant_id=row.participant.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="text" name="summary" placeholder="Unban note (optional)" style="width:100%;margin-bottom:.35rem">
+              <button type="submit" class="btn-small">unban</button>
+            </form>
+          {% else %}
+            <form method="post"
+                  action="{{ url_for('admin.admin_participant_ban', conv_id=conversation.id, participant_id=row.participant.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="text" name="summary" placeholder="Reason (optional)" style="width:100%;margin-bottom:.35rem">
+              <button type="submit" class="btn-small btn-danger">ban</button>
+            </form>
+          {% endif %}
+        </td>
       </tr>
       {% else %}
       <tr>
-        <td colspan="6" class="muted">No participants have joined yet.</td>
+        <td colspan="7" class="muted">No participants have joined yet.</td>
       </tr>
       {% endfor %}
     </tbody>
