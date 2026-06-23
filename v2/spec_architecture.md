@@ -91,8 +91,15 @@ Single login. Particiapi is on an internal Docker network — not publicly acces
 
 1. User hits Flask (Toolforge) → Wikimedia OAuth → Flask session established
 2. Flask looks up or creates the user's xid
-3. User votes → browser calls Flask → Flask proxies the request to Particiapi with the xid as the participant identity
-4. Particiapi records the vote against the xid in Polis
+3. User votes → browser calls Flask → Flask proxies the request to Particiapi
+4. On session-create the proxy asserts the user's stable identity to Particiapi (the xid,
+   via a trusted-subject header) so the same user keeps **one** Polis participant across
+   devices; Particiapi records votes against that uid in Polis
+
+> **Note:** step 4 is gated on the `PARTICIAPI_SUB_SECRET` ↔ `TRUSTED_SUB_SECRET` shared
+> secret being set on both sides. Without it, Particiapi mints a **new anonymous
+> participant per session** (one person fragments into many). Mechanism, the bug it fixes,
+> and deploy steps: [`ref_cross-device-identity.md`](ref_cross-device-identity.md).
 
 Particiapi runs with `PARTICIAPI_AUTHENTICATION_DISABLED=True`. It trusts requests from
 Flask. The browser never communicates with Particiapi directly.
