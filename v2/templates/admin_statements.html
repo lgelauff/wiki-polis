@@ -8,6 +8,25 @@
     <a href="{{ url_for('admin.admin') }}">← admin</a>
   </p>
 
+  <div class="landing-section" style="margin-bottom:1.5rem">
+    <h3 style="font-size:16px;margin-bottom:.5rem">How statement management works</h3>
+    <p class="muted" style="font-size:13px;margin-bottom:.6rem">
+      Pending statements are held for moderator review. Approve makes a statement visible
+      for participant voting, hide removes it from participant voting, and pending returns
+      an approved or hidden statement to the review queue.
+    </p>
+    <ul style="font-size:13px;padding-left:1.25rem;margin-bottom:.6rem">
+      <li>Vote counts show agree, disagree, and pass totals from Polis when the statistics database is available.</li>
+      <li>Seed statements come from moderator entry or imports; participant-submitted statements appear in the same moderation lists.</li>
+      <li>A star marks statements already selected as featured. A correction marker links derived statements back to the original TID.</li>
+      <li>Seed entry and imports are available only during preparation or open statement submission.</li>
+    </ul>
+    <p class="muted" style="font-size:13px;margin-bottom:0">
+      CSV and text imports strip spreadsheet formula prefixes, remove HTML, reject invalid
+      rows as a batch, and skip statements already present in the conversation.
+    </p>
+  </div>
+
 
   {% with messages = get_flashed_messages(with_categories=true) %}
   {% for category, message in messages %}
