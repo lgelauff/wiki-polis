@@ -117,6 +117,13 @@ def test_home_pseudonym_announced_with_context(auth_client, conv, participation)
     assert '<span class="conv-card-badge" aria-hidden="true">happy-fox</span>' in html
 
 
+def test_mobile_home_cards_keep_visible_tap_affordance():
+    css = open(_STYLE_CSS, encoding='utf-8').read()
+    assert '.conv-card-action { display: none; }' in css
+    assert 'a.conv-card::after' in css
+    assert "content: '\\203A';" in css
+
+
 # ── Name/role/value affordances (4.1.2 / 1.3.1) ────────────────────────────────
 
 def test_composer_textareas_have_accessible_names(auth_client, conv, participation):

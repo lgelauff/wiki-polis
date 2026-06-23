@@ -335,6 +335,20 @@ header {
 @media (max-width: 600px) {
   .home-container { padding: 0 1rem; }
   .conv-card { padding: 12px 14px; }
+  a.conv-card {
+    position: relative;
+    padding-right: 42px;
+  }
+  a.conv-card::after {
+    content: '\203A';
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--pass);
+    font-size: 22px;
+    line-height: 1;
+  }
   .conv-card-action { display: none; }
 }
 
