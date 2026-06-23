@@ -268,6 +268,12 @@ so it's worth being honest about what that does and does not protect.
   per-conversation **coolname pseudonyms**, which are not linked across conversations and not
   tied to the Wikimedia name. Voting stays pseudonymous to other participants.
 
+> **Superseded by #246 (conversation-scoped identity) — see the section below.** The "stable
+> per-person identifier across all conversations" described here was the #245 behaviour. #246
+> scopes the subject **per conversation**, so the cross-conversation linkage at the Polis layer
+> no longer exists. The Wikimedia-account *confirmation* limit (subject recomputable from an
+> enumerable `mw_user_id`) still applies **per conversation**.
+
 **But it is not perfect — this is operational protection, not cryptographic unlinkability:**
 - An operator / anyone with **DB or exported-dataset access can link a person's participation
   across all conversations** (one stable `uid`), and on prod can **confirm which Wikimedia
@@ -283,3 +289,41 @@ so it's worth being honest about what that does and does not protect.
 In short: acceptable given the Wikimedia-pseudonym model and internal-only handling, but it
 trades away cross-conversation unlinkability at the operator level and leans on export hygiene
 and secret handling rather than on a structural guarantee.
+
+## Conversation-scoped identity (#246, PR #247) — removes the cross-conversation chain
+
+#245 above used the **bare xid** as the trusted subject, giving one person **one uid across all
+conversations**. That is a cross-conversation linkage chain at the Polis layer. #246 scopes the
+subject **per conversation** so the chain no longer exists, while keeping the cross-device
+stability #245 bought.
+
+**Mechanism (wiki-polis side only — no Particiapi change):**
+- `_conversation_subject(xid, conv)` = `HMAC(PARTICIAPI_SUB_SECRET or SECRET_KEY, "{xid}:{conv.id}")`.
+  Deterministic per `(person, conversation)`: same person + same conversation → same subject →
+  same `uid` (across devices); different conversation → different subject → different `uid`.
+  `conv.id` (not the zid) keys it, so a conversation's P2/P6 zids share one uid.
+- New route `/c/<slug>/proxy/particiapi/<path>`; the participant client's proxy root points at it.
+  The `pa_session` cookie is **path-scoped** to `/c/<slug>/proxy/particiapi`, so the browser only
+  returns it on that conversation's calls — each conversation gets its own Polis session/uid with
+  no extra client logic. Legacy root route kept for back-compat (`conv=None` → bare-xid).
+
+**What it changes about the privacy posture above:**
+- The operator can **no longer link a person across conversations** at the Polis layer (different
+  `uid` + `subject` per conversation). The export-hygiene guardrail (#226) still matters, but a
+  leak now exposes per-conversation identity, not a cross-conversation chain.
+- Within a single conversation the Wikimedia-account *confirmation* limit is unchanged: the
+  subject is `HMAC(secret, "{xid}:{conv.id}")` and the xid is recomputable from an enumerable
+  `mw_user_id` only by a holder of both the xid scheme and `PARTICIAPI_SUB_SECRET`.
+- Side effect: admin-authored statements are no longer distinguishable by a stable
+  cross-conversation `uid` — acceptable / desirable.
+
+**Staging validation — PASSED (2026-06-23).** Combined branch `test/246-on-236` on `wiki-polis-dev`
+(staging DB is at #236 schema). One Wikimedia user: *dogs vs cats* on laptop **and** mobile both
+bound to the same participant (one uid, identical subject `32b6…`); *test1* bound to a **different**
+uid + subject. Two independent sessions deriving the identical subject confirms determinism.
+
+**Prod cutover (clean, no grandfather).** Deploy PR #247 to prod, then clear sessions exactly as in
+the [Production rollout](#production-rollout-step-by-step) recipe above
+(`DELETE FROM sessions` on the app DB) so everyone re-binds per-conversation. The per-person uids
+minted by #245 on prod orphan the same way the stale staging rows did — acceptable (~1 day of test
+data, no anon→identity merge exists anyway).
