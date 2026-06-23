@@ -90,8 +90,8 @@ def test_semantic_similarity_sidecar_score_is_recorded(app):
     assert models['semantic'] == 0.82
     assert 'char' in models
     assert post.call_args.kwargs['json'] == {
-        'source': 'the parent statement',
-        'candidate': 'the revised parent statement',
+        'left': 'the parent statement',
+        'right': 'the revised parent statement',
     }
 
 

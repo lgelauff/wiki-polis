@@ -3678,8 +3678,8 @@ def _char_similarity(new_text, parent_text):
 def _semantic_similarity(new_text, parent_text):
     """Semantic scorer (#207) backed by the optional embedding sidecar (#208).
 
-    Contract: POST STATEMENT_SIMILARITY_URL with
-    {"source": parent_text, "candidate": new_text}; response {"similarity": float}.
+    Contract (matches the embedding sidecar #208): POST STATEMENT_SIMILARITY_URL with
+    {"left": parent_text, "right": new_text}; response {"similarity": float}.
     The call is best-effort and short-timeout; absent config or sidecar failure returns
     None so the always-available char score remains the fallback.
     """
@@ -3690,7 +3690,7 @@ def _semantic_similarity(new_text, parent_text):
     try:
         resp = requests.post(
             url,
-            json={'source': parent_text or '', 'candidate': new_text or ''},
+            json={'left': parent_text or '', 'right': new_text or ''},
             headers={'User-Agent': _MW_USER_AGENT},
             timeout=timeout,
         )
