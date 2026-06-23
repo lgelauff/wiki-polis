@@ -1479,6 +1479,7 @@ h3.conv-card-title-wrap {
   gap: 6px;
   padding: 2px 0;
   min-height: 24px; /* WCAG 2.5.8 target size */
+  min-width: 24px;  /* #157 m4: symmetric target, not height-only */
   font-family: var(--sans);
 }
 
@@ -2685,9 +2686,11 @@ a { color: var(--pass); }
 .argument-checkbox {
   flex-shrink: 0;
   margin-top: 1px;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;   /* WCAG 2.5.8 (#157 M1): >=24x24 target */
+  min-height: 24px;
+  border-radius: 6px;
   border: 1.5px solid transparent;
   background: transparent;
   cursor: default;
