@@ -210,6 +210,15 @@ def test_all_complete_state_requires_side_contribution_states():
     assert '!sideContributionDone(conWrapper)' in template
 
 
+def test_all_done_interlude_copy_is_not_reversibility_copy(
+        auth_client, arg_conv, arg_part, fs):
+    resp = auth_client.get('/c/arg-conv')
+    assert resp.status_code == 200
+    html = resp.data.decode()
+    assert 'Nice work. Review the importance choices below where they are available.' in html
+    assert 'Nothing is locked in' not in html
+
+
 # ── Importance voting ─────────────────────────────────────────────────────────
 
 def _pass_gate(client, slug, fs_id):
