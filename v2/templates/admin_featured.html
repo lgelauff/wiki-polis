@@ -14,6 +14,24 @@
     argument for each, then vote on the most important arguments submitted by others.
   </p>
 
+  <div class="landing-section" style="margin-bottom:1.5rem">
+    <h3 style="font-size:16px;margin-bottom:.5rem">How to choose featured statements</h3>
+    <p class="muted" style="font-size:13px;margin-bottom:.6rem">
+      Featured statements are the representative set that carries the rest of the consultation:
+      they become the prompts for argument mapping and are seeded into informed voting.
+      Aim for a balanced set across the main viewpoints, not only the most popular statements.
+    </p>
+    <ul style="font-size:13px;padding-left:1.25rem;margin-bottom:.6rem">
+      <li>Use roughly 15 statements as a working target, then adjust for topic complexity.</li>
+      <li>Prefer statements with enough votes to indicate signal, while preserving minority viewpoints.</li>
+      <li>Once argument mapping begins, treat the selected set as locked; changing it later can confuse participants and downstream Phase 6 seeding.</li>
+    </ul>
+    <p class="muted" style="font-size:13px;margin-bottom:0">
+      System suggestions are ranked candidates from the Polis data. Manual TID adds are for
+      known statements that should be included even if they are not surfaced by the suggestion query.
+    </p>
+  </div>
+
   {% with messages = get_flashed_messages(with_categories=true) %}
   {% for category, message in messages %}
   <div style="background:{% if category == 'error' %}#fef2f2;border-color:#fca5a5;color:#991b1b{% else %}#f0fdf4;border-color:#86efac;color:#166534{% endif %};border:1px solid;padding:.75rem 1rem;border-radius:6px;font-size:13px;margin-bottom:1.5rem">
