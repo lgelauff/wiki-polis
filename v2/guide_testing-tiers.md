@@ -54,26 +54,44 @@ detail that matters for agents is **how to use tier 3 responsibly**, below.
 ### Database hygiene on staging (hard rule)
 
 **Leave the staging database in a decent state for the next user.** Staging is shared, so a
-broken DB blocks everyone after you.
+broken DB blocks everyone after you. Staging holds **no real data**, which is what makes the
+recovery rules below safe: resetting or rolling back to a prior state is cheap and *expected*,
+not a loss.
 
-If you cause or hit a database error — a half-applied or failed migration, a phantom
-`alembic_version`, a schema/column mismatch, corrupt rows — follow this order. **It is bounded:
-"don't walk away" means don't leave it *silently* broken; it does NOT mean keep trying forever.**
+Two databases sit behind staging — keep them straight:
+- **App DB — MySQL on Toolforge ToolsDB** (conversations, participations, audit, `alembic_version`).
+  This is where **migration / Alembic** errors happen. **Toolforge keeps no user-accessible backup
+  of it** — the ToolsDB replica is failover-only, and any admin restore is a slow Phabricator
+  request, not a routine path. **So you are the backup.**
+- **Polis backend — Postgres on the VPS** (votes/statements). Separate; it has an *intended* nightly
+  `pg_dump` + restore drill (`v2/guide_runbook.md` → *Backups & restore*) — though that's ⚠️ flagged
+  not-yet-confirmed-live, so don't assume a recent dump exists.
 
-1. **Attempt the documented recovery once or twice.** The known-good moves are in
-   `v2/guide_runbook.md` → *Staging MySQL + Alembic gotchas* (query staging MySQL via SQLAlchemy,
-   repair a phantom `alembic_version`, re-run `flask db upgrade`). If a couple of targeted
-   attempts fix it, you're done.
-2. **If that doesn't resolve it, stop digging.** Do **not** keep improvising fixes against a live
-   shared DB — repeated blind attempts can make it worse. Two or three failed recovery attempts
-   is your signal to escalate, not to keep going.
-3. **Reset rather than nurse a hopeless DB.** Staging is **meant to be rebuildable** from the
-   runbook — a clean reset is a perfectly good outcome, often better than a half-repaired DB.
-4. **Escalate clearly.** Tell the user plainly: what broke, what you tried, and that it needs a
-   reset (or their input). The failure mode to avoid is *silent* breakage — not "I couldn't fix
-   it." Flagging a broken DB you can't safely fix is the correct, expected ending, not a failure.
-- When you're done, **restore the deployed branch** (`bash ~/wiki-polis/deploy.sh main`) unless
-  the user wants your branch left up.
+**Before any risky DB work (a migration, a bulk change) — snapshot first.** Record the current
+Alembic head and take a logical dump of the app DB *before* you mutate it. This is what lets you
+(a) pinpoint **when/what** broke and (b) roll back to a known-good state. (If the `mysql` /
+`mysqldump` CLI hits the known Toolforge TLS error, use the SQLAlchemy approach from the runbook.
+The exact ToolsDB dump/restore command isn't yet in the runbook — documenting it is a known gap.)
+
+If you cause or hit a DB error — a half-applied/failed migration, a phantom `alembic_version`, a
+schema/column mismatch, corrupt rows — follow this order. **It is bounded: "don't walk away" means
+don't leave it *silently* broken; it does NOT mean keep trying forever.**
+
+1. **Roll back to your pre-op snapshot** if you took one — the fastest, cleanest fix.
+2. **Otherwise try the documented recovery once or twice** (runbook → *Staging MySQL + Alembic
+   gotchas*: query via SQLAlchemy, repair a phantom `alembic_version`, re-run `flask db upgrade`).
+3. **If that doesn't take, stop digging.** Repeated blind attempts against a live shared DB can
+   make it worse. **Two or three failed attempts is your signal to cease and ask for help**, not to
+   keep going.
+4. **Reset rather than nurse a hopeless DB.** No real data is at stake — a clean rebuild or restore
+   to a prior state is a perfectly good outcome, often better than a half-repaired DB.
+5. **Document and escalate clearly.** As you go, **keep a short record of what you ran**; then tell
+   the user plainly what broke, what you tried, and what state it's in (and that it needs a reset or
+   their input). *Silent* breakage is the only real failure — flagging a DB you can't safely fix is
+   the correct, expected ending.
+
+When you're done, **restore the deployed branch** (`bash ~/wiki-polis/deploy.sh main`) unless the
+user wants your branch left up.
 
 ### Test-data isolation (shared environment)
 
