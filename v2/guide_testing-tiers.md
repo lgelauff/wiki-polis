@@ -22,6 +22,27 @@ detail that matters for agents is **how to use tier 3 responsibly**, below.
   those degrade to fallbacks. A bug in a live-backend path **passes here**. That's the
   reason tiers 2 and 3 exist.
 
+## Tier 1½ — Migration check on MariaDB (cheap pre-staging gate)
+
+Tier 1 runs on SQLite, which does **not** enforce the FK/index, `ENUM`, or `JSON` DDL rules
+that Toolforge's **MariaDB** does. A migration can pass `pytest` yet fail `flask db upgrade`
+on deploy — e.g. err 1553, *"cannot drop index needed in a foreign key constraint"*. Until now
+that only surfaced at tier 3 (staging), where a half-applied migration leaves the shared DB
+broken for everyone (see `guide_runbook.md` → *Staging MySQL + Alembic gotchas*).
+
+- **What:** runs the migration chain against a real, throwaway MariaDB — bootstraps the base
+  schema, then applies the current branch's migrations exactly as a deploy would.
+- **When:** any change that adds or edits a file under `v2/migrations/versions/`.
+- **How (local):** `bash migration-check.sh` from the repo root (needs Docker; spins and tears
+  down its own MariaDB). Pass a base ref as `$1` (defaults to `origin/main`).
+- **CI:** the `migrations-mariadb` job in `.github/workflows/test.yml` runs the same script
+  against a MariaDB service on every PR — so "SQLite-only CI" no longer misses this class of bug.
+- **Known limitation:** the base schema is bootstrapped with SQLAlchemy's `create_all()` (from
+  the current models) rather than by replaying the base ref's actual migration history from
+  empty. This won't catch a bug that only depends on schema state produced by an intermediate
+  historical migration rather than the final shape — a narrower gap than the SQLite-vs-MariaDB
+  one above, but still a gap.
+
 ## Tier 2 — Local integration (you launch the whole platform)
 
 - **What:** the full stack on your machine — Particiapi + Polis server + Polis math +

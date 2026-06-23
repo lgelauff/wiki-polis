@@ -37,3 +37,33 @@ jobs:
           SECRET_KEY: "0000000000000000000000000000000000000000"
           FLASK_DEBUG: "1"
         run: uv run pytest -q
+
+  # Tier-1 pytest runs on SQLite, which does NOT enforce the FK/index, ENUM and
+  # JSON DDL rules that Toolforge's MariaDB does — so a migration can pass CI yet
+  # break `flask db upgrade` on deploy (e.g. err 1553, "cannot drop index needed
+  # in a foreign key constraint"). This job runs the migration chain against real
+  # MariaDB to catch that class of bug before staging.
+  migrations-mariadb:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: wikipolis
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # migration-check.sh worktrees the base ref to build the pre-change schema
+      - uses: astral-sh/setup-uv@v8.2.0
+      - name: Migrations apply on MariaDB (deploy DB engine)
+        env:
+          MIGCHECK_DB_URL: "mysql+pymysql://root:root@127.0.0.1:3306/wikipolis"
+          # Pass via env (not inline ${{ }}) so a crafted branch name can't inject into the shell.
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: bash migration-check.sh "origin/${BASE_REF}"
