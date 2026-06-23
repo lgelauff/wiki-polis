@@ -1,4 +1,13 @@
 {% extends "base.html" %}
+{% block header_mode %}header--admin{% endblock %}
+{% block header_crumb %}
+<span class="header-crumb">
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin') }}">Admin</a>
+  <span class="header-crumb-sep">/</span>
+  <span>{{ conversation.title | truncate(30, True, '…') }}</span>
+</span>
+{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='redesign.css') }}?v={{ git_version }}">
 {% endblock %}
@@ -22,10 +31,6 @@
 
 {# base.html already provides <main id="main">; don't nest a second one. #}
 <div class="console">
-
-  <p class="muted" style="margin-bottom:1rem">
-    <a href="{{ url_for('admin.admin') }}">← admin panel</a>
-  </p>
 
   {# ── Consultation header ──────────────────────────────────────────────── #}
   <div class="console-head">

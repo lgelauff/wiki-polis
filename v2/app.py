@@ -932,15 +932,32 @@ def _proxy_to_particiapi(pa_path: str):
 
     forwarded_cookies = {}
     pa_cookie = request.cookies.get('pa_session')
-    if pa_cookie:
+
+    # Identity binding: on the session-create call, if the user is logged in and the
+    # shared secret is configured, assert their stable identity (xid) to Particiapi so
+    # they keep the same Polis uid across devices instead of a new anonymous uid each
+    # session. Scoped to POST /api/session only — Particiapi consults the headers
+    # nowhere else, so sending the secret on other requests is pure exposure surplus.
+    _sub = session.get('xid')
+    _sub_secret = current_app.config.get('PARTICIAPI_SUB_SECRET')
+    _bind_identity = (
+        pa_path == 'api/session' and request.method == 'POST'
+        and bool(_sub) and bool(_sub_secret)
+    )
+
+    # On a bind we deliberately do NOT forward any existing pa_session cookie: a stale
+    # (possibly anonymous) session would make Particiapi skip the bind path and pin the
+    # user to a throwaway uid forever. Dropping it forces a clean re-bind to the xid.
+    if pa_cookie and not _bind_identity:
         forwarded_cookies['session'] = pa_cookie
 
     # HIGH-5: Only forward known safe query parameters to Particiapi.
     _ALLOWED_PARAMS = frozenset({'create', 'zinvite', 'conversation_id', 'tid'})
     params = {k: v for k, v in request.args.items() if k in _ALLOWED_PARAMS}
-    # If the web component calls POST /api/session with no existing session,
-    # Particiapi returns 403 (auth required) unless we add ?create=true.
-    if pa_path == 'api/session' and request.method == 'POST' and not pa_cookie:
+    # If the web component calls POST /api/session with no existing session (and we're
+    # not binding a stable identity), Particiapi 403s unless we add ?create=true.
+    if (pa_path == 'api/session' and request.method == 'POST'
+            and not pa_cookie and not _bind_identity):
         params['create'] = 'true'
 
     headers = {}
@@ -950,6 +967,10 @@ def _proxy_to_particiapi(pa_path: str):
             headers['X-CSRF-Token'] = csrf
         if request.content_type:
             headers['Content-Type'] = request.content_type
+
+    if _bind_identity:
+        headers['X-Particiapi-Sub'] = _sub
+        headers['X-Particiapi-Sub-Secret'] = _sub_secret
 
     try:
         upstream = requests.request(
@@ -3011,6 +3032,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['OAUTH_REDIRECT_URI']  = _read_secret('oauth-redirect-uri')
     app.config['PARTICIAPI_BASE']     = (_read_secret('particiapi-base-url')
                                          or os.environ.get('PARTICIAPI_BASE_URL', 'http://localhost:8000'))
+    # Shared secret that lets the proxy assert the logged-in user's stable identity
+    # (xid) to Particiapi, so a participant keeps the same Polis uid across devices
+    # instead of a fresh anonymous one per session. Must match Particiapi's
+    # TRUSTED_SUB_SECRET. Unset → falls back to the old anonymous-per-session behaviour.
+    app.config['PARTICIAPI_SUB_SECRET'] = (_read_secret('particiapi-sub-secret')
+                                           or os.environ.get('PARTICIAPI_SUB_SECRET', ''))
     app.config['POLIS_DATABASE_URL'] = (_read_secret('polis-database-url')
                                         or os.environ.get('POLIS_DATABASE_URL', ''))
     app.config['POLIS_SERVER_URL']   = (_read_secret('polis-server-url')

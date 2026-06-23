@@ -26,6 +26,10 @@
   --border:        #e5e5e6;
   --green:         #1f8a5b;
   --red:           #c44a4a;
+  /* Admin mode header */
+  --admin-header-bg:    #f0f4f8;
+  --admin-badge-bg:     #dbeafe;
+  --admin-badge-color:  #1e40af;
   --white:         #ffffff;
   /* Type stacks */
   --sans: "Inter Tight", "Inter", system-ui, -apple-system, sans-serif;
@@ -223,6 +227,35 @@ header {
 .header-admin-link:hover {
   color: var(--ink);
   border-color: var(--accent);
+}
+
+/* ── Admin-mode header tint ── */
+.header--admin {
+  background: var(--admin-header-bg);
+  border-bottom-color: #b8c8d8;
+}
+
+.header-admin-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--admin-badge-bg);
+  color: var(--admin-badge-color);
+  border-radius: 3px;
+}
+
+.header-manage-link {
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 8px;
+}
+
+.header-manage-link:hover {
+  color: var(--ink);
 }
 
 /* ── Main container ── */
