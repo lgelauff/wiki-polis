@@ -1,0 +1,27 @@
+name: microservice-smoke
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install smoke-check dependency
+        run: python -m pip install requests
+
+      - name: Run smoke checks
+        env:
+          WIKI_POLIS_URL: ${{ vars.WIKI_POLIS_STAGING_URL || 'https://wiki-polis-dev.toolforge.org' }}
+          EMBEDDING_SIDECAR_URL: ${{ vars.EMBEDDING_SIDECAR_URL }}
+          HEALTHCHECKS_URL: ${{ secrets.MICROSERVICE_HEALTHCHECKS_URL }}
+        run: python v2/ops/microservice_smoke.py

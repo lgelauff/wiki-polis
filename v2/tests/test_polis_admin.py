@@ -140,6 +140,43 @@ def test_stats_closes_connection_on_error():
     mock_conn.close.assert_called_once()
 
 
+# ── PolisServerClient.queue_math_recompute ───────────────────────────────────
+
+def test_queue_math_recompute_inserts_worker_task():
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw',
+                               db_url='postgresql://localhost/polis')
+    mock_conn = MagicMock()
+    cur = mock_conn.cursor.return_value.__enter__.return_value
+
+    with patch('psycopg2.connect', return_value=mock_conn):
+        assert client.queue_math_recompute('abc123') is True
+
+    sql = cur.execute.call_args.args[0]
+    assert 'INSERT INTO worker_tasks' in sql
+    assert cur.execute.call_args.args[1] == ('abc123',)
+    mock_conn.commit.assert_called_once()
+    mock_conn.close.assert_called_once()
+
+
+def test_queue_math_recompute_logs_worker_task_privilege_gap(caplog):
+    import logging
+
+    import psycopg2
+
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw',
+                               db_url='postgresql://localhost/polis')
+    mock_conn = MagicMock()
+    cur = mock_conn.cursor.return_value.__enter__.return_value
+    cur.execute.side_effect = psycopg2.errors.InsufficientPrivilege('permission denied')
+
+    with caplog.at_level(logging.ERROR):
+        with patch('psycopg2.connect', return_value=mock_conn):
+            assert client.queue_math_recompute('abc123') is False
+
+    assert 'grant INSERT on worker_tasks' in caplog.text
+    mock_conn.close.assert_called_once()
+
+
 # ── PolisServerClient.create_conversation ────────────────────────────────────
 
 def _setup_create(zinvite='abc123'):

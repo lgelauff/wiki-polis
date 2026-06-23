@@ -13,11 +13,46 @@ Phase 1 (foundation) slice; audit logging (Plan 2) and engagement instrumentatio
   `{"timestamp": "...", "level": "INFO", "service": "wiki-polis", "logger": "app", "message": "...", "request_id": "...", "participant_id": 42}`
   Format is chosen by `_on_toolforge` (the `TOOL_TOOLFORGE_API_URL` env var) — **not** by
   debug mode, so tests always get text.
+- **Optional central aggregation:** set `LOKI_URL` to also send the same redacted JSON
+  line to Loki through an async queue. The handler uses `RedactingJsonFormatter`, so the
+  network copy has the same redaction backstop as `uwsgi.log`.
 
 Configuration is in `logging_setup.py` (`configure_logging`), called once in `create_app`
 before extensions init. It configures the **root** logger imperatively (no `dictConfig`),
 so every logger — `app.logger`, `polis_admin`'s module logger, `werkzeug` — flows through
 the same handler. Don't add per-module handlers.
+
+## Central log aggregation (#49)
+
+The supported aggregation path is additive:
+
+- VPS containers: Fluent Bit tails Docker stdout and forwards to Loki.
+- Toolforge Flask: the app posts already-redacted JSON records directly to Loki.
+- Grafana reads Loki for a single time-ordered diagnostics view.
+
+Configure Toolforge with:
+
+| Variable | Purpose |
+|---|---|
+| `LOKI_URL` | HTTPS endpoint ending at either the Loki base URL or `/loki/api/v1/push` |
+| `LOKI_USERNAME` / `LOKI_PASSWORD` | basic-auth credentials for the VPS nginx Loki endpoint |
+| `LOKI_LABELS` | optional comma-separated low-cardinality labels, e.g. `stack=toolforge` |
+| `LOKI_QUEUE_SIZE` | optional async queue size; default `1000` |
+| `LOKI_TIMEOUT` | optional POST timeout in seconds; default `2.0` |
+| `WIKI_POLIS_ENV` | optional environment label, e.g. `staging` or `prod` |
+
+The Loki stream label `service="wiki-polis"` is forced by code and cannot be overridden.
+Do not put `request_id`, `participant_id`, usernames, `xid`, statement text, or vote
+values in Loki labels; `request_id` and `participant_id` stay inside the JSON line only.
+Loki is diagnostic only with short retention. Audit events remain in the app DB and
+engagement instrumentation must not be routed to Loki for convenience.
+
+VPS sample config lives in `ops/logging/`:
+
+- `docker-compose.loki.yaml`
+- `loki-config.yaml` (30-day retention)
+- `fluent-bit.conf` / `parsers.conf`
+- `nginx-loki-grafana.conf`
 
 ## Levels — use them consistently
 
