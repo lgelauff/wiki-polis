@@ -7,7 +7,7 @@ import io
 from dataclasses import dataclass, field
 
 MAX_FILE_BYTES = 100 * 1024
-MAX_ROWS       = 20
+MAX_ROWS       = 200   # max statements per bulk import (CSV upload and text-area paste)
 MAX_TEXT_CHARS = 280
 
 # Unicode codepoints stripped from every cell value before validation.
