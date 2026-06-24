@@ -236,7 +236,7 @@
         {# Guided 'Move on' (#156): consequences + tick-each-precondition checklist.
            Submit ships ENABLED (no-JS can advance; route enforces server-side); JS
            disables it until every box is ticked. Gating logic unchanged. #}
-        <div class="moveon phase-move-box" style="margin-top:14px">
+        <div class="moveon phase-move-box">
           <div class="moveon-head">
             <span class="moveon-from">{{ transition.source.label }}</span>
             <span class="moveon-arrow" aria-hidden="true">→</span>
@@ -325,7 +325,6 @@
 
       {% if is_admin and schedule.can_schedule %}
       <div class="schedule-card" style="margin-top:14px">
-        <div class="schedule-icon" aria-hidden="true">UTC</div>
         <div class="schedule-main">
           <div class="schedule-title">Schedule wind-down to {{ schedule.transition.target.label }}</div>
           {% if schedule.scheduled_at %}
@@ -345,6 +344,7 @@
           <input id="scheduled-at" name="scheduled_at" type="datetime-local"
                  {% if schedule.scheduled_at %}value="{{ schedule.scheduled_at.strftime('%Y-%m-%dT%H:%M') }}"{% endif %}
                  aria-label="Scheduled transition time in UTC">
+          <span class="schedule-utc" aria-hidden="true">UTC</span>
           <button type="submit" class="btn-ghost">{{ 'Edit' if schedule.scheduled_at else 'Set' }}</button>
         </form>
         {% if schedule.scheduled_at %}
@@ -370,7 +370,7 @@
 
     {# ── Advanced (mode-advanced-part) — global admin only ──────────────── #}
     {% if is_admin %}
-    <div class="mode-advanced-part" style="margin-top:14px">
+    <div class="mode-advanced-part">
       <div class="box-adv-note">
         <span aria-hidden="true">⚠️</span>
         <span><strong>Advanced.</strong> These toggles act independently and out of order, with no

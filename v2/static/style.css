@@ -2002,6 +2002,14 @@ a { color: var(--pass); }
   white-space: nowrap;
   font-size: 12px;
 }
+/* Vote tallies, ordered Agree · Pass · Disagree, each labelled + colour-coded so the three
+   numbers aren't an unlabelled "+ − ·" run. */
+.stmt-votes .vcount { font-variant-numeric: tabular-nums; }
+.stmt-votes .vcount + .vcount { margin-left: 18px; }
+.stmt-votes .vlabel { font-weight: 700; opacity: 0.7; }
+.vcount--agree { color: var(--agree); }
+.vcount--pass { color: var(--muted); }
+.vcount--disagree { color: var(--disagree); }
 
 .stmt-actions {
   white-space: nowrap;
