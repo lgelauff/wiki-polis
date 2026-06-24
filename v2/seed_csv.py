@@ -7,7 +7,10 @@ import io
 from dataclasses import dataclass, field
 
 MAX_FILE_BYTES = 100 * 1024
-MAX_ROWS       = 200   # max statements per bulk import (CSV upload and text-area paste)
+# Soft cap per bulk import. Deliberately low: a high cap signals that importing a
+# large number of statements at once is desirable, which it isn't. There is no hard
+# total cap — admins can run the import repeatedly — so this is a nudge, not a ceiling.
+MAX_ROWS       = 20
 MAX_TEXT_CHARS = 280
 
 # Unicode codepoints stripped from every cell value before validation.
