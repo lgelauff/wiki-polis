@@ -41,7 +41,7 @@ from db import (ACCESS_POLICIES, ADMIN_ROLES, FLAG_CATEGORIES, AdminRole, Argume
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
 from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
-                      RowError, parse_csv_bytes, strip_formula_prefixes)
+                      RowError, strip_formula_prefixes)
 from logging_setup import configure_logging
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
@@ -3314,8 +3314,7 @@ def admin_conversation_statements(conv_id):
                            seed_import_lock_reason=seed_lock_reason,
                            polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is',
                            max_import_rows=MAX_ROWS,
-                           max_import_chars=MAX_TEXT_CHARS,
-                           max_import_kb=MAX_FILE_BYTES // 1024)
+                           max_import_chars=MAX_TEXT_CHARS)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
 @login_required
@@ -3391,48 +3390,6 @@ def admin_statement_seed(conv_id):
         current_app.logger.exception('add_seed failed')
         flash('Could not add seed statement. Check server logs for details.', 'error')
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed/import')
-@login_required
-@limiter.limit('5 per minute')
-def admin_statement_seed_import(conv_id):
-    conv = _require_mod_for_conv(conv_id)
-    redirect_target = url_for('admin.admin_conversation_statements', conv_id=conv_id)
-    lock_reason = _seed_statement_lock_reason(conv)
-    if lock_reason:
-        flash(lock_reason, 'error')
-        return redirect(redirect_target)
-
-    f = request.files.get('csv_file')
-    if not f or not f.filename:
-        flash('No file selected.', 'error')
-        return redirect(redirect_target)
-
-    if not f.filename.lower().endswith('.csv'):
-        flash('Please upload a .csv file.', 'error')
-        return redirect(redirect_target)
-
-    raw = f.stream.read(MAX_FILE_BYTES + 1)
-    if len(raw) > MAX_FILE_BYTES:
-        flash(f'File too large — maximum is {MAX_FILE_BYTES // 1024} KB.', 'error')
-        return redirect(redirect_target)
-
-    try:
-        result = parse_csv_bytes(raw)
-    except ValueError as exc:
-        flash(str(exc), 'import_row_error')
-        flash('✗ Import failed', 'import_result')
-        return redirect(redirect_target)
-
-    if _reject_seed_import_parse_errors(result, 'CSV file'):
-        return redirect(redirect_target)
-
-    summary = _import_seed_statement_texts(conv, result.texts)
-    if summary['successes']:
-        record_audit('statement.seed_import', conv_id=conv_id,
-                     imported=summary['successes'], skipped=summary['skipped'],
-                     errors=summary['errors'])
-    return redirect(redirect_target)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed/import-text')
 @login_required
