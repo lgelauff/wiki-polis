@@ -225,6 +225,17 @@ def test_text_import_enforces_row_limit(admin_client, conv):
     assert mock.return_value.bulk_add_seeds.call_args is None
 
 
+def test_text_import_over_byte_limit_rejected(admin_client, conv):
+    """The text-area path enforces MAX_FILE_BYTES before parsing (#238), mirroring
+    the CSV upload's pre-read byte cap — a crafted POST cannot bypass it."""
+    from seed_csv import MAX_FILE_BYTES
+    big = 'a' * (MAX_FILE_BYTES + 1)
+    with _mock_polis() as mock:
+        resp = _text_import(admin_client, conv.id, big)
+    assert b'too much text' in resp.data.lower()
+    assert mock.return_value.bulk_add_seeds.call_args is None
+
+
 def test_text_import_sanitizes_and_deduplicates(admin_client, conv):
     existing = [{'txt': 'Already there', 'mod': 1, 'is_seed': True,
                  'tid': 1, 'agree_count': 0, 'disagree_count': 0, 'pass_count': 0}]

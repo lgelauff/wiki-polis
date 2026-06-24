@@ -3444,7 +3444,14 @@ def admin_statement_seed_import_text(conv_id):
     if lock_reason:
         flash(lock_reason, 'error')
         return redirect(redirect_target)
-    result = _parse_seed_text_lines(request.form.get('statement_texts', ''))
+    raw_text = request.form.get('statement_texts', '')
+    # Pre-parse size guard, mirroring the CSV path's MAX_FILE_BYTES cap (#238).
+    # The textarea has a client-side maxlength, but that is trivially bypassed by
+    # a crafted POST, so bound the raw payload server-side before parsing.
+    if len(raw_text.encode('utf-8')) > MAX_FILE_BYTES:
+        flash(f'Too much text — maximum is {MAX_FILE_BYTES // 1024} KB.', 'error')
+        return redirect(redirect_target)
+    result = _parse_seed_text_lines(raw_text)
     if _reject_seed_import_parse_errors(result, 'Text import'):
         return redirect(redirect_target)
 
