@@ -38,7 +38,9 @@
 
   {% with messages = get_flashed_messages(with_categories=true) %}
   {% for category, message in messages %}
-  <div style="background:{% if category == 'error' %}#fef2f2;border-color:#fca5a5;color:#991b1b{% else %}#f0fdf4;border-color:#86efac;color:#166534{% endif %};border:1px solid;padding:.75rem 1rem;border-radius:6px;font-size:13px;margin-bottom:1.5rem">
+  {% set is_error = category in ['error', 'import_row_error'] or message.startswith('✗') %}
+  {% set is_warn = category == 'warning' or message.startswith('⚠') %}
+  <div style="background:{% if is_error %}#fef2f2;border-color:#fca5a5;color:#991b1b{% elif is_warn %}#fffbeb;border-color:#fcd34d;color:#92400e{% else %}#f0fdf4;border-color:#86efac;color:#166534{% endif %};border:1px solid;padding:.75rem 1rem;border-radius:6px;font-size:13px;margin-bottom:1.5rem">
     {{ message }}
   </div>
   {% endfor %}
@@ -85,6 +87,11 @@
     <p class="muted" style="margin-bottom:.75rem;font-size:13px">
       Paste one statement per line. Blank lines are ignored. Maximum {{ max_import_rows }}
       statements per import and {{ max_import_chars }} characters per statement.
+    </p>
+    <p class="muted" style="margin-bottom:.75rem;font-size:13px">
+      All-or-nothing: if any line is invalid (too long, duplicated within your paste, or
+      over the limit) nothing is imported and the offending lines are listed. Lines
+      identical to an existing statement are skipped automatically — the rest still import.
     </p>
     <form method="post"
           action="{{ url_for('admin.admin_statement_seed_import_text', conv_id=conversation.id) }}">

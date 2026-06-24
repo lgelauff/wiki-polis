@@ -2084,9 +2084,9 @@ def _reject_seed_import_parse_errors(result: ParseResult, source_label: str) -> 
             MAX_ROWS,
         )
         flash(
-            f'✗ Import rejected — {source_label.lower()} contains {total_rows} rows, '
-            f'maximum is {MAX_ROWS}. Reduce it and try again. '
-            f'(Parse errors may also be present — fix both before trying again.)',
+            f'✗ Import rejected — nothing was imported. {source_label} contains '
+            f'{total_rows} lines, maximum is {MAX_ROWS}. Reduce it and try again. '
+            f'(Parse errors may also be present — fix everything before retrying.)',
             'import_result',
         )
         return True
@@ -2095,7 +2095,10 @@ def _reject_seed_import_parse_errors(result: ParseResult, source_label: str) -> 
     if parse_errors:
         for err in parse_errors:
             flash(f'Row {err.row}: {err.reason}.', 'import_row_error')
-        flash('✗ Import rejected — fix errors and try again', 'import_result')
+        # All-or-nothing: a single invalid line rejects the whole import so the admin
+        # never ends up with a silently partial paste.
+        flash('✗ Import rejected — nothing was added. One invalid line rejects the '
+              'whole import; fix the lines listed above and try again.', 'import_result')
         return True
     return False
 
