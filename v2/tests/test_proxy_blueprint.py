@@ -13,6 +13,8 @@ control) is the core proxy security posture. These tests lock the expected bound
 - the pa_session <-> session cookie rename is preserved in both directions;
 - the 403->200 rewrite on /results/ that keeps the web component usable.
 """
+import hashlib
+import hmac
 import re
 from unittest.mock import MagicMock, patch
 
@@ -339,3 +341,165 @@ def test_statement_new_allows_missing_provenance_after_valid_manual_csrf(csrf_en
                            json={'text': 'A CSRF-backed browser submit'})
 
     assert resp.status_code == 201
+
+
+# ── Upstream redirects must NOT be followed (PR #245 review, Issue 1) ─────────────
+
+def test_proxy_does_not_follow_upstream_redirect(auth_client):
+    """A proxy hands 3xx back to the browser; it must never follow them itself.
+    `requests` preserves custom headers (incl. X-Particiapi-Sub-Secret) across
+    cross-host redirects, so following one could replay the shared secret."""
+    up = _fake_upstream(status_code=302, content=b'')
+    up.headers = {'Content-Type': 'text/html', 'Location': 'https://evil.example/'}
+    with patch('app.requests.request', return_value=up) as req:
+        resp = auth_client.get('/proxy/particiapi/api/conversations/abc/')
+    assert resp.status_code == 302  # passed back unchanged, not chased
+    assert req.call_args.kwargs['allow_redirects'] is False
+    # a 3xx handed back with no Location is useless to the browser
+    assert resp.headers.get('Location') == 'https://evil.example/'
+
+
+def test_proxy_vote_redirect_does_not_count_as_engagement(bind_client):
+    """upstream.ok is True for 3xx too; a redirected-not-confirmed vote must not
+    be credited as engagement now that redirects are surfaced instead of chased."""
+    conv = _make_conv('bind-r', 'bindr00001')
+    up = _fake_upstream(status_code=302, content=b'')
+    up.headers = {'Location': 'https://particiapi.example/'}
+    with patch('app.requests.request', return_value=up):
+        with patch('app._touch_last_engagement') as touch:
+            bind_client.post(f'/c/bind-r/proxy/particiapi/api/conversations/{conv.polis_id}/votes',
+                             headers=_SAME_ORIGIN, json={})
+    touch.assert_not_called()
+
+
+# ── Identity binding on POST /api/session (PR #245) ──────────────────────────────
+#
+# The shared `app` fixture leaves PARTICIAPI_SUB_SECRET unset, so the bind path is
+# otherwise never exercised. `bind_client` configures the secret AND logs in, which
+# are the two preconditions (alongside POST api/session on a scoped route) for a bind.
+
+_BIND_SECRET = 'sub-secret'
+_SAME_ORIGIN = {'Sec-Fetch-Site': 'same-origin'}
+
+
+@pytest.fixture
+def bind_client(app, participant):
+    app.config['PARTICIAPI_SUB_SECRET'] = _BIND_SECRET
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess['username'] = participant.mw_username
+        sess['xid'] = participant.xid
+    return client
+
+
+def _make_conv(slug, polis_id):
+    c = Conversation(slug=slug, polis_id=polis_id, title=slug.upper(),
+                     active=True, access_policy='public')
+    db.session.add(c)
+    db.session.commit()
+    return c
+
+
+def _expected_subject(xid, conv_id):
+    """Re-derive the conversation-scoped subject independently, so a change to the
+    keying scheme in app.py breaks this test instead of silently passing."""
+    return hmac.new(_BIND_SECRET.encode(), f'{xid}:{conv_id}'.encode(),
+                    hashlib.sha256).hexdigest()
+
+
+def test_scoped_session_post_binds_conversation_subject(bind_client, participant):
+    conv = _make_conv('bind-a', 'binda00001')
+    up = _fake_upstream(cookies={'session': 'NEWBOUND'})
+    with patch('app.requests.request', return_value=up) as req:
+        resp = bind_client.post('/c/bind-a/proxy/particiapi/api/session',
+                                headers=_SAME_ORIGIN, json={})
+    assert resp.status_code == 200
+    sent = req.call_args.kwargs['headers']
+    assert sent['X-Particiapi-Sub'] == _expected_subject(participant.xid, conv.id)
+    assert sent['X-Particiapi-Sub-Secret'] == _BIND_SECRET
+    # bare xid must never be the asserted subject on a scoped bind
+    assert sent['X-Particiapi-Sub'] != participant.xid
+
+
+def test_scoped_subject_differs_per_conversation(bind_client, participant):
+    """The core #246 privacy property: same person → different subject per conv,
+    and never the bare xid."""
+    _make_conv('bind-1', 'bind100001')
+    _make_conv('bind-2', 'bind200002')
+    subs = []
+    for slug in ('bind-1', 'bind-2'):
+        up = _fake_upstream()
+        with patch('app.requests.request', return_value=up) as req:
+            bind_client.post(f'/c/{slug}/proxy/particiapi/api/session',
+                             headers=_SAME_ORIGIN, json={})
+        subs.append(req.call_args.kwargs['headers']['X-Particiapi-Sub'])
+    assert subs[0] != subs[1]
+    assert participant.xid not in subs
+
+
+def test_scoped_subject_stable_within_conversation(bind_client):
+    _make_conv('bind-s', 'binds00001')
+    seen = []
+    for _ in range(2):
+        up = _fake_upstream()
+        with patch('app.requests.request', return_value=up) as req:
+            bind_client.post('/c/bind-s/proxy/particiapi/api/session',
+                             headers=_SAME_ORIGIN, json={})
+        seen.append(req.call_args.kwargs['headers']['X-Particiapi-Sub'])
+    assert seen[0] == seen[1]  # stable across devices/sessions within one conversation
+
+
+def test_bind_drops_stale_pa_session_cookie(bind_client):
+    """On a bind the stale (possibly anonymous) pa_session must NOT be forwarded,
+    or Particiapi skips the bind path and pins a throwaway uid forever."""
+    _make_conv('bind-c', 'bindc00001')
+    bind_client.set_cookie('pa_session', 'STALE_ANON')
+    up = _fake_upstream()
+    with patch('app.requests.request', return_value=up) as req:
+        bind_client.post('/c/bind-c/proxy/particiapi/api/session',
+                         headers=_SAME_ORIGIN, json={})
+    assert 'session' not in req.call_args.kwargs['cookies']
+
+
+def test_bind_only_on_session_post(bind_client):
+    """Exposure-surplus guard: the secret/subject go out ONLY on POST api/session,
+    never on other paths or methods."""
+    _make_conv('bind-x', 'bindx00001')
+    up = _fake_upstream()
+    with patch('app.requests.request', return_value=up) as req:
+        bind_client.post('/c/bind-x/proxy/particiapi/api/votes/3',
+                         headers=_SAME_ORIGIN, json={})
+        post_headers = req.call_args.kwargs['headers']
+        bind_client.get('/c/bind-x/proxy/particiapi/api/session')
+        get_headers = req.call_args.kwargs['headers']
+    for h in (post_headers, get_headers):
+        assert 'X-Particiapi-Sub' not in h
+        assert 'X-Particiapi-Sub-Secret' not in h
+
+
+def test_no_bind_without_secret(auth_client):
+    """Secret unset → legacy anonymous behaviour: no sub headers, ?create=true added."""
+    _make_conv('bind-n', 'bindn00001')
+    up = _fake_upstream()
+    with patch('app.requests.request', return_value=up) as req:
+        auth_client.post('/c/bind-n/proxy/particiapi/api/session',
+                         headers=_SAME_ORIGIN, json={})
+    sent = req.call_args.kwargs
+    assert 'X-Particiapi-Sub' not in sent['headers']
+    assert sent['params'].get('create') == 'true'
+
+
+def test_unscoped_route_never_emits_identity_headers(bind_client):
+    """Privacy tripwire (#246): the legacy unscoped route must NEVER bind identity,
+    so a logged-in user is never re-linked across conversations via a bare xid.
+    NOTE: this MUST run under `bind_client` (secret set + xid present) — with the
+    no-secret `auth_client` it would pass even if the `conv is None` guard were
+    deleted, i.e. it would test nothing. Do not 'simplify' the fixture."""
+    up = _fake_upstream()
+    with patch('app.requests.request', return_value=up) as req:
+        bind_client.post('/proxy/particiapi/api/session',
+                         headers=_SAME_ORIGIN, json={})
+    sent = req.call_args.kwargs
+    assert 'X-Particiapi-Sub' not in sent['headers']
+    assert 'X-Particiapi-Sub-Secret' not in sent['headers']
+    assert sent['params'].get('create') == 'true'  # falls back to anonymous create
