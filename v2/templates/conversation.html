@@ -516,8 +516,8 @@
             Featured statement
           </div>
           <p class="at-stmt">{{ item.text }}</p>
-          {# One-line summary shown only when collapsed after all-done #}
-          <p class="at-stmt-summary" aria-hidden="true">{{ item.text | truncate(80, True) }}</p>
+          {# (Collapsed-state one-liner is rendered by .at-revisit-bar; the old .at-stmt-summary
+             here was orphaned dead markup that just duplicated .at-stmt when expanded.) #}
           {{ content_flag_form(url_for('participant.statement_flag', slug=conversation.slug, tid=fs.polis_statement_id), 'statement-' ~ fs.id, 'statement') }}
         </div>
 
@@ -542,9 +542,9 @@
               <div class="at-step-name">2 · Prioritise</div>
               <div class="at-step-sub" id="step2-sub-{{ fs.id }}">
                 {%- if both_gate -%}
-                  {{ item.pro_voted_count }}/{{ item.k }} for · {{ item.con_voted_count }}/{{ item.k }} against · can change
+                  Mark the most important — {{ item.pro_voted_count }} of {{ item.k }} for, {{ item.con_voted_count }} of {{ item.k }} against · you can still change these
                 {%- else -%}
-                  after step 1
+                  Unlocks after step 1
                 {%- endif -%}
               </div>
             </div>
@@ -2167,7 +2167,7 @@
     var pickedPro = countVoted(fsId, 'pro');
     var pickedCon = countVoted(fsId, 'con');
     var s2sub = document.getElementById('step2-sub-' + fsId);
-    if (s2sub) s2sub.textContent = pickedPro + '/' + k + ' for · ' + pickedCon + '/' + k + ' against · can change';
+    if (s2sub) s2sub.textContent = 'Mark the most important — ' + pickedPro + ' of ' + k + ' for, ' + pickedCon + ' of ' + k + ' against · you can still change these';
     paintAllCircles();
   }
 

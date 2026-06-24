@@ -715,6 +715,16 @@
     f.addEventListener('change', function () { save.classList.add('phases-save--dirty'); });
   });
 
+  // Schedule picker is interpreted as UTC server-side, but a native datetime-local renders in
+  // the browser's local zone. Pre-fill an empty picker with the current UTC time so the admin
+  // adjusts from "now (UTC)" rather than a blank mm/dd/yyyy that silently means local.
+  (function () {
+    var sched = document.getElementById('scheduled-at');
+    if (sched && !sched.value) {
+      sched.value = new Date().toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM in UTC
+    }
+  }());
+
   document.querySelectorAll('[data-countdown-target]').forEach(function (el) {
     var target = Date.parse(el.dataset.countdownTarget);
     if (!Number.isFinite(target)) return;
