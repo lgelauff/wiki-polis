@@ -89,7 +89,7 @@ def test_conversation_has_no_hidden_pa_proxy_controls(auth_client, conv, partici
     assert 'pvb-hidden' not in html
     assert 'particiapp-web-components.js' not in html
     assert 'particiapp-web-client.js' not in html
-    assert 'data-proxy-root="/proxy/particiapi/"' in html
+    assert 'data-proxy-root="/c/test-conv/proxy/particiapi/"' in html  # conversation-scoped proxy (#246)
     assert "api/session?create=true" in html
     assert "/votes/" in html
     assert '.pvb-hidden' not in css

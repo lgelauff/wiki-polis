@@ -1591,9 +1591,27 @@ def _proxy_auth_response(pa_path: str):
     return redirect(url_for('login'))
 
 
-def _proxy_to_particiapi(pa_path: str):
+def _conversation_subject(xid: str, conv) -> str:
+    """Conversation-scoped participant subject for Particiapi's trusted-sub binding.
+
+    Keyed by the **wiki-polis conversation id** so the same person resolves to the same
+    Polis uid across devices *within* one conversation, but to a **different** uid in a
+    different conversation — no cross-conversation linkage chain (#246). Using ``conv.id``
+    (not the Polis zinvite) keeps it stable across the conversation's Phase-2 and Phase-6
+    rounds, so an individual's initial and informed votes share one uid.
+    """
+    secret = current_app.config.get('PARTICIAPI_SUB_SECRET') or current_app.config['SECRET_KEY']
+    return hmac.new(str(secret).encode(), f'{xid}:{conv.id}'.encode(), hashlib.sha256).hexdigest()
+
+
+def _proxy_to_particiapi(pa_path: str, conv=None):
     """
     Proxy a browser request to Particiapi and return the response.
+
+    When ``conv`` is given (the per-conversation proxy route), the asserted identity is
+    **conversation-scoped** and the ``pa_session`` cookie is **path-scoped to that
+    conversation**, so each conversation gets its own session/uid (no cross-conversation
+    chain). The legacy unscoped route passes ``conv=None`` (bare-xid subject, root cookie).
 
     Browser ↔ Flask proxy ↔ Particiapi:
     - The browser stores a 'pa_session' cookie (Particiapi's session, renamed to
@@ -1617,15 +1635,35 @@ def _proxy_to_particiapi(pa_path: str):
 
     forwarded_cookies = {}
     pa_cookie = request.cookies.get('pa_session')
-    if pa_cookie:
+
+    # Identity binding: on the session-create call, if the user is logged in and the
+    # shared secret is configured, assert their stable identity (xid) to Particiapi so
+    # they keep the same Polis uid across devices instead of a new anonymous uid each
+    # session. Scoped to POST /api/session only — Particiapi consults the headers
+    # nowhere else, so sending the secret on other requests is pure exposure surplus.
+    _xid = session.get('xid')
+    _sub_secret = current_app.config.get('PARTICIAPI_SUB_SECRET')
+    # Conversation-scope the subject when we know the conversation, so the participant gets
+    # a different uid per conversation (no chain) while staying stable across devices in it.
+    _sub = _conversation_subject(_xid, conv) if (_xid and conv is not None) else _xid
+    _bind_identity = (
+        pa_path == 'api/session' and request.method == 'POST'
+        and bool(_sub) and bool(_sub_secret)
+    )
+
+    # On a bind we deliberately do NOT forward any existing pa_session cookie: a stale
+    # (possibly anonymous) session would make Particiapi skip the bind path and pin the
+    # user to a throwaway uid forever. Dropping it forces a clean re-bind to the xid.
+    if pa_cookie and not _bind_identity:
         forwarded_cookies['session'] = pa_cookie
 
     # HIGH-5: Only forward known safe query parameters to Particiapi.
     _ALLOWED_PARAMS = frozenset({'create', 'zinvite', 'conversation_id', 'tid'})
     params = {k: v for k, v in request.args.items() if k in _ALLOWED_PARAMS}
-    # If the web component calls POST /api/session with no existing session,
-    # Particiapi returns 403 (auth required) unless we add ?create=true.
-    if pa_path == 'api/session' and request.method == 'POST' and not pa_cookie:
+    # If the web component calls POST /api/session with no existing session (and we're
+    # not binding a stable identity), Particiapi 403s unless we add ?create=true.
+    if (pa_path == 'api/session' and request.method == 'POST'
+            and not pa_cookie and not _bind_identity):
         params['create'] = 'true'
 
     interaction_match = re.match(r'^api/conversations/([^/]+)/(votes(?:/\d+)?|statements/?)(?:/)?$', pa_path)
@@ -1642,6 +1680,10 @@ def _proxy_to_particiapi(pa_path: str):
             headers['X-CSRF-Token'] = csrf
         if request.content_type:
             headers['Content-Type'] = request.content_type
+
+    if _bind_identity:
+        headers['X-Particiapi-Sub'] = _sub
+        headers['X-Particiapi-Sub-Secret'] = _sub_secret
 
     try:
         upstream = requests.request(
@@ -1683,9 +1725,14 @@ def _proxy_to_particiapi(pa_path: str):
         'Content-Type', 'application/json')
 
     if 'session' in upstream.cookies:
+        # Path-scope the session cookie to this conversation's proxy base, so the browser
+        # only returns it on that conversation's calls — each conversation keeps its own
+        # session/uid (#246). The legacy unscoped route keeps the root path.
+        _cookie_path = f'/c/{conv.slug}/proxy/particiapi' if conv is not None else '/'
         flask_resp.set_cookie(
             'pa_session',
             upstream.cookies['session'],
+            path=_cookie_path,
             httponly=True,
             samesite='Lax',
             secure=not current_app.debug,
@@ -2017,6 +2064,20 @@ def proxy_particiapi(pa_path):
         return auth_resp
     return _proxy_to_particiapi(pa_path)
 
+
+@proxy_bp.route('/c/<slug>/proxy/particiapi/<path:pa_path>',
+                methods=['GET', 'POST', 'PUT'])
+@limiter.limit('180 per minute')
+def proxy_particiapi_scoped(slug, pa_path):
+    """Per-conversation proxy: conversation-scoped identity + path-scoped session cookie,
+    so a participant gets a different Polis uid per conversation (#246). Uses the global
+    proxy's demo-aware auth (_proxy_auth_response) rather than @login_required so demo
+    sessions work through the scoped proxy too. (admin_bp is defined above on this branch.)"""
+    auth_resp = _proxy_auth_response(pa_path)
+    if auth_resp is not None:
+        return auth_resp
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    return _proxy_to_particiapi(pa_path, conv=conv)
 # nh3 tag allowlist for CSV import sanitisation — no HTML tags permitted.
 _NH3_NO_TAGS: frozenset[str] = frozenset()
 
@@ -4544,6 +4605,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['OAUTH_REDIRECT_URI']  = _read_secret('oauth-redirect-uri')
     app.config['PARTICIAPI_BASE']     = (_read_secret('particiapi-base-url')
                                          or os.environ.get('PARTICIAPI_BASE_URL', 'http://localhost:8000'))
+    # Shared secret that lets the proxy assert the logged-in user's stable identity
+    # (xid) to Particiapi, so a participant keeps the same Polis uid across devices
+    # instead of a fresh anonymous one per session. Must match Particiapi's
+    # TRUSTED_SUB_SECRET. Unset → falls back to the old anonymous-per-session behaviour.
+    app.config['PARTICIAPI_SUB_SECRET'] = (_read_secret('particiapi-sub-secret')
+                                           or os.environ.get('PARTICIAPI_SUB_SECRET', ''))
     app.config['POLIS_DATABASE_URL'] = (_read_secret('polis-database-url')
                                         or os.environ.get('POLIS_DATABASE_URL', ''))
     app.config['POLIS_SERVER_URL']   = (_read_secret('polis-server-url')
