@@ -12,7 +12,7 @@
 {% endblock %}
 {% macro content_flag_form(action, uid, label) -%}
 <details class="content-flag">
-  <summary aria-label="Flag {{ label }} for moderator review">flag</summary>
+  <summary aria-label="Flag {{ label }} for moderator review">flag concerns about this {{ label }}</summary>
   <form method="post" action="{{ action }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label class="sr-only" for="flag-category-{{ uid }}">Reason</label>
