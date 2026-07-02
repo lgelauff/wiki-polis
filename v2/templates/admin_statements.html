@@ -24,7 +24,7 @@
       an approved or hidden statement to the review queue.
     </p>
     <ul style="font-size:13px;padding-left:1.25rem;margin-bottom:.6rem">
-      <li>Vote counts show agree, disagree, and pass totals from Polis when the statistics database is available.</li>
+      <li>Vote counts show <strong>A</strong>gree · <strong>P</strong>ass · <strong>D</strong>isagree totals from Polis when the statistics database is available.</li>
       <li>Seed statements come from moderator entry or imports; participant-submitted statements appear in the same moderation lists.</li>
       <li>A star marks statements already selected as featured. A correction marker links derived statements back to the original TID.</li>
       <li>Seed entry and imports are available only during preparation or open statement submission.</li>
@@ -185,10 +185,10 @@
                 title="Derived from statement #{{ prov.derived_from_tid }}. Similarity 1.00 = identical.{% for sc in prov.scores %} {{ sc.model }} {{ '%.2f'|format(sc.value) }}.{% endfor %}">
             <span class="sr-only">derived from statement {{ prov.derived_from_tid }}, </span>↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}</span>{% endif %}</td>
         <td class="stmt-text">{{ s.txt }}</td>
-        <td class="stmt-votes muted">
-          +{{ s.agree_count or 0 }}
-          −{{ s.disagree_count or 0 }}
-          ·{{ s.pass_count or 0 }}
+        <td class="stmt-votes">
+          <span class="vcount vcount--agree" title="Agree votes"><span class="vlabel">A</span> {{ s.agree_count or 0 }}</span>
+          <span class="vcount vcount--pass" title="Pass votes"><span class="vlabel">P</span> {{ s.pass_count or 0 }}</span>
+          <span class="vcount vcount--disagree" title="Disagree votes"><span class="vlabel">D</span> {{ s.disagree_count or 0 }}</span>
         </td>
         <td class="stmt-actions">
           <form method="post" style="display:inline"
@@ -239,10 +239,10 @@
                 title="Derived from statement #{{ prov.derived_from_tid }}. Similarity 1.00 = identical.{% for sc in prov.scores %} {{ sc.model }} {{ '%.2f'|format(sc.value) }}.{% endfor %}">
             <span class="sr-only">derived from statement {{ prov.derived_from_tid }}, </span>↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}</span>{% endif %}</td>
         <td class="stmt-text">{{ s.txt }}</td>
-        <td class="stmt-votes muted">
-          +{{ s.agree_count or 0 }}
-          −{{ s.disagree_count or 0 }}
-          ·{{ s.pass_count or 0 }}
+        <td class="stmt-votes">
+          <span class="vcount vcount--agree" title="Agree votes"><span class="vlabel">A</span> {{ s.agree_count or 0 }}</span>
+          <span class="vcount vcount--pass" title="Pass votes"><span class="vlabel">P</span> {{ s.pass_count or 0 }}</span>
+          <span class="vcount vcount--disagree" title="Disagree votes"><span class="vlabel">D</span> {{ s.disagree_count or 0 }}</span>
         </td>
         <td class="stmt-actions">
           <form method="post" style="display:inline"
@@ -287,10 +287,10 @@
       <tr>
         <td class="muted">{{ s.tid }}</td>
         <td class="stmt-text">{{ s.txt }}</td>
-        <td class="stmt-votes muted">
-          +{{ s.agree_count or 0 }}
-          −{{ s.disagree_count or 0 }}
-          ·{{ s.pass_count or 0 }}
+        <td class="stmt-votes">
+          <span class="vcount vcount--agree" title="Agree votes"><span class="vlabel">A</span> {{ s.agree_count or 0 }}</span>
+          <span class="vcount vcount--pass" title="Pass votes"><span class="vlabel">P</span> {{ s.pass_count or 0 }}</span>
+          <span class="vcount vcount--disagree" title="Disagree votes"><span class="vlabel">D</span> {{ s.disagree_count or 0 }}</span>
         </td>
         <td class="stmt-actions">
           <form method="post" style="display:inline"

@@ -141,9 +141,13 @@
 /* Per-box simple/advanced — the distinction belongs to ONE control box at a
    time (e.g. the phase control), never the whole console. No global mode, no
    header switch. A box opts in by carrying [data-mode] and a .box-mode toggle. */
-[data-mode] .mode-advanced-part { display: none; }
+[data-mode] .mode-advanced-part { display: none; margin-top: 14px; }
 [data-mode="advanced"] .mode-advanced-part { display: revert; }
 [data-mode="advanced"] .mode-guided-part   { display: none; }
+/* In Advanced mode the toggles are the point of the box — float them directly under the
+   timeline/switch instead of below all the guided stats/pause content. */
+[data-mode="advanced"] .phase-hero-body { display: flex; flex-direction: column; }
+[data-mode="advanced"] .mode-advanced-part { order: -1; margin-top: 0; margin-bottom: 14px; }
 
 .box-adv-note {
   display: none;

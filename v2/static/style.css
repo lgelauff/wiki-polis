@@ -1804,8 +1804,32 @@ a { color: var(--pass); }
 .btn-small:hover { border-color: var(--pass); color: var(--pass); }
 
 
+/* Disabled small/danger buttons must read as inert — greyed, not-allowed cursor, and
+   no hover affordance — otherwise a guarded action (e.g. delete-with-votes) still looks
+   clickable and clicking it silently does nothing. */
+.btn-small:disabled,
+.btn-small[disabled],
+.btn-small[aria-disabled="true"] {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.btn-small:disabled:hover,
+.btn-small[disabled]:hover,
+.btn-small[aria-disabled="true"]:hover {
+  border-color: var(--border);
+  color: var(--body);
+  background: var(--surface);
+}
+
 .btn-danger { border-color: var(--red); color: var(--red); }
 .btn-danger:hover { background: var(--red); color: white; border-color: var(--red); }
+.btn-danger:disabled:hover,
+.btn-danger[disabled]:hover,
+.btn-danger[aria-disabled="true"]:hover {
+  background: var(--surface);
+  color: var(--red);
+  border-color: var(--red);
+}
 .btn-warn { border-color: var(--spot); color: var(--spot); }
 .btn-warn:hover { background: var(--spot); color: white; border-color: var(--spot); }
 .btn-pause        { border-color: var(--spot); color: var(--spot); }
@@ -1978,6 +2002,14 @@ a { color: var(--pass); }
   white-space: nowrap;
   font-size: 12px;
 }
+/* Vote tallies, ordered Agree · Pass · Disagree, each labelled + colour-coded so the three
+   numbers aren't an unlabelled "+ − ·" run. */
+.stmt-votes .vcount { font-variant-numeric: tabular-nums; }
+.stmt-votes .vcount + .vcount { margin-left: 18px; }
+.stmt-votes .vlabel { font-weight: 700; opacity: 0.7; }
+.vcount--agree { color: var(--agree); }
+.vcount--pass { color: var(--muted); }
+.vcount--disagree { color: var(--disagree); }
 
 .stmt-actions {
   white-space: nowrap;
