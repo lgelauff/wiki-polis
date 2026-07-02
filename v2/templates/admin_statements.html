@@ -30,15 +30,17 @@
       <li>Seed entry and imports are available only during preparation or open statement submission.</li>
     </ul>
     <p class="muted" style="font-size:13px;margin-bottom:0">
-      CSV and text imports strip spreadsheet formula prefixes, remove HTML, reject invalid
-      rows as a batch, and skip statements already present in the conversation.
+      The text import strips spreadsheet formula prefixes, removes HTML, rejects invalid
+      rows as a batch, and skips statements already present in the conversation.
     </p>
   </div>
 
 
   {% with messages = get_flashed_messages(with_categories=true) %}
   {% for category, message in messages %}
-  <div style="background:{% if category == 'error' %}#fef2f2;border-color:#fca5a5;color:#991b1b{% else %}#f0fdf4;border-color:#86efac;color:#166534{% endif %};border:1px solid;padding:.75rem 1rem;border-radius:6px;font-size:13px;margin-bottom:1.5rem">
+  {% set is_error = category in ['error', 'import_row_error'] or message.startswith('✗') %}
+  {% set is_warn = category == 'warning' or message.startswith('⚠') %}
+  <div style="background:{% if is_error %}#fef2f2;border-color:#fca5a5;color:#991b1b{% elif is_warn %}#fffbeb;border-color:#fcd34d;color:#92400e{% else %}#f0fdf4;border-color:#86efac;color:#166534{% endif %};border:1px solid;padding:.75rem 1rem;border-radius:6px;font-size:13px;margin-bottom:1.5rem">
     {{ message }}
   </div>
   {% endfor %}
@@ -86,6 +88,11 @@
       Paste one statement per line. Blank lines are ignored. Maximum {{ max_import_rows }}
       statements per import and {{ max_import_chars }} characters per statement.
     </p>
+    <p class="muted" style="margin-bottom:.75rem;font-size:13px">
+      All-or-nothing: if any line is invalid (too long, duplicated within your paste, or
+      over the limit) nothing is imported and the offending lines are listed. Lines
+      identical to an existing statement are skipped automatically — the rest still import.
+    </p>
     <form method="post"
           action="{{ url_for('admin.admin_statement_seed_import_text', conv_id=conversation.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -96,45 +103,6 @@
       <div style="margin-top:.75rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
         <button type="submit">Import statements</button>
       </div>
-    </form>
-  </div>
-
-  <!-- ── Bulk CSV import ───────────────────────────────── -->
-  <h3 class="section-heading">Import seed statements from CSV</h3>
-  <div class="edit-form">
-    <p class="muted" style="margin-bottom:.75rem;font-size:13px">
-      Upload a UTF-8 CSV file with a <code>text</code> column header (required) and an optional <code>note</code>
-      column (ignored). Comma-delimited only. Maximum {{ max_import_rows }} rows and
-      {{ max_import_kb }} KB per upload. Statements already in this conversation are skipped automatically.
-    </p>
-    <form method="post"
-          action="{{ url_for('admin.admin_statement_seed_import', conv_id=conversation.id) }}"
-          enctype="multipart/form-data">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>CSV file
-        <input type="file" name="csv_file" accept=".csv,text/csv" required>
-      </label>
-      <div style="margin-top:.75rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-        <button type="submit">Import statements</button>
-        {% with result = get_flashed_messages(category_filter=['import_result']) %}
-        {% if result %}
-          {% set msg = result[0] %}
-          {% set ok = msg.startswith('✓') %}
-          <span style="font-size:13px;font-weight:600;color:{{ 'var(--success, #2a7a2a)' if ok else 'var(--error, #b91c1c)' }}">
-            {{ msg }}
-          </span>
-        {% endif %}
-        {% endwith %}
-      </div>
-      {% with row_errors = get_flashed_messages(category_filter=['import_row_error']) %}
-      {% if row_errors %}
-        <ul style="margin-top:.5rem;padding-left:1.25rem;font-size:13px;color:var(--error,#b91c1c)">
-          {% for err in row_errors %}
-          <li>{{ err }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-      {% endwith %}
     </form>
   </div>
   {% endif %}

@@ -83,7 +83,7 @@
                   action="{{ url_for('admin.admin_participant_unban', conv_id=conversation.id, participant_id=row.participant.id) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="text" name="summary" placeholder="Unban note (optional)" style="width:100%;margin-bottom:.35rem">
-              <button type="submit" class="btn-small">unban</button>
+              <button type="submit" class="btn-small btn-approve">unban</button>
             </form>
           {% else %}
             <form method="post"
