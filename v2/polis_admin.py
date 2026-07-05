@@ -26,15 +26,18 @@ _SAFE_ZINVITE = re.compile(r'^[A-Za-z0-9]{6,20}$')
 # Returns all active statements with vote counts, seeds first then by agree rate.
 # The agree-rate ordering is a heuristic proxy for group-representativeness when
 # cluster data (math_main) is not yet available or computed.
+# Counts use votes_latest_unique + COUNT(DISTINCT pid) so a participant is counted
+# once at their CURRENT vote — raw `votes` + COUNT(*) would inflate every count by
+# vote changes (see #269).
 _STATEMENTS_SQL = """
     WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s),
     vote_stats AS (
       SELECT
         v.tid,
-        COUNT(*) FILTER (WHERE v.vote = -1)::int AS agree_count,
-        COUNT(*) FILTER (WHERE v.vote =  1)::int AS disagree_count,
-        COUNT(*) FILTER (WHERE v.vote =  0)::int AS pass_count
-      FROM votes v, z WHERE v.zid = z.zid GROUP BY v.tid
+        COUNT(DISTINCT v.pid) FILTER (WHERE v.vote = -1)::int AS agree_count,
+        COUNT(DISTINCT v.pid) FILTER (WHERE v.vote =  1)::int AS disagree_count,
+        COUNT(DISTINCT v.pid) FILTER (WHERE v.vote =  0)::int AS pass_count
+      FROM votes_latest_unique v, z WHERE v.zid = z.zid GROUP BY v.tid
     )
     SELECT
       c.tid,
@@ -56,10 +59,10 @@ _FEATURED_CANDIDATES_SQL = """
     vote_stats AS (
       SELECT
         v.tid,
-        COUNT(*) FILTER (WHERE v.vote = -1)::int  AS n_agree,
-        COUNT(*) FILTER (WHERE v.vote =  1)::int  AS n_disagree,
-        COUNT(*) FILTER (WHERE v.vote != 0)::int  AS n_votes
-      FROM votes v, z WHERE v.zid = z.zid GROUP BY v.tid
+        COUNT(DISTINCT v.pid) FILTER (WHERE v.vote = -1)::int  AS n_agree,
+        COUNT(DISTINCT v.pid) FILTER (WHERE v.vote =  1)::int  AS n_disagree,
+        COUNT(DISTINCT v.pid) FILTER (WHERE v.vote != 0)::int  AS n_votes
+      FROM votes_latest_unique v, z WHERE v.zid = z.zid GROUP BY v.tid
     )
     SELECT
       c.tid,
