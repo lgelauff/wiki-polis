@@ -79,6 +79,10 @@ if [ "$MIGRATE" -eq 1 ]; then
   echo "    Migrations done."
 fi
 
+echo "==> Reconciling scheduled jobs (Toolforge jobs framework)..."
+# Idempotent: re-asserts the schedule defined in jobs.yaml on every deploy.
+toolforge jobs load ~/wiki-polis/jobs.yaml || echo "    WARNING: could not load jobs.yaml (is the jobs framework available?)"
+
 echo "==> Restarting web service..."
 cd ~
 toolforge webservice --backend=kubernetes python3.13 restart
