@@ -79,6 +79,18 @@ if [ "$MIGRATE" -eq 1 ]; then
   echo "    Migrations done."
 fi
 
+echo "==> Reconciling scheduled jobs (Toolforge jobs framework)..."
+# Idempotent: re-asserts the schedule defined in jobs.yaml on every deploy.
+# Non-fatal (a jobs failure must not block the web deploy) but LOUD — an earlier soft
+# "WARNING" let a failed load slide past unnoticed, leaving the scheduler unregistered.
+if toolforge jobs load ~/wiki-polis/jobs.yaml; then
+  toolforge jobs list   # echo what's now registered so a silent no-op is visible
+else
+  echo "!!  ERROR: 'toolforge jobs load' FAILED — scheduled jobs (phase-scheduler) are NOT registered." >&2
+  echo "!!  Web deploy will still finish, but scheduled phase transitions will NOT fire until you" >&2
+  echo "!!  run 'toolforge jobs load ~/wiki-polis/jobs.yaml' manually and check 'toolforge jobs list'." >&2
+fi
+
 echo "==> Restarting web service..."
 cd ~
 toolforge webservice --backend=kubernetes python3.13 restart
