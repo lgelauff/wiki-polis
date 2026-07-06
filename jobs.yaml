@@ -1,0 +1,9 @@
+# Toolforge scheduled jobs for wiki-polis. Single source of truth — loaded by deploy.sh
+# (`toolforge jobs load ~/wiki-polis/jobs.yaml`) on every deploy, so the schedule is
+# version-controlled and re-asserted each time. Future scheduled jobs (e.g. app-DB
+# backups) go here too.
+- name: phase-scheduler
+  command: ./wiki-polis/v2/bin/phase-scheduler.sh
+  image: python3.13
+  schedule: "*/5 * * * *"     # every 5 min → a scheduled transition fires within ~5 min of its time
+  emails: onfailure
