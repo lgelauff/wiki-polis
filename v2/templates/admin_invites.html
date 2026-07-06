@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block header_mode %}header--admin{% endblock %}
+{% block title %}Invites — {{ conversation.title }} — wiki-polis{% endblock %}
 {% block header_crumb %}
-<span class="header-crumb">
+<nav class="header-crumb" aria-label="Admin breadcrumb">
   <span class="header-crumb-sep">/</span>
-  <a href="{{ url_for('admin.admin') }}">Admin</a>
+  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
   <span class="header-crumb-sep">/</span>
-  <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ conversation.title | truncate(20, True, '…') }}</a>
+  <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ conversation.title | truncate(28, True, '…') }}</a>
   <span class="header-crumb-sep">/</span>
   <span>Invites</span>
-</span>
+</nav>
 {% endblock %}
 {% block content %}
 

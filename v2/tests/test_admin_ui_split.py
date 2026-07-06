@@ -141,14 +141,14 @@ def test_moderator_sees_manage_link(mod_client, mod_p, conv):
     _enroll(mod_p, conv)
     resp = mod_client.get(f'/c/{conv.slug}')
     assert resp.status_code == 200
-    assert '← Manage'.encode() in resp.data
+    assert 'Manage</a>'.encode() in resp.data
 
 
 def test_admin_sees_manage_link(admin_client, admin_p, conv):
     _enroll(admin_p, conv)
     resp = admin_client.get(f'/c/{conv.slug}')
     assert resp.status_code == 200
-    assert '← Manage'.encode() in resp.data
+    assert 'Manage</a>'.encode() in resp.data
 
 
 def test_regular_user_no_manage_link(regular_client, regular_p, conv):

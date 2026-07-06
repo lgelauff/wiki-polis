@@ -1,12 +1,13 @@
-"""Direct tests for the proxy + statement-submit blueprint (issue #91, step 7).
+"""Direct tests for the Particiapi proxy and statement-submit bridge.
 
 These cover the security-critical behaviours the main suite does NOT exercise. The
 shared `app` fixture runs with `WTF_CSRF_ENABLED=False`, so it cannot catch a broken
 `csrf.exempt(proxy_bp)` — yet CSRF exemption (with same-origin as the compensating
 control) is the core proxy security posture. These tests lock the expected boundary:
 
-- CSRF exemption is active on the blueprint, with manual CSRF on the
-  first-party statement-submit route;
+- CSRF exemption is active on the generic proxy blueprint only;
+- first-party statement submit is a participant route with normal CSRF plus the
+  same-origin provenance check;
 - the same-origin check still gates state-changing requests and fails closed
   when browser provenance headers are missing;
 - the pa_session <-> session cookie rename is preserved in both directions;
@@ -59,8 +60,7 @@ def csrf_client(csrf_enabled_app):
     return csrf_enabled_app.test_client()
 
 
-@pytest.mark.parametrize('path', ['/proxy/particiapi/api/foo',
-                                  '/c/any-slug/statements/new'])
+@pytest.mark.parametrize('path', ['/proxy/particiapi/api/foo'])
 def test_blueprint_routes_are_csrf_exempt(csrf_client, path):
     # No CSRF token, not logged in. If the blueprint were NOT exempt, Flask-WTF would
     # reject at before_request with 400 'CSRF token missing'. Because it IS exempt the
@@ -132,7 +132,7 @@ def test_proxy_post_allows_same_origin(auth_client):
     assert resp.status_code == 200
 
 
-# ── statement-submit route on the blueprint ──────────────────────────────────────
+# ── statement-submit participant route ────────────────────────────────────────────
 
 def test_proxy_rejects_path_traversal_and_non_api(auth_client):
     # CRIT-1 guard: only /api/ paths, no '..' segments — must never reach upstream.
@@ -149,6 +149,39 @@ def test_proxy_strips_unknown_query_params(auth_client):
         auth_client.get('/proxy/particiapi/api/conversations/abc/'
                         '?zinvite=ok&evil=DROP&tid=3')
     assert req.call_args.kwargs['params'] == {'zinvite': 'ok', 'tid': '3'}
+
+
+def test_demo_proxy_allows_bound_vote_endpoint(client):
+    conv = Conversation(slug='demo-proxy', polis_id='demoproxy1', title='Demo',
+                        active=True, access_policy='demo', phase_submission=True)
+    db.session.add(conv)
+    db.session.commit()
+    client.get('/c/demo-proxy')
+
+    up = _fake_upstream()
+    with patch('app.requests.request', return_value=up) as req:
+        resp = client.put('/proxy/particiapi/api/conversations/demoproxy1/votes/7',
+                          headers={'Sec-Fetch-Site': 'same-origin'},
+                          json={'value': 1})
+
+    assert resp.status_code == 200
+    assert req.called
+
+
+def test_demo_proxy_blocks_statement_write_endpoint(client):
+    conv = Conversation(slug='demo-proxy2', polis_id='demoproxy2', title='Demo',
+                        active=True, access_policy='demo', phase_submission=True)
+    db.session.add(conv)
+    db.session.commit()
+    client.get('/c/demo-proxy2')
+
+    with patch('app.requests.request') as req:
+        resp = client.post('/proxy/particiapi/api/conversations/demoproxy2/statements/',
+                           headers={'Sec-Fetch-Site': 'same-origin'},
+                           json={'text': 'blocked'})
+
+    assert resp.status_code == 403
+    req.assert_not_called()
 
 
 def test_statement_new_enforces_quota(auth_client, participant):
@@ -210,7 +243,7 @@ def test_statement_new_happy_path_records_polis_id(auth_client, participant):
                for c in resp.headers.getlist('Set-Cookie'))
 
 
-def test_statement_new_requires_manual_csrf_when_csrf_enabled(csrf_enabled_app):
+def test_statement_new_requires_csrf_when_csrf_enabled(csrf_enabled_app):
     client = csrf_enabled_app.test_client()
     p = Participant(mw_user_id=10101, mw_username='csrfuser', xid='c' * 64)
     conv = Conversation(slug='csrf-sub', polis_id='csrfxxxxxx', title='CSRF',
@@ -234,7 +267,7 @@ def test_statement_new_requires_manual_csrf_when_csrf_enabled(csrf_enabled_app):
     post.assert_not_called()
 
 
-def test_statement_new_accepts_valid_manual_csrf_when_csrf_enabled(csrf_enabled_app):
+def test_statement_new_accepts_valid_csrf_when_csrf_enabled(csrf_enabled_app):
     client = csrf_enabled_app.test_client()
     p = Participant(mw_user_id=20202, mw_username='csrfok', xid='d' * 64)
     conv = Conversation(slug='csrf-ok', polis_id='csrfokxxxx', title='CSRF OK',
@@ -268,5 +301,41 @@ def test_statement_new_accepts_valid_manual_csrf_when_csrf_enabled(csrf_enabled_
                                'X-CSRFToken': csrf_token,
                            },
                            json={'text': 'A token-backed idea'})
+
+    assert resp.status_code == 201
+
+
+def test_statement_new_allows_missing_provenance_after_valid_manual_csrf(csrf_enabled_app):
+    """Safari-style fetches may omit Fetch Metadata; the CSRF token remains required."""
+    client = csrf_enabled_app.test_client()
+    p = Participant(mw_user_id=30303, mw_username='csrfonly', xid='e' * 64)
+    conv = Conversation(slug='csrf-only', polis_id='csrfonlyxx', title='CSRF Only',
+                        active=True, access_policy='public', phase_submission=True,
+                        argument_vote_data={'new_stmt_max': 3})
+    db.session.add_all([p, conv])
+    db.session.commit()
+    db.session.add(Participation(participant_id=p.id,
+                                 conversation_id=conv.id,
+                                 pseudonym='csrf-only'))
+    db.session.commit()
+    with client.session_transaction() as sess:
+        sess['username'] = p.mw_username
+        sess['xid'] = p.xid
+
+    page = client.get('/c/csrf-only')
+    token_match = re.search(rb"var csrfToken = '([^']+)'", page.data)
+    assert token_match is not None
+    csrf_token = token_match.group(1).decode()
+
+    sess_resp = _fake_upstream(cookies={'session': 'NEWPA'})
+    sess_resp.ok = True
+    sess_resp.json = lambda: {'csrf_token': 'TOK'}
+    stmt_resp = _fake_upstream(status_code=201, content=b'{"id":557}')
+    stmt_resp.json = lambda: {'id': 557}
+
+    with patch('app.requests.post', side_effect=[sess_resp, stmt_resp]):
+        resp = client.post('/c/csrf-only/statements/new',
+                           headers={'X-CSRFToken': csrf_token},
+                           json={'text': 'A CSRF-backed browser submit'})
 
     assert resp.status_code == 201

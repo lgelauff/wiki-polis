@@ -21,8 +21,8 @@ import nh3
 import requests
 from dotenv import load_dotenv
 from flask import (Blueprint, Flask, abort, current_app, flash, g, jsonify,
-                   make_response, redirect, render_template, request, session,
-                   url_for)
+                   has_request_context, make_response, redirect, render_template,
+                   request, session, url_for)
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
@@ -34,12 +34,14 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from wtforms.validators import ValidationError
 
-from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument, ArgumentSideState,
-                ArgumentVote, AuditEvent, Conversation, ConversationInvite, FeaturedStatement,
-                Participant, Participation, StatementProvenance, StatementSimilarityScore, db)
+from db import (ACCESS_POLICIES, ADMIN_ROLES, FLAG_CATEGORIES, AdminRole, Argument,
+                ArgumentSideState, ArgumentVote, AuditEvent, ContentFlag, Conversation,
+                ConversationBan, ConversationInvite, FeaturedStatement, Participant,
+                Participation, StatementProvenance, StatementSimilarityScore, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
-from seed_csv import MAX_FILE_BYTES, MAX_ROWS, parse_csv_bytes, strip_formula_prefixes
+from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
+                      RowError, strip_formula_prefixes)
 from logging_setup import configure_logging
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
@@ -52,6 +54,8 @@ _SLUG_RE         = re.compile(r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
 _PSEUDONYM_RE    = re.compile(r'^[a-z]{2,20}-[a-z]{2,20}$')
 _REDIS_RATELIMIT_SCHEMES = ('redis://', 'rediss://')
 _MIN_RATELIMIT_IDENTITY_SECRET_LEN = 32
+_XID_HMAC_VERSION = 2
+_MIN_STAGING_DEV_TOKEN_LEN = 32
 
 
 def _read_secret(name: str) -> str:
@@ -73,11 +77,45 @@ def _truthy(value) -> bool:
     return str(value or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+def _derive_xid(subject: str) -> str:
+    """Keyed participant xid derivation (#96).
+
+    Version 1 used plain sha256(mw_user_id), which is enumerable because Wikimedia
+    user ids are sequential. HMAC keeps the live Particiapi identifier stable within
+    one deployment without making it recomputable from public user ids.
+    """
+    secret = current_app.config.get('XID_HASH_SECRET') or current_app.config['SECRET_KEY']
+    return hmac.new(str(secret).encode(), str(subject).encode(), hashlib.sha256).hexdigest()
+
+
+def _is_staging_toolforge_app(app: Flask) -> bool:
+    tool_name = (
+        os.environ.get('TOOL_NAME')
+        or os.environ.get('TOOLFORGE_TOOL_NAME')
+        or ''
+    ).strip()
+    if tool_name == 'wiki-polis-dev':
+        return True
+    if os.environ.get('WIKI_POLIS_ENV', '').strip().lower() == 'staging':
+        return True
+    hosts = app.config.get('TRUSTED_HOSTS') or []
+    if isinstance(hosts, str):
+        hosts = _split_csv(hosts)
+    return 'wiki-polis-dev.toolforge.org' in hosts
+
+
+def _staging_dev_login_token(username: str, secret: str) -> str:
+    return hmac.new(secret.encode('utf-8'), username.encode('utf-8'), hashlib.sha256).hexdigest()
+
+
 ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.strip()]
 
 _REVEAL_COOLDOWN_DAYS = 30   # days after close before reveal window opens
 _REVEAL_WINDOW_DAYS   = 30   # days participants may opt in once the window opens
 _MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
+_DEMO_MW_ID_MIN = -2_000_000_000
+_DEMO_MW_ID_MAX = -1_000_000_000
+_LAST_ENGAGEMENT_THROTTLE = timedelta(minutes=5)
 
 # ── Phase 6 results ───────────────────────────────────────────────────────────
 
@@ -100,6 +138,21 @@ class Phase6ResultsFilter:
     @classmethod
     def empty(cls) -> 'Phase6ResultsFilter':
         return cls(excluded_tids=frozenset(), excluded_pids=frozenset())
+
+    def to_snapshot(self) -> dict:
+        return {
+            'excluded_tids': sorted(int(tid) for tid in self.excluded_tids),
+            'excluded_pids': sorted(int(pid) for pid in self.excluded_pids),
+        }
+
+    @classmethod
+    def from_snapshot(cls, data) -> 'Phase6ResultsFilter':
+        if not isinstance(data, dict):
+            return cls.empty()
+        return cls(
+            excluded_tids=frozenset(int(tid) for tid in data.get('excluded_tids', [])),
+            excluded_pids=frozenset(int(pid) for pid in data.get('excluded_pids', [])),
+        )
 
 
 def _vote_label(vote: int | None) -> str | None:
@@ -298,6 +351,39 @@ def _build_phase6_results(
         'clusters':              clusters,
         'pg_available':          pg_available,
     }
+
+
+def _current_phase6_results_filter(conv) -> Phase6ResultsFilter:
+    """Build the current moderation filter for Phase 6 report surfaces.
+
+    Hidden Phase 6 statements are sourced from the Polis stats DB when available.
+    Participant exclusions are reserved for #60; the field is intentionally present
+    in snapshots now so final reports do not need another schema change later.
+    """
+    excluded_tids: set[int] = set()
+    if conv.phase6_polis_conversation_id:
+        try:
+            rows = _polis_server_client().get_statements(conv.phase6_polis_conversation_id)
+        except Exception:
+            current_app.logger.exception(
+                'Could not build Phase 6 report filter for %s', conv.slug)
+            rows = None
+        if rows:
+            _, _, hidden = rows
+            excluded_tids = {
+                int(row['tid']) for row in hidden
+                if row.get('tid') is not None
+            }
+    return Phase6ResultsFilter(excluded_tids=frozenset(excluded_tids),
+                               excluded_pids=frozenset())
+
+
+def _snapshot_report_filter(conv) -> Phase6ResultsFilter:
+    filt = _current_phase6_results_filter(conv)
+    conv.report_filter_snapshot = filt.to_snapshot()
+    return filt
+
+
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
 
@@ -359,13 +445,67 @@ PHASE_SEQUENCE = [
     {'key': 'public_results',     'label': 'Report',             'flag': 'phase_public_results',
      'effect': 'everyone can see the full aggregate results'},
 ]
+_PHASE_BY_KEY = {stage['key']: stage for stage in PHASE_SEQUENCE}
+
+PHASE_ROUTES = {
+    'default_7': {
+        'label': 'Default 7-step path',
+        'description': 'Explore, featured selection, arguments, cleanup, informed vote, report.',
+        'keys': [
+            'preparation', 'submission', 'featured_selection', 'argument_mapping',
+            'cleanup', 'informed_voting', 'public_results',
+        ],
+    },
+    'no_informed_vote': {
+        'label': 'Arguments, no informed vote',
+        'description': 'Explore, feature statements, map arguments, then publish a report.',
+        'keys': [
+            'preparation', 'submission', 'featured_selection', 'argument_mapping',
+            'cleanup', 'public_results',
+        ],
+    },
+    'short_results': {
+        'label': 'Short path to report',
+        'description': 'Explore, curate featured statements, then publish results.',
+        'keys': ['preparation', 'submission', 'featured_selection', 'public_results'],
+    },
+}
+_DEFAULT_PHASE_ROUTE = 'default_7'
 _PHASE_FLAGS = [s['flag'] for s in PHASE_SEQUENCE if s['flag']]
+_ACTIVE_PHASE_KEYS = {'submission', 'argument_mapping', 'informed_voting'}
+
+
+def _valid_phase_route(value: str | None) -> str:
+    value = (value or _DEFAULT_PHASE_ROUTE).strip()
+    return value if value in PHASE_ROUTES else _DEFAULT_PHASE_ROUTE
+
+
+def _phase_sequence_for(conv) -> list[dict]:
+    route = _valid_phase_route(getattr(conv, 'phase_route', _DEFAULT_PHASE_ROUTE))
+    return [_PHASE_BY_KEY[key] for key in PHASE_ROUTES[route]['keys']]
+
+
+def _phase_flags_for(conv) -> list[str]:
+    return [s['flag'] for s in _phase_sequence_for(conv) if s['flag']]
+
+
+def _route_has_phase(conv, key: str) -> bool:
+    return any(stage['key'] == key for stage in _phase_sequence_for(conv))
+
+
+def _in_cleanup_window(conv) -> bool:
+    return (
+        bool(conv.active)
+        and not bool(conv.phase_informed_voting)
+        and bool(conv.phase_public_results)
+        and conv.closed_at is None
+    )
 
 
 def _current_stage_index(conv) -> int:
     """Furthest-along stage whose flag is on; 0 (preparation) if none on."""
     idx = 0
-    for i, stage in enumerate(PHASE_SEQUENCE):
+    for i, stage in enumerate(_phase_sequence_for(conv)):
         if stage['flag'] and getattr(conv, stage['flag']):
             idx = i
     return idx
@@ -374,15 +514,15 @@ def _current_stage_index(conv) -> int:
 def _active_phases(conv) -> set:
     """Return the set of currently-active phase keys for a conversation.
 
-    Uses PHASE_SEQUENCE flag names as keys. Also adds 'cleanup_window' (inferred:
-    informed_voting on, not yet closed) and 'closed'. Multiple keys are possible
+    Uses route flag names as keys. Also adds 'cleanup_window' (inferred:
+    final report pending after participant activity ends) and 'closed'. Multiple keys are possible
     when the conversation is in advanced/non-linear mode.
     """
-    phases = {s['key'] for s in PHASE_SEQUENCE if s['flag'] and getattr(conv, s['flag'])}
+    phases = {s['key'] for s in _phase_sequence_for(conv) if s['flag'] and getattr(conv, s['flag'])}
     if not phases and not conv.closed_at:
         phases.add('preparation')
-    if conv.phase_informed_voting and not conv.closed_at:
-        phases.add('cleanup_window')   # inferred: after IV, before publish
+    if _in_cleanup_window(conv):
+        phases.add('cleanup_window')
     if conv.closed_at:
         phases.add('closed')
     return phases
@@ -390,7 +530,7 @@ def _active_phases(conv) -> set:
 
 def _is_linear_phase_state(conv) -> bool:
     """True if at most one phase flag is on — the simple-mode invariant."""
-    return sum(1 for f in _PHASE_FLAGS if getattr(conv, f)) <= 1
+    return sum(1 for f in _phase_flags_for(conv) if getattr(conv, f)) <= 1
 
 
 def _advance_target_index(conv) -> int | None:
@@ -400,8 +540,9 @@ def _advance_target_index(conv) -> int | None:
     to the final stage (public results) — closed consultations skip the
     intermediate steps. Returns None when already at/after the target.
     """
+    sequence = _phase_sequence_for(conv)
     i = _current_stage_index(conv)
-    last = len(PHASE_SEQUENCE) - 1
+    last = len(sequence) - 1
     target = last if not conv.active else i + 1
     return target if target > i and target <= last else None
 
@@ -413,8 +554,9 @@ def _advance_confirm_message(conv) -> str:
     target = _advance_target_index(conv)
     if target is None:
         return ''
-    nxt = PHASE_SEQUENCE[target]
-    cur = PHASE_SEQUENCE[i]
+    sequence = _phase_sequence_for(conv)
+    nxt = sequence[target]
+    cur = sequence[i]
     parts = [f'Move to “{nxt["label"]}”? Participants: {nxt["effect"]}.']
     if cur['flag']:
         parts.append(f'This closes the current phase ({cur["effect"]}).')
@@ -425,11 +567,11 @@ def _advance_confirm_message(conv) -> str:
 # Guided phase transitions (#156). Keyed by the TARGET stage. Each transition lists
 # the preconditions the organizer must affirm (one checkbox each) before the "Move on"
 # button enables. `check` (optional) names a machine-verifiable predicate, shown met/
-# unmet and enforced server-side. Behavioural flags: runs_phase6_init, auto_close,
-# show_pause.
+# unmet and enforced server-side. Behavioural flags: runs_phase6_init, show_pause.
 PHASE_TRANSITIONS = {
     'submission': {'preconditions': [
-        {'id': 'seeds',       'label': 'Enough seed statements added (the voting loop isn’t empty)'},
+        {'id': 'seeds',       'label': 'Enough seed statements added (the voting loop isn’t empty)',
+         'recommendation': 'seed_statements'},
         {'id': 'intro',       'label': 'Intro text / topic framing finalized'},
         {'id': 'access',      'label': 'Access policy (public / invite-only) set correctly'},
         {'id': 'modpolicy',   'label': 'Moderation policy decided and configured'},
@@ -455,24 +597,78 @@ PHASE_TRANSITIONS = {
         {'id': 'ready_moderate', 'label': 'I’m ready to review and moderate the arguments before the informed vote'},
     ]},
     'informed_voting': {'runs_phase6_init': True, 'show_pause': True, 'preconditions': [
-        {'id': 'args_modded', 'label': 'I’ve reviewed all arguments and removed those against moderation expectations'},
+        {'id': 'args_modded', 'label': 'I’ve reviewed all arguments and removed those against moderation expectations',
+         'recommendation': 'arguments_per_featured'},
         {'id': 'reinvite',    'label': 'I’m ready to invite participants back for the informed voting phase'},
         {'id': 'newcomers',   'label': 'I understand participants who didn’t take part earlier can join this round'},
     ]},
-    'public_results': {'auto_close': True, 'preconditions': [
+    'public_results': {'preconditions': [
         {'id': 'ran_long',    'label': 'The informed voting round has run long enough / had enough participation'},
-        {'id': 'public',      'label': 'I understand full aggregate results become public to everyone'},
+        {'id': 'public',      'label': 'I understand participant activity ends and preliminary results remain visible'},
         {'id': 'no_identity', 'label': 'I understand results won’t expose individual identities (aggregate only)'},
-        {'id': 'disclosure',  'label': 'I understand participants can now begin disclosing their identities'},
-        {'id': 'inform',      'label': 'I’m ready to inform participants of the results and that they may disclose'},
-        {'id': 'final',       'label': 'I understand this is the final phase and closes the consultation'},
+        {'id': 'disclosure',  'label': 'I understand identity disclosure does not start until final publication'},
+        {'id': 'inform',      'label': 'I’m ready to enter the organizer cleanup window'},
+        {'id': 'final',       'label': 'I understand publishing the final report is a separate irreversible action'},
     ]},
 }
 
-# Recommended number of featured statements. Advisory only (Phase 6 needs ≥1); the
-# ideal count depends on topic complexity — surfaced to the organizer as guidance.
-# TODO: make this per-conversation configurable when complexity tiers land.
-_RECOMMENDED_FEATURED = 15
+# Recommended quantities are advisory unless a transition has a separate machine
+# check. Organizers can choose a tier and override individual values per conversation.
+_RECOMMENDATION_TIERS = {
+    'simple': {
+        'label': 'Simple topic',
+        'seed_statements': 5,
+        'featured_statements': 8,
+        'arguments_per_featured': 2,
+        'votes_per_statement': 25,
+    },
+    'medium': {
+        'label': 'Medium topic',
+        'seed_statements': 8,
+        'featured_statements': 15,
+        'arguments_per_featured': 3,
+        'votes_per_statement': 50,
+    },
+    'complex': {
+        'label': 'Complex topic',
+        'seed_statements': 12,
+        'featured_statements': 24,
+        'arguments_per_featured': 4,
+        'votes_per_statement': 75,
+    },
+}
+_DEFAULT_RECOMMENDATION_TIER = 'medium'
+_RECOMMENDATION_LABELS = {
+    'seed_statements': 'seed statements before Explore opens',
+    'featured_statements': 'featured statements for argument mapping',
+    'arguments_per_featured': 'arguments per featured statement',
+    'votes_per_statement': 'votes per statement before advancing',
+}
+_RECOMMENDED_FEATURED = _RECOMMENDATION_TIERS[_DEFAULT_RECOMMENDATION_TIER]['featured_statements']
+
+
+def _recommendation_profile(conv) -> dict:
+    raw = getattr(conv, 'recommended_quantities', None) or {}
+    tier = raw.get('tier', _DEFAULT_RECOMMENDATION_TIER)
+    if tier not in _RECOMMENDATION_TIERS:
+        tier = _DEFAULT_RECOMMENDATION_TIER
+    profile = dict(_RECOMMENDATION_TIERS[tier])
+    profile['tier'] = tier
+    for key in _RECOMMENDATION_LABELS:
+        value = raw.get(key)
+        if isinstance(value, int) and value > 0:
+            profile[key] = value
+    return profile
+
+
+def _recommended_quantity(conv, key: str) -> int:
+    return int(_recommendation_profile(conv).get(key, 0))
+
+
+def _recommendation_note(conv, key: str) -> str | None:
+    value = _recommended_quantity(conv, key)
+    label = _RECOMMENDATION_LABELS.get(key)
+    return f'{value} recommended {label}' if value and label else None
 
 
 def _check_confirmed_featured(conv):
@@ -481,7 +677,8 @@ def _check_confirmed_featured(conv):
     selected count against the recommended target so the organizer can judge coverage."""
     n = (FeaturedStatement.query
          .filter_by(conversation_id=conv.id, confirmed_by_admin=True).count())
-    note = f'{n} selected, {_RECOMMENDED_FEATURED} recommended' if n > 0 else None
+    recommended = _recommended_quantity(conv, 'featured_statements')
+    note = f'{n} selected, {recommended} recommended' if n > 0 else None
     return n > 0, note
 
 
@@ -501,20 +698,22 @@ def _transition_context(conv):
     target = _advance_target_index(conv)
     if target is None:
         return None
-    cur = PHASE_SEQUENCE[_current_stage_index(conv)]
-    nxt = PHASE_SEQUENCE[target]
+    sequence = _phase_sequence_for(conv)
+    cur = sequence[_current_stage_index(conv)]
+    nxt = sequence[target]
     cfg = PHASE_TRANSITIONS.get(nxt['key'], {})
     preconds = []
     for p in cfg.get('preconditions', []):
         met, note = None, None
         if p.get('check'):
             met, note = _PRECONDITION_CHECKS[p['check']](conv)
+        elif p.get('recommendation'):
+            note = _recommendation_note(conv, p['recommendation'])
         preconds.append({**p, 'met': met, 'note': note})
     # Consequence text — what opens, what closes, irreversibility.
     consequence = {
         'opens':  nxt['effect'],
         'closes': cur['effect'] if cur['flag'] else None,
-        'auto_close': bool(cfg.get('auto_close')),
     }
     return {
         'target': nxt,
@@ -523,8 +722,274 @@ def _transition_context(conv):
         'consequence': consequence,
         'runs_phase6_init': bool(cfg.get('runs_phase6_init')),
         'show_pause': bool(cfg.get('show_pause')),
-        'auto_close': bool(cfg.get('auto_close')),
     }
+
+
+def _is_schedulable_transition(ctx: dict | None) -> bool:
+    if not ctx:
+        return False
+    source = ctx['source']['key']
+    target = ctx['target']['key']
+    return source in _ACTIVE_PHASE_KEYS and target not in _ACTIVE_PHASE_KEYS
+
+
+def _clear_scheduled_transition(conv) -> None:
+    conv.scheduled_transition_at = None
+    conv.scheduled_transition_target = None
+    conv.scheduled_transition_frozen = False
+
+
+def _normalise_utc(value: datetime | None) -> datetime | None:
+    if not value:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _parse_utc_timestamp(value: str) -> datetime | None:
+    raw = (value or '').strip()
+    if not raw:
+        return None
+    if raw.endswith('Z'):
+        raw = raw[:-1] + '+00:00'
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _format_countdown(target: datetime | None) -> str | None:
+    target = _normalise_utc(target)
+    if target is None:
+        return None
+    delta = target - datetime.now(timezone.utc)
+    if delta.total_seconds() <= 0:
+        return 'due now'
+    days = delta.days
+    hours, rem = divmod(delta.seconds, 3600)
+    minutes = rem // 60
+    if days:
+        return f'{days}d {hours}h'
+    if hours:
+        return f'{hours}h {minutes}m'
+    return f'{minutes}m'
+
+
+def _schedule_context(conv) -> dict:
+    ctx = _transition_context(conv)
+    scheduled_at = _normalise_utc(conv.scheduled_transition_at)
+    return {
+        'transition': ctx,
+        'can_schedule': _is_schedulable_transition(ctx),
+        'scheduled_at': scheduled_at,
+        'scheduled_target': conv.scheduled_transition_target,
+        'scheduled_label': next(
+            (stage['label'] for stage in _phase_sequence_for(conv)
+             if stage['key'] == conv.scheduled_transition_target),
+            conv.scheduled_transition_target,
+        ),
+        'frozen': bool(conv.scheduled_transition_frozen),
+        'countdown': _format_countdown(scheduled_at),
+    }
+
+
+def _apply_phase_transition(conv, ctx: dict) -> tuple[str, str]:
+    cur, nxt = ctx['source'], ctx['target']
+    if cur['flag']:
+        setattr(conv, cur['flag'], False)
+    setattr(conv, nxt['flag'], True)
+    _clear_scheduled_transition(conv)
+    return cur['key'], nxt['key']
+
+
+def _publish_final_report(conv) -> Phase6ResultsFilter:
+    conv.phase_public_results = True
+    conv.active = False
+    conv.paused = False
+    conv.closed_at = datetime.now(timezone.utc)
+    _clear_scheduled_transition(conv)
+    return _snapshot_report_filter(conv)
+
+
+def _process_due_scheduled_transitions(now: datetime | None = None) -> dict:
+    now = now or datetime.now(timezone.utc)
+    due = Conversation.query.filter(
+        Conversation.active.is_(True),
+        Conversation.scheduled_transition_at.isnot(None),
+        Conversation.scheduled_transition_frozen.is_(False),
+    ).all()
+    fired = aborted = skipped = 0
+    for conv in due:
+        scheduled_at = _normalise_utc(conv.scheduled_transition_at)
+        if scheduled_at is None or scheduled_at > now:
+            skipped += 1
+            continue
+        ctx = _transition_context(conv)
+        if (
+            not _is_schedulable_transition(ctx)
+            or conv.scheduled_transition_target != ctx['target']['key']
+            or any(p.get('met') is False for p in ctx['preconditions'])
+        ):
+            conv.scheduled_transition_frozen = True
+            db.session.commit()
+            record_audit('phase.schedule.abort', conv_id=conv.id,
+                         target_type='phase',
+                         target_id=conv.scheduled_transition_target,
+                         outcome='blocked')
+            aborted += 1
+            continue
+        source, target = _apply_phase_transition(conv, ctx)
+        db.session.commit()
+        record_audit('phase.schedule.fire', conv_id=conv.id,
+                     target_type='phase', target_id=target,
+                     from_phase=source)
+        if not _sync_vis_type(conv):
+            current_app.logger.warning(
+                'Scheduled phase transition fired for %s but vis_type sync failed',
+                conv.slug)
+        fired += 1
+    return {'fired': fired, 'aborted': aborted, 'skipped': skipped}
+
+
+OUTPUT_DEFINITIONS = [
+    {
+        'key': 'initial-clustering',
+        'label': 'Initial clustering',
+        'short_label': 'Clusters',
+        'phase': 'Explore',
+        'tooltip': 'After Explore phase: topic and participant clustering',
+        'method': (
+            'Votes from the Explore phase are grouped with Polis clustering. '
+            'The page focuses first on consensus statements and breaking points; '
+            'cluster details are shown only when the data is stable enough.'
+        ),
+        'status': 'provisional',
+        'symbol': 'initial-clustering',
+        'pending': (
+            'Initial clustering becomes available after Explore closes. It will show '
+            'which statements mostly united participants and which statements split them.'
+        ),
+    },
+    {
+        'key': 'argument-map',
+        'label': 'Argument map',
+        'short_label': 'Arguments',
+        'phase': 'Arguments',
+        'tooltip': 'After Arguments phase: argument mapping',
+        'method': (
+            'Featured statements are paired with pro and con arguments submitted by '
+            'participants, then ordered by participant argument votes.'
+        ),
+        'status': 'provisional',
+        'symbol': 'argument-map',
+        'pending': (
+            'The argument map opens when featured statements are visible for argument '
+            'mapping. It will collect the strongest pro and con reasoning for each featured statement.'
+        ),
+    },
+    {
+        'key': 'preliminary-results',
+        'label': 'Preliminary results',
+        'short_label': 'Prelim',
+        'phase': 'Informed vote',
+        'tooltip': 'After Informed Vote and closing: preliminary results',
+        'method': (
+            'Informed-voting tallies are computed from the Phase 6 Polis round and '
+            'shown as a live, lighter-weight preview before the final report is published.'
+        ),
+        'status': 'provisional',
+        'symbol': 'preliminary-results',
+        'pending': (
+            'Preliminary results become available once informed voting is running. '
+            'They are useful for orientation but can still change before publication.'
+        ),
+    },
+    {
+        'key': 'report',
+        'label': 'Report',
+        'short_label': 'Report',
+        'phase': 'Publish',
+        'tooltip': 'After closing and organizer confirmation: report',
+        'method': (
+            'The report uses the informed-voting tallies frozen at publication time, '
+            'with moderation exclusions snapshotted so later cleanup cannot silently alter it.'
+        ),
+        'status': 'final',
+        'symbol': 'report',
+        'pending': (
+            'The final report is published after the organizer completes cleanup. '
+            'Publication freezes the report filter and starts the identity-reveal window.'
+        ),
+    },
+    {
+        'key': 'dataset',
+        'label': 'Dataset',
+        'short_label': 'Dataset',
+        'phase': 'Opt-in identity window',
+        'tooltip': 'After the opt-in identity window: download of the raw pseudonymous dataset',
+        'method': (
+            'The dataset is the raw pseudonymous results export for external analysis. '
+            'It never exposes xid or Wikimedia user IDs.'
+        ),
+        'status': 'provisional',
+        'symbol': 'dataset',
+        'pending': (
+            'The dataset finalizes after the opt-in identity window and post-close processing settle. '
+            'Until then, re-exports may differ.'
+        ),
+    },
+]
+
+
+def _output_ready(conv, key: str) -> bool:
+    phases = _active_phases(conv)
+    if key == 'initial-clustering':
+        return bool(phases & {
+            'featured_selection', 'argument_mapping', 'cleanup', 'informed_voting',
+            'public_results', 'cleanup_window', 'closed',
+        })
+    if key == 'argument-map':
+        return bool(phases & {'argument_mapping', 'cleanup', 'informed_voting',
+                              'public_results', 'cleanup_window', 'closed'})
+    if key == 'preliminary-results':
+        return bool(phases & {'informed_voting', 'public_results',
+                              'cleanup_window', 'closed'})
+    if key == 'report':
+        return bool(conv.closed_at)
+    if key == 'dataset':
+        reveal = _reveal_context(conv, participation=None)
+        return bool(reveal and reveal['state'] == 'expired')
+    return False
+
+
+def _output_href(conv, key: str) -> str:
+    if key == 'report':
+        return url_for('participant.conversation_report', slug=conv.slug)
+    return url_for('participant.conversation_output', slug=conv.slug, output_key=key)
+
+
+def _output_items(conv) -> list[dict]:
+    items = []
+    for definition in OUTPUT_DEFINITIONS:
+        ready = _output_ready(conv, definition['key'])
+        status = definition['status']
+        if definition['key'] == 'dataset' and ready:
+            status = 'final'
+        item = {
+            **definition,
+            'ready': ready,
+            'status': status,
+            'state': 'ready' if ready else 'pending',
+            'href': _output_href(conv, definition['key']),
+        }
+        items.append(item)
+    return items
+
+
+def _output_definition(output_key: str) -> dict | None:
+    return next((item for item in OUTPUT_DEFINITIONS if item['key'] == output_key), None)
 
 
 def _featured_counts(conv):
@@ -536,7 +1001,7 @@ def _featured_counts(conv):
 def _argument_stats(conv):
     """Argument-phase aggregates for one conversation (Flask DB only).
 
-    Counts human-authored, visible arguments — seeds (NULL proposer_id) and
+    Counts human-authored, visible arguments — seeds (NULL proposer_pseudonym) and
     hidden/moderated arguments are excluded — plus the distinct participants
     who contributed or rated arguments.
     """
@@ -544,10 +1009,10 @@ def _argument_stats(conv):
                .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
                .filter(FeaturedStatement.conversation_id == conv.id,
                        Argument.hidden.is_(False),
-                       Argument.proposer_id.isnot(None)))
+                       Argument.proposer_pseudonym.isnot(None)))
     by_side = dict(visible.with_entities(Argument.side, db.func.count(Argument.id))
                           .group_by(Argument.side).all())
-    n_contributors = (visible.with_entities(db.func.count(db.distinct(Argument.proposer_id)))
+    n_contributors = (visible.with_entities(db.func.count(db.distinct(Argument.proposer_pseudonym)))
                              .scalar() or 0)
     n_raters = (db.session.query(db.func.count(db.distinct(ArgumentVote.participant_id)))
                 .join(Argument, ArgumentVote.argument_id == Argument.id)
@@ -598,7 +1063,8 @@ def _phase_tiles(conv, key, polis_stats, phase6_stats=None,
     elif key == 'featured_selection':
         confirmed, _ = get_featured_counts()
         tiles.append({'value': confirmed, 'label': 'featured selected',
-                      'note': '{} recommended'.format(_RECOMMENDED_FEATURED)})
+                      'note': '{} recommended'.format(
+                          _recommended_quantity(conv, 'featured_statements'))})
         if polis_stats:
             tiles.append({'value': polis_stats['n_statements'],   'label': 'candidate statements'})
             tiles.append({'value': polis_stats['n_participants'], 'label': 'participants'})
@@ -659,11 +1125,11 @@ def _phase_stat_groups(conv, polis_stats, phase6_stats=None):
         return cache['arguments']
 
     return [
-        {'key':   PHASE_SEQUENCE[i]['key'],
-         'label': PHASE_SEQUENCE[i]['label'],
-         'tiles': _phase_tiles(conv, PHASE_SEQUENCE[i]['key'], polis_stats, phase6_stats,
+        {'key':   _phase_sequence_for(conv)[i]['key'],
+         'label': _phase_sequence_for(conv)[i]['label'],
+         'tiles': _phase_tiles(conv, _phase_sequence_for(conv)[i]['key'], polis_stats, phase6_stats,
                                featured_counts, argument_stats)}
-        for i in [j for j, s in enumerate(PHASE_SEQUENCE) if s['key'] in _active_phases(conv)]
+        for i in [j for j, s in enumerate(_phase_sequence_for(conv)) if s['key'] in _active_phases(conv)]
     ]
 
 
@@ -712,6 +1178,27 @@ def _safe_redirect(target: str, fallback: str) -> str:
     return fallback
 
 
+def _touch_last_engagement(participation: 'Participation | None', *, commit: bool = False) -> bool:
+    """Update meaningful-action recency, throttled and best-effort."""
+    if participation is None:
+        return False
+    now = datetime.now(timezone.utc)
+    last = participation.last_engagement
+    if last is not None and last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    if last is not None and now - last < _LAST_ENGAGEMENT_THROTTLE:
+        return False
+    participation.last_engagement = now
+    if commit:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('last_engagement update failed')
+            return False
+    return True
+
+
 def _sanitise_text(html: str) -> str:
     return nh3.clean(html or '', tags=_TEXT_ALLOWED_TAGS,
                      attributes=_TEXT_ALLOWED_ATTRS, strip_comments=True)
@@ -727,11 +1214,15 @@ def _valid_slug(v: str) -> bool:
 
 def _parse_conversation_form() -> dict:
     raw_policy = request.form.get('access_policy', 'public').strip()
+    eligibility_event_id = request.form.get('eligibility_event_id', '').strip()
+    eligibility_label = request.form.get('eligibility_label', '').strip()
     return {
         'title':         request.form.get('title', '').strip(),
         'intro_text':    _sanitise_text(request.form.get('intro_text', '')),
         'outro_text':    _sanitise_text(request.form.get('outro_text', '')),
         'access_policy': raw_policy if raw_policy in ACCESS_POLICIES else 'public',
+        'eligibility_event_id': eligibility_event_id[:80] or None,
+        'eligibility_label': eligibility_label[:255] or None,
     }
 
 
@@ -752,6 +1243,75 @@ def _current_participant() -> 'Participant | None':
     return g.participant
 
 
+def _is_demo_session() -> bool:
+    return bool(session.get('demo_conversation_id') and session.get('xid'))
+
+
+def _demo_bound_conversation_id() -> int | None:
+    value = session.get('demo_conversation_id')
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _demo_pseudonym() -> str:
+    for _ in range(50):
+        name = f"demo-{secrets.token_hex(4)}"
+        if Participation.query.filter_by(pseudonym=name).first() is None:
+            return name
+    return f"demo-{secrets.token_hex(8)}"
+
+
+def _ensure_demo_participation(conversation) -> 'Participation':
+    """Create or return a session-scoped synthetic participant for one demo conversation."""
+    if conversation.access_policy != 'demo':
+        abort(404)
+    bound = _demo_bound_conversation_id()
+    if bound is not None and bound != conversation.id:
+        abort(403)
+
+    participant = _current_participant()
+    if participant and participant.is_demo:
+        part = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conversation.id,
+        ).first()
+        if part:
+            session.pop('username', None)
+            return part
+
+    for _ in range(20):
+        token = secrets.token_hex(4)
+        participant = Participant(
+            mw_user_id=random.randint(_DEMO_MW_ID_MIN, _DEMO_MW_ID_MAX),
+            mw_username=f'Demo-guest-{token}',
+            xid=secrets.token_hex(32),
+            xid_key_version=_XID_HMAC_VERSION,
+            is_demo=True,
+        )
+        db.session.add(participant)
+        try:
+            db.session.flush()
+        except IntegrityError:
+            db.session.rollback()
+            continue
+        part = Participation(
+            participant_id=participant.id,
+            conversation_id=conversation.id,
+            pseudonym=_demo_pseudonym(),
+            eligibility_status='not_required',
+        )
+        db.session.add(part)
+        db.session.commit()
+        session['xid'] = participant.xid
+        session['demo_conversation_id'] = conversation.id
+        session.pop('username', None)
+        session['emailable'] = False
+        return part
+    abort(503)
+
+
 def _is_emailable(username: str) -> bool:
     try:
         resp = requests.get(
@@ -766,6 +1326,48 @@ def _is_emailable(username: str) -> bool:
         return 'emailable' in user
     except Exception:
         return False
+
+
+def _eligibility_detail(payload: dict, *, reason: str | None = None) -> dict:
+    """Small non-PII detail blob for cached AccountEligibility verdicts (#146)."""
+    detail = {}
+    if reason:
+        detail['reason'] = reason
+    for key in ('reason', 'message', 'event', 'criteria', 'failed', 'rules'):
+        value = payload.get(key)
+        if value not in (None, ''):
+            detail[key] = value
+    return detail
+
+
+def _check_join_eligibility(conversation, participant) -> tuple[bool, str, dict]:
+    """Return (allowed, status, detail) for the optional join-time gate (#146).
+
+    The expected sidecar/tool contract is AccountEligibility-style JSON:
+    GET <ACCOUNT_ELIGIBILITY_URL>?user=<mw_username>&event=<event_id>&format=json
+    returning at least {"eligible": true|false}. Extra non-PII fields such as
+    reason/criteria/rules are cached for admin/debug display.
+    """
+    event_id = (conversation.eligibility_event_id or '').strip()
+    if not event_id:
+        return True, 'not_required', {}
+    endpoint = current_app.config.get('ACCOUNT_ELIGIBILITY_URL', '').strip()
+    if not endpoint:
+        return False, 'unavailable', {'reason': 'eligibility checker is not configured'}
+    try:
+        resp = requests.get(
+            endpoint,
+            params={'user': participant.mw_username, 'event': event_id, 'format': 'json'},
+            headers={'User-Agent': _MW_USER_AGENT},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception:
+        current_app.logger.exception('eligibility check failed for event %s', event_id)
+        return False, 'unavailable', {'reason': 'eligibility checker is unavailable'}
+    allowed = bool(payload.get('eligible'))
+    return allowed, 'eligible' if allowed else 'ineligible', _eligibility_detail(payload)
 
 
 def _generate_pseudonyms(count: int = 5) -> list[str]:
@@ -818,6 +1420,28 @@ def _can_moderate(conversation, participant: 'Participant | None' = None) -> boo
     ).first() is not None
 
 
+def _can_organize(conversation, participant: 'Participant | None' = None) -> bool:
+    if _is_global_admin(participant):
+        return True
+    if participant is None:
+        participant = _current_participant()
+    if participant is None:
+        return False
+    return AdminRole.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conversation.id,
+        role='organizer',
+    ).first() is not None
+
+
+def _conversation_role_label(conversation, participant: 'Participant | None' = None) -> str:
+    if _is_global_admin(participant):
+        return 'Global admin'
+    if _can_organize(conversation, participant):
+        return 'Organizer'
+    return 'Moderator'
+
+
 def admin_required(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
@@ -851,7 +1475,36 @@ def _require_mod_for_conv(conv_id: int) -> 'Conversation':
     return conv
 
 
+def _require_organizer_for_conv(conv_id: int) -> 'Conversation':
+    """Return conversation or abort 403 if the current user can't organize it."""
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _can_organize(conv):
+        abort(403)
+    return conv
+
+
+def _active_conversation_ban(conversation, participant: 'Participant | None'):
+    if participant is None:
+        return None
+    return ConversationBan.query.filter_by(
+        conversation_id=conversation.id,
+        participant_id=participant.id,
+        lifted_at=None,
+    ).first()
+
+
+def _abort_if_banned(conversation, participant: 'Participant | None') -> None:
+    if _active_conversation_ban(conversation, participant):
+        abort(403)
+
+
 def _check_conversation_access(conversation, participant) -> None:
+    if _is_demo_session():
+        if conversation.access_policy == 'demo' and _demo_bound_conversation_id() == conversation.id:
+            return
+        abort(403)
+    if conversation.access_policy == 'demo':
+        return
     if conversation.access_policy != 'invite_only':
         return
     if participant:
@@ -877,7 +1530,7 @@ def _check_conversation_access(conversation, participant) -> None:
 
 # ── Particiapi proxy ──────────────────────────────────────────────────────────
 
-def _validate_same_origin():
+def _validate_same_origin(*, allow_missing_provenance: bool = False):
     """Abort 403 if the request does not appear to be same-origin.
     Used as a compensating control on CSRF-exempt endpoints."""
     sec_fetch = request.headers.get('Sec-Fetch-Site')
@@ -890,13 +1543,15 @@ def _validate_same_origin():
         if urlparse(origin).netloc != urlparse(request.host_url).netloc:
             abort(403)
         return
+    if allow_missing_provenance:
+        return
     abort(403)
 
 
 def _validate_fetch_csrf():
     """Validate Flask-WTF CSRF for JSON/fetch routes on the exempt proxy blueprint."""
     if not current_app.config.get('WTF_CSRF_ENABLED', True):
-        return
+        return False
     token = (request.headers.get('X-CSRFToken')
              or request.headers.get('X-CSRF-Token')
              or request.form.get('csrf_token'))
@@ -904,6 +1559,36 @@ def _validate_fetch_csrf():
         validate_csrf(token)
     except ValidationError:
         abort(400)
+    return True
+
+
+def _demo_proxy_allowed(pa_path: str, method: str) -> bool:
+    conv_id = _demo_bound_conversation_id()
+    if conv_id is None:
+        return False
+    conv = db.session.get(Conversation, conv_id)
+    if conv is None or conv.access_policy != 'demo':
+        return False
+    if pa_path == 'api/session' and method in ('GET', 'POST'):
+        return True
+    prefix = f'api/conversations/{conv.polis_id}/'
+    if method == 'GET' and pa_path.startswith(prefix):
+        return True
+    if method == 'PUT' and pa_path.startswith(prefix + 'votes/'):
+        return True
+    return False
+
+
+def _proxy_auth_response(pa_path: str):
+    if 'username' in session:
+        return None
+    if _is_demo_session():
+        if _demo_proxy_allowed(pa_path, request.method):
+            return None
+        abort(403)
+    if not request.path.startswith('/proxy/'):
+        session['next'] = request.path
+    return redirect(url_for('login'))
 
 
 def _conversation_subject(xid: str, conv) -> str:
@@ -981,6 +1666,13 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
             and not pa_cookie and not _bind_identity):
         params['create'] = 'true'
 
+    interaction_match = re.match(r'^api/conversations/([^/]+)/(votes(?:/\d+)?|statements/?)(?:/)?$', pa_path)
+    if request.method in ('POST', 'PUT') and interaction_match:
+        participant = _current_participant()
+        conv = Conversation.query.filter_by(polis_id=interaction_match.group(1)).first()
+        if conv:
+            _abort_if_banned(conv, participant)
+
     headers = {}
     if request.method in ('POST', 'PUT'):
         csrf = request.headers.get('X-CSRF-Token')
@@ -1015,6 +1707,18 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
         flask_resp = make_response('{}', 200)
         flask_resp.headers['Content-Type'] = 'application/json'
         return flask_resp
+
+    vote_match = re.match(r'^api/conversations/([^/]+)/votes(?:/\d+)?/?$', pa_path)
+    if upstream.ok and request.method in ('POST', 'PUT') and vote_match:
+        participant = _current_participant()
+        if participant:
+            conv = Conversation.query.filter_by(polis_id=vote_match.group(1)).first()
+            if conv:
+                part = Participation.query.filter_by(
+                    participant_id=participant.id,
+                    conversation_id=conv.id,
+                ).first()
+                _touch_last_engagement(part, commit=True)
 
     flask_resp = make_response(upstream.content, upstream.status_code)
     flask_resp.headers['Content-Type'] = upstream.headers.get(
@@ -1136,18 +1840,6 @@ def _build_featured_data(conv, participation, can_mod=False):
     voted_ids = {av.argument_id for av in
                  ArgumentVote.query.filter_by(participant_id=pid).all()}
 
-    # Proposer pseudonyms: one query for all proposers across all FSs.
-    all_proposer_ids = {a.proposer_id for fs in fss for a in fs.arguments
-                        if a.proposer_id is not None}
-    if all_proposer_ids:
-        proposer_parts = Participation.query.filter(
-            Participation.participant_id.in_(all_proposer_ids),
-            Participation.conversation_id == conv.id,
-        ).all()
-        proposer_pseudonym_map = {p.participant_id: p.pseudonym for p in proposer_parts}
-    else:
-        proposer_pseudonym_map = {}
-
     result = []
     for fs in fss:
         pro_args = [a for a in fs.arguments if a.side == 'pro' and (can_mod or not a.hidden)]
@@ -1161,9 +1853,11 @@ def _build_featured_data(conv, participation, can_mod=False):
             return [arg_map[aid] for aid in state.argument_order if aid in arg_map]
 
         pro_proposed = Argument.query.filter_by(
-            proposer_id=pid, featured_statement_id=fs.id, side='pro').first()
+            proposer_pseudonym=participation.pseudonym,
+            featured_statement_id=fs.id, side='pro').first()
         con_proposed = Argument.query.filter_by(
-            proposer_id=pid, featured_statement_id=fs.id, side='con').first()
+            proposer_pseudonym=participation.pseudonym,
+            featured_statement_id=fs.id, side='con').first()
 
         ordered_pro = _ordered(pro_args, pro_state)
         ordered_con = _ordered(con_args, con_state)
@@ -1189,7 +1883,6 @@ def _build_featured_data(conv, participation, can_mod=False):
             'k': int((conv.argument_vote_data or {}).get('K', 2)),
             'pro_voted_count': pro_voted_count,
             'con_voted_count': con_voted_count,
-            'proposer_pseudonyms': proposer_pseudonym_map,
         })
 
     random.Random(pid).shuffle(result)
@@ -1198,6 +1891,8 @@ def _build_featured_data(conv, participation, can_mod=False):
 def _require_arg_participation(slug):
     """Return (conv, participation) or abort. Checks active + argument phase."""
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    if conv.access_policy == 'demo':
+        abort(403)
     if not conv.active or conv.paused or not conv.phase_argument_mapping:
         abort(403)
     participant = _current_participant()
@@ -1207,6 +1902,7 @@ def _require_arg_participation(slug):
         participant_id=participant.id,
         conversation_id=conv.id,
     ).first_or_404()
+    _abort_if_banned(conv, participant)
     return conv, part
 
 def _backfill_statement_texts(conv, confirmed: list) -> bool:
@@ -1235,25 +1931,30 @@ def _fetch_statement_text(conv_polis_id: str, tid: int) -> str:
         return ''
 
 
-# ── Proxy + statement-submit blueprint (issue #91, step 7) ──────────────────
-# The security-sensitive cluster: both routes are CSRF-exempt with
-# _validate_same_origin() as the compensating control, and both bridge the
-# browser's renamed 'pa_session' cookie to Particiapi's 'session'. They live on a
-# blueprint (CSRF-exempted in create_app via csrf.exempt(proxy_bp)) instead of the
-# _register_routes closure. Behaviour is byte-identical to the prior inline routes.
+# ── Particiapi proxy + participant statement submit ──────────────────────────
+# The generic Particiapi proxy is CSRF-exempt with _validate_same_origin() as the
+# compensating control and bridges the browser's renamed 'pa_session' cookie to
+# Particiapi's 'session'. First-party statement submission lives on
+# participant_bp so Flask-WTF validates CSRF normally, while the same-origin
+# provenance check remains as an extra browser-request guard.
 proxy_bp = Blueprint('proxy', __name__)
+admin_bp = Blueprint('admin', __name__)
+participant_bp = Blueprint('participant', __name__)
 
-@proxy_bp.post('/c/<slug>/statements/new')
+@participant_bp.post('/c/<slug>/statements/new')
 @login_required
 def conversation_statement_new(slug):
     """Submit an entirely new statement; enforces per-participant quota and
     records the Polis statement ID for novelty tracking."""
-    # This route lives on the CSRF-exempt proxy blueprint for historical reasons,
-    # so validate Flask-WTF's token manually before same-origin checks.
-    _validate_fetch_csrf()
-    _validate_same_origin()
+    # Statement submit is on participant_bp, so Flask-WTF validates CSRF; we also
+    # re-check the token here so the same-origin guard can relax the provenance
+    # requirement when a valid CSRF token is present (#129).
+    csrf_validated = _validate_fetch_csrf()
+    _validate_same_origin(allow_missing_provenance=csrf_validated)
 
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    if conv.access_policy == 'demo':
+        abort(403)
     if not conv.active or conv.paused or not conv.phase_submission:
         abort(403)
     participant = _current_participant()
@@ -1265,6 +1966,7 @@ def conversation_statement_new(slug):
     part = Participation.query.filter_by(
         participant_id=participant.id, conversation_id=conv.id,
     ).with_for_update().first_or_404()
+    _abort_if_banned(conv, participant)
 
     new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
     if len(part.new_stmt_ids or []) >= new_stmt_max:
@@ -1274,6 +1976,32 @@ def conversation_statement_new(slug):
     text = (body.get('text') or '').strip()
     if not text or len(text) > 280:
         abort(400)
+    derived_from = body.get('derived_from')
+    if derived_from in ('', None):
+        derived_from = None
+    if derived_from is not None and not isinstance(derived_from, int):
+        abort(400)
+    parent_text = None
+    if derived_from is not None:
+        try:
+            text_map = _statement_text_map(conv.polis_id)
+        except PolisParticipantError:
+            current_app.logger.exception('could not load statements for derivative parent')
+            abort(502)
+        parent_text = text_map.get(derived_from)
+        if parent_text is None:
+            return jsonify({'error': 'unknown_parent_statement'}), 400
+        scores = _statement_similarity_scores(text, parent_text)
+        model, score = _preferred_similarity_score(scores)
+        threshold = _derivative_similarity_threshold()
+        if threshold and score is not None and score < threshold:
+            return jsonify({
+                'error': 'derivative_similarity_too_low',
+                'message': 'This looks like a different claim. Revise it closer to the original, or submit it as a new statement instead.',
+                'model': model,
+                'similarity': score,
+                'threshold': threshold,
+            }), 409
 
     # Get CSRF token for this Particiapi session, then submit the statement.
     pa_cookie = request.cookies.get('pa_session')
@@ -1311,7 +2039,11 @@ def conversation_statement_new(slug):
             ids = list(part.new_stmt_ids or [])
             ids.append(stmt_id)
             part.new_stmt_ids = ids
-            db.session.commit()
+            if derived_from is not None:
+                record_statement_provenance(conv.id, stmt_id, derived_from,
+                                            parent_text=parent_text, new_text=text)
+        _touch_last_engagement(part)
+        db.session.commit()
         flask_resp = make_response(stmt_resp.content, 201)
         flask_resp.headers['Content-Type'] = 'application/json'
     else:
@@ -1325,25 +2057,362 @@ def conversation_statement_new(slug):
 
 @proxy_bp.route('/proxy/particiapi/<path:pa_path>',
                 methods=['GET', 'POST', 'PUT'])
-@login_required
+@limiter.limit('180 per minute')
 def proxy_particiapi(pa_path):
+    auth_resp = _proxy_auth_response(pa_path)
+    if auth_resp is not None:
+        return auth_resp
     return _proxy_to_particiapi(pa_path)
 
 
 @proxy_bp.route('/c/<slug>/proxy/particiapi/<path:pa_path>',
                 methods=['GET', 'POST', 'PUT'])
-@login_required
+@limiter.limit('180 per minute')
 def proxy_particiapi_scoped(slug, pa_path):
     """Per-conversation proxy: conversation-scoped identity + path-scoped session cookie,
-    so a participant gets a different Polis uid per conversation (#246)."""
+    so a participant gets a different Polis uid per conversation (#246). Uses the global
+    proxy's demo-aware auth (_proxy_auth_response) rather than @login_required so demo
+    sessions work through the scoped proxy too. (admin_bp is defined above on this branch.)"""
+    auth_resp = _proxy_auth_response(pa_path)
+    if auth_resp is not None:
+        return auth_resp
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     return _proxy_to_particiapi(pa_path, conv=conv)
-
-admin_bp = Blueprint('admin', __name__)
-
 # nh3 tag allowlist for CSV import sanitisation — no HTML tags permitted.
 _NH3_NO_TAGS: frozenset[str] = frozenset()
-participant_bp = Blueprint('participant', __name__)
+
+
+@participant_bp.get('/help/statements')
+def statement_guidance():
+    return render_template('guidance_statement.html')
+
+
+@participant_bp.get('/help/arguments')
+def argument_guidance():
+    return render_template('guidance_argument.html')
+
+
+_FLAG_CATEGORY_LABELS = {
+    'personal_attack': 'Personal attack',
+    'privacy': 'Privacy violation',
+    'off_topic': 'Off-topic',
+    'other': 'Other',
+}
+
+
+def _parse_seed_text_lines(raw_text: str) -> ParseResult:
+    """Parse textarea seed import: one non-empty line per candidate statement."""
+    result = ParseResult()
+    seen: set[str] = set()
+    non_empty_rows: list[tuple[int, str]] = [
+        (idx, line.strip())
+        for idx, line in enumerate((raw_text or '').splitlines(), start=1)
+        if line.strip()
+    ]
+    if len(non_empty_rows) > MAX_ROWS:
+        for idx, _line in non_empty_rows[MAX_ROWS:]:
+            result.errors.append(RowError(
+                idx,
+                f'skipped — import limit of {MAX_ROWS} rows reached',
+                limit_skipped=True,
+            ))
+        non_empty_rows = non_empty_rows[:MAX_ROWS]
+
+    for idx, text in non_empty_rows:
+        if len(text) > MAX_TEXT_CHARS:
+            result.errors.append(RowError(
+                idx,
+                f'text is too long ({len(text)} characters; max {MAX_TEXT_CHARS})',
+            ))
+            continue
+        if text in seen:
+            result.errors.append(RowError(idx, 'duplicate — already added from an earlier row'))
+            continue
+        seen.add(text)
+        result.texts.append(text)
+    return result
+
+
+def _reject_seed_import_parse_errors(result: ParseResult, source_label: str) -> bool:
+    """Flash parse errors and return True when an import should stop before Polis I/O."""
+    limit_skipped = [e for e in result.errors if e.limit_skipped]
+    if limit_skipped:
+        total_rows = len(result.texts) + len(result.errors)
+        current_app.logger.warning(
+            '%s import rejected — row limit exceeded: %d rows, max %d',
+            source_label,
+            total_rows,
+            MAX_ROWS,
+        )
+        flash(
+            f'✗ Import rejected — nothing was imported. {source_label} contains '
+            f'{total_rows} lines, maximum is {MAX_ROWS}. Reduce it and try again. '
+            f'(Parse errors may also be present — fix everything before retrying.)',
+            'import_result',
+        )
+        return True
+
+    parse_errors = [e for e in result.errors if not e.limit_skipped]
+    if parse_errors:
+        for err in parse_errors:
+            flash(f'Row {err.row}: {err.reason}.', 'import_row_error')
+        # All-or-nothing: a single invalid line rejects the whole import so the admin
+        # never ends up with a silently partial paste.
+        flash('✗ Import rejected — nothing was added. One invalid line rejects the '
+              'whole import; fix the lines listed above and try again.', 'import_result')
+        return True
+    return False
+
+
+def _import_seed_statement_texts(conv: Conversation, texts: list[str]) -> dict:
+    """Shared post-parse seed import pipeline: sanitize, dedup, bulk-add, report."""
+    seen_sanitised: set[str] = set()
+    sanitised_texts: list[str] = []
+    for raw_text in texts:
+        san = nh3.clean(raw_text, tags=_NH3_NO_TAGS)
+        # Re-apply formula-prefix stripping: nh3 decodes HTML entities (e.g.
+        # &equals; -> =) which can reintroduce leading formula chars.
+        san = strip_formula_prefixes(san).strip()
+        san_key = san.casefold()
+        if not san or san_key in seen_sanitised:
+            continue  # drop empty-after-nh3 and nh3-induced within-batch dupes
+        seen_sanitised.add(san_key)
+        sanitised_texts.append(san)
+
+    existing_texts: set[str] = set()
+    dedup_check_failed = False
+    try:
+        rows = _polis_server_client().get_statements(conv.polis_id)
+        if rows is not None:
+            pending, approved, hidden = rows
+            for stmt in pending + approved + hidden:
+                existing_texts.add(stmt['txt'].strip().casefold())
+    except Exception:
+        current_app.logger.exception('Could not fetch existing statements for dedup check')
+        dedup_check_failed = True
+
+    dedup_errors = []
+    clean_texts = []
+    for sanitised in sanitised_texts:
+        if sanitised.casefold() in existing_texts:
+            dedup_errors.append(
+                f'"{sanitised[:60]}{"…" if len(sanitised) > 60 else ""}" — already exists in this conversation'
+            )
+        else:
+            clean_texts.append(sanitised)
+
+    successes = 0
+    polis_skipped = []  # Polis rejected these — likely already exist
+    polis_errors = []  # Polis login or unexpected failure
+    if clean_texts:
+        try:
+            successes, failures = _polis_server_client().bulk_add_seeds(conv.polis_id, clean_texts)
+            for text, exc in failures:
+                current_app.logger.warning('Polis rejected imported row (%s, may already exist): %s',
+                                           type(exc).__name__, exc)
+                polis_skipped.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
+        except PolisServerError:
+            current_app.logger.exception('Polis login failed during bulk import')
+            polis_errors = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
+
+    if dedup_check_failed:
+        flash('Could not check for existing statements — some may be duplicates. Check server logs.', 'warning')
+
+    for msg in dedup_errors:
+        flash(f'Skipped — {msg}.', 'warning')
+    for msg in polis_skipped:
+        flash(f'Already in Polis, skipped: {msg}.', 'warning')
+    for msg in polis_errors:
+        flash(f'Could not send to Polis: {msg}.', 'error')
+    if not successes and not dedup_errors and not polis_skipped and not polis_errors:
+        flash('No statements were imported — there were no valid rows.', 'warning')
+
+    n_skipped = len(dedup_errors) + len(polis_skipped)
+    n_errors = len(polis_errors)
+    if successes and not n_skipped:
+        flash(f'✓ {successes} statement{"s" if successes != 1 else ""} imported', 'import_result')
+    elif successes:
+        flash(f'✓ {successes} imported — ⚠ {n_skipped} skipped', 'import_result')
+    elif n_errors:
+        flash('✗ Import failed — could not reach Polis. Check server logs.', 'import_result')
+    elif n_skipped:
+        flash(f'⚠ 0 imported — {n_skipped} already existed in Polis', 'import_result')
+    else:
+        flash('⚠ 0 imported — Polis returned no result', 'import_result')
+
+    return {'successes': successes, 'skipped': n_skipped, 'errors': n_errors}
+
+
+def _seed_statement_lock_reason(conv: Conversation) -> str | None:
+    """Why seed-statement controls are locked, or None when seeding is allowed."""
+    if not conv.active:
+        return 'Seed statements are locked because this conversation is permanently closed.'
+    if conv.phase_submission:
+        return None
+    if not any(getattr(conv, flag) for flag in _PHASE_FLAGS):
+        return None
+    return 'Seed statements are locked because statement submission has ended.'
+
+
+def _delete_local_conversation(conv: Conversation) -> None:
+    """Delete local rows owned by a conversation after external deletion guards pass."""
+    conv_id = conv.id
+    ContentFlag.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
+    featured_ids = [
+        row[0] for row in db.session.query(FeaturedStatement.id)
+        .filter_by(conversation_id=conv_id)
+        .all()
+    ]
+    if featured_ids:
+        arg_ids = [
+            row[0] for row in db.session.query(Argument.id)
+            .filter(Argument.featured_statement_id.in_(featured_ids))
+            .all()
+        ]
+        if arg_ids:
+            ArgumentVote.query.filter(
+                ArgumentVote.argument_id.in_(arg_ids)
+            ).delete(synchronize_session=False)
+            Argument.query.filter(
+                Argument.id.in_(arg_ids)
+            ).delete(synchronize_session=False)
+        ArgumentSideState.query.filter(
+            ArgumentSideState.featured_statement_id.in_(featured_ids)
+        ).delete(synchronize_session=False)
+        FeaturedStatement.query.filter(
+            FeaturedStatement.id.in_(featured_ids)
+        ).delete(synchronize_session=False)
+
+    provenance_ids = [
+        row[0] for row in db.session.query(StatementProvenance.id)
+        .filter_by(conversation_id=conv_id)
+        .all()
+    ]
+    if provenance_ids:
+        StatementSimilarityScore.query.filter(
+            StatementSimilarityScore.provenance_id.in_(provenance_ids)
+        ).delete(synchronize_session=False)
+        StatementProvenance.query.filter(
+            StatementProvenance.id.in_(provenance_ids)
+        ).delete(synchronize_session=False)
+
+    ConversationBan.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
+    ConversationInvite.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
+    AdminRole.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
+    Participation.query.filter_by(conversation_id=conv_id).delete(synchronize_session=False)
+    AuditEvent.query.filter_by(conversation_id=conv_id).update(
+        {'conversation_id': None},
+        synchronize_session=False,
+    )
+    db.session.delete(conv)
+
+
+def _parse_content_flag_form() -> tuple[str, str | None]:
+    category = (request.form.get('category') or '').strip()
+    if category not in FLAG_CATEGORIES:
+        abort(400)
+    detail = nh3.clean((request.form.get('detail') or '').strip(),
+                       tags=_NH3_NO_TAGS)[:1000]
+    return category, detail or None
+
+
+def _existing_open_flag(
+    conv_id: int,
+    participant_id: int,
+    content_type: str,
+    category: str,
+    *,
+    statement_tid: int | None = None,
+    argument_id: int | None = None,
+) -> ContentFlag | None:
+    query = ContentFlag.query.filter_by(
+        conversation_id=conv_id,
+        participant_id=participant_id,
+        content_type=content_type,
+        category=category,
+        status='open',
+    )
+    if content_type == 'statement':
+        query = query.filter_by(statement_tid=statement_tid)
+    else:
+        query = query.filter_by(argument_id=argument_id)
+    return query.first()
+
+
+def _flag_rows_for_admin(conv: Conversation) -> list[dict]:
+    flags = (ContentFlag.query
+             .filter_by(conversation_id=conv.id)
+             .options(joinedload(ContentFlag.argument))
+             .order_by(ContentFlag.status, ContentFlag.created_at.desc())
+             .all())
+    statement_tids = [f.statement_tid for f in flags if f.content_type == 'statement']
+    statement_texts = {}
+    if statement_tids:
+        try:
+            statement_texts = _statement_text_map(conv.polis_id)
+        except PolisParticipantError:
+            statement_texts = {}
+    rows = []
+    for flag in flags:
+        if flag.content_type == 'argument':
+            target_text = flag.argument.body if flag.argument else 'Argument removed'
+            target_label = f'Argument #{flag.argument_id}'
+        else:
+            target_text = statement_texts.get(flag.statement_tid, 'Statement text unavailable')
+            target_label = f'Statement #{flag.statement_tid}'
+        rows.append({
+            'flag': flag,
+            'category_label': _FLAG_CATEGORY_LABELS.get(flag.category, flag.category),
+            'target_label': target_label,
+            'target_text': target_text,
+        })
+    return rows
+
+
+def _conversation_ban_log_rows(conv: Conversation) -> list[dict]:
+    events = (AuditEvent.query
+              .filter(AuditEvent.conversation_id == conv.id,
+                      AuditEvent.operation.in_(('participant.ban', 'participant.unban')))
+              .order_by(AuditEvent.ts.desc())
+              .all())
+    target_ids = []
+    actor_ids = []
+    for event in events:
+        try:
+            target_ids.append(int(event.target_id))
+        except (TypeError, ValueError):
+            pass
+        if event.actor_participant_id:
+            actor_ids.append(event.actor_participant_id)
+
+    pseudonyms = {
+        p.participant_id: p.pseudonym
+        for p in Participation.query.filter(
+            Participation.conversation_id == conv.id,
+            Participation.participant_id.in_(target_ids or [-1]),
+        ).all()
+    }
+    actors = {
+        p.id: p.mw_username
+        for p in Participant.query.filter(
+            Participant.id.in_(actor_ids or [-1]),
+        ).all()
+    }
+
+    rows = []
+    for event in events:
+        try:
+            target_id = int(event.target_id)
+        except (TypeError, ValueError):
+            target_id = None
+        rows.append({
+            'action': 'Unbanned' if event.operation == 'participant.unban' else 'Banned',
+            'ts': event.ts,
+            'pseudonym': pseudonyms.get(target_id, 'participant'),
+            'actor': actors.get(event.actor_participant_id, 'administrator'),
+            'scope': 'conversation',
+        })
+    return rows
 
 # ── Admin ─────────────────────────────────────────────────────────────────
 
@@ -1362,12 +2431,14 @@ def admin():
                            conversations=conversations,
                            participants=participants,
                            global_admins=global_admins,
+                           phase_routes=PHASE_ROUTES,
                            )
 
 @admin_bp.get('/admin/conversations/<int:conv_id>')
 @login_required
 def admin_conversation_detail(conv_id):
     conv       = _require_mod_for_conv(conv_id)
+    phase_sequence = _phase_sequence_for(conv)
     conv_roles = (AdminRole.query
                    .filter_by(conversation_id=conv_id)
                    .all())
@@ -1378,13 +2449,20 @@ def admin_conversation_detail(conv_id):
     )
     invite_count      = ConversationInvite.query.filter_by(conversation_id=conv_id).count()
     participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
+    open_flag_count   = ContentFlag.query.filter_by(
+        conversation_id=conv_id,
+        status='open',
+    ).count()
+    can_organize      = _can_organize(conv)
     client            = _polis_server_client()
     polis_stats       = client.get_polis_stats(conv.polis_id)
+    delete_vote_count = client.get_valid_vote_count(conv.polis_id) if _is_global_admin() else None
     # Informed-voting round-2 tiles render whenever that phase is active (its flag is
     # on) — including alongside other phases in advanced mode — so fetch the phase-6
     # stats and gate the warning on the flag itself.
     phase6_stats      = (client.get_polis_stats(conv.phase6_polis_conversation_id)
-                         if conv.phase_informed_voting and conv.phase6_polis_conversation_id
+                         if (conv.phase_informed_voting or _in_cleanup_window(conv))
+                         and conv.phase6_polis_conversation_id
                          else None)
     # Loud warning only when Polis PG is configured but unreachable — never when it is
     # deliberately not wired (local/dev), where None is expected. Unavailable if the
@@ -1393,10 +2471,12 @@ def admin_conversation_detail(conv_id):
     polis_pg_configured     = bool(current_app.config.get('POLIS_DATABASE_URL'))
     polis_stats_unavailable = polis_pg_configured and (
         polis_stats is None
-        or (conv.phase_informed_voting and conv.phase6_polis_conversation_id
+        or ((conv.phase_informed_voting or _in_cleanup_window(conv))
+            and conv.phase6_polis_conversation_id
             and phase6_stats is None))
     phase6_results    = (_build_phase6_results(conv, participation=None)
-                         if conv.phase_informed_voting and conv.phase6_polis_conversation_id
+                         if (conv.phase_informed_voting or _in_cleanup_window(conv))
+                         and conv.phase6_polis_conversation_id
                          else None)
     reveal            = _reveal_context(conv, participation=None)
     return render_template('admin_conversation.html',
@@ -1405,20 +2485,186 @@ def admin_conversation_detail(conv_id):
                            participants=participants,
                            invite_count=invite_count,
                            participant_count=participant_count,
+                           open_flag_count=open_flag_count,
                            polis_stats=polis_stats,
                            phase_stat_groups=_phase_stat_groups(conv, polis_stats, phase6_stats),
                            polis_stats_unavailable=polis_stats_unavailable,
                            phase6_results=phase6_results,
                            reveal=reveal,
+                           delete_vote_count=delete_vote_count,
                            admin_roles=ADMIN_ROLES,
                            can_manage_roles=can_manage_roles,
-                           phase_sequence=PHASE_SEQUENCE,
+                           can_organize=can_organize,
+                           role_label=_conversation_role_label(conv),
+                           phase_sequence=phase_sequence,
                            current_stage_index=_current_stage_index(conv),
-                           active_stage_indices=[i for i, s in enumerate(PHASE_SEQUENCE)
+                           active_stage_indices=[i for i, s in enumerate(phase_sequence)
                                                   if s['key'] in _active_phases(conv)],
                            linear_phase_state=_is_linear_phase_state(conv),
                            advance_target_index=_advance_target_index(conv),
-                           transition=_transition_context(conv))
+                           transition=_transition_context(conv),
+                           phase_routes=PHASE_ROUTES,
+                           recommendation_tiers=_RECOMMENDATION_TIERS,
+                           recommendation_labels=_RECOMMENDATION_LABELS,
+                           recommendation_profile=_recommendation_profile(conv),
+                           schedule=_schedule_context(conv),
+                           cleanup_window=_in_cleanup_window(conv))
+
+
+@admin_bp.get('/admin/conversations/<int:conv_id>/participants')
+@login_required
+def admin_conversation_participants(conv_id):
+    conv = _require_mod_for_conv(conv_id)
+    participations = (Participation.query
+                      .join(Participant)
+                      .filter(Participation.conversation_id == conv_id)
+                      .options(joinedload(Participation.participant))
+                      .order_by(Participant.mw_username)
+                      .all())
+
+    # Arguments store the proposer's pseudonym (not a participant FK) for privacy (#113),
+    # so attribute submitted-argument counts by pseudonym within this conversation.
+    submitted_counts = dict(
+        db.session.query(Argument.proposer_pseudonym, db.func.count(Argument.id))
+        .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
+        .filter(FeaturedStatement.conversation_id == conv_id,
+                Argument.proposer_pseudonym.isnot(None))
+        .group_by(Argument.proposer_pseudonym)
+        .all()
+    )
+    voted_counts = dict(
+        db.session.query(ArgumentVote.participant_id, db.func.count(ArgumentVote.id))
+        .join(Argument, ArgumentVote.argument_id == Argument.id)
+        .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
+        .filter(FeaturedStatement.conversation_id == conv_id)
+        .group_by(ArgumentVote.participant_id)
+        .all()
+    )
+
+    client = _polis_server_client()
+    statement_progress_unavailable = bool(current_app.config.get('POLIS_DATABASE_URL'))
+    active_bans = {
+        ban.participant_id: ban
+        for ban in ConversationBan.query.filter_by(
+            conversation_id=conv_id,
+            lifted_at=None,
+        ).all()
+    }
+    rows = []
+    for part in participations:
+        progress_row = None
+        if current_app.config.get('POLIS_DATABASE_URL'):
+            progress = client.get_statement_progress_bulk([conv.polis_id], part.participant.xid)
+            if progress is not None:
+                statement_progress_unavailable = False
+                progress_row = progress.get(conv.polis_id)
+        rows.append({
+            'participation': part,
+            'participant': part.participant,
+            'statement_progress': progress_row,
+            'arguments_submitted': int(submitted_counts.get(part.pseudonym, 0)),
+            'arguments_voted': int(voted_counts.get(part.participant_id, 0)),
+            'active_ban': active_bans.get(part.participant_id),
+        })
+
+    return render_template(
+        'admin_participants.html',
+        conversation=conv,
+        rows=rows,
+        statement_progress_unavailable=statement_progress_unavailable,
+    )
+
+
+@admin_bp.get('/admin/conversations/<int:conv_id>/flags')
+@login_required
+def admin_conversation_flags(conv_id):
+    conv = _require_mod_for_conv(conv_id)
+    rows = _flag_rows_for_admin(conv)
+    open_count = sum(1 for row in rows if row['flag'].status == 'open')
+    return render_template(
+        'admin_flags.html',
+        conversation=conv,
+        rows=rows,
+        open_count=open_count,
+    )
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/flags/<int:flag_id>/resolve')
+@login_required
+def admin_flag_resolve(conv_id, flag_id):
+    conv = _require_mod_for_conv(conv_id)
+    flag = ContentFlag.query.filter_by(
+        id=flag_id,
+        conversation_id=conv.id,
+    ).first_or_404()
+    note = nh3.clean((request.form.get('resolution_note') or '').strip(),
+                     tags=_NH3_NO_TAGS)[:1000]
+    actor = _current_participant()
+    flag.status = 'resolved'
+    flag.resolved_at = datetime.now(timezone.utc)
+    flag.resolved_by_id = actor.id if actor else None
+    flag.resolution_note = note or None
+    db.session.commit()
+    record_audit('content_flag.resolve', conv_id=conv.id, target_type='content_flag',
+                 target_id=flag.id, content_type=flag.content_type)
+    flash('Flag marked resolved.', 'success')
+    return redirect(url_for('admin.admin_conversation_flags', conv_id=conv.id))
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/participants/<int:participant_id>/ban')
+@login_required
+def admin_participant_ban(conv_id, participant_id):
+    conv = _require_mod_for_conv(conv_id)
+    Participation.query.filter_by(
+        conversation_id=conv_id,
+        participant_id=participant_id,
+    ).first_or_404()
+    existing = ConversationBan.query.filter_by(
+        conversation_id=conv_id,
+        participant_id=participant_id,
+        lifted_at=None,
+    ).first()
+    if existing:
+        flash('Participant is already banned from this conversation.', 'warning')
+        return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
+
+    summary = nh3.clean((request.form.get('summary') or '').strip(), tags=_NH3_NO_TAGS)[:1000]
+    actor = _current_participant()
+    ban = ConversationBan(
+        conversation_id=conv_id,
+        participant_id=participant_id,
+        banned_by_id=actor.id if actor else None,
+        summary=summary or None,
+    )
+    db.session.add(ban)
+    db.session.commit()
+    record_audit('participant.ban', conv_id=conv.id, target_type='participant',
+                 target_id=participant_id, scope='conversation',
+                 summary_present=bool(summary))
+    flash('Participant banned from this conversation.', 'success')
+    return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/participants/<int:participant_id>/unban')
+@login_required
+def admin_participant_unban(conv_id, participant_id):
+    conv = _require_mod_for_conv(conv_id)
+    ban = ConversationBan.query.filter_by(
+        conversation_id=conv_id,
+        participant_id=participant_id,
+        lifted_at=None,
+    ).first_or_404()
+    summary = nh3.clean((request.form.get('summary') or '').strip(), tags=_NH3_NO_TAGS)[:1000]
+    actor = _current_participant()
+    ban.lifted_at = datetime.now(timezone.utc)
+    ban.lifted_by_id = actor.id if actor else None
+    ban.lift_summary = summary or None
+    db.session.commit()
+    record_audit('participant.unban', conv_id=conv.id, target_type='participant',
+                 target_id=participant_id, scope='conversation',
+                 summary_present=bool(summary))
+    flash('Participant unbanned from this conversation.', 'success')
+    return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/new')
 @login_required
@@ -1426,6 +2672,7 @@ def admin_conversation_detail(conv_id):
 def admin_conversation_new():
     slug   = request.form.get('slug', '').strip().lower()
     fields = _parse_conversation_form()
+    phase_route = _valid_phase_route(request.form.get('phase_route'))
 
     if not fields['title']:
         flash('Title is required.', 'error')
@@ -1456,7 +2703,8 @@ def admin_conversation_new():
                 'Pass a polis_id manually or set the env vars.'
             )))
 
-    conv = Conversation(slug=slug, active=True, polis_id=polis_id, **fields)
+    conv = Conversation(slug=slug, active=True, polis_id=polis_id,
+                        phase_route=phase_route, **fields)
     db.session.add(conv)
     db.session.commit()
     record_audit('conversation.create', conv_id=conv.id, slug=slug)
@@ -1464,9 +2712,8 @@ def admin_conversation_new():
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/edit')
 @login_required
-@admin_required
 def admin_conversation_edit(conv_id):
-    conv   = Conversation.query.get_or_404(conv_id)
+    conv   = _require_organizer_for_conv(conv_id)
     fields = _parse_conversation_form()
 
     if not fields['title']:
@@ -1476,6 +2723,11 @@ def admin_conversation_edit(conv_id):
     conv.title         = fields['title']
     conv.intro_text    = fields['intro_text']
     conv.outro_text    = fields['outro_text']
+    if conv.access_policy == 'demo':
+        fields['access_policy'] = 'demo'
+    elif fields['access_policy'] == 'demo':
+        flash('Demo mode is fixed at creation and cannot be enabled on an existing consultation.', 'error')
+        fields['access_policy'] = conv.access_policy
     conv.access_policy = fields['access_policy']
     db.session.commit()
     record_audit('conversation.edit', conv_id=conv.id)
@@ -1500,12 +2752,118 @@ def admin_conversation_close(conv_id):
     conv = Conversation.query.get_or_404(conv_id)
     if not conv.active:
         abort(400)
-    conv.active    = False
-    conv.paused    = False
-    conv.closed_at = datetime.now(timezone.utc)
+    if _in_cleanup_window(conv):
+        required = {
+            'cleanup_reviewed_results',
+            'cleanup_moderated_flagged',
+            'cleanup_reviewed_exclusions',
+            'cleanup_report_intro',
+        }
+        if any(request.form.get(field) != 'on' for field in required):
+            flash('Complete every cleanup checklist item before publishing the final report.', 'error')
+            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+        if _route_has_phase(conv, 'informed_voting') and not conv.phase6_polis_conversation_id:
+            flash('Phase 6 must be initialised before publishing the final report.', 'error')
+            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    filt = _publish_final_report(conv)
     db.session.commit()
-    record_audit('conversation.close', conv_id=conv.id)
+    record_audit('conversation.close', conv_id=conv.id,
+                 excluded_tids=len(filt.excluded_tids),
+                 excluded_pids=len(filt.excluded_pids))
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/recommendations')
+@login_required
+@admin_required
+def admin_conversation_recommendations(conv_id):
+    conv = Conversation.query.get_or_404(conv_id)
+    tier = request.form.get('tier', _DEFAULT_RECOMMENDATION_TIER)
+    if tier not in _RECOMMENDATION_TIERS:
+        tier = _DEFAULT_RECOMMENDATION_TIER
+    config = {'tier': tier}
+    for key in _RECOMMENDATION_LABELS:
+        value = request.form.get(key, type=int)
+        if value is not None and value > 0:
+            config[key] = min(value, 999)
+    conv.recommended_quantities = config
+    db.session.commit()
+    record_audit('recommendations.set', conv_id=conv.id, tier=tier)
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/phase/schedule')
+@login_required
+@admin_required
+def admin_conversation_phase_schedule(conv_id):
+    conv = Conversation.query.get_or_404(conv_id)
+    action = request.form.get('action', 'set')
+    if action == 'cancel':
+        _clear_scheduled_transition(conv)
+        db.session.commit()
+        record_audit('phase.schedule.cancel', conv_id=conv.id)
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    if action in ('freeze', 'unfreeze') and conv.scheduled_transition_at:
+        conv.scheduled_transition_frozen = action == 'freeze'
+        db.session.commit()
+        record_audit(f'phase.schedule.{action}', conv_id=conv.id,
+                     target_type='phase',
+                     target_id=conv.scheduled_transition_target)
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    ctx = _transition_context(conv)
+    if not _is_schedulable_transition(ctx):
+        flash('Only active-to-passive wind-down transitions can be scheduled.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    scheduled_at = _parse_utc_timestamp(request.form.get('scheduled_at', ''))
+    if scheduled_at is None:
+        flash('Enter a valid UTC timestamp.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    if scheduled_at <= datetime.now(timezone.utc):
+        flash('Scheduled transition time must be in the future.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    conv.scheduled_transition_at = scheduled_at
+    conv.scheduled_transition_target = ctx['target']['key']
+    conv.scheduled_transition_frozen = False
+    db.session.commit()
+    record_audit('phase.schedule.set', conv_id=conv.id,
+                 target_type='phase', target_id=ctx['target']['key'])
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+@admin_bp.post('/admin/conversations/<int:conv_id>/delete')
+@login_required
+@admin_required
+def admin_conversation_delete(conv_id):
+    conv = Conversation.query.get_or_404(conv_id)
+    client = _polis_server_client()
+    valid_vote_count = client.get_valid_vote_count(conv.polis_id)
+    if valid_vote_count is None:
+        flash('Cannot delete this conversation because Polis vote data could not be verified.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    if valid_vote_count != 0:
+        flash(
+            f'Cannot delete this conversation because it has {valid_vote_count} valid vote'
+            f'{"s" if valid_vote_count != 1 else ""}.',
+            'error',
+        )
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    try:
+        client.close_and_hide_conversation(conv.polis_id)
+    except PolisServerError:
+        current_app.logger.exception('Polis conversation close/hide failed')
+        flash('Could not hide the Polis conversation. Nothing was deleted.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+    slug = conv.slug
+    polis_id = conv.polis_id
+    record_audit('conversation.delete', conv_id=conv.id, target_type='conversation',
+                 target_id=conv.id, valid_vote_count=valid_vote_count)
+    _delete_local_conversation(conv)
+    db.session.commit()
+    current_app.logger.info('deleted empty conversation slug=%s polis_id=%s', slug, polis_id)
+    flash('Conversation deleted.', 'success')
+    return redirect(url_for('admin.admin'))
 
 def _sync_vis_type(conv) -> bool:
     """Mirror the results phases onto Polis's vis_type, which gates GET /results/
@@ -1558,7 +2916,6 @@ def admin_conversation_phases(conv_id):
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/phase/advance')
 @login_required
-@admin_required                      # guided forward move — global admin (later: organizer)
 def admin_conversation_advance(conv_id):
     """Guided 'Move on' phase transition (#156). The organizer must affirm every
     precondition (one checkbox each) before this is accepted; the route re-enforces
@@ -1568,9 +2925,10 @@ def admin_conversation_advance(conv_id):
     Active conversation → one step forward; closed → jump to public results. Backward
     / custom-state repair is an advanced-mode action, so a non-linear state is refused.
     The Informed-voting transition runs Phase 6 init atomically; the Public-results
-    transition auto-closes the conversation (starting the identity-reveal window).
+    transition to Report ends participant activity and enters the cleanup window;
+    the separate publish action stamps closed_at and starts the identity-reveal window.
     """
-    conv = Conversation.query.get_or_404(conv_id)
+    conv = _require_organizer_for_conv(conv_id)
     redirect_to = redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
     ctx = _transition_context(conv)
@@ -1613,15 +2971,7 @@ def admin_conversation_advance(conv_id):
                 flash(sync_msg, 'error')
                 return redirect_to
 
-    cur, nxt = ctx['source'], ctx['target']
-    if cur['flag']:                               # preparation has flag=None
-        setattr(conv, cur['flag'], False)
-    setattr(conv, nxt['flag'], True)
-
-    if ctx['auto_close'] and conv.closed_at is None:
-        conv.active    = False
-        conv.paused    = False
-        conv.closed_at = datetime.now(timezone.utc)
+    source_key, target_key = _apply_phase_transition(conv, ctx)
 
     slug = conv.slug                              # capture before any rollback expires it
     try:
@@ -1655,15 +3005,14 @@ def admin_conversation_advance(conv_id):
             flash('Could not move on — a database error occurred. Please try again.', 'error')
         return redirect_to
 
-    record_audit('phase.advance', conv_id=conv.id, target_type='phase', target_id=nxt['key'],
-                 from_phase=cur['key'], phase6_created=bool(created_p6),
-                 auto_closed=bool(ctx['auto_close']))
+    record_audit('phase.advance', conv_id=conv.id, target_type='phase', target_id=target_key,
+                 from_phase=source_key, phase6_created=bool(created_p6))
 
     if not _sync_vis_type(conv):
         flash('Phase moved, but updating results visibility in Polis failed.', 'error')
     if sync_msg:                                  # re-entry re-synced round 6 (#175)
         flash(sync_msg, 'warning' if 'check manually' in sync_msg else 'success')
-    flash(f'Moved to: {nxt["label"]}.', 'success')
+    flash(f'Moved to: {ctx["target"]["label"]}.', 'success')
     return redirect_to
 
 
@@ -2015,6 +3364,7 @@ def admin_conversation_statements(conv_id):
     # Provenance (#143): which listed statements are recorded derivatives → {tid: row}.
     all_tids = [s['tid'] for s in (list(pending) + list(approved) + list(hidden))]
     provenance_map = _provenance_map(conv_id, all_tids)
+    seed_lock_reason = _seed_statement_lock_reason(conv)
     return render_template('admin_statements.html',
                            conversation=conv,
                            pending=pending,
@@ -2024,9 +3374,11 @@ def admin_conversation_statements(conv_id):
                            featured_tids=featured_tids,
                            provenance_map=provenance_map,
                            phase_active=conv.phase_argument_mapping,
+                           seed_import_allowed=seed_lock_reason is None,
+                           seed_import_lock_reason=seed_lock_reason,
                            polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is',
                            max_import_rows=MAX_ROWS,
-                           max_import_kb=MAX_FILE_BYTES // 1024)
+                           max_import_chars=MAX_TEXT_CHARS)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
 @login_required
@@ -2065,6 +3417,10 @@ def admin_statement_moderate(conv_id, tid):
 @login_required
 def admin_statement_seed(conv_id):
     conv = _require_mod_for_conv(conv_id)
+    lock_reason = _seed_statement_lock_reason(conv)
+    if lock_reason:
+        flash(lock_reason, 'error')
+        return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
     text = request.form.get('txt', '').strip()
     text = nh3.clean(text, tags=frozenset())
     if not text or len(text) > 280:
@@ -2099,141 +3455,32 @@ def admin_statement_seed(conv_id):
         flash('Could not add seed statement. Check server logs for details.', 'error')
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
 
-@admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed/import')
+@admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed/import-text')
 @login_required
 @limiter.limit('5 per minute')
-def admin_statement_seed_import(conv_id):
+def admin_statement_seed_import_text(conv_id):
     conv = _require_mod_for_conv(conv_id)
     redirect_target = url_for('admin.admin_conversation_statements', conv_id=conv_id)
-
-    f = request.files.get('csv_file')
-    if not f or not f.filename:
-        flash('No file selected.', 'error')
+    lock_reason = _seed_statement_lock_reason(conv)
+    if lock_reason:
+        flash(lock_reason, 'error')
+        return redirect(redirect_target)
+    raw_text = request.form.get('statement_texts', '')
+    # Pre-parse size guard, mirroring the CSV path's MAX_FILE_BYTES cap (#238).
+    # The textarea has a client-side maxlength, but that is trivially bypassed by
+    # a crafted POST, so bound the raw payload server-side before parsing.
+    if len(raw_text.encode('utf-8')) > MAX_FILE_BYTES:
+        flash(f'Too much text — maximum is {MAX_FILE_BYTES // 1024} KB.', 'error')
+        return redirect(redirect_target)
+    result = _parse_seed_text_lines(raw_text)
+    if _reject_seed_import_parse_errors(result, 'Text import'):
         return redirect(redirect_target)
 
-    if not f.filename.lower().endswith('.csv'):
-        flash('Please upload a .csv file.', 'error')
-        return redirect(redirect_target)
-
-    raw = f.stream.read(MAX_FILE_BYTES + 1)
-    if len(raw) > MAX_FILE_BYTES:
-        flash(f'File too large — maximum is {MAX_FILE_BYTES // 1024} KB.', 'error')
-        return redirect(redirect_target)
-
-    try:
-        result = parse_csv_bytes(raw)
-    except ValueError as exc:
-        flash(str(exc), 'import_row_error')
-        flash('✗ Import failed', 'import_result')
-        return redirect(redirect_target)
-
-    # Reject if the file exceeds the row limit — partial imports are confusing.
-    limit_skipped = [e for e in result.errors if e.limit_skipped]
-    if limit_skipped:
-        total_rows = len(result.texts) + len(result.errors)
-        current_app.logger.warning(
-            'CSV import rejected — row limit exceeded: %d rows, max %d (conv %s)',
-            total_rows, MAX_ROWS, conv.polis_id,
-        )
-        flash(
-            f'✗ Import rejected — file contains {total_rows} rows, maximum is {MAX_ROWS}. '
-            f'Reduce the file and re-upload. '
-            f'(Parse errors may also be present — fix both before re-uploading.)',
-            'import_result',
-        )
-        return redirect(redirect_target)
-
-    # Reject the entire batch if any row has a parse error — partial imports
-    # are confusing and hard to reconcile.
-    parse_errors = [e for e in result.errors if not e.limit_skipped]
-    if parse_errors:
-        for err in parse_errors:
-            flash(f'Row {err.row}: {err.reason}.', 'import_row_error')
-        flash('✗ Import rejected — fix errors and re-upload', 'import_result')
-        return redirect(redirect_target)
-
-    # Sanitize all texts with nh3 first, then re-strip formula prefixes that
-    # HTML-entity encoding could have reintroduced (e.g. &equals; → =).
-    # Filter empty strings that result from nh3 stripping all-tag content.
-    seen_sanitised: set[str] = set()
-    sanitised_texts: list[str] = []
-    for raw_text in result.texts:
-        san = nh3.clean(raw_text, tags=_NH3_NO_TAGS)
-        # Re-apply formula-prefix stripping: nh3 decodes HTML entities (e.g.
-        # &equals; → =) which can reintroduce leading formula chars.
-        san = strip_formula_prefixes(san).strip()
-        if not san or san in seen_sanitised:
-            continue  # drop empty-after-nh3 and nh3-induced within-batch dupes
-        seen_sanitised.add(san)
-        sanitised_texts.append(san)
-
-    # Check for duplicates against statements already in Polis.
-    existing_texts: set[str] = set()
-    dedup_check_failed = False
-    try:
-        rows = _polis_server_client().get_statements(conv.polis_id)
-        if rows is not None:
-            pending, approved, hidden = rows
-            for stmt in pending + approved + hidden:
-                existing_texts.add(stmt['txt'].strip().casefold())
-    except Exception:
-        current_app.logger.exception('Could not fetch existing statements for dedup check')
-        dedup_check_failed = True
-
-    dedup_errors = []
-    clean_texts  = []
-    for sanitised in sanitised_texts:
-        if sanitised.casefold() in existing_texts:
-            dedup_errors.append(f'"{sanitised[:60]}{"…" if len(sanitised) > 60 else ""}" — already exists in this conversation')
-        else:
-            clean_texts.append(sanitised)
-
-    successes     = 0
-    polis_skipped = []  # Polis rejected these — likely already exist
-    polis_errors  = []  # Polis login or unexpected failure
-    if clean_texts:
-        try:
-            successes, failures = _polis_server_client().bulk_add_seeds(conv.polis_id, clean_texts)
-            for text, exc in failures:
-                current_app.logger.warning('Polis rejected imported row (%s, may already exist): %s',
-                                           type(exc).__name__, exc)
-                polis_skipped.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
-        except PolisServerError:
-            current_app.logger.exception('Polis login failed during bulk import')
-            polis_errors = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
-
-    if dedup_check_failed:
-        flash('Could not check for existing statements — some may be duplicates. Check server logs.', 'warning')
-
-    for msg in dedup_errors:
-        flash(f'Skipped — {msg}.', 'warning')
-    for msg in polis_skipped:
-        flash(f'Already in Polis, skipped: {msg}.', 'warning')
-    for msg in polis_errors:
-        flash(f'Could not send to Polis: {msg}.', 'error')
-    if not successes and not result.errors and not dedup_errors and not polis_skipped and not polis_errors:
-        flash('No statements were imported — the file had no valid rows.', 'warning')
-
-    # Persistent inline result near the upload button.
-    n_skipped = len(dedup_errors) + len(polis_skipped)
-    n_errors   = len(polis_errors)
-    # Note: polis_errors is only set in the except-PolisServerError branch, which
-    # means successes == 0 whenever polis_errors is non-empty. The two cannot
-    # coexist; n_errors is checked last to keep the ladder exhaustive.
-    if successes and not n_skipped:
-        flash(f'✓ {successes} statement{"s" if successes != 1 else ""} imported', 'import_result')
-    elif successes:
-        flash(f'✓ {successes} imported — ⚠ {n_skipped} skipped', 'import_result')
-    elif n_errors:
-        flash('✗ Import failed — could not reach Polis. Check server logs.', 'import_result')
-    elif n_skipped:
-        flash(f'⚠ 0 imported — {n_skipped} already existed in Polis', 'import_result')
-    else:
-        flash('⚠ 0 imported — Polis returned no result', 'import_result')
-
-    if successes:
-        record_audit('statement.seed_import', conv_id=conv_id,
-                     imported=successes, skipped=n_skipped, errors=n_errors)
+    summary = _import_seed_statement_texts(conv, result.texts)
+    if summary['successes']:
+        record_audit('statement.seed_import_text', conv_id=conv_id,
+                     imported=summary['successes'], skipped=summary['skipped'],
+                     errors=summary['errors'])
     return redirect(redirect_target)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/strict-moderation')
@@ -2266,10 +3513,13 @@ def admin_conversation_featured(conv_id):
     candidates   = _polis_server_client().get_featured_candidates(conv.polis_id)
     if candidates is not None:
         candidates = [c for c in candidates if c['tid'] not in confirmed_tids]
+    candidate_tids = [c['tid'] for c in candidates] if candidates else []
+    provenance_map = _provenance_map(conv_id, list(confirmed_tids) + candidate_tids)
     return render_template('admin_featured.html',
                            conversation=conv,
                            confirmed=confirmed,
                            candidates=candidates,
+                           provenance_map=provenance_map,
                            phase_active=conv.phase_argument_mapping)
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/featured/confirm')
@@ -2342,6 +3592,20 @@ def admin_argument_delete(conv_id, arg_id):
                  featured_statement_id=fs_id)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
 
+@admin_bp.post('/admin/conversations/<int:conv_id>/arguments/<int:arg_id>/moderate')
+@login_required
+def admin_argument_moderate(conv_id, arg_id):
+    conv = _require_mod_for_conv(conv_id)
+    arg  = Argument.query.filter_by(id=arg_id).first_or_404()
+    FeaturedStatement.query.filter_by(
+        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+    hidden = request.form.get('hidden') == '1'
+    arg.hidden = hidden
+    db.session.commit()
+    record_audit('argument.moderate', conv_id=conv_id, target_type='argument',
+                 target_id=arg_id, hidden=hidden)
+    return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
+
 
 # ── Accept ───────────────────────────────────────────────────────────────
 
@@ -2349,6 +3613,8 @@ def admin_argument_delete(conv_id, arg_id):
 @login_required
 def accept(slug):
     conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+    if conv.access_policy == 'demo':
+        return redirect(url_for('participant.conversation', slug=slug))
     participant = _current_participant()
     _check_conversation_access(conv, participant)
     if participant and Participation.query.filter_by(
@@ -2367,6 +3633,8 @@ def accept(slug):
 @limiter.limit('10 per minute')
 def accept_post(slug):
     conv        = Conversation.query.filter_by(slug=slug).first_or_404()
+    if conv.access_policy == 'demo':
+        return redirect(url_for('participant.conversation', slug=slug))
     participant = _current_participant()
     if participant is None:
         abort(404)
@@ -2383,12 +3651,25 @@ def accept_post(slug):
     if not _PSEUDONYM_RE.match(pseudonym):
         abort(400)
 
+    allowed, eligibility_status, eligibility_detail = _check_join_eligibility(conv, participant)
+    if not allowed:
+        return make_response(render_template(
+            'forbidden_eligibility.html',
+            conversation=conv,
+            status=eligibility_status,
+            detail=eligibility_detail,
+        ), 403)
+
     db.session.add(Participation(
         participant_id=participant.id,
         conversation_id=conv.id,
         pseudonym=pseudonym,
         notify_email=bool(request.form.get('notify_email')) and emailable,
         notify_talk_page=bool(request.form.get('notify_talk_page')),
+        eligibility_status=eligibility_status,
+        eligibility_checked_at=datetime.now(timezone.utc)
+        if eligibility_status != 'not_required' else None,
+        eligibility_detail=eligibility_detail or None,
     ))
     try:
         db.session.commit()
@@ -2412,14 +3693,28 @@ def accept_pseudonyms(slug):
 # ── Conversation ─────────────────────────────────────────────────────────
 
 @participant_bp.get('/c/<slug>')
-@login_required
+@limiter.limit('120 per minute')
 def conversation(slug):
-    conv        = Conversation.query.filter_by(slug=slug).first_or_404()
-    participant = _current_participant()
+    conv        = Conversation.query.filter_by(slug=slug).first()
+    if conv is None:
+        if 'username' not in session and not _is_demo_session():
+            session['next'] = request.path
+            return redirect(url_for('login'))
+        abort(404)
+    if conv.access_policy == 'demo':
+        participation = _ensure_demo_participation(conv)
+        participant = participation.participant
+    else:
+        if _is_demo_session():
+            abort(403)
+        if 'username' not in session:
+            session['next'] = request.path
+            return redirect(url_for('login'))
+        participant = _current_participant()
     _check_conversation_access(conv, participant)
 
-    participation = None
-    if participant:
+    participation = locals().get('participation')
+    if participation is None and participant:
         participation = Participation.query.filter_by(
             participant_id=participant.id,
             conversation_id=conv.id,
@@ -2459,6 +3754,11 @@ def conversation(slug):
     featured_data = []
     if conv.phase_argument_mapping and participation:
         featured_data = _build_featured_data(conv, participation, can_mod=can_mod)
+
+    moderation_log_count = AuditEvent.query.filter(
+        AuditEvent.conversation_id == conv.id,
+        AuditEvent.operation.in_(('participant.ban', 'participant.unban')),
+    ).count()
 
     # Phase 6 — build card data: each confirmed featured statement with its
     # top-10 visible arguments per side, sorted by usefulness vote count.
@@ -2521,16 +3821,59 @@ def conversation(slug):
                            reveal_state=reveal_state,
                            reveal_opens_at=reveal_opens_at,
                            reveal=reveal,
+                           demo_mode=conv.access_policy == 'demo',
                            featured_data=featured_data,
                            new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10,
                            new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
                            new_stmt_ids=participation.new_stmt_ids if participation else [],
                            phase6_data=phase6_data,
-                           phase6_results=phase6_results)
+                           phase6_results=phase6_results,
+                           output_items=_output_items(conv),
+                           moderation_log_count=moderation_log_count)
+
+
+@participant_bp.get('/c/<slug>/outputs/<output_key>')
+@login_required
+def conversation_output(slug, output_key):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        return redirect(url_for('participant.accept', slug=slug))
+    definition = _output_definition(output_key)
+    if definition is None:
+        abort(404)
+    items = _output_items(conv)
+    output = next(item for item in items if item['key'] == output_key)
+    return render_template('output.html',
+                           conversation=conv,
+                           participation=participation,
+                           output=output,
+                           output_items=items)
+
+
+@participant_bp.get('/c/<slug>/moderation-log')
+def conversation_moderation_log(slug):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    return render_template(
+        'moderation_log.html',
+        conversation=conv,
+        rows=_conversation_ban_log_rows(conv),
+    )
 
 # ── Arguments ────────────────────────────────────────────────────────────
 
 @participant_bp.post('/c/<slug>/arguments/<int:fs_id>/submit')
+@login_required
+def argument_submit_legacy(slug, fs_id):
+    return redirect(url_for('participant.argument_submit', slug=slug, fs_id=fs_id),
+                    code=307)
+
+@participant_bp.post('/c/<slug>/featured-statements/<int:fs_id>/arguments')
 @login_required
 def argument_submit(slug, fs_id):
     conv, part = _require_arg_participation(slug)
@@ -2542,18 +3885,24 @@ def argument_submit(slug, fs_id):
         abort(400)
 
     existing = Argument.query.filter_by(
-        proposer_id=part.participant_id,
+        proposer_pseudonym=part.pseudonym,
         featured_statement_id=fs_id,
         side=side,
     ).first()
     if existing:
         if request.headers.get('X-Requested-With') == 'fetch':
-            return jsonify({'ok': True, 'id': existing.id, 'body': existing.body})
+            return jsonify({
+                'ok': True,
+                'id': existing.id,
+                'body': existing.body,
+                'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=existing.id),
+                'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=existing.id),
+            })
         return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
     arg = Argument(
         featured_statement_id=fs_id,
-        proposer_id=part.participant_id,
+        proposer_pseudonym=part.pseudonym,
         body=body,
         side=side,
     )
@@ -2580,12 +3929,25 @@ def argument_submit(slug, fs_id):
     order.insert(random.randint(0, len(order)), arg.id)
     state.argument_order = order
 
+    _touch_last_engagement(part)
     db.session.commit()
     if request.headers.get('X-Requested-With') == 'fetch':
-        return jsonify({'ok': True, 'id': arg.id, 'body': body})
+        return jsonify({
+            'ok': True,
+            'id': arg.id,
+            'body': body,
+            'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=arg.id),
+            'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=arg.id),
+        })
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
 @participant_bp.post('/c/<slug>/arguments/<int:fs_id>/<side>/skip')
+@login_required
+def argument_skip_legacy(slug, fs_id, side):
+    return redirect(url_for('participant.argument_skip', slug=slug, fs_id=fs_id, side=side),
+                    code=307)
+
+@participant_bp.post('/c/<slug>/featured-statements/<int:fs_id>/skip/<side>')
 @login_required
 def argument_skip(slug, fs_id, side):
     conv, part = _require_arg_participation(slug)
@@ -2607,10 +3969,14 @@ def argument_skip(slug, fs_id, side):
             skipped=True,
         )
         db.session.add(state)
+        _touch_last_engagement(part)
         db.session.commit()
     elif not state.skipped:
         state.skipped = True
+        _touch_last_engagement(part)
         db.session.commit()
+    else:
+        _touch_last_engagement(part, commit=True)
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
@@ -2631,10 +3997,10 @@ def argument_vote(slug, arg_id):
         participant_id=part.participant_id,
         featured_statement_id=fs.id, side='con').first()
     pro_proposed = Argument.query.filter_by(
-        proposer_id=part.participant_id,
+        proposer_pseudonym=part.pseudonym,
         featured_statement_id=fs.id, side='pro').first()
     con_proposed = Argument.query.filter_by(
-        proposer_id=part.participant_id,
+        proposer_pseudonym=part.pseudonym,
         featured_statement_id=fs.id, side='con').first()
     pro_gate = bool(pro_proposed or (pro_state and pro_state.skipped))
     con_gate = bool(con_proposed or (con_state and con_state.skipped))
@@ -2670,6 +4036,7 @@ def argument_vote(slug, arg_id):
             argument_id=arg_id,
             participant_id=part.participant_id,
         ))
+        _touch_last_engagement(part)
         db.session.commit()
     if is_ajax:
         return jsonify({'ok': True})
@@ -2686,6 +4053,7 @@ def argument_unvote(slug, arg_id):
         participant_id=part.participant_id, argument_id=arg_id).first()
     if existing:
         db.session.delete(existing)
+        _touch_last_engagement(part)
         db.session.commit()
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
@@ -2716,6 +4084,90 @@ def argument_unhide(slug, arg_id):
     arg.hidden = False
     db.session.commit()
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+
+
+@participant_bp.post('/c/<slug>/arguments/<int:arg_id>/flag')
+@login_required
+@limiter.limit('10 per minute')
+def argument_flag(slug, arg_id):
+    conv, part = _require_arg_participation(slug)
+    arg = Argument.query.filter_by(id=arg_id).first_or_404()
+    FeaturedStatement.query.filter_by(
+        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
+    if arg.hidden:
+        flash('This argument is already under moderator review.', 'info')
+        return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+    category, detail = _parse_content_flag_form()
+    if not _existing_open_flag(
+        conv.id,
+        part.participant_id,
+        'argument',
+        category,
+        argument_id=arg.id,
+    ):
+        db.session.add(ContentFlag(
+            conversation_id=conv.id,
+            participant_id=part.participant_id,
+            content_type='argument',
+            argument_id=arg.id,
+            category=category,
+            detail=detail,
+            status='open',
+        ))
+        db.session.commit()
+        record_audit('content_flag.create', conv_id=conv.id, target_type='argument',
+                     target_id=arg.id, category=category)
+    flash('Thanks - this has been sent to the moderator for review.', 'success')
+    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
+
+
+@participant_bp.post('/c/<slug>/statements/<int:tid>/flag')
+@login_required
+@limiter.limit('10 per minute')
+def statement_flag(slug, tid):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    if not conv.active or conv.paused:
+        abort(403)
+    participant = _current_participant()
+    if participant is None:
+        abort(403)
+    part = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first_or_404()
+    _abort_if_banned(conv, participant)
+
+    statements = _polis_server_client().get_statements(conv.polis_id)
+    if statements is not None:
+        all_statements = [s for group in statements for s in group]
+        matching = [s for s in all_statements if s.get('tid') == tid]
+        if not matching:
+            abort(404)
+        if matching[0].get('is_seed'):
+            abort(400)
+
+    category, detail = _parse_content_flag_form()
+    if not _existing_open_flag(
+        conv.id,
+        part.participant_id,
+        'statement',
+        category,
+        statement_tid=tid,
+    ):
+        db.session.add(ContentFlag(
+            conversation_id=conv.id,
+            participant_id=part.participant_id,
+            content_type='statement',
+            statement_tid=tid,
+            category=category,
+            detail=detail,
+            status='open',
+        ))
+        db.session.commit()
+        record_audit('content_flag.create', conv_id=conv.id, target_type='statement',
+                     target_id=tid, category=category)
+    flash('Thanks - this has been sent to the moderator for review.', 'success')
+    return redirect(url_for('participant.conversation', slug=slug) + '#tab-vote')
 
 # ── Identity reveal ───────────────────────────────────────────────────────
 
@@ -2778,7 +4230,6 @@ def reveal_identity_post(slug):
 # ── Phase 6 vote ──────────────────────────────────────────────────────────────
 
 @participant_bp.post('/c/<slug>/phase6/vote')
-@login_required
 @limiter.limit('30 per minute')
 def phase6_vote(slug):
     """Submit a Phase 6 (informed voting) vote for a featured statement.
@@ -2796,6 +4247,12 @@ def phase6_vote(slug):
     if not conv.active or conv.paused:
         abort(403)
 
+    if _is_demo_session():
+        if _demo_bound_conversation_id() != conv.id or conv.access_policy != 'demo':
+            abort(403)
+    elif 'username' not in session:
+        abort(403)
+
     participant = _current_participant()
     if participant is None:
         abort(403)
@@ -2807,6 +4264,7 @@ def phase6_vote(slug):
     ).first()
     if not participation:
         abort(403)
+    _abort_if_banned(conv, participant)
 
     if not conv.phase_informed_voting or not conv.phase6_polis_conversation_id:
         abort(404)
@@ -2854,8 +4312,7 @@ def phase6_vote(slug):
 
     vote_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
 
-    # Particiapi vote endpoint: PUT /api/conversations/{id}/votes/{tid} with {value: N}
-    # (matches particiapp-web-client.js line 840-841)
+    # Particiapi vote endpoint: PUT /api/conversations/{id}/votes/{tid} with {value: N}.
     try:
         upstream = requests.put(
             f'{base}/api/conversations/{polis_conv_id}/votes/{tid}',
@@ -2869,6 +4326,8 @@ def phase6_vote(slug):
         abort(502)
 
     resp = make_response('', upstream.status_code)
+    if upstream.ok:
+        _touch_last_engagement(participation, commit=True)
     if new_pa_cookie:
         resp.set_cookie('pa_session', new_pa_cookie, httponly=True,
                         samesite='Lax', secure=not current_app.debug)
@@ -2894,7 +4353,7 @@ def record_audit(operation, *, conv_id=None, target_type=None, target_id=None,
     this contract is the control (enforced by tests).
     """
     actor = getattr(g.get('participant'), 'id', None)
-    if actor is None and session.get('username'):
+    if actor is None and has_request_context() and session.get('username'):
         # Authenticated admin with no Participant row (env-listed ADMIN_USERS superadmin).
         # Mark the row so a NULL actor is explained, not ambiguous — without storing the
         # username (PII). See _is_global_admin's ADMIN_USERS branch.
@@ -2923,22 +4382,67 @@ def _char_similarity(new_text, parent_text):
 
 
 def _semantic_similarity(new_text, parent_text):
-    """Seam for #207: multilingual sentence-embedding similarity. Returns None until #207
-    supplies a model — wiring it here adds the 'semantic' score with no schema/flow change.
+    """Semantic scorer (#207) backed by the optional embedding sidecar (#208).
 
-    #207 implements this by POSTing both texts to the embedding sidecar (#208, FastAPI +
-    paraphrase-multilingual-MiniLM) and returning its **cosine similarity** directly (the
-    standard metric; every scorer here returns similarity, higher = more similar). Keep it
-    best-effort: a short-timeout synchronous call that returns None on timeout/sidecar-down,
-    so the 'char' score still records and the seed never blocks.
+    Contract (matches the embedding sidecar #208): POST STATEMENT_SIMILARITY_URL with
+    {"left": parent_text, "right": new_text}; response {"similarity": float}.
+    The call is best-effort and short-timeout; absent config or sidecar failure returns
+    None so the always-available char score remains the fallback.
     """
-    return None
+    url = current_app.config.get('STATEMENT_SIMILARITY_URL', '').strip()
+    if not url:
+        return None
+    timeout = float(current_app.config.get('STATEMENT_SIMILARITY_TIMEOUT', 1.5))
+    try:
+        resp = requests.post(
+            url,
+            json={'left': parent_text or '', 'right': new_text or ''},
+            headers={'User-Agent': _MW_USER_AGENT},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        raw = payload.get('similarity', payload.get('score'))
+        value = float(raw)
+    except Exception:
+        current_app.logger.exception('semantic similarity sidecar failed')
+        return None
+    return round(max(0.0, min(1.0, value)), 4)
 
 
 # Similarity-at-creation scorers (#143/#207). Each: (new_text, parent_text) -> float | None
 # in [0, 1], higher = more similar. Best-effort — a scorer returning None or raising is
 # skipped. The 'char' fallback ships working now; #207 fills in 'semantic' (cosine).
 _SIMILARITY_SCORERS = {'char': _char_similarity, 'semantic': _semantic_similarity}
+
+
+def _statement_similarity_scores(new_text, parent_text) -> dict[str, float]:
+    scores = {}
+    for name, fn in _SIMILARITY_SCORERS.items():
+        try:
+            value = fn(new_text, parent_text)
+        except Exception:
+            current_app.logger.exception('similarity scorer %s failed', name)
+            continue
+        if value is not None:
+            scores[name] = value
+    return scores
+
+
+def _preferred_similarity_score(scores: dict[str, float]) -> tuple[str | None, float | None]:
+    if 'semantic' in scores:
+        return 'semantic', scores['semantic']
+    if 'char' in scores:
+        return 'char', scores['char']
+    return None, None
+
+
+def _derivative_similarity_threshold() -> float:
+    raw = current_app.config.get('STATEMENT_DERIVATIVE_MIN_SIMILARITY', 0)
+    try:
+        return max(0.0, min(1.0, float(raw)))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def record_statement_provenance(conv_id, new_tid, derived_from_tid,
@@ -2957,15 +4461,9 @@ def record_statement_provenance(conv_id, new_tid, derived_from_tid,
         db.session.add(row)
         db.session.flush()        # need row.id for the score FKs
         if parent_text is not None and new_text is not None:
-            for name, fn in _SIMILARITY_SCORERS.items():
-                try:
-                    value = fn(new_text, parent_text)
-                except Exception:
-                    current_app.logger.exception('similarity scorer %s failed for tid %s', name, new_tid)
-                    continue
-                if value is not None:
-                    db.session.add(StatementSimilarityScore(
-                        provenance_id=row.id, model=name, value=value))
+            for name, value in _statement_similarity_scores(new_text, parent_text).items():
+                db.session.add(StatementSimilarityScore(
+                    provenance_id=row.id, model=name, value=value))
         db.session.commit()
         return row
     except Exception:
@@ -3052,6 +4550,12 @@ def create_app(test_config: dict | None = None) -> Flask:
             )
         _secret_key = 'dev-insecure-key'
     app.config['SECRET_KEY'] = _secret_key
+    app.config['XID_HASH_SECRET'] = (
+        (test_config or {}).get('XID_HASH_SECRET')
+        or _read_secret('xid-hash-secret')
+        or os.environ.get('XID_HASH_SECRET', '')
+        or _secret_key
+    )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SQLALCHEMY_ENGINE_OPTIONS']      = {'pool_recycle': 280, 'pool_pre_ping': True}
 
@@ -3082,6 +4586,20 @@ def create_app(test_config: dict | None = None) -> Flask:
                                         or os.environ.get('POLIS_ADMIN_EMAIL', ''))
     app.config['POLIS_ADMIN_PASSWORD'] = (_read_secret('polis-admin-password')
                                           or os.environ.get('POLIS_ADMIN_PASSWORD', ''))
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = (
+        _read_secret('account-eligibility-url')
+        or os.environ.get('ACCOUNT_ELIGIBILITY_URL', '')
+    )
+    app.config['STATEMENT_SIMILARITY_URL'] = (
+        _read_secret('statement-similarity-url')
+        or os.environ.get('STATEMENT_SIMILARITY_URL', '')
+    )
+    app.config['STATEMENT_SIMILARITY_TIMEOUT'] = (
+        os.environ.get('STATEMENT_SIMILARITY_TIMEOUT', '1.5')
+    )
+    app.config['STATEMENT_DERIVATIVE_MIN_SIMILARITY'] = (
+        os.environ.get('STATEMENT_DERIVATIVE_MIN_SIMILARITY', '0')
+    )
 
     # Apply test overrides before extensions are initialised so SESSION_TYPE,
     # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
@@ -3208,6 +4726,16 @@ def create_app(test_config: dict | None = None) -> Flask:
             _upgrade()
             click.echo('Database migrated to head revision.')
 
+    @app.cli.command('process-phase-schedules')
+    def process_phase_schedules_cmd():
+        """Fire due scheduled active-to-passive phase transitions."""
+        result = _process_due_scheduled_transitions()
+        click.echo(
+            'Scheduled transitions: '
+            f'{result["fired"]} fired, {result["aborted"]} aborted, '
+            f'{result["skipped"]} not due.'
+        )
+
     @app.before_request
     def _set_csp_nonce():
         g.csp_nonce = secrets.token_urlsafe(16)
@@ -3282,9 +4810,8 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     _register_routes(app)
 
-    # Proxy + statement-submit blueprint (#91). Both routes are CSRF-exempt with
-    # _validate_same_origin() as the compensating control; exempt the whole
-    # blueprint explicitly rather than per-route.
+    # Generic Particiapi proxy: CSRF-exempt with _validate_same_origin() as the
+    # compensating control; first-party statement submission is on participant_bp.
     app.register_blueprint(proxy_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(participant_bp)
@@ -3343,7 +4870,9 @@ def conversation_report(slug):
     if conv.phase_personal_results and not conv.phase_public_results and not participant:
         return redirect(url_for('participant.login') + f'?next={request.path}')
 
-    phase6_results = _build_phase6_results(conv, participation=None)  # aggregate only
+    report_filter = Phase6ResultsFilter.from_snapshot(conv.report_filter_snapshot)
+    phase6_results = _build_phase6_results(
+        conv, participation=None, results_filter=report_filter)  # aggregate only
 
     reveal = _reveal_context(conv, participation)
     return render_template(
@@ -3351,6 +4880,7 @@ def conversation_report(slug):
         conversation=conv,
         participation=participation,
         phase6_results=phase6_results,
+        output_context=next(item for item in _output_items(conv) if item['key'] == 'report'),
         reveal=reveal,
         reveal_state=reveal['state'] if reveal else None,
     )
@@ -3362,46 +4892,33 @@ def _register_routes(app: Flask) -> None:
 
     _dev_login_user = os.environ.get('DEV_LOGIN_USER', '').strip()
     _on_toolforge   = bool(os.environ.get('TOOL_TOOLFORGE_API_URL'))
-
-    if app.debug:
-        import pathlib
-        from flask import send_file as _send_file
-
-        # Resolve particiapp-web-components.js once at startup.
-        # Default: sibling repo layout (particiapp-docker/ next to wiki-polis/).
-        # Override with PARTICIAPP_WEB_COMPONENTS=/abs/path/to/file.js in .env.
-        _WC_DEFAULT = (pathlib.Path(__file__).parent.parent.parent /
-                       'particiapp-docker/subprojects'
-                       '/particiapp-web-components/particiapp-web-components.js')
-        _WC_PATH = pathlib.Path(
-            os.environ.get('PARTICIAPP_WEB_COMPONENTS', str(_WC_DEFAULT))
-        ).resolve()
-
-        @app.before_request
-        def _dev_serve_webcomponents():
-            if request.path == '/static/particiapp-web-components.js':
-                if _WC_PATH.exists():
-                    return _send_file(_WC_PATH, mimetype='application/javascript')
-                app.logger.warning(
-                    'particiapp-web-components.js not found at %s — '
-                    'set PARTICIAPP_WEB_COMPONENTS in .env', _WC_PATH)
+    _staging_dev_token = _read_secret('staging-dev-token')
+    _staging_dev_login_enabled = bool(
+        _on_toolforge
+        and _staging_dev_token
+        and len(_staging_dev_token) >= _MIN_STAGING_DEV_TOKEN_LEN
+        and _is_staging_toolforge_app(app)
+    )
+    app.config['STAGING_DEV_LOGIN'] = _staging_dev_login_enabled
 
     if app.debug and _dev_login_user and not _on_toolforge:
         @app.get('/dev-login')
         @limiter.limit('20 per minute')
         def dev_login():
             username = _dev_login_user
-            xid = hashlib.sha256(f'dev-{username}'.encode()).hexdigest()
+            xid = _derive_xid(f'dev:{username}')
             participant = Participant.query.filter_by(mw_username=username).first()
             if participant is None:
                 participant = Participant(
                     mw_user_id=abs(hash(username)) % 10**9,
                     mw_username=username,
                     xid=xid,
+                    xid_key_version=_XID_HMAC_VERSION,
                 )
                 db.session.add(participant)
             else:
                 participant.xid = xid
+                participant.xid_key_version = _XID_HMAC_VERSION
             db.session.commit()
             session['username']  = username
             session['xid']       = xid
@@ -3426,27 +4943,36 @@ def _register_routes(app: Flask) -> None:
             'DEV_FAKE_LOGIN ignored because fake login is only allowed in local debug mode'
         )
     app.config['DEV_FAKE_LOGIN'] = _fake_login_enabled
-    app.config['DEV_TEST_USERS'] = _DEV_TEST_USERS if _fake_login_enabled else []
+    app.config['DEV_TEST_USERS'] = (
+        _DEV_TEST_USERS if (_fake_login_enabled or _staging_dev_login_enabled) else []
+    )
 
-    if _fake_login_enabled:
+    if _fake_login_enabled or _staging_dev_login_enabled:
         @app.get('/dev/login/<username>')
         @limiter.limit('30 per minute')
         def dev_fake_login(username):
             user = next((u for u in _DEV_TEST_USERS if u['username'] == username), None)
             if user is None:
                 return 'Unknown test user', 404
-            xid = hashlib.sha256(f'dev-fake-{username}'.encode()).hexdigest()
+            if _staging_dev_login_enabled and not _fake_login_enabled:
+                supplied = request.args.get('token', '')
+                expected = _staging_dev_login_token(username, _staging_dev_token)
+                if not hmac.compare_digest(supplied, expected):
+                    abort(403)
+            xid = _derive_xid(f'dev-fake:{user["mw_user_id"]}:{username}')
             participant = Participant.query.filter_by(mw_user_id=user['mw_user_id']).first()
             if participant is None:
                 participant = Participant(
                     mw_user_id=user['mw_user_id'],
                     mw_username=username,
                     xid=xid,
+                    xid_key_version=_XID_HMAC_VERSION,
                 )
                 db.session.add(participant)
             else:
                 participant.mw_username = username
                 participant.xid = xid
+                participant.xid_key_version = _XID_HMAC_VERSION
             db.session.commit()
             session['username']  = username
             session['xid']       = xid
@@ -3460,7 +4986,8 @@ def _register_routes(app: Flask) -> None:
         dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
         if 'username' not in session:
             public_convos = (Conversation.query
-                             .filter_by(active=True, paused=False, access_policy='public')
+                             .filter_by(active=True, paused=False)
+                             .filter(Conversation.access_policy.in_(('public', 'demo')))
                              .order_by(Conversation.created_at.desc())
                              .all())
             return render_template('home.html',
@@ -3546,6 +5073,7 @@ def _register_routes(app: Flask) -> None:
                 conv.polis_id) if conv.polis_id else None
             signals_map[conv.id] = {
                 'phases':               _active_phases(conv),
+                'outputs':              _output_items(conv),
                 'statements_remaining': remaining,
                 'reveal':               reveal,
             }
@@ -3637,16 +5165,18 @@ def _register_routes(app: Flask) -> None:
         if not username or not mw_user_id:
             return redirect(url_for('index'))
 
-        xid = hashlib.sha256(str(mw_user_id).encode()).hexdigest()
+        xid = _derive_xid(f'mw:{mw_user_id}')
 
         participant = Participant.query.filter_by(mw_user_id=mw_user_id).first()
         if participant is None:
-            participant = Participant(mw_user_id=mw_user_id, mw_username=username, xid=xid)
+            participant = Participant(mw_user_id=mw_user_id, mw_username=username, xid=xid,
+                                      xid_key_version=_XID_HMAC_VERSION)
             db.session.add(participant)
         elif participant.mw_username != username:
             participant.mw_username = username
         if participant.xid != xid:
             participant.xid = xid
+            participant.xid_key_version = _XID_HMAC_VERSION
         db.session.commit()
 
         next_url = session.pop('next', None)

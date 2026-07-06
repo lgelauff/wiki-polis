@@ -5,8 +5,9 @@ scorer is best-effort (stub None, and a raising scorer still commits the link); 
 lineage resolver walks a chain to its root; and the audit detail carries derived_from.
 """
 import logging
+from unittest.mock import MagicMock, patch
 
-from db import Conversation, Participant, StatementProvenance, db
+from db import Conversation, Participant, Participation, StatementProvenance, db
 
 
 def _login_admin(client, app):
@@ -70,6 +71,28 @@ def test_distance_scorers_best_effort(app, monkeypatch):
         r = StatementProvenance.query.filter_by(conversation_id=conv_id, polis_statement_id=31).one()
         models = {s.model for s in r.scores}
         assert 'char' in models and 'semantic' not in models   # char still recorded, semantic skipped
+
+
+def test_semantic_similarity_sidecar_score_is_recorded(app):
+    from app import record_statement_provenance
+    conv_id = _conv(app, 'provsemantic')
+    resp = MagicMock()
+    resp.raise_for_status.return_value = None
+    resp.json.return_value = {'similarity': 0.82}
+    app.config['STATEMENT_SIMILARITY_URL'] = 'http://sidecar/similarity'
+    with app.app_context(), patch('app.requests.post', return_value=resp) as post:
+        record_statement_provenance(conv_id, 40, 12,
+                                    parent_text='the parent statement',
+                                    new_text='the revised parent statement')
+        r = StatementProvenance.query.filter_by(conversation_id=conv_id,
+                                                polis_statement_id=40).one()
+        models = {s.model: s.value for s in r.scores}
+    assert models['semantic'] == 0.82
+    assert 'char' in models
+    assert post.call_args.kwargs['json'] == {
+        'left': 'the parent statement',
+        'right': 'the revised parent statement',
+    }
 
 
 def test_lineage_group_walks_to_root(app):
@@ -136,3 +159,71 @@ def test_plain_seed_route_writes_no_provenance(client, app):
         client.post(f'/admin/conversations/{conv_id}/statements/seed', data={'txt': 'just a new one'})
     with app.app_context():
         assert StatementProvenance.query.filter_by(conversation_id=conv_id).count() == 0
+
+
+# ── Participant derivative submissions (#143/#210) ───────────────────────────
+
+def _fake_upstream(status_code=200, content=b'{}', cookies=None):
+    m = MagicMock()
+    m.status_code = status_code
+    m.content = content
+    m.headers = {'Content-Type': 'application/json'}
+    m.cookies = cookies or {}
+    m.ok = status_code < 400
+    return m
+
+
+def _login_participant_for_submission(client, app):
+    with app.app_context():
+        p = Participant(mw_user_id=17, mw_username='Submitter', xid='b' * 64)
+        c = Conversation(slug='subderiv', title='Sub', active=True, polis_id='subpolis',
+                         phase_submission=True)
+        db.session.add_all([p, c])
+        db.session.commit()
+        db.session.add(Participation(participant_id=p.id, conversation_id=c.id,
+                                     pseudonym='submit-fox'))
+        db.session.commit()
+    with client.session_transaction() as s:
+        s['xid'] = 'b' * 64
+        s['username'] = 'Submitter'
+
+
+def test_participant_derivative_submission_records_provenance(client, app):
+    _login_participant_for_submission(client, app)
+    sess_resp = _fake_upstream(cookies={'session': 'NEWPA'})
+    sess_resp.json = lambda: {'csrf_token': 'TOK'}
+    stmt_resp = _fake_upstream(status_code=201, content=b'{"id":777}')
+    stmt_resp.json = lambda: {'id': 777}
+
+    with patch('app._statement_text_map', return_value={12: 'parent statement'}), \
+         patch('app.requests.post', side_effect=[sess_resp, stmt_resp]):
+        resp = client.post('/c/subderiv/statements/new',
+                           headers={'Sec-Fetch-Site': 'same-origin'},
+                           json={'text': 'parent statement improved',
+                                 'derived_from': 12})
+
+    assert resp.status_code == 201
+    with app.app_context():
+        row = StatementProvenance.query.filter_by(polis_statement_id=777).one()
+        assert row.derived_from_tid == 12
+        assert {s.model for s in row.scores} == {'char'}
+
+
+def test_participant_derivative_submission_rejects_below_similarity_bound(client, app):
+    _login_participant_for_submission(client, app)
+    app.config['STATEMENT_DERIVATIVE_MIN_SIMILARITY'] = 0.8
+
+    with patch('app._statement_text_map', return_value={12: 'cats are good'}), \
+         patch('app.requests.post') as post:
+        resp = client.post('/c/subderiv/statements/new',
+                           headers={'Sec-Fetch-Site': 'same-origin'},
+                           json={'text': 'unrelated policy claim',
+                                 'derived_from': 12})
+
+    assert resp.status_code == 409
+    data = resp.get_json()
+    assert data['error'] == 'derivative_similarity_too_low'
+    assert data['model'] == 'char'
+    post.assert_not_called()
+    with app.app_context():
+        assert StatementProvenance.query.count() == 0

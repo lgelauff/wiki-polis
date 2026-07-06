@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block header_mode %}header--admin{% endblock %}
+{% block title %}Admin panel — wiki-polis{% endblock %}
 {% block header_crumb %}
-<span class="header-crumb">
+<nav class="header-crumb" aria-label="Admin breadcrumb">
   <span class="header-crumb-sep">/</span>
-  <a href="{{ url_for('admin.admin') }}">Admin</a>
-</span>
+  <span>Admin panel</span>
+</nav>
 {% endblock %}
 {% block content %}
 
@@ -67,7 +67,23 @@
           <select name="access_policy">
             <option value="public">public</option>
             <option value="invite_only">invite_only</option>
+            <option value="demo">demo</option>
           </select>
+        </label>
+        <label>Route
+          <select name="phase_route">
+            {% for key, route in phase_routes.items() %}
+            <option value="{{ key }}">{{ route.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Eligibility event ID
+          <input type="text" name="eligibility_event_id" maxlength="80"
+                 placeholder="optional AccountEligibility event">
+        </label>
+        <label>Eligibility label
+          <input type="text" name="eligibility_label" maxlength="255"
+                 placeholder="optional criteria summary">
         </label>
       </div>
       <div class="edit-row-texts">
@@ -86,8 +102,8 @@
   <h3 class="section-heading">Global admins</h3>
   <p class="muted" style="font-size:13px;margin-bottom:.75rem">
     Global admins have platform-wide access to all conversations and settings.
-    To assign a moderator to a specific conversation, use
-    <strong>manage → moderators</strong> on that conversation.
+    To assign a moderator or organizer to a specific conversation, use
+    <strong>manage → conversation roles</strong> on that conversation.
   </p>
 
   {% if global_admins %}

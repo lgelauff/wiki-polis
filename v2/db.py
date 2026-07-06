@@ -9,9 +9,12 @@ db = SQLAlchemy()
 # everywhere so values are correct; timezone metadata is not stored at DB level
 # because SQLite and MySQL both ignore DateTime(timezone=True).
 
-ACCESS_POLICIES = ('public', 'invite_only')
-ADMIN_ROLES     = ('moderator',)   # conversation-scoped only; site-wide access is Participant.is_global_admin
+ACCESS_POLICIES = ('public', 'invite_only', 'demo')
+ADMIN_ROLES     = ('moderator', 'organizer')   # conversation-scoped; site-wide access is Participant.is_global_admin
 ARGUMENT_SIDES  = ('pro', 'con')
+FLAG_CONTENT_TYPES = ('statement', 'argument')
+FLAG_CATEGORIES = ('personal_attack', 'privacy', 'off_topic', 'other')
+FLAG_STATUSES = ('open', 'resolved')
 
 
 class Participant(db.Model):
@@ -20,10 +23,13 @@ class Participant(db.Model):
     id               = db.Column(db.Integer, primary_key=True)
     mw_user_id       = db.Column(db.Integer, nullable=False, unique=True)
     mw_username      = db.Column(db.String(255), nullable=False)
-    # xid: sha256(mw_user_id). Stable opaque token passed to Particiapi — not a privacy guarantee.
-    # MW user IDs are sequential integers; the hash space is brute-forceable. Do not treat xid
-    # as a pseudonym or publish it. Salt before any public exposure.
+    # Stable opaque token passed to Particiapi. Version 1 was sha256(mw_user_id),
+    # which is enumerable; version 2 is keyed HMAC and is not recomputable without
+    # the deployment secret.
     xid              = db.Column(db.String(64), nullable=False, unique=True)
+    xid_key_version  = db.Column(db.Integer, nullable=False, default=2, server_default='2')
+    is_demo          = db.Column(db.Boolean, default=False, nullable=False,
+                                 server_default=sa.false())
     is_global_admin  = db.Column(db.Boolean, default=False, nullable=False)
     created_at       = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -57,8 +63,20 @@ class Conversation(db.Model):
     active       = db.Column(db.Boolean, default=True, nullable=False)
     paused       = db.Column(db.Boolean, default=False, nullable=False)  # reversible; does NOT start reveal clock
     access_policy = db.Column(db.String(20), nullable=False, default='public')
+    # Optional join-time AccountEligibility event gate (#146). Empty event id = open
+    # to any logged-in user allowed by access_policy.
+    eligibility_event_id = db.Column(db.String(80), nullable=True)
+    eligibility_label    = db.Column(db.String(255), nullable=True)
     created_at   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     closed_at    = db.Column(db.DateTime, nullable=True)   # set on permanent close; drives reveal timeline (irreversible)
+    phase_route   = db.Column(db.String(32), nullable=False, default='default_7',
+                              server_default='default_7')
+    recommended_quantities = db.Column(db.JSON, nullable=True, default=dict)
+    scheduled_transition_at = db.Column(db.DateTime, nullable=True)
+    scheduled_transition_target = db.Column(db.String(32), nullable=True)
+    scheduled_transition_frozen = db.Column(db.Boolean, nullable=False, default=False,
+                                            server_default=sa.false())
+    report_filter_snapshot = db.Column(db.JSON, nullable=True)
 
     # Phase toggles — each controls whether that phase is available to participants.
     # Independent, default off; admin sets them via the conversation panel.
@@ -116,13 +134,68 @@ class Participation(db.Model):
     # Polis statement IDs of entirely new statements submitted by this participant.
     # Quota = len(new_stmt_ids). Slots consumed at submit time; never returned.
     new_stmt_ids      = db.Column(db.JSON, nullable=False, default=list)
+    last_engagement   = db.Column(db.DateTime, nullable=True)
     # Phase 6 card display order: list of FeaturedStatement IDs in the order shown to
     # this participant. Set once on first visit to the informed-voting tab; stable across
     # reloads. Same pattern as ArgumentSideState.argument_order.
     phase6_card_order = db.Column(db.JSON, nullable=True)
+    # Cached join-time eligibility verdict (#146). Only set when the conversation
+    # has an eligibility_event_id; actions do not re-check after joining.
+    eligibility_status     = db.Column(db.String(16), nullable=True)  # eligible|not_required
+    eligibility_checked_at = db.Column(db.DateTime, nullable=True)
+    eligibility_detail     = db.Column(db.JSON, nullable=True)
 
     participant  = db.relationship('Participant', back_populates='participations')
     conversation = db.relationship('Conversation', back_populates='participations')
+
+
+class ConversationBan(db.Model):
+    __tablename__ = 'conversation_bans'
+
+    id              = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
+    participant_id  = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='CASCADE'), nullable=False)
+    banned_by_id    = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
+    summary         = db.Column(db.Text, nullable=True)
+    created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    lifted_at       = db.Column(db.DateTime, nullable=True)
+    lifted_by_id    = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
+    lift_summary    = db.Column(db.Text, nullable=True)
+
+    conversation = db.relationship('Conversation')
+    participant  = db.relationship('Participant', foreign_keys=[participant_id])
+    banned_by    = db.relationship('Participant', foreign_keys=[banned_by_id])
+    lifted_by    = db.relationship('Participant', foreign_keys=[lifted_by_id])
+
+
+class ContentFlag(db.Model):
+    __tablename__ = 'content_flags'
+    __table_args__ = (
+        db.CheckConstraint(
+            "((content_type = 'statement' AND statement_tid IS NOT NULL AND argument_id IS NULL) "
+            "OR (content_type = 'argument' AND argument_id IS NOT NULL AND statement_tid IS NULL))",
+            name='content_flag_target_check',
+        ),
+    )
+
+    id              = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
+    participant_id  = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
+    content_type    = db.Column(db.Enum(*FLAG_CONTENT_TYPES, name='flag_content_type'), nullable=False)
+    statement_tid   = db.Column(db.Integer, nullable=True)
+    argument_id     = db.Column(db.Integer, db.ForeignKey('arguments.id', ondelete='CASCADE'), nullable=True)
+    category        = db.Column(db.Enum(*FLAG_CATEGORIES, name='flag_category'), nullable=False)
+    detail          = db.Column(db.Text, nullable=True)
+    status          = db.Column(db.Enum(*FLAG_STATUSES, name='flag_status'), nullable=False, default='open')
+    created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    resolved_at     = db.Column(db.DateTime, nullable=True)
+    resolved_by_id  = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
+    resolution_note = db.Column(db.Text, nullable=True)
+
+    conversation = db.relationship('Conversation')
+    participant  = db.relationship('Participant', foreign_keys=[participant_id])
+    argument     = db.relationship('Argument')
+    resolved_by  = db.relationship('Participant', foreign_keys=[resolved_by_id])
 
 
 class ConversationInvite(db.Model):
@@ -183,22 +256,22 @@ class FeaturedStatement(db.Model):
 class Argument(db.Model):
     __tablename__  = 'arguments'
     __table_args__ = (
-        # Enforces one argument per side per participant per featured statement.
-        # NULL proposer_id (seeded arguments) is exempt — SQL NULL != NULL.
-        db.UniqueConstraint('featured_statement_id', 'proposer_id', 'side'),
+        # Enforces one argument per side per pseudonym per featured statement.
+        # NULL proposer_pseudonym (seeded arguments) is exempt — SQL NULL != NULL.
+        db.UniqueConstraint('featured_statement_id', 'proposer_pseudonym', 'side',
+                            name='uq_arguments_featured_pseudonym_side'),
     )
 
     id                    = db.Column(db.Integer, primary_key=True)
     featured_statement_id = db.Column(db.Integer, db.ForeignKey('featured_statements.id', ondelete='CASCADE'),
                                       nullable=False)
-    proposer_id           = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
+    proposer_pseudonym    = db.Column(db.String(80), nullable=True)
     body                  = db.Column(db.String(280), nullable=False)
     side                  = db.Column(db.Enum(*ARGUMENT_SIDES, name='argument_side'), nullable=False)
     hidden                = db.Column(db.Boolean, nullable=False, default=False)
     created_at            = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     featured_statement = db.relationship('FeaturedStatement', back_populates='arguments')
-    proposer           = db.relationship('Participant')
     votes              = db.relationship('ArgumentVote', back_populates='argument',
                                          cascade='all, delete-orphan')
 
@@ -346,8 +419,14 @@ class StatementSimilarityScore(db.Model):
 # Cover the highest-volume lookup patterns in the argument mapping flow.
 db.Index('ix_participations_participant_id', Participation.participant_id)
 db.Index('ix_participations_conversation_id', Participation.conversation_id)
+db.Index('ix_conversation_bans_conversation_participant',
+         ConversationBan.conversation_id, ConversationBan.participant_id)
+db.Index('ix_content_flags_conversation_status',
+         ContentFlag.conversation_id, ContentFlag.status, ContentFlag.created_at)
+db.Index('ix_content_flags_argument_id', ContentFlag.argument_id)
+db.Index('ix_content_flags_statement_tid', ContentFlag.conversation_id, ContentFlag.statement_tid)
 db.Index('ix_arguments_featured_statement_id', Argument.featured_statement_id)
-db.Index('ix_arguments_proposer_id', Argument.proposer_id)
+db.Index('ix_arguments_proposer_pseudonym', Argument.proposer_pseudonym)
 db.Index('ix_argument_votes_argument_id', ArgumentVote.argument_id)
 db.Index('ix_argument_votes_participant_id', ArgumentVote.participant_id)
 db.Index('ix_argument_side_states_participant_id', ArgumentSideState.participant_id)

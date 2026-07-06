@@ -12,7 +12,7 @@
   (`datetime.now(timezone.utc)` on write); SQLite and MySQL both ignore
   `DateTime(timezone=True)`.
 - **Enumerations:** `ACCESS_POLICIES = ('public', 'invite_only')`;
-  `ADMIN_ROLES = ('moderator',)` — conversation-scoped only, site-wide admin is
+  `ADMIN_ROLES = ('moderator', 'organizer')` — conversation-scoped only, site-wide admin is
   `Participant.is_global_admin`; `ARGUMENT_SIDES = ('pro', 'con')`.
 - **Store:** MariaDB (ToolsDB) in production, SQLite in dev.
 
@@ -45,13 +45,34 @@ str(10)='en' (BCP-47) · `intro_text` / `outro_text` (sanitised HTML, nullable) 
 `id` PK · `participant_id` FK→participants (**RESTRICT**) · `conversation_id`
 FK→conversations (CASCADE) · `pseudonym` str(80) · `accepted_at` · `notify_email`
 bool=F · `notify_talk_page` bool=F · `public_username` (nullable) · `revealed_at`
-(nullable) · `new_stmt_ids` JSON=[].
+(nullable) · `new_stmt_ids` JSON=[] · `last_engagement` nullable.
 - **Constraints:** unique `(participant_id, conversation_id)`; unique `pseudonym`
   (platform-wide, never reused/deleted); check `pseudonym = LOWER(pseudonym)`.
 - `public_username` / `revealed_at` record the opt-in reveal. Per D-PRIV, a reveal is
   **permanent** and is not nullified by the app.
 - `new_stmt_ids` = Polis statement IDs of new statements this participant submitted;
   quota used = `len(new_stmt_ids)`, slots consumed at submit time and never returned.
+- `last_engagement` records recent meaningful actions only; passive page views are not tracked.
+
+### `conversation_bans`
+`id` PK · `conversation_id` FK (CASCADE) · `participant_id` FK (CASCADE) ·
+`banned_by_id` FK→participants (**SET NULL**) · `summary` · `created_at` ·
+`lifted_at` nullable · `lifted_by_id` FK→participants (**SET NULL**) ·
+`lift_summary`.
+- Active ban = `lifted_at IS NULL`. Bans are conversation-scoped; existing content
+  remains and is handled separately by moderation.
+
+### `content_flags`
+`id` PK · `conversation_id` FK (CASCADE) · `participant_id` FK→participants
+(**SET NULL**) · `content_type` enum(`statement`, `argument`) · `statement_tid`
+nullable · `argument_id` FK→arguments (CASCADE) nullable · `category`
+enum(`personal_attack`, `privacy`, `off_topic`, `other`) · `detail` nullable ·
+`status` enum(`open`, `resolved`) · `created_at` · `resolved_at` nullable ·
+`resolved_by_id` FK→participants (**SET NULL**) · `resolution_note` nullable.
+- Target invariant: statement flags store `statement_tid` and no `argument_id`;
+  argument flags store `argument_id` and no `statement_tid`.
+- The admin queue does not display flagger identity; moderators review the target,
+  reason, optional note, and timestamp.
 
 ### `conversation_invites`
 `id` PK · `conversation_id` FK (CASCADE) · `mw_username` · `created_at`. Unique
@@ -59,7 +80,7 @@ bool=F · `notify_talk_page` bool=F · `public_username` (nullable) · `revealed
 
 ### `admin_roles`
 `id` PK · `participant_id` FK (CASCADE) · `conversation_id` FK (CASCADE) · `role`
-enum(`moderator`) · `granted_at` · `granted_by` FK→participants (**SET NULL**). Unique
+enum(`moderator`, `organizer`) · `granted_at` · `granted_by` FK→participants (**SET NULL**). Unique
 `(participant_id, conversation_id, role)`.
 
 ### `featured_statements`

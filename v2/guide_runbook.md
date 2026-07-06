@@ -22,10 +22,16 @@ them:
   when its upstream probe returns a 404. A green `/health` means "the process answered,"
   not "Particiapi is serving correctly." Treat a non-200 or a connection error as the
   real alarm.
-- Centralised log aggregation / alerting across the VPS + Toolforge — **⚠️ not live
-  yet**, deferred by decision D-MON
-  ([#49](https://github.com/lgelauff/wiki-polis/issues/49)). There is no alerting today;
-  you find problems by checking `/health` and the logs by hand.
+- A scheduled GitHub Actions smoke check (`microservice-smoke.yml`) runs every 6 hours
+  against staging by default. It calls `/health` and, when `EMBEDDING_SIDECAR_URL` is
+  configured, the embedding sidecar `/health` and `/similarity` endpoints. Configure:
+  `WIKI_POLIS_STAGING_URL` (repo variable, optional),
+  `EMBEDDING_SIDECAR_URL` (repo variable, optional), and
+  `MICROSERVICE_HEALTHCHECKS_URL` (repo secret, optional dead-man ping). Manual run:
+  `python v2/ops/microservice_smoke.py --wiki-base-url https://wiki-polis-dev.toolforge.org`.
+- Centralised log aggregation across the VPS + Toolforge is configured in code and
+  sample VPS files, but **⚠️ not live yet** until the Loki/Grafana compose stack and
+  Toolforge `LOKI_*` envvars are installed. See [Central log aggregation](#central-log-aggregation).
 
 ## Logs
 
@@ -39,6 +45,35 @@ them:
   **production**. For **staging** the stack runs under a non-default compose project
   name — use `docker-compose -p wiki-polis-staging logs <service>` (see
   [Staging environment](#staging-environment)).
+
+### Central log aggregation
+
+**⚠️ not live yet:** these are the install steps for #49. They are additive; logs still
+go to `uwsgi.log` and Docker stdout.
+
+1. Copy `v2/ops/logging/` to the VPS, set `GRAFANA_ADMIN_PASSWORD` in an `.env` file,
+   and start the stack:
+
+       cd ~/wiki-polis/v2/ops/logging
+       docker-compose -f docker-compose.loki.yaml up -d
+
+2. Install the nginx snippet from `nginx-loki-grafana.conf`, create
+   `/etc/nginx/wiki-polis-loki.htpasswd`, and reload nginx. Loki must be reachable at
+   an HTTPS URL protected by basic auth so Toolforge can push to it.
+3. In Grafana, add Loki datasource `http://loki:3100`. Use `{service="wiki-polis"}` for
+   Flask logs and the Polis service names for backend logs. The `service` label
+   `wiki-polis` is intentionally distinct from the Polis container services.
+4. Set Toolforge envvars on both staging and production:
+
+       toolforge envvars create LOKI_URL
+       toolforge envvars create LOKI_USERNAME
+       toolforge envvars create LOKI_PASSWORD
+       toolforge envvars create LOKI_LABELS 'stack=toolforge'
+       toolforge envvars create WIKI_POLIS_ENV 'staging'   # or prod
+
+5. Restart the webservice and confirm a startup line appears in Grafana. If Loki is
+   down, requests should still complete; the app drops or logs Loki handler errors
+   without treating Loki as a request-path dependency.
 
 ## Changes not showing up in the browser
 
@@ -186,6 +221,23 @@ docker exec -it $CID psql -U polis -d polis -c \
 
 If `finished_time` is set, the worker processed it. If rows are absent and the admin stats panel is blank, fix `POLIS_DATABASE_URL` first.
 
+If rows are absent and Flask logs `queue_math_recompute lacks worker_tasks privileges`,
+the `POLIS_DATABASE_URL` role can read Polis stats but cannot enqueue math work. Grant the
+minimum additional privileges on the VPS:
+
+```bash
+# Production
+~/wiki-polis/v2/ops/grant_polis_worker_tasks.sh \
+  --container particiapp-docker_postgres_1 --role wiki_polis_ro
+
+# Staging
+~/wiki-polis/v2/ops/grant_polis_worker_tasks.sh \
+  --container wiki-polis-staging_postgres_1 --role wiki_polis_ro
+```
+
+Then reload `/c/<slug>` after the 10-minute recompute cooldown or clear the cooldown by
+restarting the Flask pod. A successful trigger creates a fresh `worker_tasks` row.
+
 ## Migration fails with "Duplicate column" (alembic drift)
 
 **Symptom:** `deploy.sh --migrate` fails with e.g. `(1060, "Duplicate column name 'phase6_card_order'")` while "Running upgrade `<old>` -> `<rev>`". The migration is trying to ADD a column that already exists.
@@ -219,16 +271,43 @@ MIGRATION_MODE=1 flask --app app db current        # expect: <head> (head)
 
 ## Backups & restore
 
-- **Backups:** a nightly `pg_dump` of the Polis Postgres DB → offsite. **⚠️ not live
-  yet — not confirmed running in production.** For a live service this is the top
-  hardening priority: set it up (see `guide_deployment.md`), confirm it produces a recent,
-  non-empty dump, then rehearse the restore below. A backup you've never checked is a
-  hope, not a backup.
-- **Restore drill** (rehearse before you need it) — **⚠️ not live yet: never rehearsed
-  against production.**
-  1. Copy the latest dump to the VPS and `gunzip` it.
-  2. Restore into a scratch database first (`createdb polis_restore_test`; `psql -U polis polis_restore_test < dump.sql`) and sanity-check row counts against production.
-  3. Only then restore into the live DB, with the stack stopped.
+- **Backups:** `v2/ops/backups/backup_polis_postgres_b2.sh` dumps production and
+  staging Polis Postgres from the VPS containers, uploads to Backblaze B2 via `rclone`,
+  deletes the local copy, and pings a dead-man URL. `backup_toolsdb_b2.sh` does the same
+  for ToolsDB from Toolforge using `mysqldump` and a MySQL option file.
+- **Status:** **⚠️ not live yet** until cron jobs, B2 bucket, rclone config, and
+  Healthchecks URLs are installed and the first restore drill succeeds.
+- **Daily verification:** check the dead-man dashboard first. If it missed a run, SSH to
+  the relevant host and run the backup script manually with the same envvars.
+- **List remote dumps:**
+
+      rclone lsf b2:wiki-polis-postgres-backups/prod
+      rclone lsf b2:wiki-polis-postgres-backups/staging
+      rclone lsf b2:wiki-polis-postgres-backups/toolsdb
+
+- **Restore drill** (rehearse before you need it):
+  1. Copy the latest dump to the VPS and verify gzip integrity:
+
+         rclone copyto b2:wiki-polis-postgres-backups/prod/<dump>.sql.gz /tmp/<dump>.sql.gz
+         gzip -t /tmp/<dump>.sql.gz
+         gunzip -c /tmp/<dump>.sql.gz > /tmp/polis-restore.sql
+
+  2. Restore into a scratch database first:
+
+         docker exec particiapp-docker_postgres_1 createdb -U polis polis_restore_test
+         docker exec -i particiapp-docker_postgres_1 \
+           psql -U polis -d polis_restore_test < /tmp/polis-restore.sql
+
+  3. Sanity-check row counts against production:
+
+         docker exec particiapp-docker_postgres_1 psql -U polis -d polis_restore_test -c \
+           "SELECT COUNT(*) FROM conversations; SELECT COUNT(*) FROM votes;"
+
+  4. Only restore into the live DB with the stack stopped and after taking a fresh
+     pre-restore dump. Record the drill date and dump name in the password manager.
+- **Secrets backup:** export Toolforge envvar names/values and copy the VPS `.env` values
+  into the password manager whenever they change. Database dumps without these secrets are
+  not enough to restore service.
 
 ## Staging environment
 
@@ -258,11 +337,40 @@ flag (or `docker ps`, which always shows the truth — staging containers are
     docker-compose -p wiki-polis-staging logs --since 30m <service>
     # or export COMPOSE_PROJECT_NAME=wiki-polis-staging
 
-**Logging in to staging (headless or browser).** Toolforge deployments do not register
-the fake-login routes, even on a dev tool. Browser checks should use Wikimedia OAuth.
-Headless checks such as `synthetic_traffic.py` must pass `--session-cookie` from an
-authenticated staging browser session. Both `/dev/login/<username>` and the single-user
-`/dev-login` variant are local-debug-only paths.
+**Logging in to staging (headless or browser).** Browser checks should use Wikimedia
+OAuth. For headless staging checks, `wiki-polis-dev` may enable the signed dev-login
+route by setting `STAGING_DEV_TOKEN` as a Toolforge envvar. The route is intentionally
+limited to the staging tool (`TOOL_NAME=wiki-polis-dev`, `WIKI_POLIS_ENV=staging`, or
+`TRUSTED_HOSTS` containing `wiki-polis-dev.toolforge.org`) and does not register on
+production.
+
+Generate a per-user login token on the bastion without putting the secret in the shell
+history:
+
+```bash
+read -rsp "STAGING_DEV_TOKEN: " STAGING_DEV_TOKEN; echo
+python3 - <<'PY'
+import hashlib, hmac, os
+for username in ("dev-user-1", "dev-user-2", "dev-user-3"):
+    token = hmac.new(os.environ["STAGING_DEV_TOKEN"].encode(),
+                     username.encode(), hashlib.sha256).hexdigest()
+    print(f"{username}: {token}")
+PY
+unset STAGING_DEV_TOKEN
+```
+
+Then either open `/dev/login/dev-user-1?token=<token>` in a browser or let
+`synthetic_traffic.py` use the route directly:
+
+```bash
+python v2/synthetic_traffic.py \
+  --base-url https://wiki-polis-dev.toolforge.org \
+  --slug test --dry-run
+```
+
+If the signed staging route is not configured, pass `--session-cookie` from an
+authenticated staging browser session. The single-user `/dev-login` variant remains
+local-debug-only.
 
 **Deploying to staging.** `become wiki-polis-dev`, then
 `bash ~/wiki-polis/deploy.sh <branch>` (add `--migrate` only for schema changes). Confirm

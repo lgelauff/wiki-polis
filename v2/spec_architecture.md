@@ -123,7 +123,7 @@ a general upstream improvement; it is not a blocker for our deployment.)
 |---|---|---|
 | Auth wrapper / admin | Python / Flask | Runs on Toolforge |
 | Polis API abstraction | Particiapi (stock, auth disabled) | Runs on VPS via Docker Compose; Flask proxies all calls |
-| Voting UI | Particiapp web components | `<pa-statement>`, `<pa-vote-button>` only |
+| Voting UI | Flask templates + vanilla JS | Talks to Particiapi through the same-origin Flask proxy |
 | Everything else | Our Flask templates + vanilla JS | Argument tab, conversation list, accept flow |
 | Database (our data) | MariaDB via SQLAlchemy | Toolforge ToolsDB (SQLite in dev) |
 | Database (Polis data) | PostgreSQL | VPS, managed by the Polis Docker container |
