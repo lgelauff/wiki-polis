@@ -227,3 +227,45 @@ def test_participant_derivative_submission_rejects_below_similarity_bound(client
     post.assert_not_called()
     with app.app_context():
         assert StatementProvenance.query.count() == 0
+
+
+def test_derivative_submission_scores_similarity_once(client, app):
+    """A6 dedupe: the gate scores the pair, and provenance reuses those scores rather
+    than recomputing (which would repeat the similarity sidecar call)."""
+    _login_participant_for_submission(client, app)
+    sess_resp = _fake_upstream(cookies={'session': 'NEWPA'})
+    sess_resp.json = lambda: {'csrf_token': 'TOK'}
+    stmt_resp = _fake_upstream(status_code=201, content=b'{"id":778}')
+    stmt_resp.json = lambda: {'id': 778}
+
+    with patch('app._statement_text_map', return_value={12: 'parent statement'}), \
+         patch('app._statement_similarity_scores', return_value={'char': 0.9}) as sim, \
+         patch('app.polis_http.post', side_effect=[sess_resp, stmt_resp]):
+        resp = client.post('/c/subderiv/statements/new',
+                           headers={'Sec-Fetch-Site': 'same-origin'},
+                           json={'text': 'parent statement improved', 'derived_from': 12})
+
+    assert resp.status_code == 201
+    assert sim.call_count == 1   # scored once for the gate, reused for provenance
+    with app.app_context():
+        row = StatementProvenance.query.filter_by(polis_statement_id=778).one()
+        assert {s.model for s in row.scores} == {'char'}
+
+
+def test_quota_exceeded_rejects_before_upstream(client, app):
+    """A6: the optimistic quota fast-fail rejects an over-quota submit before any
+    Particiapi call, so a quota-rejected request never creates an orphaned statement."""
+    _login_participant_for_submission(client, app)
+    with app.app_context():
+        part = Participation.query.filter_by(pseudonym='submit-fox').one()
+        part.new_stmt_ids = [1, 2, 3]   # default quota is 3
+        db.session.commit()
+
+    with patch('app.polis_http.post') as post:
+        resp = client.post('/c/subderiv/statements/new',
+                           headers={'Sec-Fetch-Site': 'same-origin'},
+                           json={'text': 'one more statement'})
+
+    assert resp.status_code == 403
+    assert resp.get_json()['error'] == 'quota_exceeded'
+    post.assert_not_called()   # rejected before any Particiapi submit

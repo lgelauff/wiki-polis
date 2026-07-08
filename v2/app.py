@@ -2028,16 +2028,7 @@ def conversation_statement_new(slug):
     if not participant:
         abort(401)
 
-    # Lock the participation row for the duration of this transaction to
-    # prevent two concurrent requests from both passing the quota check.
-    part = Participation.query.filter_by(
-        participant_id=participant.id, conversation_id=conv.id,
-    ).with_for_update().first_or_404()
     _abort_if_banned(conv, participant)
-
-    new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
-    if len(part.new_stmt_ids or []) >= new_stmt_max:
-        return jsonify({'error': 'quota_exceeded'}), 403
 
     body = request.get_json(silent=True) or {}
     text = (body.get('text') or '').strip()
@@ -2048,7 +2039,24 @@ def conversation_statement_new(slug):
         derived_from = None
     if derived_from is not None and not isinstance(derived_from, int):
         abort(400)
+
+    new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
+
+    # Optimistic quota fast-fail (unlocked read): reject an over-quota submit before the
+    # upstream statement fetch + similarity work. The authoritative check runs under the
+    # lock below, right before the submit, so the quota stays race-safe.
+    part = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=conv.id,
+    ).first_or_404()
+    if len(part.new_stmt_ids or []) >= new_stmt_max:
+        return jsonify({'error': 'quota_exceeded'}), 403
+
+    # Derivative gate — statement fetch + similarity + threshold. Read-only w.r.t. the
+    # participation row, and a rejection here means we never submit, so it runs OFF the
+    # quota lock (keeping the lock's held time off the statement fetch and the similarity
+    # sidecar). `scores` is reused for provenance below — computed once, not twice.
     parent_text = None
+    scores = None
     if derived_from is not None:
         try:
             text_map = _statement_text_map(conv.polis_id)
@@ -2069,6 +2077,17 @@ def conversation_statement_new(slug):
                 'similarity': score,
                 'threshold': threshold,
             }), 409
+
+    # Authoritative quota check under a row lock, held through the submit + append so two
+    # concurrent submits from the same participant can't both pass. (Per-participation
+    # lock — only serialises one participant's own concurrent submits, not the
+    # conversation.) The submit stays inside the lock so a quota-rejected request never
+    # creates an orphaned Polis statement.
+    part = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=conv.id,
+    ).with_for_update().first_or_404()
+    if len(part.new_stmt_ids or []) >= new_stmt_max:
+        return jsonify({'error': 'quota_exceeded'}), 403
 
     # Get CSRF token for this Particiapi session, then submit the statement.
     pa_cookie = request.cookies.get('pa_session')
@@ -2108,7 +2127,8 @@ def conversation_statement_new(slug):
             part.new_stmt_ids = ids
             if derived_from is not None:
                 record_statement_provenance(conv.id, stmt_id, derived_from,
-                                            parent_text=parent_text, new_text=text)
+                                            parent_text=parent_text, new_text=text,
+                                            scores=scores)
         _touch_last_engagement(part)
         db.session.commit()
         flask_resp = make_response(stmt_resp.content, 201)
@@ -4536,12 +4556,16 @@ def _derivative_similarity_threshold() -> float:
 
 
 def record_statement_provenance(conv_id, new_tid, derived_from_tid,
-                                parent_text=None, new_text=None):
+                                parent_text=None, new_text=None, scores=None):
     """Record that `new_tid` is a derivative of `derived_from_tid` (#143), best-effort.
 
     Writes one StatementProvenance row (declared link) plus a StatementSimilarityScore row
     per scorer that yields a value. A scorer failure never blocks the link; a provenance
     write failure is swallowed (logged). Returns the row, or None on failure.
+
+    Pass `scores` (from an earlier `_statement_similarity_scores` call) to avoid
+    recomputing them — the caller already scores the pair for the derivative gate,
+    so recomputing here would repeat the similarity sidecar call.
     """
     try:
         row = StatementProvenance(
@@ -4550,8 +4574,10 @@ def record_statement_provenance(conv_id, new_tid, derived_from_tid,
             link_method='declared')
         db.session.add(row)
         db.session.flush()        # need row.id for the score FKs
-        if parent_text is not None and new_text is not None:
-            for name, value in _statement_similarity_scores(new_text, parent_text).items():
+        if scores is None and parent_text is not None and new_text is not None:
+            scores = _statement_similarity_scores(new_text, parent_text)
+        if scores:
+            for name, value in scores.items():
                 db.session.add(StatementSimilarityScore(
                     provenance_id=row.id, model=name, value=value))
         db.session.commit()
