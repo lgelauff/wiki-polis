@@ -2543,7 +2543,17 @@ def admin_conversation_participants(conv_id):
     )
 
     client = _polis_server_client()
-    statement_progress_unavailable = bool(current_app.config.get('POLIS_DATABASE_URL'))
+    pg_configured = bool(current_app.config.get('POLIS_DATABASE_URL'))
+    statement_progress_unavailable = pg_configured
+    # One batched query for every participant's progress — previously this issued a
+    # fresh Postgres connection per participant (O(N) connects on this page, which
+    # stalled at 1000 participants).
+    progress_by_xid = None
+    if pg_configured:
+        progress_by_xid = client.get_statement_progress_for_participants(
+            conv.polis_id, [p.participant.xid for p in participations])
+        if progress_by_xid is not None:
+            statement_progress_unavailable = False
     active_bans = {
         ban.participant_id: ban
         for ban in ConversationBan.query.filter_by(
@@ -2553,12 +2563,10 @@ def admin_conversation_participants(conv_id):
     }
     rows = []
     for part in participations:
-        progress_row = None
-        if current_app.config.get('POLIS_DATABASE_URL'):
-            progress = client.get_statement_progress_bulk([conv.polis_id], part.participant.xid)
-            if progress is not None:
-                statement_progress_unavailable = False
-                progress_row = progress.get(conv.polis_id)
+        progress_row = (
+            progress_by_xid.get(part.participant.xid)
+            if progress_by_xid is not None else None
+        )
         rows.append({
             'participation': part,
             'participant': part.participant,

@@ -254,6 +254,46 @@ _STATEMENTS_REMAINING_BULK_SQL = """
     LEFT JOIN voted_stmts vs USING (zinvite)
 """
 
+# Statement vote progress for MANY participants in ONE conversation, in a single
+# query — the batched inverse of _STATEMENTS_REMAINING_BULK_SQL (one zinvite, many
+# xids, grouped by xid). Replaces the per-participant loop on the admin participants
+# page: one round trip instead of one Postgres connection per participant. The
+# xid -> Polis pid mapping mirrors the per-participant query exactly. Driving the
+# result from `req` (the requested xids) means every participant gets a row with
+# n_total filled and n_voted = 0 when they have no recorded votes.
+_STATEMENT_PROGRESS_BY_XID_SQL = """
+    WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s),
+    req AS (SELECT UNNEST(%s::text[]) AS xid),
+    total AS (
+        SELECT COUNT(c.tid)::int AS n_total
+        FROM comments c, z
+        WHERE c.zid = z.zid AND c.active = TRUE AND c.mod = 1
+    ),
+    pid_map AS (
+        SELECT x.xid, p.pid
+        FROM xids x
+        JOIN req ON req.xid = x.xid
+        JOIN z ON x.zid = z.zid
+        JOIN participants p ON p.uid = x.uid AND p.zid = x.zid
+    ),
+    voted AS (
+        SELECT pm.xid, COUNT(DISTINCT v.tid)::int AS n_voted
+        FROM votes_latest_unique v
+        JOIN z ON v.zid = z.zid
+        JOIN pid_map pm ON pm.pid = v.pid
+        JOIN comments c ON c.zid = z.zid AND c.tid = v.tid
+          AND c.active = TRUE AND c.mod = 1
+        GROUP BY pm.xid
+    )
+    SELECT
+        req.xid,
+        (SELECT n_total FROM total)                                        AS n_total,
+        COALESCE(vd.n_voted, 0)                                            AS n_voted,
+        GREATEST(0, (SELECT n_total FROM total) - COALESCE(vd.n_voted, 0)) AS n_remaining
+    FROM req
+    LEFT JOIN voted vd USING (xid)
+"""
+
 # Personal votes: the logged-in participant's own votes in a given conversation,
 # keyed by statement tid. Used to show "You: Agreed / Disagreed / Passed" on
 # the results surfaces. Requires the participant's Polis pid.
@@ -817,6 +857,34 @@ class PolisServerClient:
                 'voted': int(r[2]),
                 'remaining': int(r[3]),
             }
+            for r in rows
+        }
+
+    def get_statement_progress_for_participants(
+        self,
+        zinvite: str,
+        xids: list[str],
+    ) -> dict[str, dict] | None:
+        """Return statement vote progress for many participants in one query.
+
+        The batched inverse of get_statement_progress_bulk: one conversation, many
+        participant xids. Returns dict[xid -> {total, voted, remaining}], or None if
+        Postgres is unavailable ({} when xids is empty). Every requested xid appears
+        with total filled and voted = 0 when it has no recorded votes.
+        """
+        if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
+            return None
+        if not xids:
+            return {}
+        rows = self._pg_query(
+            _STATEMENT_PROGRESS_BY_XID_SQL,
+            (zinvite, list(xids)),
+            'get_statement_progress_for_participants',
+        )
+        if rows is None:
+            return None
+        return {
+            r[0]: {'total': int(r[1]), 'voted': int(r[2]), 'remaining': int(r[3])}
             for r in rows
         }
 

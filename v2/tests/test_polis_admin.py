@@ -190,6 +190,32 @@ def test_queue_math_recompute_logs_worker_task_privilege_gap(caplog):
     mock_conn.close.assert_called_once()
 
 
+# ── PolisServerClient.get_statement_progress_for_participants ────────────────
+
+def test_statement_progress_for_participants_maps_by_xid():
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw',
+                               db_url='postgresql://localhost/polis')
+    mock_conn = MagicMock()
+    cur = mock_conn.cursor.return_value.__enter__.return_value
+    cur.fetchall.return_value = [('xidA', 5, 3, 2), ('xidB', 5, 0, 5)]
+    with patch('psycopg2.connect', return_value=mock_conn):
+        result = client.get_statement_progress_for_participants('abc123', ['xidA', 'xidB'])
+    assert result == {
+        'xidA': {'total': 5, 'voted': 3, 'remaining': 2},
+        'xidB': {'total': 5, 'voted': 0, 'remaining': 5},
+    }
+    cur.execute.assert_called_once()  # one query for all participants, not per-participant
+
+
+def test_statement_progress_for_participants_guards():
+    no_db = PolisServerClient('http://polis', 'a@b.com', 'pw', db_url='')
+    assert no_db.get_statement_progress_for_participants('abc123', ['x']) is None
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw',
+                               db_url='postgresql://localhost/polis')
+    assert client.get_statement_progress_for_participants('bad zinvite!', ['x']) is None
+    assert client.get_statement_progress_for_participants('abc123', []) == {}
+
+
 # ── PolisServerClient.create_conversation ────────────────────────────────────
 
 def _setup_create(zinvite='abc123'):
