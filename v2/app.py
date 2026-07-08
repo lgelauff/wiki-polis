@@ -8,6 +8,7 @@ import dataclasses
 import functools
 import hashlib
 import hmac
+import ipaddress
 import os
 import random
 import re
@@ -1591,6 +1592,24 @@ def _proxy_auth_response(pa_path: str):
     return redirect(url_for('login'))
 
 
+def _is_secure_pa_transport(base_url: str) -> bool:
+    """True if the sub-secret can be sent safely: HTTPS, or HTTP to loopback only.
+
+    X-Particiapi-Sub-Secret is a long-lived master credential; combined with an
+    enumerable xid, a wire-capture of it lets an attacker forge any user's identity.
+    Used only to emit a loud warning when it would traverse a cleartext non-loopback
+    link (#245 review) — the actual fix is encrypting that hop.
+    """
+    u = urlparse(base_url)
+    if u.scheme == 'https':
+        return True
+    host = (u.hostname or '').strip('[]')
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host == 'localhost'
+
+
 def _conversation_subject(xid: str, conv) -> str:
     """Conversation-scoped participant subject for Particiapi's trusted-sub binding.
 
@@ -1654,6 +1673,16 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
         and pa_path == 'api/session' and request.method == 'POST'
         and bool(_sub) and bool(_sub_secret)
     )
+
+    # Loud warning (#245 review): the sub-secret is a master credential. If the transport
+    # to Particiapi is cleartext non-loopback, a wire-capture forges any user's identity.
+    # We still bind (the link is firewalled-private in prod) but surface it on every bind
+    # so an unencrypted hop can't stay invisible. The real fix is encrypting the hop.
+    if _bind_identity and not _is_secure_pa_transport(current_app.config['PARTICIAPI_BASE']):
+        current_app.logger.warning(
+            'PARTICIAPI_SUB_SECRET is being sent over a cleartext non-loopback transport '
+            '(%s); encrypt the Toolforge<->VPS hop (WireGuard/TLS)',
+            current_app.config['PARTICIAPI_BASE'])
 
     # On a bind we deliberately do NOT forward any existing pa_session cookie: a stale
     # (possibly anonymous) session would make Particiapi skip the bind path and pin the

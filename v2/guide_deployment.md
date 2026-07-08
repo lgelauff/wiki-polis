@@ -362,7 +362,18 @@ toolforge envvars create POLIS_ADMIN_PASSWORD
 toolforge envvars create POLIS_DATABASE_URL
 toolforge envvars create RATELIMIT_KEY_PREFIX
 toolforge envvars create RATELIMIT_IDENTITY_SECRET
+toolforge envvars create PARTICIAPI_SUB_SECRET
 ```
+
+> ⚠️ **`PARTICIAPI_SUB_SECRET` is a long-lived master credential.** It lets the proxy
+> assert any logged-in user's identity to Particiapi (cross-device stable participant).
+> It must match Particiapi's `TRUSTED_SUB_SECRET`, and it is sent to `PARTICIAPI_BASE_URL`
+> on every identity bind — so that link **must be encrypted (WireGuard/TLS) or loopback**.
+> A wire-capture of this secret, combined with the enumerable xid, would let an attacker
+> forge any user's identity — so do not set it until the Toolforge↔VPS hop is encrypted
+> (WireGuard/TLS) or loopback. If the secret is sent over a cleartext non-loopback
+> transport the app logs a warning on every bind. Leave `PARTICIAPI_SUB_SECRET` unset to
+> fall back to the old anonymous-per-session behaviour.
 
 Non-secret values can be passed as arguments:
 
@@ -623,7 +634,8 @@ export SECRET_KEY=$(toolforge envvars show SECRET_KEY | tail -1 | awk '{print $N
 | `OAUTH_CLIENT_ID` | yes (prod) | Wikimedia OAuth consumer key |
 | `OAUTH_CLIENT_SECRET` | yes (prod) | Wikimedia OAuth consumer secret |
 | `OAUTH_REDIRECT_URI` | yes (prod) | Must match registered callback URL |
-| `PARTICIAPI_BASE_URL` | yes | Internal URL of Particiapi (e.g. `http://10.x.x.x:8000`) |
+| `PARTICIAPI_BASE_URL` | yes | Internal URL of Particiapi (e.g. `http://10.x.x.x:8000`) — **must be encrypted (TLS) or loopback if `PARTICIAPI_SUB_SECRET` is set** |
+| `PARTICIAPI_SUB_SECRET` | no | Shared master secret for cross-device identity binding; must match Particiapi's `TRUSTED_SUB_SECRET`. Unset → anonymous-per-session. Only set it when the transport is encrypted (TLS) or loopback |
 | `DATABASE_URL` | yes (prod) | SQLAlchemy DB URL; defaults to `sqlite:///dev.db` |
 | `POLIS_SERVER_URL` | yes | Direct Polis server URL (e.g. `http://10.x.x.x:8001`) — required for conversation creation |
 | `POLIS_ADMIN_EMAIL` | yes | Email of the Polis system account (created once on VPS) |

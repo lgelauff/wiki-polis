@@ -503,3 +503,42 @@ def test_unscoped_route_never_emits_identity_headers(bind_client):
     assert 'X-Particiapi-Sub' not in sent['headers']
     assert 'X-Particiapi-Sub-Secret' not in sent['headers']
     assert sent['params'].get('create') == 'true'  # falls back to anonymous create
+
+
+# ── Cleartext-transport warning for the sub-secret (PR #245 review, Issue 2) ──────
+
+def test_is_secure_pa_transport():
+    from app import _is_secure_pa_transport
+    assert _is_secure_pa_transport('https://particiapi.example')
+    assert _is_secure_pa_transport('http://localhost:8000')
+    assert _is_secure_pa_transport('http://127.0.0.1:8000')
+    assert _is_secure_pa_transport('http://[::1]:8000')
+    assert not _is_secure_pa_transport('http://10.0.0.5:8000')      # private but cleartext
+    assert not _is_secure_pa_transport('http://particiapi.example')  # cleartext non-loopback
+
+
+def test_bind_warns_on_cleartext_but_still_binds(bind_client, app, caplog):
+    """Cleartext non-loopback transport logs a loud warning on bind, but still binds —
+    the warning must not silently disable the live cross-device feature."""
+    import logging
+    app.config['PARTICIAPI_BASE'] = 'http://10.0.0.5:8000'
+    _make_conv('bind-w', 'bindw00001')
+    up = _fake_upstream()
+    with caplog.at_level(logging.WARNING), \
+            patch('app.requests.request', return_value=up) as req:
+        bind_client.post('/c/bind-w/proxy/particiapi/api/session',
+                         headers=_SAME_ORIGIN, json={})
+    assert 'X-Particiapi-Sub-Secret' in req.call_args.kwargs['headers']  # still binds
+    assert any('cleartext non-loopback' in r.message for r in caplog.records)
+
+
+def test_bind_no_warning_on_loopback(bind_client, app, caplog):
+    import logging
+    app.config['PARTICIAPI_BASE'] = 'http://localhost:8000'
+    _make_conv('bind-l', 'bindl00001')
+    up = _fake_upstream()
+    with caplog.at_level(logging.WARNING), \
+            patch('app.requests.request', return_value=up):
+        bind_client.post('/c/bind-l/proxy/particiapi/api/session',
+                         headers=_SAME_ORIGIN, json={})
+    assert not any('cleartext non-loopback' in r.message for r in caplog.records)
