@@ -15,7 +15,10 @@ Used for featured candidates and stats — data not exposed by the Polis API.
 """
 
 import logging
+import os
 import re
+import threading
+from contextlib import contextmanager
 
 import requests
 
@@ -24,6 +27,96 @@ from http_pool import session as _http
 logger = logging.getLogger(__name__)
 
 _SAFE_ZINVITE = re.compile(r'^[A-Za-z0-9]{6,20}$')
+
+
+# ── Direct-Postgres connection pool ───────────────────────────────────────────
+# Stats / results / progress reads to Polis Postgres used to open and close a fresh
+# connection per query. Under load (and the admin surfaces especially) that is a
+# connect+teardown per call over the VPS private network. Pool connections per
+# db_url instead. Size to the uWSGI threads-per-process; reconcile with the VPS
+# Postgres max_connections. Override with POLIS_PG_POOL_MAXCONN.
+_PG_POOL_MAXCONN = int(os.environ.get('POLIS_PG_POOL_MAXCONN', '20'))
+_PG_POOLS: dict[str, object] = {}
+_PG_POOLS_LOCK = threading.Lock()
+
+
+def _get_pg_pool(db_url: str):
+    """Return a process-wide ThreadedConnectionPool for db_url, built once.
+
+    Returns None when psycopg2's pool is unavailable or the pool can't be built,
+    so callers fall back to a one-off direct connection — Postgres reads then
+    degrade in latency, not availability.
+    """
+    try:
+        import psycopg2.pool
+    except ImportError:
+        return None
+    pool = _PG_POOLS.get(db_url)
+    if pool is not None:
+        return pool
+    with _PG_POOLS_LOCK:
+        pool = _PG_POOLS.get(db_url)
+        if pool is None:
+            try:
+                pool = psycopg2.pool.ThreadedConnectionPool(1, _PG_POOL_MAXCONN, db_url)
+            except Exception:
+                logger.exception('Postgres connection pool init failed')
+                return None
+            _PG_POOLS[db_url] = pool
+        return pool
+
+
+def _reset_pg_pools() -> None:
+    """Close and drop every pooled connection. For clean shutdown and tests."""
+    with _PG_POOLS_LOCK:
+        for pool in _PG_POOLS.values():
+            try:
+                pool.closeall()
+            except Exception:
+                pass
+        _PG_POOLS.clear()
+
+
+@contextmanager
+def _pg_connection(db_url: str):
+    """Yield a Postgres connection, returning it to the pool afterward.
+
+    Prefers a pooled connection; falls back to a one-off direct connection if the
+    pool is exhausted or unavailable. A connection that raises is discarded
+    (never returned to the pool) so a broken/aborted-transaction connection is not
+    handed to the next caller.
+    """
+    import psycopg2  # caller has already verified importability
+    pool = _get_pg_pool(db_url)
+    conn = None
+    from_pool = False
+    try:
+        if pool is not None:
+            try:
+                conn = pool.getconn()
+                from_pool = True
+            except psycopg2.pool.PoolError:
+                conn = None  # exhausted — fall back to a one-off connection
+        if conn is None:
+            conn = psycopg2.connect(db_url)
+        yield conn
+    except Exception:
+        if conn is not None and from_pool and pool is not None:
+            try:
+                pool.putconn(conn, close=True)  # discard the broken connection
+            except Exception:
+                pass
+            conn, from_pool = None, False
+        raise
+    finally:
+        if conn is not None:
+            try:
+                if from_pool and pool is not None:
+                    pool.putconn(conn)
+                else:
+                    conn.close()
+            except Exception:
+                pass
 
 # Returns all active statements with vote counts, seeds first then by agree rate.
 # The agree-rate ordering is a heuristic proxy for group-representativeness when
@@ -514,18 +607,16 @@ class PolisServerClient:
         query raises. Callers are responsible for their own zinvite guard.
         """
         try:
-            import psycopg2
+            import psycopg2  # noqa: F401 — importability check; used in _pg_connection
         except ImportError:
             logger.exception('psycopg2 not available — %s unavailable', label)
             return None
         try:
-            conn = psycopg2.connect(self._db_url)
-            try:
+            with _pg_connection(self._db_url) as conn:
                 with conn.cursor() as cur:
                     cur.execute(sql, params)
                     rows = cur.fetchall()
-            finally:
-                conn.close()
+                conn.rollback()  # end the implicit read-only txn before reuse
         except Exception:
             logger.exception('Postgres %s failed', label)
             return None
@@ -773,13 +864,10 @@ class PolisServerClient:
             logger.exception('psycopg2 not available — queue_math_recompute unavailable')
             return False
         try:
-            conn = psycopg2.connect(self._db_url)
-            try:
+            with _pg_connection(self._db_url) as conn:
                 with conn.cursor() as cur:
                     cur.execute(sql, (zinvite,))
                 conn.commit()
-            finally:
-                conn.close()
         except psycopg2.errors.InsufficientPrivilege:
             logger.exception(
                 'queue_math_recompute lacks worker_tasks privileges for %s; '

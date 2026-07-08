@@ -130,7 +130,8 @@ def test_stats_returns_correct_dict():
         'n_participants': 10, 'n_votes': 150, 'avg_votes': 15.0,
         'median_votes': 12.5, 'n_statements': 8, 'n_seed': 3,
     }
-    mock_conn.close.assert_called_once()
+    # Pooled: a successful read returns the connection to the pool, not close().
+    mock_conn.close.assert_not_called()
 
 
 def test_valid_vote_count_returns_latest_vote_rows():
@@ -166,7 +167,8 @@ def test_queue_math_recompute_inserts_worker_task():
     assert 'INSERT INTO worker_tasks' in sql
     assert cur.execute.call_args.args[1] == ('abc123',)
     mock_conn.commit.assert_called_once()
-    mock_conn.close.assert_called_once()
+    # Pooled: a successful write returns the connection to the pool, not close().
+    mock_conn.close.assert_not_called()
 
 
 def test_queue_math_recompute_logs_worker_task_privilege_gap(caplog):

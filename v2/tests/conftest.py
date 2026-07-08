@@ -5,8 +5,23 @@ from unittest.mock import patch
 import pytest
 from cachelib.file import FileSystemCache
 
+import polis_admin
 from app import create_app
 from db import Conversation, Participant, db
+
+
+@pytest.fixture(autouse=True)
+def _reset_polis_pg_pools():
+    """Drop the process-wide Polis-Postgres connection pools around each test.
+
+    _pg_query pools connections per db_url for the life of the process. Tests
+    patch psycopg2.connect per-test; without a reset the first test's pooled
+    (mock) connection would be reused by later tests. Cheap no-op when no pool
+    has been built.
+    """
+    polis_admin._reset_pg_pools()
+    yield
+    polis_admin._reset_pg_pools()
 
 
 @pytest.fixture
