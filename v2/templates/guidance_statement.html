@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Writing good statements - wiki-polis{% endblock %}
+{% block title %}{{ msg('guidance-statement-doc-title') }} - wiki-polis{% endblock %}
 
 {% block header_crumb %}
 <span class="header-crumb">
   <span class="header-crumb-sep">/</span>
-  <span>statement guide</span>
+  <span>{{ msg('guidance-statement-crumb') }}</span>
 </span>
 {% endblock %}
 
@@ -12,39 +12,36 @@
 <div class="container" style="max-width:760px">
   <div class="landing-section">
     <h1 style="font-size:28px;font-weight:600;color:var(--ink);line-height:1.2;margin:0 0 12px">
-      Writing good statements
+      {{ msg('guidance-statement-heading') }}
     </h1>
     <p class="muted">
-      Statements are the short claims participants vote Agree, Disagree, or Pass on.
-      A good statement lets people answer one clear question with one clear vote.
+      {{ msg('guidance-statement-intro') }}
     </p>
   </div>
 
   <div class="landing-section">
-    <h2>Checklist</h2>
+    <h2>{{ msg('common-checklist') }}</h2>
     <ul class="accept-summary-list">
-      <li><strong>Make one claim.</strong> If you want to say two things, submit two statements.</li>
-      <li><strong>Use neutral wording.</strong> Describe the claim without arguing for the answer.</li>
-      <li><strong>Be specific.</strong> Avoid broad wishes that almost everyone can agree with.</li>
-      <li><strong>Write a statement.</strong> Do not submit a question, slogan, or topic title.</li>
+      <li>{{ msg('guidance-statement-check-one-claim')|safe }}</li>
+      <li>{{ msg('guidance-statement-check-neutral')|safe }}</li>
+      <li>{{ msg('guidance-statement-check-specific')|safe }}</li>
+      <li>{{ msg('guidance-statement-check-statement')|safe }}</li>
     </ul>
   </div>
 
   <div class="landing-section">
-    <h2>Examples</h2>
-    <p><strong>Split compound claims:</strong></p>
-    <p class="muted">Instead of "Wikipedia should require reliable sources and editors should disclose conflicts of interest", submit one statement about sources and one about conflicts of interest.</p>
+    <h2>{{ msg('common-examples') }}</h2>
+    <p><strong>{{ msg('guidance-statement-split-label') }}</strong></p>
+    <p class="muted">{{ msg('guidance-statement-split-body') }}</p>
 
-    <p><strong>Turn questions into claims:</strong></p>
-    <p class="muted">Instead of "Shouldn't the Wikimedia Foundation be more transparent?", write "The Wikimedia Foundation should make its grant decision process more transparent."</p>
+    <p><strong>{{ msg('guidance-statement-questions-label') }}</strong></p>
+    <p class="muted">{{ msg('guidance-statement-questions-body') }}</p>
   </div>
 
   <div class="landing-section">
-    <h2>When to pass</h2>
+    <h2>{{ msg('guidance-statement-pass-heading') }}</h2>
     <p class="muted">
-      Passing is fine when a statement is unclear, does not apply to you, or combines
-      claims you would vote on differently. High pass rates are a signal that a statement
-      may need to be split or rewritten next time.
+      {{ msg('guidance-statement-pass-body') }}
     </p>
   </div>
 </div>
