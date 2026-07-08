@@ -1,0 +1,11 @@
+{
+	"@metadata": {
+		"authors": []
+	},
+	"base-skip-to-content": "Accessibility skip link at the top of every page; jumps keyboard/screen-reader users past the header to the main content.",
+	"base-admin-badge": "Small badge shown in the header on admin pages, indicating admin mode. Keep short.",
+	"base-log-out": "Header button that signs the user out. Lowercase to match the compact header style.",
+	"base-admin-link": "Header link to the admin dashboard, shown only to administrators. Lowercase to match the header style.",
+	"base-log-in": "Header link to sign in (Wikimedia OAuth). Lowercase to match the header style.",
+	"base-dismiss": "Accessible label (aria-label) for the × button that closes a toast/notification."
+}

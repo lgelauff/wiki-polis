@@ -43,6 +43,7 @@ from polis_admin import (PolisParticipantClient, PolisParticipantError,
 from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
                       RowError, strip_formula_prefixes)
 from logging_setup import configure_logging
+import i18n
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -75,6 +76,13 @@ def _truthy(value) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _(key, *params):
+    """Resolve an i18n message for the current request's UI locale (Python side, e.g.
+    ``flash(_('key', n))``). Falls back to the source locale outside a request context."""
+    locale = g.get('locale', i18n.SOURCE_LOCALE) if has_request_context() else i18n.SOURCE_LOCALE
+    return i18n.resolve(key, locale, params)
 
 
 def _derive_xid(subject: str) -> str:
@@ -4752,6 +4760,15 @@ def create_app(test_config: dict | None = None) -> Flask:
             f'{result["skipped"]} not due.'
         )
 
+    # UI locale config: which locales are offered (CSV) + the fallback. v1 defaults to English
+    # only, so there is no visible change until translatewiki.net delivers translations.
+    _default_locale = os.environ.get('DEFAULT_LOCALE', '').strip() or i18n.SOURCE_LOCALE
+    _enabled_locales = _split_csv(os.environ.get('ENABLED_LOCALES', '')) or [i18n.SOURCE_LOCALE]
+    if _default_locale not in _enabled_locales:
+        _enabled_locales.append(_default_locale)
+    app.config['DEFAULT_LOCALE']  = _default_locale
+    app.config['ENABLED_LOCALES'] = _enabled_locales
+
     @app.before_request
     def _set_csp_nonce():
         g.csp_nonce = secrets.token_urlsafe(16)
@@ -4769,6 +4786,25 @@ def create_app(test_config: dict | None = None) -> Flask:
         g.request_id = rid or secrets.token_urlsafe(8)
         g._t0 = time.perf_counter()
 
+    @app.before_request
+    def _negotiate_locale():
+        # Resolve the UI locale: ?uselang= (explicit) -> uselang cookie -> Accept-Language
+        # best match among enabled -> default. qqx (message keys) is always available for QA.
+        enabled = app.config['ENABLED_LOCALES']
+        requested = (request.args.get('uselang') or '').strip()
+        persist = None
+        if requested == i18n.DEBUG_LOCALE:
+            locale = i18n.DEBUG_LOCALE
+        elif requested in enabled:
+            locale = persist = requested
+        elif (cookie := (request.cookies.get('uselang') or '').strip()) in enabled:
+            locale = cookie
+        else:
+            locale = request.accept_languages.best_match(enabled) or app.config['DEFAULT_LOCALE']
+        g.locale = locale
+        g.dir = i18n.text_direction(locale)
+        g._persist_locale = persist
+
     @app.context_processor
     def _inject_globals():
         participant = _current_participant()
@@ -4777,6 +4813,15 @@ def create_app(test_config: dict | None = None) -> Flask:
             'username':   session.get('username'),
             'csp_nonce':  g.get('csp_nonce', ''),
             'git_version': _GIT_VERSION,
+            'msg':    lambda key, *params: i18n.resolve(key, g.get('locale', i18n.SOURCE_LOCALE), params),
+            'locale': g.get('locale', i18n.SOURCE_LOCALE),
+            'dir':    g.get('dir', 'ltr'),
+            # Client-side message island (base.html emits it as JSON for static/i18n.js).
+            'i18n_data': lambda: {
+                'locale':   g.get('locale', i18n.SOURCE_LOCALE),
+                'dir':      g.get('dir', 'ltr'),
+                'messages': i18n.all_messages(g.get('locale', i18n.SOURCE_LOCALE)),
+            },
         }
 
     @app.after_request
@@ -4821,6 +4866,11 @@ def create_app(test_config: dict | None = None) -> Flask:
             # Prevent intermediary proxies from caching HTML pages; stale HTML pointing
             # to old ?v= URLs would cause users to load mismatched assets after a deploy.
             response.headers.setdefault('Cache-Control', 'no-store')
+
+        # Persist an explicit ?uselang= choice so the UI language sticks across requests.
+        if g.get('_persist_locale'):
+            response.set_cookie('uselang', g._persist_locale, max_age=31536000,
+                                samesite='Lax', secure=not app.debug)
 
         return response
 

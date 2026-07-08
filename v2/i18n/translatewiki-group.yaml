@@ -1,0 +1,40 @@
+# DRAFT translatewiki.net message-group config for wiki-polis.
+#
+# This is NOT read by wiki-polis — it is a reference to hand to translatewiki.net (TWN) staff
+# when requesting onboarding. TWN keeps the authoritative copy in their `translatewiki` config
+# repo (group_yaml). Onboarding steps:
+#   1. Confirm the repo LICENSE is OSS (TWN requirement — wiki-polis qualifies).
+#   2. File a support request on translatewiki.net referencing this file.
+#   3. TWN configures the group + the l10n sync bot, which commits translations back as
+#      i18n/<code>.json (via PRs to the repo). Enable delivered locales via ENABLED_LOCALES.
+#
+# Docs: https://translatewiki.net/wiki/Translating:New_project
+
+BASIC:
+  id: wiki-polis
+  label: wiki-polis
+  namespace: NS_TRANSLATIONS
+  description: "Deliberation tool for the Wikimedia community (Toolforge)."
+  sourcelanguage: en
+
+FILES:
+  class: JsonFFS
+  codeMap:
+    en-gb: en-GB
+  sourcePattern: "%GROUPROOT%/wiki-polis/v2/i18n/%CODE%.json"
+  targetPattern: "wiki-polis/v2/i18n/%CODE%.json"
+  definitionFile: "%GROUPROOT%/wiki-polis/v2/i18n/en.json"
+
+MANGLER:
+  class: StringMatcher
+  # Keys are already namespaced by surface (base-*, home-*, ...); no group prefix mangling.
+  prefix: ""
+  patterns: "*"
+
+VALIDATORS:
+  - id: BraceBalance
+  - id: MediaWikiPlural
+  - id: Printf
+
+INSERTABLES:
+  - class: FlatPluralInsertablesSuggester
