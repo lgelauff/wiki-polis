@@ -380,8 +380,11 @@ def test_empty_results_triggers_recompute_and_shows_computing_message(
     resp = auth_client.get('/c/test-conv')
     assert resp.status_code == 200
     assert recompute_called == [conv.polis_id]
-    assert b'being computed' in resp.data
-    assert b'enough votes' not in resp.data
+    # Anchor on the rendered </p> so these check the visible branch, not the
+    # client-side message island (window.wpMessages ships every UI string,
+    # including the 'enough votes' pending message, to every page).
+    assert b'check back in a moment.</p>' in resp.data
+    assert b'enough votes have been cast.</p>' not in resp.data
 
 
 def test_recompute_rate_limited_within_cooldown(auth_client, conv, participation,

@@ -2,30 +2,30 @@
 {% block title %}{{ conversation.title }} — wiki-polis{% endblock %}
 
 {% block header_crumb %}
-<nav class="header-crumb" aria-label="Conversation context">
+<nav class="header-crumb" aria-label="{{ msg('conv-crumb-aria') }}">
   <span class="header-crumb-sep">/</span>
   <span>{{ conversation.title | truncate(40, True, '…') }}</span>
   {% if can_moderate %}
-    <a class="header-manage-link" href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">Manage</a>
+    <a class="header-manage-link" href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ msg('conv-crumb-manage') }}</a>
   {% endif %}
 </nav>
 {% endblock %}
 {% macro content_flag_form(action, uid, label) -%}
 <details class="content-flag">
-  <summary aria-label="Flag {{ label }} for moderator review">flag concerns about this {{ label }}</summary>
+  <summary aria-label="{{ msg('conv-flag-aria', label) }}">{{ msg('conv-flag-summary', label) }}</summary>
   <form method="post" action="{{ action }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label class="sr-only" for="flag-category-{{ uid }}">Reason</label>
+    <label class="sr-only" for="flag-category-{{ uid }}">{{ msg('conv-flag-reason-label') }}</label>
     <select id="flag-category-{{ uid }}" name="category" required>
-      <option value="personal_attack">Personal attack</option>
-      <option value="privacy">Privacy violation</option>
-      <option value="off_topic">Off-topic</option>
-      <option value="other">Other</option>
+      <option value="personal_attack">{{ msg('conv-flag-cat-personal') }}</option>
+      <option value="privacy">{{ msg('conv-flag-cat-privacy') }}</option>
+      <option value="off_topic">{{ msg('conv-flag-cat-offtopic') }}</option>
+      <option value="other">{{ msg('conv-flag-cat-other') }}</option>
     </select>
-    <label class="sr-only" for="flag-detail-{{ uid }}">Details</label>
+    <label class="sr-only" for="flag-detail-{{ uid }}">{{ msg('conv-flag-details-label') }}</label>
     <textarea id="flag-detail-{{ uid }}" name="detail" rows="2" maxlength="1000"
-              placeholder="Optional details"></textarea>
-    <button type="submit" class="btn-small">Send</button>
+              placeholder="{{ msg('conv-flag-details-placeholder') }}"></textarea>
+    <button type="submit" class="btn-small">{{ msg('conv-flag-send') }}</button>
   </form>
 </details>
 {%- endmacro %}
@@ -42,7 +42,7 @@
 
   {% if demo_mode %}
   <div class="landing-section" style="margin-bottom:1rem">
-    <p class="muted"><strong>Demo</strong> — anonymous vote-only participation. Responses are not part of a real consultation and may be cleared.</p>
+    <p class="muted"><strong>{{ msg('conv-demo-label') }}</strong> {{ msg('conv-demo-text') }}</p>
   </div>
   {% endif %}
 
@@ -55,7 +55,7 @@
   {% if conversation.scheduled_transition_at and conversation.scheduled_transition_target and not conversation.scheduled_transition_frozen %}
   <div class="landing-section output-context">
     <p class="muted" style="margin:0">
-      Next phase change scheduled for
+      {{ msg('conv-scheduled-transition') }}
       <strong>{{ conversation.scheduled_transition_at.strftime('%Y-%m-%d %H:%M') }} UTC</strong>.
     </p>
   </div>
@@ -66,46 +66,45 @@
   <div class="landing-section">
     {% if reveal %}
     <p class="muted">
-      This consultation closed on <strong>{{ reveal.closed_at.strftime('%-d %b %Y') }}</strong>.
-      Your votes were recorded under your pseudonym; for a limited time you may optionally and
-      permanently link your Wikimedia username to it.
+      {{ msg('conv-closed-on') }} <strong>{{ reveal.closed_at.strftime('%-d %b %Y') }}</strong>.
+      {{ msg('conv-closed-recorded') }}
     </p>
 
     {{ reveal_timeline(reveal) }}
 
     {% if reveal_state == 'revealed' %}
     <p class="muted" style="margin-top:.5rem;font-size:13px">
-      You linked your identity — your username is associated with pseudonym
-      <strong>{{ participation.pseudonym }}</strong> in this consultation's records.
+      {{ msg('conv-revealed-text') }}
+      <strong>{{ participation.pseudonym }}</strong> {{ msg('conv-revealed-suffix') }}
     </p>
     {% elif reveal_state == 'open' %}
     <div class="reveal-callout">
-      <p class="reveal-callout-text">The identity reveal window is open. Your participation is recorded under pseudonym <strong>{{ participation.pseudonym }}</strong>.</p>
-      <a class="reveal-callout-link" href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">Optionally link your Wikimedia username <span aria-hidden="true">→</span></a>
+      <p class="reveal-callout-text">{{ msg('reveal-callout-open-text') }} <strong>{{ participation.pseudonym }}</strong>.</p>
+      <a class="reveal-callout-link" href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">{{ msg('reveal-callout-link') }} <span aria-hidden="true">→</span></a>
     </div>
 
     {% elif reveal_state == 'pending' %}
     <p class="muted" style="margin-top:.5rem;font-size:13px">
-      The window opens on {{ reveal.opens_at.strftime('%-d %b %Y') }} — nothing to do until then.
+      {{ msg('conv-reveal-pending-opens') }} {{ reveal.opens_at.strftime('%-d %b %Y') }} {{ msg('conv-reveal-pending-until') }}
     </p>
     {% elif reveal_state == 'expired' %}
     <p class="muted" style="margin-top:.5rem;font-size:13px">
-      The reveal window has closed. Records stay pseudonymous — identities can no longer be linked.
+      {{ msg('conv-reveal-expired') }}
     </p>
     {% endif %}
     {% else %}
-    <p class="muted">This consultation is closed.</p>
+    <p class="muted">{{ msg('conv-closed-simple') }}</p>
     {% endif %}
     {% if conversation.phase_public_results or conversation.phase_personal_results %}
     <p style="margin-top:1rem;font-size:14px">
-      <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">Read the final report <span aria-hidden="true">→</span></a>
+      <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">{{ msg('conv-read-report') }} <span aria-hidden="true">→</span></a>
     </p>
     {% endif %}
   </div>
 
   {% elif conversation.paused %}
   <div class="landing-section">
-    <p class="muted">This consultation is temporarily paused. Check back soon.</p>
+    <p class="muted">{{ msg('conv-paused') }}</p>
   </div>
 
   {% else %}
@@ -120,7 +119,7 @@
 
   {% if tabs | length == 0 %}
   <div class="landing-section">
-    <p class="muted">Nothing is available yet. Check back soon.</p>
+    <p class="muted">{{ msg('conv-nothing-available') }}</p>
   </div>
 
   {% else %}
@@ -131,31 +130,31 @@
     <button id="tab-btn-vote" class="tab-btn{% if tabs[0] == 'vote' %} tab-btn--active{% endif %}"
             role="tab" data-tab="tab-vote" aria-controls="tab-vote"
             aria-selected="{{ 'true' if tabs[0] == 'vote' else 'false' }}"
-            tabindex="{{ '0' if tabs[0] == 'vote' else '-1' }}">Vote</button>
+            tabindex="{{ '0' if tabs[0] == 'vote' else '-1' }}">{{ msg('conv-tab-vote') }}</button>
     {% endif %}
     {% if 'results' in tabs %}
     <button id="tab-btn-results" class="tab-btn{% if tabs[0] == 'results' %} tab-btn--active{% endif %}"
             role="tab" data-tab="tab-results" aria-controls="tab-results"
             aria-selected="{{ 'true' if tabs[0] == 'results' else 'false' }}"
-            tabindex="{{ '0' if tabs[0] == 'results' else '-1' }}">Intermediate results</button>
+            tabindex="{{ '0' if tabs[0] == 'results' else '-1' }}">{{ msg('conv-tab-results') }}</button>
     {% endif %}
     {% if 'arguments' in tabs %}
     <button id="tab-btn-arguments" class="tab-btn{% if tabs[0] == 'arguments' %} tab-btn--active{% endif %}"
             role="tab" data-tab="tab-arguments" aria-controls="tab-arguments"
             aria-selected="{{ 'true' if tabs[0] == 'arguments' else 'false' }}"
-            tabindex="{{ '0' if tabs[0] == 'arguments' else '-1' }}">Arguments</button>
+            tabindex="{{ '0' if tabs[0] == 'arguments' else '-1' }}">{{ msg('conv-tab-arguments') }}</button>
     {% endif %}
     {% if 'informed-voting' in tabs %}
     <button id="tab-btn-informed-voting" class="tab-btn{% if tabs[0] == 'informed-voting' %} tab-btn--active{% endif %}"
             role="tab" data-tab="tab-informed-voting" aria-controls="tab-informed-voting"
             aria-selected="{{ 'true' if tabs[0] == 'informed-voting' else 'false' }}"
-            tabindex="{{ '0' if tabs[0] == 'informed-voting' else '-1' }}">Informed vote</button>
+            tabindex="{{ '0' if tabs[0] == 'informed-voting' else '-1' }}">{{ msg('conv-tab-informed') }}</button>
     {% endif %}
     {% if 'p6-results' in tabs %}
     <button id="tab-btn-p6-results" class="tab-btn{% if tabs[0] == 'p6-results' %} tab-btn--active{% endif %}"
             role="tab" data-tab="tab-p6-results" aria-controls="tab-p6-results"
             aria-selected="{{ 'true' if tabs[0] == 'p6-results' else 'false' }}"
-            tabindex="{{ '0' if tabs[0] == 'p6-results' else '-1' }}">Preliminary results</button>
+            tabindex="{{ '0' if tabs[0] == 'p6-results' else '-1' }}">{{ msg('conv-tab-preliminary') }}</button>
     {% endif %}
   </div>
   {% endif %}
@@ -176,11 +175,11 @@
             <span id="votes-done" class="vote-progress-voted">0</span>
             <span class="vote-progress-sep"> / </span>
             <span id="votes-total">?</span>
-            <span class="vote-progress-label">voted</span>
+            <span class="vote-progress-label">{{ msg('conv-vote-voted-label') }}</span>
           </span>
           <div class="vote-progress-bar-wrap">
             <div class="vote-progress-bar" id="vote-progress-bar"
-                 role="progressbar" aria-label="Statements voted" aria-valuemin="0" aria-valuenow="0"></div>
+                 role="progressbar" aria-label="{{ msg('conv-vote-progress-aria') }}" aria-valuemin="0" aria-valuenow="0"></div>
           </div>
           <span class="vote-progress-queued" id="vote-progress-queued"></span>
         </div>
@@ -194,39 +193,39 @@
           <div class="statement-card-header">
             <span class="stmt-meta-left">
               <span class="stmt-dot"></span>
-              <span class="stmt-meta-label">STATEMENT</span>
+              <span class="stmt-meta-label">{{ msg('conv-vote-statement-label') }}</span>
             </span>
-            <span class="stmt-meta-right" id="stmt-right-label">private vote</span>
+            <span class="stmt-meta-right" id="stmt-right-label">{{ msg('conv-vote-private') }}</span>
             <span id="voted-badge" class="voted-badge" data-type="agree" hidden>
               <span class="voted-badge-check">
                 <svg width="7" height="7" viewBox="0 0 12 12" fill="none">
                   <path d="M2 6.5L4.8 9L10 3.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </span>
-              YOU VOTED <span id="voted-label">AGREE</span>
-              <button type="button" id="change-vote-btn" class="change-vote-btn">change</button>
+              {{ msg('conv-vote-you-voted') }} <span id="voted-label">{{ msg('conv-vote-label-agree') }}</span>
+              <button type="button" id="change-vote-btn" class="change-vote-btn">{{ msg('conv-vote-change') }}</button>
             </span>
           </div>
 
-          <p id="statement-text" class="statement-text">Loading statements…</p>
+          <p id="statement-text" class="statement-text">{{ msg('conv-vote-loading') }}</p>
           <p id="voted-stmt-text" class="voted-stmt-text" hidden></p>
 
           <div class="vote-choice-row" id="vote-choice-row">
             <button type="button" class="vote-choice" data-type="agree" disabled>
-              <span class="vote-dot vote-dot--agree"></span>Agree
+              <span class="vote-dot vote-dot--agree"></span>{{ msg('conv-vote-agree') }}
             </button>
             <button type="button" class="vote-choice" data-type="neutral" disabled>
-              <span class="vote-dot vote-dot--pass"></span>Pass
+              <span class="vote-dot vote-dot--pass"></span>{{ msg('conv-vote-pass') }}
             </button>
             <button type="button" class="vote-choice" data-type="disagree" disabled>
-              <span class="vote-dot vote-dot--disagree"></span>Disagree
+              <span class="vote-dot vote-dot--disagree"></span>{{ msg('conv-vote-disagree') }}
             </button>
           </div>
         </div>
 
         {# ── V2 Option Triad — always rendered, dimmed pre-vote, active post-vote ── #}
         <div class="v2-triad" id="v2-triad" {% if demo_mode %}hidden{% endif %}>
-          <div class="v2-triad-label" id="v2-triad-label" aria-live="polite">After you vote, you can&hellip;</div>
+          <div class="v2-triad-label" id="v2-triad-label" aria-live="polite">{{ msg('conv-triad-idle-label') }}</div>
           <div class="v2-triad-grid" role="group" aria-labelledby="v2-triad-label">
 
             <button type="button" class="v2-option-card" id="triad-suggest"
@@ -240,9 +239,9 @@
                 </span>
               </div>
               <div class="v2-option-bottom">
-                <div class="v2-option-title">Suggest different wording</div>
-                <div class="v2-option-sub">Same idea, clearer phrasing</div>
-                <div class="v2-option-action">Write yours &rarr;</div>
+                <div class="v2-option-title">{{ msg('conv-triad-suggest-title') }}</div>
+                <div class="v2-option-sub">{{ msg('conv-triad-suggest-sub') }}</div>
+                <div class="v2-option-action">{{ msg('conv-triad-suggest-action') }}</div>
               </div>
             </button>
 
@@ -257,9 +256,9 @@
                 </span>
               </div>
               <div class="v2-option-bottom">
-                <div class="v2-option-title">Move on</div>
-                <div class="v2-option-sub">Next statement, nothing to add</div>
-                <div class="v2-option-action">Next &rarr;</div>
+                <div class="v2-option-title">{{ msg('conv-triad-next-title') }}</div>
+                <div class="v2-option-sub">{{ msg('conv-triad-next-sub') }}</div>
+                <div class="v2-option-action">{{ msg('conv-triad-next-action') }}</div>
               </div>
             </button>
 
@@ -279,9 +278,9 @@
                 </svg>
               </div>
               <div class="v2-option-bottom">
-                <div class="v2-option-title">Propose a new statement</div>
-                <div class="v2-option-sub" id="triad-newstmt-sub">Unlocks after {{ new_stmt_unlock_at | default(10) }} votes</div>
-                <div class="v2-option-action" id="triad-newstmt-action" hidden>Compose &rarr;</div>
+                <div class="v2-option-title">{{ msg('conv-triad-newstmt-title') }}</div>
+                <div class="v2-option-sub" id="triad-newstmt-sub">{{ msg('conv-newstmt-unlocks', new_stmt_unlock_at | default(10)) }}</div>
+                <div class="v2-option-action" id="triad-newstmt-action" hidden>{{ msg('conv-triad-newstmt-action') }}</div>
               </div>
             </button>
 
@@ -292,19 +291,19 @@
         <div id="composer-suggest" class="v2-composer" hidden>
           <div class="v2-composer-header">
             <div>
-              <div class="v2-composer-title" id="composer-suggest-title">Suggest different wording</div>
-              <div class="v2-composer-helper" id="composer-suggest-helper">Stays close to the same idea — just a clearer or fairer phrasing. <a href="{{ url_for('participant.statement_guidance') }}">Writing tips</a></div>
+              <div class="v2-composer-title" id="composer-suggest-title">{{ msg('conv-triad-suggest-title') }}</div>
+              <div class="v2-composer-helper" id="composer-suggest-helper">{{ msg('conv-suggest-helper') }} <a href="{{ url_for('participant.statement_guidance') }}">{{ msg('conv-writing-tips') }}</a></div>
             </div>
             <span class="propose-charcount"><span id="suggest-len">0</span> / 280</span>
           </div>
           <textarea id="suggest-input" class="v2-composer-textarea" maxlength="280"
                     aria-labelledby="composer-suggest-title" aria-describedby="composer-suggest-helper"
-                    placeholder="Re-confirmation every five years would balance accountability against admin burnout…"></textarea>
+                    placeholder="{{ msg('conv-suggest-placeholder') }}"></textarea>
           <div class="v2-composer-footer">
-            <span class="v2-composer-hint">Goes into the pool with the original</span>
+            <span class="v2-composer-hint">{{ msg('conv-suggest-hint') }}</span>
             <div class="v2-composer-btns">
-              <button type="button" id="suggest-cancel" class="btn-small btn-muted">Cancel</button>
-              <button type="button" id="suggest-submit" class="propose-submit-btn" disabled>Submit &amp; next</button>
+              <button type="button" id="suggest-cancel" class="btn-small btn-muted">{{ msg('common-cancel') }}</button>
+              <button type="button" id="suggest-submit" class="propose-submit-btn" disabled>{{ msg('conv-composer-submit') }}</button>
             </div>
           </div>
         </div>
@@ -313,19 +312,19 @@
         <div id="composer-newstmt" class="v2-composer" hidden>
           <div class="v2-composer-header">
             <div>
-              <div class="v2-composer-title" id="composer-newstmt-title">Propose a new statement</div>
-              <div class="v2-composer-helper" id="composer-newstmt-helper">A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool. <a href="{{ url_for('participant.statement_guidance') }}">Writing tips</a></div>
+              <div class="v2-composer-title" id="composer-newstmt-title">{{ msg('conv-triad-newstmt-title') }}</div>
+              <div class="v2-composer-helper" id="composer-newstmt-helper">{{ msg('conv-newstmt-helper') }} <a href="{{ url_for('participant.statement_guidance') }}">{{ msg('conv-writing-tips') }}</a></div>
             </div>
             <span class="propose-charcount"><span id="newstmt-len">0</span> / 280</span>
           </div>
           <textarea id="newstmt-input" class="v2-composer-textarea" maxlength="280"
                     aria-labelledby="composer-newstmt-title" aria-describedby="composer-newstmt-helper"
-                    placeholder="A new angle on the topic…"></textarea>
+                    placeholder="{{ msg('conv-newstmt-placeholder') }}"></textarea>
           <div class="v2-composer-footer">
-            <span class="v2-composer-hint">A separate statement — others will vote on it too</span>
+            <span class="v2-composer-hint">{{ msg('conv-newstmt-hint') }}</span>
             <div class="v2-composer-btns">
-              <button type="button" id="newstmt-cancel" class="btn-small btn-muted">Cancel</button>
-              <button type="button" id="newstmt-submit" class="propose-submit-btn" disabled>Submit &amp; next</button>
+              <button type="button" id="newstmt-cancel" class="btn-small btn-muted">{{ msg('common-cancel') }}</button>
+              <button type="button" id="newstmt-submit" class="propose-submit-btn" disabled>{{ msg('conv-composer-submit') }}</button>
             </div>
           </div>
         </div>
@@ -337,18 +336,18 @@
               <path d="M2 6.5L4.8 9L10 3.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </span>
-          <span class="propose-submitted-label">PROPOSED — heading to moderation</span>
-          <button type="button" id="propose-next" class="propose-next-btn">Next statement <span aria-hidden="true">→</span></button>
+          <span class="propose-submitted-label">{{ msg('conv-proposed') }}</span>
+          <button type="button" id="propose-next" class="propose-next-btn">{{ msg('conv-propose-next') }} <span aria-hidden="true">→</span></button>
         </div>
 
         {# ── All done message ── #}
         <div id="all-done-msg" class="all-done-msg" hidden>
-          <p class="all-done-label">For now, you have shared your opinion on all available statements. Please come back later for more!</p>
-          <p class="all-done-sub" id="all-done-propose-hint" hidden>If you can think of any statements that are missing from the current set, this is your chance to submit them.</p>
+          <p class="all-done-label">{{ msg('conv-alldone-label') }}</p>
+          <p class="all-done-sub" id="all-done-propose-hint" hidden>{{ msg('conv-alldone-sub') }}</p>
         </div>
 
         <div id="conv-error" role="alert" hidden>
-          <p class="muted" id="conv-error-msg">Unable to load statements. Please refresh the page.</p>
+          <p class="muted" id="conv-error-msg">{{ msg('conv-error-load') }}</p>
         </div>
 
       </div>
@@ -361,7 +360,7 @@
   <div id="tab-results" class="tab-panel{% if tabs|length > 1 and tabs[0] != 'results' %} tab-panel--hidden{% endif %}"
        role="tabpanel" aria-labelledby="tab-btn-results">
     <div class="landing-section results-section">
-      <h3>Results{% if polis_stats and polis_stats.n_participants %}<span class="muted" style="font-size:13px;font-weight:400;margin-left:.75rem">{{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}</span>{% endif %}</h3>
+      <h3>{{ msg('conv-results-heading') }}{% if polis_stats and polis_stats.n_participants %}<span class="muted" style="font-size:13px;font-weight:400;margin-left:.75rem">{{ msg('conv-participant-count', polis_stats.n_participants) }}</span>{% endif %}</h3>
 
       {% if conversation.phase_public_results or conversation.phase_personal_results %}
 
@@ -369,26 +368,25 @@
 
           {% if polis_stats and polis_stats.n_participants < 25 %}
           <div class="notice-low-n">
-            <strong>Small sample:</strong> these results are based on
-            {{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}.
-            Opinion groups detected from small samples can shift substantially as more people
-            participate — treat group boundaries with caution.
+            <strong>{{ msg('conv-small-sample-label') }}</strong> {{ msg('conv-small-sample-a') }}
+            {{ msg('conv-participant-count', polis_stats.n_participants) }}.
+            {{ msg('conv-small-sample-b') }}
           </div>
           {% endif %}
 
           {% if results.majority.agree or results.majority.disagree %}
           <div class="results-block">
-            <p class="results-label">Areas of broad consensus</p>
+            <p class="results-label">{{ msg('conv-consensus-label') }}</p>
             {% for r in results.majority.agree %}
             <div class="results-row">
-              <span class="results-badge results-agree">agree</span>
+              <span class="results-badge results-agree">{{ msg('conv-badge-agree') }}</span>
               <span class="results-text">"{{ r.statement_text }}"</span>
               <span class="results-pct">{{ (r.value * 100)|int }}%</span>
             </div>
             {% endfor %}
             {% for r in results.majority.disagree %}
             <div class="results-row">
-              <span class="results-badge results-disagree">disagree</span>
+              <span class="results-badge results-disagree">{{ msg('conv-badge-disagree') }}</span>
               <span class="results-text">"{{ r.statement_text }}"</span>
               <span class="results-pct">{{ (r.value * 100)|int }}%</span>
             </div>
@@ -399,20 +397,20 @@
           {% if results.groups %}
           <div class="results-block">
             <p class="results-label">
-              {{ results.groups|length }} opinion group{{ 's' if results.groups|length != 1 }} found
+              {{ msg('conv-groups-found', results.groups|length) }}
             </p>
             {% for group in results.groups %}
-            <p class="results-group-heading">Group {{ loop.index }}</p>
+            <p class="results-group-heading">{{ msg('report-group-label', loop.index) }}</p>
             {% for r in group.agree %}
             <div class="results-row">
-              <span class="results-badge results-agree">agree</span>
+              <span class="results-badge results-agree">{{ msg('conv-badge-agree') }}</span>
               <span class="results-text">"{{ r.statement_text }}"</span>
               <span class="results-pct">{{ (r.value * 100)|int }}%</span>
             </div>
             {% endfor %}
             {% for r in group.disagree %}
             <div class="results-row">
-              <span class="results-badge results-disagree">disagree</span>
+              <span class="results-badge results-disagree">{{ msg('conv-badge-disagree') }}</span>
               <span class="results-text">"{{ r.statement_text }}"</span>
               <span class="results-pct">{{ (r.value * 100)|int }}%</span>
             </div>
@@ -423,16 +421,16 @@
 
         {% else %}
           {% if recomputing %}
-          <p class="muted">Results are being computed — check back in a moment.</p>
+          <p class="muted">{{ msg('conv-results-computing') }}</p>
           {% else %}
-          <p class="muted">Results will appear here once enough votes have been cast.</p>
+          <p class="muted">{{ msg('conv-results-pending') }}</p>
           {% endif %}
         {% endif %}
 
 
 
       {% else %}
-        <p class="muted">Results haven't been published yet. Check back soon.</p>
+        <p class="muted">{{ msg('conv-results-unpublished') }}</p>
       {% endif %}
 
 
@@ -455,7 +453,7 @@
 
     {% if featured_data | length == 0 %}
     <div class="landing-section">
-      <p class="muted">No statements have been selected for argument mapping yet.</p>
+      <p class="muted">{{ msg('conv-arg-none') }}</p>
     </div>
     {% endif %}
 
@@ -466,15 +464,12 @@
       <span class="at-orient-icon" aria-hidden="true">?</span>
       <div class="at-orient-body" id="at-orient-body-{{ conversation.slug }}">
         <div class="at-orient-full">
-          <strong>This isn't another vote — it's a short writing task.</strong>
-          These are the statements that divided people most. For each one, add one argument
-          <em>for</em> and one <em>against</em> (or skip a side), then mark the arguments — from
-          anyone — you find most important.
+          {{ msg('conv-orient-full')|safe }}
         </div>
-        <div class="at-orient-mini">What is this tab? <strong>A two-step task on the most divisive statements.</strong></div>
+        <div class="at-orient-mini">{{ msg('conv-orient-mini')|safe }}</div>
       </div>
       <button class="at-orient-toggle" type="button" id="at-orient-toggle-{{ conversation.slug }}"
-              aria-expanded="true" aria-controls="at-orient-body-{{ conversation.slug }}">collapse <span aria-hidden="true">▲</span></button>
+              aria-expanded="true" aria-controls="at-orient-body-{{ conversation.slug }}">{{ msg('conv-orient-collapse') }} <span aria-hidden="true">▲</span></button>
     </div>
 
     {# All-complete state — shown by JS when every panel is done; sits above panels #}
@@ -486,8 +481,8 @@
             <path d="M20 6 9 17l-5-5"/>
           </svg>
         </span>
-        <h2 class="interlude-title">You've been through all of them</h2>
-        <p class="interlude-sub">Nice work. Review the importance choices below where they are available.</p>
+        <h2 class="interlude-title">{{ msg('conv-arg-complete-title') }}</h2>
+        <p class="interlude-sub">{{ msg('conv-arg-complete-sub') }}</p>
       </div>
     </div>
 
@@ -514,12 +509,12 @@
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="m12 2 3 7 7 .5-5.5 4.5 2 7-6.5-4-6.5 4 2-7L2 9.5 9 9z"/>
             </svg>
-            Featured statement
+            {{ msg('conv-arg-featured-label') }}
           </div>
           <p class="at-stmt">{{ item.text }}</p>
           {# (Collapsed-state one-liner is rendered by .at-revisit-bar; the old .at-stmt-summary
              here was orphaned dead markup that just duplicated .at-stmt when expanded.) #}
-          {{ content_flag_form(url_for('participant.statement_flag', slug=conversation.slug, tid=fs.polis_statement_id), 'statement-' ~ fs.id, 'statement') }}
+          {{ content_flag_form(url_for('participant.statement_flag', slug=conversation.slug, tid=fs.polis_statement_id), 'statement-' ~ fs.id, msg('conv-noun-statement')) }}
         </div>
 
         {# Two-step indicator — hidden when collapsed #}
@@ -527,12 +522,12 @@
           <div class="at-step {% if both_gate %}at-step--done{% else %}at-step--active{% endif %}" id="step1-{{ fs.id }}">
             <span class="at-step-num">{% if both_gate %}✓{% else %}1{% endif %}</span>
             <div>
-              <div class="at-step-name">1 · Add arguments</div>
+              <div class="at-step-name">{{ msg('conv-arg-step1-name') }}</div>
               <div class="at-step-sub" id="step1-sub-{{ fs.id }}">
                 {%- if both_gate -%}
-                  for ✓ · against ✓
+                  {{ msg('conv-arg-for') }} ✓ · {{ msg('conv-arg-against') }} ✓
                 {%- else -%}
-                  {%- if item.pro_gate %}for ✓{% else %}for{% endif %} · {% if item.con_gate %}against ✓{% else %}against{% endif -%}
+                  {%- if item.pro_gate %}{{ msg('conv-arg-for') }} ✓{% else %}{{ msg('conv-arg-for') }}{% endif %} · {% if item.con_gate %}{{ msg('conv-arg-against') }} ✓{% else %}{{ msg('conv-arg-against') }}{% endif -%}
                 {%- endif -%}
               </div>
             </div>
@@ -540,12 +535,12 @@
           <div class="at-step {% if both_gate %}at-step--active{% else %}at-step--locked{% endif %}" id="step2-{{ fs.id }}">
             <span class="at-step-num">{% if not both_gate %}🔒{% else %}2{% endif %}</span>
             <div>
-              <div class="at-step-name">2 · Prioritise</div>
+              <div class="at-step-name">{{ msg('conv-arg-step2-name') }}</div>
               <div class="at-step-sub" id="step2-sub-{{ fs.id }}">
                 {%- if both_gate -%}
-                  Mark the most important — {{ item.pro_voted_count }} of {{ item.k }} for, {{ item.con_voted_count }} of {{ item.k }} against · you can still change these
+                  {{ msg('conv-arg-step2-sub', item.pro_voted_count, item.k, item.con_voted_count, item.k) }}
                 {%- else -%}
-                  Unlocks after step 1
+                  {{ msg('conv-arg-step2-locked') }}
                 {%- endif -%}
               </div>
             </div>
@@ -562,7 +557,7 @@
         <div class="at-col at-col--for">
           <div class="at-col-head">
             <span class="at-col-sign" aria-hidden="true">+</span>
-            <span class="at-col-label">For</span>
+            <span class="at-col-label">{{ msg('conv-arg-col-for') }}</span>
             <span class="at-col-count">{{ item.pro_args | length }}</span>
           </div>
 
@@ -578,38 +573,38 @@
                data-my-pseudonym="{{ participation.pseudonym }}">
             <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--pro" type="button">
               <span class="at-contribute-glyph" style="background:rgba(21,115,74,.15);color:var(--agree);font-weight:700" aria-hidden="true">+</span>
-              Add one for-argument
+              {{ msg('conv-arg-add-for') }}
             </button>
-            <button class="at-direct-skip contribute-direct-skip" type="button">Nothing to add</button>
+            <button class="at-direct-skip contribute-direct-skip" type="button">{{ msg('conv-arg-nothing') }}</button>
             <div class="contribute-composer">
               <div class="contribute-composer-header">
                 <span class="contribute-glyph filled">+</span>
-                <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-pro">Your for-argument · one sentence, one claim</span>
-                <a class="contribute-help-link" href="{{ url_for('participant.argument_guidance') }}">Argument tips</a>
+                <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-pro">{{ msg('conv-arg-composer-label-for') }}</span>
+                <a class="contribute-help-link" href="{{ url_for('participant.argument_guidance') }}">{{ msg('conv-arg-tips') }}</a>
                 <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
               </div>
               <textarea class="contribute-textarea" maxlength="280" rows="3"
                         aria-labelledby="contribute-label-{{ fs.id }}-pro"
-                        placeholder="Add a short for-argument (one sentence, max 280 characters)…"></textarea>
+                        placeholder="{{ msg('conv-arg-placeholder-for') }}"></textarea>
               <div class="contribute-actions">
-                <button type="button" class="btn-secondary contribute-skip-btn">Nothing to add</button>
-                <button type="button" class="btn-primary contribute-submit-btn" disabled>Submit argument</button>
+                <button type="button" class="btn-secondary contribute-skip-btn">{{ msg('conv-arg-nothing') }}</button>
+                <button type="button" class="btn-primary contribute-submit-btn" disabled>{{ msg('conv-arg-submit') }}</button>
               </div>
             </div>
             <div class="at-contribute at-contribute--done contribute-submitted contribute-submitted--pro">
               <span class="at-contribute-glyph"><svg width="11" height="9" viewBox="0 0 13 10" fill="none" aria-hidden="true"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-              You added one argument for
+              {{ msg('conv-arg-added-for') }}
             </div>
             <div class="at-contribute at-contribute--skipped contribute-skipped">
               <span class="at-contribute-glyph" aria-hidden="true">↷</span>
-              Nothing to add
-              <button type="button" class="at-link contribute-changemind">change my mind</button>
+              {{ msg('conv-arg-nothing') }}
+              <button type="button" class="at-link contribute-changemind">{{ msg('conv-arg-changemind') }}</button>
             </div>
           </div>
 
           {# Locked-state note — only when gate is closed and no cards exist yet #}
           {% if not item.pro_gate and item.pro_args | length == 0 %}
-          <p class="at-col-note">Other arguments appear here once you've added yours or skipped — so you form your own view first.</p>
+          <p class="at-col-note">{{ msg('conv-arg-locked-note') }}</p>
           {% endif %}
 
           {# Argument cards — pro #}
@@ -632,7 +627,7 @@
                data-csrf="{{ csrf_token() }}">
             <button class="at-pick argument-checkbox"
                     aria-pressed="{{ 'true' if is_picked else 'false' }}"
-                    aria-label="{{ 'Unmark as most important' if is_picked else 'Mark as most important' }}"
+                    aria-label="{{ msg('conv-arg-unmark') if is_picked else msg('conv-arg-mark') }}"
                     {% if arg.hidden %}aria-hidden="true" tabindex="-1"
                     {% elif pro_vol_locked %}tabindex="0" aria-disabled="true" aria-describedby="volnote-pro-{{ fs.id }}"
                     {% elif pro_can_vote %}tabindex="0"
@@ -652,24 +647,24 @@
                           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
                   <strong class="importance-count">{{ arg.votes | length }}</strong>
-                  <span class="sr-only"> importance votes</span>
+                  <span class="sr-only">{{ msg('conv-arg-importance-votes') }}</span>
                 </span>
-                {% if is_own %}<span class="at-yours argument-yours">YOURS</span>{% endif %}
-                {% if arg.hidden %}<span class="at-hidden-badge argument-hidden-badge">HIDDEN</span>{% endif %}
+                {% if is_own %}<span class="at-yours argument-yours">{{ msg('conv-arg-yours') }}</span>{% endif %}
+                {% if arg.hidden %}<span class="at-hidden-badge argument-hidden-badge">{{ msg('conv-arg-hidden') }}</span>{% endif %}
                 {% if not arg.hidden and not can_moderate %}
-                {{ content_flag_form(url_for('participant.argument_flag', slug=conversation.slug, arg_id=arg.id), 'argument-pro-' ~ arg.id, 'argument') }}
+                {{ content_flag_form(url_for('participant.argument_flag', slug=conversation.slug, arg_id=arg.id), 'argument-pro-' ~ arg.id, msg('conv-noun-argument')) }}
                 {% endif %}
                 {% if can_moderate %}
                 <span style="display:inline-flex;gap:4px;margin-left:auto">
                   {% if arg.hidden %}
                   <form method="post" action="{{ url_for('participant.argument_unhide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-small">unhide</button>
+                    <button type="submit" class="btn-small">{{ msg('conv-arg-unhide') }}</button>
                   </form>
                   {% else %}
                   <form method="post" action="{{ url_for('participant.argument_hide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-small btn-warn">hide</button>
+                    <button type="submit" class="btn-small btn-warn">{{ msg('conv-arg-hide') }}</button>
                   </form>
                   {% endif %}
                 </span>
@@ -682,7 +677,7 @@
           {% if both_gate and not pro_vote_ready %}
           <div class="at-volnote" id="volnote-pro-{{ fs.id }}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-            <span>Prioritising unlocks once there are more than {{ item.k }} for-arguments ({{ item.pro_args | length }} so far).</span>
+            <span>{{ msg('conv-arg-volnote-for', item.k, item.pro_args | length) }}</span>
           </div>
           {% endif %}
         </div>{# end for col #}
@@ -693,7 +688,7 @@
         <div class="at-col at-col--against">
           <div class="at-col-head">
             <span class="at-col-sign" aria-hidden="true">−</span>
-            <span class="at-col-label">Against</span>
+            <span class="at-col-label">{{ msg('conv-arg-col-against') }}</span>
             <span class="at-col-count">{{ item.con_args | length }}</span>
           </div>
 
@@ -709,38 +704,38 @@
                data-my-pseudonym="{{ participation.pseudonym }}">
             <button class="at-contribute at-contribute--idle contribute-affordance contribute-affordance--con" type="button">
               <span class="at-contribute-glyph" style="background:rgba(178,58,58,.15);color:var(--disagree);font-weight:700" aria-hidden="true">−</span>
-              Add one against-argument
+              {{ msg('conv-arg-add-against') }}
             </button>
-            <button class="at-direct-skip contribute-direct-skip" type="button">Nothing to add</button>
+            <button class="at-direct-skip contribute-direct-skip" type="button">{{ msg('conv-arg-nothing') }}</button>
             <div class="contribute-composer">
               <div class="contribute-composer-header">
                 <span class="contribute-glyph filled">−</span>
-                <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-con">Your against-argument · one sentence, one claim</span>
-                <a class="contribute-help-link" href="{{ url_for('participant.argument_guidance') }}">Argument tips</a>
+                <span class="contribute-composer-label" id="contribute-label-{{ fs.id }}-con">{{ msg('conv-arg-composer-label-against') }}</span>
+                <a class="contribute-help-link" href="{{ url_for('participant.argument_guidance') }}">{{ msg('conv-arg-tips') }}</a>
                 <span class="contribute-charcount"><span class="cc-len">0</span> / 280</span>
               </div>
               <textarea class="contribute-textarea" maxlength="280" rows="3"
                         aria-labelledby="contribute-label-{{ fs.id }}-con"
-                        placeholder="Add a short against-argument (one sentence, max 280 characters)…"></textarea>
+                        placeholder="{{ msg('conv-arg-placeholder-against') }}"></textarea>
               <div class="contribute-actions">
-                <button type="button" class="btn-secondary contribute-skip-btn">Nothing to add</button>
-                <button type="button" class="btn-primary contribute-submit-btn" disabled>Submit argument</button>
+                <button type="button" class="btn-secondary contribute-skip-btn">{{ msg('conv-arg-nothing') }}</button>
+                <button type="button" class="btn-primary contribute-submit-btn" disabled>{{ msg('conv-arg-submit') }}</button>
               </div>
             </div>
             <div class="at-contribute at-contribute--done contribute-submitted contribute-submitted--con">
               <span class="at-contribute-glyph"><svg width="11" height="9" viewBox="0 0 13 10" fill="none" aria-hidden="true"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-              You added one argument against
+              {{ msg('conv-arg-added-against') }}
             </div>
             <div class="at-contribute at-contribute--skipped contribute-skipped">
               <span class="at-contribute-glyph" aria-hidden="true">↷</span>
-              Nothing to add
-              <button type="button" class="at-link contribute-changemind">change my mind</button>
+              {{ msg('conv-arg-nothing') }}
+              <button type="button" class="at-link contribute-changemind">{{ msg('conv-arg-changemind') }}</button>
             </div>
           </div>
 
           {# Locked-state note — only when gate is closed and no cards exist yet #}
           {% if not item.con_gate and item.con_args | length == 0 %}
-          <p class="at-col-note">Other arguments appear here once you've added yours or skipped — so you form your own view first.</p>
+          <p class="at-col-note">{{ msg('conv-arg-locked-note') }}</p>
           {% endif %}
 
           {# Argument cards — con #}
@@ -763,7 +758,7 @@
                data-csrf="{{ csrf_token() }}">
             <button class="at-pick argument-checkbox"
                     aria-pressed="{{ 'true' if is_picked else 'false' }}"
-                    aria-label="{{ 'Unmark as most important' if is_picked else 'Mark as most important' }}"
+                    aria-label="{{ msg('conv-arg-unmark') if is_picked else msg('conv-arg-mark') }}"
                     {% if arg.hidden %}aria-hidden="true" tabindex="-1"
                     {% elif con_vol_locked %}tabindex="0" aria-disabled="true" aria-describedby="volnote-con-{{ fs.id }}"
                     {% elif con_can_vote %}tabindex="0"
@@ -783,24 +778,24 @@
                           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
                   <strong class="importance-count">{{ arg.votes | length }}</strong>
-                  <span class="sr-only"> importance votes</span>
+                  <span class="sr-only">{{ msg('conv-arg-importance-votes') }}</span>
                 </span>
-                {% if is_own %}<span class="at-yours argument-yours">YOURS</span>{% endif %}
-                {% if arg.hidden %}<span class="at-hidden-badge argument-hidden-badge">HIDDEN</span>{% endif %}
+                {% if is_own %}<span class="at-yours argument-yours">{{ msg('conv-arg-yours') }}</span>{% endif %}
+                {% if arg.hidden %}<span class="at-hidden-badge argument-hidden-badge">{{ msg('conv-arg-hidden') }}</span>{% endif %}
                 {% if not arg.hidden and not can_moderate %}
-                {{ content_flag_form(url_for('participant.argument_flag', slug=conversation.slug, arg_id=arg.id), 'argument-con-' ~ arg.id, 'argument') }}
+                {{ content_flag_form(url_for('participant.argument_flag', slug=conversation.slug, arg_id=arg.id), 'argument-con-' ~ arg.id, msg('conv-noun-argument')) }}
                 {% endif %}
                 {% if can_moderate %}
                 <span style="display:inline-flex;gap:4px;margin-left:auto">
                   {% if arg.hidden %}
                   <form method="post" action="{{ url_for('participant.argument_unhide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-small">unhide</button>
+                    <button type="submit" class="btn-small">{{ msg('conv-arg-unhide') }}</button>
                   </form>
                   {% else %}
                   <form method="post" action="{{ url_for('participant.argument_hide', slug=conversation.slug, arg_id=arg.id) }}" style="display:inline">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-small btn-warn">hide</button>
+                    <button type="submit" class="btn-small btn-warn">{{ msg('conv-arg-hide') }}</button>
                   </form>
                   {% endif %}
                 </span>
@@ -813,7 +808,7 @@
           {% if both_gate and not con_vote_ready %}
           <div class="at-volnote" id="volnote-con-{{ fs.id }}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-            <span>Prioritising unlocks once there are more than {{ item.k }} against-arguments ({{ item.con_args | length }} so far).</span>
+            <span>{{ msg('conv-arg-volnote-against', item.k, item.con_args | length) }}</span>
           </div>
           {% endif %}
         </div>{# end against col #}
@@ -824,11 +819,11 @@
       <div class="at-nav">
         <button class="at-navbtn at-navbtn--prev" type="button"
                 {% if loop.first %}disabled{% endif %}
-                aria-label="Previous statement">← Previous</button>
-        <div class="at-circles" id="circles-{{ fs.id }}" role="group" aria-label="Statement progress"></div>
+                aria-label="{{ msg('conv-nav-prev-aria') }}">{{ msg('conv-nav-prev') }}</button>
+        <div class="at-circles" id="circles-{{ fs.id }}" role="group" aria-label="{{ msg('conv-arg-progress-aria') }}"></div>
         <button class="at-navbtn at-navbtn--next" type="button"
                 {% if loop.last %}disabled{% endif %}
-                aria-label="Next statement">Next →</button>
+                aria-label="{{ msg('conv-nav-next-aria') }}">{{ msg('conv-nav-next') }}</button>
       </div>
 
     </div>{# end at-panel / arg-block #}
@@ -853,7 +848,7 @@
 
     {% if phase6_data | length == 0 %}
     <div class="landing-section">
-      <p class="muted">No statements are available for informed voting yet.</p>
+      <p class="muted">{{ msg('conv-p6-none') }}</p>
     </div>
     {% endif %}
 
@@ -865,7 +860,7 @@
       <div class="p6-card-header">
         <span class="stmt-meta-left">
           <span class="stmt-dot"></span>
-          INFORMED VOTE &middot; {{ loop.index }} of {{ phase6_data | length }}
+          {{ msg('conv-p6-label') }} &middot; {{ msg('conv-of', loop.index, phase6_data | length) }}
         </span>
         <span class="p6-voted-badge" role="alert" hidden></span>
       </div>
@@ -879,13 +874,13 @@
           {% if item.phase6_stmt_id is not none %}
           <div class="vote-choice-row p6-vote-row">
             <button class="vote-choice btn-p6-vote" data-vote="1">
-              <span class="vote-dot vote-dot--agree"></span>Agree
+              <span class="vote-dot vote-dot--agree"></span>{{ msg('conv-vote-agree') }}
             </button>
             <button class="vote-choice btn-p6-vote" data-vote="0">
-              <span class="vote-dot vote-dot--pass"></span>Pass
+              <span class="vote-dot vote-dot--pass"></span>{{ msg('conv-vote-pass') }}
             </button>
             <button class="vote-choice btn-p6-vote" data-vote="-1">
-              <span class="vote-dot vote-dot--disagree"></span>Disagree
+              <span class="vote-dot vote-dot--disagree"></span>{{ msg('conv-vote-disagree') }}
             </button>
           </div>
           {% endif %}
@@ -895,16 +890,16 @@
         <div class="p6-args-panel">
 
           <div class="p6-args-side p6-args-side--pro">
-            <h3 class="p6-args-side-header">For</h3>
+            <h3 class="p6-args-side-header">{{ msg('conv-arg-col-for') }}</h3>
             {% if item.pro | length == 0 %}
-            <p class="p6-args-empty">No arguments yet.</p>
+            <p class="p6-args-empty">{{ msg('conv-p6-no-args') }}</p>
             {% else %}
             {% for arg in item.pro[:3] %}
             <p class="p6-arg-item">{{ arg.body }}</p>
             {% endfor %}
             {% if item.pro | length > 3 %}
             <details class="p6-args-more">
-              <summary>{{ item.pro | length - 3 }} more</summary>
+              <summary>{{ msg('conv-p6-more', item.pro | length - 3) }}</summary>
               {% for arg in item.pro[3:] %}
               <p class="p6-arg-item">{{ arg.body }}</p>
               {% endfor %}
@@ -914,16 +909,16 @@
           </div>
 
           <div class="p6-args-side p6-args-side--con">
-            <h3 class="p6-args-side-header">Against</h3>
+            <h3 class="p6-args-side-header">{{ msg('conv-arg-col-against') }}</h3>
             {% if item.con | length == 0 %}
-            <p class="p6-args-empty">No arguments yet.</p>
+            <p class="p6-args-empty">{{ msg('conv-p6-no-args') }}</p>
             {% else %}
             {% for arg in item.con[:3] %}
             <p class="p6-arg-item">{{ arg.body }}</p>
             {% endfor %}
             {% if item.con | length > 3 %}
             <details class="p6-args-more">
-              <summary>{{ item.con | length - 3 }} more</summary>
+              <summary>{{ msg('conv-p6-more', item.con | length - 3) }}</summary>
               {% for arg in item.con[3:] %}
               <p class="p6-arg-item">{{ arg.body }}</p>
               {% endfor %}
@@ -937,9 +932,9 @@
       </div>{# end p6-card-inner #}
 
       <div class="p6-nav">
-        <button class="p6-navbtn p6-navbtn--prev" {% if loop.first %}disabled{% endif %}>← Previous</button>
-        <span class="p6-nav-counter" aria-live="polite">{{ loop.index }} of {{ phase6_data | length }}</span>
-        <button class="p6-navbtn p6-navbtn--next" {% if loop.last %}disabled{% endif %}>Next →</button>
+        <button class="p6-navbtn p6-navbtn--prev" {% if loop.first %}disabled{% endif %}>{{ msg('conv-nav-prev') }}</button>
+        <span class="p6-nav-counter" aria-live="polite">{{ msg('conv-of', loop.index, phase6_data | length) }}</span>
+        <button class="p6-navbtn p6-navbtn--next" {% if loop.last %}disabled{% endif %}>{{ msg('conv-nav-next') }}</button>
       </div>
 
     </div>{# end p6-card #}
@@ -947,20 +942,20 @@
 
   {# Done screen — shown when all cards are voted or skipped #}
   <div class="p6-done" hidden>
-    <h2 class="p6-done-heading">You've completed informed voting.</h2>
+    <h2 class="p6-done-heading">{{ msg('conv-p6-done-heading') }}</h2>
     {% if conversation.phase_public_results and phase6_results and phase6_results.statements %}
-    <p class="p6-done-text">See the <a href="#" onclick="document.querySelector('[data-tab=tab-p6-results]').click();return false;">Preliminary results</a> tab for the full comparison.</p>
+    <p class="p6-done-text">{{ msg('conv-p6-done-see-a') }} <a href="#" onclick="document.querySelector('[data-tab=tab-p6-results]').click();return false;">{{ msg('conv-tab-preliminary') }}</a> {{ msg('conv-p6-done-see-b') }}</p>
     {% elif conversation.phase_submission or conversation.phase_argument_mapping %}
-    <p class="p6-done-text">The deliberation is still open — come back if new arguments are added.</p>
+    <p class="p6-done-text">{{ msg('conv-p6-done-open') }}</p>
     {% elif conversation.active %}
-    <p class="p6-done-text">The results report will be published here once this consultation closes.</p>
+    <p class="p6-done-text">{{ msg('conv-p6-done-willpublish') }}</p>
     {% else %}
-    <p class="p6-done-text">This consultation is now closed. <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">Read the final report <span aria-hidden="true">→</span></a></p>
+    <p class="p6-done-text">{{ msg('conv-p6-done-closed') }} <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">{{ msg('conv-read-report') }} <span aria-hidden="true">→</span></a></p>
     {% endif %}
     {% if reveal_state is none or reveal_state == 'pending' %}
-    <p class="p6-done-reveal">Your votes are recorded under pseudonym <strong>{{ participation.pseudonym }}</strong>. Once this consultation closes, you will have a limited window to optionally link your Wikimedia username. You cannot make that decision yet.</p>
+    <p class="p6-done-reveal">{{ msg('conv-p6-reveal-recorded') }} <strong>{{ participation.pseudonym }}</strong>. {{ msg('conv-p6-reveal-pending') }}</p>
     {% elif reveal_state == 'open' %}
-    <p class="p6-done-reveal p6-done-reveal--open">Your votes are recorded under pseudonym <strong>{{ participation.pseudonym }}</strong>. The identity reveal window is open — <a href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">optionally link your username <span aria-hidden="true">→</span></a></p>
+    <p class="p6-done-reveal p6-done-reveal--open">{{ msg('conv-p6-reveal-recorded') }} <strong>{{ participation.pseudonym }}</strong>. {{ msg('conv-p6-reveal-open') }} <a href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">{{ msg('conv-p6-reveal-link') }} <span aria-hidden="true">→</span></a></p>
     {% endif %}
   </div>
 
@@ -974,25 +969,25 @@
     <div class="landing-section results-section">
       <div class="results-block p6-results-block">
         <div class="p6-results-header">
-          <p class="results-label">Preliminary results</p>
+          <p class="results-label">{{ msg('conv-tab-preliminary') }}</p>
           {% if phase6_results.is_preliminary %}
-          <span class="p6-results-badge p6-results-badge--preliminary">Preliminary</span>
+          <span class="p6-results-badge p6-results-badge--preliminary">{{ msg('conv-p6-badge-prelim') }}</span>
           {% endif %}
           {% if phase6_results.p6_participants %}
-          <span class="muted" style="font-size:12px">{{ phase6_results.p6_participants }} participant{{ 's' if phase6_results.p6_participants != 1 }}</span>
+          <span class="muted" style="font-size:12px">{{ msg('conv-participant-count', phase6_results.p6_participants) }}</span>
           {% endif %}
         </div>
         {% if not phase6_results.pg_available %}
-        <p class="muted" style="font-size:13px">Detailed vote counts are not available right now.</p>
+        <p class="muted" style="font-size:13px">{{ msg('conv-p6-counts-unavailable') }}</p>
         {% else %}
-        <table class="p6-results-table" aria-label="Preliminary informed voting results by statement">
+        <table class="p6-results-table" aria-label="{{ msg('conv-p6-table-aria') }}">
           <thead>
             <tr>
-              <th class="p6-col-stmt">Statement</th>
-              <th class="p6-col-phase" title="Phase 2 — initial voting">Initial vote</th>
-              <th class="p6-col-phase" title="Phase 6 — informed voting">Informed vote</th>
-              <th class="p6-col-shift" title="Change in agree rate">Shift</th>
-              {% if participation %}<th class="p6-col-mine">Yours</th>{% endif %}
+              <th class="p6-col-stmt">{{ msg('conv-col-statement') }}</th>
+              <th class="p6-col-phase" title="{{ msg('conv-col-initial-title') }}">{{ msg('conv-col-initial-vote') }}</th>
+              <th class="p6-col-phase" title="{{ msg('conv-col-informed-title') }}">{{ msg('conv-col-informed-vote') }}</th>
+              <th class="p6-col-shift" title="{{ msg('conv-col-shift-title') }}">{{ msg('conv-col-shift') }}</th>
+              {% if participation %}<th class="p6-col-mine">{{ msg('conv-col-yours') }}</th>{% endif %}
             </tr>
           </thead>
           <tbody>
@@ -1001,19 +996,19 @@
             <td class="p6-col-stmt">{{ s.text }}</td>
             <td class="p6-col-phase">
               {% if s.p2 %}
-              <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}%">
+              <div class="p6-vote-bar" title="{{ msg('report-bar-title', s.p2.pct_agree, s.p2.pct_disagree) }}">
                 <div class="p6-bar-agree" style="width:{{ s.p2.pct_agree }}%"></div>
                 <div class="p6-bar-disagree" style="width:{{ s.p2.pct_disagree }}%"></div>
               </div>
-              <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree</span>
+              <span class="p6-bar-label">{{ msg('conv-pct-agree', s.p2.pct_agree) }}</span>
               {% else %}<span class="muted">—</span>{% endif %}
             </td>
             <td class="p6-col-phase">
-              <div class="p6-vote-bar" title="Agree {{ s.p6.pct_agree }}% · Disagree {{ s.p6.pct_disagree }}%">
+              <div class="p6-vote-bar" title="{{ msg('report-bar-title', s.p6.pct_agree, s.p6.pct_disagree) }}">
                 <div class="p6-bar-agree" style="width:{{ s.p6.pct_agree }}%"></div>
                 <div class="p6-bar-disagree" style="width:{{ s.p6.pct_disagree }}%"></div>
               </div>
-              <span class="p6-bar-label">{{ s.p6.pct_agree }}% agree</span>
+              <span class="p6-bar-label">{{ msg('conv-pct-agree', s.p6.pct_agree) }}</span>
             </td>
             <td class="p6-col-shift">
               {% if s.shift is not none %}
@@ -1025,7 +1020,7 @@
             {% if participation %}
             <td class="p6-col-mine">
               {% if s.my_p6_label %}
-              <span class="p6-my-vote p6-my-vote--{{ s.my_p6_label|lower }}">{{ s.my_p6_label }}</span>
+              <span class="p6-my-vote p6-my-vote--{{ s.my_p6_label|lower }}">{{ msg('conv-vote-' ~ s.my_p6_label|lower) }}</span>
               {% else %}<span class="muted">—</span>{% endif %}
             </td>
             {% endif %}
@@ -1036,7 +1031,7 @@
         {% endif %}
         {% if not conversation.active %}
         <p style="margin-top:1rem;font-size:13px">
-          <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">Read the final report <span aria-hidden="true">→</span></a>
+          <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}">{{ msg('conv-read-report') }} <span aria-hidden="true">→</span></a>
         </p>
         {% endif %}
       </div>
@@ -1132,7 +1127,7 @@
       // Update all nav counters + button states
       cards.forEach(function (c, i) {
         var counter = c.querySelector('.p6-nav-counter');
-        if (counter) counter.textContent = (idx + 1) + ' of ' + cards.length;
+        if (counter) counter.textContent = wpI18n.msg('conv-of', idx + 1, cards.length);
         var prev = c.querySelector('.p6-navbtn--prev');
         var next = c.querySelector('.p6-navbtn--next');
         if (prev) prev.disabled = (idx === 0);
@@ -1196,7 +1191,7 @@
             body: JSON.stringify({ fs_id: parseInt(fsId, 10), vote: vote }),
           }).then(function (resp) {
             if (resp.ok) {
-              var label = vote === 1 ? 'Agreed' : vote === -1 ? 'Disagreed' : 'Passed';
+              var label = vote === 1 ? wpI18n.msg('conv-p6-voted-agree') : vote === -1 ? wpI18n.msg('conv-p6-voted-disagree') : wpI18n.msg('conv-p6-voted-pass');
               var cls   = vote === 1 ? 'agree' : vote === -1 ? 'disagree' : 'pass';
               badge.className = 'p6-voted-badge p6-voted-badge--' + cls;
               badge.removeAttribute('hidden');
@@ -1213,7 +1208,7 @@
           }).catch(function () {
             row.querySelectorAll('.btn-p6-vote').forEach(function (b) { b.disabled = false; });
             badge.removeAttribute('hidden');
-            badge.textContent = 'Network error — try again';
+            badge.textContent = wpI18n.msg('conv-network-error-retry');
           });
         });
       });
@@ -1227,7 +1222,7 @@
 
   {% if moderation_log_count %}
   <p class="muted" style="font-size:13px;margin-top:1.5rem">
-    <a href="{{ url_for('participant.conversation_moderation_log', slug=conversation.slug) }}">Moderation log</a>
+    <a href="{{ url_for('participant.conversation_moderation_log', slug=conversation.slug) }}">{{ msg('conv-moderation-log') }}</a>
   </p>
   {% endif %}
 
@@ -1274,7 +1269,7 @@
   var votesTotal       = document.getElementById('votes-total');
   var progressBar      = document.getElementById('vote-progress-bar');
 
-  var LABELS = { agree: 'AGREE', neutral: 'PASS', disagree: 'DISAGREE' };
+  var LABELS = { agree: wpI18n.msg('conv-vote-label-agree'), neutral: wpI18n.msg('conv-vote-label-pass'), disagree: wpI18n.msg('conv-vote-label-disagree') };
   var VOTE_VALUES = { agree: -1, neutral: 0, disagree: 1 };
   var CONVERSATION_ID = clientRoot ? clientRoot.dataset.conversationId : '';
   var PROXY_ROOT = clientRoot ? clientRoot.dataset.proxyRoot : '/proxy/particiapi/';
@@ -1405,7 +1400,7 @@
     if (isAllDone()) { stmtLive.textContent = ''; return; }
     var stmt = currentStatement();
     var txt = stmt ? String(stmt.text || '').trim() : '';
-    if (txt) stmtLive.textContent = 'Statement: ' + txt;
+    if (txt) stmtLive.textContent = wpI18n.msg('conv-announce-statement', txt);
   }
 
   function getVotedCount() {
@@ -1443,13 +1438,13 @@
 
     if (!unlocked) {
       var remaining = Math.max(0, effectiveUnlock - getVotedCount());
-      triadNewstmtSub.textContent = 'Unlocks after ' + remaining + ' more vote' + (remaining === 1 ? '' : 's');
+      triadNewstmtSub.textContent = wpI18n.msg('conv-newstmt-unlocks-more', remaining);
       triadNewstmtAction.hidden = true;
     } else if (quotaLeft === 0) {
-      triadNewstmtSub.textContent = 'Limit reached';
+      triadNewstmtSub.textContent = wpI18n.msg('conv-newstmt-limit-reached');
       triadNewstmtAction.hidden = true;
     } else {
-      triadNewstmtSub.textContent = quotaLeft + ' of ' + NEW_STMT_MAX + ' remaining';
+      triadNewstmtSub.textContent = wpI18n.msg('conv-newstmt-remaining', quotaLeft, NEW_STMT_MAX);
       triadNewstmtAction.hidden = false;
     }
 
@@ -1480,7 +1475,7 @@
     triad.classList.remove('v2-triad--alldone');
 
     triad.hidden = false;
-    triadLabel.textContent = 'After you vote, you can…';
+    triadLabel.textContent = wpI18n.msg('conv-triad-idle-label');
     triad.classList.remove('v2-triad--active');
     setAriaDisabled(triadSuggest, true);
     setAriaDisabled(triadNext,    true);
@@ -1528,7 +1523,7 @@
     }
 
     triad.hidden = false;
-    triadLabel.textContent = 'What now?';
+    triadLabel.textContent = wpI18n.msg('conv-triad-active-label');
     triad.classList.add('v2-triad--active');
     setAriaDisabled(triadSuggest, false);
     setAriaDisabled(triadNext,    false);
@@ -1630,18 +1625,18 @@
           submitBtn.disabled = false;
           convError.hidden = false;
           if (data && data.error === 'derivative_similarity_too_low') {
-            convErrorMsg.textContent = data.message || 'This looks like a different claim. Revise it closer to the original, or submit it as a new statement instead.';
+            convErrorMsg.textContent = data.message || wpI18n.msg('conv-err-similarity');
           } else if (resp.status === 403) {
-            convErrorMsg.textContent = 'You have reached the proposal limit for this consultation.';
+            convErrorMsg.textContent = wpI18n.msg('conv-err-proposal-limit');
           } else {
-            convErrorMsg.textContent = 'Could not submit statement. Please try again.';
+            convErrorMsg.textContent = wpI18n.msg('conv-err-submit-statement');
           }
         });
       }
     }).catch(function () {
       submitBtn.disabled = false;
       convError.hidden = false;
-      convErrorMsg.textContent = 'Network error. Please try again.';
+      convErrorMsg.textContent = wpI18n.msg('conv-network-error');
     });
   }
 
@@ -1666,7 +1661,7 @@
           convError.hidden = true;                  // clear any stale error from a prior attempt
         } else {
           convError.hidden = false;
-          convErrorMsg.textContent = 'Could not change your vote. Please try again.';
+          convErrorMsg.textContent = wpI18n.msg('conv-err-change-vote');
         }
       };
       setVoteButtonsDisabled(true);
@@ -1699,7 +1694,7 @@
         return;
       }
       setVoteButtonsDisabled(false);
-      showError('Could not submit your vote. Please try again.');
+      showError(wpI18n.msg('conv-err-submit-vote'));
     });
   });
 
@@ -1846,7 +1841,7 @@
     triad.hidden = false;
     triad.classList.remove('v2-triad--active');
     triad.classList.add('v2-triad--alldone');
-    triadLabel.textContent = 'Want to add something new?';
+    triadLabel.textContent = wpI18n.msg('conv-triad-alldone-label');
     setAriaDisabled(triadSuggest, true);
     setAriaDisabled(triadNext,    true);
     updateNewstmtCard();
@@ -1875,7 +1870,7 @@
     if (!isAllDone()) enterIdle(choiceRow.querySelector('.vote-choice'));
   }).catch(function () {
     setVoteButtonsDisabled(true);
-    showError('Could not connect to the voting server. Please refresh the page.');
+    showError(wpI18n.msg('conv-err-connect'));
   });
 }());
 </script>
@@ -1896,12 +1891,12 @@
     if (!orient || !btn) return;
     if (localStorage.getItem(key) === 'collapsed') {
       orient.classList.add('at-collapsed');
-      btn.textContent = 'what is this? ▼';
+      btn.textContent = wpI18n.msg('conv-orient-whatis') + ' ▼';
       btn.setAttribute('aria-expanded', 'false');
     }
     btn.addEventListener('click', function () {
       var c = orient.classList.toggle('at-collapsed');
-      btn.innerHTML = c ? 'what is this? <span aria-hidden="true">▼</span>' : 'collapse <span aria-hidden="true">▲</span>';
+      btn.innerHTML = c ? wpI18n.msg('conv-orient-whatis') + ' <span aria-hidden="true">▼</span>' : wpI18n.msg('conv-orient-collapse') + ' <span aria-hidden="true">▲</span>';
       btn.setAttribute('aria-expanded', c ? 'false' : 'true');
       try { localStorage.setItem(key, c ? 'collapsed' : 'open'); } catch(e) {}
     });
@@ -1953,7 +1948,7 @@
     svg.setAttribute('class', 'at-circle');
     svg.setAttribute('viewBox', '0 0 36 36');
     svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', 'Statement ' + num + ': ' + state);
+    svg.setAttribute('aria-label', wpI18n.msg('conv-circle-aria', num, wpI18n.msg('conv-circle-state-' + state)));
 
     var ring = document.createElementNS(NS, 'circle');
     ring.setAttribute('cx', '18'); ring.setAttribute('cy', '18'); ring.setAttribute('r', '15');
@@ -2168,7 +2163,7 @@
     var pickedPro = countVoted(fsId, 'pro');
     var pickedCon = countVoted(fsId, 'con');
     var s2sub = document.getElementById('step2-sub-' + fsId);
-    if (s2sub) s2sub.textContent = 'Mark the most important — ' + pickedPro + ' of ' + k + ' for, ' + pickedCon + ' of ' + k + ' against · you can still change these';
+    if (s2sub) s2sub.textContent = wpI18n.msg('conv-arg-step2-sub', pickedPro, k, pickedCon, k);
     paintAllCircles();
   }
 
@@ -2186,7 +2181,7 @@
     div.dataset.unvoteUrl = unvoteUrl;
     div.dataset.csrf = csrf;
     div.innerHTML =
-      '<button class="at-pick argument-checkbox" aria-pressed="false" aria-label="Mark as most important" tabindex="-1"></button>' +
+      '<button class="at-pick argument-checkbox" aria-pressed="false" aria-label="' + escapeHtml(wpI18n.msg('conv-arg-mark')) + '" tabindex="-1"></button>' +
       '<div class="at-card-body argument-body">' +
         '<p class="at-card-text argument-text">' + escapeHtml(body) + '</p>' +
         '<div class="at-card-meta argument-meta">' +
@@ -2195,9 +2190,9 @@
               '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
             '</svg>' +
             '<strong class="importance-count">0</strong>' +
-            '<span class="sr-only"> importance votes</span>' +
+            '<span class="sr-only">' + escapeHtml(wpI18n.msg('conv-arg-importance-votes')) + '</span>' +
           '</span>' +
-          '<span class="at-yours argument-yours">YOURS</span>' +
+          '<span class="at-yours argument-yours">' + escapeHtml(wpI18n.msg('conv-arg-yours')) + '</span>' +
         '</div>' +
       '</div>';
     return div;
@@ -2215,7 +2210,7 @@
     if (!cb) return;
     cb.innerHTML = picked ? PICK_SVG : '';
     cb.setAttribute('aria-pressed', picked ? 'true' : 'false');
-    cb.setAttribute('aria-label', picked ? 'Unmark as most important' : 'Mark as most important');
+    cb.setAttribute('aria-label', picked ? wpI18n.msg('conv-arg-unmark') : wpI18n.msg('conv-arg-mark'));
   }
 
   // ── Contribute wrapper state machine ─────────────────────────────────────────
@@ -2336,8 +2331,8 @@
       var conW2 = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="con"]');
       var ps = proW2 ? proW2.dataset.state : 'idle';
       var cs = conW2 ? conW2.dataset.state : 'idle';
-      var proTick = (ps === 'submitted' || ps === 'skipped') ? 'for ✓' : 'for';
-      var conTick = (cs === 'submitted' || cs === 'skipped') ? 'against ✓' : 'against';
+      var proTick = (ps === 'submitted' || ps === 'skipped') ? wpI18n.msg('conv-arg-for') + ' ✓' : wpI18n.msg('conv-arg-for');
+      var conTick = (cs === 'submitted' || cs === 'skipped') ? wpI18n.msg('conv-arg-against') + ' ✓' : wpI18n.msg('conv-arg-against');
       step1Sub.textContent = proTick + ' · ' + conTick;
     }
 
@@ -2357,7 +2352,7 @@
         var num = step1.querySelector('.at-step-num');
         if (num) num.textContent = '✓';
         var s1sub = document.getElementById('step1-sub-' + fsId);
-        if (s1sub) s1sub.textContent = 'for ✓ · against ✓';
+        if (s1sub) s1sub.textContent = wpI18n.msg('conv-arg-for') + ' ✓ · ' + wpI18n.msg('conv-arg-against') + ' ✓';
       }
       var step2 = document.getElementById('step2-' + fsId);
       if (step2) {
@@ -2366,7 +2361,7 @@
         var num2 = step2.querySelector('.at-step-num');
         if (num2) num2.textContent = '2';
         var s2sub = document.getElementById('step2-sub-' + fsId);
-        if (s2sub) s2sub.textContent = '0/' + kVal + ' for · 0/' + kVal + ' against · can change';
+        if (s2sub) s2sub.textContent = wpI18n.msg('conv-arg-step2-init', kVal, kVal);
       }
 
       // Update panel data-* so getPanelState() sees the new gate
@@ -2407,7 +2402,7 @@
       if (alertEl) {
         alertEl.textContent = '';
         requestAnimationFrame(function () {
-          alertEl.textContent = 'Step 2 unlocked — you can now mark the most important arguments.';
+          alertEl.textContent = wpI18n.msg('conv-arg-step2-unlocked-sr');
         });
       }
     }
@@ -2466,9 +2461,9 @@
           r.json().then(function (data) {
             var kVal = getK(tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="' + side + '"]'));
             var msgs = {
-              cap:  "You've already picked your " + kVal + " most important — unvote one first.",
-              gate: 'Voting is not open yet — add or skip on each side first.',
-              own:  'Could not record your pick — please try again.',
+              cap:  wpI18n.msg('conv-arg-cap', kVal),
+              gate: wpI18n.msg('conv-arg-gate-msg'),
+              own:  wpI18n.msg('conv-arg-own-msg'),
             };
             if (data && msgs[data.reason]) {
               var msg = msgs[data.reason];
