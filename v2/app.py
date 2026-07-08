@@ -3702,6 +3702,8 @@ def accept_post(slug):
         pseudonyms = _generate_pseudonyms(5)
         return render_template('accept.html', conversation=conv,
                                emailable=emailable, pseudonyms=pseudonyms,
+                               reveal_cooldown=_REVEAL_COOLDOWN_DAYS,
+                               reveal_window_end=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS,
                                error='That pseudonym was just taken — please choose another.')
     return redirect(url_for('participant.conversation', slug=slug))
 
