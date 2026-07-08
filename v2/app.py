@@ -1647,7 +1647,11 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
     # a different uid per conversation (no chain) while staying stable across devices in it.
     _sub = _conversation_subject(_xid, conv) if (_xid and conv is not None) else _xid
     _bind_identity = (
-        pa_path == 'api/session' and request.method == 'POST'
+        # Privacy invariant (#246): only ever bind on the conversation-scoped route.
+        # With conv=None (legacy unscoped route) `_sub` is the bare xid, which would
+        # re-link the participant across conversations — never assert that as identity.
+        conv is not None
+        and pa_path == 'api/session' and request.method == 'POST'
         and bool(_sub) and bool(_sub_secret)
     )
 
@@ -1695,6 +1699,11 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
             json=request.get_json(silent=True),
             data=request.form if not request.is_json else None,
             timeout=10,
+            # A proxy must hand 3xx back to the browser, never follow them itself:
+            # `requests` preserves custom headers across cross-host redirects (it only
+            # strips Authorization/Cookie), so following one could replay
+            # X-Particiapi-Sub-Secret to a redirect-chosen host.
+            allow_redirects=False,
         )
     except requests.RequestException:
         current_app.logger.exception('Particiapi proxy error')
@@ -1709,7 +1718,10 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
         return flask_resp
 
     vote_match = re.match(r'^api/conversations/([^/]+)/votes(?:/\d+)?/?$', pa_path)
-    if upstream.ok and request.method in ('POST', 'PUT') and vote_match:
+    # `upstream.ok` (status < 400) also covers 3xx; with allow_redirects=False a
+    # redirect is a reachable terminal response here, so require an actual 2xx
+    # before crediting engagement for a vote that was never confirmed applied.
+    if upstream.status_code < 300 and request.method in ('POST', 'PUT') and vote_match:
         participant = _current_participant()
         if participant:
             conv = Conversation.query.filter_by(polis_id=vote_match.group(1)).first()
@@ -1723,6 +1735,10 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
     flask_resp = make_response(upstream.content, upstream.status_code)
     flask_resp.headers['Content-Type'] = upstream.headers.get(
         'Content-Type', 'application/json')
+    if 'Location' in upstream.headers:
+        # allow_redirects=False means a 3xx reaches here verbatim; forward Location
+        # too or the browser gets a redirect status with nowhere to go (#245 follow-up).
+        flask_resp.headers['Location'] = upstream.headers['Location']
 
     if 'session' in upstream.cookies:
         # Path-scope the session cookie to this conversation's proxy base, so the browser
