@@ -4558,7 +4558,17 @@ def create_app(test_config: dict | None = None) -> Flask:
         or _secret_key
     )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['SQLALCHEMY_ENGINE_OPTIONS']      = {'pool_recycle': 280, 'pool_pre_ping': True}
+    # On MariaDB/MySQL (prod ToolsDB) size the pool so threaded uWSGI workers don't
+    # starve waiting on a connection, and fail fast (pool_timeout) rather than hang
+    # under exhaustion. SQLite (dev/tests) keeps the default pool — pool_size /
+    # max_overflow are for QueuePool and don't apply to its thread-local connections.
+    # Reconcile processes x (pool_size + max_overflow) with ToolsDB max_user_connections.
+    _engine_options = {'pool_recycle': 280, 'pool_pre_ping': True}
+    if not str(app.config.get('SQLALCHEMY_DATABASE_URI', '')).startswith('sqlite'):
+        _engine_options['pool_size']    = int(os.environ.get('TOOLSDB_POOL_SIZE', '10'))
+        _engine_options['max_overflow'] = int(os.environ.get('TOOLSDB_MAX_OVERFLOW', '10'))
+        _engine_options['pool_timeout'] = int(os.environ.get('TOOLSDB_POOL_TIMEOUT', '10'))
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = _engine_options
 
     app.config['SESSION_TYPE']               = 'sqlalchemy'
     app.config['SESSION_SQLALCHEMY']         = db
