@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Invites — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block title %}{{ msg('invites-doc-title') }} — {{ conversation.title }} — wiki-polis{% endblock %}
 {% block header_crumb %}
-<nav class="header-crumb" aria-label="Admin breadcrumb">
+<nav class="header-crumb" aria-label="{{ msg('admin-crumb-aria') }}">
   <span class="header-crumb-sep">/</span>
-  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
+  <a href="{{ url_for('admin.admin') }}">{{ msg('admin-nav-panel') }}</a>
   <span class="header-crumb-sep">/</span>
   <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ conversation.title | truncate(28, True, '…') }}</a>
   <span class="header-crumb-sep">/</span>
-  <span>Invites</span>
+  <span>{{ msg('invites-crumb') }}</span>
 </nav>
 {% endblock %}
 {% block content %}
@@ -15,39 +15,38 @@
 <div class="container">
 
   <h2>
-    Invites — <a href="{{ url_for('participant.conversation', slug=conversation.slug) }}">{{ conversation.title }}</a>
+    {{ msg('invites-heading-prefix') }} <a href="{{ url_for('participant.conversation', slug=conversation.slug) }}">{{ conversation.title }}</a>
   </h2>
   <p class="muted" style="margin-bottom: 1.25rem;">
-    Access policy: <strong>{{ conversation.access_policy }}</strong>
+    {{ msg('invites-access-policy') }} <strong>{{ conversation.access_policy }}</strong>
   </p>
 
   {% if conversation.access_policy != 'invite_only' %}
   <div class="landing-section">
     <p class="muted">
-      This conversation uses <strong>{{ conversation.access_policy }}</strong> access.
-      Invites only take effect when the policy is set to <strong>invite_only</strong>.
+      {{ msg('invites-not-invite-only') }} <strong>{{ conversation.access_policy }}</strong> {{ msg('invites-not-invite-only-b') }} <strong>invite_only</strong>.
     </p>
   </div>
   {% endif %}
 
   <div class="edit-form">
-    <h3>Add invites</h3>
+    <h3>{{ msg('invites-add-heading') }}</h3>
     <form method="post"
           action="{{ url_for('admin.admin_invite_add', conv_id=conversation.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Wikimedia usernames (one per line)
+      <label>{{ msg('invites-label-usernames') }}
         <textarea name="mw_usernames" rows="6"
                   placeholder="Username1&#10;Username2&#10;Username3"></textarea>
       </label>
-      <button type="submit">Add</button>
+      <button type="submit">{{ msg('admin-btn-add') }}</button>
     </form>
   </div>
 
   <table class="admin-table">
     <thead>
       <tr>
-        <th>Username</th>
-        <th>Added</th>
+        <th>{{ msg('admin-th-username') }}</th>
+        <th>{{ msg('invites-th-added') }}</th>
         <th></th>
       </tr>
     </thead>
@@ -61,14 +60,14 @@
                 action="{{ url_for('admin.admin_invite_remove', conv_id=conversation.id, invite_id=inv.id) }}"
                 style="display:inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn-small btn-danger">remove</button>
+            <button type="submit" class="btn-small btn-danger">{{ msg('admin-btn-remove') }}</button>
           </form>
         </td>
       </tr>
       {% endfor %}
       {% if not invites %}
       <tr>
-        <td colspan="3" class="muted">No invites yet.</td>
+        <td colspan="3" class="muted">{{ msg('invites-empty') }}</td>
       </tr>
       {% endif %}
     </tbody>

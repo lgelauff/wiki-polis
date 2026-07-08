@@ -1,31 +1,29 @@
 {% extends "base.html" %}
-{% block title %}Participants — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block title %}{{ msg('participants-doc-title') }} — {{ conversation.title }} — wiki-polis{% endblock %}
 {% block header_crumb %}
-<nav class="header-crumb" aria-label="Admin breadcrumb">
+<nav class="header-crumb" aria-label="{{ msg('admin-crumb-aria') }}">
   <span class="header-crumb-sep">/</span>
-  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
+  <a href="{{ url_for('admin.admin') }}">{{ msg('admin-nav-panel') }}</a>
   <span class="header-crumb-sep">/</span>
   <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ conversation.title | truncate(28, True, '…') }}</a>
   <span class="header-crumb-sep">/</span>
-  <span>Participants</span>
+  <span>{{ msg('participants-crumb') }}</span>
 </nav>
 {% endblock %}
 {% block content %}
 
 <div class="container">
 
-  <h2>Participants — {{ conversation.title }}</h2>
+  <h2>{{ msg('participants-heading-prefix') }} {{ conversation.title }}</h2>
 
   <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
-    Engagement is based on meaningful actions in this conversation: statement votes,
-    statement submissions, argument actions, and informed votes. Page views are not tracked.
+    {{ msg('participants-intro') }}
   </p>
 
   {% if statement_progress_unavailable %}
   <div class="landing-section" style="margin-bottom:1.5rem">
     <p class="muted" style="font-size:13px;margin-bottom:0">
-      Statement vote progress is unavailable because the Polis statistics database could
-      not be read. Argument counts and last engagement are shown from the local database.
+      {{ msg('participants-progress-unavailable') }}
     </p>
   </div>
   {% endif %}
@@ -33,13 +31,13 @@
   <table class="admin-table">
     <thead>
       <tr>
-        <th>Username</th>
-        <th>Statements voted</th>
-        <th>Statements remaining</th>
-        <th>Arguments submitted</th>
-        <th>Arguments voted</th>
-        <th>Last engagement</th>
-        <th>Access</th>
+        <th>{{ msg('admin-th-username') }}</th>
+        <th>{{ msg('participants-th-voted') }}</th>
+        <th>{{ msg('participants-th-remaining') }}</th>
+        <th>{{ msg('participants-th-args-submitted') }}</th>
+        <th>{{ msg('participants-th-args-voted') }}</th>
+        <th>{{ msg('participants-th-last-engagement') }}</th>
+        <th>{{ msg('participants-th-access') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -67,14 +65,14 @@
           {% if row.participation.last_engagement %}
             {{ row.participation.last_engagement.strftime('%Y-%m-%d %H:%M') }}
           {% else %}
-            <span class="muted">No actions yet</span>
+            <span class="muted">{{ msg('participants-no-actions') }}</span>
           {% endif %}
         </td>
         <td style="min-width:210px">
           {% if row.active_ban %}
             <div style="font-size:13px;margin-bottom:.5rem">
-              <strong>Banned</strong>
-              <span class="muted">since {{ row.active_ban.created_at.strftime('%Y-%m-%d') }}</span>
+              <strong>{{ msg('participants-banned') }}</strong>
+              <span class="muted">{{ msg('participants-banned-since') }} {{ row.active_ban.created_at.strftime('%Y-%m-%d') }}</span>
               {% if row.active_ban.summary %}
                 <div class="muted" style="margin-top:.25rem">{{ row.active_ban.summary }}</div>
               {% endif %}
@@ -82,22 +80,22 @@
             <form method="post"
                   action="{{ url_for('admin.admin_participant_unban', conv_id=conversation.id, participant_id=row.participant.id) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="text" name="summary" placeholder="Unban note (optional)" style="width:100%;margin-bottom:.35rem">
-              <button type="submit" class="btn-small btn-approve">unban</button>
+              <input type="text" name="summary" placeholder="{{ msg('participants-unban-note-ph') }}" style="width:100%;margin-bottom:.35rem">
+              <button type="submit" class="btn-small btn-approve">{{ msg('participants-btn-unban') }}</button>
             </form>
           {% else %}
             <form method="post"
                   action="{{ url_for('admin.admin_participant_ban', conv_id=conversation.id, participant_id=row.participant.id) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="text" name="summary" placeholder="Reason (optional)" style="width:100%;margin-bottom:.35rem">
-              <button type="submit" class="btn-small btn-danger">ban</button>
+              <input type="text" name="summary" placeholder="{{ msg('participants-ban-reason-ph') }}" style="width:100%;margin-bottom:.35rem">
+              <button type="submit" class="btn-small btn-danger">{{ msg('participants-btn-ban') }}</button>
             </form>
           {% endif %}
         </td>
       </tr>
       {% else %}
       <tr>
-        <td colspan="7" class="muted">No participants have joined yet.</td>
+        <td colspan="7" class="muted">{{ msg('participants-empty') }}</td>
       </tr>
       {% endfor %}
     </tbody>
