@@ -64,6 +64,24 @@ def test_act_submit_uses_cli_csrf_without_fetch(monkeypatch):
     assert calls[0][3]["headers"]["X-CSRFToken"] == "CLI456"
 
 
+def test_submit_never_exercised_is_a_failure():
+    # #130: submit that only ever 401/404s (accept never established a Participation)
+    # is a false green — check_action_exercised must turn it into a health failure.
+    h = Health()
+    for st in (404, 401, 404):
+        h.records.append(("submit", st, 5.0))
+    h.check_action_exercised("submit", {201, 403, 409})
+    assert h.failures and h.failures[0][0] == "submit"
+
+
+def test_submit_exercised_is_not_a_failure():
+    h = Health()
+    for st in (201, 404):   # at least one route-level result -> exercised
+        h.records.append(("submit", st, 5.0))
+    h.check_action_exercised("submit", {201, 403, 409})
+    assert not h.failures
+
+
 def test_parse_args_accepts_csrf_token():
     args = parse_args(["--dry-run", "--csrf-token", "TOK"])
     assert args.csrf_token == "TOK"
