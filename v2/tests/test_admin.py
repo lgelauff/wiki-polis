@@ -645,6 +645,88 @@ def test_reentry_resyncs_instead_of_reinitialising(admin_client, conv):
     create.assert_not_called()                     # no re-init
     db.session.refresh(conv)
     assert conv.phase_informed_voting is True
+
+
+# ── Auto-resync on featured-set edits during a live Informed vote round ───────
+# An admin adding/removing a featured statement while round 6 is already running
+# should not depend on someone re-clicking "Move on" — the round must reflect the
+# featured set immediately, since participants are voting on it right now.
+
+def _live_phase6_conv(conv):
+    conv.phase_informed_voting = True
+    conv.phase6_polis_conversation_id = 'r6'
+    db.session.commit()
+
+
+def test_featured_confirm_resyncs_a_live_informed_vote_round(admin_client, conv):
+    _live_phase6_conv(conv)
+    round6 = ([], [], [])
+    with patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=99) as add, \
+         patch('app._fetch_statement_text', return_value='New one'):
+        admin_client.post(f'/admin/conversations/{conv.id}/featured/confirm',
+                          data={'tid': '5'})
+    add.assert_called_once()
+    fs = FeaturedStatement.query.filter_by(conversation_id=conv.id, polis_statement_id=5).first()
+    assert fs.phase6_polis_statement_id == 99      # seeded into the live round immediately
+
+
+def test_featured_add_resyncs_a_live_informed_vote_round(admin_client, conv):
+    _live_phase6_conv(conv)
+    round6 = ([], [], [])
+    with patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=98) as add, \
+         patch('app._fetch_statement_text', return_value='Admin-typed one'):
+        admin_client.post(f'/admin/conversations/{conv.id}/featured/add',
+                          data={'tid': '50'})
+    add.assert_called_once()
+    fs = FeaturedStatement.query.filter_by(conversation_id=conv.id, polis_statement_id=50).first()
+    assert fs.phase6_polis_statement_id == 98
+
+
+def test_featured_remove_resyncs_a_live_informed_vote_round(admin_client, conv):
+    _live_phase6_conv(conv)
+    fs = _featured(conv, 'Going away')[0]
+    fs.phase6_polis_statement_id = 7
+    db.session.commit()
+    round6 = ([], [{'tid': 7, 'txt': 'Going away'}], [])
+    with patch('app.PolisServerClient.get_statements', return_value=round6), \
+         patch('app.PolisServerClient.moderate') as mod, \
+         patch('app.PolisServerClient.add_seed_return_id'):
+        admin_client.post(f'/admin/conversations/{conv.id}/featured/{fs.id}/remove')
+    mod.assert_called_once_with('r6', 7, -1)       # hidden in the live round, not just deleted locally
+    assert FeaturedStatement.query.filter_by(id=fs.id).first() is None
+
+
+def test_featured_confirm_skips_resync_before_phase6_init(admin_client, conv):
+    """Confirming a featured statement before round 6 exists must not touch Polis —
+    _sync_phase6_featured assumes an already-initialised round."""
+    with patch('app._fetch_statement_text', return_value='Pre-init statement'), \
+         patch('app.PolisServerClient.get_statements') as get_stmts, \
+         patch('app.PolisServerClient.add_seed_return_id') as add:
+        admin_client.post(f'/admin/conversations/{conv.id}/featured/confirm',
+                          data={'tid': '1'})
+    get_stmts.assert_not_called()
+    add.assert_not_called()
+    fs = FeaturedStatement.query.filter_by(conversation_id=conv.id, polis_statement_id=1).first()
+    assert fs is not None and fs.confirmed_by_admin is True
+
+
+def test_featured_add_resync_failure_rolls_back_the_add(admin_client, conv):
+    """If the live-round resync fails, the featured statement itself must not be
+    persisted either — otherwise the admin sees it 'confirmed' but never voteable."""
+    _live_phase6_conv(conv)
+    with patch('app.PolisServerClient.get_statements', return_value=None), \
+         patch('app.PolisServerClient.add_seed_return_id') as add, \
+         patch('app._fetch_statement_text', return_value='Will fail'):
+        admin_client.application.config['POLIS_DATABASE_URL'] = 'postgresql://x/y'
+        admin_client.post(f'/admin/conversations/{conv.id}/featured/add',
+                          data={'tid': '51'})
+    add.assert_not_called()
+    assert FeaturedStatement.query.filter_by(
+        conversation_id=conv.id, polis_statement_id=51).first() is None
     assert conv.phase6_polis_conversation_id == 'r6'   # unchanged
 
 

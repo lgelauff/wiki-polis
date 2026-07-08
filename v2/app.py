@@ -3170,6 +3170,21 @@ def _norm(text) -> str:
     return (text or '').strip().casefold()
 
 
+def _resync_phase6_if_live(conv) -> bool:
+    """Keep an already-running Informed Vote round in sync with the featured set:
+    call after staging (not committing) a confirm/add/remove of a FeaturedStatement.
+    On failure this rolls back the staged change and flashes the error, so a broken
+    Polis sync never leaves a featured-set edit half-applied. Returns whether the
+    caller should proceed to commit."""
+    if not (conv.phase_informed_voting and conv.phase6_polis_conversation_id):
+        return True
+    ok, msg = _sync_phase6_featured(conv)
+    if not ok:
+        db.session.rollback()
+        flash(msg, 'error')
+    return ok
+
+
 def _sync_phase6_featured(conv) -> tuple[bool, str]:
     """Reconcile an ALREADY-initialised Phase 6 round with the CURRENT confirmed
     featured set, preserving votes (#175). Statements are matched by text:
@@ -3583,6 +3598,8 @@ def admin_featured_confirm(conv_id):
             suggested_by_system=request.form.get('system_suggested') == '1',
             confirmed_by_admin=True,
         ))
+        if not _resync_phase6_if_live(conv):
+            return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
         db.session.commit()
         record_audit('featured.confirm', conv_id=conv_id, target_type='statement', target_id=tid)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
@@ -3603,6 +3620,8 @@ def admin_featured_add(conv_id):
             suggested_by_system=False,
             confirmed_by_admin=True,
         ))
+        if not _resync_phase6_if_live(conv):
+            return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
         db.session.commit()
         record_audit('featured.add', conv_id=conv_id, target_type='statement', target_id=tid)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
@@ -3619,6 +3638,8 @@ def admin_featured_remove(conv_id, fs_id):
             flash('Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first.', 'error')
             return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
     db.session.delete(fs)
+    if not _resync_phase6_if_live(conv):
+        return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
     db.session.commit()
     record_audit('featured.remove', conv_id=conv_id, target_type='featured', target_id=fs_id)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
