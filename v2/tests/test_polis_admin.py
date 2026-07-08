@@ -44,7 +44,7 @@ def test_get_statements_returns_all_as_approved():
     """Particiapi returns a dict; all statements normalised into approved."""
     client = PolisParticipantClient('http://localhost:8000')
     data = {'0': {'text': 'first stmt'}, '1': {'text': 'second stmt'}}
-    with patch('polis_admin.requests.request', return_value=_mock_ok(data)) as mock_req:
+    with patch('polis_admin._http.request', return_value=_mock_ok(data)) as mock_req:
         pending, approved, hid = client.get_statements('abc123')
 
     assert pending == [] and hid == []
@@ -57,21 +57,21 @@ def test_get_statements_returns_all_as_approved():
 
 def test_get_statements_non_dict_returns_empty():
     client = PolisParticipantClient('http://localhost:8000')
-    with patch('polis_admin.requests.request', return_value=_mock_ok([])):
+    with patch('polis_admin._http.request', return_value=_mock_ok([])):
         pending, approved, hid = client.get_statements('abc123')
     assert pending == approved == hid == []
 
 
 def test_get_statements_http_error_raises():
     client = PolisParticipantClient('http://localhost:8000')
-    with patch('polis_admin.requests.request', return_value=_mock_err(503)):
+    with patch('polis_admin._http.request', return_value=_mock_err(503)):
         with pytest.raises(PolisParticipantError, match='503'):
             client.get_statements('abc123')
 
 
 def test_get_statements_network_error_raises():
     client = PolisParticipantClient('http://localhost:8000')
-    with patch('polis_admin.requests.request',
+    with patch('polis_admin._http.request',
                side_effect=_requests.RequestException('timeout')):
         with pytest.raises(PolisParticipantError, match='timeout'):
             client.get_statements('abc123')
@@ -79,7 +79,7 @@ def test_get_statements_network_error_raises():
 
 def test_get_results_returns_none_on_error():
     client = PolisParticipantClient('http://localhost:8000')
-    with patch('polis_admin.requests.request', return_value=_mock_err(404)):
+    with patch('polis_admin._http.request', return_value=_mock_err(404)):
         assert client.get_results('abc123') is None
 
 

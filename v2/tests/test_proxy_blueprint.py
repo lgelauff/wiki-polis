@@ -75,7 +75,7 @@ def test_blueprint_routes_are_csrf_exempt(csrf_client, path):
 
 def test_proxy_renames_upstream_session_to_pa_session(auth_client):
     up = _fake_upstream(cookies={'session': 'UPSTREAM123'})
-    with patch('app.requests.request', return_value=up):
+    with patch('app.polis_http.request', return_value=up):
         resp = auth_client.get('/proxy/particiapi/api/conversations/abc/')
     set_cookies = resp.headers.getlist('Set-Cookie')
     # Particiapi's 'session' is re-emitted to the browser as 'pa_session', never raw.
@@ -86,7 +86,7 @@ def test_proxy_renames_upstream_session_to_pa_session(auth_client):
 def test_proxy_forwards_pa_session_as_session(auth_client):
     auth_client.set_cookie('pa_session', 'BROWSER456')
     up = _fake_upstream()
-    with patch('app.requests.request', return_value=up) as req:
+    with patch('app.polis_http.request', return_value=up) as req:
         auth_client.get('/proxy/particiapi/api/conversations/abc/')
     # The browser's 'pa_session' is forwarded upstream as Particiapi's 'session'.
     assert req.call_args.kwargs['cookies'] == {'session': 'BROWSER456'}
@@ -96,7 +96,7 @@ def test_proxy_forwards_pa_session_as_session(auth_client):
 
 def test_proxy_rewrites_results_403_to_200(auth_client):
     up = _fake_upstream(status_code=403, content=b'forbidden')
-    with patch('app.requests.request', return_value=up):
+    with patch('app.polis_http.request', return_value=up):
         resp = auth_client.get(
             '/proxy/particiapi/api/conversations/abc/math/results/')
     # Pre-math /results/ 403 would blank the UI; rewrite to an empty 200 instead.
@@ -106,7 +106,7 @@ def test_proxy_rewrites_results_403_to_200(auth_client):
 
 def test_proxy_passes_through_non_results_403(auth_client):
     up = _fake_upstream(status_code=403, content=b'nope')
-    with patch('app.requests.request', return_value=up):
+    with patch('app.polis_http.request', return_value=up):
         resp = auth_client.get('/proxy/particiapi/api/conversations/abc/')
     assert resp.status_code == 403  # the rewrite is scoped to /results/ only
 
@@ -126,7 +126,7 @@ def test_proxy_post_blocks_missing_provenance_headers(auth_client):
 
 def test_proxy_post_allows_same_origin(auth_client):
     up = _fake_upstream()
-    with patch('app.requests.request', return_value=up):
+    with patch('app.polis_http.request', return_value=up):
         resp = auth_client.post('/proxy/particiapi/api/foo',
                                 headers={'Sec-Fetch-Site': 'same-origin'}, json={})
     assert resp.status_code == 200
@@ -136,7 +136,7 @@ def test_proxy_post_allows_same_origin(auth_client):
 
 def test_proxy_rejects_path_traversal_and_non_api(auth_client):
     # CRIT-1 guard: only /api/ paths, no '..' segments — must never reach upstream.
-    with patch('app.requests.request') as req:
+    with patch('app.polis_http.request') as req:
         assert auth_client.get('/proxy/particiapi/api/../secret').status_code == 404
         assert auth_client.get('/proxy/particiapi/etc/passwd').status_code == 404
     req.assert_not_called()
@@ -145,7 +145,7 @@ def test_proxy_rejects_path_traversal_and_non_api(auth_client):
 def test_proxy_strips_unknown_query_params(auth_client):
     # HIGH-5 allowlist: only known-safe params are forwarded to Particiapi.
     up = _fake_upstream()
-    with patch('app.requests.request', return_value=up) as req:
+    with patch('app.polis_http.request', return_value=up) as req:
         auth_client.get('/proxy/particiapi/api/conversations/abc/'
                         '?zinvite=ok&evil=DROP&tid=3')
     assert req.call_args.kwargs['params'] == {'zinvite': 'ok', 'tid': '3'}
@@ -159,7 +159,7 @@ def test_demo_proxy_allows_bound_vote_endpoint(client):
     client.get('/c/demo-proxy')
 
     up = _fake_upstream()
-    with patch('app.requests.request', return_value=up) as req:
+    with patch('app.polis_http.request', return_value=up) as req:
         resp = client.put('/proxy/particiapi/api/conversations/demoproxy1/votes/7',
                           headers={'Sec-Fetch-Site': 'same-origin'},
                           json={'value': 1})
@@ -175,7 +175,7 @@ def test_demo_proxy_blocks_statement_write_endpoint(client):
     db.session.commit()
     client.get('/c/demo-proxy2')
 
-    with patch('app.requests.request') as req:
+    with patch('app.polis_http.request') as req:
         resp = client.post('/proxy/particiapi/api/conversations/demoproxy2/statements/',
                            headers={'Sec-Fetch-Site': 'same-origin'},
                            json={'text': 'blocked'})
@@ -194,7 +194,7 @@ def test_statement_new_enforces_quota(auth_client, participant):
                                  conversation_id=conv.id, pseudonym='p',
                                  new_stmt_ids=[101]))  # already at the cap of 1
     db.session.commit()
-    with patch('app.requests.post') as post:
+    with patch('app.polis_http.post') as post:
         resp = auth_client.post('/c/q/statements/new',
                                 headers={'Sec-Fetch-Site': 'same-origin'},
                                 json={'text': 'one too many'})
@@ -231,7 +231,7 @@ def test_statement_new_happy_path_records_polis_id(auth_client, participant):
     stmt_resp = _fake_upstream(status_code=201, content=b'{"id":555}')
     stmt_resp.json = lambda: {'id': 555}
 
-    with patch('app.requests.post', side_effect=[sess_resp, stmt_resp]):
+    with patch('app.polis_http.post', side_effect=[sess_resp, stmt_resp]):
         resp = auth_client.post('/c/sub/statements/new',
                                 headers={'Sec-Fetch-Site': 'same-origin'},
                                 json={'text': 'A genuinely new idea'})
@@ -258,7 +258,7 @@ def test_statement_new_requires_csrf_when_csrf_enabled(csrf_enabled_app):
         sess['username'] = p.mw_username
         sess['xid'] = p.xid
 
-    with patch('app.requests.post') as post:
+    with patch('app.polis_http.post') as post:
         resp = client.post('/c/csrf-sub/statements/new',
                            headers={'Sec-Fetch-Site': 'same-origin'},
                            json={'text': 'Needs a token'})
@@ -294,7 +294,7 @@ def test_statement_new_accepts_valid_csrf_when_csrf_enabled(csrf_enabled_app):
     stmt_resp = _fake_upstream(status_code=201, content=b'{"id":556}')
     stmt_resp.json = lambda: {'id': 556}
 
-    with patch('app.requests.post', side_effect=[sess_resp, stmt_resp]):
+    with patch('app.polis_http.post', side_effect=[sess_resp, stmt_resp]):
         resp = client.post('/c/csrf-ok/statements/new',
                            headers={
                                'Sec-Fetch-Site': 'same-origin',
@@ -333,7 +333,7 @@ def test_statement_new_allows_missing_provenance_after_valid_manual_csrf(csrf_en
     stmt_resp = _fake_upstream(status_code=201, content=b'{"id":557}')
     stmt_resp.json = lambda: {'id': 557}
 
-    with patch('app.requests.post', side_effect=[sess_resp, stmt_resp]):
+    with patch('app.polis_http.post', side_effect=[sess_resp, stmt_resp]):
         resp = client.post('/c/csrf-only/statements/new',
                            headers={'X-CSRFToken': csrf_token},
                            json={'text': 'A CSRF-backed browser submit'})

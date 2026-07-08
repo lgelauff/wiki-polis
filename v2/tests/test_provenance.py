@@ -196,7 +196,7 @@ def test_participant_derivative_submission_records_provenance(client, app):
     stmt_resp.json = lambda: {'id': 777}
 
     with patch('app._statement_text_map', return_value={12: 'parent statement'}), \
-         patch('app.requests.post', side_effect=[sess_resp, stmt_resp]):
+         patch('app.polis_http.post', side_effect=[sess_resp, stmt_resp]):
         resp = client.post('/c/subderiv/statements/new',
                            headers={'Sec-Fetch-Site': 'same-origin'},
                            json={'text': 'parent statement improved',

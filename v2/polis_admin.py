@@ -19,6 +19,8 @@ import re
 
 import requests
 
+from http_pool import session as _http
+
 logger = logging.getLogger(__name__)
 
 _SAFE_ZINVITE = re.compile(r'^[A-Za-z0-9]{6,20}$')
@@ -215,7 +217,7 @@ class PolisParticipantClient:
     def _req(self, method: str, path: str, **kwargs):
         url = f"{self._base}/{path.lstrip('/')}"
         try:
-            resp = requests.request(method, url, timeout=10, **kwargs)
+            resp = _http.request(method, url, timeout=10, **kwargs)
         except requests.RequestException as exc:
             raise PolisParticipantError(str(exc)) from exc
         if not resp.ok:
@@ -283,8 +285,12 @@ class PolisServerClient:
         That domain never matches our internal VPS hostname, so requests won't send the
         cookie automatically.  We extract the raw token from the response and return it
         as an explicit Cookie header for callers to merge into their requests.
+
+        Uses the shared connection-pooled session (http_pool). Safe because the auth
+        token is returned as an explicit header, never relied on via session cookies,
+        and no session state is mutated here.
         """
-        sess = requests.Session()
+        sess = _http
         try:
             resp = sess.post(
                 f'{self._base}/api/v3/auth/login',

@@ -40,6 +40,7 @@ from db import (ACCESS_POLICIES, ADMIN_ROLES, FLAG_CATEGORIES, AdminRole, Argume
                 Participation, StatementProvenance, StatementSimilarityScore, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
+from http_pool import session as polis_http
 from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
                       RowError, strip_formula_prefixes)
 from logging_setup import configure_logging
@@ -1686,7 +1687,7 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
         headers['X-Particiapi-Sub-Secret'] = _sub_secret
 
     try:
-        upstream = requests.request(
+        upstream = polis_http.request(
             method=request.method,
             url=url,
             params=params,
@@ -2009,7 +2010,7 @@ def conversation_statement_new(slug):
     base = current_app.config['PARTICIAPI_BASE']
 
     try:
-        sess_resp = requests.post(
+        sess_resp = polis_http.post(
             f'{base}/api/session',
             cookies=forwarded,
             params={'create': 'true'},
@@ -2022,7 +2023,7 @@ def conversation_statement_new(slug):
         new_pa_cookie = sess_resp.cookies.get('session')
         submit_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
 
-        stmt_resp = requests.post(
+        stmt_resp = polis_http.post(
             f'{base}/api/conversations/{conv.polis_id}/statements/',
             json={'text': text},
             cookies=submit_cookies,
@@ -4294,7 +4295,7 @@ def phase6_vote(slug):
     forwarded = {'session': pa_cookie} if pa_cookie else {}
     new_pa_cookie = None
     try:
-        sess_resp = requests.post(
+        sess_resp = polis_http.post(
             f'{base}/api/session',
             cookies=forwarded,
             params={'create': 'true'},
@@ -4314,7 +4315,7 @@ def phase6_vote(slug):
 
     # Particiapi vote endpoint: PUT /api/conversations/{id}/votes/{tid} with {value: N}.
     try:
-        upstream = requests.put(
+        upstream = polis_http.put(
             f'{base}/api/conversations/{polis_conv_id}/votes/{tid}',
             json={'value': vote},
             cookies=vote_cookies,
