@@ -4362,50 +4362,65 @@ def phase6_vote(slug):
     polis_conv_id = conv.phase6_polis_conversation_id
     tid           = fs.phase6_polis_statement_id
 
-    # Ensure a stable Polis session and CSRF token before voting.
-    # Mirrors the exact pattern used in conversation_statement_new.
-    pa_cookie = request.cookies.get('pa_session')
     base = current_app.config['PARTICIAPI_BASE']
-    forwarded = {'session': pa_cookie} if pa_cookie else {}
-    new_pa_cookie = None
-    try:
-        sess_resp = polis_http.post(
-            f'{base}/api/session',
-            cookies=forwarded,
-            params={'create': 'true'},
-            timeout=5,
-        )
-        if not sess_resp.ok:
-            current_app.logger.error('Particiapi session error in phase6_vote: %s',
-                                     sess_resp.status_code)
+
+    # Manage the Phase 6 Particiapi session entirely server-side, in the Flask
+    # session, and reuse its CSRF token across votes — instead of bootstrapping a
+    # fresh session (two upstream calls) on every vote. Kept out of the browser's
+    # `pa_session` cookie so it never collides with the Phase 2 web component's
+    # session. We re-bootstrap only when it is missing or a vote is rejected as a
+    # session/CSRF failure (stale token).
+    def _bootstrap():
+        """(Re)establish the Phase 6 Particiapi session + CSRF token, storing both in
+        the Flask session. Returns (pa, csrf_token); aborts 502 on failure."""
+        prior = session.get('_p6_pa')
+        try:
+            r = polis_http.post(
+                f'{base}/api/session',
+                cookies={'session': prior} if prior else {},
+                params={'create': 'true'},
+                timeout=5,
+            )
+        except requests.RequestException:
+            current_app.logger.exception('Particiapi session bootstrap failed in phase6_vote')
             abort(502)
-        csrf_token    = sess_resp.json().get('csrf_token', '')
-        new_pa_cookie = sess_resp.cookies.get('session')
-    except requests.RequestException:
-        current_app.logger.exception('Particiapi session bootstrap failed in phase6_vote')
-        abort(502)
+        if not r.ok:
+            current_app.logger.error('Particiapi session error in phase6_vote: %s', r.status_code)
+            abort(502)
+        session['_p6_pa']   = r.cookies.get('session') or prior
+        session['_p6_csrf'] = r.json().get('csrf_token', '')
+        return session['_p6_pa'], session['_p6_csrf']
 
-    vote_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
+    pa = session.get('_p6_pa')
+    csrf_token = session.get('_p6_csrf')
+    bootstrapped = False
+    if not (pa and csrf_token):
+        pa, csrf_token = _bootstrap()
+        bootstrapped = True
 
-    # Particiapi vote endpoint: PUT /api/conversations/{id}/votes/{tid} with {value: N}.
-    try:
-        upstream = polis_http.put(
-            f'{base}/api/conversations/{polis_conv_id}/votes/{tid}',
-            json={'value': vote},
-            cookies=vote_cookies,
-            headers={'X-CSRF-Token': csrf_token},
-            timeout=10,
-        )
-    except requests.RequestException:
-        current_app.logger.exception('Particiapi error in phase6_vote')
-        abort(502)
+    def _put(cookie_val, token):
+        try:
+            return polis_http.put(
+                f'{base}/api/conversations/{polis_conv_id}/votes/{tid}',
+                json={'value': vote},
+                cookies={'session': cookie_val} if cookie_val else {},
+                headers={'X-CSRF-Token': token},
+                timeout=10,
+            )
+        except requests.RequestException:
+            current_app.logger.exception('Particiapi error in phase6_vote')
+            abort(502)
+
+    upstream = _put(pa, csrf_token)
+    # A reused token can be stale (the session expired). If a vote we did NOT just
+    # bootstrap for is rejected, refresh the session once and retry.
+    if upstream.status_code in (401, 403) and not bootstrapped:
+        pa, csrf_token = _bootstrap()
+        upstream = _put(pa, csrf_token)
 
     resp = make_response('', upstream.status_code)
     if upstream.ok:
         _touch_last_engagement(participation, commit=True)
-    if new_pa_cookie:
-        resp.set_cookie('pa_session', new_pa_cookie, httponly=True,
-                        samesite='Lax', secure=not current_app.debug)
     return resp
 
 
