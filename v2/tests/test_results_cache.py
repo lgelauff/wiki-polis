@@ -31,6 +31,25 @@ def test_phase6_agg_cache_memoises_expires_and_invalidates(monkeypatch):
     assert calls['n'] == 3
 
 
+def test_phase6_agg_cache_skips_uncacheable_value(monkeypatch):
+    # FIX-3: a degraded fetch (pg_available False) must NOT be memoised for the TTL.
+    monkeypatch.setattr(app, '_PHASE6_AGG_TTL', 100.0)
+    clock = {'now': 1000.0}
+    monkeypatch.setattr(app.time, 'monotonic', lambda: clock['now'])
+    app._invalidate_phase6_results_cache()
+    calls = {'n': 0}
+
+    def producer():
+        calls['n'] += 1
+        return {'pg_available': False}
+
+    key = ('z6', 'z2', (), (), ())
+    ok = lambda v: v['pg_available']  # noqa: E731
+    app._phase6_agg_cached(key, producer, cacheable=ok)
+    app._phase6_agg_cached(key, producer, cacheable=ok)
+    assert calls['n'] == 2   # recomputed each time — the degraded value was not cached
+
+
 def test_phase6_agg_cache_disabled_when_ttl_zero(monkeypatch):
     calls = {'n': 0}
 

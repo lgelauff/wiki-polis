@@ -180,12 +180,16 @@ _phase6_agg_cache: dict = {}
 _phase6_agg_lock = threading.Lock()
 
 
-def _phase6_agg_cached(key, producer):
+def _phase6_agg_cached(key, producer, cacheable=None):
     """Return producer()'s value, memoised per key for _PHASE6_AGG_TTL seconds.
 
     TTL <= 0 disables caching. The producer runs outside the lock, so a burst may
     recompute a few times before the entry is warm — acceptable, and it keeps one
     slow fetch from blocking every other viewer.
+
+    `cacheable`, if given, is called with the produced value; the value is cached
+    only when it returns truthy. Used to avoid memoising a transient/degraded fetch
+    (e.g. a momentary Postgres failure) for the full TTL.
     """
     ttl = _PHASE6_AGG_TTL
     if ttl <= 0:
@@ -196,8 +200,9 @@ def _phase6_agg_cached(key, producer):
         if hit is not None and hit[0] > now:
             return hit[1]
     value = producer()
-    with _phase6_agg_lock:
-        _phase6_agg_cache[key] = (now + ttl, value)
+    if cacheable is None or cacheable(value):
+        with _phase6_agg_lock:
+            _phase6_agg_cache[key] = (now + ttl, value)
     return value
 
 
@@ -315,6 +320,8 @@ def _build_phase6_results(
         (p6_zinvite, p2_zinvite, tuple(sorted(allowed_p6_tids)),
          tuple(sorted(p2_tids)), tuple(sorted(excluded_pids))),
         _fetch_phase6_aggregate,
+        # Don't memoise a degraded fetch (transient Postgres failure) for the full TTL.
+        cacheable=lambda v: v['pg_available'],
     )
     p6_counts             = _agg['p6_counts']
     p6_total_participants = _agg['p6_total']
@@ -2083,9 +2090,15 @@ def conversation_statement_new(slug):
     # lock — only serialises one participant's own concurrent submits, not the
     # conversation.) The submit stays inside the lock so a quota-rejected request never
     # creates an orphaned Polis statement.
+    #
+    # populate_existing() is REQUIRED: the optimistic read above already loaded this row
+    # into the session identity map, so without it the locking SELECT returns the stale
+    # cached instance (SQLAlchemy does not refresh an already-loaded object on
+    # with_for_update) and the recheck below would run on pre-lock data — defeating the
+    # lock entirely.
     part = Participation.query.filter_by(
         participant_id=participant.id, conversation_id=conv.id,
-    ).with_for_update().first_or_404()
+    ).populate_existing().with_for_update().first_or_404()
     if len(part.new_stmt_ids or []) >= new_stmt_max:
         return jsonify({'error': 'quota_exceeded'}), 403
 
@@ -2862,6 +2875,7 @@ def admin_conversation_close(conv_id):
             return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     filt = _publish_final_report(conv)
     db.session.commit()
+    _invalidate_phase6_results_cache(conv)  # report view must reflect the close immediately
     record_audit('conversation.close', conv_id=conv.id,
                  excluded_tids=len(filt.excluded_tids),
                  excluded_pids=len(filt.excluded_pids))
@@ -3006,6 +3020,8 @@ def admin_conversation_phases(conv_id):
     if not _sync_vis_type(conv):
         flash('Phases saved, but updating results visibility in Polis failed — '
               'results may not appear until you save phases again.', 'error')
+    # A vis_type change alters what /results/ returns — drop any cached aggregate.
+    _invalidate_phase6_results_cache(conv)
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 
