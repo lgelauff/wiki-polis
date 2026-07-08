@@ -43,5 +43,22 @@ concern.
 
 New locales arrive as `i18n/<code>.json` from TWN. Enable them for users by adding the code to
 `ENABLED_LOCALES` (see `.env.example`). Until enabled, a locale is present in the repo but not
-offered. (Note: server-side `{{PLURAL:}}` currently uses the English rule; full CLDR plural
-rules for non-English locales are a tracked follow-up before enabling them.)
+offered.
+
+### Before enabling a non-English locale — two tracked follow-ups
+
+1. **CLDR plural rules.** Server-side `{{PLURAL:}}` (and the client mirror in `static/i18n.js`)
+   currently use the English rule (`n == 1` → singular, else plural). Languages with more than
+   two plural forms (Arabic, Polish, Russian, …) need their CLDR rule wired into
+   `i18n._plural_index` before their counts read correctly.
+2. **RTL CSS audit.** `<html dir>` is already driven by `i18n.text_direction(locale)`, so RTL
+   locales render right-to-left today — but `static/style.css` / `static/redesign.css` still use
+   a handful of *physical* properties (`margin-left`, `text-align:left`, `left:`) that should be
+   *logical* (`margin-inline-start`, `text-align:start`, `inset-inline-start`). Convert those and
+   verify against a pseudo-RTL locale before offering an RTL language.
+
+## Coverage guard (CI)
+
+`tests/test_i18n.py` fails CI if a message in `en.json` has no `qqq.json` doc, if `qqq.json`
+documents a key not in `en.json`, or if a `{{PLURAL:}}`/placeholder is malformed. Add both the
+`en.json` value **and** the `qqq.json` line in the same change and the guard stays green.
