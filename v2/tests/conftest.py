@@ -24,6 +24,18 @@ def _reset_polis_pg_pools():
     polis_admin._reset_pg_pools()
 
 
+@pytest.fixture(autouse=True)
+def _disable_phase6_results_cache():
+    """Disable the in-process Phase 6 results cache in tests so mocked client
+    return values are always seen fresh (no cross-test or within-test staleness)."""
+    import app as _app
+    saved = _app._PHASE6_AGG_TTL
+    _app._PHASE6_AGG_TTL = 0.0
+    yield
+    _app._PHASE6_AGG_TTL = saved
+    _app._invalidate_phase6_results_cache()
+
+
 @pytest.fixture
 def app(tmp_path):
     """Fresh Flask app with isolated SQLite DB and filesystem sessions per test.

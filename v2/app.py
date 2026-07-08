@@ -12,6 +12,7 @@ import os
 import random
 import re
 import secrets
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse, urljoin
@@ -167,6 +168,56 @@ def _pct(n: int, total: int) -> float:
     return round(n / total * 100, 1) if total else 0.0
 
 
+# ── Phase 6 results aggregate cache ───────────────────────────────────────────
+# The results / report surfaces recompute ~5 Postgres + Particiapi round trips per
+# view, and the aggregate is identical for every viewer. Memoise the fetched
+# aggregate (NOT the assembled result — the per-participant overlay stays
+# per-request) for a short TTL so a Results-tab spike collapses to ~one fetch per
+# TTL per conversation. In-process only (no Redis); a few duplicate fetches per pod
+# per TTL are fine. Set PHASE6_RESULTS_CACHE_TTL=0 to disable (tests do this).
+_PHASE6_AGG_TTL = float(os.environ.get('PHASE6_RESULTS_CACHE_TTL', '30'))
+_phase6_agg_cache: dict = {}
+_phase6_agg_lock = threading.Lock()
+
+
+def _phase6_agg_cached(key, producer):
+    """Return producer()'s value, memoised per key for _PHASE6_AGG_TTL seconds.
+
+    TTL <= 0 disables caching. The producer runs outside the lock, so a burst may
+    recompute a few times before the entry is warm — acceptable, and it keeps one
+    slow fetch from blocking every other viewer.
+    """
+    ttl = _PHASE6_AGG_TTL
+    if ttl <= 0:
+        return producer()
+    now = time.monotonic()
+    with _phase6_agg_lock:
+        hit = _phase6_agg_cache.get(key)
+        if hit is not None and hit[0] > now:
+            return hit[1]
+    value = producer()
+    with _phase6_agg_lock:
+        _phase6_agg_cache[key] = (now + ttl, value)
+    return value
+
+
+def _invalidate_phase6_results_cache(conv=None) -> None:
+    """Drop cached Phase 6 aggregates — all, or just one conversation's.
+
+    Called on transitions that change what results should show (phase toggles,
+    close). The short TTL bounds staleness even without an explicit call; keys are
+    (p6_zinvite, ...), so a per-conversation drop matches on the first element.
+    """
+    with _phase6_agg_lock:
+        if conv is None:
+            _phase6_agg_cache.clear()
+            return
+        z = conv.phase6_polis_conversation_id
+        if z:
+            for k in [k for k in _phase6_agg_cache if k and k[0] == z]:
+                _phase6_agg_cache.pop(k, None)
+
+
 def _build_phase6_results(
     conv,
     participation,
@@ -234,21 +285,45 @@ def _build_phase6_results(
 
     client = _polis_server_client()
 
-    # ── Primary source: Postgres ──────────────────────────────────────────────
-    p6_counts = client.get_phase6_vote_counts(p6_zinvite, allowed_p6_tids, excluded_pids)
-    p6_total_participants = client.get_phase6_participant_count(p6_zinvite, excluded_pids)
-    pg_available = p6_counts is not None
-
     # Phase 2 counts keyed by polis_statement_id (Phase 2 tid).
     p2_tids = [fs.polis_statement_id for fs in confirmed if fs.polis_statement_id]
-    p2_counts_raw = None
-    p2_total_participants = None
-    if p2_tids and pg_available:
-        # Reuse get_phase6_vote_counts against the Phase 2 zinvite — same SQL works.
-        p2_counts_raw = client.get_phase6_vote_counts(p2_zinvite, p2_tids, excluded_pids)
-        p2_total_participants = client.get_phase6_participant_count(p2_zinvite, excluded_pids)
 
-    # ── Personal votes (only when participation is present) ───────────────────
+    # ── Aggregate fetches (cached) ────────────────────────────────────────────
+    # ~5 Postgres/Particiapi round trips, identical for every viewer. Memoise them
+    # for a short TTL (see _phase6_agg_cached). The per-participant overlay below
+    # stays per-request, outside the cache.
+    def _fetch_phase6_aggregate():
+        p6c = client.get_phase6_vote_counts(p6_zinvite, allowed_p6_tids, excluded_pids)
+        p6t = client.get_phase6_participant_count(p6_zinvite, excluded_pids)
+        pg_ok = p6c is not None
+        p2c = p2t = None
+        if p2_tids and pg_ok:
+            # Reuse get_phase6_vote_counts against the Phase 2 zinvite — same SQL works.
+            p2c = client.get_phase6_vote_counts(p2_zinvite, p2_tids, excluded_pids)
+            p2t = client.get_phase6_participant_count(p2_zinvite, excluded_pids)
+        pa = None
+        try:
+            pa = PolisParticipantClient(
+                current_app.config['PARTICIAPI_BASE']).get_results(p6_zinvite)
+        except Exception:
+            current_app.logger.exception(
+                'Particiapi get_results failed for Phase 6 zinvite %s', p6_zinvite)
+        return {'p6_counts': p6c, 'p6_total': p6t, 'pg_available': pg_ok,
+                'p2_counts_raw': p2c, 'p2_total': p2t, 'pa_results': pa}
+
+    _agg = _phase6_agg_cached(
+        (p6_zinvite, p2_zinvite, tuple(sorted(allowed_p6_tids)),
+         tuple(sorted(p2_tids)), tuple(sorted(excluded_pids))),
+        _fetch_phase6_aggregate,
+    )
+    p6_counts             = _agg['p6_counts']
+    p6_total_participants = _agg['p6_total']
+    pg_available          = _agg['pg_available']
+    p2_counts_raw         = _agg['p2_counts_raw']
+    p2_total_participants = _agg['p2_total']
+    pa_results            = _agg['pa_results']
+
+    # ── Personal votes (per-request; only when participation is present) ───────
     my_p2_votes: dict[int, int] = {}
     my_p6_votes: dict[int, int] = {}
     if participation and pg_available:
@@ -258,15 +333,6 @@ def _build_phase6_results(
         # For now this is left as empty dicts (personal votes show as None).
         # TODO: store or derive Polis pid to enable per-participant vote display.
         pass
-
-    # ── Comparison source: Particiapi ─────────────────────────────────────────
-    pa_results = None
-    try:
-        pa_results = PolisParticipantClient(
-            current_app.config['PARTICIAPI_BASE']
-        ).get_results(p6_zinvite)
-    except Exception:
-        current_app.logger.exception('Particiapi get_results failed for Phase 6 zinvite %s', p6_zinvite)
 
     clusters = None
     source_divergence = None
