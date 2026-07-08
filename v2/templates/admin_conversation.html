@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Manage {{ conversation.title }} — wiki-polis{% endblock %}
+{% block title %}{{ msg('adminconv-doc-title') }} {{ conversation.title }} — wiki-polis{% endblock %}
 {% block header_crumb %}
-<nav class="header-crumb" aria-label="Admin breadcrumb">
+<nav class="header-crumb" aria-label="{{ msg('admin-crumb-aria') }}">
   <span class="header-crumb-sep">/</span>
-  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
+  <a href="{{ url_for('admin.admin') }}">{{ msg('admin-nav-panel') }}</a>
   <span class="header-crumb-sep">/</span>
   <span>{{ conversation.title | truncate(34, True, '…') }}</span>
 </nav>
@@ -17,14 +17,14 @@
 <div class="role-bar">
   <div class="role-bar-inner">
     <span class="role-chip {% if is_admin %}role-chip--admin{% endif %}"
-          title="Your assigned role on this platform">
+          title="{{ msg('adminconv-role-title') }}">
       <span class="role-chip-dot"></span>{{ role_label }}
     </span>
-    <span class="role-bar-context">managing&nbsp;<strong>{{ conversation.title }}</strong></span>
+    <span class="role-bar-context">{{ msg('adminconv-managing') }}&nbsp;<strong>{{ conversation.title }}</strong></span>
     <span class="role-bar-spacer"></span>
     {# View as participant — just a shortcut link to the participant view (not impersonation). #}
     <a class="view-as-btn" href="{{ url_for('participant.conversation', slug=conversation.slug) }}">
-      View as participant →
+      {{ msg('adminconv-view-as') }}
     </a>
   </div>
 </div>
@@ -36,18 +36,18 @@
   <div class="console-head">
     <h1 class="console-title">{{ conversation.title }}</h1>
     {% if not conversation.active %}
-      <span class="status-pill status-pill--closed"><span class="status-pill-dot"></span>Closed</span>
+      <span class="status-pill status-pill--closed"><span class="status-pill-dot"></span>{{ msg('adminconv-status-closed') }}</span>
     {% elif conversation.paused %}
-      <span class="status-pill status-pill--paused"><span class="status-pill-dot"></span>Paused</span>
+      <span class="status-pill status-pill--paused"><span class="status-pill-dot"></span>{{ msg('adminconv-status-paused') }}</span>
     {% elif schedule.scheduled_at and not schedule.frozen %}
-      <span class="status-pill status-pill--scheduled"><span class="status-pill-dot"></span>Scheduled</span>
+      <span class="status-pill status-pill--scheduled"><span class="status-pill-dot"></span>{{ msg('adminconv-status-scheduled') }}</span>
     {% else %}
-      <span class="status-pill status-pill--active"><span class="status-pill-dot"></span>Active</span>
+      <span class="status-pill status-pill--active"><span class="status-pill-dot"></span>{{ msg('adminconv-status-active') }}</span>
     {% endif %}
   </div>
   <p class="console-sub">
     <code>/c/{{ conversation.slug }}</code> &nbsp;·&nbsp;
-    {{ conversation.access_policy }} &nbsp;·&nbsp; {{ participant_count }} joined
+    {{ conversation.access_policy }} &nbsp;·&nbsp; {{ participant_count }} {{ msg('adminconv-joined') }}
   </p>
 
   {# ── PHASE HERO (FA1) — the centrepiece ───────────────────────────────── #}
@@ -57,12 +57,12 @@
     <div class="phase-hero">
 
       <div class="phase-hero-top">
-        <span class="phase-now-kicker">Phase control</span>
+        <span class="phase-now-kicker">{{ msg('adminconv-phase-control') }}</span>
       </div>
 
       {# 7-phase journey rail (#163 added the passive 'Cleanup' phase between
          Arguments and Informed vote). Renders from PHASE_SEQUENCE. #}
-      <ol class="journey phase-stepper" aria-label="Consultation phase progress">
+      <ol class="journey phase-stepper" aria-label="{{ msg('adminconv-journey-aria') }}">
         {% for stage in phase_sequence %}
         {# Linear (simple) mode: one current step, earlier steps done ✓ — driven by the
            furthest-along stage. Non-linear (advanced) mode: several phases are open at
@@ -78,9 +78,9 @@
             {% if is_current %}aria-current="step"{% endif %}>
           <span class="journey-dot">{% if is_done %}✓{% else %}{{ loop.index }}{% endif %}</span>
           <span class="journey-label">{{ stage.label }}</span>
-          {% if is_current %}<span class="sr-only">(current phase)</span>
-          {% elif is_done %}<span class="sr-only">(completed)</span>
-          {% else %}<span class="sr-only">(upcoming)</span>{% endif %}
+          {% if is_current %}<span class="sr-only">{{ msg('adminconv-step-current') }}</span>
+          {% elif is_done %}<span class="sr-only">{{ msg('adminconv-step-completed') }}</span>
+          {% else %}<span class="sr-only">{{ msg('adminconv-step-upcoming') }}</span>{% endif %}
         </li>
         {% endfor %}
       </ol>
@@ -89,9 +89,9 @@
       {# Reusable per-box Guided/Advanced switch, right under the timeline. The generic
          JS (bottom) drives any box with [data-mode] + .mode-switch. #}
       <div class="mode-switch-row">
-        <span class="mode-switch" role="group" aria-label="Phase control mode">
-          <button type="button" class="pc-guided" aria-pressed="true" aria-controls="phaseControl">Simple</button>
-          <button type="button" class="pc-advanced mode-adv" aria-pressed="false" aria-controls="phaseControl">Advanced</button>
+        <span class="mode-switch" role="group" aria-label="{{ msg('adminconv-mode-aria') }}">
+          <button type="button" class="pc-guided" aria-pressed="true" aria-controls="phaseControl">{{ msg('adminconv-mode-simple') }}</button>
+          <button type="button" class="pc-advanced mode-adv" aria-pressed="false" aria-controls="phaseControl">{{ msg('adminconv-mode-advanced') }}</button>
         </span>
       </div>
       {% endif %}
@@ -104,7 +104,7 @@
         {% set shown_groups = phase_stat_groups | selectattr('tiles') | list %}
         {% if linear_phase_state %}
         <div class="phase-now-head">
-          <span class="phase-now-kicker">You are in phase {{ current_stage_index + 1 }} of {{ phase_sequence | length }}</span>
+          <span class="phase-now-kicker">{{ msg('adminconv-you-are-in-phase', current_stage_index + 1, phase_sequence | length) }}</span>
         </div>
         <div class="phase-now-head" style="margin-top:2px">
           <span class="phase-now-name">{{ phase_sequence[current_stage_index].label }}</span>
@@ -114,13 +114,13 @@
         {# Advanced/non-linear: several phase flags are on at once — name them all rather
            than only the furthest-along one. #}
         <div class="phase-now-head">
-          <span class="phase-now-kicker">Multiple phases active</span>
+          <span class="phase-now-kicker">{{ msg('adminconv-multiple-active') }}</span>
         </div>
         <div class="phase-now-head" style="margin-top:2px">
           <span class="phase-now-name">{{ phase_stat_groups | map(attribute='label') | join(' + ') }}</span>
         </div>
         {# Reword + omit the "shown below" promise unless a group will actually render. #}
-        <p class="phase-now-desc">Several phases are open at once (advanced mode).{% if shown_groups %} Statistics for the phases with available data are shown below.{% endif %}</p>
+        <p class="phase-now-desc">{{ msg('adminconv-several-open') }}{% if shown_groups %} {{ msg('adminconv-stats-below') }}{% endif %}</p>
         {% endif %}
 
         {# Phase-specific statistics (#165). One group per active phase; in advanced mode
@@ -130,9 +130,7 @@
         {% if polis_stats_unavailable %}
         <div class="phase-stats-warning" role="status">
           <span aria-hidden="true">⚠️</span>
-          <span><strong>Live statistics unavailable.</strong> Vote and participant counts may be
-            missing or stale — the Polis statistics database may be unreachable, or this
-            conversation may not yet be registered in Polis. Check the server logs.</span>
+          <span>{{ msg('adminconv-stats-warning')|safe }}</span>
         </div>
         {% endif %}
         {# Label each group whenever the box is in non-linear (advanced) mode — i.e. whenever
@@ -161,24 +159,24 @@
         {% if phase6_results %}
         <div class="phase-stats phase-stats--p6" style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--hairline)">
           <div>
-            <div class="phase-stat-label" style="margin-bottom:3px">Informed voting</div>
+            <div class="phase-stat-label" style="margin-bottom:3px">{{ msg('adminconv-informed-voting-label') }}</div>
             {% if phase6_results.p6_participants is not none %}
             <div><div class="phase-stat-value">{{ phase6_results.p6_participants }}</div>
-                 <div class="phase-stat-label">participants in round 6</div></div>
+                 <div class="phase-stat-label">{{ msg('adminconv-participants-round6') }}</div></div>
             {% else %}
-            <div class="muted" style="font-size:12px">participant count unavailable</div>
+            <div class="muted" style="font-size:12px">{{ msg('adminconv-participant-count-unavailable') }}</div>
             {% endif %}
           </div>
           {% if phase6_results.statements %}
           <div>
             <div class="phase-stat-value">{{ phase6_results.statements | length }}</div>
-            <div class="phase-stat-label">statements voted on</div>
+            <div class="phase-stat-label">{{ msg('adminconv-statements-voted-on') }}</div>
           </div>
           {# Teaser: statement with largest opinion shift #}
           {% set biggest = phase6_results.statements | selectattr('shift', 'ne', none) | list | first %}
           {% if biggest %}
           <div style="grid-column:1/-1;margin-top:.25rem">
-            <div class="phase-stat-label" style="margin-bottom:3px">Largest shift</div>
+            <div class="phase-stat-label" style="margin-bottom:3px">{{ msg('adminconv-largest-shift') }}</div>
             <span style="font-size:13px">"{{ biggest.text | truncate(60, True, '…') }}"</span>
             <span class="p6-shift {% if biggest.shift > 0 %}p6-shift--up{% elif biggest.shift < 0 %}p6-shift--down{% endif %}" style="margin-left:.4rem">
               {% if biggest.shift > 0 %}+{% endif %}{{ biggest.shift }}%
@@ -188,9 +186,9 @@
           {% endif %}
           {% if phase6_results.filter.excluded_tids or phase6_results.filter.excluded_pids %}
           <div style="grid-column:1/-1;font-size:11px;color:var(--muted)">
-            Moderation:
-            {% if phase6_results.filter.excluded_tids %}{{ phase6_results.filter.excluded_tids | length }} stmt excluded{% endif %}
-            {% if phase6_results.filter.excluded_pids %}· {{ phase6_results.filter.excluded_pids | length }} participant excluded{% endif %}
+            {{ msg('adminconv-moderation') }}
+            {% if phase6_results.filter.excluded_tids %}{{ msg('adminconv-stmt-excluded', phase6_results.filter.excluded_tids | length) }}{% endif %}
+            {% if phase6_results.filter.excluded_pids %}{{ msg('adminconv-participant-excluded', phase6_results.filter.excluded_pids | length) }}{% endif %}
           </div>
           {% endif %}
         </div>
@@ -206,14 +204,14 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit"
                   class="btn-small {% if conversation.paused %}btn-approve{% else %}btn-pause{% endif %}">
-            {{ 'Resume' if conversation.paused else 'Pause' }}
+            {{ msg('adminconv-resume') if conversation.paused else msg('adminconv-pause') }}
           </button>
         </form>
         <span class="muted" style="font-size:13px">
           {% if conversation.paused %}
-            Paused — participants cannot vote. The identity-reveal clock has <strong>not</strong> started; resuming is possible.
+            {{ msg('adminconv-paused-note')|safe }}
           {% else %}
-            Pause temporarily disables voting without starting the reveal timeline.
+            {{ msg('adminconv-pause-note') }}
           {% endif %}
         </span>
       </div>
@@ -230,7 +228,7 @@
         <div class="phase-foot">
           <div class="phase-foot-ready {{ 'phase-foot-ready--wait' if unmet else 'phase-foot-ready--go' }}">
             <span class="phase-foot-ready-icon" aria-hidden="true">{{ '!' if unmet else '✓' }}</span>
-            <span>{% if unmet %}{{ unmet }} readiness check{{ 's' if unmet != 1 }} still need resolving before {{ transition.target.label }}{% else %}No blocking checks — confirm each item below to move on to {{ transition.target.label }}{% endif %}</span>
+            <span>{% if unmet %}{{ msg('adminconv-readiness-unmet', unmet) }} {{ transition.target.label }}{% else %}{{ msg('adminconv-no-blocking') }} {{ transition.target.label }}{% endif %}</span>
           </div>
         </div>
         {# Guided 'Move on' (#156): consequences + tick-each-precondition checklist.
@@ -244,21 +242,21 @@
           </div>
           <div class="moveon-body">
             <ul class="consequence">
-              <li><span class="consequence-tag consequence-tag--opens">Opens</span>
+              <li><span class="consequence-tag consequence-tag--opens">{{ msg('adminconv-tag-opens') }}</span>
                   <span>{{ transition.consequence.opens }}</span></li>
               {% if transition.consequence.closes %}
-              <li><span class="consequence-tag consequence-tag--closes">Closes</span>
+              <li><span class="consequence-tag consequence-tag--closes">{{ msg('adminconv-tag-closes') }}</span>
                   <span>{{ transition.consequence.closes }}</span></li>
               {% endif %}
-              <li><span class="consequence-tag" style="background:var(--surface2);color:var(--muted)">Undo</span>
-                  <span>Reversible only by a site admin via advanced controls.</span></li>
+              <li><span class="consequence-tag" style="background:var(--surface2);color:var(--muted)">{{ msg('adminconv-tag-undo') }}</span>
+                  <span>{{ msg('adminconv-undo-text') }}</span></li>
             </ul>
 
             {% if not conversation.active %}
-            <p class="muted" style="font-size:12px">This consultation is closed — the only move is to open the final report.</p>
+            <p class="muted" style="font-size:12px">{{ msg('adminconv-closed-only-report') }}</p>
             {% endif %}
 
-            <div class="console-section-label" style="margin-bottom:8px">Readiness</div>
+            <div class="console-section-label" style="margin-bottom:8px">{{ msg('adminconv-readiness-label') }}</div>
             <form method="post" class="phase-move-form"
                   action="{{ url_for('admin.admin_conversation_advance', conv_id=conversation.id) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -269,22 +267,22 @@
                     <input type="checkbox" name="{{ p.id }}" class="phase-move-check moveon-check">
                     <span class="readiness-label">{{ p.label }}
                       {% if p.met is not none %}
-                        {% if p.met %}<span class="readiness-note">({{ p.note or 'met' }})</span>
-                        {% else %}<span class="phase-check-unmet"><span aria-hidden="true">✗</span> not met yet</span>{% if p.note %}<span class="readiness-note">({{ p.note }})</span>{% endif %}{% endif %}
+                        {% if p.met %}<span class="readiness-note">({{ p.note or msg('adminconv-met') }})</span>
+                        {% else %}<span class="phase-check-unmet"><span aria-hidden="true">✗</span> {{ msg('adminconv-not-met') }}</span>{% if p.note %}<span class="readiness-note">({{ p.note }})</span>{% endif %}{% endif %}
                       {% endif %}
                     </span>
                   </label>
                 </li>
                 {% endfor %}
               </ul>
-              <p class="phase-move-hint moveon-hint muted">Confirm every item above to enable “Move on”. Anything marked “not met yet” must be resolved first.</p>
+              <p class="phase-move-hint moveon-hint muted">{{ msg('adminconv-move-hint') }}</p>
               <button type="submit" class="rd-btn-primary phase-move-submit">
-                Move on to {{ transition.target.label }} →
+                {{ msg('adminconv-move-on-to') }} {{ transition.target.label }} →
               </button>
             </form>
 
             {% if transition.show_pause %}
-            <p class="muted" style="font-size:12px;margin-top:10px">Need time to coordinate inviting people back? You can pause first.</p>
+            <p class="muted" style="font-size:12px;margin-top:10px">{{ msg('adminconv-need-time') }}</p>
             {% endif %}
           </div>
         </div>
@@ -304,66 +302,66 @@
             sync();
             form.addEventListener('submit', function () {
               submit.disabled = true;
-              submit.textContent = 'Moving on…';
+              submit.textContent = wpI18n.msg('adminconv-moving-on');
             });
           }());
         </script>
         {% else %}
         {# Moderator: read-only — cannot move phases. #}
-        <p class="muted" style="font-size:13px;margin-top:14px">Only an organizer or site admin can change phases.</p>
+        <p class="muted" style="font-size:13px;margin-top:14px">{{ msg('adminconv-only-organizer') }}</p>
         <button type="button" class="btn-small" disabled
-                title="Only an organizer or site admin can change phases">Move on to {{ transition.target.label }} →</button>
+                title="{{ msg('adminconv-only-organizer') }}">{{ msg('adminconv-move-on-to') }} {{ transition.target.label }} →</button>
         {% endif %}
       {% elif not linear_phase_state %}
         <p class="muted" style="margin-top:14px;font-size:13px">
-          <span aria-hidden="true">⚠️</span> Phases are in a custom state (more than one active).
-          {% if is_admin %}Use Advanced below to adjust.{% else %}A site admin can adjust this.{% endif %}
+          <span aria-hidden="true">⚠️</span> {{ msg('adminconv-custom-state') }}
+          {% if is_admin %}{{ msg('adminconv-use-advanced') }}{% else %}{{ msg('adminconv-admin-can-adjust') }}{% endif %}
         </p>
       {% else %}
-        <p class="muted" style="margin-top:14px;font-size:13px">Final phase reached — the report is open.</p>
+        <p class="muted" style="margin-top:14px;font-size:13px">{{ msg('adminconv-final-phase') }}</p>
       {% endif %}
 
       {% if is_admin and schedule.can_schedule %}
       <div class="schedule-card" style="margin-top:14px">
         <div class="schedule-main">
-          <div class="schedule-title">Schedule wind-down to {{ schedule.transition.target.label }}</div>
+          <div class="schedule-title">{{ msg('adminconv-schedule-title') }} {{ schedule.transition.target.label }}</div>
           {% if schedule.scheduled_at %}
           <div class="schedule-when">
             {{ schedule.scheduled_at.strftime('%Y-%m-%d %H:%M') }} <span class="schedule-utc">UTC</span>
             · <span class="countdown-mini" data-countdown-target="{{ schedule.scheduled_at.isoformat() }}">{{ schedule.countdown }}</span>
-            {% if schedule.frozen %} · frozen{% endif %}
+            {% if schedule.frozen %} · {{ msg('adminconv-frozen') }}{% endif %}
           </div>
           {% else %}
-          <div class="schedule-when">No scheduled transition set.</div>
+          <div class="schedule-when">{{ msg('adminconv-no-schedule') }}</div>
           {% endif %}
         </div>
         <form method="post" action="{{ url_for('admin.admin_conversation_phase_schedule', conv_id=conversation.id) }}" class="schedule-actions">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="action" value="set">
-          <label class="sr-only" for="scheduled-at">UTC timestamp</label>
+          <label class="sr-only" for="scheduled-at">{{ msg('adminconv-utc-timestamp') }}</label>
           <input id="scheduled-at" name="scheduled_at" type="datetime-local"
                  {% if schedule.scheduled_at %}value="{{ schedule.scheduled_at.strftime('%Y-%m-%dT%H:%M') }}"{% endif %}
-                 aria-label="Scheduled transition time in UTC">
+                 aria-label="{{ msg('adminconv-scheduled-aria') }}">
           <span class="schedule-utc" aria-hidden="true">UTC</span>
-          <button type="submit" class="btn-ghost">{{ 'Edit' if schedule.scheduled_at else 'Set' }}</button>
+          <button type="submit" class="btn-ghost">{{ msg('adminconv-edit') if schedule.scheduled_at else msg('adminconv-set') }}</button>
         </form>
         {% if schedule.scheduled_at %}
         <form method="post" action="{{ url_for('admin.admin_conversation_phase_schedule', conv_id=conversation.id) }}" class="schedule-actions">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="action" value="{{ 'unfreeze' if schedule.frozen else 'freeze' }}">
-          <button type="submit" class="btn-ghost">{{ 'Unfreeze' if schedule.frozen else 'Freeze' }}</button>
+          <button type="submit" class="btn-ghost">{{ msg('adminconv-unfreeze') if schedule.frozen else msg('adminconv-freeze') }}</button>
         </form>
         <form method="post" action="{{ url_for('admin.admin_conversation_phase_schedule', conv_id=conversation.id) }}" class="schedule-actions">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="action" value="cancel">
-          <button type="submit" class="btn-ghost">Cancel</button>
+          <button type="submit" class="btn-ghost">{{ msg('common-cancel') }}</button>
         </form>
         {% endif %}
       </div>
       {% elif is_admin and transition %}
       <div class="locked-control" style="margin-top:14px">
-        <strong>Scheduling unavailable.</strong>
-        <span class="locked-why">Opening an active participant phase still requires the full manual checklist.</span>
+        <strong>{{ msg('adminconv-scheduling-unavailable') }}</strong>
+        <span class="locked-why">{{ msg('adminconv-scheduling-why') }}</span>
       </div>
       {% endif %}
     </div>
@@ -373,47 +371,45 @@
     <div class="mode-advanced-part">
       <div class="box-adv-note">
         <span aria-hidden="true">⚠️</span>
-        <span><strong>Advanced.</strong> These toggles act independently and out of order, with no
-          readiness checks — for demos and recovery, not routine runs.</span>
+        <span>{{ msg('adminconv-advanced-note')|safe }}</span>
       </div>
       <form method="post"
             action="{{ url_for('admin.admin_conversation_phases', conv_id=conversation.id) }}"
             class="phases-form" style="flex-wrap:wrap;gap:.75rem;margin-top:.75rem">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label><input type="checkbox" name="phase_submission" value="1"
-               {% if conversation.phase_submission %}checked{% endif %}> Statement submission (Explore)</label>
+               {% if conversation.phase_submission %}checked{% endif %}> {{ msg('adminconv-phase-submission') }}</label>
         <label><input type="checkbox" name="phase_personal_results" value="1"
-               {% if conversation.phase_personal_results %}checked{% endif %}> Personal results</label>
+               {% if conversation.phase_personal_results %}checked{% endif %}> {{ msg('adminconv-phase-personal') }}</label>
         <label><input type="checkbox" name="phase_argument_mapping" value="1"
-               {% if conversation.phase_argument_mapping %}checked{% endif %}> Argument mapping</label>
+               {% if conversation.phase_argument_mapping %}checked{% endif %}> {{ msg('adminconv-phase-argmap') }}</label>
         <label><input type="checkbox" name="phase_cleanup" value="1"
-               {% if conversation.phase_cleanup %}checked{% endif %}> Cleanup</label>
+               {% if conversation.phase_cleanup %}checked{% endif %}> {{ msg('adminconv-phase-cleanup') }}</label>
         <label><input type="checkbox" name="phase_informed_voting" value="1"
-               {% if conversation.phase_informed_voting %}checked{% endif %}> Informed voting</label>
+               {% if conversation.phase_informed_voting %}checked{% endif %}> {{ msg('adminconv-phase-informed') }}</label>
         <label><input type="checkbox" name="phase_public_results" value="1"
-               {% if conversation.phase_public_results %}checked{% endif %}> Public results</label>
-        <button type="submit" class="btn-small phases-save">Save phases</button>
+               {% if conversation.phase_public_results %}checked{% endif %}> {{ msg('adminconv-phase-public') }}</label>
+        <button type="submit" class="btn-small phases-save">{{ msg('adminconv-save-phases') }}</button>
       </form>
 
       {# Phase 6 initialisation — fallback for the advanced/demo path (the guided
          Informed-vote transition folds this in). #}
       {% if conversation.phase_informed_voting %}
       <div style="margin-top:1rem">
-        <div class="console-section-label">Informed voting — setup</div>
+        <div class="console-section-label">{{ msg('adminconv-p6-setup-label') }}</div>
         {% if conversation.phase6_polis_conversation_id %}
         <p style="font-size:13px">
-          Phase 6 Polis conversation: <code>{{ conversation.phase6_polis_conversation_id }}</code> ·
+          {{ msg('adminconv-p6-conv') }} <code>{{ conversation.phase6_polis_conversation_id }}</code> ·
           {{ conversation.featured_statements | selectattr('confirmed_by_admin') | selectattr('phase6_polis_statement_id', 'ne', none) | list | length }}
-          of {{ conversation.featured_statements | selectattr('confirmed_by_admin') | list | length }} statements seeded.
+{{ msg('adminconv-p6-seeded', (conversation.featured_statements | selectattr('confirmed_by_admin') | selectattr('phase6_polis_statement_id', 'ne', none) | list | length), (conversation.featured_statements | selectattr('confirmed_by_admin') | list | length)) }}
         </p>
         {% else %}
         <p style="font-size:13px;margin-bottom:.5rem">
-          Enabled but not initialised. Initialising creates a dedicated Polis conversation and seeds
-          all confirmed featured statements.
+          {{ msg('adminconv-p6-not-init') }}
         </p>
         <form method="post" action="{{ url_for('admin.admin_phase6_init', conv_id=conversation.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn-small">Initialise Phase 6</button>
+          <button type="submit" class="btn-small">{{ msg('adminconv-p6-init-btn') }}</button>
         </form>
         {% endif %}
       </div>
@@ -424,31 +420,31 @@
 
   {# ── Secondary management (navigation) ────────────────────────────────── #}
   <div class="console-section">
-    <div class="console-section-label">Content &amp; access</div>
+    <div class="console-section-label">{{ msg('adminconv-content-access') }}</div>
     <div class="manage-grid">
       <a class="manage-card" href="{{ url_for('admin.admin_conversation_statements', conv_id=conversation.id) }}">
-        <div class="manage-card-title">Statements</div>
-        <div class="manage-card-desc">Review, approve or hide statements; add seed statements</div>
+        <div class="manage-card-title">{{ msg('adminconv-card-statements') }}</div>
+        <div class="manage-card-desc">{{ msg('adminconv-card-statements-desc') }}</div>
       </a>
       <a class="manage-card" href="{{ url_for('admin.admin_conversation_invites', conv_id=conversation.id) }}">
-        <div class="manage-card-top"><span class="manage-card-count">{{ invite_count }} invite{{ 's' if invite_count != 1 }}</span></div>
-        <div class="manage-card-title">Invites &amp; access</div>
-        <div class="manage-card-desc">Who can join this consultation</div>
+        <div class="manage-card-top"><span class="manage-card-count">{{ msg('adminconv-invite-count', invite_count) }}</span></div>
+        <div class="manage-card-title">{{ msg('adminconv-card-invites') }}</div>
+        <div class="manage-card-desc">{{ msg('adminconv-card-invites-desc') }}</div>
       </a>
       <a class="manage-card" href="{{ url_for('admin.admin_conversation_featured', conv_id=conversation.id) }}">
-        <div class="manage-card-top"><span class="manage-card-count">{{ conversation.featured_statements | length }} featured</span></div>
-        <div class="manage-card-title">Featured statements</div>
-        <div class="manage-card-desc">Curate the set for arguments &amp; informed voting</div>
+        <div class="manage-card-top"><span class="manage-card-count">{{ msg('adminconv-featured-count', conversation.featured_statements | length) }}</span></div>
+        <div class="manage-card-title">{{ msg('adminconv-card-featured') }}</div>
+        <div class="manage-card-desc">{{ msg('adminconv-card-featured-desc') }}</div>
       </a>
       <a class="manage-card" href="{{ url_for('admin.admin_conversation_participants', conv_id=conversation.id) }}">
-        <div class="manage-card-top"><span class="manage-card-count">{{ participant_count }} joined</span></div>
-        <div class="manage-card-title">Participants</div>
-        <div class="manage-card-desc">Review per-participant engagement and drop-off signals</div>
+        <div class="manage-card-top"><span class="manage-card-count">{{ participant_count }} {{ msg('adminconv-joined') }}</span></div>
+        <div class="manage-card-title">{{ msg('adminconv-card-participants') }}</div>
+        <div class="manage-card-desc">{{ msg('adminconv-card-participants-desc') }}</div>
       </a>
       <a class="manage-card" href="{{ url_for('admin.admin_conversation_flags', conv_id=conversation.id) }}">
-        <div class="manage-card-top"><span class="manage-card-count">{{ open_flag_count }} open</span></div>
-        <div class="manage-card-title">Moderation queue</div>
-        <div class="manage-card-desc">Review participant flags for statements and arguments</div>
+        <div class="manage-card-top"><span class="manage-card-count">{{ msg('adminconv-open-count', open_flag_count) }}</span></div>
+        <div class="manage-card-title">{{ msg('adminconv-card-modqueue') }}</div>
+        <div class="manage-card-desc">{{ msg('adminconv-card-modqueue-desc') }}</div>
       </a>
     </div>
   </div>
@@ -456,12 +452,12 @@
   {# ── Conversation roles — roster visible to anyone managing the conversation;
      adding / removing is global-admin only (can_manage_roles). ── #}
   <div class="console-section">
-    <div class="console-section-label">Conversation roles</div>
+    <div class="console-section-label">{{ msg('adminconv-roles-label') }}</div>
     <details class="phase-advanced">
-      <summary>Roles{% if conv_roles %} ({{ conv_roles | length }}){% endif %}</summary>
+      <summary>{{ msg('adminconv-roles-summary') }}{% if conv_roles %} ({{ conv_roles | length }}){% endif %}</summary>
       {% if conv_roles %}
       <table class="admin-table" style="margin-top:.75rem">
-        <thead><tr><th>Participant</th><th>Role</th><th></th></tr></thead>
+        <thead><tr><th>{{ msg('admin-th-participant') }}</th><th>{{ msg('adminconv-th-role') }}</th><th></th></tr></thead>
         <tbody>
           {% for role in conv_roles %}
           <tr>
@@ -472,7 +468,7 @@
               <form method="post" action="{{ url_for('admin.admin_role_remove', role_id=role.id) }}" style="display:inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="redirect_to" value="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">
-                <button type="submit" class="btn-small btn-danger">remove</button>
+                <button type="submit" class="btn-small btn-danger">{{ msg('admin-btn-remove') }}</button>
               </form>
               {% endif %}
             </td>
@@ -481,7 +477,7 @@
         </tbody>
       </table>
       {% else %}
-      <p class="muted" style="margin:.75rem 0;font-size:14px">No conversation roles assigned.</p>
+      <p class="muted" style="margin:.75rem 0;font-size:14px">{{ msg('adminconv-no-roles') }}</p>
       {% endif %}
 
       {% if can_manage_roles %}
@@ -490,19 +486,19 @@
         <input type="hidden" name="conversation_id" value="{{ conversation.id }}">
         <input type="hidden" name="redirect_to" value="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">
         <div class="edit-row-fields">
-          <label>Participant
+          <label>{{ msg('adminconv-label-participant') }}
             <select name="participant_id" required>
-              <option value="">— select —</option>
+              <option value="">{{ msg('adminconv-select-placeholder') }}</option>
               {% for p in participants %}<option value="{{ p.id }}">{{ p.mw_username }}</option>{% endfor %}
             </select>
           </label>
-          <label>Role
+          <label>{{ msg('adminconv-label-role') }}
             <select name="role" required>
               {% for r in admin_roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
             </select>
           </label>
         </div>
-        <button type="submit">Add role</button>
+        <button type="submit">{{ msg('adminconv-add-role') }}</button>
       </form>
       {% endif %}
     </details>
@@ -511,61 +507,61 @@
   {% if can_organize %}
   {# ── Configuration — settings (inline; no separate page yet) ── #}
   <div class="console-section">
-    <div class="console-section-label">Configuration</div>
+    <div class="console-section-label">{{ msg('adminconv-config-label') }}</div>
 
     <details class="phase-advanced">
-      <summary>Settings — title, intro/outro, access policy</summary>
+      <summary>{{ msg('adminconv-settings-summary') }}</summary>
       <form method="post" class="panel"
             action="{{ url_for('admin.admin_conversation_edit', conv_id=conversation.id) }}"
             style="margin-top:.75rem">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="edit-row-fields">
-          <label>Title
+          <label>{{ msg('admin-label-title') }}
             <input type="text" name="title" value="{{ conversation.title }}" required>
           </label>
-          <label>Route (locked after launch)
+          <label>{{ msg('adminconv-label-route-locked') }}
             <input type="text" value="{{ phase_routes[conversation.phase_route].label if conversation.phase_route in phase_routes else phase_routes.default_7.label }}" readonly style="background:#f5f5f5;color:#666">
           </label>
-          <label>Polis ID (zinvite, read-only)
+          <label>{{ msg('adminconv-label-polis-id') }}
             <input type="text" value="{{ conversation.polis_id }}" readonly style="background:#f5f5f5;color:#666">
           </label>
-          <label>Access policy
+          <label>{{ msg('admin-label-access') }}
             <select name="access_policy">
               {% for p in ['public', 'invite_only', 'demo'] %}
               <option value="{{ p }}" {% if conversation.access_policy == p %}selected{% endif %}>{{ p }}</option>
               {% endfor %}
             </select>
           </label>
-          <label>Eligibility event ID
+          <label>{{ msg('admin-label-elig-event') }}
             <input type="text" name="eligibility_event_id" maxlength="80"
                    value="{{ conversation.eligibility_event_id or '' }}">
           </label>
-          <label>Eligibility label
+          <label>{{ msg('admin-label-elig-label') }}
             <input type="text" name="eligibility_label" maxlength="255"
                    value="{{ conversation.eligibility_label or '' }}">
           </label>
         </div>
         <div class="edit-row-texts">
-          <label>Intro text (HTML, optional)
+          <label>{{ msg('admin-label-intro') }}
             <textarea name="intro_text" rows="4">{{ conversation.intro_text or '' }}</textarea>
           </label>
-          <label>Outro text (HTML, optional)
+          <label>{{ msg('admin-label-outro') }}
             <textarea name="outro_text" rows="4">{{ conversation.outro_text or '' }}</textarea>
           </label>
         </div>
-        <button type="submit">Save settings</button>
+        <button type="submit">{{ msg('adminconv-save-settings') }}</button>
       </form>
     </details>
 
     <details class="phase-advanced">
-      <summary>Recommended quantities</summary>
+      <summary>{{ msg('adminconv-rec-summary') }}</summary>
       <form method="post" class="panel"
             action="{{ url_for('admin.admin_conversation_recommendations', conv_id=conversation.id) }}"
             style="margin-top:.75rem">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <p class="section-help">These numbers are advisory. They appear in readiness checks and stats so organizers can judge whether the consultation has enough material to move on.</p>
+        <p class="section-help">{{ msg('adminconv-rec-help') }}</p>
         <div class="edit-row-fields">
-          <label>Complexity tier
+          <label>{{ msg('adminconv-label-tier') }}
             <select name="tier">
               {% for key, tier in recommendation_tiers.items() %}
               <option value="{{ key }}" {% if recommendation_profile.tier == key %}selected{% endif %}>{{ tier.label }}</option>
@@ -578,7 +574,7 @@
           </label>
           {% endfor %}
         </div>
-        <button type="submit">Save recommendations</button>
+        <button type="submit">{{ msg('adminconv-save-rec') }}</button>
       </form>
     </details>
   </div>
@@ -587,29 +583,29 @@
   {% if is_admin %}
   {# ── Danger zone ──────────────────────────────────────────────────────── #}
   <div class="console-section">
-    <div class="console-section-label" style="color:var(--disagree)">Ending the consultation</div>
+    <div class="console-section-label" style="color:var(--disagree)">{{ msg('adminconv-danger-label') }}</div>
     <div class="danger-zone">
       {% if not conversation.active %}
       <div class="danger-row">
         <div class="danger-row-main">
-          <div class="danger-row-title">Permanently closed
+          <div class="danger-row-title">{{ msg('adminconv-perm-closed') }}
             {% if conversation.phase_public_results or conversation.phase_personal_results %}
-            · <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}" style="font-weight:400;font-size:13px">View final report <span aria-hidden="true">→</span></a>
+            · <a href="{{ url_for('participant.conversation_report', slug=conversation.slug) }}" style="font-weight:400;font-size:13px">{{ msg('adminconv-view-report') }} <span aria-hidden="true">→</span></a>
             {% endif %}
           </div>
           <div class="danger-row-desc">
             {% if reveal and reveal.state == 'pending' %}
-              Closed {{ conversation.closed_at.strftime('%-d %b %Y') }}.
-              The identity-reveal window opens on {{ reveal.opens_at.strftime('%-d %b %Y') }}
-              ({{ reveal.days_left }} day{{ 's' if reveal.days_left != 1 }} away) — nothing to do until then.
+              {{ msg('adminconv-closed') }} {{ conversation.closed_at.strftime('%-d %b %Y') }}.
+              {{ msg('adminconv-reveal-opens-on') }} {{ reveal.opens_at.strftime('%-d %b %Y') }}
+              {{ msg('adminconv-days-away', reveal.days_left) }}
             {% elif reveal and reveal.state == 'open' %}
-              Closed {{ conversation.closed_at.strftime('%-d %b %Y') }}.
-              The identity-reveal window is open until {{ reveal.closes_at.strftime('%-d %b %Y') }}.
+              {{ msg('adminconv-closed') }} {{ conversation.closed_at.strftime('%-d %b %Y') }}.
+              {{ msg('adminconv-reveal-open-until') }} {{ reveal.closes_at.strftime('%-d %b %Y') }}.
             {% elif reveal and reveal.state == 'expired' %}
-              Closed {{ conversation.closed_at.strftime('%-d %b %Y') }}.
-              The identity-reveal window has ended — records are permanently pseudonymous.
+              {{ msg('adminconv-closed') }} {{ conversation.closed_at.strftime('%-d %b %Y') }}.
+              {{ msg('adminconv-reveal-ended') }}
             {% else %}
-              Closed{% if conversation.closed_at %} {{ conversation.closed_at.strftime('%-d %b %Y') }}{% endif %}. Cannot be reopened.
+              {{ msg('adminconv-closed') }}{% if conversation.closed_at %} {{ conversation.closed_at.strftime('%-d %b %Y') }}{% endif %}. {{ msg('adminconv-closed-cannot-reopen') }}
             {% endif %}
           </div>
         </div>
@@ -617,12 +613,12 @@
       {% else %}
       <div class="danger-row">
         <div class="danger-row-main">
-          <div class="danger-row-title">Publish final report</div>
+          <div class="danger-row-title">{{ msg('adminconv-publish-report') }}</div>
           <div class="danger-row-desc">
             {% if cleanup_window %}
-            Irreversible. Publishes <code>/c/{{ conversation.slug }}/report</code>, freezes moderation exclusions, and starts the identity-reveal window.
+            {{ msg('adminconv-publish-irrev-a') }} <code>/c/{{ conversation.slug }}/report</code>{{ msg('adminconv-publish-irrev-b') }}
             {% else %}
-            Available after informed voting has ended and the consultation is in the cleanup window.
+            {{ msg('adminconv-publish-unavailable') }}
             {% endif %}
           </div>
         </div>
@@ -631,39 +627,39 @@
               action="{{ url_for('admin.admin_conversation_close', conv_id=conversation.id) }}" class="cleanup-publish-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <ul class="readiness cleanup-readiness">
-            <li><label><input type="checkbox" name="cleanup_reviewed_results"> <span class="readiness-label">Reviewed preliminary results</span></label></li>
-            <li><label><input type="checkbox" name="cleanup_moderated_flagged"> <span class="readiness-label">Moderated any remaining flagged informed-voting statements</span></label></li>
-            <li><label><input type="checkbox" name="cleanup_reviewed_exclusions"> <span class="readiness-label">Reviewed participant exclusions</span></label></li>
-            <li><label><input type="checkbox" name="cleanup_report_intro"> <span class="readiness-label">Written or reviewed the report introduction text</span></label></li>
+            <li><label><input type="checkbox" name="cleanup_reviewed_results"> <span class="readiness-label">{{ msg('adminconv-cleanup-li1') }}</span></label></li>
+            <li><label><input type="checkbox" name="cleanup_moderated_flagged"> <span class="readiness-label">{{ msg('adminconv-cleanup-li2') }}</span></label></li>
+            <li><label><input type="checkbox" name="cleanup_reviewed_exclusions"> <span class="readiness-label">{{ msg('adminconv-cleanup-li3') }}</span></label></li>
+            <li><label><input type="checkbox" name="cleanup_report_intro"> <span class="readiness-label">{{ msg('adminconv-cleanup-li4') }}</span></label></li>
             <li>
               <span class="readiness-label">
-                Phase 6 initialized
+                {{ msg('adminconv-cleanup-p6') }}
                 {% if conversation.phase6_polis_conversation_id or not phase6_required %}
-                <span class="readiness-note">(met)</span>
+                <span class="readiness-note">({{ msg('adminconv-met') }})</span>
                 {% else %}
-                <span class="phase-check-unmet">not met yet</span>
+                <span class="phase-check-unmet">{{ msg('adminconv-not-met') }}</span>
                 {% endif %}
               </span>
             </li>
           </ul>
-          <button type="submit" class="btn-small btn-danger">Publish final report</button>
+          <button type="submit" class="btn-small btn-danger">{{ msg('adminconv-publish-report') }}</button>
         </form>
         {% else %}
-        <button type="button" class="btn-small btn-danger" disabled>Publish final report</button>
+        <button type="button" class="btn-small btn-danger" disabled>{{ msg('adminconv-publish-report') }}</button>
         {% endif %}
       </div>
       {% endif %}
       <div class="danger-row">
         <div class="danger-row-main">
-          <div class="danger-row-title">Delete empty consultation</div>
+          <div class="danger-row-title">{{ msg('adminconv-delete-title') }}</div>
           <div class="danger-row-desc">
-            Deletes the local consultation after deactivating and hiding it in Polis.
+            {{ msg('adminconv-delete-desc') }}
             {% if delete_vote_count is none %}
-              Disabled because Polis vote data could not be verified.
+              {{ msg('adminconv-delete-unverified') }}
             {% elif delete_vote_count == 0 %}
-              Available because Polis has no valid votes for this consultation.
+              {{ msg('adminconv-delete-available') }}
             {% else %}
-              Disabled because Polis has {{ delete_vote_count }} valid vote{{ 's' if delete_vote_count != 1 }}.
+              {{ msg('adminconv-delete-hasvotes', delete_vote_count) }}
             {% endif %}
           </div>
         </div>
@@ -672,7 +668,7 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn-small btn-danger"
                   {% if delete_vote_count != 0 %}disabled aria-disabled="true"{% endif %}>
-            Delete consultation
+            {{ msg('adminconv-delete-btn') }}
           </button>
         </form>
       </div>
@@ -681,11 +677,11 @@
   <script nonce="{{ csp_nonce }}">
     var cf = document.getElementById('close-permanently-form');
     if (cf) cf.addEventListener('submit', function (e) {
-      if (!confirm('Publish the final report?\n\nThis freezes report exclusions, closes the consultation, and starts the identity reveal timeline.')) e.preventDefault();
+      if (!confirm(wpI18n.msg('adminconv-confirm-publish'))) e.preventDefault();
     });
     var df = document.getElementById('delete-conversation-form');
     if (df) df.addEventListener('submit', function (e) {
-      if (!confirm('Delete this consultation?\n\nThis removes local wiki-polis records after hiding the Polis conversation. This cannot be undone.')) e.preventDefault();
+      if (!confirm(wpI18n.msg('adminconv-confirm-delete'))) e.preventDefault();
     });
   </script>
   {% endif %}{# is_admin #}
@@ -731,7 +727,7 @@
     function render() {
       var seconds = Math.max(0, Math.floor((target - Date.now()) / 1000));
       if (seconds === 0) {
-        el.textContent = 'due now';
+        el.textContent = wpI18n.msg('adminconv-due-now');
         return;
       }
       var days = Math.floor(seconds / 86400);

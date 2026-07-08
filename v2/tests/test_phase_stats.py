@@ -222,7 +222,9 @@ def test_single_phase_renders_flat_without_group_label(admin_client, conv):
     db.session.commit()
     page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
     assert 'phase-stats-group-label' not in page
-    assert 'Multiple phases active' not in page
+    # Anchor on the visible kicker span: the bare string now also appears in the
+    # client message island (window.wpMessages ships every UI string).
+    assert 'phase-now-kicker">Multiple phases active' not in page
 
 
 def test_multi_phase_informed_voting_warns_on_phase6_outage(app, admin_client, conv):
@@ -282,7 +284,8 @@ def test_multi_phase_all_polis_only_omits_shown_below_copy(admin_client, conv):
     page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
     assert 'Multiple phases active' in page
     assert 'Explore + Report' in page
-    assert 'Statistics for the phases with available data are shown below' not in page
+    # Anchor on the visible sentence join (the message text alone is in the island).
+    assert 'mode). Statistics for the phases with available data are shown below' not in page
     assert 'phase-stats-group-label' not in page          # no group renders
     assert 'phase-stats-warning' not in page              # PG unconfigured — None is expected
 
