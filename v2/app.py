@@ -4188,8 +4188,10 @@ def statement_flag(slug, tid):
         matching = [s for s in all_statements if s.get('tid') == tid]
         if not matching:
             abort(404)
-        if matching[0].get('is_seed'):
-            abort(400)
+        # Seed statements (organizer-authored) are just as flaggable as any other —
+        # a moderator's own wording can still need review. Previously excluded here
+        # with no test coverage and no documented rationale; caused every flag on a
+        # featured (often seed-derived) statement to 400.
 
     category, detail = _parse_content_flag_form()
     if not _existing_open_flag(

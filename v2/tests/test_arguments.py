@@ -1,5 +1,6 @@
 """Tests for the argument mapping layer: submit, skip, vote, admin featured."""
 import os
+from unittest.mock import patch
 
 import pytest
 
@@ -555,6 +556,26 @@ def test_participant_can_flag_statement(auth_client, arg_conv, arg_part, partici
     ).first()
     assert flag is not None
     assert flag.category == 'privacy'
+
+
+def test_participant_can_flag_seed_statement(auth_client, arg_conv, arg_part, participant):
+    """A seed (organizer-authored) statement must be just as flaggable as any other —
+    previously an unconditional abort(400) here meant flagging any seed-derived
+    featured statement (the common case) failed with Bad Request."""
+    seed_stmt = {'tid': 42, 'txt': 'Seed statement text', 'is_seed': True}
+    with patch('app.PolisServerClient.get_statements', return_value=([], [seed_stmt], [])):
+        resp = auth_client.post(
+            '/c/arg-conv/statements/42/flag',
+            data={'category': 'privacy', 'detail': 'Personal details'},
+        )
+    assert resp.status_code == 302
+    flag = ContentFlag.query.filter_by(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        content_type='statement',
+        statement_tid=42,
+    ).first()
+    assert flag is not None
 
 
 def test_hide_argument_wrong_conversation_returns_404(admin_client, arg_conv,

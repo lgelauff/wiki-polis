@@ -10,9 +10,13 @@
   {% endif %}
 </nav>
 {% endblock %}
-{% macro content_flag_form(action, uid, label) -%}
-<details class="content-flag">
-  <summary aria-label="Flag {{ label }} for moderator review">flag concerns about this {{ label }}</summary>
+{% macro content_flag_form(action, uid, label, corner=false) -%}
+<details class="content-flag{% if corner %} content-flag--corner{% endif %}">
+  <summary class="content-flag-trigger" aria-label="Flag {{ label }} for moderator review">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 21V4a1 1 0 0 1 1-1h11.5a1 1 0 0 1 .8 1.6L14 9l3.3 4.4a1 1 0 0 1-.8 1.6H5"/>
+    </svg>
+  </summary>
   <form method="post" action="{{ action }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label class="sr-only" for="flag-category-{{ uid }}">Reason</label>
@@ -191,6 +195,27 @@
 
         {# ── Statement card — always visible ── #}
         <div class="statement-card" id="statement-card">
+          <details class="content-flag content-flag--corner" id="stmt-flag">
+            <summary class="content-flag-trigger" aria-label="Flag this statement for moderator review">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 21V4a1 1 0 0 1 1-1h11.5a1 1 0 0 1 .8 1.6L14 9l3.3 4.4a1 1 0 0 1-.8 1.6H5"/>
+              </svg>
+            </summary>
+            <form method="post" id="stmt-flag-form" action="{{ url_for('participant.statement_flag', slug=conversation.slug, tid=0) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <label class="sr-only" for="stmt-flag-category">Reason</label>
+              <select id="stmt-flag-category" name="category" required>
+                <option value="personal_attack">Personal attack</option>
+                <option value="privacy">Privacy violation</option>
+                <option value="off_topic">Off-topic</option>
+                <option value="other">Other</option>
+              </select>
+              <label class="sr-only" for="stmt-flag-detail">Details</label>
+              <textarea id="stmt-flag-detail" name="detail" rows="2" maxlength="1000"
+                        placeholder="Optional details"></textarea>
+              <button type="submit" class="btn-small">Send</button>
+            </form>
+          </details>
           <div class="statement-card-header">
             <span class="stmt-meta-left">
               <span class="stmt-dot"></span>
@@ -510,6 +535,7 @@
       {# When all-done: at-head becomes a full-width click target; JS adds role/aria #}
       <div class="at-head">
         <div class="at-head-main">
+          {{ content_flag_form(url_for('participant.statement_flag', slug=conversation.slug, tid=fs.polis_statement_id), 'statement-' ~ fs.id, 'statement', corner=true) }}
           <div class="at-featured-label" aria-hidden="true">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="m12 2 3 7 7 .5-5.5 4.5 2 7-6.5-4-6.5 4 2-7L2 9.5 9 9z"/>
@@ -517,9 +543,7 @@
             Featured statement
           </div>
           <p class="at-stmt">{{ item.text }}</p>
-          {# (Collapsed-state one-liner is rendered by .at-revisit-bar; the old .at-stmt-summary
-             here was orphaned dead markup that just duplicated .at-stmt when expanded.) #}
-          {{ content_flag_form(url_for('participant.statement_flag', slug=conversation.slug, tid=fs.polis_statement_id), 'statement-' ~ fs.id, 'statement') }}
+          {# (Collapsed-state one-liner is rendered by .at-revisit-bar) #}
         </div>
 
         {# Two-step indicator — hidden when collapsed #}
@@ -1245,6 +1269,19 @@
   var clientRoot       = document.getElementById('particiapi-client');
   var stmtCard         = document.getElementById('statement-card');
   var statementText    = document.getElementById('statement-text');
+  var stmtFlag         = document.getElementById('stmt-flag');
+  var stmtFlagForm     = document.getElementById('stmt-flag-form');
+  var STMT_FLAG_URL_TEMPLATE = stmtFlagForm.getAttribute('action');   // ends in '/0/flag'
+
+  // The flag popover targets whichever statement is currently displayed — update
+  // its form action each time the card shows a new one; hide it entirely when
+  // there's no statement to flag (e.g. all-done).
+  function updateStmtFlag(tid) {
+    if (tid == null) { stmtFlag.hidden = true; return; }
+    stmtFlag.hidden = false;
+    stmtFlag.open = false;
+    stmtFlagForm.action = STMT_FLAG_URL_TEMPLATE.replace(/\/0\/flag$/, '/' + tid + '/flag');
+  }
   var choiceRow        = document.getElementById('vote-choice-row');
   var stmtRightLabel   = document.getElementById('stmt-right-label');
   var votedBadge       = document.getElementById('voted-badge');
@@ -1473,6 +1510,7 @@
     stmtCard.hidden        = false;
     statementText.hidden   = false;
     statementText.textContent = stmt ? stmt.text : '';
+    updateStmtFlag(stmt ? stmt.id : null);
     votedStmtText.hidden   = true;
     votedBadge.hidden      = true;
     originalStmtText       = '';
