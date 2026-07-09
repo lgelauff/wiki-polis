@@ -4,8 +4,7 @@
 > agreed design for the current version. Where the implementation diverges, that's a
 > tracked bug/gap (flagged inline with a `pending` marker), not a change to this spec.
 > Phase 6 (informed voting) was adopted and implemented (PR #115, 2026-06-04) and is
-> described in the Results section below. [`prop_phase-model.md`](prop_phase-model.md)
-> contains the full six-phase narrative and is now partially current.
+> described in the Results section below.
 
 A deliberation tool for the Wikimedia community. Participants vote on atomic statements, clusters of opinion emerge, and curated debate layers can be added on top.
 

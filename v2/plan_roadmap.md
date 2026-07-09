@@ -30,8 +30,8 @@ plan has been retired to the local-only `archive/`.)
 
 ## 2. Documentation
 
-This documentation effort — see
-[`docs/plan_doc-improvement.md`](docs/plan_doc-improvement.md) for the wave plan.
+This documentation effort is largely complete; the original wave plan has been retired
+to the local-only `archive/`.
 Launch-blocking item: the **privacy statement (N2)**, drafted toward the 180-day
 retention commitment (decision D-PRIV), pending legal/comms review.
 

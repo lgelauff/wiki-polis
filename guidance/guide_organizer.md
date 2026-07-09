@@ -8,9 +8,7 @@
 > *unknown — requires literature review* are open questions we have not resolved.
 
 This guide is for **organizers**: you set up and run a consultation on wiki-polis from
-start to finish. It describes the platform as it works **today** (the four phase
-toggles); forward-looking ideas live in
-[`prop_phase-model.md`](../v2/prop_phase-model.md).
+start to finish. It describes the platform as it works **today**.
 
 ---
 
