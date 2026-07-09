@@ -204,6 +204,14 @@ curl -s -o /dev/null -w "%{http_code}" http://<private-ip>:8000/
 chmod 600 ~/particiapp-docker/.env
 ```
 
+**Clone the wiki-polis ops scripts** — the `docker exec` helper scripts referenced below (`v2/ops/*.sh`) live in the wiki-polis repo itself, not in `particiapp-docker`. This VPS needs its own checkout:
+
+```bash
+git clone https://github.com/lgelauff/wiki-polis.git ~/wiki-polis
+```
+
+Run `cd ~/wiki-polis && git pull` after future deploys to pick up ops-script changes.
+
 **Create a read-only Postgres role** for the Flask admin connection — do not use the `polis` superuser for external connections:
 
 ```bash
