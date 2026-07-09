@@ -7,16 +7,16 @@
               (3 if 'informed_voting' in phases else
                (2 if ('argument_mapping' in phases or 'cleanup' in phases) else
                 (1 if ('submission' in phases or 'featured_selection' in phases) else 0))) -%}
-<div class="conv-input-timeline" aria-label="Input phase progress">
+<div class="conv-input-timeline" aria-label="{{ msg('home-timeline-aria') }}">
   <span class="conv-input-badge{% if pos == 1 %} conv-input-badge--current{% elif pos > 1 %} conv-input-badge--done{% endif %}">
-    {% if pos > 1 %}<span aria-hidden="true">✓</span>{% endif %} Explore
+    {% if pos > 1 %}<span aria-hidden="true">✓</span>{% endif %} {{ msg('home-phase-explore') }}
   </span>
   {% if pos >= 2 %}
   <span class="conv-input-rail" aria-hidden="true"></span>
   <span class="conv-input-clock" aria-hidden="true"></span>
   <span class="conv-input-rail" aria-hidden="true"></span>
   <span class="conv-input-badge{% if pos == 2 %} conv-input-badge--current{% elif pos > 2 %} conv-input-badge--done{% endif %}">
-    {% if pos > 2 %}<span aria-hidden="true">✓</span>{% endif %} Arguments
+    {% if pos > 2 %}<span aria-hidden="true">✓</span>{% endif %} {{ msg('home-phase-arguments') }}
   </span>
   {% endif %}
   {% if pos >= 3 %}
@@ -24,21 +24,21 @@
   <span class="conv-input-clock" aria-hidden="true"></span>
   <span class="conv-input-rail" aria-hidden="true"></span>
   <span class="conv-input-badge{% if pos == 3 %} conv-input-badge--current{% elif pos > 3 %} conv-input-badge--done{% endif %}">
-    {% if pos > 3 %}<span aria-hidden="true">✓</span>{% endif %} Informed vote
+    {% if pos > 3 %}<span aria-hidden="true">✓</span>{% endif %} {{ msg('home-phase-informed-vote') }}
   </span>
   {% endif %}
   {% if 'closed' in phases %}
   <span class="conv-input-rail" aria-hidden="true"></span>
   <span class="conv-input-clock" aria-hidden="true"></span>
   <span class="conv-input-rail" aria-hidden="true"></span>
-  <span class="conv-input-badge conv-input-badge--todo">Opt-in identification</span>
+  <span class="conv-input-badge conv-input-badge--todo">{{ msg('home-phase-optin-id') }}</span>
   {% endif %}
 </div>
 {% endmacro %}
 
 {# ── Output symbol macro: ready links or pending detail popups ────────────── #}
 {% macro output_symbols(outputs) %}
-<div class="conv-output-grid" aria-label="Consultation outputs">
+<div class="conv-output-grid" aria-label="{{ msg('home-outputs-aria') }}">
   {% for output in outputs %}
     {% if output.ready %}
     <a class="conv-output-symbol conv-output-symbol--ready"
@@ -69,22 +69,22 @@
 {# ── Action chips macro ─────────────────────────────────────────────────────── #}
 {% macro conv_chips(sig) %}
 {%- if sig and sig.get('statements_remaining') is not none and sig.get('statements_remaining') > 0 -%}
-<span class="conv-chip">{{ sig.get('statements_remaining') }} to vote</span>
+<span class="conv-chip">{{ msg('home-chip-to-vote', sig.get('statements_remaining')) }}</span>
 {%- endif -%}
 {%- if sig and sig.get('reveal') and sig.get('reveal').state == 'open' -%}
 {%- set dl = sig.get('reveal').days_left -%}
-<span class="conv-chip conv-chip--alert"><span aria-hidden="true">! </span>Reveal window: {{ 'today' if dl <= 0 else (dl|string + 'd left') }}</span>
+<span class="conv-chip conv-chip--alert"><span aria-hidden="true">! </span>{{ msg('home-chip-reveal-today') if dl <= 0 else msg('home-chip-reveal-days', dl) }}</span>
 {%- elif sig and sig.get('reveal') and sig.get('reveal').state == 'pending' -%}
-<span class="conv-chip">Reveal opens in {{ sig.get('reveal').days_left }}d</span>
+<span class="conv-chip">{{ msg('home-chip-reveal-opens', sig.get('reveal').days_left) }}</span>
 {%- endif -%}
 {% endmacro %}
 
 <div class="container home-container">
 
   <div class="home-banner">
-    Prototype in active development — things may change.
+    {{ msg('home-banner-prototype') }}
     <a href="https://github.com/lgelauff/wiki-polis/issues/new"
-       target="_blank" rel="noopener">Open an issue<span class="sr-only"> (opens in a new tab)</span></a> if you find a bug.
+       target="_blank" rel="noopener">{{ msg('home-banner-open-issue') }}<span class="sr-only">{{ msg('common-opens-in-new-tab') }}</span></a>
   </div>
 
 {% if not username %}
@@ -92,10 +92,9 @@
   {# ── Unauthenticated landing ───────────────────────────────────────────── #}
 
   <div class="landing-section">
-    <h1 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Where the community actually stands.</h1>
+    <h1 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">{{ msg('home-hero-heading') }}</h1>
     <p style="font-size:15px;line-height:1.6;color:var(--body);max-width:520px">
-      Vote on short statements, watch opinion clusters emerge.
-      No threads, no replies — just signal.
+      {{ msg('home-hero-body') }}
     </p>
     <a href="{{ url_for('login') }}" class="login-btn" style="margin-top:18px">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -105,15 +104,15 @@
         <ellipse cx="12" cy="12" rx="9" ry="3.5"/>
         <ellipse cx="12" cy="12" rx="3.5" ry="9"/>
       </svg>
-      Login with Wikimedia
+      {{ msg('home-login-wikimedia') }}
     </a>
     {% if dev_test_users %}
     <div style="margin-top:1.25rem;padding:10px 14px;border:1px dashed var(--spot);border-radius:8px;background:rgba(245,158,11,0.05);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--spot)">Dev</span>
+      <span style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--spot)">{{ msg('home-dev-badge') }}</span>
       {% for u in dev_test_users %}
       <a href="{{ url_for('dev_fake_login', username=u.username) }}"
          style="font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:4px;background:var(--surface2);border:1px solid var(--hairline);color:var(--ink);text-decoration:none"
-         title="Log in as {{ u.username }}">{{ u.username }}</a>
+         title="{{ msg('home-dev-login-as', u.username) }}">{{ u.username }}</a>
       {% endfor %}
     </div>
     {% endif %}
@@ -123,20 +122,20 @@
   <section aria-labelledby="sec-open">
     <div class="home-section">
       <div class="home-section-header">
-        <h2 class="home-section-label" id="sec-open">Open consultations</h2>
-        <span class="home-section-count" aria-hidden="true">{{ public_conversations | length }} total</span>
+        <h2 class="home-section-label" id="sec-open">{{ msg('home-open-consultations') }}</h2>
+        <span class="home-section-count" aria-hidden="true">{{ msg('home-count-total', public_conversations | length) }}</span>
       </div>
       <ul class="conv-list">
         {% for c in public_conversations %}
         <li>
           <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card"
-             aria-label="{{ c.title }} — join consultation">
+             aria-label="{{ msg('home-card-join-aria', c.title) }}">
             <div class="conv-card-left">
               <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
               <h3 class="conv-card-title">{{ c.title }}</h3>
-              {% if c.access_policy == 'demo' %}<span class="conv-card-badge" aria-hidden="true">Demo</span>{% endif %}
+              {% if c.access_policy == 'demo' %}<span class="conv-card-badge" aria-hidden="true">{{ msg('home-badge-demo') }}</span>{% endif %}
             </div>
-            <span class="conv-card-action" aria-hidden="true">JOIN →</span>
+            <span class="conv-card-action" aria-hidden="true">{{ msg('home-action-join') }}</span>
           </a>
         </li>
         {% endfor %}
@@ -149,20 +148,20 @@
 
   {# ── Authenticated view ────────────────────────────────────────────────── #}
 
-  <h1 class="sr-only">Your consultations</h1>
+  <h1 class="sr-only">{{ msg('home-your-consultations') }}</h1>
 
   {# ── Flow diagram ─────────────────────────────────────────────────────── #}
   <img src="{{ url_for('static', filename='wiki-polis-flow.svg') }}"
-       alt="How a wiki-polis conversation works"
+       alt="{{ msg('home-flow-alt') }}"
        style="width:100%;max-width:900px;display:block;margin:0 auto 1.5rem">
 
   {# ── Phase journey legend ──────────────────────────────────────────────── #}
-  <div class="phase-legend" role="img" aria-label="Consultation phases: Explore, Arguments, Informed vote, Report">
+  <div class="phase-legend" role="img" aria-label="{{ msg('home-phase-legend-aria') }}">
     <div class="phase-legend-node">
       <span class="phase-legend-icon" aria-hidden="true">
         <span class="phase-symbol phase-symbol--explore"></span>
       </span>
-      <span class="phase-legend-label" aria-hidden="true">Explore</span>
+      <span class="phase-legend-label" aria-hidden="true">{{ msg('home-phase-explore') }}</span>
     </div>
     <div class="phase-legend-connector" aria-hidden="true">
       <span class="phase-legend-line"></span>
@@ -173,7 +172,7 @@
       <span class="phase-legend-icon" aria-hidden="true">
         <span class="phase-symbol phase-symbol--arguments"></span>
       </span>
-      <span class="phase-legend-label" aria-hidden="true">Arguments</span>
+      <span class="phase-legend-label" aria-hidden="true">{{ msg('home-phase-arguments') }}</span>
     </div>
     <div class="phase-legend-connector" aria-hidden="true">
       <span class="phase-legend-line"></span>
@@ -184,7 +183,7 @@
       <span class="phase-legend-icon" aria-hidden="true">
         <span class="phase-symbol phase-symbol--informed-vote"></span>
       </span>
-      <span class="phase-legend-label" aria-hidden="true">Informed vote</span>
+      <span class="phase-legend-label" aria-hidden="true">{{ msg('home-phase-informed-vote') }}</span>
     </div>
     <div class="phase-legend-connector" aria-hidden="true">
       <span class="phase-legend-line"></span>
@@ -195,14 +194,14 @@
       <span class="phase-legend-icon" aria-hidden="true">
         <span class="phase-symbol phase-symbol--report"></span>
       </span>
-      <span class="phase-legend-label" aria-hidden="true">Report</span>
+      <span class="phase-legend-label" aria-hidden="true">{{ msg('home-phase-report') }}</span>
     </div>
   </div>
 
   {# ── Mode toggle ───────────────────────────────────────────────────────── #}
-  <div class="home-mode-toggle" role="group" aria-label="View mode">
-    <button class="home-mode-btn" data-target="yours" type="button" aria-pressed="true">Your conversations</button>
-    <button class="home-mode-btn" data-target="browse" type="button" aria-pressed="false">Browse</button>
+  <div class="home-mode-toggle" role="group" aria-label="{{ msg('home-view-mode-aria') }}">
+    <button class="home-mode-btn" data-target="yours" type="button" aria-pressed="true">{{ msg('home-mode-yours') }}</button>
+    <button class="home-mode-btn" data-target="browse" type="button" aria-pressed="false">{{ msg('home-mode-browse') }}</button>
   </div>
 
   {# ── Your conversations ────────────────────────────────────────────────── #}
@@ -212,7 +211,7 @@
     <section aria-labelledby="sec-active">
       <div class="home-section">
         <div class="home-section-header">
-          <h2 class="home-section-label" id="sec-active">Active</h2>
+          <h2 class="home-section-label" id="sec-active">{{ msg('home-section-active') }}</h2>
           <span class="home-section-count" aria-hidden="true">{{ active_joined | length }}</span>
         </div>
         <ul class="conv-list">
@@ -222,7 +221,7 @@
           <li>
             <div class="conv-card conv-card--phase conv-card--outputs">
               <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card-main"
-                 aria-label="{{ c.title }}{% if part and part.pseudonym %} — your pseudonym: {{ part.pseudonym }}{% endif %}{% if sig.statements_remaining %} — {{ sig.statements_remaining }} statements to vote{% endif %} — continue">
+                 aria-label="{{ c.title }}{% if part and part.pseudonym %} {{ msg('home-card-aria-pseudonym', part.pseudonym) }}{% endif %}{% if sig.statements_remaining %} {{ msg('home-card-aria-remaining', sig.statements_remaining) }}{% endif %} {{ msg('home-card-aria-continue') }}">
                 <div class="conv-card-left conv-card-left--col">
                 <div class="conv-card-title-row">
                   <h3 class="conv-card-title">{{ c.title }}</h3>
@@ -232,7 +231,7 @@
                 {% set chips = conv_chips(sig) %}
                 {% if chips.strip() %}<div class="conv-chips">{{ chips }}</div>{% endif %}
                 </div>
-                <span class="conv-card-action" aria-hidden="true">CONTINUE →</span>
+                <span class="conv-card-action" aria-hidden="true">{{ msg('home-action-continue') }}</span>
               </a>
               <span class="conv-card-output-divider" aria-hidden="true"></span>
               {{ output_symbols(sig.outputs if sig.outputs is defined else []) }}
@@ -248,7 +247,7 @@
     <section aria-labelledby="sec-closed">
       <div class="home-section">
         <div class="home-section-header">
-          <h2 class="home-section-label" id="sec-closed">Closed</h2>
+          <h2 class="home-section-label" id="sec-closed">{{ msg('home-section-closed') }}</h2>
           <span class="home-section-count" aria-hidden="true">{{ archived_joined | length }}</span>
         </div>
         <ul class="conv-list">
@@ -258,7 +257,7 @@
           <li>
             <div class="conv-card conv-card--phase conv-card--outputs">
               <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card-main"
-                 aria-label="{{ c.title }}{% if part and part.pseudonym %} — pseudonym: {{ part.pseudonym }}{% endif %} — closed{% if c.closed_at %} {{ c.closed_at.strftime('%B %Y') }}{% endif %}">
+                 aria-label="{{ c.title }}{% if part and part.pseudonym %} {{ msg('home-card-aria-pseudonym-short', part.pseudonym) }}{% endif %} {{ msg('home-card-aria-closed') }}{% if c.closed_at %} {{ c.closed_at.strftime('%B %Y') }}{% endif %}">
                 <div class="conv-card-left conv-card-left--col">
                 <div class="conv-card-title-row">
                   <h3 class="conv-card-title">{{ c.title }}</h3>
@@ -269,7 +268,7 @@
                 {% set chips = conv_chips(sig) %}
                 {% if chips.strip() %}<div class="conv-chips">{{ chips }}</div>{% endif %}
                 </div>
-                <span class="conv-card-action conv-card-action--muted" aria-hidden="true">VIEW →</span>
+                <span class="conv-card-action conv-card-action--muted" aria-hidden="true">{{ msg('home-action-view') }}</span>
               </a>
               <span class="conv-card-output-divider" aria-hidden="true"></span>
               {{ output_symbols(sig.outputs if sig.outputs is defined else []) }}
@@ -283,7 +282,7 @@
 
     {% if not active_joined and not archived_joined %}
     <div class="home-empty">
-      <p class="muted">You haven't joined any consultations yet. Use Browse to find one.</p>
+      <p class="muted">{{ msg('home-empty-none-joined') }}</p>
     </div>
     {% endif %}
 
@@ -296,7 +295,7 @@
     <section aria-labelledby="sec-available">
       <div class="home-section">
         <div class="home-section-header">
-          <h2 class="home-section-label" id="sec-available">Open to you</h2>
+          <h2 class="home-section-label" id="sec-available">{{ msg('home-section-open-to-you') }}</h2>
           <span class="home-section-count" aria-hidden="true">{{ available | length }}</span>
         </div>
         <ul class="conv-list">
@@ -305,14 +304,14 @@
           <li>
             <div class="conv-card conv-card--phase conv-card--outputs">
               <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card-main"
-                 aria-label="{{ c.title }} — join consultation">
+                 aria-label="{{ msg('home-card-join-aria', c.title) }}">
                 <div class="conv-card-left conv-card-left--col">
                 <div class="conv-card-title-row">
                   <h3 class="conv-card-title">{{ c.title }}</h3>
                 </div>
                 {{ input_timeline(sig.phases if sig.phases is defined else set()) }}
                 </div>
-                <span class="conv-card-action" aria-hidden="true">JOIN →</span>
+                <span class="conv-card-action" aria-hidden="true">{{ msg('home-action-join') }}</span>
               </a>
               <span class="conv-card-output-divider" aria-hidden="true"></span>
               {{ output_symbols(sig.outputs if sig.outputs is defined else []) }}
@@ -324,7 +323,7 @@
     </section>
     {% else %}
     <div class="home-empty">
-      <p class="muted">No consultations open to you right now.</p>
+      <p class="muted">{{ msg('home-empty-none-open') }}</p>
     </div>
     {% endif %}
 
@@ -335,7 +334,7 @@
   <section aria-labelledby="sec-moderate">
     <div class="home-section">
       <div class="home-section-header">
-        <h2 class="home-section-label" id="sec-moderate">You moderate</h2>
+        <h2 class="home-section-label" id="sec-moderate">{{ msg('home-section-moderate') }}</h2>
         <span class="home-section-count" aria-hidden="true">{{ moderating | length }}</span>
       </div>
       <ul class="conv-list">
@@ -345,13 +344,13 @@
             <div class="conv-card-left">
               <span class="conv-dot {{ 'conv-dot--active' if c.active else 'conv-dot--closed' }}" aria-hidden="true"></span>
               <h3 class="conv-card-title-wrap"><a href="{{ url_for('participant.conversation', slug=c.slug) }}"
-                 class="conv-card-title" aria-label="{{ c.title }} — open consultation">{{ c.title }}</a></h3>
-              {% if not c.active %}<span class="conv-card-badge">closed</span>{% endif %}
+                 class="conv-card-title" aria-label="{{ msg('home-card-view-aria', c.title) }}">{{ c.title }}</a></h3>
+              {% if not c.active %}<span class="conv-card-badge">{{ msg('home-card-badge-closed') }}</span>{% endif %}
             </div>
             <span class="conv-card-divider" aria-hidden="true"></span>
             <a href="{{ url_for('admin.admin_conversation_detail', conv_id=c.id) }}"
                class="admin-action-btn"
-               aria-label="Open admin panel for {{ c.title }}">Admin →</a>
+               aria-label="{{ msg('home-card-admin-aria', c.title) }}">{{ msg('home-action-admin') }}</a>
           </div>
         </li>
         {% endfor %}
@@ -367,8 +366,8 @@
 {% if username %}
 <div class="output-dialog" id="output-dialog" role="dialog" aria-modal="true" aria-labelledby="output-dialog-title" hidden>
   <div class="output-dialog-panel">
-    <button type="button" class="output-dialog-close" aria-label="Close output details">&times;</button>
-    <h2 id="output-dialog-title">Output pending</h2>
+    <button type="button" class="output-dialog-close" aria-label="{{ msg('home-output-dialog-close') }}">&times;</button>
+    <h2 id="output-dialog-title">{{ msg('home-output-dialog-title') }}</h2>
     <p id="output-dialog-body" class="muted"></p>
   </div>
 </div>
@@ -420,7 +419,7 @@
   document.querySelectorAll('.conv-output-symbol--pending').forEach(function (btn) {
     btn.addEventListener('click', function () {
       lastFocus = btn;
-      title.textContent = btn.dataset.title || 'Output pending';
+      title.textContent = btn.dataset.title || wpI18n.msg('home-output-dialog-title');
       body.textContent = btn.dataset.detail || '';
       dialog.hidden = false;
       close.focus();

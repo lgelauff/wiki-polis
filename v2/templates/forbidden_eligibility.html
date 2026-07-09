@@ -1,23 +1,23 @@
 {% extends "base.html" %}
-{% block title %}Not eligible — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block title %}{{ msg('forbidden-elig-doc-title') }} — {{ conversation.title }} — wiki-polis{% endblock %}
 {% block content %}
 
 <div class="container">
   <div class="landing-section">
-    <h1>Not eligible for this consultation</h1>
+    <h1>{{ msg('forbidden-elig-heading') }}</h1>
     <p class="muted">
-      This consultation has an eligibility requirement{% if conversation.eligibility_label %}:
+      {{ msg('forbidden-elig-requirement') }}{% if conversation.eligibility_label %}:
       <strong>{{ conversation.eligibility_label }}</strong>{% endif %}.
     </p>
     {% if detail.reason or detail.message %}
     <p class="muted">{{ detail.reason or detail.message }}</p>
     {% elif status == 'unavailable' %}
-    <p class="muted">The eligibility checker is unavailable right now. Try again later.</p>
+    <p class="muted">{{ msg('forbidden-elig-unavailable') }}</p>
     {% else %}
-    <p class="muted">Your account did not meet the configured criteria.</p>
+    <p class="muted">{{ msg('forbidden-elig-criteria') }}</p>
     {% endif %}
     <p style="margin-top:1rem">
-      <a href="{{ url_for('index') }}">Return home <span aria-hidden="true">→</span></a>
+      <a href="{{ url_for('index') }}">{{ msg('common-return-home') }} <span aria-hidden="true">→</span></a>
     </p>
   </div>
 </div>

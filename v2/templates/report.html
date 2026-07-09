@@ -5,7 +5,7 @@
   <span class="header-crumb-sep">/</span>
   <span>{{ conversation.title | truncate(40, True, '…') }}</span>
   <span class="header-crumb-sep">/</span>
-  <span>report</span>
+  <span>{{ msg('report-crumb') }}</span>
 </span>
 {% endblock %}
 
@@ -24,29 +24,29 @@
     <div>
       <h1 class="report-title">{{ conversation.title }}</h1>
       <p class="report-subtitle">
-        Final results report
+        {{ msg('report-subtitle') }}
         {% if conversation.closed_at %}
-        · closed {{ conversation.closed_at.strftime('%-d %b %Y') }}
+        {{ msg('report-closed-suffix') }} {{ conversation.closed_at.strftime('%-d %b %Y') }}
         {% endif %}
       </p>
     </div>
-    <span class="report-badge">Final</span>
+    <span class="report-badge">{{ msg('report-badge-final') }}</span>
   </div>
 
   {% if output_context %}
   <div class="report-section output-context">
-    <h2 class="report-section-heading">How to read this output</h2>
+    <h2 class="report-section-heading">{{ msg('output-howto-heading') }}</h2>
     <dl class="output-context-grid">
       <div>
-        <dt>Produced from</dt>
+        <dt>{{ msg('output-produced-from') }}</dt>
         <dd>{{ output_context.phase }}</dd>
       </div>
       <div>
-        <dt>Status</dt>
-        <dd>Final · frozen at publication</dd>
+        <dt>{{ msg('output-status-label') }}</dt>
+        <dd>{{ msg('report-status-final') }}</dd>
       </div>
       <div>
-        <dt>Method</dt>
+        <dt>{{ msg('output-method-label') }}</dt>
         <dd>{{ output_context.method }}</dd>
       </div>
     </dl>
@@ -55,42 +55,40 @@
 
   {# ── Introduction ─────────────────────────────────────────────────────────── #}
   <div class="report-section">
-    <h2 class="report-section-heading">Introduction</h2>
+    <h2 class="report-section-heading">{{ msg('report-intro-heading') }}</h2>
     {# PLACEHOLDER: organizer-written report introduction.
        Add a `conversation.report_intro` field (separate from intro_text, which is
        the participant-facing submission prompt) and render it here. #}
     <p class="report-placeholder">
-      <em>Organizer introduction not yet added. This section should explain
-      what the consultation was about, who organised it, and how the results
-      will be used.</em>
+      <em>{{ msg('report-intro-placeholder') }}</em>
     </p>
   </div>
 
   {# ── Process timeline ────────────────────────────────────────────────────── #}
   <div class="report-section">
-    <h2 class="report-section-heading">Process</h2>
+    <h2 class="report-section-heading">{{ msg('report-process-heading') }}</h2>
     <div class="report-timeline">
       <div class="report-timeline-item">
-        <span class="report-timeline-label">Consultation opened</span>
+        <span class="report-timeline-label">{{ msg('report-process-opened') }}</span>
         <span class="report-timeline-value">{{ conversation.created_at.strftime('%-d %b %Y') }}</span>
       </div>
       {# PLACEHOLDER: per-phase open timestamps are not yet stored in the DB.
          Add phase_*_opened_at columns to record when each toggle was first enabled. #}
       <div class="report-timeline-item report-timeline-item--placeholder">
-        <span class="report-timeline-label">Submission phase</span>
-        <span class="report-timeline-value report-placeholder-inline">dates not stored yet</span>
+        <span class="report-timeline-label">{{ msg('report-process-submission') }}</span>
+        <span class="report-timeline-value report-placeholder-inline">{{ msg('report-process-dates-tbd') }}</span>
       </div>
       <div class="report-timeline-item report-timeline-item--placeholder">
-        <span class="report-timeline-label">Argument mapping</span>
-        <span class="report-timeline-value report-placeholder-inline">dates not stored yet</span>
+        <span class="report-timeline-label">{{ msg('report-process-argmap') }}</span>
+        <span class="report-timeline-value report-placeholder-inline">{{ msg('report-process-dates-tbd') }}</span>
       </div>
       <div class="report-timeline-item report-timeline-item--placeholder">
-        <span class="report-timeline-label">Informed voting</span>
-        <span class="report-timeline-value report-placeholder-inline">dates not stored yet</span>
+        <span class="report-timeline-label">{{ msg('report-process-informed') }}</span>
+        <span class="report-timeline-value report-placeholder-inline">{{ msg('report-process-dates-tbd') }}</span>
       </div>
       {% if conversation.closed_at %}
       <div class="report-timeline-item">
-        <span class="report-timeline-label">Consultation closed</span>
+        <span class="report-timeline-label">{{ msg('report-process-closed') }}</span>
         <span class="report-timeline-value">{{ conversation.closed_at.strftime('%-d %b %Y') }}</span>
       </div>
       {% endif %}
@@ -101,18 +99,18 @@
 
   {# ── Participation ────────────────────────────────────────────────────────── #}
   <div class="report-section">
-    <h2 class="report-section-heading">Participation</h2>
+    <h2 class="report-section-heading">{{ msg('report-participation-heading') }}</h2>
     <div class="report-stats-row">
       {% if phase6_results.p2_participants %}
       <div class="report-stat">
         <span class="report-stat-value">{{ phase6_results.p2_participants }}</span>
-        <span class="report-stat-label">Initial voting (Phase 2)</span>
+        <span class="report-stat-label">{{ msg('report-participation-p2') }}</span>
       </div>
       {% endif %}
       {% if phase6_results.p6_participants %}
       <div class="report-stat">
         <span class="report-stat-value">{{ phase6_results.p6_participants }}</span>
-        <span class="report-stat-label">Informed voting (Phase 6)</span>
+        <span class="report-stat-label">{{ msg('report-participation-p6') }}</span>
       </div>
       {% endif %}
       {# PLACEHOLDER: matched_participants — participants who voted in both rounds.
@@ -120,42 +118,40 @@
          delta calculation and extrapolation. #}
       <div class="report-stat report-stat--placeholder">
         <span class="report-stat-value">—</span>
-        <span class="report-stat-label">Voted in both rounds</span>
+        <span class="report-stat-label">{{ msg('report-participation-both') }}</span>
       </div>
     </div>
     {% if phase6_results.filter.excluded_tids or phase6_results.filter.excluded_pids %}
     <p class="report-moderation-note muted">
-      Moderation applied:
+      {{ msg('report-moderation-applied') }}
       {% if phase6_results.filter.excluded_tids %}
-      {{ phase6_results.filter.excluded_tids | length }} statement{{ 's' if phase6_results.filter.excluded_tids | length != 1 }} excluded
+      {{ msg('report-moderation-stmts', phase6_results.filter.excluded_tids | length) }}
       {% endif %}
       {% if phase6_results.filter.excluded_pids %}
-      · {{ phase6_results.filter.excluded_pids | length }} participant{{ 's' if phase6_results.filter.excluded_pids | length != 1 }} excluded
+      {{ msg('report-moderation-parts', phase6_results.filter.excluded_pids | length) }}
       {% endif %}
     </p>
     {% endif %}
     {% if not phase6_results.pg_available %}
     <p class="muted" style="font-size:13px;margin-top:.5rem">
-      Detailed vote counts are not available — the results database is unreachable.
+      {{ msg('report-participation-unavailable') }}
     </p>
     {% endif %}
   </div>
 
   {# ── Statement inventory ──────────────────────────────────────────────────── #}
   <div class="report-section">
-    <h2 class="report-section-heading">Statements</h2>
+    <h2 class="report-section-heading">{{ msg('report-statements-heading') }}</h2>
     {# PLACEHOLDER: full statement inventory — total submitted, seed vs participant-proposed,
        moderation outcomes (accepted / rejected / pending).
        Requires: Particiapi query for full statement list + moderation status.
        We currently only store confirmed featured statements.
        Add a `get_all_statements(zinvite)` call and render counts here. #}
     <p class="report-placeholder">
-      <em>Statement inventory not yet available. This section will show: total
-      statements submitted, how many were seed statements vs participant-proposed,
-      and moderation outcomes.</em>
+      <em>{{ msg('report-statements-placeholder') }}</em>
     </p>
     <p class="muted" style="font-size:13px">
-      Featured statements used in informed voting: {{ phase6_results.statements | length }}
+      {{ msg('report-featured-count', phase6_results.statements | length) }}
     </p>
   </div>
 
@@ -163,41 +159,40 @@
   {% if phase6_results.p2_consensus or phase6_results.p2_divisive %}
   <div class="report-section">
     <h2 class="report-section-heading">
-      Initial opinions
-      <span class="report-section-sub">Phase 2 — before argument mapping</span>
+      {{ msg('report-initial-heading') }}
+      <span class="report-section-sub">{{ msg('report-initial-sub') }}</span>
     </h2>
     <p class="muted" style="font-size:13px;margin-bottom:1rem">
-      Based on votes cast during the initial submission phase, before participants
-      saw any arguments.
+      {{ msg('report-initial-intro') }}
     </p>
 
     {% if phase6_results.p2_consensus %}
-    <h3 class="report-section-sub-heading">Highest agreement</h3>
+    <h3 class="report-section-sub-heading">{{ msg('report-highest-agreement') }}</h3>
     {% for s in phase6_results.p2_consensus %}
     <div class="report-stmt-row">
       <p class="report-stmt-text">{{ s.text }}</p>
-      <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}%">
+      <div class="p6-vote-bar" title="{{ msg('report-bar-title', s.p2.pct_agree, s.p2.pct_disagree) }}">
         <div class="p6-bar-agree" style="width:{{ s.p2.pct_agree }}%"></div>
         <div class="p6-bar-disagree" style="width:{{ s.p2.pct_disagree }}%"></div>
       </div>
-      <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree · {{ s.p2.n_voters }} votes</span>
+      <span class="p6-bar-label">{{ msg('report-bar-label', s.p2.pct_agree, s.p2.n_voters) }}</span>
     </div>
     {% endfor %}
     {% endif %}
 
     {% if phase6_results.p2_divisive %}
-    <h3 class="report-section-sub-heading" style="margin-top:1.25rem">Most divisive</h3>
+    <h3 class="report-section-sub-heading" style="margin-top:1.25rem">{{ msg('report-most-divisive') }}</h3>
     <p class="muted" style="font-size:13px;margin-bottom:.75rem">
-      Statements with the most evenly split agree/disagree response.
+      {{ msg('report-divisive-intro') }}
     </p>
     {% for s in phase6_results.p2_divisive %}
     <div class="report-stmt-row">
       <p class="report-stmt-text">{{ s.text }}</p>
-      <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}%">
+      <div class="p6-vote-bar" title="{{ msg('report-bar-title', s.p2.pct_agree, s.p2.pct_disagree) }}">
         <div class="p6-bar-agree" style="width:{{ s.p2.pct_agree }}%"></div>
         <div class="p6-bar-disagree" style="width:{{ s.p2.pct_disagree }}%"></div>
       </div>
-      <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree · {{ s.p2.n_voters }} votes</span>
+      <span class="p6-bar-label">{{ msg('report-bar-label', s.p2.pct_agree, s.p2.n_voters) }}</span>
     </div>
     {% endfor %}
     {% endif %}
@@ -206,15 +201,13 @@
 
   {# ── Argument mapping ─────────────────────────────────────────────────────── #}
   <div class="report-section">
-    <h2 class="report-section-heading">Argument mapping</h2>
+    <h2 class="report-section-heading">{{ msg('report-argmap-heading') }}</h2>
     {# PLACEHOLDER: argument mapping summary.
        Feasible soon: argument counts are in our DB (Arguments table).
        Add to the report route: argument count per statement, most-upvoted arguments,
        participation in the argument voting phase. #}
     <p class="report-placeholder">
-      <em>Argument mapping summary not yet available. This section will show:
-      arguments submitted per statement, most-upvoted pro/con arguments, and
-      participation in argument voting.</em>
+      <em>{{ msg('report-argmap-placeholder') }}</em>
     </p>
   </div>
 
@@ -222,24 +215,19 @@
   {% if phase6_results.statements and phase6_results.pg_available %}
   <div class="report-section">
     <h2 class="report-section-heading">
-      Opinion shift
-      <span class="report-section-sub">Did argument exposure change views?</span>
+      {{ msg('report-shift-heading') }}
+      <span class="report-section-sub">{{ msg('report-shift-sub') }}</span>
     </h2>
     <p class="muted" style="font-size:13px;margin-bottom:1rem">
-      Each row compares the initial vote (Phase 2, before arguments) with the
-      informed vote (Phase 6, after argument mapping). <strong>Shift</strong> is
-      the change in population-level agree rate — a cross-round comparison of
-      separate populations, not a matched individual delta
-      (see <a href="#methodology" class="report-anchor">Methodology</a> below).
-      Sorted by size of shift.
+      {{ msg('report-shift-intro')|safe }} <a href="#methodology" class="report-anchor">{{ msg('report-methodology-link') }}</a> {{ msg('report-shift-below') }} {{ msg('report-shift-sorted') }}
     </p>
-    <table class="p6-results-table report-table" aria-label="Aggregate opinion shift per statement">
+    <table class="p6-results-table report-table" aria-label="{{ msg('report-table-aria') }}">
       <thead>
         <tr>
-          <th class="p6-col-stmt">Statement</th>
-          <th class="p6-col-phase">Initial</th>
-          <th class="p6-col-phase">Informed</th>
-          <th class="p6-col-shift">Shift <span class="report-col-note">(aggregate)</span></th>
+          <th class="p6-col-stmt">{{ msg('report-col-statement') }}</th>
+          <th class="p6-col-phase">{{ msg('report-col-initial') }}</th>
+          <th class="p6-col-phase">{{ msg('report-col-informed') }}</th>
+          <th class="p6-col-shift">{{ msg('report-col-shift') }} <span class="report-col-note">{{ msg('report-col-shift-note') }}</span></th>
         </tr>
       </thead>
       <tbody>
@@ -248,19 +236,19 @@
         <td class="p6-col-stmt">{{ s.text }}</td>
         <td class="p6-col-phase">
           {% if s.p2 %}
-          <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}%">
+          <div class="p6-vote-bar" title="{{ msg('report-bar-title', s.p2.pct_agree, s.p2.pct_disagree) }}">
             <div class="p6-bar-agree" style="width:{{ s.p2.pct_agree }}%"></div>
             <div class="p6-bar-disagree" style="width:{{ s.p2.pct_disagree }}%"></div>
           </div>
-          <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree · {{ s.p2.n_voters }} votes</span>
+          <span class="p6-bar-label">{{ msg('report-bar-label', s.p2.pct_agree, s.p2.n_voters) }}</span>
           {% else %}<span class="muted">—</span>{% endif %}
         </td>
         <td class="p6-col-phase">
-          <div class="p6-vote-bar" title="Agree {{ s.p6.pct_agree }}% · Disagree {{ s.p6.pct_disagree }}%">
+          <div class="p6-vote-bar" title="{{ msg('report-bar-title', s.p6.pct_agree, s.p6.pct_disagree) }}">
             <div class="p6-bar-agree" style="width:{{ s.p6.pct_agree }}%"></div>
             <div class="p6-bar-disagree" style="width:{{ s.p6.pct_disagree }}%"></div>
           </div>
-          <span class="p6-bar-label">{{ s.p6.pct_agree }}% agree · {{ s.p6.n_voters }} votes</span>
+          <span class="p6-bar-label">{{ msg('report-bar-label', s.p6.pct_agree, s.p6.n_voters) }}</span>
         </td>
         <td class="p6-col-shift">
           {% if s.shift is not none %}
@@ -278,7 +266,7 @@
 
   {# ── Matched participant delta ─────────────────────────────────────────────── #}
   <div class="report-section">
-    <h2 class="report-section-heading">Matched participant analysis</h2>
+    <h2 class="report-section-heading">{{ msg('report-matched-heading') }}</h2>
     {# PLACEHOLDER: individual-level delta for participants who voted in both rounds,
        and extrapolation to the full Phase 2 population with confidence intervals.
 
@@ -292,15 +280,10 @@
           - Difference-in-differences with covariates if demographic data is available
        See literature/REVIEW.md in polis-study for relevant references. #}
     <p class="report-placeholder">
-      <em>Matched participant analysis not yet available. This section will show
-      the individual-level opinion change for participants who voted in both rounds,
-      and a population-level extrapolation with confidence intervals.</em>
+      <em>{{ msg('report-matched-placeholder') }}</em>
     </p>
     <p class="muted" style="font-size:13px">
-      Note: delta is only directly observable for participants who cast a vote in
-      both Phase 2 and Phase 6. Extrapolation to the full initial-voting cohort
-      requires statistical adjustment; confidence intervals for this extrapolation
-      are under development (pending methodology review).
+      {{ msg('report-matched-note') }}
     </p>
   </div>
 
@@ -308,30 +291,28 @@
   {% if phase6_results.clusters %}
   <div class="report-section">
     <h2 class="report-section-heading">
-      Opinion groups
-      <span class="report-section-sub">{{ phase6_results.clusters | length }} group{{ 's' if phase6_results.clusters | length != 1 }} identified in the informed voting round</span>
+      {{ msg('report-groups-heading') }}
+      <span class="report-section-sub">{{ msg('report-groups-sub', phase6_results.clusters | length) }}</span>
     </h2>
     <p class="muted" style="font-size:13px;margin-bottom:1rem">
-      Groups represent clusters of participants with similar voting patterns,
-      identified by PCA + k-means on the informed voting matrix. Statements
-      listed here were most characteristic of each group.
+      {{ msg('report-groups-intro') }}
     </p>
     {% for group in phase6_results.clusters %}
     <div class="results-block" style="margin-bottom:1rem">
       <p class="results-group-heading">
-        Group {{ loop.index }}
-        {% if group.n_members %}<span class="muted" style="font-weight:400;font-size:12px">· {{ group.n_members }} participant{{ 's' if group.n_members != 1 }}</span>{% endif %}
+        {{ msg('report-group-label', loop.index) }}
+        {% if group.n_members %}<span class="muted" style="font-weight:400;font-size:12px">{{ msg('report-group-members', group.n_members) }}</span>{% endif %}
       </p>
       {% for r in group.agree %}
       <div class="results-row">
-        <span class="results-badge results-agree">agree</span>
+        <span class="results-badge results-agree">{{ msg('report-badge-agree') }}</span>
         <span class="results-text">"{{ r.statement_text }}"</span>
         {% if r.value %}<span class="results-pct">{{ (r.value * 100)|int }}%</span>{% endif %}
       </div>
       {% endfor %}
       {% for r in group.disagree %}
       <div class="results-row">
-        <span class="results-badge results-disagree">disagree</span>
+        <span class="results-badge results-disagree">{{ msg('report-badge-disagree') }}</span>
         <span class="results-text">"{{ r.statement_text }}"</span>
         {% if r.value %}<span class="results-pct">{{ (r.value * 100)|int }}%</span>{% endif %}
       </div>
@@ -344,41 +325,28 @@
   {# ── Self-comparison placeholder (Surface C) ─────────────────────────────── #}
   {% if participation and phase6_results.clusters %}
   <div class="report-section report-section--explore">
-    <h2 class="report-section-heading">Where did you land?</h2>
+    <h2 class="report-section-heading">{{ msg('report-landed-heading') }}</h2>
     <p class="muted" style="font-size:13px">
-      Personalised group comparison — coming soon. This will show how your informed votes
-      compare to each opinion group and where your views sit in the overall distribution.
+      {{ msg('report-landed-body') }}
     </p>
   </div>
   {% endif %}
 
   {# ── Methodology ─────────────────────────────────────────────────────────── #}
   <div class="report-section" id="methodology">
-    <h2 class="report-section-heading">Methodology</h2>
+    <h2 class="report-section-heading">{{ msg('report-methodology-heading') }}</h2>
 
-    <h3 class="report-section-sub-heading">Data sources</h3>
+    <h3 class="report-section-sub-heading">{{ msg('report-methodology-sources-heading') }}</h3>
     <p class="muted" style="font-size:13px;margin-bottom:1rem">
-      Vote counts are drawn from the Polis Postgres database
-      (<code>votes_latest_unique</code> view), which holds one vote per
-      participant per statement. Opinion groups (clusters) are computed by the
-      Polis math service and retrieved via the Particiapi results API. Where the
-      two participant counts diverge by more than 5%, a warning is logged.
-      Moderation exclusions (hidden statements, banned participants) are applied
-      before any aggregation.
+      {{ msg('report-methodology-sources-body')|safe }}
     </p>
 
-    <h3 class="report-section-sub-heading">Aggregate opinion shift</h3>
+    <h3 class="report-section-sub-heading">{{ msg('report-methodology-shift-heading') }}</h3>
     <p class="muted" style="font-size:13px;margin-bottom:1rem">
-      The shift column in the opinion-shift table is computed as
-      <em>Phase 6 agree% − Phase 2 agree%</em>. This is a cross-round
-      <strong>population comparison</strong>, not a paired before/after
-      measurement: Phase 2 and Phase 6 participants are overlapping but not
-      identical sets. A positive shift means the informed-voting cohort agreed
-      at a higher rate, but this may partly reflect differences in who
-      participated rather than genuine attitude change.
+      {{ msg('report-methodology-shift-body')|safe }}
     </p>
 
-    <h3 class="report-section-sub-heading">Individual delta and extrapolation</h3>
+    <h3 class="report-section-sub-heading">{{ msg('report-methodology-delta-heading') }}</h3>
     {# PLACEHOLDER: CI methodology — requires literature review.
        Candidate references from polis-study/literature/REVIEW.md:
        - small2021polis for the Polis matrix model
@@ -388,31 +356,21 @@
        inverse-probability weighting or difference-in-differences for extrapolation.
        Literature review needed before finalising. #}
     <p class="muted" style="font-size:13px;margin-bottom:1rem">
-      Individual-level delta — the change in a specific participant's vote
-      between rounds — is only observable for participants who voted in both
-      Phase 2 and Phase 6. Extrapolating from this matched subset to the full
-      initial-voting population requires statistical adjustment for the
-      non-random selection of who returned for Phase 6.
+      {{ msg('report-methodology-delta-body') }}
     </p>
     <p class="report-placeholder" style="font-size:13px">
-      <em>Confidence interval methodology for the extrapolated delta is pending
-      literature review. This section will describe the statistical method used
-      once the approach is finalised.</em>
+      <em>{{ msg('report-methodology-delta-placeholder') }}</em>
     </p>
 
-    <h3 class="report-section-sub-heading">Clustering</h3>
+    <h3 class="report-section-sub-heading">{{ msg('report-methodology-clustering-heading') }}</h3>
     <p class="muted" style="font-size:13px">
-      Opinion groups are produced by the Polis algorithm: PCA reduces the
-      participant × statement vote matrix to two dimensions, then k-means
-      clustering groups participants by voting similarity. The number of groups
-      is chosen by silhouette score. Consensus and representative statements for
-      each group are selected by the Polis math service.
+      {{ msg('report-methodology-clustering-body') }}
     </p>
   </div>
 
   {% else %}
   <div class="landing-section">
-    <p class="muted">Informed voting results are not available for this consultation yet.</p>
+    <p class="muted">{{ msg('report-no-results') }}</p>
   </div>
   {% endif %}
 
@@ -420,12 +378,11 @@
   {% if reveal_state == 'open' and participation %}
   <div class="reveal-callout" style="margin-top:2rem">
     <p class="reveal-callout-text">
-      The identity reveal window is open. Your participation is recorded under
-      pseudonym <strong>{{ participation.pseudonym }}</strong>.
+      {{ msg('reveal-callout-open-text') }} <strong>{{ participation.pseudonym }}</strong>.
     </p>
     <a class="reveal-callout-link"
        href="{{ url_for('participant.reveal_identity', slug=conversation.slug) }}">
-      Optionally link your Wikimedia username <span aria-hidden="true">→</span>
+      {{ msg('reveal-callout-link') }} <span aria-hidden="true">→</span>
     </a>
   </div>
   {% endif %}

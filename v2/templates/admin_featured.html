@@ -1,43 +1,37 @@
 {% extends "base.html" %}
-{% block title %}Featured statements — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block title %}{{ msg('featured-doc-title') }} — {{ conversation.title }} — wiki-polis{% endblock %}
 {% block header_crumb %}
-<nav class="header-crumb" aria-label="Admin breadcrumb">
+<nav class="header-crumb" aria-label="{{ msg('admin-crumb-aria') }}">
   <span class="header-crumb-sep">/</span>
-  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
+  <a href="{{ url_for('admin.admin') }}">{{ msg('admin-nav-panel') }}</a>
   <span class="header-crumb-sep">/</span>
   <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ conversation.title | truncate(28, True, '…') }}</a>
   <span class="header-crumb-sep">/</span>
-  <span>Featured</span>
+  <span>{{ msg('featured-crumb') }}</span>
 </nav>
 {% endblock %}
 {% block content %}
 
 <div class="container">
 
-  <h2>Featured statements — {{ conversation.title }}</h2>
+  <h2>{{ msg('featured-heading-prefix') }} {{ conversation.title }}</h2>
 
   <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
-    Featured statements appear in the argument mapping tab. Participants submit a pro and con
-    argument for each, then vote on the most important arguments submitted by others.
+    {{ msg('featured-intro') }}
   </p>
 
   <div class="landing-section" style="margin-bottom:1.5rem">
-    <h3 style="font-size:16px;margin-bottom:.5rem">How to choose featured statements</h3>
+    <h3 style="font-size:16px;margin-bottom:.5rem">{{ msg('featured-howto-heading') }}</h3>
     <p class="muted" style="font-size:13px;margin-bottom:.6rem">
-      Featured statements are the representative set that carries the rest of the consultation:
-      they become the prompts for argument mapping and are seeded into informed voting.
-      Aim for a balanced set across the main viewpoints, not only the most popular statements.
+      {{ msg('featured-howto-body') }}
     </p>
     <ul style="font-size:13px;padding-left:1.25rem;margin-bottom:.6rem">
-      <li>Use roughly 15 statements as a working target, then adjust for topic complexity.</li>
-      <li>Prefer statements with enough votes to indicate signal, while preserving minority viewpoints.</li>
-      <li>Once argument mapping begins, treat the selected set as locked; changing it later can confuse participants and downstream Phase 6 seeding.</li>
+      <li>{{ msg('featured-howto-li1') }}</li>
+      <li>{{ msg('featured-howto-li2') }}</li>
+      <li>{{ msg('featured-howto-li3') }}</li>
     </ul>
     <p class="muted" style="font-size:13px;margin-bottom:0">
-      System suggestions are ranked candidates from the Polis data. Manual TID adds are for
-      known statements that should be included even if they are not surfaced by the suggestion query.
-      Arguments are visible by default; hide individual arguments here when they need moderation,
-      and unhide them after review.
+      {{ msg('featured-howto-body2') }}
     </p>
   </div>
 
@@ -50,14 +44,14 @@
   {% endwith %}
 
   <!-- ── Confirmed ──────────────────────────────────────── -->
-  <h3 class="section-heading">Confirmed ({{ confirmed | length }})</h3>
+  <h3 class="section-heading">{{ msg('featured-confirmed-heading') }} ({{ confirmed | length }})</h3>
 
   {% if confirmed %}
   <table class="admin-table" style="margin-bottom:1.5rem">
     <thead>
       <tr>
-        <th>TID</th>
-        <th>Statement</th>
+        <th>{{ msg('featured-th-tid') }}</th>
+        <th>{{ msg('featured-th-statement') }}</th>
         <th></th>
       </tr>
     </thead>
@@ -75,13 +69,13 @@
             </span>
           </div>{% endif %}
           <div style="border-top:1px solid var(--hairline);padding-top:0.4rem;margin-top:0.1rem">
-            <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Arguments</span>
+            <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">{{ msg('featured-arguments-label') }}</span>
             {% if fs.arguments %}
             {% for arg in fs.arguments %}
             <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin-top:4px;font-size:12px">
               <span style="color:var(--muted);min-width:2rem;flex-shrink:0">{{ arg.side }}</span>
               {% if arg.hidden %}
-              <span style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:999px;padding:1px 6px;font-size:11px">hidden</span>
+              <span style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:999px;padding:1px 6px;font-size:11px">{{ msg('featured-arg-hidden') }}</span>
               {% endif %}
               <span style="flex:1;min-width:120px;color:var(--body)">{{ arg.body }}</span>
               <span style="color:var(--muted);white-space:nowrap">{{ arg.proposer_pseudonym or '—' }}</span>
@@ -91,19 +85,19 @@
                     style="display:inline;flex-shrink:0">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="hidden" value="{{ '0' if arg.hidden else '1' }}">
-                <button type="submit" class="btn-small">{{ 'unhide' if arg.hidden else 'hide' }}</button>
+                <button type="submit" class="btn-small">{{ msg('featured-arg-unhide') if arg.hidden else msg('featured-arg-hide') }}</button>
               </form>
               <form method="post"
                     action="{{ url_for('admin.admin_argument_delete', conv_id=conversation.id, arg_id=arg.id) }}"
                     style="display:inline;flex-shrink:0">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn-small btn-danger"
-                        onclick="return confirm('Delete this argument and all its votes? This cannot be undone.')">delete</button>
+                        onclick="return confirm('{{ msg('featured-arg-delete-confirm') }}')">{{ msg('featured-arg-delete') }}</button>
               </form>
             </div>
             {% endfor %}
             {% else %}
-            <p style="font-size:12px;color:var(--body);margin:4px 0 0">no arguments yet</p>
+            <p style="font-size:12px;color:var(--body);margin:4px 0 0">{{ msg('featured-no-args') }}</p>
             {% endif %}
           </div>
         </td>
@@ -116,7 +110,7 @@
                 data-confirm-msg="Informed vote is already live. Removing this statement hides it from that round immediately (existing votes are preserved). Continue?"
                 {% endif %}>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn-small btn-danger">remove</button>
+            <button type="submit" class="btn-small btn-danger">{{ msg('admin-btn-remove') }}</button>
           </form>
         </td>
       </tr>
@@ -124,32 +118,30 @@
     </tbody>
   </table>
   {% else %}
-  <p class="muted" style="font-size:14px;margin-bottom:1.5rem">No featured statements yet.</p>
+  <p class="muted" style="font-size:14px;margin-bottom:1.5rem">{{ msg('featured-empty') }}</p>
   {% endif %}
 
   <!-- ── System suggestions ─────────────────────────────── -->
-  <h3 class="section-heading">System suggestions</h3>
+  <h3 class="section-heading">{{ msg('featured-suggestions-heading') }}</h3>
 
   {% if candidates is none %}
   <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
-    Not available — <code>POLIS_DATABASE_URL</code> is not configured.
-    Use the manual form below to add statements by TID.
+    {{ msg('featured-suggestions-unconfigured') }} <code>POLIS_DATABASE_URL</code> {{ msg('featured-suggestions-unconfigured-b') }}
   </p>
   {% elif candidates | length == 0 %}
   <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
-    No unconfirmed candidates. All available statements are already featured,
-    or there are no statements yet.
+    {{ msg('featured-suggestions-empty') }}
   </p>
   {% else %}
   <table class="admin-table" style="margin-bottom:1.5rem">
     <thead>
       <tr>
-        <th>TID</th>
-        <th>Text</th>
-        <th>Seed</th>
-        <th>Agree</th>
-        <th>Disagree</th>
-        <th>Votes</th>
+        <th>{{ msg('featured-th-tid') }}</th>
+        <th>{{ msg('featured-th-text') }}</th>
+        <th>{{ msg('featured-th-seed') }}</th>
+        <th>{{ msg('featured-th-agree') }}</th>
+        <th>{{ msg('featured-th-disagree') }}</th>
+        <th>{{ msg('featured-th-votes') }}</th>
         <th></th>
       </tr>
     </thead>
@@ -182,7 +174,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="tid" value="{{ c.tid }}">
             <input type="hidden" name="system_suggested" value="1">
-            <button type="submit" class="btn-small">confirm</button>
+            <button type="submit" class="btn-small">{{ msg('featured-btn-confirm') }}</button>
           </form>
         </td>
       </tr>
@@ -192,10 +184,10 @@
   {% endif %}
 
   <!-- ── Manual add ─────────────────────────────────────── -->
-  <h3 class="section-heading">Add by TID</h3>
+  <h3 class="section-heading">{{ msg('featured-addtid-heading') }}</h3>
   <div class="edit-form">
     <p class="muted" style="font-size:13px;margin-bottom:.75rem">
-      Enter the Polis statement ID (TID) to feature it directly.
+      {{ msg('featured-addtid-intro') }}
     </p>
     <form method="post" action="{{ url_for('admin.admin_featured_add', conv_id=conversation.id) }}"
           {% if conversation.phase_informed_voting and conversation.phase6_polis_conversation_id %}
@@ -204,11 +196,11 @@
           {% endif %}>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="edit-row-fields">
-        <label>Statement TID
+        <label>{{ msg('featured-label-tid') }}
           <input type="number" name="tid" min="0" required style="width:100px">
         </label>
       </div>
-      <button type="submit">Add</button>
+      <button type="submit">{{ msg('admin-btn-add') }}</button>
     </form>
   </div>
 

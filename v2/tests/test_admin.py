@@ -336,8 +336,9 @@ def test_moderator_sees_roster_readonly(client, conv, participant):
     resp = client.get(f'/admin/conversations/{conv.id}')
     assert resp.status_code == 200
     assert b'testuser' in resp.data                  # roster lists the moderator
-    assert b'Add role' not in resp.data              # cannot manage roles
-    assert b'Save settings' not in resp.data         # no settings form
+    # Anchor on rendered buttons: bare labels are shipped to every page's message island.
+    assert b'>Add role</button>' not in resp.data    # cannot manage roles
+    assert b'>Save settings</button>' not in resp.data  # no settings form
     assert b'roles/' not in resp.data                # no add/remove role actions
 
 
@@ -841,7 +842,11 @@ def test_pause_control_paused_state_copy(admin_client, conv):
     assert resp.status_code == 200
     assert b'identity-reveal clock has' in resp.data       # paused safety copy
     assert b'btn-approve' in resp.data                     # Resume styling
-    assert b'temporarily disables voting without starting' not in resp.data
+    # Strip the client message island (window.wpMessages ships every UI string to
+    # every page) so this checks the visible copy, not the shipped dictionary.
+    import re as _re
+    body = _re.sub(rb'window\.wpMessages\s*=\s*\{.*?\};', b'', resp.data, flags=_re.S)
+    assert b'temporarily disables voting without starting' not in body
 
 
 def test_featured_check_shows_selected_count_and_recommendation(admin_client, conv):
@@ -1381,7 +1386,9 @@ def test_scoped_moderator_cannot_see_global_role_controls(client, conv, particip
     assert resp.status_code == 200
     assert b'testuser' in resp.data
     assert b'otheruser' not in resp.data
-    assert b'Add role' not in resp.data
+    # Anchor on the rendered button, not the bare label: every UI string (incl.
+    # "Add role") is shipped to the client message island on every page.
+    assert b'>Add role</button>' not in resp.data
     assert b'class="btn-small btn-danger">remove</button>' not in resp.data
 
 

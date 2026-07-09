@@ -6,15 +6,15 @@
    window_days). Import `with context` so the countdown script gets csp_nonce. #}
 {% macro reveal_timeline(reveal) %}
 <div class="reveal-timeline">
-  <ol class="reveal-track" aria-label="Identity reveal timeline">
+  <ol class="reveal-track" aria-label="{{ msg('reveal-tl-aria') }}">
     <li class="reveal-node reveal-node--done
         {%- if reveal.state == 'pending' %} reveal-node--now{% endif %}"
         {% if reveal.state == 'pending' %}aria-current="step"{% endif %}>
       <span class="reveal-pip" aria-hidden="true"></span>
       <div class="reveal-when">{{ reveal.closed_at.strftime('%-d %b %Y') }}</div>
-      <div class="reveal-what">Closed — linking stays sealed for {{ reveal.cooldown_days }} days
-        {% if reveal.state == 'pending' %}<span class="sr-only">(in progress — cooldown)</span>
-        {%- else %}<span class="sr-only">(completed)</span>{% endif %}</div>
+      <div class="reveal-what">{{ msg('reveal-tl-closed-what', reveal.cooldown_days) }}
+        {% if reveal.state == 'pending' %}<span class="sr-only">{{ msg('reveal-tl-step-inprogress') }}</span>
+        {%- else %}<span class="sr-only">{{ msg('reveal-tl-step-completed') }}</span>{% endif %}</div>
     </li>
     <li class="reveal-node
         {%- if reveal.state in ['open', 'revealed'] %} reveal-node--now
@@ -22,26 +22,26 @@
         {% if reveal.state in ['open', 'revealed'] %}aria-current="step"{% endif %}>
       <span class="reveal-pip" aria-hidden="true"></span>
       <div class="reveal-when">{{ reveal.opens_at.strftime('%-d %b %Y') }}</div>
-      <div class="reveal-what">Window opens — {{ reveal.window_days }} days to optionally link your Wikimedia username
-        {% if reveal.state in ['open', 'revealed'] %}<span class="sr-only">(current)</span>
-        {%- elif reveal.state == 'expired' %}<span class="sr-only">(completed)</span>
-        {%- else %}<span class="sr-only">(upcoming)</span>{% endif %}</div>
+      <div class="reveal-what">{{ msg('reveal-tl-opens-what', reveal.window_days) }}
+        {% if reveal.state in ['open', 'revealed'] %}<span class="sr-only">{{ msg('reveal-tl-step-current') }}</span>
+        {%- elif reveal.state == 'expired' %}<span class="sr-only">{{ msg('reveal-tl-step-completed') }}</span>
+        {%- else %}<span class="sr-only">{{ msg('reveal-tl-step-upcoming') }}</span>{% endif %}</div>
     </li>
     <li class="reveal-node{% if reveal.state == 'expired' %} reveal-node--now{% endif %}"
         {% if reveal.state == 'expired' %}aria-current="step"{% endif %}>
       <span class="reveal-pip" aria-hidden="true"></span>
       <div class="reveal-when">{{ reveal.closes_at.strftime('%-d %b %Y') }}</div>
-      <div class="reveal-what">Window closes — records stay pseudonymous permanently
-        {% if reveal.state == 'expired' %}<span class="sr-only">(current)</span>
-        {%- else %}<span class="sr-only">(upcoming)</span>{% endif %}</div>
+      <div class="reveal-what">{{ msg('reveal-tl-closes-what') }}
+        {% if reveal.state == 'expired' %}<span class="sr-only">{{ msg('reveal-tl-step-current') }}</span>
+        {%- else %}<span class="sr-only">{{ msg('reveal-tl-step-upcoming') }}</span>{% endif %}</div>
     </li>
   </ol>
   {% if reveal.countdown_target_iso %}
   <p class="reveal-deadline">
-    {% if reveal.state == 'pending' %}Reveal window opens in
-    {% else %}<strong>Window closes in</strong>{% endif %}
+    {% if reveal.state == 'pending' %}{{ msg('reveal-tl-deadline-opens') }}
+    {% else %}<strong>{{ msg('reveal-tl-deadline-closes') }}</strong>{% endif %}
     <strong class="reveal-countdown" data-reveal-countdown="{{ reveal.countdown_target_iso }}"
-            >{{ reveal.days_left }} day{{ 's' if reveal.days_left != 1 }}</strong>{% if reveal.state == 'open' %} — linking is <strong>permanent and cannot be undone</strong>{% endif %}.
+            >{{ msg('reveal-tl-days', reveal.days_left) }}</strong>{% if reveal.state == 'open' %} {{ msg('reveal-tl-permanent')|safe }}{% endif %}.
   </p>
   {% endif %}
 </div>
@@ -56,7 +56,7 @@
     function p(n) { return String(n).padStart(2, '0'); }
     function tick() {
       var ms = target - Date.now();
-      if (ms <= 0) { el.textContent = 'now'; clearInterval(t); return; }
+      if (ms <= 0) { el.textContent = wpI18n.msg('reveal-tl-now'); clearInterval(t); return; }
       var s = Math.floor(ms / 1000), d = Math.floor(s / 86400);
       el.textContent = d + 'd ' + p(Math.floor(s % 86400 / 3600)) + ':' +
                        p(Math.floor(s % 3600 / 60)) + ':' + p(s % 60);

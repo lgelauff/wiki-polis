@@ -209,7 +209,11 @@ def test_text_import_exactly_max_rows_accepted(admin_client, conv):
         resp = _text_import(admin_client, conv.id, rows)
     texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
     assert len(texts_sent) == MAX_ROWS
-    assert b'rejected' not in resp.data.lower()
+    # Strip the client message island (window.wpMessages ships every UI string,
+    # including the 'Import rejected' messages) so this checks the visible flash.
+    import re as _re
+    body = _re.sub(rb'window\.wpMessages\s*=\s*\{.*?\};', b'', resp.data, flags=_re.S)
+    assert b'rejected' not in body.lower()
 
 
 def test_text_import_over_byte_limit_rejected(admin_client, conv):

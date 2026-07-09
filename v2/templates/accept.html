@@ -3,7 +3,7 @@
 {% block header_crumb %}
 <span class="header-crumb">
   <span class="header-crumb-sep">/</span>
-  <span>join</span>
+  <span>{{ msg('accept-crumb') }}</span>
 </span>
 {% endblock %}
 
@@ -19,7 +19,7 @@
       <ellipse cx="12" cy="12" rx="9" ry="3.5"/>
       <ellipse cx="12" cy="12" rx="3.5" ry="9"/>
     </svg>
-    joining consultation
+    {{ msg('accept-joining') }}
   </div>
 
   <h1 id="accept-title" style="font-size:30px;font-weight:600;color:var(--ink);letter-spacing:-0.02em;line-height:1.2;margin:0">
@@ -33,7 +33,7 @@
   {% endif %}
 
   <p style="font-size:14px;color:var(--muted);margin-top:18px;margin-bottom:0">
-    Pick the name you will use in this consultation.
+    {{ msg('accept-pick-name') }}
   </p>
 
   <form method="post"
@@ -49,15 +49,15 @@
          aria-labelledby="pseudonym-title"
          aria-describedby="pseudonym-help pseudonym-status">
       <div class="pseudonym-card-header">
-        <div class="pseudonym-card-title" id="pseudonym-title">Choose a pseudonym</div>
+        <div class="pseudonym-card-title" id="pseudonym-title">{{ msg('accept-choose-pseudonym') }}</div>
         <button type="button"
                 class="reroll-btn"
                 id="reroll-btn"
                 aria-controls="pseudonym-options"
-                aria-label="Generate new pseudonym options">↻ reroll</button>
+                aria-label="{{ msg('accept-reroll-aria') }}">{{ msg('accept-reroll') }}</button>
       </div>
       <div class="pseudonym-card-sub" id="pseudonym-help">
-        Other participants see this name next to your votes and arguments. Your Wikimedia username stays internal unless you reveal it after the consultation closes.
+        {{ msg('accept-pseudonym-help') }}
       </div>
       <p class="sr-only" id="pseudonym-status" role="status" aria-live="polite"></p>
 
@@ -80,57 +80,50 @@
          role="group"
          aria-labelledby="notification-title"
          aria-describedby="notification-help">
-      <h3 id="notification-title">Stay informed</h3>
+      <h3 id="notification-title">{{ msg('accept-notify-heading') }}</h3>
       <p id="notification-help" style="color:var(--muted);font-size:13px;margin-bottom:.75rem">
-        Optional best-effort updates when the consultation closes or results are published.
+        {{ msg('accept-notify-help') }}
       </p>
 
       {% if emailable %}
       <label class="checkbox-label">
         <input type="checkbox" name="notify_email" value="1">
-        <span>Email me if we send updates (via your confirmed wiki email address)</span>
+        <span>{{ msg('accept-notify-email') }}</span>
       </label>
       {% else %}
       <p class="muted" style="margin-top:.25rem">
-        Email notifications unavailable — no confirmed email on your wiki account.
+        {{ msg('accept-notify-email-unavailable') }}
         <a href="https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal"
-           target="_blank" rel="noopener">Add one on Meta-Wiki<span class="sr-only"> (opens in a new tab)</span></a> and return to enable this.
+           target="_blank" rel="noopener">{{ msg('accept-notify-add-email') }}<span class="sr-only">{{ msg('common-opens-in-new-tab') }}</span></a> {{ msg('accept-notify-add-email-after') }}
       </p>
       {% endif %}
 
       <label class="checkbox-label" style="margin-top:.5rem">
         <input type="checkbox" name="notify_talk_page" value="1">
-        <span>Post to my talk page if we send updates</span>
+        <span>{{ msg('accept-notify-talk') }}</span>
       </label>
     </div>
 
     {# ── Privacy summary and foldable details ── #}
     <div class="accept-section" id="accept-privacy-note">
-      <h3>Privacy summary</h3>
+      <h3>{{ msg('accept-privacy-heading') }}</h3>
       <p>
-        Public records use your pseudonym. wiki-polis keeps the username link
-        internally for login, access checks, notifications, moderation, and
-        privacy controls.
+        {{ msg('accept-privacy-summary') }}
       </p>
       <details class="privacy-details">
         <summary class="privacy-summary" aria-controls="privacy-details-body">
-          Privacy &amp; data handling
+          {{ msg('accept-privacy-details-summary') }}
         </summary>
         <div class="privacy-body" id="privacy-details-body">
           <p>
-            Your pseudonym is used for consultation records and participant-facing
-            displays. Your Wikimedia username is used internally for login,
-            access checks, moderation, and notification preferences.
+            {{ msg('accept-privacy-body1') }}
           </p>
           <p>
-            Public results may include aggregate votes, clusters, and pseudonyms.
-            They do not show your Wikimedia username unless you explicitly reveal
-            it after the consultation closes.
+            {{ msg('accept-privacy-body2') }}
           </p>
           <p>
-            Between <strong>{{ reveal_cooldown }}</strong> and <strong>{{ reveal_window_end }} days</strong>
-            after close, you may optionally and permanently link your username to your pseudonym in the
-            public record. This is irreversible during that window.
+            {{ msg('accept-privacy-window-a') }} <strong>{{ reveal_cooldown }}</strong> {{ msg('accept-privacy-window-b') }} <strong>{{ reveal_window_end }} {{ msg('common-days', reveal_window_end) }}</strong>
+            {{ msg('accept-privacy-window-c') }}
           </p>
         </div>
       </details>
@@ -145,8 +138,7 @@
              required
              aria-required="true">
       <span>
-        I understand my votes and arguments are recorded with this pseudonym,
-        and wiki-polis keeps an internal username link while this consultation runs.
+        {{ msg('accept-consent') }}
       </span>
     </label>
 
@@ -156,9 +148,9 @@
 
     <div style="display:flex;align-items:center;gap:16px;margin-top:22px">
       <button type="submit" class="participate-btn" id="submit-btn">
-        Join consultation as <span id="chosen-name">{{ pseudonyms[0] }}</span> →
+        {{ msg('accept-submit-prefix') }} <span id="chosen-name">{{ pseudonyms[0] }}</span> →
       </button>
-      <a href="{{ url_for('index') }}" style="color:var(--muted);font-size:13px;text-decoration:none">Not now</a>
+      <a href="{{ url_for('index') }}" style="color:var(--muted);font-size:13px;text-decoration:none">{{ msg('accept-not-now') }}</a>
     </div>
 
   </form>
@@ -179,7 +171,7 @@
     var name = getSelected();
     if (name && chosenSpan) chosenSpan.textContent = name;
     if (announce && name && statusEl) {
-      statusEl.textContent = 'Selected pseudonym ' + name + '.';
+      statusEl.textContent = wpI18n.msg('accept-js-selected', name);
     }
   }
 
@@ -209,7 +201,7 @@
     });
     updateLabel(false);
     if (statusEl && names.length) {
-      statusEl.textContent = 'New pseudonym options generated. Selected ' + names[0] + '.';
+      statusEl.textContent = wpI18n.msg('accept-js-regenerated', names[0]);
     }
   }
 
@@ -217,21 +209,21 @@
     var btn = this;
     btn.disabled = true;
     container.setAttribute('aria-busy', 'true');
-    if (statusEl) statusEl.textContent = 'Generating new pseudonym options.';
-    btn.textContent = '↻ loading…';
+    if (statusEl) statusEl.textContent = wpI18n.msg('accept-js-generating');
+    btn.textContent = wpI18n.msg('accept-reroll-loading');
     fetch('{{ url_for("participant.accept_pseudonyms", slug=conversation.slug) }}')
       .then(function (r) { return r.json(); })
       .then(function (data) {
         buildOptions(data.pseudonyms);
         btn.disabled = false;
         container.setAttribute('aria-busy', 'false');
-        btn.textContent = '↻ reroll';
+        btn.textContent = wpI18n.msg('accept-reroll');
       })
       .catch(function () {
         btn.disabled = false;
         container.setAttribute('aria-busy', 'false');
-        if (statusEl) statusEl.textContent = 'Could not generate new pseudonym options. Try again.';
-        btn.textContent = '↻ reroll';
+        if (statusEl) statusEl.textContent = wpI18n.msg('accept-js-error');
+        btn.textContent = wpI18n.msg('accept-reroll');
       });
   });
 

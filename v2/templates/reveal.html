@@ -5,7 +5,7 @@
   <span class="header-crumb-sep">/</span>
   <span>{{ conversation.title | truncate(40, True, '…') }}</span>
   <span class="header-crumb-sep">/</span>
-  <span>reveal</span>
+  <span>{{ msg('reveal-crumb') }}</span>
 </span>
 {% endblock %}
 
@@ -21,52 +21,49 @@
 
   {% if participation.public_username %}
 
-  <div class="reveal-banner">Identity reveal</div>
+  <div class="reveal-banner">{{ msg('reveal-banner-identity') }}</div>
   <h1 style="font-size:26px;font-weight:600;color:var(--ink);letter-spacing:-0.02em;line-height:1.2;margin:0">
-    Identity linked
+    {{ msg('reveal-linked-heading') }}
   </h1>
 
   <div class="reveal-identity-card" style="margin-top:18px">
     <div class="reveal-identity-row">
       <div class="reveal-identity-col">
-        <div class="reveal-identity-label">pseudonym</div>
+        <div class="reveal-identity-label">{{ msg('reveal-label-pseudonym') }}</div>
         <div class="reveal-identity-value">{{ participation.pseudonym }}</div>
       </div>
       <div class="reveal-identity-sep" aria-hidden="true">↔</div>
       <div class="reveal-identity-col">
-        <div class="reveal-identity-label">wikimedia username</div>
+        <div class="reveal-identity-label">{{ msg('reveal-label-username') }}</div>
         <div class="reveal-identity-value">{{ participation.public_username }}</div>
       </div>
     </div>
   </div>
   <p class="muted" style="margin-top:14px">
-    This public link is permanent and is not removed by the platform.
+    {{ msg('reveal-permanent-note') }}
   </p>
 
   {% elif window_closed %}
 
-  <div class="reveal-banner">Identity reveal</div>
+  <div class="reveal-banner">{{ msg('reveal-banner-identity') }}</div>
   <h1 style="font-size:26px;font-weight:600;color:var(--ink);letter-spacing:-0.02em;margin:0">
-    Reveal window closed
+    {{ msg('reveal-closed-heading') }}
   </h1>
   <p style="font-size:15px;line-height:1.6;color:var(--body);margin-top:14px">
-    The identity reveal window for this consultation has closed.
-    Participation data is now pseudonymous only.
+    {{ msg('reveal-closed-body') }}
   </p>
 
   {% elif not window_open %}
 
-  <div class="reveal-banner">Identity reveal</div>
+  <div class="reveal-banner">{{ msg('reveal-banner-identity') }}</div>
   <h1 style="font-size:26px;font-weight:600;color:var(--ink);letter-spacing:-0.02em;margin:0">
-    Reveal window not yet open
+    {{ msg('reveal-notyet-heading') }}
   </h1>
   <p style="font-size:15px;line-height:1.6;color:var(--body);margin-top:14px">
-    The identity reveal window has not opened yet.
-    It will open on <strong>{{ opens_at.strftime('%-d %b %Y') }}</strong>.
+    {{ msg('reveal-notyet-body') }} <strong>{{ opens_at.strftime('%-d %b %Y') }}</strong>.
   </p>
   <p class="muted" style="margin-top:8px">
-    After that date you may optionally and <strong>permanently</strong> link your Wikimedia
-    username to your pseudonym in this consultation's public record. You're never required to.
+    {{ msg('reveal-notyet-after')|safe }}
   </p>
 
   {% if reveal %}{{ reveal_timeline(reveal) }}{% endif %}
@@ -81,36 +78,34 @@
       <ellipse cx="12" cy="12" rx="9" ry="3.5"/>
       <ellipse cx="12" cy="12" rx="3.5" ry="9"/>
     </svg>
-    identity reveal window
+    {{ msg('reveal-banner-window') }}
   </div>
 
   <h1 style="font-size:28px;font-weight:600;color:var(--ink);letter-spacing:-0.02em;line-height:1.2;margin:0">
-    Permanently link
+    {{ msg('reveal-open-heading-a') }}
     <span style="font-family:var(--mono);color:var(--spot);font-weight:500">{{ participation.pseudonym }}</span>
-    to your wiki name?
+    {{ msg('reveal-open-heading-b') }}
   </h1>
 
   <p style="font-size:15px;line-height:1.6;color:var(--body);margin-top:14px">
-    You may optionally publish that
-    <span style="font-family:var(--mono);color:var(--ink)">{{ username }}</span> voted as
+    {{ msg('reveal-open-body-a') }}
+    <span style="font-family:var(--mono);color:var(--ink)">{{ username }}</span> {{ msg('reveal-open-body-b') }}
     <span style="font-family:var(--mono);color:var(--ink)">{{ participation.pseudonym }}</span>
-    in this conversation. Other pseudonyms you used elsewhere are unaffected.
+    {{ msg('reveal-open-body-c') }}
   </p>
 
   {% if reveal %}{{ reveal_timeline(reveal) }}{% endif %}
 
   <div class="close-warning" style="margin:1.25rem 0">
-    <p style="font-weight:600;margin-bottom:.5rem;color:#9a3412">Irreversible</p>
+    <p style="font-weight:600;margin-bottom:.5rem;color:#9a3412">{{ msg('reveal-irreversible-label') }}</p>
     <ul style="font-size:13px;margin:.25rem 0 0 1.25rem;line-height:1.7;color:#7c2d12">
       <li>
-        Your Wikimedia username (<strong>{{ username }}</strong>) will be permanently
-        associated with your pseudonym <strong>{{ participation.pseudonym }}</strong>
-        in exported records for this consultation.
+        {{ msg('reveal-irrev-li1-a') }} (<strong>{{ username }}</strong>) {{ msg('reveal-irrev-li1-b') }}
+        <strong>{{ participation.pseudonym }}</strong> {{ msg('reveal-irrev-li1-c') }}
       </li>
-      <li>You cannot undo this or re-anonymise your participation.</li>
+      <li>{{ msg('reveal-irreversible-li2') }}</li>
       <li>
-        Separate internal identity links may be retained for moderation and process
-        review according to the platform retention policy.
+        {{ msg('reveal-irreversible-li3') }}
       </li>
     </ul>
   </div>
@@ -118,12 +113,12 @@
   <div class="reveal-identity-card">
     <div class="reveal-identity-row">
       <div class="reveal-identity-col">
-        <div class="reveal-identity-label">pseudonym</div>
+        <div class="reveal-identity-label">{{ msg('reveal-label-pseudonym') }}</div>
         <div class="reveal-identity-value">{{ participation.pseudonym }}</div>
       </div>
       <div class="reveal-identity-sep" aria-hidden="true">↔</div>
       <div class="reveal-identity-col">
-        <div class="reveal-identity-label">wikimedia username</div>
+        <div class="reveal-identity-label">{{ msg('reveal-label-username') }}</div>
         <div class="reveal-identity-value">{{ username }}</div>
       </div>
     </div>
@@ -133,14 +128,14 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label class="checkbox-label" style="margin-bottom:16px">
       <input type="checkbox" name="confirm" value="1" required>
-      <span>I understand this is irreversible. Link my Wikimedia username
-      (<strong>{{ username }}</strong>) to my pseudonym
+      <span>{{ msg('reveal-consent-a') }}
+      (<strong>{{ username }}</strong>) {{ msg('reveal-consent-b') }}
       (<strong>{{ participation.pseudonym }}</strong>).</span>
     </label>
     <div style="display:flex;align-items:center;gap:16px">
-      <button type="submit" class="participate-btn" style="background:var(--ink)">Yes, link my identity</button>
+      <button type="submit" class="participate-btn" style="background:var(--ink)">{{ msg('reveal-submit') }}</button>
       <a href="{{ url_for('participant.conversation', slug=conversation.slug) }}"
-         style="color:var(--muted);font-size:13px;text-decoration:none">Cancel</a>
+         style="color:var(--muted);font-size:13px;text-decoration:none">{{ msg('common-cancel') }}</a>
     </div>
   </form>
 

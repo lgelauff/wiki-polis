@@ -44,6 +44,7 @@ from polis_admin import (PolisParticipantClient, PolisParticipantError,
 from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
                       RowError, strip_formula_prefixes)
 from logging_setup import configure_logging
+import i18n
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -76,6 +77,13 @@ def _truthy(value) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _(key, *params):
+    """Resolve an i18n message for the current request's UI locale (Python side, e.g.
+    ``flash(_('key', n))``). Falls back to the source locale outside a request context."""
+    locale = g.get('locale', i18n.SOURCE_LOCALE) if has_request_context() else i18n.SOURCE_LOCALE
+    return i18n.resolve(key, locale, params)
 
 
 def _derive_xid(subject: str) -> str:
@@ -648,6 +656,28 @@ _RECOMMENDATION_LABELS = {
 _RECOMMENDED_FEATURED = _RECOMMENDATION_TIERS[_DEFAULT_RECOMMENDATION_TIER]['featured_statements']
 
 
+# ── i18n localizers for display strings that live in the module-level data
+# structures above. These are called per-request (during context assembly), so
+# _() resolves the caller's UI locale; the stable `key`/`id` fields drive the
+# message key and are preserved for downstream logic. See i18n/README.md.
+def _localize_stage(stage: dict) -> dict:
+    return {**stage,
+            'label':  _('phase-label-' + stage['key']),
+            'effect': _('phase-effect-' + stage['key'])}
+
+
+def _localized_phase_routes() -> dict:
+    return {k: {**v, 'label': _('phase-route-' + k)} for k, v in PHASE_ROUTES.items()}
+
+
+def _localized_recommendation_tiers() -> dict:
+    return {k: {**v, 'label': _('rec-tier-' + k)} for k, v in _RECOMMENDATION_TIERS.items()}
+
+
+def _localized_recommendation_labels() -> dict:
+    return {k: _('rec-field-' + k) for k in _RECOMMENDATION_LABELS}
+
+
 def _recommendation_profile(conv) -> dict:
     raw = getattr(conv, 'recommended_quantities', None) or {}
     tier = raw.get('tier', _DEFAULT_RECOMMENDATION_TIER)
@@ -710,15 +740,17 @@ def _transition_context(conv):
             met, note = _PRECONDITION_CHECKS[p['check']](conv)
         elif p.get('recommendation'):
             note = _recommendation_note(conv, p['recommendation'])
-        preconds.append({**p, 'met': met, 'note': note})
+        preconds.append({**p, 'label': _('precond-' + p['id']), 'met': met, 'note': note})
+    target = _localize_stage(nxt)
+    source = _localize_stage(cur)
     # Consequence text — what opens, what closes, irreversibility.
     consequence = {
-        'opens':  nxt['effect'],
-        'closes': cur['effect'] if cur['flag'] else None,
+        'opens':  target['effect'],
+        'closes': source['effect'] if cur['flag'] else None,
     }
     return {
-        'target': nxt,
-        'source': cur,
+        'target': target,
+        'source': source,
         'preconditions': preconds,
         'consequence': consequence,
         'runs_phase6_init': bool(cfg.get('runs_phase6_init')),
@@ -978,10 +1010,16 @@ def _output_items(conv) -> list[dict]:
         status = definition['status']
         if definition['key'] == 'dataset' and ready:
             status = 'final'
+        k = definition['key']
         item = {
             **definition,
+            'label':   _('output-' + k + '-label'),
+            'tooltip': _('output-' + k + '-tooltip'),
+            'pending': _('output-' + k + '-pending'),
+            'phase':   _('output-' + k + '-phase'),
+            'method':  _('output-' + k + '-method'),
             'ready': ready,
-            'status': status,
+            'status': _('output-status-' + status),
             'state': 'ready' if ready else 'pending',
             'href': _output_href(conv, definition['key']),
         }
@@ -1127,7 +1165,7 @@ def _phase_stat_groups(conv, polis_stats, phase6_stats=None):
 
     return [
         {'key':   _phase_sequence_for(conv)[i]['key'],
-         'label': _phase_sequence_for(conv)[i]['label'],
+         'label': _('phase-label-' + _phase_sequence_for(conv)[i]['key']),
          'tiles': _phase_tiles(conv, _phase_sequence_for(conv)[i]['key'], polis_stats, phase6_stats,
                                featured_counts, argument_stats)}
         for i in [j for j, s in enumerate(_phase_sequence_for(conv)) if s['key'] in _active_phases(conv)]
@@ -1437,10 +1475,10 @@ def _can_organize(conversation, participant: 'Participant | None' = None) -> boo
 
 def _conversation_role_label(conversation, participant: 'Participant | None' = None) -> str:
     if _is_global_admin(participant):
-        return 'Global admin'
+        return _('role-global-admin')
     if _can_organize(conversation, participant):
-        return 'Organizer'
-    return 'Moderator'
+        return _('role-organizer')
+    return _('role-moderator')
 
 
 def admin_required(f):
@@ -2190,9 +2228,7 @@ def _reject_seed_import_parse_errors(result: ParseResult, source_label: str) -> 
             MAX_ROWS,
         )
         flash(
-            f'✗ Import rejected — nothing was imported. {source_label} contains '
-            f'{total_rows} lines, maximum is {MAX_ROWS}. Reduce it and try again. '
-            f'(Parse errors may also be present — fix everything before retrying.)',
+            _('flash-import-rejected-rows', source_label, total_rows, MAX_ROWS),
             'import_result',
         )
         return True
@@ -2200,11 +2236,10 @@ def _reject_seed_import_parse_errors(result: ParseResult, source_label: str) -> 
     parse_errors = [e for e in result.errors if not e.limit_skipped]
     if parse_errors:
         for err in parse_errors:
-            flash(f'Row {err.row}: {err.reason}.', 'import_row_error')
+            flash(_('flash-import-row-error', err.row, err.reason), 'import_row_error')
         # All-or-nothing: a single invalid line rejects the whole import so the admin
         # never ends up with a silently partial paste.
-        flash('✗ Import rejected — nothing was added. One invalid line rejects the '
-              'whole import; fix the lines listed above and try again.', 'import_result')
+        flash(_('flash-import-rejected-invalid'), 'import_result')
         return True
     return False
 
@@ -2261,29 +2296,29 @@ def _import_seed_statement_texts(conv: Conversation, texts: list[str]) -> dict:
             polis_errors = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
 
     if dedup_check_failed:
-        flash('Could not check for existing statements — some may be duplicates. Check server logs.', 'warning')
+        flash(_('flash-dup-check-failed'), 'warning')
 
     for msg in dedup_errors:
-        flash(f'Skipped — {msg}.', 'warning')
+        flash(_('flash-skipped', msg), 'warning')
     for msg in polis_skipped:
-        flash(f'Already in Polis, skipped: {msg}.', 'warning')
+        flash(_('flash-already-polis', msg), 'warning')
     for msg in polis_errors:
-        flash(f'Could not send to Polis: {msg}.', 'error')
+        flash(_('flash-polis-send-failed', msg), 'error')
     if not successes and not dedup_errors and not polis_skipped and not polis_errors:
-        flash('No statements were imported — there were no valid rows.', 'warning')
+        flash(_('flash-import-no-valid-rows'), 'warning')
 
     n_skipped = len(dedup_errors) + len(polis_skipped)
     n_errors = len(polis_errors)
     if successes and not n_skipped:
-        flash(f'✓ {successes} statement{"s" if successes != 1 else ""} imported', 'import_result')
+        flash(_('flash-import-success', successes), 'import_result')
     elif successes:
-        flash(f'✓ {successes} imported — ⚠ {n_skipped} skipped', 'import_result')
+        flash(_('flash-import-partial', successes, n_skipped), 'import_result')
     elif n_errors:
-        flash('✗ Import failed — could not reach Polis. Check server logs.', 'import_result')
+        flash(_('flash-import-polis-unreach'), 'import_result')
     elif n_skipped:
-        flash(f'⚠ 0 imported — {n_skipped} already existed in Polis', 'import_result')
+        flash(_('flash-import-all-existed', n_skipped), 'import_result')
     else:
-        flash('⚠ 0 imported — Polis returned no result', 'import_result')
+        flash(_('flash-import-no-result'), 'import_result')
 
     return {'successes': successes, 'skipped': n_skipped, 'errors': n_errors}
 
@@ -2476,7 +2511,7 @@ def admin():
                            conversations=conversations,
                            participants=participants,
                            global_admins=global_admins,
-                           phase_routes=PHASE_ROUTES,
+                           phase_routes=_localized_phase_routes(),
                            )
 
 @admin_bp.get('/admin/conversations/<int:conv_id>')
@@ -2541,16 +2576,16 @@ def admin_conversation_detail(conv_id):
                            can_manage_roles=can_manage_roles,
                            can_organize=can_organize,
                            role_label=_conversation_role_label(conv),
-                           phase_sequence=phase_sequence,
+                           phase_sequence=[_localize_stage(s) for s in phase_sequence],
                            current_stage_index=_current_stage_index(conv),
                            active_stage_indices=[i for i, s in enumerate(phase_sequence)
                                                   if s['key'] in _active_phases(conv)],
                            linear_phase_state=_is_linear_phase_state(conv),
                            advance_target_index=_advance_target_index(conv),
                            transition=_transition_context(conv),
-                           phase_routes=PHASE_ROUTES,
-                           recommendation_tiers=_RECOMMENDATION_TIERS,
-                           recommendation_labels=_RECOMMENDATION_LABELS,
+                           phase_routes=_localized_phase_routes(),
+                           recommendation_tiers=_localized_recommendation_tiers(),
+                           recommendation_labels=_localized_recommendation_labels(),
                            recommendation_profile=_recommendation_profile(conv),
                            schedule=_schedule_context(conv),
                            cleanup_window=_in_cleanup_window(conv))
@@ -2652,7 +2687,7 @@ def admin_flag_resolve(conv_id, flag_id):
     db.session.commit()
     record_audit('content_flag.resolve', conv_id=conv.id, target_type='content_flag',
                  target_id=flag.id, content_type=flag.content_type)
-    flash('Flag marked resolved.', 'success')
+    flash(_('flash-flag-resolved'), 'success')
     return redirect(url_for('admin.admin_conversation_flags', conv_id=conv.id))
 
 
@@ -2670,7 +2705,7 @@ def admin_participant_ban(conv_id, participant_id):
         lifted_at=None,
     ).first()
     if existing:
-        flash('Participant is already banned from this conversation.', 'warning')
+        flash(_('flash-already-banned'), 'warning')
         return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
 
     summary = nh3.clean((request.form.get('summary') or '').strip(), tags=_NH3_NO_TAGS)[:1000]
@@ -2686,7 +2721,7 @@ def admin_participant_ban(conv_id, participant_id):
     record_audit('participant.ban', conv_id=conv.id, target_type='participant',
                  target_id=participant_id, scope='conversation',
                  summary_present=bool(summary))
-    flash('Participant banned from this conversation.', 'success')
+    flash(_('flash-banned'), 'success')
     return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
 
 
@@ -2708,7 +2743,7 @@ def admin_participant_unban(conv_id, participant_id):
     record_audit('participant.unban', conv_id=conv.id, target_type='participant',
                  target_id=participant_id, scope='conversation',
                  summary_present=bool(summary))
-    flash('Participant unbanned from this conversation.', 'success')
+    flash(_('flash-unbanned'), 'success')
     return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/new')
@@ -2720,12 +2755,11 @@ def admin_conversation_new():
     phase_route = _valid_phase_route(request.form.get('phase_route'))
 
     if not fields['title']:
-        flash('Title is required.', 'error')
+        flash(_('flash-title-required'), 'error')
         return redirect(url_for('admin.admin'))
     if not _valid_slug(slug):
         flash(
-            'Invalid slug — use lowercase letters, numbers, and hyphens only, '
-            'no spaces or special characters (e.g. climate-2026).',
+            _('flash-invalid-slug'),
             'error',
         )
         return redirect(url_for('admin.admin'))
@@ -2737,7 +2771,7 @@ def admin_conversation_new():
             polis_id = _polis_server_client().create_conversation(fields['title'], strict_moderation=True)
         except PolisServerError:
             current_app.logger.exception('Polis conversation creation failed')
-            flash('Could not create the Polis conversation. Check server logs for details.', 'error')
+            flash(_('flash-polis-create-failed'), 'error')
             return redirect(url_for('admin.admin'))
     else:
         # Fallback: accept manually supplied polis_id (local dev / misconfigured prod)
@@ -2762,7 +2796,7 @@ def admin_conversation_edit(conv_id):
     fields = _parse_conversation_form()
 
     if not fields['title']:
-        flash('Title is required.', 'error')
+        flash(_('flash-title-required'), 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
     conv.title         = fields['title']
@@ -2771,7 +2805,7 @@ def admin_conversation_edit(conv_id):
     if conv.access_policy == 'demo':
         fields['access_policy'] = 'demo'
     elif fields['access_policy'] == 'demo':
-        flash('Demo mode is fixed at creation and cannot be enabled on an existing consultation.', 'error')
+        flash(_('flash-demo-fixed'), 'error')
         fields['access_policy'] = conv.access_policy
     conv.access_policy = fields['access_policy']
     db.session.commit()
@@ -2805,10 +2839,10 @@ def admin_conversation_close(conv_id):
             'cleanup_report_intro',
         }
         if any(request.form.get(field) != 'on' for field in required):
-            flash('Complete every cleanup checklist item before publishing the final report.', 'error')
+            flash(_('flash-cleanup-incomplete'), 'error')
             return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
         if _route_has_phase(conv, 'informed_voting') and not conv.phase6_polis_conversation_id:
-            flash('Phase 6 must be initialised before publishing the final report.', 'error')
+            flash(_('flash-p6-required-publish'), 'error')
             return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     filt = _publish_final_report(conv)
     db.session.commit()
@@ -2858,14 +2892,14 @@ def admin_conversation_phase_schedule(conv_id):
 
     ctx = _transition_context(conv)
     if not _is_schedulable_transition(ctx):
-        flash('Only active-to-passive wind-down transitions can be scheduled.', 'error')
+        flash(_('flash-schedule-windown-only'), 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     scheduled_at = _parse_utc_timestamp(request.form.get('scheduled_at', ''))
     if scheduled_at is None:
-        flash('Enter a valid UTC timestamp.', 'error')
+        flash(_('flash-invalid-utc'), 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     if scheduled_at <= datetime.now(timezone.utc):
-        flash('Scheduled transition time must be in the future.', 'error')
+        flash(_('flash-schedule-future'), 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     conv.scheduled_transition_at = scheduled_at
     conv.scheduled_transition_target = ctx['target']['key']
@@ -2883,12 +2917,11 @@ def admin_conversation_delete(conv_id):
     client = _polis_server_client()
     valid_vote_count = client.get_valid_vote_count(conv.polis_id)
     if valid_vote_count is None:
-        flash('Cannot delete this conversation because Polis vote data could not be verified.', 'error')
+        flash(_('flash-delete-unverified'), 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     if valid_vote_count != 0:
         flash(
-            f'Cannot delete this conversation because it has {valid_vote_count} valid vote'
-            f'{"s" if valid_vote_count != 1 else ""}.',
+            _('flash-delete-hasvotes', valid_vote_count),
             'error',
         )
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
@@ -2897,7 +2930,7 @@ def admin_conversation_delete(conv_id):
         client.close_and_hide_conversation(conv.polis_id)
     except PolisServerError:
         current_app.logger.exception('Polis conversation close/hide failed')
-        flash('Could not hide the Polis conversation. Nothing was deleted.', 'error')
+        flash(_('flash-hide-polis-failed'), 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
     slug = conv.slug
@@ -2907,7 +2940,7 @@ def admin_conversation_delete(conv_id):
     _delete_local_conversation(conv)
     db.session.commit()
     current_app.logger.info('deleted empty conversation slug=%s polis_id=%s', slug, polis_id)
-    flash('Conversation deleted.', 'success')
+    flash(_('flash-conv-deleted'), 'success')
     return redirect(url_for('admin.admin'))
 
 def _sync_vis_type(conv) -> bool:
@@ -2954,8 +2987,7 @@ def admin_conversation_phases(conv_id):
         'public_results': conv.phase_public_results, 'informed_voting': conv.phase_informed_voting})
 
     if not _sync_vis_type(conv):
-        flash('Phases saved, but updating results visibility in Polis failed — '
-              'results may not appear until you save phases again.', 'error')
+        flash(_('flash-phases-saved-sync-failed'), 'error')
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 
@@ -2979,19 +3011,19 @@ def admin_conversation_advance(conv_id):
     ctx = _transition_context(conv)
     if ctx is None:
         if not _is_linear_phase_state(conv):
-            flash('Phases are in a custom state — use Advanced controls to adjust.', 'error')
+            flash(_('flash-custom-phase-state'), 'error')
         else:
-            flash('Already at the final phase (public results).', 'error')
+            flash(_('flash-final-phase'), 'error')
         return redirect_to
 
     # Server-side enforcement of the readiness checklist (the UI disables the button
     # until all are ticked; a stale page or direct POST must not bypass it).
     for p in ctx['preconditions']:
         if request.form.get(p['id']) != 'on':
-            flash('Confirm every readiness check before moving on.', 'error')
+            flash(_('flash-confirm-readiness'), 'error')
             return redirect_to
         if p.get('met') is False:                 # machine-checkable and currently unmet
-            flash('A readiness condition is not met yet — fix it before moving on.', 'error')
+            flash(_('flash-readiness-unmet'), 'error')
             return redirect_to
 
     # Run the Phase 6 Polis I/O FIRST, before mutating conv. This keeps the network
@@ -3030,8 +3062,7 @@ def admin_conversation_advance(conv_id):
             current_app.logger.error(
                 'Phase advance lost a concurrent race after Phase 6 init — '
                 'orphaned Polis conversation %s (conv %s)', created_p6, slug)
-        flash('Could not move on — the conversation changed at the same time. '
-              'Reload and try again.', 'error')
+        flash(_('flash-move-conflict'), 'error')
         return redirect_to
     except SQLAlchemyError:
         # Any other DB failure (deadlock, timeout, lost connection). Scoped to
@@ -3043,21 +3074,19 @@ def admin_conversation_advance(conv_id):
             current_app.logger.error(
                 'Phase advance commit failed after Phase 6 init — '
                 'orphaned Polis conversation %s (conv %s)', created_p6, slug)
-            flash('Could not complete the move — a database error occurred, and a '
-                  'linked Polis conversation may already have been created. Do not '
-                  'simply retry; check with a site admin first.', 'error')
+            flash(_('flash-move-db-error-polis'), 'error')
         else:
-            flash('Could not move on — a database error occurred. Please try again.', 'error')
+            flash(_('flash-move-db-error'), 'error')
         return redirect_to
 
     record_audit('phase.advance', conv_id=conv.id, target_type='phase', target_id=target_key,
                  from_phase=source_key, phase6_created=bool(created_p6))
 
     if not _sync_vis_type(conv):
-        flash('Phase moved, but updating results visibility in Polis failed.', 'error')
+        flash(_('flash-move-sync-failed'), 'error')
     if sync_msg:                                  # re-entry re-synced round 6 (#175)
         flash(sync_msg, 'warning' if 'check manually' in sync_msg else 'success')
-    flash(f'Moved to: {ctx["target"]["label"]}.', 'success')
+    flash(_('flash-moved-to', ctx["target"]["label"]), 'success')
     return redirect_to
 
 
@@ -3078,15 +3107,15 @@ def admin_phase6_init(conv_id):
     conv = _require_mod_for_conv(conv_id)
 
     if not conv.active or conv.paused:
-        flash('Cannot initialise Phase 6 on a closed or paused conversation.', 'error')
+        flash(_('flash-p6-init-closed'), 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
     if not conv.phase_informed_voting:
-        flash('Enable the Informed voting toggle first, then initialise.', 'error')
+        flash(_('flash-p6-enable-first'), 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
     if conv.phase6_polis_conversation_id:
-        flash('Phase 6 already initialised.', 'error')
+        flash(_('flash-p6-already-init'), 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
     ok, msg = _init_phase6(conv)
@@ -3099,7 +3128,7 @@ def admin_phase6_init(conv_id):
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
-        flash('Phase 6 was already initialised by a concurrent request.', 'error')
+        flash(_('flash-p6-concurrent-init'), 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     except SQLAlchemyError:
         db.session.rollback()
@@ -3110,8 +3139,7 @@ def admin_phase6_init(conv_id):
         current_app.logger.error(
             'Phase 6 standalone init: DB error after Polis I/O — '
             'orphaned Polis conversation %s (conv %s)', orphan_id, slug)
-        flash('Phase 6 initialisation failed due to a database error. '
-              'Contact a site admin — the Polis conversation id has been logged.', 'error')
+        flash(_('flash-p6-init-db-error'), 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     record_audit('phase6.init', conv_id=conv.id)
     flash(msg, 'success')
@@ -3279,11 +3307,11 @@ def _sync_phase6_featured(conv) -> tuple[bool, str]:
 def admin_global_admin_add():
     mw_username = (request.form.get('mw_username') or '').strip()
     if not mw_username:
-        flash('Enter a Wikimedia username.', 'error')
+        flash(_('flash-enter-username'), 'error')
         return redirect(url_for('admin.admin'))
     p = Participant.query.filter_by(mw_username=mw_username).first()
     if not p:
-        flash(f'No account found for "{mw_username}". They must log in at least once first.', 'error')
+        flash(_('flash-no-account', mw_username), 'error')
         return redirect(url_for('admin.admin'))
     p.is_global_admin = True
     db.session.commit()
@@ -3410,7 +3438,7 @@ def admin_conversation_statements(conv_id):
             ).get_statements(conv.polis_id)
         except PolisParticipantError:
             current_app.logger.exception('get_statements failed')
-            flash('Could not load statements. Check server logs.', 'error')
+            flash(_('flash-load-statements-failed'), 'error')
     try:
         settings = PolisParticipantClient(
             current_app.config['PARTICIAPI_BASE']
@@ -3459,7 +3487,7 @@ def admin_statement_moderate(conv_id, tid):
                 conversation_id=conv_id).count()
             if featured_count <= 1:
                 flash(
-                    'Cannot hide or move the last featured statement to pending while argument mapping is active. Disable the argument mapping phase first.',
+                    _('flash-last-featured-hide'),
                     'error'
                 )
                 return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
@@ -3467,7 +3495,7 @@ def admin_statement_moderate(conv_id, tid):
         _polis_server_client().moderate(conv.polis_id, tid, mod)
     except PolisServerError:
         current_app.logger.exception('moderate failed')
-        flash('Moderation action failed. Check server logs for details.', 'error')
+        flash(_('flash-moderation-failed'), 'error')
         return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
     record_audit('statement.moderate', conv_id=conv_id, target_type='statement',
                  target_id=tid, decision=mod)
@@ -3494,25 +3522,24 @@ def admin_statement_seed(conv_id):
             # link — a typo'd / cross-conversation tid would otherwise store a bogus link.
             text_map = _statement_text_map(conv.polis_id)
             if derived_from not in text_map:
-                flash(f'Statement #{derived_from} was not found in this conversation — '
-                      'fix the "corrects" number and try again. Nothing was added.', 'error')
+                flash(_('flash-stmt-not-found', derived_from), 'error')
                 return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
             new_tid = _polis_server_client().add_seed_return_id(conv.polis_id, text)
             prov = record_statement_provenance(conv_id, new_tid, derived_from,
                                                parent_text=text_map.get(derived_from), new_text=text)
             if prov is None:
-                flash('Seed statement added, but the correction link could not be recorded.', 'warning')
+                flash(_('flash-seed-added-no-link'), 'warning')
             else:
-                flash(f'Seed statement added (recorded as a correction of #{derived_from}).', 'success')
+                flash(_('flash-seed-added-corrected', derived_from), 'success')
             record_audit('statement.seed', conv_id=conv_id, target_type='statement',
                          target_id=new_tid, derived_from=derived_from)
         else:
             _polis_server_client().add_seed(conv.polis_id, text)
-            flash('Seed statement added.', 'success')
+            flash(_('flash-seed-added'), 'success')
             record_audit('statement.seed', conv_id=conv_id)   # no text (statement content)
     except PolisServerError:
         current_app.logger.exception('add_seed failed')
-        flash('Could not add seed statement. Check server logs for details.', 'error')
+        flash(_('flash-seed-add-failed'), 'error')
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed/import-text')
@@ -3530,7 +3557,7 @@ def admin_statement_seed_import_text(conv_id):
     # The textarea has a client-side maxlength, but that is trivially bypassed by
     # a crafted POST, so bound the raw payload server-side before parsing.
     if len(raw_text.encode('utf-8')) > MAX_FILE_BYTES:
-        flash(f'Too much text — maximum is {MAX_FILE_BYTES // 1024} KB.', 'error')
+        flash(_('flash-too-much-text', MAX_FILE_BYTES // 1024), 'error')
         return redirect(redirect_target)
     result = _parse_seed_text_lines(raw_text)
     if _reject_seed_import_parse_errors(result, 'Text import'):
@@ -3553,7 +3580,7 @@ def admin_conversation_strict_moderation(conv_id):
         record_audit('strict_moderation.set', conv_id=conv_id, enabled=enabled)
     except PolisServerError:
         current_app.logger.exception('set_strict_moderation failed')
-        flash('Could not update moderation settings. Check server logs for details.', 'error')
+        flash(_('flash-modsettings-failed'), 'error')
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
 
 # ── Featured statements ───────────────────────────────────────────────────
@@ -3635,7 +3662,7 @@ def admin_featured_remove(conv_id, fs_id):
     if conv.phase_argument_mapping:
         remaining = FeaturedStatement.query.filter_by(conversation_id=conv_id).with_for_update().count()
         if remaining <= 1:
-            flash('Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first.', 'error')
+            flash(_('flash-last-featured-remove'), 'error')
             return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
     db.session.delete(fs)
     if not _resync_phase6_if_live(conv):
@@ -3744,6 +3771,8 @@ def accept_post(slug):
         pseudonyms = _generate_pseudonyms(5)
         return render_template('accept.html', conversation=conv,
                                emailable=emailable, pseudonyms=pseudonyms,
+                               reveal_cooldown=_REVEAL_COOLDOWN_DAYS,
+                               reveal_window_end=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS,
                                error='That pseudonym was just taken — please choose another.')
     return redirect(url_for('participant.conversation', slug=slug))
 
@@ -4161,7 +4190,7 @@ def argument_flag(slug, arg_id):
     FeaturedStatement.query.filter_by(
         id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
     if arg.hidden:
-        flash('This argument is already under moderator review.', 'info')
+        flash(_('flash-arg-already-review'), 'info')
         return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
     category, detail = _parse_content_flag_form()
     if not _existing_open_flag(
@@ -4183,7 +4212,7 @@ def argument_flag(slug, arg_id):
         db.session.commit()
         record_audit('content_flag.create', conv_id=conv.id, target_type='argument',
                      target_id=arg.id, category=category)
-    flash('Thanks - this has been sent to the moderator for review.', 'success')
+    flash(_('flash-flag-thanks'), 'success')
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
 
 
@@ -4232,7 +4261,7 @@ def statement_flag(slug, tid):
         db.session.commit()
         record_audit('content_flag.create', conv_id=conv.id, target_type='statement',
                      target_id=tid, category=category)
-    flash('Thanks - this has been sent to the moderator for review.', 'success')
+    flash(_('flash-flag-thanks'), 'success')
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-vote')
 
 # ── Identity reveal ───────────────────────────────────────────────────────
@@ -4802,6 +4831,15 @@ def create_app(test_config: dict | None = None) -> Flask:
             f'{result["skipped"]} not due.'
         )
 
+    # UI locale config: which locales are offered (CSV) + the fallback. v1 defaults to English
+    # only, so there is no visible change until translatewiki.net delivers translations.
+    _default_locale = os.environ.get('DEFAULT_LOCALE', '').strip() or i18n.SOURCE_LOCALE
+    _enabled_locales = _split_csv(os.environ.get('ENABLED_LOCALES', '')) or [i18n.SOURCE_LOCALE]
+    if _default_locale not in _enabled_locales:
+        _enabled_locales.append(_default_locale)
+    app.config['DEFAULT_LOCALE']  = _default_locale
+    app.config['ENABLED_LOCALES'] = _enabled_locales
+
     @app.before_request
     def _set_csp_nonce():
         g.csp_nonce = secrets.token_urlsafe(16)
@@ -4819,6 +4857,25 @@ def create_app(test_config: dict | None = None) -> Flask:
         g.request_id = rid or secrets.token_urlsafe(8)
         g._t0 = time.perf_counter()
 
+    @app.before_request
+    def _negotiate_locale():
+        # Resolve the UI locale: ?uselang= (explicit) -> uselang cookie -> Accept-Language
+        # best match among enabled -> default. qqx (message keys) is always available for QA.
+        enabled = app.config['ENABLED_LOCALES']
+        requested = (request.args.get('uselang') or '').strip()
+        persist = None
+        if requested == i18n.DEBUG_LOCALE:
+            locale = i18n.DEBUG_LOCALE
+        elif requested in enabled:
+            locale = persist = requested
+        elif (cookie := (request.cookies.get('uselang') or '').strip()) in enabled:
+            locale = cookie
+        else:
+            locale = request.accept_languages.best_match(enabled) or app.config['DEFAULT_LOCALE']
+        g.locale = locale
+        g.dir = i18n.text_direction(locale)
+        g._persist_locale = persist
+
     @app.context_processor
     def _inject_globals():
         participant = _current_participant()
@@ -4827,6 +4884,15 @@ def create_app(test_config: dict | None = None) -> Flask:
             'username':   session.get('username'),
             'csp_nonce':  g.get('csp_nonce', ''),
             'git_version': _GIT_VERSION,
+            'msg':    lambda key, *params: i18n.resolve(key, g.get('locale', i18n.SOURCE_LOCALE), params),
+            'locale': g.get('locale', i18n.SOURCE_LOCALE),
+            'dir':    g.get('dir', 'ltr'),
+            # Client-side message island (base.html emits it as JSON for static/i18n.js).
+            'i18n_data': lambda: {
+                'locale':   g.get('locale', i18n.SOURCE_LOCALE),
+                'dir':      g.get('dir', 'ltr'),
+                'messages': i18n.all_messages(g.get('locale', i18n.SOURCE_LOCALE)),
+            },
         }
 
     @app.after_request
@@ -4871,6 +4937,11 @@ def create_app(test_config: dict | None = None) -> Flask:
             # Prevent intermediary proxies from caching HTML pages; stale HTML pointing
             # to old ?v= URLs would cause users to load mismatched assets after a deploy.
             response.headers.setdefault('Cache-Control', 'no-store')
+
+        # Persist an explicit ?uselang= choice so the UI language sticks across requests.
+        if g.get('_persist_locale'):
+            response.set_cookie('uselang', g._persist_locale, max_age=31536000,
+                                samesite='Lax', secure=not app.debug)
 
         return response
 
@@ -5189,7 +5260,7 @@ def _register_routes(app: Flask) -> None:
     def oauth_callback():
         if request.args.get('state') != session.pop('oauth_state', None):
             app.logger.warning('OAuth callback: state mismatch (likely duplicate login tab or expired session)')
-            flash('Login failed — please try again.', 'error')
+            flash(_('flash-login-failed'), 'error')
             return redirect(url_for('login'))
 
         code          = request.args.get('code', '')

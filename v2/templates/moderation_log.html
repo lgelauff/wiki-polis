@@ -1,29 +1,28 @@
 {% extends "base.html" %}
-{% block title %}Moderation log — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block title %}{{ msg('conv-moderation-log') }} — {{ conversation.title }} — wiki-polis{% endblock %}
 {% block header_crumb %}
-<nav class="header-crumb" aria-label="Conversation context">
+<nav class="header-crumb" aria-label="{{ msg('conv-crumb-aria') }}">
   <span class="header-crumb-sep">/</span>
-  <a href="{{ url_for('participant.conversation_moderation_log', slug=conversation.slug) }}">Moderation log</a>
+  <a href="{{ url_for('participant.conversation_moderation_log', slug=conversation.slug) }}">{{ msg('conv-moderation-log') }}</a>
 </nav>
 {% endblock %}
 {% block content %}
 
 <div class="container">
-  <h1>Moderation log — {{ conversation.title }}</h1>
+  <h1>{{ msg('conv-moderation-log') }} — {{ conversation.title }}</h1>
   <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
-    Conversation-level bans and unbans are listed for accountability. Private moderator
-    notes are not public.
+    {{ msg('modlog-intro') }}
   </p>
 
   {% if rows %}
   <table class="admin-table">
     <thead>
       <tr>
-        <th>When</th>
-        <th>Action</th>
-        <th>Pseudonym</th>
-        <th>Scope</th>
-        <th>Moderator</th>
+        <th>{{ msg('modlog-th-when') }}</th>
+        <th>{{ msg('modlog-th-action') }}</th>
+        <th>{{ msg('modlog-th-pseudonym') }}</th>
+        <th>{{ msg('modlog-th-scope') }}</th>
+        <th>{{ msg('modlog-th-moderator') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -39,7 +38,7 @@
     </tbody>
   </table>
   {% else %}
-  <p class="muted">No bans or unbans have been recorded for this conversation.</p>
+  <p class="muted">{{ msg('modlog-empty') }}</p>
   {% endif %}
 </div>
 

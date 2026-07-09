@@ -1,37 +1,34 @@
 {% extends "base.html" %}
-{% block title %}Statements — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block title %}{{ msg('stmts-doc-title') }} — {{ conversation.title }} — wiki-polis{% endblock %}
 {% block header_crumb %}
-<nav class="header-crumb" aria-label="Admin breadcrumb">
+<nav class="header-crumb" aria-label="{{ msg('admin-crumb-aria') }}">
   <span class="header-crumb-sep">/</span>
-  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
+  <a href="{{ url_for('admin.admin') }}">{{ msg('admin-nav-panel') }}</a>
   <span class="header-crumb-sep">/</span>
   <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ conversation.title | truncate(28, True, '…') }}</a>
   <span class="header-crumb-sep">/</span>
-  <span>Statements</span>
+  <span>{{ msg('stmts-crumb') }}</span>
 </nav>
 {% endblock %}
 {% block content %}
 
 <div class="container">
 
-  <h2>Statements — {{ conversation.title }}</h2>
+  <h2>{{ msg('stmts-heading-prefix') }} {{ conversation.title }}</h2>
 
   <div class="landing-section" style="margin-bottom:1.5rem">
-    <h3 style="font-size:16px;margin-bottom:.5rem">How statement management works</h3>
+    <h3 style="font-size:16px;margin-bottom:.5rem">{{ msg('stmts-howto-heading') }}</h3>
     <p class="muted" style="font-size:13px;margin-bottom:.6rem">
-      Pending statements are held for moderator review. Approve makes a statement visible
-      for participant voting, hide removes it from participant voting, and pending returns
-      an approved or hidden statement to the review queue.
+      {{ msg('stmts-howto-body') }}
     </p>
     <ul style="font-size:13px;padding-left:1.25rem;margin-bottom:.6rem">
-      <li>Vote counts show <strong>A</strong>gree · <strong>P</strong>ass · <strong>D</strong>isagree totals from Polis when the statistics database is available.</li>
-      <li>Seed statements come from moderator entry or imports; participant-submitted statements appear in the same moderation lists.</li>
-      <li>A star marks statements already selected as featured. A correction marker links derived statements back to the original TID.</li>
-      <li>Seed entry and imports are available only during preparation or open statement submission.</li>
+      <li>{{ msg('stmts-howto-li1')|safe }}</li>
+      <li>{{ msg('stmts-howto-li2') }}</li>
+      <li>{{ msg('stmts-howto-li3') }}</li>
+      <li>{{ msg('stmts-howto-li4') }}</li>
     </ul>
     <p class="muted" style="font-size:13px;margin-bottom:0">
-      The text import strips spreadsheet formula prefixes, removes HTML, rejects invalid
-      rows as a batch, and skips statements already present in the conversation.
+      {{ msg('stmts-howto-import') }}
     </p>
   </div>
 
@@ -48,67 +45,62 @@
 
   <!-- ── Add seed statement ──────────────────────────── -->
   {% if not seed_import_allowed %}
-  <h3 class="section-heading">Seed statements locked</h3>
+  <h3 class="section-heading">{{ msg('stmts-seed-locked-heading') }}</h3>
   <div class="edit-form">
     <p class="muted" style="margin-bottom:0;font-size:13px">
-      {{ seed_import_lock_reason }} Seed statements can only be added during preparation
-      or while statement submission is open.
+      {{ seed_import_lock_reason }} {{ msg('stmts-seed-locked-body') }}
     </p>
   </div>
   {% else %}
 
-  <h3 class="section-heading">Add seed statement</h3>
+  <h3 class="section-heading">{{ msg('stmts-seed-heading') }}</h3>
   <div class="edit-form">
     <p class="muted" style="margin-bottom:.75rem;font-size:13px">
-      Adds a statement that immediately appears in the vote view for all participants.
-      Statements added here appear as regular participant statements (not seed-marked).
+      {{ msg('stmts-seed-intro') }}
     </p>
     <form method="post" action="{{ url_for('admin.admin_statement_seed', conv_id=conversation.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Statement text (max 280 characters)
+      <label>{{ msg('stmts-seed-label') }}
         <textarea name="txt" rows="3" maxlength="280" id="seed-txt" required
-                  placeholder="Enter a statement participants will vote on…"></textarea>
+                  placeholder="{{ msg('stmts-seed-placeholder') }}"></textarea>
       </label>
       <label class="muted" style="display:block;margin-top:.5rem;font-size:13px">
-        Corrects statement&nbsp;#&nbsp;(optional)
+        {{ msg('stmts-seed-corrects-label') }}
         <input type="number" name="derived_from" min="0" style="width:6rem"
-               title="If this is a corrected/derived version of an existing statement, enter its #id so the link is recorded (#143).">
+               title="{{ msg('stmts-seed-corrects-title') }}">
       </label>
       <div style="display:flex;align-items:center;gap:1rem;margin-top:.5rem">
-        <button type="submit">Add seed statement</button>
+        <button type="submit">{{ msg('stmts-seed-submit') }}</button>
         <span id="seed-count" class="muted" style="font-size:12px">0 / 280</span>
       </div>
     </form>
   </div>
 
   <!-- ── Bulk text import ──────────────────────────────── -->
-  <h3 class="section-heading">Import seed statements from text</h3>
+  <h3 class="section-heading">{{ msg('stmts-import-heading') }}</h3>
   <div class="edit-form">
     <p class="muted" style="margin-bottom:.75rem;font-size:13px">
-      Paste one statement per line. Blank lines are ignored. Maximum {{ max_import_rows }}
-      statements per import and {{ max_import_chars }} characters per statement.
+      {{ msg('stmts-import-intro1', max_import_rows, max_import_chars) }}
     </p>
     <p class="muted" style="margin-bottom:.75rem;font-size:13px">
-      All-or-nothing: if any line is invalid (too long, duplicated within your paste, or
-      over the limit) nothing is imported and the offending lines are listed. Lines
-      identical to an existing statement are skipped automatically — the rest still import.
+      {{ msg('stmts-import-intro2') }}
     </p>
     <form method="post"
           action="{{ url_for('admin.admin_statement_seed_import_text', conv_id=conversation.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Statements
+      <label>{{ msg('stmts-import-label') }}
         <textarea name="statement_texts" rows="8" maxlength="{{ max_import_rows * (max_import_chars + 1) }}"
                   placeholder="First statement&#10;Second statement&#10;Third statement"></textarea>
       </label>
       <div style="margin-top:.75rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-        <button type="submit">Import statements</button>
+        <button type="submit">{{ msg('stmts-import-submit') }}</button>
       </div>
     </form>
   </div>
   {% endif %}
 
   <!-- ── Conversation settings ──────────────────────── -->
-  <h3 class="section-heading">Moderation settings</h3>
+  <h3 class="section-heading">{{ msg('stmts-modsettings-heading') }}</h3>
   <div class="edit-form" style="margin-bottom:2rem">
     <form method="post"
           action="{{ url_for('admin.admin_conversation_strict_moderation', conv_id=conversation.id) }}">
@@ -116,29 +108,29 @@
       <label class="checkbox-label" style="font-weight:normal;color:var(--text)">
         <input type="checkbox" name="strict_moderation" value="1"
                {% if settings.get('strict_moderation') %}checked{% endif %}>
-        Strict moderation — new participant statements must be approved before others can vote on them
+        {{ msg('stmts-strict-label') }}
       </label>
       <div style="margin-top:.75rem">
-        <button type="submit" class="btn-small">Save</button>
+        <button type="submit" class="btn-small">{{ msg('stmts-save') }}</button>
       </div>
     </form>
   </div>
 
   <!-- ── Pending ────────────────────────────────────── -->
   <h3 class="section-heading">
-    Pending review
+    {{ msg('stmts-pending-heading') }}
     {% if pending %}<span class="stmt-count">{{ pending|length }}</span>{% endif %}
   </h3>
 
   {% if not pending %}
-    <p class="muted" style="margin-bottom:1.5rem">No statements awaiting review.</p>
+    <p class="muted" style="margin-bottom:1.5rem">{{ msg('stmts-pending-empty') }}</p>
   {% else %}
   <table class="admin-table stmt-table">
     <thead>
       <tr>
-        <th>#</th>
-        <th>Text</th>
-        <th>Votes</th>
+        <th>{{ msg('stmts-th-num') }}</th>
+        <th>{{ msg('stmts-th-text') }}</th>
+        <th>{{ msg('stmts-th-votes') }}</th>
         <th></th>
       </tr>
     </thead>
@@ -154,22 +146,22 @@
             <span class="sr-only">derived from statement {{ prov.derived_from_tid }}, </span>↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}</span>{% endif %}</td>
         <td class="stmt-text">{{ s.txt }}</td>
         <td class="stmt-votes">
-          <span class="vcount vcount--agree" title="Agree votes"><span class="vlabel">A</span> {{ s.agree_count or 0 }}</span>
-          <span class="vcount vcount--pass" title="Pass votes"><span class="vlabel">P</span> {{ s.pass_count or 0 }}</span>
-          <span class="vcount vcount--disagree" title="Disagree votes"><span class="vlabel">D</span> {{ s.disagree_count or 0 }}</span>
+          <span class="vcount vcount--agree" title="{{ msg('stmts-vote-agree-title') }}"><span class="vlabel">{{ msg('stmts-vlabel-a') }}</span> {{ s.agree_count or 0 }}</span>
+          <span class="vcount vcount--pass" title="{{ msg('stmts-vote-pass-title') }}"><span class="vlabel">{{ msg('stmts-vlabel-p') }}</span> {{ s.pass_count or 0 }}</span>
+          <span class="vcount vcount--disagree" title="{{ msg('stmts-vote-disagree-title') }}"><span class="vlabel">{{ msg('stmts-vlabel-d') }}</span> {{ s.disagree_count or 0 }}</span>
         </td>
         <td class="stmt-actions">
           <form method="post" style="display:inline"
                 action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="1">
-            <button type="submit" class="btn-small btn-approve">approve</button>
+            <button type="submit" class="btn-small btn-approve">{{ msg('stmts-approve') }}</button>
           </form>
           <form method="post" style="display:inline"
                 action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="-1">
-            <button type="submit" class="btn-small btn-danger">hide</button>
+            <button type="submit" class="btn-small btn-danger">{{ msg('stmts-hide') }}</button>
           </form>
         </td>
       </tr>
@@ -180,19 +172,19 @@
 
   <!-- ── Approved ───────────────────────────────────── -->
   <h3 class="section-heading">
-    Approved
+    {{ msg('stmts-approved-heading') }}
     {% if approved %}<span class="stmt-count">{{ approved|length }}</span>{% endif %}
   </h3>
 
   {% if not approved %}
-    <p class="muted" style="margin-bottom:1.5rem">No approved statements.</p>
+    <p class="muted" style="margin-bottom:1.5rem">{{ msg('stmts-approved-empty') }}</p>
   {% else %}
   <table class="admin-table stmt-table">
     <thead>
       <tr>
-        <th>#</th>
-        <th>Text</th>
-        <th>Votes</th>
+        <th>{{ msg('stmts-th-num') }}</th>
+        <th>{{ msg('stmts-th-text') }}</th>
+        <th>{{ msg('stmts-th-votes') }}</th>
         <th></th>
       </tr>
     </thead>
@@ -208,22 +200,22 @@
             <span class="sr-only">derived from statement {{ prov.derived_from_tid }}, </span>↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}</span>{% endif %}</td>
         <td class="stmt-text">{{ s.txt }}</td>
         <td class="stmt-votes">
-          <span class="vcount vcount--agree" title="Agree votes"><span class="vlabel">A</span> {{ s.agree_count or 0 }}</span>
-          <span class="vcount vcount--pass" title="Pass votes"><span class="vlabel">P</span> {{ s.pass_count or 0 }}</span>
-          <span class="vcount vcount--disagree" title="Disagree votes"><span class="vlabel">D</span> {{ s.disagree_count or 0 }}</span>
+          <span class="vcount vcount--agree" title="{{ msg('stmts-vote-agree-title') }}"><span class="vlabel">{{ msg('stmts-vlabel-a') }}</span> {{ s.agree_count or 0 }}</span>
+          <span class="vcount vcount--pass" title="{{ msg('stmts-vote-pass-title') }}"><span class="vlabel">{{ msg('stmts-vlabel-p') }}</span> {{ s.pass_count or 0 }}</span>
+          <span class="vcount vcount--disagree" title="{{ msg('stmts-vote-disagree-title') }}"><span class="vlabel">{{ msg('stmts-vlabel-d') }}</span> {{ s.disagree_count or 0 }}</span>
         </td>
         <td class="stmt-actions">
           <form method="post" style="display:inline"
                 action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="-1">
-            <button type="submit" class="btn-small btn-danger">hide</button>
+            <button type="submit" class="btn-small btn-danger">{{ msg('stmts-hide') }}</button>
           </form>
           <form method="post" style="display:inline"
                 action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="0">
-            <button type="submit" class="btn-small">pending</button>
+            <button type="submit" class="btn-small">{{ msg('stmts-pending-btn') }}</button>
           </form>
         </td>
       </tr>
@@ -234,19 +226,19 @@
 
   <!-- ── Hidden ─────────────────────────────────────── -->
   <h3 class="section-heading">
-    Hidden
+    {{ msg('stmts-hidden-heading') }}
     {% if hidden %}<span class="stmt-count">{{ hidden|length }}</span>{% endif %}
   </h3>
 
   {% if not hidden %}
-    <p class="muted" style="margin-bottom:1.5rem">No hidden statements.</p>
+    <p class="muted" style="margin-bottom:1.5rem">{{ msg('stmts-hidden-empty') }}</p>
   {% else %}
   <table class="admin-table stmt-table">
     <thead>
       <tr>
-        <th>#</th>
-        <th>Text</th>
-        <th>Votes</th>
+        <th>{{ msg('stmts-th-num') }}</th>
+        <th>{{ msg('stmts-th-text') }}</th>
+        <th>{{ msg('stmts-th-votes') }}</th>
         <th></th>
       </tr>
     </thead>
@@ -256,22 +248,22 @@
         <td class="muted">{{ s.tid }}</td>
         <td class="stmt-text">{{ s.txt }}</td>
         <td class="stmt-votes">
-          <span class="vcount vcount--agree" title="Agree votes"><span class="vlabel">A</span> {{ s.agree_count or 0 }}</span>
-          <span class="vcount vcount--pass" title="Pass votes"><span class="vlabel">P</span> {{ s.pass_count or 0 }}</span>
-          <span class="vcount vcount--disagree" title="Disagree votes"><span class="vlabel">D</span> {{ s.disagree_count or 0 }}</span>
+          <span class="vcount vcount--agree" title="{{ msg('stmts-vote-agree-title') }}"><span class="vlabel">{{ msg('stmts-vlabel-a') }}</span> {{ s.agree_count or 0 }}</span>
+          <span class="vcount vcount--pass" title="{{ msg('stmts-vote-pass-title') }}"><span class="vlabel">{{ msg('stmts-vlabel-p') }}</span> {{ s.pass_count or 0 }}</span>
+          <span class="vcount vcount--disagree" title="{{ msg('stmts-vote-disagree-title') }}"><span class="vlabel">{{ msg('stmts-vlabel-d') }}</span> {{ s.disagree_count or 0 }}</span>
         </td>
         <td class="stmt-actions">
           <form method="post" style="display:inline"
                 action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="1">
-            <button type="submit" class="btn-small btn-approve">approve</button>
+            <button type="submit" class="btn-small btn-approve">{{ msg('stmts-approve') }}</button>
           </form>
           <form method="post" style="display:inline"
                 action="{{ url_for('admin.admin_statement_moderate', conv_id=conversation.id, tid=s.tid) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="mod" value="0">
-            <button type="submit" class="btn-small">pending</button>
+            <button type="submit" class="btn-small">{{ msg('stmts-pending-btn') }}</button>
           </form>
         </td>
       </tr>
