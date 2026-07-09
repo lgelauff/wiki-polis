@@ -204,6 +204,14 @@ curl -s -o /dev/null -w "%{http_code}" http://<private-ip>:8000/
 chmod 600 ~/particiapp-docker/.env
 ```
 
+**Clone the wiki-polis ops scripts** — the `docker exec` helper scripts referenced below (`v2/ops/*.sh`) live in the wiki-polis repo itself, not in `particiapp-docker`. This VPS needs its own checkout:
+
+```bash
+git clone https://github.com/lgelauff/wiki-polis.git ~/wiki-polis
+```
+
+Run `cd ~/wiki-polis && git pull` after future deploys to pick up ops-script changes.
+
 **Create a read-only Postgres role** for the Flask admin connection — do not use the `polis` superuser for external connections:
 
 ```bash
@@ -287,6 +295,10 @@ than command-line credentials:
 30 4 * * * TOOLSDB_DATABASE=<creduser>__wiki-polis RCLONE_REMOTE=b2:wiki-polis-postgres-backups HEALTHCHECKS_URL=https://hc-ping.com/<uuid-toolsdb> /data/project/wiki-polis/wiki-polis/v2/ops/backups/backup_toolsdb_b2.sh
 ```
 
+`backup_toolsdb_b2.sh` reads ToolsDB credentials from a MySQL option file via
+`TOOLSDB_DEFAULTS_FILE`, which defaults to `$HOME/replica.my.cnf` — the standard
+Toolforge-provisioned credentials file — so it does not normally need to be set explicitly.
+
 Record the B2 application key, rclone remote name, Healthchecks URLs, Toolforge envvar
 export, and VPS `.env` location in the password manager. See `guide_runbook.md` for the
 restore drill.
@@ -322,6 +334,14 @@ git clone https://github.com/lgelauff/wiki-polis.git ~/wiki-polis
 mkdir -p ~/www/python
 ln -s ~/wiki-polis/v2 ~/www/python/src
 ```
+
+**Toolforge jobs framework access:** the tool account also needs access to the Toolforge
+jobs framework (`toolforge jobs ...`). Scheduled phase transitions rely on a `phase-scheduler`
+job defined in `jobs.yaml` (repo root) — a `*/5 * * * *` cron job running
+`v2/bin/phase-scheduler.sh`, which runs `flask --app app process-phase-schedules`.
+`deploy.sh` registers/re-asserts this job on every deploy (`toolforge jobs load
+~/wiki-polis/jobs.yaml`), so no separate one-time `toolforge jobs load` step is needed —
+just make sure the tool account isn't blocked from the jobs framework.
 
 ### Install Python dependencies
 
@@ -469,6 +489,12 @@ Or use the deploy script (which handles all steps):
 bash ~/wiki-polis/deploy.sh
 ```
 
+`deploy.sh` also runs `toolforge jobs load ~/wiki-polis/jobs.yaml` on every deploy, re-asserting
+the `phase-scheduler` scheduled job (see [One-time tool setup](#one-time-tool-setup) above). This
+step is non-fatal but loud — if `toolforge jobs load` fails, the script prints an error and
+continues the web deploy, but scheduled phase transitions won't fire until the job is reloaded
+manually.
+
 ### Buildservice status
 
 Toolforge buildservice has been evaluated but is **not** the default deploy path. The
@@ -504,7 +530,7 @@ Run inside the webservice shell, where pod envvars are present (here you do **no
 
 ### Migration history
 
-Ordered chain (oldest → newest); the current head is `f667548e9519`. Run `flask --app app db upgrade` to apply everything up to the head — you do not apply these individually.
+Ordered chain (oldest → newest); the current head is `d5e6f7a8b9c0`. Run `flask --app app db upgrade` to apply everything up to the head — you do not apply these individually.
 
 | Order | Revision | Description |
 |---|---|---|
@@ -513,9 +539,24 @@ Ordered chain (oldest → newest); the current head is `f667548e9519`. Run `flas
 | 3 | `99f8b42af697` | Adds `arguments.hidden`. |
 | 4 | `a3f1c8e2d905` | Adds `participations.new_stmt_ids`. |
 | 5 | `3e86727dbcee` | Phase 6 — adds `phase_informed_voting`, `phase6_polis_conversation_id` to conversations; `phase6_polis_statement_id` to featured_statements; UNIQUE constraints and index. |
-| 6 | `f667548e9519` | Adds `participations.phase6_card_order` (JSON, nullable). **Current head.** |
+| 6 | `f667548e9519` | Adds `participations.phase6_card_order` (JSON, nullable). |
+| 7 | `c1a2b3d4e5f6` | Adds `conversations.phase_cleanup` (boolean, default off) — the passive phase between argument mapping and informed voting (#163). |
+| 8 | `d2e3f4a5b6c7` | Adds the append-only `audit_events` table (#135). |
+| 9 | `e3f4a5b6c7d8` | Adds `statement_provenance` and `statement_similarity_scores` tables for derivative-statement tracking (#143). |
+| 10 | `4b6c7d8e9f01` | Adds `participants.xid_key_version` (legacy plain-sha256 vs. HMAC-keyed xid) (#96). |
+| 11 | `5c7d8e9f0123` | Adds `arguments.proposer_pseudonym`, backfills it, and drops `arguments.proposer_id` (#113). |
+| 12 | `6d8e9f012345` | Adds conversation/participation eligibility-gate columns (`eligibility_event_id`, `eligibility_label`, `eligibility_status`, `eligibility_checked_at`, `eligibility_detail`) (#146). |
+| 13 | `7e9f01234567` | Adds `participants.is_demo` marker (#223). |
+| 14 | `a4b5c6d7e8f9` | Adds `conversations.recommended_quantities` (JSON) (#160). |
+| 15 | `b5c6d7e8f9a0` | Adds `conversations.phase_route` (default `default_7`) (#173). |
+| 16 | `c6d7e8f9a0b1` | Adds scheduled phase-transition fields to `conversations` (`scheduled_transition_at`, `scheduled_transition_target`, `scheduled_transition_frozen`) (#164). |
+| 17 | `d7e8f9a0b1c2` | Adds `conversations.report_filter_snapshot` (JSON) (#186). |
+| 18 | `a4b5c6d7e8fa` | Widens the `admin_roles.role` enum to add the organizer role (#154). |
+| 19 | `b4c5d6e7f8a9` | Adds `participations.last_engagement` (#42). |
+| 20 | `c4d5e6f7a8b9` | Adds the `conversation_bans` table (#60). |
+| 21 | `d5e6f7a8b9c0` | Adds the `content_flags` table (statement/argument moderation flags) (#138). **Current head.** |
 
-Verify the live head with `flask --app app db current`; confirm it matches `f667548e9519` after deploying. When new migrations land, append them here.
+Verify the live head with `flask --app app db current`; confirm it matches `d5e6f7a8b9c0` after deploying. When new migrations land, append them here.
 
 ### Check whether a migration is needed
 
