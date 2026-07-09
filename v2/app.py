@@ -655,6 +655,28 @@ _RECOMMENDATION_LABELS = {
 _RECOMMENDED_FEATURED = _RECOMMENDATION_TIERS[_DEFAULT_RECOMMENDATION_TIER]['featured_statements']
 
 
+# ── i18n localizers for display strings that live in the module-level data
+# structures above. These are called per-request (during context assembly), so
+# _() resolves the caller's UI locale; the stable `key`/`id` fields drive the
+# message key and are preserved for downstream logic. See i18n/README.md.
+def _localize_stage(stage: dict) -> dict:
+    return {**stage,
+            'label':  _('phase-label-' + stage['key']),
+            'effect': _('phase-effect-' + stage['key'])}
+
+
+def _localized_phase_routes() -> dict:
+    return {k: {**v, 'label': _('phase-route-' + k)} for k, v in PHASE_ROUTES.items()}
+
+
+def _localized_recommendation_tiers() -> dict:
+    return {k: {**v, 'label': _('rec-tier-' + k)} for k, v in _RECOMMENDATION_TIERS.items()}
+
+
+def _localized_recommendation_labels() -> dict:
+    return {k: _('rec-field-' + k) for k in _RECOMMENDATION_LABELS}
+
+
 def _recommendation_profile(conv) -> dict:
     raw = getattr(conv, 'recommended_quantities', None) or {}
     tier = raw.get('tier', _DEFAULT_RECOMMENDATION_TIER)
@@ -717,15 +739,17 @@ def _transition_context(conv):
             met, note = _PRECONDITION_CHECKS[p['check']](conv)
         elif p.get('recommendation'):
             note = _recommendation_note(conv, p['recommendation'])
-        preconds.append({**p, 'met': met, 'note': note})
+        preconds.append({**p, 'label': _('precond-' + p['id']), 'met': met, 'note': note})
+    target = _localize_stage(nxt)
+    source = _localize_stage(cur)
     # Consequence text — what opens, what closes, irreversibility.
     consequence = {
-        'opens':  nxt['effect'],
-        'closes': cur['effect'] if cur['flag'] else None,
+        'opens':  target['effect'],
+        'closes': source['effect'] if cur['flag'] else None,
     }
     return {
-        'target': nxt,
-        'source': cur,
+        'target': target,
+        'source': source,
         'preconditions': preconds,
         'consequence': consequence,
         'runs_phase6_init': bool(cfg.get('runs_phase6_init')),
@@ -985,10 +1009,16 @@ def _output_items(conv) -> list[dict]:
         status = definition['status']
         if definition['key'] == 'dataset' and ready:
             status = 'final'
+        k = definition['key']
         item = {
             **definition,
+            'label':   _('output-' + k + '-label'),
+            'tooltip': _('output-' + k + '-tooltip'),
+            'pending': _('output-' + k + '-pending'),
+            'phase':   _('output-' + k + '-phase'),
+            'method':  _('output-' + k + '-method'),
             'ready': ready,
-            'status': status,
+            'status': _('output-status-' + status),
             'state': 'ready' if ready else 'pending',
             'href': _output_href(conv, definition['key']),
         }
@@ -1134,7 +1164,7 @@ def _phase_stat_groups(conv, polis_stats, phase6_stats=None):
 
     return [
         {'key':   _phase_sequence_for(conv)[i]['key'],
-         'label': _phase_sequence_for(conv)[i]['label'],
+         'label': _('phase-label-' + _phase_sequence_for(conv)[i]['key']),
          'tiles': _phase_tiles(conv, _phase_sequence_for(conv)[i]['key'], polis_stats, phase6_stats,
                                featured_counts, argument_stats)}
         for i in [j for j, s in enumerate(_phase_sequence_for(conv)) if s['key'] in _active_phases(conv)]
@@ -1444,10 +1474,10 @@ def _can_organize(conversation, participant: 'Participant | None' = None) -> boo
 
 def _conversation_role_label(conversation, participant: 'Participant | None' = None) -> str:
     if _is_global_admin(participant):
-        return 'Global admin'
+        return _('role-global-admin')
     if _can_organize(conversation, participant):
-        return 'Organizer'
-    return 'Moderator'
+        return _('role-organizer')
+    return _('role-moderator')
 
 
 def admin_required(f):
@@ -2452,7 +2482,7 @@ def admin():
                            conversations=conversations,
                            participants=participants,
                            global_admins=global_admins,
-                           phase_routes=PHASE_ROUTES,
+                           phase_routes=_localized_phase_routes(),
                            )
 
 @admin_bp.get('/admin/conversations/<int:conv_id>')
@@ -2517,16 +2547,16 @@ def admin_conversation_detail(conv_id):
                            can_manage_roles=can_manage_roles,
                            can_organize=can_organize,
                            role_label=_conversation_role_label(conv),
-                           phase_sequence=phase_sequence,
+                           phase_sequence=[_localize_stage(s) for s in phase_sequence],
                            current_stage_index=_current_stage_index(conv),
                            active_stage_indices=[i for i, s in enumerate(phase_sequence)
                                                   if s['key'] in _active_phases(conv)],
                            linear_phase_state=_is_linear_phase_state(conv),
                            advance_target_index=_advance_target_index(conv),
                            transition=_transition_context(conv),
-                           phase_routes=PHASE_ROUTES,
-                           recommendation_tiers=_RECOMMENDATION_TIERS,
-                           recommendation_labels=_RECOMMENDATION_LABELS,
+                           phase_routes=_localized_phase_routes(),
+                           recommendation_tiers=_localized_recommendation_tiers(),
+                           recommendation_labels=_localized_recommendation_labels(),
                            recommendation_profile=_recommendation_profile(conv),
                            schedule=_schedule_context(conv),
                            cleanup_window=_in_cleanup_window(conv))
