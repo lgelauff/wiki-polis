@@ -31,13 +31,70 @@ Append **`?uselang=qqx`** to any page: every externalised string renders as its 
 (`(base-log-out)`). Any real English still visible = a string that still needs extracting.
 A missing key renders loudly as `⧼key⧽`.
 
-## Scope
+## Scope — the interface / content split
 
-TWN translates the **interface chrome only**. Participant-authored **statements and arguments**
-are content in the conversation's own language (`Conversation.language`) and are *not*
-translated here. The Polis web component (`particiapp-web-components.js`, added at deploy from
-the upstream particiapp project) carries its own English — its i18n is a separate upstream
-concern.
+wiki-polis has **two language surfaces**, and only one is translated here.
+
+### Interface (translate — this catalogue)
+
+The UI chrome the platform itself renders: the same for every consultation, regardless of the
+consultation's topic or language. Buttons, labels, headings, help/onboarding copy, table
+headers, status badges, tab names, `aria-label`/`title`/`placeholder` attributes, screen-reader
+announcements, and `flash()` notices. This is what TWN volunteers translate.
+
+Where it lives, and how it's externalised:
+
+| Interface source | Mechanism | Status |
+|---|---|---|
+| Template literal text | `{{ msg('key') }}` | ✅ all 19 templates |
+| Template attrs (aria/title/placeholder) | `{{ msg('key') }}` | ✅ |
+| Inline JS UI strings | `wpI18n.msg('key')` (island) | ✅ |
+| Python `flash()` messages | `flash(_('key'), 'cat')` | ✅ 61 done |
+| **Python display labels in data structures** | need `_()` at the definition | ⚠️ **not yet** — see gap below |
+
+**Interpolating content into an interface frame is still interface.** A message like
+`"$1 — join consultation"` is translated; the `$1` value passed in (a consultation title, a
+pseudonym, a statement) is *content* and is **not** translated — it's substituted verbatim and
+autoescaped. So `msg('home-card-join-aria', c.title)` is correct: translatable frame, literal
+value.
+
+### Content (never translate — always renders as `{{ data }}`)
+
+Participant- and organizer-authored material, in the consultation's own `Conversation.language`.
+Auditied clean — none of these is wrapped in `msg()`:
+
+- `conversation.title`, `conversation.intro_text`, `conversation.outro_text`
+- statement text (`item.text`, `s.text`, `stmt.text`, `txt`)
+- argument bodies (`arg.body`), `r.statement_text`
+- pseudonyms (`participation.pseudonym`, `part.pseudonym`), Wikimedia usernames
+- derived-statement provenance data (TIDs, similarity scores)
+
+Also left as data by design: **enum/config identifiers** shown verbatim (`public`,
+`invite_only`, `demo`, phase-route keys), env-var names (`POLIS_DATABASE_URL`), and the Polis
+web component (`particiapp-web-components.js`, vendored at deploy) which carries its own English
+— a separate upstream i18n concern.
+
+### ⚠️ Known gap — interface strings defined in Python data structures
+
+A class of genuinely-*interface* strings is defined in Python **data structures** and reaches
+templates as `{{ x.label }}` / `{{ x.effect }}` / `{{ output.tooltip }}`, so the template pass
+could not touch them and they are **not yet internationalised**. Until they are, a non-English
+locale would translate the participant surface but leave these English (e.g. the admin phase
+stepper would read "Explore" in English while the participant tab reads the translated form):
+
+- `PHASE_SEQUENCE` (`app.py`): 7 phase **labels** + 7 **effect** descriptions. Transition
+  `consequence.opens/closes` reuse these effects, so fixing the sequence covers them too.
+- Phase-route labels (`_PHASE_ROUTES`): 3.
+- Readiness **precondition** labels/notes (built per transition).
+- Output-item **label / tooltip / pending** text (`_output_items`, ~5 items): shown on `home`,
+  `output`, and `report`.
+- `_RECOMMENDATION_TIERS` tier labels + `_RECOMMENDATION_LABELS` field labels.
+- `_vote_label()` → handled: the p6-results "Yours" cell now maps its `Agreed/Disagreed/Passed`
+  values to `conv-p6-mine-*` messages.
+
+Closing this means adding `_()` at each definition site (they're evaluated per-request, so
+`_()` resolves the caller's locale correctly). Estimated ~40–50 messages. Tracked as the next
+i18n pass; it is **not** covered by "all templates + flash strings done".
 
 ## Enabling a locale
 
