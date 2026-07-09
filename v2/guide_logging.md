@@ -2,8 +2,8 @@
 
 How logging works in wiki-polis and the rules for adding log statements. This is the
 Phase 1 (foundation) slice; audit logging (Plan 2) and engagement instrumentation
-(Plan 4) are documented separately when they land. Design rationale lives in
-`.claude/plan-logging.md`.
+(Plan 4) are documented separately when they land. The design rationale was captured in
+an internal planning doc that was never committed to the repo.
 
 ## Where logs go
 
