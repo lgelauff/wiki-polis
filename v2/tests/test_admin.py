@@ -1,11 +1,11 @@
 """Tests for admin conversation management, roles, and phase toggles."""
 import re
-from datetime import datetime, timezone
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from db import AdminRole, Conversation, ConversationInvite, Participant, db
+from db import AdminRole, ContentFlag, Conversation, ConversationInvite, Participant, db
 from polis_admin import PolisServerError
 from tests.conftest import login
 
@@ -54,6 +54,19 @@ def test_create_conversation(app, admin_client):
     assert conv.title == 'New Conversation'
     assert conv.polis_id == 'newpolis12'
     assert conv.active is True
+
+
+def test_create_conversation_stores_selected_phase_route(admin_client):
+    resp = admin_client.post('/admin/conversations/new', data={
+        'slug': 'short-route',
+        'polis_id': 'shr1234567',
+        'title': 'Short Route',
+        'access_policy': 'public',
+        'phase_route': 'short_results',
+    })
+    assert resp.status_code == 302
+    conv = Conversation.query.filter_by(slug='short-route').first()
+    assert conv.phase_route == 'short_results'
 
 
 def test_create_conversation_invalid_slug_rejected(admin_client):
@@ -107,6 +120,21 @@ def test_edit_conversation_missing_title_flashes(admin_client, conv):
     assert b'Title is required' in resp.data
     db.session.refresh(conv)
     assert conv.title == 'Admin Test Conv'          # unchanged
+
+
+def test_organizer_can_edit_conversation_settings(client, conv, participant):
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='organizer'))
+    db.session.commit()
+    login(client, 'testuser')
+    resp = client.post(f'/admin/conversations/{conv.id}/edit', data={
+        'title': 'Organizer Updated',
+        'access_policy': 'invite_only',
+    })
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.title == 'Organizer Updated'
+    assert conv.access_policy == 'invite_only'
 
 
 # ── Phase toggles ─────────────────────────────────────────────────────────────
@@ -235,7 +263,7 @@ def test_move_forbidden_for_regular_participant(auth_client, conv):
 
 
 def test_move_forbidden_for_moderator(client, conv, participant):
-    """Phase control is global-admin only — a moderator cannot move phases."""
+    """Phase control is organizer-or-above — a moderator cannot move phases."""
     db.session.add(AdminRole(participant_id=participant.id,
                              conversation_id=conv.id, role='moderator'))
     db.session.commit()
@@ -245,6 +273,43 @@ def test_move_forbidden_for_moderator(client, conv, participant):
     assert resp.status_code == 403
     db.session.refresh(conv)
     assert conv.phase_submission is False
+
+
+def test_organizer_can_advance_phase(client, conv, participant):
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='organizer'))
+    db.session.commit()
+    login(client, 'testuser')
+    with patch('app.PolisServerClient.set_vis_type'):
+        resp = client.post(f'/admin/conversations/{conv.id}/phase/advance',
+                           data=_checks_for(conv))
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.phase_submission is True
+
+
+def test_organizer_cannot_use_advanced_phase_toggles(client, conv, participant):
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='organizer'))
+    db.session.commit()
+    login(client, 'testuser')
+    resp = client.post(f'/admin/conversations/{conv.id}/phases',
+                       data={'phase_submission': '1'})
+    assert resp.status_code == 403
+    db.session.refresh(conv)
+    assert conv.phase_submission is False
+
+
+def test_organizer_sees_guided_not_advanced_phase_controls(client, conv, participant):
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='organizer'))
+    db.session.commit()
+    login(client, 'testuser')
+    resp = client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'Organizer' in resp.data
+    assert b'phase/advance' in resp.data
+    assert f'/admin/conversations/{conv.id}/phases'.encode() not in resp.data
 
 
 def test_moderator_sees_readonly_stepper(client, conv, participant):
@@ -271,7 +336,7 @@ def test_moderator_sees_roster_readonly(client, conv, participant):
     resp = client.get(f'/admin/conversations/{conv.id}')
     assert resp.status_code == 200
     assert b'testuser' in resp.data                  # roster lists the moderator
-    assert b'Add moderator' not in resp.data         # cannot manage roles
+    assert b'Add role' not in resp.data              # cannot manage roles
     assert b'Save settings' not in resp.data         # no settings form
     assert b'roles/' not in resp.data                # no add/remove role actions
 
@@ -583,16 +648,17 @@ def test_reentry_resyncs_instead_of_reinitialising(admin_client, conv):
     assert conv.phase6_polis_conversation_id == 'r6'   # unchanged
 
 
-def test_move_to_public_results_auto_closes(admin_client, conv):
-    """The final transition opens public results and permanently closes the
-    conversation, starting the identity-reveal flow."""
+def test_move_to_public_results_enters_cleanup_window(admin_client, conv):
+    """The final guided transition ends informed voting but does not stamp
+    closed_at; publication is a separate cleanup-window action."""
     conv.phase_informed_voting = True
     db.session.commit()
     _move(admin_client, conv)
     db.session.refresh(conv)
     assert conv.phase_public_results is True
-    assert conv.active is False
-    assert conv.closed_at is not None
+    assert conv.phase_informed_voting is False
+    assert conv.active is True
+    assert conv.closed_at is None
 
 
 def test_move_on_closed_conversation_jumps_to_public_results(admin_client, conv):
@@ -704,6 +770,22 @@ def test_featured_check_shows_selected_count_and_recommendation(admin_client, co
     resp = admin_client.get(f'/admin/conversations/{conv.id}')
     assert resp.status_code == 200
     assert b'2 selected, 15 recommended' in resp.data
+
+
+def test_recommendation_override_updates_featured_guidance(admin_client, conv):
+    conv.phase_personal_results = True
+    db.session.commit()
+    _add_featured(conv)
+    admin_client.post(f'/admin/conversations/{conv.id}/recommendations', data={
+        'tier': 'complex',
+        'seed_statements': '11',
+        'featured_statements': '21',
+        'arguments_per_featured': '4',
+        'votes_per_statement': '60',
+    })
+    resp = admin_client.get(f'/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    assert b'1 selected, 21 recommended' in resp.data
 
 
 def test_featured_check_zero_confirmed_suppresses_count(admin_client, conv):
@@ -1069,6 +1151,72 @@ def test_close_conversation_sets_closed_at(admin_client, conv):
     assert conv.active is False
     assert conv.paused is False
     assert conv.closed_at is not None
+    assert conv.report_filter_snapshot == {'excluded_tids': [], 'excluded_pids': []}
+
+
+def test_publish_final_report_requires_cleanup_checklist(admin_client, conv):
+    conv.phase_public_results = True
+    conv.phase6_polis_conversation_id = 'p6conv1234'
+    db.session.commit()
+
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/close',
+                             data={'cleanup_reviewed_results': 'on'},
+                             follow_redirects=True)
+    assert resp.status_code == 200
+    assert b'Complete every cleanup checklist' in resp.data
+    db.session.refresh(conv)
+    assert conv.active is True
+    assert conv.closed_at is None
+
+
+def test_publish_final_report_snapshots_phase6_filter(admin_client, conv):
+    conv.phase_public_results = True
+    conv.phase6_polis_conversation_id = 'p6conv1234'
+    db.session.commit()
+    data = {
+        'cleanup_reviewed_results': 'on',
+        'cleanup_moderated_flagged': 'on',
+        'cleanup_reviewed_exclusions': 'on',
+        'cleanup_report_intro': 'on',
+    }
+    with patch('app.PolisServerClient.get_statements',
+               return_value=([], [], [{'tid': 42, 'txt': 'hidden'}])):
+        resp = admin_client.post(f'/admin/conversations/{conv.id}/close', data=data)
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.active is False
+    assert conv.closed_at is not None
+    assert conv.report_filter_snapshot == {'excluded_tids': [42], 'excluded_pids': []}
+
+
+def test_schedule_active_to_passive_transition(admin_client, conv):
+    conv.phase_submission = True
+    db.session.commit()
+    when = (datetime.now(timezone.utc) + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/phase/schedule',
+                             data={'scheduled_at': when})
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.scheduled_transition_target == 'featured_selection'
+    assert conv.scheduled_transition_at is not None
+    assert conv.scheduled_transition_frozen is False
+
+
+def test_due_schedule_fires_and_clears(app, admin_client, conv):
+    import app as app_module
+    conv.phase_submission = True
+    conv.scheduled_transition_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    conv.scheduled_transition_target = 'featured_selection'
+    db.session.commit()
+
+    with patch('app.PolisServerClient.set_vis_type', return_value=True):
+        result = app_module._process_due_scheduled_transitions()
+
+    assert result['fired'] == 1
+    db.session.refresh(conv)
+    assert conv.phase_submission is False
+    assert conv.phase_personal_results is True
+    assert conv.scheduled_transition_at is None
 
 
 def test_close_already_closed_rejected(admin_client, conv):
@@ -1099,6 +1247,22 @@ def test_grant_moderator_role(admin_client, admin_participant, conv, participant
         participant_id=participant.id,
         conversation_id=conv.id,
         role='moderator',
+    ).first()
+    assert role is not None
+
+
+def test_grant_organizer_role(admin_client, admin_participant, conv, participant):
+    resp = admin_client.post('/admin/roles/add', data={
+        'participant_id': participant.id,
+        'conversation_id': conv.id,
+        'role': 'organizer',
+        'redirect_to': f'/admin/conversations/{conv.id}',
+    })
+    assert resp.status_code == 302
+    role = AdminRole.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        role='organizer',
     ).first()
     assert role is not None
 
@@ -1135,7 +1299,7 @@ def test_scoped_moderator_cannot_see_global_role_controls(client, conv, particip
     assert resp.status_code == 200
     assert b'testuser' in resp.data
     assert b'otheruser' not in resp.data
-    assert b'Add moderator' not in resp.data
+    assert b'Add role' not in resp.data
     assert b'class="btn-small btn-danger">remove</button>' not in resp.data
 
 
@@ -1163,6 +1327,118 @@ def test_remove_invite(admin_client, conv):
     assert db.session.get(ConversationInvite, inv.id) is None
 
 
+def test_participants_page_shows_engagement_metrics(app, admin_client, conv, participant):
+    from db import Argument, ArgumentVote, Participation
+
+    app.config['POLIS_DATABASE_URL'] = 'postgres://stats.example/db'
+    other = Participant(mw_user_id=44444, mw_username='otheruser', xid='u' * 64)
+    db.session.add(other)
+    db.session.flush()
+    part = Participation(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        pseudonym='test-lion',
+        last_engagement=datetime(2026, 6, 23, 12, 30, tzinfo=timezone.utc),
+    )
+    other_part = Participation(
+        participant_id=other.id,
+        conversation_id=conv.id,
+        pseudonym='other-lion',
+    )
+    db.session.add_all([part, other_part])
+    db.session.flush()
+    fs = FeaturedStatement(
+        conversation_id=conv.id,
+        polis_statement_id=7,
+        statement_text='Featured',
+        confirmed_by_admin=True,
+    )
+    db.session.add(fs)
+    db.session.flush()
+    arg = Argument(featured_statement_id=fs.id, proposer_pseudonym='test-lion',
+                   body='Useful because...', side='pro')
+    db.session.add(arg)
+    db.session.flush()
+    db.session.add(ArgumentVote(argument_id=arg.id, participant_id=participant.id))
+    db.session.commit()
+
+    server = MagicMock()
+    server.get_statement_progress_bulk.return_value = {
+        conv.polis_id: {'total': 5, 'voted': 3, 'remaining': 2},
+    }
+    with patch('app._polis_server_client', return_value=server):
+        resp = admin_client.get(f'/admin/conversations/{conv.id}/participants')
+
+    assert resp.status_code == 200
+    page = resp.data.decode()
+    assert 'testuser' in page
+    assert '3 / 5' in page
+    assert re.search(r'<td>\s*2\s*</td>', page)
+    assert re.search(r'<td>\s*1\s*</td>', page)
+    assert '2026-06-23 12:30' in page
+
+
+def test_admin_can_ban_and_unban_participant(admin_client, conv, participant):
+    from db import ConversationBan, Participation
+
+    db.session.add(Participation(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        pseudonym='ban-lion',
+    ))
+    db.session.commit()
+
+    ban_resp = admin_client.post(
+        f'/admin/conversations/{conv.id}/participants/{participant.id}/ban',
+        data={'summary': '<b>spam</b>'},
+        follow_redirects=True,
+    )
+    ban = ConversationBan.query.filter_by(
+        conversation_id=conv.id,
+        participant_id=participant.id,
+        lifted_at=None,
+    ).first()
+    assert ban_resp.status_code == 200
+    assert ban is not None
+    assert ban.summary == 'spam'
+    assert b'Banned' in ban_resp.data
+
+    unban_resp = admin_client.post(
+        f'/admin/conversations/{conv.id}/participants/{participant.id}/unban',
+        data={'summary': 'resolved'},
+        follow_redirects=True,
+    )
+    db.session.refresh(ban)
+    assert unban_resp.status_code == 200
+    assert ban.lifted_at is not None
+    assert ban.lift_summary == 'resolved'
+
+
+def test_public_ban_log_uses_pseudonym_and_hides_reason(client, admin_client,
+                                                        conv, participant):
+    from db import Participation
+
+    db.session.add(Participation(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        pseudonym='public-lion',
+    ))
+    db.session.commit()
+
+    admin_client.post(
+        f'/admin/conversations/{conv.id}/participants/{participant.id}/ban',
+        data={'summary': 'private reason'},
+    )
+
+    resp = client.get(f'/c/{conv.slug}/moderation-log')
+    assert resp.status_code == 200
+    page = resp.data.decode()
+    assert 'Banned' in page
+    assert 'public-lion' in page
+    assert 'private reason' not in page
+    assert participant.mw_username not in page
+
+
 # ── Template-render smoke test (#92 blueprint extraction) ───────────────────────
 # The admin routes moved onto Blueprint('admin'), so every `url_for('admin…')` in the
 # admin templates was requalified to `url_for('admin.admin…')`. The rest of this suite
@@ -1174,6 +1450,8 @@ def test_admin_template_pages_render(admin_client, conv):
     # Pure-DB pages — no backend needed.
     assert admin_client.get(f'/admin/conversations/{conv.id}').status_code == 200
     assert admin_client.get(f'/admin/conversations/{conv.id}/invites').status_code == 200
+    assert admin_client.get(f'/admin/conversations/{conv.id}/participants').status_code == 200
+    assert admin_client.get(f'/admin/conversations/{conv.id}/flags').status_code == 200
 
     # Statements page pulls from Polis; stub both clients so it renders offline.
     from unittest.mock import MagicMock
@@ -1184,6 +1462,28 @@ def test_admin_template_pages_render(admin_client, conv):
         ppc.return_value.get_settings.return_value = {}
         resp = admin_client.get(f'/admin/conversations/{conv.id}/statements')
     assert resp.status_code == 200
+
+
+def test_admin_mode_header_and_participant_manage_shortcut(admin_client, conv, admin_participant):
+    from db import Participation
+
+    db.session.add(Participation(
+        participant_id=admin_participant.id,
+        conversation_id=conv.id,
+        pseudonym='admin-mode',
+    ))
+    db.session.commit()
+
+    admin_page = admin_client.get(f'/admin/conversations/{conv.id}').data.decode()
+    assert 'site-header--admin' in admin_page
+    assert '<span class="header-mode-badge">Admin</span>' in admin_page
+    assert 'aria-label="Admin breadcrumb"' in admin_page
+    assert 'View as participant' in admin_page
+
+    participant_page = admin_client.get(f'/c/{conv.slug}').data.decode()
+    assert 'site-header--participant' in participant_page
+    assert 'header-mode-badge' not in participant_page
+    assert f'href="/admin/conversations/{conv.id}">Manage</a>' in participant_page
 
 
 def test_phases_toggle_mirrors_results_into_polis_vis_type(admin_client, conv):
@@ -1212,3 +1512,74 @@ def test_phases_toggle_mirrors_results_into_polis_vis_type(admin_client, conv):
         admin_client.post(f'/admin/conversations/{conv.id}/phases',
                           data={'phase_submission': 'on'})
     server2.set_vis_type.assert_called_once_with('adm1234567', 0)
+
+
+def test_delete_conversation_button_disabled_without_vote_count(admin_client, conv):
+    server = MagicMock()
+    server.get_polis_stats.return_value = None
+    server.get_valid_vote_count.return_value = None
+
+    with patch('app._polis_server_client', return_value=server):
+        page = admin_client.get(f'/admin/conversations/{conv.id}').data.decode()
+
+    assert 'Delete empty consultation' in page
+    assert 'Polis vote data could not be verified' in page
+    assert 'disabled aria-disabled="true"' in page
+
+
+def test_delete_conversation_blocked_when_valid_votes_exist(admin_client, conv):
+    server = MagicMock()
+    server.get_valid_vote_count.return_value = 2
+
+    with patch('app._polis_server_client', return_value=server):
+        resp = admin_client.post(
+            f'/admin/conversations/{conv.id}/delete',
+            follow_redirects=True,
+        )
+
+    assert resp.status_code == 200
+    assert db.session.get(Conversation, conv.id) is not None
+    server.close_and_hide_conversation.assert_not_called()
+    assert b'2 valid votes' in resp.data
+
+
+def test_delete_conversation_with_zero_valid_votes(admin_client, conv):
+    server = MagicMock()
+    server.get_valid_vote_count.return_value = 0
+
+    with patch('app._polis_server_client', return_value=server):
+        resp = admin_client.post(f'/admin/conversations/{conv.id}/delete')
+
+    assert resp.status_code == 302
+    assert resp.headers['Location'].endswith('/admin')
+    assert db.session.get(Conversation, conv.id) is None
+    server.close_and_hide_conversation.assert_called_once_with('adm1234567')
+
+
+def test_admin_flag_queue_resolves_statement_flag(admin_client, conv, participant):
+    flag = ContentFlag(
+        conversation_id=conv.id,
+        participant_id=participant.id,
+        content_type='statement',
+        statement_tid=7,
+        category='privacy',
+        detail='Names a private person.',
+        status='open',
+    )
+    db.session.add(flag)
+    db.session.commit()
+
+    with patch('app._statement_text_map', return_value={7: 'Statement text'}):
+        page = admin_client.get(f'/admin/conversations/{conv.id}/flags').data.decode()
+    assert 'Statement text' in page
+    assert 'Privacy violation' in page
+
+    resp = admin_client.post(
+        f'/admin/conversations/{conv.id}/flags/{flag.id}/resolve',
+        data={'resolution_note': 'handled'},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    db.session.refresh(flag)
+    assert flag.status == 'resolved'
+    assert flag.resolution_note == 'handled'

@@ -70,25 +70,29 @@ def test_conversation_has_h1_with_title(auth_client, conv, participation):
     assert re.search(rb'<h1[^>]*>\s*Test Conversation\s*</h1>', resp.data)
 
 
-# ── Hidden API-proxy controls must be out of the a11y tree (4.1.2) ─────────────
+# ── No hidden API-proxy controls (4.1.2 / #159) ───────────────────────────────
 
-def test_pvb_hidden_uses_display_none_not_sr_only():
-    """The hidden pa-* vote/submit proxies must be display:none, not clip/sr-only.
+def test_conversation_has_no_hidden_pa_proxy_controls(auth_client, conv, participation):
+    """The participant UI talks to Particiapi directly through same-origin routes.
 
-    They are fired only via JS .click() (works under display:none). If hidden with
-    the visually-hidden clip pattern they stay focusable + in the a11y tree, so a
-    screen-reader/keyboard user hits phantom Agree/Pass/Disagree + submit controls.
-
-    REMOVE THIS GUARD when #159 lands: that refactor deletes the hidden pa-*
-    proxy entirely (calling Particiapi directly), so `.pvb-hidden` ceases to
-    exist and this interim test becomes obsolete.
+    There must be no hidden pa-* controls left for keyboard or screen-reader users
+    to encounter, and no web-component bundle imports in the rendered page.
     """
+    conv.phase_submission = True
+    db.session.commit()
+    resp = auth_client.get('/c/test-conv')
+    assert resp.status_code == 200
+    html = resp.data.decode()
     css = open(_STYLE_CSS, encoding='utf-8').read()
-    m = re.search(r'\.pvb-hidden\s*\{([^}]*)\}', css)
-    assert m, '.pvb-hidden rule not found'
-    body = m.group(1)
-    assert re.search(r'display:\s*none', body), '.pvb-hidden must use display:none'
-    assert 'clip:' not in body, '.pvb-hidden must not use the clip/sr-only pattern'
+
+    assert '<pa-' not in html
+    assert 'pvb-hidden' not in html
+    assert 'particiapp-web-components.js' not in html
+    assert 'particiapp-web-client.js' not in html
+    assert 'data-proxy-root="/c/test-conv/proxy/particiapi/"' in html  # conversation-scoped proxy (#246)
+    assert "api/session?create=true" in html
+    assert "/votes/" in html
+    assert '.pvb-hidden' not in css
 
 
 # ── Consultation listing semantics (1.3.1 / 2.4.6 / 4.1.2) ─────────────────────
@@ -117,6 +121,25 @@ def test_home_pseudonym_announced_with_context(auth_client, conv, participation)
     assert '<span class="conv-card-badge" aria-hidden="true">happy-fox</span>' in html
 
 
+def test_home_output_symbols_expose_state_and_labels(auth_client, conv, participation):
+    conv.phase_personal_results = True
+    db.session.commit()
+    resp = auth_client.get('/')
+    assert resp.status_code == 200
+    html = resp.data.decode()
+    assert 'class="conv-output-grid"' in html
+    assert 'data-state="ready"' in html
+    assert 'data-state="pending"' in html
+    assert 'aria-label="After Explore phase: topic and participant clustering"' in html
+
+
+def test_mobile_home_cards_keep_visible_tap_affordance():
+    css = open(_STYLE_CSS, encoding='utf-8').read()
+    assert '.conv-card-action { display: none; }' in css
+    assert 'a.conv-card::after' in css
+    assert "content: '\\203A';" in css
+
+
 # ── Name/role/value affordances (4.1.2 / 1.3.1) ────────────────────────────────
 
 def test_composer_textareas_have_accessible_names(auth_client, conv, participation):
@@ -126,6 +149,7 @@ def test_composer_textareas_have_accessible_names(auth_client, conv, participati
     assert resp.status_code == 200
     assert b'aria-labelledby="composer-suggest-title"' in resp.data
     assert b'aria-labelledby="composer-newstmt-title"' in resp.data
+    assert b'/help/statements' in resp.data
 
 
 def test_progressbar_has_static_valuenow(auth_client, conv, participation):
@@ -137,6 +161,7 @@ def test_progressbar_has_static_valuenow(auth_client, conv, participation):
     bar = re.search(rb'role="progressbar"[^>]*>', resp.data)
     assert bar, 'progressbar not rendered'
     assert b'aria-valuenow=' in bar.group(0)
+    assert b'<span class="vote-progress-label">voted</span>' in resp.data
 
 
 # ── The high-value coupling guard ──────────────────────────────────────────────

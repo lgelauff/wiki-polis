@@ -1,4 +1,13 @@
 {% extends "base.html" %}
+{% block title %}Manage {{ conversation.title }} — wiki-polis{% endblock %}
+{% block header_crumb %}
+<nav class="header-crumb" aria-label="Admin breadcrumb">
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
+  <span class="header-crumb-sep">/</span>
+  <span>{{ conversation.title | truncate(34, True, '…') }}</span>
+</nav>
+{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='redesign.css') }}?v={{ git_version }}">
 {% endblock %}
@@ -9,23 +18,19 @@
   <div class="role-bar-inner">
     <span class="role-chip {% if is_admin %}role-chip--admin{% endif %}"
           title="Your assigned role on this platform">
-      <span class="role-chip-dot"></span>{{ 'Global admin' if is_admin else 'Moderator' }}
+      <span class="role-chip-dot"></span>{{ role_label }}
     </span>
     <span class="role-bar-context">managing&nbsp;<strong>{{ conversation.title }}</strong></span>
     <span class="role-bar-spacer"></span>
     {# View as participant — just a shortcut link to the participant view (not impersonation). #}
     <a class="view-as-btn" href="{{ url_for('participant.conversation', slug=conversation.slug) }}">
-      View as participant
+      View as participant →
     </a>
   </div>
 </div>
 
 {# base.html already provides <main id="main">; don't nest a second one. #}
 <div class="console">
-
-  <p class="muted" style="margin-bottom:1rem">
-    <a href="{{ url_for('admin.admin') }}">← admin panel</a>
-  </p>
 
   {# ── Consultation header ──────────────────────────────────────────────── #}
   <div class="console-head">
@@ -34,6 +39,8 @@
       <span class="status-pill status-pill--closed"><span class="status-pill-dot"></span>Closed</span>
     {% elif conversation.paused %}
       <span class="status-pill status-pill--paused"><span class="status-pill-dot"></span>Paused</span>
+    {% elif schedule.scheduled_at and not schedule.frozen %}
+      <span class="status-pill status-pill--scheduled"><span class="status-pill-dot"></span>Scheduled</span>
     {% else %}
       <span class="status-pill status-pill--active"><span class="status-pill-dot"></span>Active</span>
     {% endif %}
@@ -45,6 +52,7 @@
 
   {# ── PHASE HERO (FA1) — the centrepiece ───────────────────────────────── #}
   {% set target_stage = phase_sequence[advance_target_index] if advance_target_index is not none else none %}
+  {% set phase6_required = (phase_sequence | selectattr('key', 'equalto', 'informed_voting') | list | length) > 0 %}
   <div class="console-section" id="phaseControl" data-mode="simple">
     <div class="phase-hero">
 
@@ -215,7 +223,7 @@
     {# ── Guided move-on (mode-guided-part) ──────────────────────────────── #}
     <div class="mode-guided-part">
       {% if transition %}
-        {% if is_admin %}
+        {% if can_organize %}
         {# At-a-glance readiness summary in the hero — machine-checkable conditions
            that are currently unmet block the move. #}
         {% set unmet = transition.preconditions | selectattr('met', 'equalto', false) | list | length %}
@@ -228,7 +236,7 @@
         {# Guided 'Move on' (#156): consequences + tick-each-precondition checklist.
            Submit ships ENABLED (no-JS can advance; route enforces server-side); JS
            disables it until every box is ticked. Gating logic unchanged. #}
-        <div class="moveon phase-move-box" style="margin-top:14px">
+        <div class="moveon phase-move-box">
           <div class="moveon-head">
             <span class="moveon-from">{{ transition.source.label }}</span>
             <span class="moveon-arrow" aria-hidden="true">→</span>
@@ -242,15 +250,8 @@
               <li><span class="consequence-tag consequence-tag--closes">Closes</span>
                   <span>{{ transition.consequence.closes }}</span></li>
               {% endif %}
-              {% if transition.auto_close %}
-              <li><span class="consequence-tag consequence-tag--closes">Ends</span>
-                  <span><strong>Permanently closes the consultation</strong> and starts the identity-reveal window.</span></li>
-              <li><span class="consequence-tag consequence-tag--closes">Undo</span>
-                  <span><strong>Not possible</strong> — closing is irreversible.</span></li>
-              {% else %}
               <li><span class="consequence-tag" style="background:var(--surface2);color:var(--muted)">Undo</span>
                   <span>Reversible only by a site admin via advanced controls.</span></li>
-              {% endif %}
             </ul>
 
             {% if not conversation.active %}
@@ -309,9 +310,9 @@
         </script>
         {% else %}
         {# Moderator: read-only — cannot move phases. #}
-        <p class="muted" style="font-size:13px;margin-top:14px">Only a site admin can change phases.</p>
+        <p class="muted" style="font-size:13px;margin-top:14px">Only an organizer or site admin can change phases.</p>
         <button type="button" class="btn-small" disabled
-                title="Only a site admin can change phases">Move on to {{ transition.target.label }} →</button>
+                title="Only an organizer or site admin can change phases">Move on to {{ transition.target.label }} →</button>
         {% endif %}
       {% elif not linear_phase_state %}
         <p class="muted" style="margin-top:14px;font-size:13px">
@@ -322,14 +323,54 @@
         <p class="muted" style="margin-top:14px;font-size:13px">Final phase reached — the report is open.</p>
       {% endif %}
 
-      {# TODO(#164): scheduled wind-down card + composer (UTC, countdown,
-         freeze/edit/cancel) go here, under the move-on launcher. Needs a
-         scheduler worker — see redesign/organizer-console.html .schedule-card. #}
+      {% if is_admin and schedule.can_schedule %}
+      <div class="schedule-card" style="margin-top:14px">
+        <div class="schedule-main">
+          <div class="schedule-title">Schedule wind-down to {{ schedule.transition.target.label }}</div>
+          {% if schedule.scheduled_at %}
+          <div class="schedule-when">
+            {{ schedule.scheduled_at.strftime('%Y-%m-%d %H:%M') }} <span class="schedule-utc">UTC</span>
+            · <span class="countdown-mini" data-countdown-target="{{ schedule.scheduled_at.isoformat() }}">{{ schedule.countdown }}</span>
+            {% if schedule.frozen %} · frozen{% endif %}
+          </div>
+          {% else %}
+          <div class="schedule-when">No scheduled transition set.</div>
+          {% endif %}
+        </div>
+        <form method="post" action="{{ url_for('admin.admin_conversation_phase_schedule', conv_id=conversation.id) }}" class="schedule-actions">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="set">
+          <label class="sr-only" for="scheduled-at">UTC timestamp</label>
+          <input id="scheduled-at" name="scheduled_at" type="datetime-local"
+                 {% if schedule.scheduled_at %}value="{{ schedule.scheduled_at.strftime('%Y-%m-%dT%H:%M') }}"{% endif %}
+                 aria-label="Scheduled transition time in UTC">
+          <span class="schedule-utc" aria-hidden="true">UTC</span>
+          <button type="submit" class="btn-ghost">{{ 'Edit' if schedule.scheduled_at else 'Set' }}</button>
+        </form>
+        {% if schedule.scheduled_at %}
+        <form method="post" action="{{ url_for('admin.admin_conversation_phase_schedule', conv_id=conversation.id) }}" class="schedule-actions">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="{{ 'unfreeze' if schedule.frozen else 'freeze' }}">
+          <button type="submit" class="btn-ghost">{{ 'Unfreeze' if schedule.frozen else 'Freeze' }}</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.admin_conversation_phase_schedule', conv_id=conversation.id) }}" class="schedule-actions">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="cancel">
+          <button type="submit" class="btn-ghost">Cancel</button>
+        </form>
+        {% endif %}
+      </div>
+      {% elif is_admin and transition %}
+      <div class="locked-control" style="margin-top:14px">
+        <strong>Scheduling unavailable.</strong>
+        <span class="locked-why">Opening an active participant phase still requires the full manual checklist.</span>
+      </div>
+      {% endif %}
     </div>
 
     {# ── Advanced (mode-advanced-part) — global admin only ──────────────── #}
     {% if is_admin %}
-    <div class="mode-advanced-part" style="margin-top:14px">
+    <div class="mode-advanced-part">
       <div class="box-adv-note">
         <span aria-hidden="true">⚠️</span>
         <span><strong>Advanced.</strong> These toggles act independently and out of order, with no
@@ -399,17 +440,25 @@
         <div class="manage-card-title">Featured statements</div>
         <div class="manage-card-desc">Curate the set for arguments &amp; informed voting</div>
       </a>
-      {# TODO(#165/#42): a 'Statistics' manage-card linking to a per-conversation
-         stats page goes here once that page exists. #}
+      <a class="manage-card" href="{{ url_for('admin.admin_conversation_participants', conv_id=conversation.id) }}">
+        <div class="manage-card-top"><span class="manage-card-count">{{ participant_count }} joined</span></div>
+        <div class="manage-card-title">Participants</div>
+        <div class="manage-card-desc">Review per-participant engagement and drop-off signals</div>
+      </a>
+      <a class="manage-card" href="{{ url_for('admin.admin_conversation_flags', conv_id=conversation.id) }}">
+        <div class="manage-card-top"><span class="manage-card-count">{{ open_flag_count }} open</span></div>
+        <div class="manage-card-title">Moderation queue</div>
+        <div class="manage-card-desc">Review participant flags for statements and arguments</div>
+      </a>
     </div>
   </div>
 
-  {# ── Moderators — roster visible to anyone managing the conversation;
+  {# ── Conversation roles — roster visible to anyone managing the conversation;
      adding / removing is global-admin only (can_manage_roles). ── #}
   <div class="console-section">
-    <div class="console-section-label">Moderators</div>
+    <div class="console-section-label">Conversation roles</div>
     <details class="phase-advanced">
-      <summary>Moderators{% if conv_roles %} ({{ conv_roles | length }}){% endif %}</summary>
+      <summary>Roles{% if conv_roles %} ({{ conv_roles | length }}){% endif %}</summary>
       {% if conv_roles %}
       <table class="admin-table" style="margin-top:.75rem">
         <thead><tr><th>Participant</th><th>Role</th><th></th></tr></thead>
@@ -432,7 +481,7 @@
         </tbody>
       </table>
       {% else %}
-      <p class="muted" style="margin:.75rem 0;font-size:14px">No moderators assigned.</p>
+      <p class="muted" style="margin:.75rem 0;font-size:14px">No conversation roles assigned.</p>
       {% endif %}
 
       {% if can_manage_roles %}
@@ -453,13 +502,13 @@
             </select>
           </label>
         </div>
-        <button type="submit">Add moderator</button>
+        <button type="submit">Add role</button>
       </form>
       {% endif %}
     </details>
   </div>
 
-  {% if is_admin %}
+  {% if can_organize %}
   {# ── Configuration — settings (inline; no separate page yet) ── #}
   <div class="console-section">
     <div class="console-section-label">Configuration</div>
@@ -474,15 +523,26 @@
           <label>Title
             <input type="text" name="title" value="{{ conversation.title }}" required>
           </label>
+          <label>Route (locked after launch)
+            <input type="text" value="{{ phase_routes[conversation.phase_route].label if conversation.phase_route in phase_routes else phase_routes.default_7.label }}" readonly style="background:#f5f5f5;color:#666">
+          </label>
           <label>Polis ID (zinvite, read-only)
             <input type="text" value="{{ conversation.polis_id }}" readonly style="background:#f5f5f5;color:#666">
           </label>
           <label>Access policy
             <select name="access_policy">
-              {% for p in ['public', 'invite_only'] %}
+              {% for p in ['public', 'invite_only', 'demo'] %}
               <option value="{{ p }}" {% if conversation.access_policy == p %}selected{% endif %}>{{ p }}</option>
               {% endfor %}
             </select>
+          </label>
+          <label>Eligibility event ID
+            <input type="text" name="eligibility_event_id" maxlength="80"
+                   value="{{ conversation.eligibility_event_id or '' }}">
+          </label>
+          <label>Eligibility label
+            <input type="text" name="eligibility_label" maxlength="255"
+                   value="{{ conversation.eligibility_label or '' }}">
           </label>
         </div>
         <div class="edit-row-texts">
@@ -496,8 +556,35 @@
         <button type="submit">Save settings</button>
       </form>
     </details>
-  </div>
 
+    <details class="phase-advanced">
+      <summary>Recommended quantities</summary>
+      <form method="post" class="panel"
+            action="{{ url_for('admin.admin_conversation_recommendations', conv_id=conversation.id) }}"
+            style="margin-top:.75rem">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <p class="section-help">These numbers are advisory. They appear in readiness checks and stats so organizers can judge whether the consultation has enough material to move on.</p>
+        <div class="edit-row-fields">
+          <label>Complexity tier
+            <select name="tier">
+              {% for key, tier in recommendation_tiers.items() %}
+              <option value="{{ key }}" {% if recommendation_profile.tier == key %}selected{% endif %}>{{ tier.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          {% for key, label in recommendation_labels.items() %}
+          <label>{{ label | capitalize }}
+            <input type="number" min="1" max="999" name="{{ key }}" value="{{ recommendation_profile[key] }}">
+          </label>
+          {% endfor %}
+        </div>
+        <button type="submit">Save recommendations</button>
+      </form>
+    </details>
+  </div>
+  {% endif %}{# can_organize #}
+
+  {% if is_admin %}
   {# ── Danger zone ──────────────────────────────────────────────────────── #}
   <div class="console-section">
     <div class="console-section-label" style="color:var(--disagree)">Ending the consultation</div>
@@ -530,25 +617,75 @@
       {% else %}
       <div class="danger-row">
         <div class="danger-row-main">
-          <div class="danger-row-title">Close permanently</div>
-          <div class="danger-row-desc">Irreversible. Opens the report and starts the 30-day identity-reveal window. Only do this when the process is genuinely over.</div>
+          <div class="danger-row-title">Publish final report</div>
+          <div class="danger-row-desc">
+            {% if cleanup_window %}
+            Irreversible. Publishes <code>/c/{{ conversation.slug }}/report</code>, freezes moderation exclusions, and starts the identity-reveal window.
+            {% else %}
+            Available after informed voting has ended and the consultation is in the cleanup window.
+            {% endif %}
+          </div>
         </div>
+        {% if cleanup_window %}
         <form id="close-permanently-form" method="post"
-              action="{{ url_for('admin.admin_conversation_close', conv_id=conversation.id) }}" style="display:inline">
+              action="{{ url_for('admin.admin_conversation_close', conv_id=conversation.id) }}" class="cleanup-publish-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn-small btn-danger">Close permanently…</button>
+          <ul class="readiness cleanup-readiness">
+            <li><label><input type="checkbox" name="cleanup_reviewed_results"> <span class="readiness-label">Reviewed preliminary results</span></label></li>
+            <li><label><input type="checkbox" name="cleanup_moderated_flagged"> <span class="readiness-label">Moderated any remaining flagged informed-voting statements</span></label></li>
+            <li><label><input type="checkbox" name="cleanup_reviewed_exclusions"> <span class="readiness-label">Reviewed participant exclusions</span></label></li>
+            <li><label><input type="checkbox" name="cleanup_report_intro"> <span class="readiness-label">Written or reviewed the report introduction text</span></label></li>
+            <li>
+              <span class="readiness-label">
+                Phase 6 initialized
+                {% if conversation.phase6_polis_conversation_id or not phase6_required %}
+                <span class="readiness-note">(met)</span>
+                {% else %}
+                <span class="phase-check-unmet">not met yet</span>
+                {% endif %}
+              </span>
+            </li>
+          </ul>
+          <button type="submit" class="btn-small btn-danger">Publish final report</button>
         </form>
+        {% else %}
+        <button type="button" class="btn-small btn-danger" disabled>Publish final report</button>
+        {% endif %}
       </div>
       {% endif %}
-      {# TODO(#145): a 'Delete consultation' danger-row (disabled with an inline
-         reason when participation exists) goes here. Needs a delete route + a
-         no-valid-votes guard. #}
+      <div class="danger-row">
+        <div class="danger-row-main">
+          <div class="danger-row-title">Delete empty consultation</div>
+          <div class="danger-row-desc">
+            Deletes the local consultation after deactivating and hiding it in Polis.
+            {% if delete_vote_count is none %}
+              Disabled because Polis vote data could not be verified.
+            {% elif delete_vote_count == 0 %}
+              Available because Polis has no valid votes for this consultation.
+            {% else %}
+              Disabled because Polis has {{ delete_vote_count }} valid vote{{ 's' if delete_vote_count != 1 }}.
+            {% endif %}
+          </div>
+        </div>
+        <form id="delete-conversation-form" method="post"
+              action="{{ url_for('admin.admin_conversation_delete', conv_id=conversation.id) }}" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-small btn-danger"
+                  {% if delete_vote_count != 0 %}disabled aria-disabled="true"{% endif %}>
+            Delete consultation
+          </button>
+        </form>
+      </div>
     </div>
   </div>
   <script nonce="{{ csp_nonce }}">
     var cf = document.getElementById('close-permanently-form');
     if (cf) cf.addEventListener('submit', function (e) {
-      if (!confirm('Close this consultation permanently?\n\nThis cannot be undone and starts the identity reveal timeline.')) e.preventDefault();
+      if (!confirm('Publish the final report?\n\nThis freezes report exclusions, closes the consultation, and starts the identity reveal timeline.')) e.preventDefault();
+    });
+    var df = document.getElementById('delete-conversation-form');
+    if (df) df.addEventListener('submit', function (e) {
+      if (!confirm('Delete this consultation?\n\nThis removes local wiki-polis records after hiding the Polis conversation. This cannot be undone.')) e.preventDefault();
     });
   </script>
   {% endif %}{# is_admin #}
@@ -576,6 +713,38 @@
     var save = f.querySelector('.phases-save');
     if (!save) return;
     f.addEventListener('change', function () { save.classList.add('phases-save--dirty'); });
+  });
+
+  // Schedule picker is interpreted as UTC server-side, but a native datetime-local renders in
+  // the browser's local zone. Pre-fill an empty picker with the current UTC time so the admin
+  // adjusts from "now (UTC)" rather than a blank mm/dd/yyyy that silently means local.
+  (function () {
+    var sched = document.getElementById('scheduled-at');
+    if (sched && !sched.value) {
+      sched.value = new Date().toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM in UTC
+    }
+  }());
+
+  document.querySelectorAll('[data-countdown-target]').forEach(function (el) {
+    var target = Date.parse(el.dataset.countdownTarget);
+    if (!Number.isFinite(target)) return;
+    function render() {
+      var seconds = Math.max(0, Math.floor((target - Date.now()) / 1000));
+      if (seconds === 0) {
+        el.textContent = 'due now';
+        return;
+      }
+      var days = Math.floor(seconds / 86400);
+      seconds -= days * 86400;
+      var hours = Math.floor(seconds / 3600);
+      seconds -= hours * 3600;
+      var minutes = Math.floor(seconds / 60);
+      el.textContent = days ? (days + 'd ' + hours + 'h')
+        : hours ? (hours + 'h ' + minutes + 'm')
+        : (minutes + 'm');
+    }
+    render();
+    window.setInterval(render, 60000);
   });
 </script>
 

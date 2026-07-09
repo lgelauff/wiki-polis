@@ -12,7 +12,8 @@ import re
 import pytest
 from flask import Flask
 
-from logging_setup import (RedactingJsonFormatter, _HANDLER_NAME, _redact,
+from logging_setup import (RedactingJsonFormatter, RedactingLokiQueueHandler,
+                           _HANDLER_NAME, _LOKI_HANDLER_NAME, _redact,
                            configure_logging)
 
 
@@ -96,6 +97,60 @@ def test_configure_logging_idempotent():
     finally:
         for h in [h for h in root.handlers if getattr(h, 'name', None) == _HANDLER_NAME]:
             root.removeHandler(h)
+
+
+def test_loki_handler_posts_redacted_json_line():
+    rec = logging.LogRecord('x', logging.INFO, __file__, 1,
+                            'token=%s', ('secret-token-value',), None)
+    rec.request_id = 'rid'
+    rec.participant_id = None
+    handler = RedactingLokiQueueHandler(
+        'https://logs.example.test',
+        {'service': 'wiki-polis', 'env': 'test'},
+        auth=('user', 'pass'),
+        timeout=0.1,
+    )
+    handler.setFormatter(RedactingJsonFormatter())
+    try:
+        from unittest.mock import patch
+
+        with patch('logging_setup.requests.post') as post:
+            post.return_value.raise_for_status.return_value = None
+            handler._post_record(rec)
+    finally:
+        handler.close()
+
+    assert post.call_args.args[0] == 'https://logs.example.test/loki/api/v1/push'
+    assert post.call_args.kwargs['auth'] == ('user', 'pass')
+    payload = post.call_args.kwargs['json']
+    stream = payload['streams'][0]
+    assert stream['stream'] == {'service': 'wiki-polis', 'env': 'test'}
+    line = stream['values'][0][1]
+    assert 'secret-token-value' not in line
+    assert json.loads(line)['service'] == 'wiki-polis'
+
+
+def test_configure_logging_installs_one_loki_handler():
+    a = Flask('loki-test')
+    a.config.update({
+        'LOKI_URL': 'https://logs.example.test/loki/api/v1/push',
+        'LOKI_LABELS': 'stack=toolforge,request_id=ignored',
+    })
+    root = logging.getLogger()
+    try:
+        configure_logging(a, on_toolforge=True)
+        configure_logging(a, on_toolforge=True)
+        handlers = [h for h in root.handlers if getattr(h, 'name', None) == _LOKI_HANDLER_NAME]
+        assert len(handlers) == 1
+        assert isinstance(handlers[0].formatter, RedactingJsonFormatter)
+        assert handlers[0].labels['service'] == 'wiki-polis'
+        assert handlers[0].labels['stack'] == 'toolforge'
+        assert 'request_id' not in handlers[0].labels
+    finally:
+        for h in [h for h in root.handlers
+                  if getattr(h, 'name', None) in (_HANDLER_NAME, _LOKI_HANDLER_NAME)]:
+            root.removeHandler(h)
+            h.close()
 
 
 # ── Behaviour through a real request (app/client fixtures) ───────────────────

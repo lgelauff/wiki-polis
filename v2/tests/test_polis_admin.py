@@ -133,10 +133,58 @@ def test_stats_returns_correct_dict():
     mock_conn.close.assert_called_once()
 
 
+def test_valid_vote_count_returns_latest_vote_rows():
+    client, mock_conn = _make_stats_client(db_rows=(7,))
+    with patch('psycopg2.connect', return_value=mock_conn):
+        assert client.get_valid_vote_count('abc123') == 7
+
+
+def test_valid_vote_count_no_db_url_returns_none():
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw', db_url='')
+    assert client.get_valid_vote_count('abc123') is None
+
+
 def test_stats_closes_connection_on_error():
     client, mock_conn = _make_stats_client(db_error=Exception('query boom'))
     with patch('psycopg2.connect', return_value=mock_conn):
         assert client.get_polis_stats('abc123') is None
+    mock_conn.close.assert_called_once()
+
+
+# ── PolisServerClient.queue_math_recompute ───────────────────────────────────
+
+def test_queue_math_recompute_inserts_worker_task():
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw',
+                               db_url='postgresql://localhost/polis')
+    mock_conn = MagicMock()
+    cur = mock_conn.cursor.return_value.__enter__.return_value
+
+    with patch('psycopg2.connect', return_value=mock_conn):
+        assert client.queue_math_recompute('abc123') is True
+
+    sql = cur.execute.call_args.args[0]
+    assert 'INSERT INTO worker_tasks' in sql
+    assert cur.execute.call_args.args[1] == ('abc123',)
+    mock_conn.commit.assert_called_once()
+    mock_conn.close.assert_called_once()
+
+
+def test_queue_math_recompute_logs_worker_task_privilege_gap(caplog):
+    import logging
+
+    import psycopg2
+
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw',
+                               db_url='postgresql://localhost/polis')
+    mock_conn = MagicMock()
+    cur = mock_conn.cursor.return_value.__enter__.return_value
+    cur.execute.side_effect = psycopg2.errors.InsufficientPrivilege('permission denied')
+
+    with caplog.at_level(logging.ERROR):
+        with patch('psycopg2.connect', return_value=mock_conn):
+            assert client.queue_math_recompute('abc123') is False
+
+    assert 'grant INSERT on worker_tasks' in caplog.text
     mock_conn.close.assert_called_once()
 
 
@@ -182,3 +230,27 @@ def test_create_conversation_raises_on_polis_error():
     with login_patch:
         with pytest.raises(PolisServerError):
             client.create_conversation('My conversation')
+
+
+def test_close_and_hide_conversation_deactivates_and_hides_results():
+    client = _server_client()
+    login_patch, sess = _mock_login(client)
+    sess.put.return_value = _mock_ok({})
+    with login_patch:
+        client.close_and_hide_conversation('abc123')
+
+    payload = sess.put.call_args[1]['json']
+    assert payload == {
+        'conversation_id': 'abc123',
+        'is_active': False,
+        'vis_type': 0,
+    }
+
+
+def test_close_and_hide_conversation_raises_on_polis_error():
+    client = _server_client()
+    login_patch, sess = _mock_login(client)
+    sess.put.return_value = _mock_err(500)
+    with login_patch:
+        with pytest.raises(PolisServerError):
+            client.close_and_hide_conversation('abc123')

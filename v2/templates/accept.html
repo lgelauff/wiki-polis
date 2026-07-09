@@ -33,14 +33,14 @@
   {% endif %}
 
   <p style="font-size:14px;color:var(--muted);margin-top:18px;margin-bottom:0">
-    Quick setup before you start — pick a pseudonym for this topic and review how your data is handled.
+    Pick the name you will use in this consultation.
   </p>
 
   <form method="post"
         action="{{ url_for('participant.accept_post', slug=conversation.slug) }}"
         id="accept-form"
         aria-labelledby="accept-title"
-        aria-describedby="accept-privacy-summary-copy{% if error %} accept-error{% endif %}">
+        aria-describedby="pseudonym-help accept-privacy-note{% if error %} accept-error{% endif %}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     {# ── Pseudonym card ── #}
@@ -49,6 +49,7 @@
          aria-labelledby="pseudonym-title"
          aria-describedby="pseudonym-help pseudonym-status">
       <div class="pseudonym-card-header">
+        <div class="pseudonym-card-title" id="pseudonym-title">Choose a pseudonym</div>
         <button type="button"
                 class="reroll-btn"
                 id="reroll-btn"
@@ -56,7 +57,7 @@
                 aria-label="Generate new pseudonym options">↻ reroll</button>
       </div>
       <div class="pseudonym-card-sub" id="pseudonym-help">
-        This name appears next to your opinions in this consultation. It is separate from your Wikimedia username.
+        Other participants see this name next to your votes and arguments. Your Wikimedia username stays internal unless you reveal it after the consultation closes.
       </div>
       <p class="sr-only" id="pseudonym-status" role="status" aria-live="polite"></p>
 
@@ -81,8 +82,7 @@
          aria-describedby="notification-help">
       <h3 id="notification-title">Stay informed</h3>
       <p id="notification-help" style="color:var(--muted);font-size:13px;margin-bottom:.75rem">
-        Choose whether wiki-polis can send best-effort updates when this
-        consultation closes or when results are published.
+        Optional best-effort updates when the consultation closes or results are published.
       </p>
 
       {% if emailable %}
@@ -105,24 +105,13 @@
     </div>
 
     {# ── Privacy summary and foldable details ── #}
-    <div class="accept-section">
+    <div class="accept-section" id="accept-privacy-note">
       <h3>Privacy summary</h3>
-      <div id="accept-privacy-summary-copy">
-        <p>
-          wiki-polis keeps an internal link between your Wikimedia username and
-          your consultation pseudonym for login, access checks, notifications,
-          moderation, and privacy controls. That link is not shown to other
-          participants or in public results.
-        </p>
-        <p>
-          After the consultation closes, you may get a time-limited option to
-          reveal your username in the public record. If you do nothing, public
-          records stay pseudonymous.
-        </p>
-      </div>
-    </div>
-
-    <div class="accept-section" style="padding:0">
+      <p>
+        Public records use your pseudonym. wiki-polis keeps the username link
+        internally for login, access checks, notifications, moderation, and
+        privacy controls.
+      </p>
       <details class="privacy-details">
         <summary class="privacy-summary" aria-controls="privacy-details-body">
           Privacy &amp; data handling
@@ -156,9 +145,8 @@
              required
              aria-required="true">
       <span>
-        I understand that my individual votes will appear with my pseudonym
-        in consultation records, and wiki-polis keeps an internal username link
-        while the consultation is running.
+        I understand my votes and arguments are recorded with this pseudonym,
+        and wiki-polis keeps an internal username link while this consultation runs.
       </span>
     </label>
 

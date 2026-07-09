@@ -1,23 +1,62 @@
 {% extends "base.html" %}
+{% block title %}Statements — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block header_crumb %}
+<nav class="header-crumb" aria-label="Admin breadcrumb">
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ conversation.title | truncate(28, True, '…') }}</a>
+  <span class="header-crumb-sep">/</span>
+  <span>Statements</span>
+</nav>
+{% endblock %}
 {% block content %}
 
 <div class="container">
 
   <h2>Statements — {{ conversation.title }}</h2>
-  <p class="muted" style="margin-bottom:1.5rem">
-    <a href="{{ url_for('admin.admin') }}">← admin</a>
-  </p>
+
+  <div class="landing-section" style="margin-bottom:1.5rem">
+    <h3 style="font-size:16px;margin-bottom:.5rem">How statement management works</h3>
+    <p class="muted" style="font-size:13px;margin-bottom:.6rem">
+      Pending statements are held for moderator review. Approve makes a statement visible
+      for participant voting, hide removes it from participant voting, and pending returns
+      an approved or hidden statement to the review queue.
+    </p>
+    <ul style="font-size:13px;padding-left:1.25rem;margin-bottom:.6rem">
+      <li>Vote counts show <strong>A</strong>gree · <strong>P</strong>ass · <strong>D</strong>isagree totals from Polis when the statistics database is available.</li>
+      <li>Seed statements come from moderator entry or imports; participant-submitted statements appear in the same moderation lists.</li>
+      <li>A star marks statements already selected as featured. A correction marker links derived statements back to the original TID.</li>
+      <li>Seed entry and imports are available only during preparation or open statement submission.</li>
+    </ul>
+    <p class="muted" style="font-size:13px;margin-bottom:0">
+      The text import strips spreadsheet formula prefixes, removes HTML, rejects invalid
+      rows as a batch, and skips statements already present in the conversation.
+    </p>
+  </div>
 
 
   {% with messages = get_flashed_messages(with_categories=true) %}
   {% for category, message in messages %}
-  <div style="background:{% if category == 'error' %}#fef2f2;border-color:#fca5a5;color:#991b1b{% else %}#f0fdf4;border-color:#86efac;color:#166534{% endif %};border:1px solid;padding:.75rem 1rem;border-radius:6px;font-size:13px;margin-bottom:1.5rem">
+  {% set is_error = category in ['error', 'import_row_error'] or message.startswith('✗') %}
+  {% set is_warn = category == 'warning' or message.startswith('⚠') %}
+  <div style="background:{% if is_error %}#fef2f2;border-color:#fca5a5;color:#991b1b{% elif is_warn %}#fffbeb;border-color:#fcd34d;color:#92400e{% else %}#f0fdf4;border-color:#86efac;color:#166534{% endif %};border:1px solid;padding:.75rem 1rem;border-radius:6px;font-size:13px;margin-bottom:1.5rem">
     {{ message }}
   </div>
   {% endfor %}
   {% endwith %}
 
   <!-- ── Add seed statement ──────────────────────────── -->
+  {% if not seed_import_allowed %}
+  <h3 class="section-heading">Seed statements locked</h3>
+  <div class="edit-form">
+    <p class="muted" style="margin-bottom:0;font-size:13px">
+      {{ seed_import_lock_reason }} Seed statements can only be added during preparation
+      or while statement submission is open.
+    </p>
+  </div>
+  {% else %}
+
   <h3 class="section-heading">Add seed statement</h3>
   <div class="edit-form">
     <p class="muted" style="margin-bottom:.75rem;font-size:13px">
@@ -42,44 +81,31 @@
     </form>
   </div>
 
-  <!-- ── Bulk CSV import ───────────────────────────────── -->
-  <h3 class="section-heading">Import seed statements from CSV</h3>
+  <!-- ── Bulk text import ──────────────────────────────── -->
+  <h3 class="section-heading">Import seed statements from text</h3>
   <div class="edit-form">
     <p class="muted" style="margin-bottom:.75rem;font-size:13px">
-      Upload a UTF-8 CSV file with a <code>text</code> column header (required) and an optional <code>note</code>
-      column (ignored). Comma-delimited only. Maximum {{ max_import_rows }} rows and
-      {{ max_import_kb }} KB per upload. Statements already in this conversation are skipped automatically.
+      Paste one statement per line. Blank lines are ignored. Maximum {{ max_import_rows }}
+      statements per import and {{ max_import_chars }} characters per statement.
+    </p>
+    <p class="muted" style="margin-bottom:.75rem;font-size:13px">
+      All-or-nothing: if any line is invalid (too long, duplicated within your paste, or
+      over the limit) nothing is imported and the offending lines are listed. Lines
+      identical to an existing statement are skipped automatically — the rest still import.
     </p>
     <form method="post"
-          action="{{ url_for('admin.admin_statement_seed_import', conv_id=conversation.id) }}"
-          enctype="multipart/form-data">
+          action="{{ url_for('admin.admin_statement_seed_import_text', conv_id=conversation.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>CSV file
-        <input type="file" name="csv_file" accept=".csv,text/csv" required>
+      <label>Statements
+        <textarea name="statement_texts" rows="8" maxlength="{{ max_import_rows * (max_import_chars + 1) }}"
+                  placeholder="First statement&#10;Second statement&#10;Third statement"></textarea>
       </label>
       <div style="margin-top:.75rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
         <button type="submit">Import statements</button>
-        {% with result = get_flashed_messages(category_filter=['import_result']) %}
-        {% if result %}
-          {% set msg = result[0] %}
-          {% set ok = msg.startswith('✓') %}
-          <span style="font-size:13px;font-weight:600;color:{{ 'var(--success, #2a7a2a)' if ok else 'var(--error, #b91c1c)' }}">
-            {{ msg }}
-          </span>
-        {% endif %}
-        {% endwith %}
       </div>
-      {% with row_errors = get_flashed_messages(category_filter=['import_row_error']) %}
-      {% if row_errors %}
-        <ul style="margin-top:.5rem;padding-left:1.25rem;font-size:13px;color:var(--error,#b91c1c)">
-          {% for err in row_errors %}
-          <li>{{ err }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-      {% endwith %}
     </form>
   </div>
+  {% endif %}
 
   <!-- ── Conversation settings ──────────────────────── -->
   <h3 class="section-heading">Moderation settings</h3>
@@ -127,10 +153,10 @@
                 title="Derived from statement #{{ prov.derived_from_tid }}. Similarity 1.00 = identical.{% for sc in prov.scores %} {{ sc.model }} {{ '%.2f'|format(sc.value) }}.{% endfor %}">
             <span class="sr-only">derived from statement {{ prov.derived_from_tid }}, </span>↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}</span>{% endif %}</td>
         <td class="stmt-text">{{ s.txt }}</td>
-        <td class="stmt-votes muted">
-          +{{ s.agree_count or 0 }}
-          −{{ s.disagree_count or 0 }}
-          ·{{ s.pass_count or 0 }}
+        <td class="stmt-votes">
+          <span class="vcount vcount--agree" title="Agree votes"><span class="vlabel">A</span> {{ s.agree_count or 0 }}</span>
+          <span class="vcount vcount--pass" title="Pass votes"><span class="vlabel">P</span> {{ s.pass_count or 0 }}</span>
+          <span class="vcount vcount--disagree" title="Disagree votes"><span class="vlabel">D</span> {{ s.disagree_count or 0 }}</span>
         </td>
         <td class="stmt-actions">
           <form method="post" style="display:inline"
@@ -181,10 +207,10 @@
                 title="Derived from statement #{{ prov.derived_from_tid }}. Similarity 1.00 = identical.{% for sc in prov.scores %} {{ sc.model }} {{ '%.2f'|format(sc.value) }}.{% endfor %}">
             <span class="sr-only">derived from statement {{ prov.derived_from_tid }}, </span>↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}</span>{% endif %}</td>
         <td class="stmt-text">{{ s.txt }}</td>
-        <td class="stmt-votes muted">
-          +{{ s.agree_count or 0 }}
-          −{{ s.disagree_count or 0 }}
-          ·{{ s.pass_count or 0 }}
+        <td class="stmt-votes">
+          <span class="vcount vcount--agree" title="Agree votes"><span class="vlabel">A</span> {{ s.agree_count or 0 }}</span>
+          <span class="vcount vcount--pass" title="Pass votes"><span class="vlabel">P</span> {{ s.pass_count or 0 }}</span>
+          <span class="vcount vcount--disagree" title="Disagree votes"><span class="vlabel">D</span> {{ s.disagree_count or 0 }}</span>
         </td>
         <td class="stmt-actions">
           <form method="post" style="display:inline"
@@ -229,10 +255,10 @@
       <tr>
         <td class="muted">{{ s.tid }}</td>
         <td class="stmt-text">{{ s.txt }}</td>
-        <td class="stmt-votes muted">
-          +{{ s.agree_count or 0 }}
-          −{{ s.disagree_count or 0 }}
-          ·{{ s.pass_count or 0 }}
+        <td class="stmt-votes">
+          <span class="vcount vcount--agree" title="Agree votes"><span class="vlabel">A</span> {{ s.agree_count or 0 }}</span>
+          <span class="vcount vcount--pass" title="Pass votes"><span class="vlabel">P</span> {{ s.pass_count or 0 }}</span>
+          <span class="vcount vcount--disagree" title="Disagree votes"><span class="vlabel">D</span> {{ s.disagree_count or 0 }}</span>
         </td>
         <td class="stmt-actions">
           <form method="post" style="display:inline"

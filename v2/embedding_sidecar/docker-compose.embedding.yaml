@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  embedding-sidecar:
+    build: .
+    restart: always
+    environment:
+      EMBEDDING_MODEL: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+    volumes:
+      - embedding-models:/models
+    ports:
+      - "127.0.0.1:8015:8015"
+
+volumes:
+  embedding-models:

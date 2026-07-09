@@ -31,7 +31,7 @@ Enforcement arm: rendered-markup regression guards in `tests/test_a11y_markup.py
 ### Hiding things
 - **Never** push content off-screen with `left:-9999px` / `text-indent:-9999px` — it breaks RTL, breaks positional mobile VoiceOver, and costs render performance.
 - **Name icon-only controls with `aria-label`**, not visually-hidden label text.
-- **To remove a control from assistive tech**, use `display:none` (or `tabindex="-1"` + `aria-hidden` if it must stay visible). Controls that exist only for JS to `.click()` use `display:none` (see `.pvb-hidden`).
+- **To remove a control from assistive tech**, use `display:none` (or `tabindex="-1"` + `aria-hidden` if it must stay visible). Do not create hidden duplicate controls for API proxying; call the API from the visible control's handler.
 - The clipped `.sr-only` pattern is **only** for text that must be announced but has no visual equivalent (e.g. live-region content, "(opens in a new tab)" cues) — not for hiding controls.
 
 ### Focus & keyboard
@@ -60,7 +60,7 @@ Enforcement arm: rendered-markup regression guards in `tests/test_a11y_markup.py
 | Situation | Convention |
 |---|---|
 | Icon/arrow-only affordance ("JOIN →", "↻", "↔") | decorative → `aria-hidden`; never the accessible name |
-| Control that exists only for JS to `.click()` | `display:none` (not clip/sr-only) — see `.pvb-hidden` |
+| API-only control | Do not render a hidden duplicate control; call the API from the visible control's handler |
 | SR-only announcement with no visual twin | `.sr-only` clip + `aria-live` (`status`=polite / `alert`=assertive) |
 | Card with title + helper text | name = title (heading); helper via `aria-describedby` |
 | Listing of entities | real `<ul>/<li>` + a heading per item |

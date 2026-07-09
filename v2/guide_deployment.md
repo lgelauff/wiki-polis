@@ -214,6 +214,16 @@ Use this role in the `POLIS_DATABASE_URL` Toolforge envvar: `postgresql://wiki_p
 
 > **Use the numeric IP, not the hostname.** Toolforge pods cannot resolve the WMCS internal hostname (`*.wikimedia.cloud`) — the DSN must use the VPS's private IP address directly (e.g. `172.16.19.44`). For staging, use the same IP with port `5442`.
 
+The same role also enqueues math recomputes by inserting into Polis'
+`worker_tasks` table when results are empty. Grant only that extra write surface:
+
+```bash
+~/wiki-polis/v2/ops/grant_polis_worker_tasks.sh \
+  --container particiapp-docker_postgres_1 --role wiki_polis_ro
+```
+
+For staging, use `--container wiki-polis-staging_postgres_1`.
+
 ### Polis system account (one-time)
 
 The wiki-polis admin panel creates Polis conversations by calling the Polis API at port 8001. This requires a dedicated Polis user account. Create it once on the VPS:
@@ -234,15 +244,52 @@ A successful response returns JSON with a `uid`. Store the email and password in
 
 > **If Polis replies "Please use HTTPS":** the port is bound to the private IP, not loopback, so add `-H 'X-Forwarded-Proto: https'` to the curl command.
 
-### Backups
+### Embedding sidecar (optional, for semantic similarity)
 
-Set up a daily `pg_dump` to WMCS Object Storage (Swift) or any offsite location:
+The semantic-similarity sidecar runs on the VPS as a separate container and is consumed
+by future Flask statement-submission code. It is intentionally not a Toolforge
+dependency.
 
 ```bash
-# Example cron (adjust credentials and bucket name)
-0 3 * * * docker exec $(docker ps --filter name=postgres --format '{{.Names}}' | head -1) \
-  pg_dump -U polis polis | gzip > /backup/polis-$(date +\%F).sql.gz
+cd ~/wiki-polis/v2/embedding_sidecar
+docker-compose -f docker-compose.embedding.yaml up -d --build
+curl -fsS http://127.0.0.1:8015/health
 ```
+
+Expose it only on loopback or the private Docker/VPS network. When the Flask integration
+lands, set `EMBEDDING_SIDECAR_URL` to the internal URL (for example
+`http://<vps-private-ip>:8015` if Toolforge must reach it over the private network).
+The HTTP contract is documented in `embedding_sidecar/README.md`.
+
+### Backups
+
+WMCS does not provide offsite backups for this self-hosted Postgres. Use `rclone` with
+Backblaze B2 (or another offsite rclone remote) and keep only a brief local staging
+copy:
+
+```bash
+sudo apt install -y rclone
+rclone config   # create remote, e.g. b2:wiki-polis-postgres-backups
+mkdir -p ~/particiapp-data/postgres-backups
+```
+
+Install cron on the VPS for production and staging Polis Postgres:
+
+```cron
+15 3 * * * RCLONE_REMOTE=b2:wiki-polis-postgres-backups HEALTHCHECKS_URL=https://hc-ping.com/<uuid-prod> /home/<user>/wiki-polis/v2/ops/backups/backup_polis_postgres_b2.sh --container particiapp-docker_postgres_1 --name prod
+45 3 * * * RCLONE_REMOTE=b2:wiki-polis-postgres-backups HEALTHCHECKS_URL=https://hc-ping.com/<uuid-staging> /home/<user>/wiki-polis/v2/ops/backups/backup_polis_postgres_b2.sh --container wiki-polis-staging_postgres_1 --name staging
+```
+
+On Toolforge, back up ToolsDB with the same B2 remote and a MySQL option file rather
+than command-line credentials:
+
+```cron
+30 4 * * * TOOLSDB_DATABASE=<creduser>__wiki-polis RCLONE_REMOTE=b2:wiki-polis-postgres-backups HEALTHCHECKS_URL=https://hc-ping.com/<uuid-toolsdb> /data/project/wiki-polis/wiki-polis/v2/ops/backups/backup_toolsdb_b2.sh
+```
+
+Record the B2 application key, rclone remote name, Healthchecks URLs, Toolforge envvar
+export, and VPS `.env` location in the password manager. See `guide_runbook.md` for the
+restore drill.
 
 ---
 
@@ -315,7 +362,18 @@ toolforge envvars create POLIS_ADMIN_PASSWORD
 toolforge envvars create POLIS_DATABASE_URL
 toolforge envvars create RATELIMIT_KEY_PREFIX
 toolforge envvars create RATELIMIT_IDENTITY_SECRET
+toolforge envvars create PARTICIAPI_SUB_SECRET
 ```
+
+> ⚠️ **`PARTICIAPI_SUB_SECRET` is a long-lived master credential.** It lets the proxy
+> assert any logged-in user's identity to Particiapi (cross-device stable participant).
+> It must match Particiapi's `TRUSTED_SUB_SECRET`, and it is sent to `PARTICIAPI_BASE_URL`
+> on every identity bind — so that link **must be encrypted (WireGuard/TLS) or loopback**.
+> A wire-capture of this secret, combined with the enumerable xid, would let an attacker
+> forge any user's identity — so do not set it until the Toolforge↔VPS hop is encrypted
+> (WireGuard/TLS) or loopback. If the secret is sent over a cleartext non-loopback
+> transport the app logs a warning on every bind. Leave `PARTICIAPI_SUB_SECRET` unset to
+> fall back to the old anonymous-per-session behaviour.
 
 Non-secret values can be passed as arguments:
 
@@ -410,6 +468,14 @@ Or use the deploy script (which handles all steps):
 ```bash
 bash ~/wiki-polis/deploy.sh
 ```
+
+### Buildservice status
+
+Toolforge buildservice has been evaluated but is **not** the default deploy path. The
+repo still contains legacy top-level Flask files while the live app is under `v2/`, so a
+root buildpack/Procfile migration could accidentally build the wrong app. Use the
+current `python3.13` webservice flow until a staging pilot with an explicit `v2/`
+Dockerfile/build context passes. See `ops/toolforge-buildservice.md`.
 
 ---
 
@@ -568,7 +634,8 @@ export SECRET_KEY=$(toolforge envvars show SECRET_KEY | tail -1 | awk '{print $N
 | `OAUTH_CLIENT_ID` | yes (prod) | Wikimedia OAuth consumer key |
 | `OAUTH_CLIENT_SECRET` | yes (prod) | Wikimedia OAuth consumer secret |
 | `OAUTH_REDIRECT_URI` | yes (prod) | Must match registered callback URL |
-| `PARTICIAPI_BASE_URL` | yes | Internal URL of Particiapi (e.g. `http://10.x.x.x:8000`) |
+| `PARTICIAPI_BASE_URL` | yes | Internal URL of Particiapi (e.g. `http://10.x.x.x:8000`) — **must be encrypted (TLS) or loopback if `PARTICIAPI_SUB_SECRET` is set** |
+| `PARTICIAPI_SUB_SECRET` | no | Shared master secret for cross-device identity binding; must match Particiapi's `TRUSTED_SUB_SECRET`. Unset → anonymous-per-session. Only set it when the transport is encrypted (TLS) or loopback |
 | `DATABASE_URL` | yes (prod) | SQLAlchemy DB URL; defaults to `sqlite:///dev.db` |
 | `POLIS_SERVER_URL` | yes | Direct Polis server URL (e.g. `http://10.x.x.x:8001`) — required for conversation creation |
 | `POLIS_ADMIN_EMAIL` | yes | Email of the Polis system account (created once on VPS) |
@@ -580,6 +647,15 @@ export SECRET_KEY=$(toolforge envvars show SECRET_KEY | tail -1 | awk '{print $N
 | `RATELIMIT_IDENTITY_SECRET` | yes (prod) | Random HMAC secret used to avoid storing raw client identities in shared Redis keys |
 | `TRUST_PROXY_HEADERS` | VPS reverse proxy only | Set to `1` only when a Wikimedia VPS reverse proxy overwrites forwarding headers; Toolforge is detected automatically |
 | `TRUSTED_HOSTS` | yes (prod) | Comma-separated allowed request hostnames, for example `wiki-polis.toolforge.org` |
+| `LOKI_URL` | optional | HTTPS Loki push endpoint for central diagnostics logs |
+| `LOKI_USERNAME` | optional | Basic-auth username for `LOKI_URL` |
+| `LOKI_PASSWORD` | optional | Basic-auth password for `LOKI_URL` |
+| `LOKI_LABELS` | optional | Low-cardinality Loki labels, e.g. `stack=toolforge`; `service=wiki-polis` is forced |
+| `LOKI_QUEUE_SIZE` | optional | Async log shipping queue size; default `1000` |
+| `LOKI_TIMEOUT` | optional | Loki POST timeout in seconds; default `2.0` |
+| `WIKI_POLIS_ENV` | optional | Environment label for logs and staging-only operational gates, e.g. `staging` or `prod` |
+| `EMBEDDING_SIDECAR_URL` | future optional | Internal URL for the VPS embedding sidecar once semantic similarity is wired |
 | `DEV_LOGIN_USER` | dev only | Bypasses OAuth in local dev; never set in production |
 | `DEV_FAKE_LOGIN` | dev only | Set to `1` to show hardcoded test-user badges on the home page; never set in production |
+| `STAGING_DEV_TOKEN` | staging only | HMAC secret for `/dev/login/<username>?token=...` on `wiki-polis-dev`; never set on production |
 | `FLASK_DEBUG` | dev only | Enables debug mode; never set in production |

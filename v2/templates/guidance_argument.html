@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Writing good arguments - wiki-polis{% endblock %}
+
+{% block header_crumb %}
+<span class="header-crumb">
+  <span class="header-crumb-sep">/</span>
+  <span>argument guide</span>
+</span>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:760px">
+  <div class="landing-section">
+    <h1 style="font-size:28px;font-weight:600;color:var(--ink);line-height:1.2;margin:0 0 12px">
+      Writing good arguments
+    </h1>
+    <p class="muted">
+      Arguments are a wiki-polis feature. They explain why someone might support
+      or oppose a featured statement; they are read by people, not used by the
+      clustering algorithm.
+    </p>
+  </div>
+
+  <div class="landing-section">
+    <h2>Checklist</h2>
+    <ul class="accept-summary-list">
+      <li><strong>State the direction.</strong> Make clear whether the argument is for or against the statement.</li>
+      <li><strong>Add a reason.</strong> Do not just restate your vote.</li>
+      <li><strong>Make one point.</strong> If you have several reasons, write separate arguments.</li>
+      <li><strong>Be specific.</strong> Name a mechanism, consequence, example, or precedent.</li>
+      <li><strong>Argue the claim.</strong> Do not argue about the person who wrote it.</li>
+    </ul>
+  </div>
+
+  <div class="landing-section">
+    <h2>Examples</h2>
+    <p><strong>Weak:</strong></p>
+    <p class="muted">"I disagree because this would be bad for the project."</p>
+
+    <p><strong>Stronger:</strong></p>
+    <p class="muted">"Against: this would disproportionately affect new editors, who are less likely to know sourcing conventions and more likely to be discouraged by rejection."</p>
+  </div>
+
+  <div class="landing-section">
+    <h2>Moderation baseline</h2>
+    <p class="muted">
+      Keep the argument about the statement. Personal attacks, harassment, and
+      content that violates Wikimedia conduct expectations may be removed.
+    </p>
+  </div>
+</div>
+{% endblock %}

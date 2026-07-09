@@ -78,7 +78,7 @@
   outline: none;
 }
 
-/* .conv-card is always an <a> element — this rule relies on that assumption */
+/* Applies to simple cards that are anchors; phase/output cards focus their inner link. */
 .conv-card:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -115,6 +115,11 @@ header {
   border-bottom: 1px solid var(--hairline);
 }
 
+.site-header--admin {
+  background: #f8fafc;
+  border-bottom-color: #cbd5e1;
+}
+
 .header-inner {
   width: 100%;
   max-width: 900px;
@@ -124,12 +129,20 @@ header {
   align-items: center;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
 .header-logo {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   text-decoration: none;
   color: var(--ink);
+  flex-shrink: 0;
 }
 
 .header-title {
@@ -156,10 +169,53 @@ header {
   gap: 8px;
   font-size: 13px;
   color: var(--body);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.header-crumb a {
+  color: var(--body);
+  text-decoration: none;
+}
+
+.header-crumb a:hover {
+  color: var(--ink);
+  text-decoration: underline;
 }
 
 .header-crumb-sep {
   color: var(--muted);
+}
+
+.header-mode-badge,
+.header-manage-link {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.3;
+  border-radius: 4px;
+  text-decoration: none;
+}
+
+.header-mode-badge {
+  padding: 2px 7px;
+  color: #0f172a;
+  background: #e0f2fe;
+  border: 1px solid #7dd3fc;
+  font-weight: 700;
+}
+
+.header-manage-link {
+  margin-left: 6px;
+  padding: 2px 8px;
+  color: var(--ink);
+  background: var(--surface2);
+  border: 1px solid var(--hairline);
+}
+
+.header-manage-link:hover {
+  border-color: var(--accent);
+  text-decoration: none;
 }
 
 .header-right {
@@ -223,6 +279,47 @@ header {
 .header-admin-link:hover {
   color: var(--ink);
   border-color: var(--accent);
+}
+
+.content-flag {
+  display: inline-block;
+  position: relative;
+  margin-left: 6px;
+  font-size: 12px;
+}
+
+.content-flag summary {
+  cursor: pointer;
+  color: var(--muted);
+  list-style: none;
+}
+
+.content-flag summary::-webkit-details-marker {
+  display: none;
+}
+
+.content-flag[open] summary {
+  color: var(--ink);
+}
+
+.content-flag form {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  top: 1.6rem;
+  width: 220px;
+  padding: .65rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  box-shadow: 0 12px 28px -18px rgba(0, 0, 0, .35);
+}
+
+.content-flag select,
+.content-flag textarea {
+  width: 100%;
+  margin-bottom: .4rem;
+  font-size: 12px;
 }
 
 /* ── Main container ── */
@@ -335,6 +432,20 @@ header {
 @media (max-width: 600px) {
   .home-container { padding: 0 1rem; }
   .conv-card { padding: 12px 14px; }
+  a.conv-card {
+    position: relative;
+    padding-right: 42px;
+  }
+  a.conv-card::after {
+    content: '\203A';
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--pass);
+    font-size: 22px;
+    line-height: 1;
+  }
   .conv-card-action { display: none; }
 }
 
@@ -543,8 +654,6 @@ h3.conv-card-title-wrap {
   margin: 0 auto;
 }
 
-pa-conversation:state(loading) { opacity: 0.5; }
-
 /* ── Progress row ── */
 
 .vote-progress-row {
@@ -615,10 +724,8 @@ pa-conversation:state(loading) { opacity: 0.5; }
   margin-bottom: 0;
 }
 
-/* In voted state, hide the live statement and vote buttons via parent class.
-   Using CSS (not just hidden attr) because pa-statement may re-show itself
-   when it receives the next statement from the web component. */
-.statement-card--voted pa-statement   { display: none !important; }
+/* In voted state, hide the live statement and vote buttons via parent class. */
+.statement-card--voted .statement-text { display: none !important; }
 .statement-card--voted .vote-choice-row { display: none !important; }
 .statement-card--voted .stmt-meta-right { visibility: hidden; }
 
@@ -668,8 +775,14 @@ pa-conversation:state(loading) { opacity: 0.5; }
   color: var(--muted);
 }
 
-/* pa-statement text sizing */
-pa-statement { display: block; }
+.statement-text {
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.28;
+  color: var(--text);
+  margin: 0;
+  text-wrap: pretty;
+}
 
 /* ── Voted badge ── */
 
@@ -763,8 +876,6 @@ pa-statement { display: block; }
 .vote-dot--agree    { background: var(--agree); }
 .vote-dot--pass     { background: var(--pass); }
 .vote-dot--disagree { background: var(--disagree); }
-
-pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
 
 /* ── Propose affordance (3 states) ── */
 
@@ -1180,20 +1291,6 @@ pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
   .v2-composer-btns { width: 100%; justify-content: flex-end; }
 }
 
-/* ── Hidden pa-vote-button/pa-submit-button for API submission ── */
-
-.pvb-hidden {
-  /* These pa-* elements exist only so JS can fire them at the API via .click()
-     (which works on display:none elements). They must NOT be visually-hidden
-     (clip/sr-only), because that keeps them in the a11y tree + tab order — a
-     screen-reader/keyboard user would otherwise hit phantom Agree/Pass/Disagree
-     + submit controls duplicating the visible UI. display:none removes them
-     from layout, the a11y tree, and the tab order while keeping .click() working.
-     NOTE: this whole rule (and the .pvb-hidden span) goes away with #159, which
-     drops the pa-* proxy and talks to Particiapi directly — remove it then. */
-  display: none;
-}
-
 /* ── Statement display ── */
 
 .statement-meta {
@@ -1382,6 +1479,7 @@ pa-statement:state(no-statement) ~ .vote-choice-row { display: none; }
   gap: 6px;
   padding: 2px 0;
   min-height: 24px; /* WCAG 2.5.8 target size */
+  min-width: 24px;  /* #157 m4: symmetric target, not height-only */
   font-family: var(--sans);
 }
 
@@ -1706,8 +1804,32 @@ a { color: var(--pass); }
 .btn-small:hover { border-color: var(--pass); color: var(--pass); }
 
 
+/* Disabled small/danger buttons must read as inert — greyed, not-allowed cursor, and
+   no hover affordance — otherwise a guarded action (e.g. delete-with-votes) still looks
+   clickable and clicking it silently does nothing. */
+.btn-small:disabled,
+.btn-small[disabled],
+.btn-small[aria-disabled="true"] {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.btn-small:disabled:hover,
+.btn-small[disabled]:hover,
+.btn-small[aria-disabled="true"]:hover {
+  border-color: var(--border);
+  color: var(--body);
+  background: var(--surface);
+}
+
 .btn-danger { border-color: var(--red); color: var(--red); }
 .btn-danger:hover { background: var(--red); color: white; border-color: var(--red); }
+.btn-danger:disabled:hover,
+.btn-danger[disabled]:hover,
+.btn-danger[aria-disabled="true"]:hover {
+  background: var(--surface);
+  color: var(--red);
+  border-color: var(--red);
+}
 .btn-warn { border-color: var(--spot); color: var(--spot); }
 .btn-warn:hover { background: var(--spot); color: white; border-color: var(--spot); }
 .btn-pause        { border-color: var(--spot); color: var(--spot); }
@@ -1880,6 +2002,14 @@ a { color: var(--pass); }
   white-space: nowrap;
   font-size: 12px;
 }
+/* Vote tallies, ordered Agree · Pass · Disagree, each labelled + colour-coded so the three
+   numbers aren't an unlabelled "+ − ·" run. */
+.stmt-votes .vcount { font-variant-numeric: tabular-nums; }
+.stmt-votes .vcount + .vcount { margin-left: 18px; }
+.stmt-votes .vlabel { font-weight: 700; opacity: 0.7; }
+.vcount--agree { color: var(--agree); }
+.vcount--pass { color: var(--muted); }
+.vcount--disagree { color: var(--disagree); }
 
 .stmt-actions {
   white-space: nowrap;
@@ -2352,11 +2482,13 @@ a { color: var(--pass); }
 
 /* Contribute affordance — state machine via data-state attribute */
 .contribute-wrapper .contribute-affordance,
+.contribute-wrapper .contribute-direct-skip,
 .contribute-wrapper .contribute-composer,
 .contribute-wrapper .contribute-submitted,
 .contribute-wrapper .contribute-skipped { display: none; }
 
 .contribute-wrapper[data-state="idle"]      .contribute-affordance { display: flex; }
+.contribute-wrapper[data-state="idle"]      .contribute-direct-skip { display: inline-flex; }
 .contribute-wrapper[data-state="composing"] .contribute-composer   { display: block; }
 .contribute-wrapper[data-state="submitted"] .contribute-submitted  { display: flex; }
 .contribute-wrapper[data-state="skipped"]   .contribute-skipped    { display: flex; }
@@ -2446,6 +2578,12 @@ a { color: var(--pass); }
 
 .arg-col--pro .contribute-composer-label { color: var(--agree); }
 .arg-col--con .contribute-composer-label { color: var(--disagree); }
+
+.contribute-help-link {
+  font-size: 12px;
+  color: var(--pass);
+  white-space: nowrap;
+}
 
 .contribute-charcount {
   font-family: var(--mono);
@@ -2580,9 +2718,11 @@ a { color: var(--pass); }
 .argument-checkbox {
   flex-shrink: 0;
   margin-top: 1px;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;   /* WCAG 2.5.8 (#157 M1): >=24x24 target */
+  min-height: 24px;
+  border-radius: 6px;
   border: 1.5px solid transparent;
   background: transparent;
   cursor: default;
@@ -3434,6 +3574,29 @@ a { color: var(--pass); }
   font-family: var(--sans);
 }
 .at-contribute--idle:hover { border-color: var(--muted); color: var(--body); }
+.at-direct-skip {
+  align-items: center;
+  min-height: 32px;
+  margin: -6px 0 12px 1px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pass);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.at-direct-skip:hover { color: var(--blue-dark); text-decoration: underline; text-underline-offset: 3px; }
+.at-direct-skip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.at-direct-skip:disabled {
+  color: var(--muted);
+  cursor: wait;
+  text-decoration: none;
+}
 .at-contribute--done {
   border: 1.5px solid var(--ink);
   background: var(--surface2);
@@ -3719,6 +3882,24 @@ a { color: var(--pass); }
   color: var(--body);
 }
 
+.phase-symbol {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background: currentColor;
+  -webkit-mask: var(--phase-symbol-url) center / contain no-repeat;
+  mask: var(--phase-symbol-url) center / contain no-repeat;
+}
+
+.phase-symbol--explore { --phase-symbol-url: url("/static/img/phases/explore.svg"); }
+.phase-symbol--arguments { --phase-symbol-url: url("/static/img/phases/arguments.svg"); }
+.phase-symbol--informed-vote { --phase-symbol-url: url("/static/img/phases/informed-vote.svg"); }
+.phase-symbol--initial-clustering { --phase-symbol-url: url("/static/img/phases/initial-clustering.svg"); }
+.phase-symbol--argument-map { --phase-symbol-url: url("/static/img/phases/argument-map.svg"); }
+.phase-symbol--preliminary-results { --phase-symbol-url: url("/static/img/phases/preliminary-results.svg"); }
+.phase-symbol--report { --phase-symbol-url: url("/static/img/phases/report.svg"); }
+.phase-symbol--dataset { --phase-symbol-url: url("/static/img/phases/dataset.svg"); }
+
 .phase-legend-label {
   font-size: 11px;
   font-weight: 500;
@@ -3794,47 +3975,211 @@ a { color: var(--pass); }
   border-color: var(--accent);
 }
 
-/* ── Conv card: phase-rail variant ────────────────────────────────────────── */
+/* ── Conv card: input timeline + output symbols ──────────────────────────── */
 
 .conv-card--phase .conv-card-left { flex-direction: column; align-items: flex-start; gap: 6px; }
 .conv-card-left--col { flex-direction: column; align-items: flex-start; gap: 6px; }
-
-.conv-phase-rail {
+.conv-card--outputs {
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+.conv-card-main {
+  min-width: 0;
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 0;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+  text-decoration: none;
+  color: inherit;
 }
-
-.conv-phase-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1.5px solid var(--hairline);
-  background: transparent;
+.conv-card-main:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+.conv-card-output-divider {
+  width: 1px;
+  margin: 10px 0;
+  background: var(--hairline);
   flex-shrink: 0;
 }
-
-.conv-phase-dot--past {
-  background: var(--hairline);
-  border-color: var(--hairline);
+.conv-input-timeline {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  gap: 4px;
+  flex-wrap: wrap;
 }
-
-.conv-phase-dot--active {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(61, 109, 186, 0.15);
+.conv-input-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(245,158,11,0.4);
+  background: rgba(245,158,11,0.12);
+  color: #8a5a00;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
 }
-
-.conv-phase-rail-line {
-  width: 18px;
+.conv-input-badge--done {
+  border-color: rgba(61,109,186,0.22);
+  background: rgba(61,109,186,0.08);
+  color: var(--pass);
+}
+.conv-input-badge--current {
+  border-color: var(--pass);
+  background: var(--pass);
+  color: #fff;
+}
+.conv-input-badge--todo {
+  border-style: dashed;
+  background: var(--surface);
+  color: var(--muted);
+}
+.conv-input-rail {
+  width: 16px;
   height: 1px;
   background: var(--hairline);
+}
+.conv-input-clock {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--hairline);
+  border-radius: 50%;
+  position: relative;
   flex-shrink: 0;
 }
-
-.conv-phase-rail-line--done {
+.conv-input-clock::before,
+.conv-input-clock::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1px;
   background: var(--muted);
-  opacity: 0.4;
+  transform-origin: top center;
+}
+.conv-input-clock::before { height: 3px; transform: translate(-50%, -50%); }
+.conv-input-clock::after { height: 4px; transform: translate(-50%, -50%) rotate(90deg); }
+.conv-output-grid {
+  width: 94px;
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 32px);
+  grid-auto-rows: 32px;
+  gap: 6px;
+  align-content: center;
+  justify-content: center;
+  padding: 10px 12px;
+}
+.conv-output-symbol {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  text-decoration: none;
+}
+button.conv-output-symbol {
+  font: inherit;
+  cursor: pointer;
+}
+.conv-output-symbol--ready {
+  background: rgba(61,109,186,0.1);
+  border-color: rgba(61,109,186,0.28);
+  color: var(--pass);
+}
+.conv-output-symbol--pending {
+  background: rgba(245,158,11,0.12);
+  border-color: rgba(245,158,11,0.42);
+  color: #9a6500;
+}
+.conv-output-symbol:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.output-dialog[hidden] { display: none; }
+.output-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(12,12,14,0.38);
+}
+.output-dialog-panel {
+  width: min(420px, 100%);
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  padding: 18px 20px;
+  box-shadow: 0 18px 50px -28px rgba(0,0,0,0.45);
+  position: relative;
+}
+.output-dialog-panel h2 {
+  margin: 0 32px 8px 0;
+  font-size: 18px;
+}
+.output-dialog-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: var(--surface2);
+  color: var(--body);
+  cursor: pointer;
+}
+
+.output-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 1.5rem;
+}
+.output-context-grid {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+.output-context-grid div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.3fr) 1fr;
+  gap: 12px;
+}
+.output-context-grid dt {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.output-context-grid dd {
+  margin: 0;
+  color: var(--body);
+  line-height: 1.55;
+}
+
+@media (max-width: 620px) {
+  .conv-card--outputs { flex-direction: column; }
+  .conv-card-main { width: 100%; }
+  .conv-card-output-divider { width: auto; height: 1px; margin: 0 14px; }
+  .conv-output-grid { width: 100%; grid-template-columns: repeat(5, 32px); }
+  .output-context-grid div { grid-template-columns: 1fr; }
 }
 
 /* ── Conv card: action chips ───────────────────────────────────────────────── */

@@ -1,20 +1,68 @@
 {% extends "base.html" %}
 {% block content %}
 
-{# ── Phase rail macro: 4 dots showing where this conversation is in the journey ─ #}
-{% macro phase_rail(phases) %}
-{%- set pos = 4 if ('closed' in phases or 'public_results' in phases) else
-              (3 if ('cleanup_window' in phases or 'informed_voting' in phases or 'cleanup' in phases) else
-               (2 if ('argument_mapping' in phases or 'featured_selection' in phases) else
-                (1 if 'submission' in phases else 0))) -%}
-<div class="conv-phase-rail" aria-hidden="true">
-  <span class="conv-phase-dot{% if pos == 1 %} conv-phase-dot--active{% elif pos > 1 %} conv-phase-dot--past{% endif %}" title="Explore"></span>
-  <span class="conv-phase-rail-line{% if pos > 1 %} conv-phase-rail-line--done{% endif %}"></span>
-  <span class="conv-phase-dot{% if pos == 2 %} conv-phase-dot--active{% elif pos > 2 %} conv-phase-dot--past{% endif %}" title="Featured / Arguments"></span>
-  <span class="conv-phase-rail-line{% if pos > 2 %} conv-phase-rail-line--done{% endif %}"></span>
-  <span class="conv-phase-dot{% if pos == 3 %} conv-phase-dot--active{% elif pos > 3 %} conv-phase-dot--past{% endif %}" title="Informed vote"></span>
-  <span class="conv-phase-rail-line{% if pos > 3 %} conv-phase-rail-line--done{% endif %}"></span>
-  <span class="conv-phase-dot{% if pos == 4 %} conv-phase-dot--active{% endif %}" title="Report"></span>
+{# ── Input timeline macro: progressive participation phases ───────────────── #}
+{% macro input_timeline(phases) %}
+{%- set pos = 4 if ('closed' in phases or 'cleanup_window' in phases or 'public_results' in phases) else
+              (3 if 'informed_voting' in phases else
+               (2 if ('argument_mapping' in phases or 'cleanup' in phases) else
+                (1 if ('submission' in phases or 'featured_selection' in phases) else 0))) -%}
+<div class="conv-input-timeline" aria-label="Input phase progress">
+  <span class="conv-input-badge{% if pos == 1 %} conv-input-badge--current{% elif pos > 1 %} conv-input-badge--done{% endif %}">
+    {% if pos > 1 %}<span aria-hidden="true">✓</span>{% endif %} Explore
+  </span>
+  {% if pos >= 2 %}
+  <span class="conv-input-rail" aria-hidden="true"></span>
+  <span class="conv-input-clock" aria-hidden="true"></span>
+  <span class="conv-input-rail" aria-hidden="true"></span>
+  <span class="conv-input-badge{% if pos == 2 %} conv-input-badge--current{% elif pos > 2 %} conv-input-badge--done{% endif %}">
+    {% if pos > 2 %}<span aria-hidden="true">✓</span>{% endif %} Arguments
+  </span>
+  {% endif %}
+  {% if pos >= 3 %}
+  <span class="conv-input-rail" aria-hidden="true"></span>
+  <span class="conv-input-clock" aria-hidden="true"></span>
+  <span class="conv-input-rail" aria-hidden="true"></span>
+  <span class="conv-input-badge{% if pos == 3 %} conv-input-badge--current{% elif pos > 3 %} conv-input-badge--done{% endif %}">
+    {% if pos > 3 %}<span aria-hidden="true">✓</span>{% endif %} Informed vote
+  </span>
+  {% endif %}
+  {% if 'closed' in phases %}
+  <span class="conv-input-rail" aria-hidden="true"></span>
+  <span class="conv-input-clock" aria-hidden="true"></span>
+  <span class="conv-input-rail" aria-hidden="true"></span>
+  <span class="conv-input-badge conv-input-badge--todo">Opt-in identification</span>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# ── Output symbol macro: ready links or pending detail popups ────────────── #}
+{% macro output_symbols(outputs) %}
+<div class="conv-output-grid" aria-label="Consultation outputs">
+  {% for output in outputs %}
+    {% if output.ready %}
+    <a class="conv-output-symbol conv-output-symbol--ready"
+       href="{{ output.href }}"
+       data-state="ready"
+       data-href="{{ output.href }}"
+       aria-label="{{ output.tooltip }}"
+       title="{{ output.tooltip }}">
+      <span class="phase-symbol phase-symbol--{{ output.symbol }}" aria-hidden="true"></span>
+      <span class="sr-only">{{ output.label }}</span>
+    </a>
+    {% else %}
+    <button class="conv-output-symbol conv-output-symbol--pending"
+            type="button"
+            data-state="pending"
+            data-title="{{ output.label }}"
+            data-detail="{{ output.pending }}"
+            aria-label="{{ output.tooltip }}"
+            title="{{ output.tooltip }}">
+      <span class="phase-symbol phase-symbol--{{ output.symbol }}" aria-hidden="true"></span>
+      <span class="sr-only">{{ output.label }}</span>
+    </button>
+    {% endif %}
+  {% endfor %}
 </div>
 {% endmacro %}
 
@@ -86,6 +134,7 @@
             <div class="conv-card-left">
               <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
               <h3 class="conv-card-title">{{ c.title }}</h3>
+              {% if c.access_policy == 'demo' %}<span class="conv-card-badge" aria-hidden="true">Demo</span>{% endif %}
             </div>
             <span class="conv-card-action" aria-hidden="true">JOIN →</span>
           </a>
@@ -111,12 +160,7 @@
   <div class="phase-legend" role="img" aria-label="Consultation phases: Explore, Arguments, Informed vote, Report">
     <div class="phase-legend-node">
       <span class="phase-legend-icon" aria-hidden="true">
-        {# Explore: two horizontal bars + checkmark #}
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="2" y1="7" x2="11" y2="7"/>
-          <line x1="2" y1="11" x2="11" y2="11"/>
-          <polyline points="12,9 14,12.5 17,5.5"/>
-        </svg>
+        <span class="phase-symbol phase-symbol--explore"></span>
       </span>
       <span class="phase-legend-label" aria-hidden="true">Explore</span>
     </div>
@@ -127,14 +171,7 @@
     </div>
     <div class="phase-legend-node">
       <span class="phase-legend-icon" aria-hidden="true">
-        {# Arguments: scales / balance #}
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="9" y1="2" x2="9" y2="16"/>
-          <line x1="3" y1="16" x2="15" y2="16"/>
-          <line x1="4" y1="6" x2="14" y2="6"/>
-          <path d="M4,6 L2,9.5 Q4,13 6,9.5 Z"/>
-          <path d="M14,6 L12,9.5 Q14,13 16,9.5 Z"/>
-        </svg>
+        <span class="phase-symbol phase-symbol--arguments"></span>
       </span>
       <span class="phase-legend-label" aria-hidden="true">Arguments</span>
     </div>
@@ -145,16 +182,7 @@
     </div>
     <div class="phase-legend-node">
       <span class="phase-legend-icon" aria-hidden="true">
-        {# Informed vote: two bars + small scales #}
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="2" y1="7" x2="9" y2="7"/>
-          <line x1="2" y1="11" x2="9" y2="11"/>
-          <line x1="13" y1="3" x2="13" y2="15"/>
-          <line x1="10" y1="15" x2="16" y2="15"/>
-          <line x1="11" y1="6" x2="15" y2="6"/>
-          <path d="M11,6 L10,8 Q11,10 12,8 Z"/>
-          <path d="M15,6 L14,8 Q15,10 16,8 Z"/>
-        </svg>
+        <span class="phase-symbol phase-symbol--informed-vote"></span>
       </span>
       <span class="phase-legend-label" aria-hidden="true">Informed vote</span>
     </div>
@@ -165,13 +193,7 @@
     </div>
     <div class="phase-legend-node">
       <span class="phase-legend-icon" aria-hidden="true">
-        {# Report: document with lines #}
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="1" width="12" height="16" rx="1.5"/>
-          <line x1="6" y1="6" x2="12" y2="6"/>
-          <line x1="6" y1="9" x2="12" y2="9"/>
-          <line x1="6" y1="12" x2="10" y2="12"/>
-        </svg>
+        <span class="phase-symbol phase-symbol--report"></span>
       </span>
       <span class="phase-legend-label" aria-hidden="true">Report</span>
     </div>
@@ -198,19 +220,23 @@
           {% set part = pseudonym_map.get(c.id) %}
           {% set sig  = signals_map.get(c.id, {}) %}
           <li>
-            <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card conv-card--phase"
-               aria-label="{{ c.title }}{% if part and part.pseudonym %} — your pseudonym: {{ part.pseudonym }}{% endif %}{% if sig.statements_remaining %} — {{ sig.statements_remaining }} statements to vote{% endif %} — continue">
-              <div class="conv-card-left conv-card-left--col">
+            <div class="conv-card conv-card--phase conv-card--outputs">
+              <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card-main"
+                 aria-label="{{ c.title }}{% if part and part.pseudonym %} — your pseudonym: {{ part.pseudonym }}{% endif %}{% if sig.statements_remaining %} — {{ sig.statements_remaining }} statements to vote{% endif %} — continue">
+                <div class="conv-card-left conv-card-left--col">
                 <div class="conv-card-title-row">
                   <h3 class="conv-card-title">{{ c.title }}</h3>
                   {% if part and part.pseudonym %}<span class="conv-card-badge" aria-hidden="true">{{ part.pseudonym }}</span>{% endif %}
                 </div>
-                {{ phase_rail(sig.phases if sig.phases is defined else set()) }}
+                {{ input_timeline(sig.phases if sig.phases is defined else set()) }}
                 {% set chips = conv_chips(sig) %}
                 {% if chips.strip() %}<div class="conv-chips">{{ chips }}</div>{% endif %}
-              </div>
-              <span class="conv-card-action" aria-hidden="true">CONTINUE →</span>
-            </a>
+                </div>
+                <span class="conv-card-action" aria-hidden="true">CONTINUE →</span>
+              </a>
+              <span class="conv-card-output-divider" aria-hidden="true"></span>
+              {{ output_symbols(sig.outputs if sig.outputs is defined else []) }}
+            </div>
           </li>
           {% endfor %}
         </ul>
@@ -230,20 +256,24 @@
           {% set part = pseudonym_map.get(c.id) %}
           {% set sig  = signals_map.get(c.id, {}) %}
           <li>
-            <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card conv-card--phase"
-               aria-label="{{ c.title }}{% if part and part.pseudonym %} — pseudonym: {{ part.pseudonym }}{% endif %} — closed{% if c.closed_at %} {{ c.closed_at.strftime('%B %Y') }}{% endif %}">
-              <div class="conv-card-left conv-card-left--col">
+            <div class="conv-card conv-card--phase conv-card--outputs">
+              <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card-main"
+                 aria-label="{{ c.title }}{% if part and part.pseudonym %} — pseudonym: {{ part.pseudonym }}{% endif %} — closed{% if c.closed_at %} {{ c.closed_at.strftime('%B %Y') }}{% endif %}">
+                <div class="conv-card-left conv-card-left--col">
                 <div class="conv-card-title-row">
                   <h3 class="conv-card-title">{{ c.title }}</h3>
                   {% if part and part.pseudonym %}<span class="conv-card-badge" aria-hidden="true">{{ part.pseudonym }}</span>{% endif %}
                   {% if c.closed_at %}<span class="conv-card-badge conv-card-badge--muted" aria-hidden="true">{{ c.closed_at.strftime('%b %Y') }}</span>{% endif %}
                 </div>
-                {{ phase_rail(sig.phases if sig.phases is defined else set()) }}
+                {{ input_timeline(sig.phases if sig.phases is defined else set()) }}
                 {% set chips = conv_chips(sig) %}
                 {% if chips.strip() %}<div class="conv-chips">{{ chips }}</div>{% endif %}
-              </div>
-              <span class="conv-card-action conv-card-action--muted" aria-hidden="true">VIEW →</span>
-            </a>
+                </div>
+                <span class="conv-card-action conv-card-action--muted" aria-hidden="true">VIEW →</span>
+              </a>
+              <span class="conv-card-output-divider" aria-hidden="true"></span>
+              {{ output_symbols(sig.outputs if sig.outputs is defined else []) }}
+            </div>
           </li>
           {% endfor %}
         </ul>
@@ -273,16 +303,20 @@
           {% for c in available %}
           {% set sig = signals_map.get(c.id, {}) %}
           <li>
-            <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card conv-card--phase"
-               aria-label="{{ c.title }} — join consultation">
-              <div class="conv-card-left conv-card-left--col">
+            <div class="conv-card conv-card--phase conv-card--outputs">
+              <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card-main"
+                 aria-label="{{ c.title }} — join consultation">
+                <div class="conv-card-left conv-card-left--col">
                 <div class="conv-card-title-row">
                   <h3 class="conv-card-title">{{ c.title }}</h3>
                 </div>
-                {{ phase_rail(sig.phases if sig.phases is defined else set()) }}
-              </div>
-              <span class="conv-card-action" aria-hidden="true">JOIN →</span>
-            </a>
+                {{ input_timeline(sig.phases if sig.phases is defined else set()) }}
+                </div>
+                <span class="conv-card-action" aria-hidden="true">JOIN →</span>
+              </a>
+              <span class="conv-card-output-divider" aria-hidden="true"></span>
+              {{ output_symbols(sig.outputs if sig.outputs is defined else []) }}
+            </div>
           </li>
           {% endfor %}
         </ul>
@@ -331,6 +365,14 @@
 </div>{# /container #}
 
 {% if username %}
+<div class="output-dialog" id="output-dialog" role="dialog" aria-modal="true" aria-labelledby="output-dialog-title" hidden>
+  <div class="output-dialog-panel">
+    <button type="button" class="output-dialog-close" aria-label="Close output details">&times;</button>
+    <h2 id="output-dialog-title">Output pending</h2>
+    <p id="output-dialog-body" class="muted"></p>
+  </div>
+</div>
+
 <script nonce="{{ csp_nonce }}">
 (function () {
   var MODES = ['yours', 'browse'];
@@ -360,6 +402,38 @@
   });
 
   setMode(stored);
+}());
+
+(function () {
+  var dialog = document.getElementById('output-dialog');
+  if (!dialog) return;
+  var title = document.getElementById('output-dialog-title');
+  var body = document.getElementById('output-dialog-body');
+  var close = dialog.querySelector('.output-dialog-close');
+  var lastFocus = null;
+
+  function hide() {
+    dialog.hidden = true;
+    if (lastFocus) lastFocus.focus();
+  }
+
+  document.querySelectorAll('.conv-output-symbol--pending').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      lastFocus = btn;
+      title.textContent = btn.dataset.title || 'Output pending';
+      body.textContent = btn.dataset.detail || '';
+      dialog.hidden = false;
+      close.focus();
+    });
+  });
+
+  close.addEventListener('click', hide);
+  dialog.addEventListener('click', function (e) {
+    if (e.target === dialog) hide();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (!dialog.hidden && e.key === 'Escape') hide();
+  });
 }());
 </script>
 {% endif %}

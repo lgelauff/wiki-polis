@@ -1,18 +1,45 @@
 {% extends "base.html" %}
 {% block title %}Featured statements — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block header_crumb %}
+<nav class="header-crumb" aria-label="Admin breadcrumb">
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin') }}">Admin panel</a>
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">{{ conversation.title | truncate(28, True, '…') }}</a>
+  <span class="header-crumb-sep">/</span>
+  <span>Featured</span>
+</nav>
+{% endblock %}
 {% block content %}
 
 <div class="container">
 
   <h2>Featured statements — {{ conversation.title }}</h2>
-  <p class="muted" style="margin-bottom:1.5rem">
-    <a href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">← conversation</a>
-  </p>
 
   <p class="muted" style="font-size:13px;margin-bottom:1.5rem">
     Featured statements appear in the argument mapping tab. Participants submit a pro and con
     argument for each, then vote on the most important arguments submitted by others.
   </p>
+
+  <div class="landing-section" style="margin-bottom:1.5rem">
+    <h3 style="font-size:16px;margin-bottom:.5rem">How to choose featured statements</h3>
+    <p class="muted" style="font-size:13px;margin-bottom:.6rem">
+      Featured statements are the representative set that carries the rest of the consultation:
+      they become the prompts for argument mapping and are seeded into informed voting.
+      Aim for a balanced set across the main viewpoints, not only the most popular statements.
+    </p>
+    <ul style="font-size:13px;padding-left:1.25rem;margin-bottom:.6rem">
+      <li>Use roughly 15 statements as a working target, then adjust for topic complexity.</li>
+      <li>Prefer statements with enough votes to indicate signal, while preserving minority viewpoints.</li>
+      <li>Once argument mapping begins, treat the selected set as locked; changing it later can confuse participants and downstream Phase 6 seeding.</li>
+    </ul>
+    <p class="muted" style="font-size:13px;margin-bottom:0">
+      System suggestions are ranked candidates from the Polis data. Manual TID adds are for
+      known statements that should be included even if they are not surfaced by the suggestion query.
+      Arguments are visible by default; hide individual arguments here when they need moderation,
+      and unhide them after review.
+    </p>
+  </div>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
   {% for category, message in messages %}
@@ -40,15 +67,32 @@
         <td style="white-space:nowrap;vertical-align:top">{{ fs.polis_statement_id }}</td>
         <td style="font-size:13px;vertical-align:top">
           <div style="margin-bottom:0.5rem">{{ fs.statement_text or '—' }}</div>
+          {%- set prov = provenance_map.get(fs.polis_statement_id) %}
+          {% if prov %}<div style="margin-bottom:0.5rem">
+            <span class="prov-badge"
+                  title="Derived from statement #{{ prov.derived_from_tid }}. Similarity 1.00 = identical.{% for sc in prov.scores %} {{ sc.model }} {{ '%.2f'|format(sc.value) }}.{% endfor %}">
+              <span class="sr-only">derived from statement {{ prov.derived_from_tid }}, </span>↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}
+            </span>
+          </div>{% endif %}
           <div style="border-top:1px solid var(--hairline);padding-top:0.4rem;margin-top:0.1rem">
             <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Arguments</span>
             {% if fs.arguments %}
             {% for arg in fs.arguments %}
             <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin-top:4px;font-size:12px">
               <span style="color:var(--muted);min-width:2rem;flex-shrink:0">{{ arg.side }}</span>
+              {% if arg.hidden %}
+              <span style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:999px;padding:1px 6px;font-size:11px">hidden</span>
+              {% endif %}
               <span style="flex:1;min-width:120px;color:var(--body)">{{ arg.body }}</span>
-              <span style="color:var(--muted);white-space:nowrap">{{ arg.proposer.mw_username if arg.proposer else '—' }}</span>
+              <span style="color:var(--muted);white-space:nowrap">{{ arg.proposer_pseudonym or '—' }}</span>
               <span style="color:var(--muted);white-space:nowrap">{{ arg.created_at.strftime('%Y-%m-%d') if arg.created_at else '' }}</span>
+              <form method="post"
+                    action="{{ url_for('admin.admin_argument_moderate', conv_id=conversation.id, arg_id=arg.id) }}"
+                    style="display:inline;flex-shrink:0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="hidden" value="{{ '0' if arg.hidden else '1' }}">
+                <button type="submit" class="btn-small">{{ 'unhide' if arg.hidden else 'hide' }}</button>
+              </form>
               <form method="post"
                     action="{{ url_for('admin.admin_argument_delete', conv_id=conversation.id, arg_id=arg.id) }}"
                     style="display:inline;flex-shrink:0">
@@ -109,7 +153,16 @@
       {% for c in candidates %}
       <tr>
         <td>{{ c.tid }}</td>
-        <td style="font-size:13px">{{ c.text }}</td>
+        <td style="font-size:13px">
+          {{ c.text }}
+          {%- set prov = provenance_map.get(c.tid) %}
+          {% if prov %}<div style="margin-top:0.35rem">
+            <span class="prov-badge"
+                  title="Derived from statement #{{ prov.derived_from_tid }}. Similarity 1.00 = identical.{% for sc in prov.scores %} {{ sc.model }} {{ '%.2f'|format(sc.value) }}.{% endfor %}">
+              <span class="sr-only">derived from statement {{ prov.derived_from_tid }}, </span>↳ #{{ prov.derived_from_tid }}{% for sc in prov.scores %} · {{ sc.model }}&nbsp;{{ '%.2f'|format(sc.value) }}{% endfor %}
+            </span>
+          </div>{% endif %}
+        </td>
         <td>{{ '✓' if c.is_seed else '' }}</td>
         <td>{{ c.n_agree }}</td>
         <td>{{ c.n_disagree }}</td>

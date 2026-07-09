@@ -11,9 +11,9 @@
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
-  <header>
+  <header class="site-header {% if request.blueprint == 'admin' %}site-header--admin{% else %}site-header--participant{% endif %}">
     <div class="header-inner">
-      <div style="display:flex;align-items:center;gap:14px">
+      <div class="header-left">
         <a href="{{ url_for('index') }}" class="header-logo">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="1" stroke-linecap="round"
@@ -24,6 +24,9 @@
           </svg>
           <span class="header-title">wiki-polis</span>
         </a>
+        {% if request.blueprint == 'admin' %}
+          <span class="header-mode-badge">Admin</span>
+        {% endif %}
         {% block header_crumb %}{% endblock %}
       </div>
 
@@ -51,7 +54,7 @@
     {% block content %}{% endblock %}
   </main>
 
-  <div id="toast-container" aria-live="polite"></div>
+  <div id="toast-container"></div>
 
   <footer style="text-align:right;padding:.5rem 1rem;font-size:11px;color:var(--muted)">
     <code>{{ git_version }}</code>
@@ -68,7 +71,10 @@
       var category = pair[0], message = pair[1];
       var el = document.createElement('div');
       el.className = 'toast toast--' + category;
-      el.setAttribute('role', 'alert');
+      // Per-toast politeness (#157 M4): errors/warnings assert, others are polite.
+      // The container itself is no longer a live region, so there is no
+      // polite-wraps-assertive conflict.
+      el.setAttribute('role', (category === 'error' || category === 'warning') ? 'alert' : 'status');
       var msg = document.createElement('span');
       msg.className = 'toast__msg';
       msg.textContent = message;
