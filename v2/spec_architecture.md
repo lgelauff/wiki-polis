@@ -20,9 +20,11 @@
                         │  - All UI (conversation list,         │
                         │    voting page, argument tab,         │
                         │    accept flow)                       │
-                        │  - Admin: conversations, roles,       │
-                        │    invites, featured statements,      │
-                        │    phase toggles, moderation          │
+                        │  - Admin: conversations, roles         │
+                        │    (moderator/organizer), invites,     │
+                        │    featured statements, phase          │
+                        │    toggles, content-flag moderation    │
+                        │    queue, conversation bans            │
                         │  - Proxies voting calls to VPS        │
                         │  - MariaDB (ToolsDB) — identity layer │
                         └──────────────┬──────────────────────┘
@@ -47,6 +49,35 @@
 
 The VPS runs a standard Docker Compose stack — the same `docker-compose.yml` locally and
 in production. Particiapi is not exposed publicly; Flask proxies all calls to it.
+
+**Two optional external integrations.** Flask calls these directly over outbound HTTP —
+not proxied through Particiapi — and both degrade gracefully when unconfigured or
+unreachable:
+
+```
+  Flask app (wiki-polis) ── optional, best-effort ──▶ ┌───────────────────────────────┐
+                                                      │ Embedding sidecar (#208)      │
+                                                      │ FastAPI · /similarity, /embed │
+                                                      └───────────────────────────────┘
+                                                      falls back to stdlib difflib if unset/unreachable
+
+  Flask app (wiki-polis) ── optional, join-time ────▶ ┌──────────────────────────────┐
+                                                      │ External eligibility service │
+                                                      │ (event-keyed join gate)      │
+                                                      └──────────────────────────────┘
+                                                      gates join only when eligibility_event_id is set
+```
+
+- **Embedding sidecar** (`STATEMENT_SIMILARITY_URL`) — a small FastAPI service
+  (`v2/embedding_sidecar/`), typically run on the same VPS next to Particiapi/Polis but
+  reachable over plain HTTP, not the internal Docker network used for voting. `_semantic_similarity()`
+  POSTs `{"left": ..., "right": ...}` and expects `{"similarity": <float>}`, with a short
+  timeout; if the URL is unset or the call fails, statement-derivation similarity scoring
+  falls back to a stdlib `difflib` ratio, so the app is fully functional without it.
+- **Eligibility service** (`ACCOUNT_ELIGIBILITY_URL`) — an arbitrary external HTTP
+  endpoint. `_check_join_eligibility()` only calls it for conversations that set an
+  `eligibility_event_id`; it GETs the endpoint keyed by that event ID and the joining
+  user, and fails closed (join denied) if the service is unconfigured or errors.
 
 ---
 
@@ -129,6 +160,8 @@ a general upstream improvement; it is not a blocker for our deployment.)
 | Database (Polis data) | PostgreSQL | VPS, managed by the Polis Docker container |
 | Polis runtime | Stock Polis (Node.js) | VPS via Docker Compose; no fork |
 | Moderation | Flask admin panel + Polis admin UI | Statement moderation (approve/hide/seed) and argument moderation (hide/delete) in the Flask admin; Polis admin UI for clustering/math |
+| Statement similarity (optional) | Embedding sidecar — FastAPI + sentence-transformers | `v2/embedding_sidecar/`; Flask calls it directly over HTTP, best-effort with a short timeout; falls back to stdlib `difflib` if unset/unreachable — no hard dependency |
+| Join eligibility (optional) | External eligibility service (HTTP) | Arbitrary endpoint set via `ACCOUNT_ELIGIBILITY_URL`; only invoked for conversations with an `eligibility_event_id`; fails closed if unconfigured or erroring |
 
 ---
 
