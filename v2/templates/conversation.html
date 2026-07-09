@@ -2284,6 +2284,8 @@
       submitBtn.disabled = len === 0;
     });
 
+    function sideWord() { return wrapper.dataset.side === 'pro' ? 'for' : 'against'; }
+
     function performSkip(trigger) {
       var url   = wrapper.dataset.skipUrl;
       var csrf  = wrapper.dataset.csrf;
@@ -2292,6 +2294,7 @@
         if (r.ok) {
           setState('skipped');
           checkGateTransition(wrapper);
+          announceArg('Skipped — no ' + sideWord() + '-argument added.');
         } else if (trigger) {
           trigger.disabled = false;
         }
@@ -2317,9 +2320,10 @@
         if (r.ok) {
           return r.json().then(function (data) {
             setState('submitted');
+            announceArg('Your ' + sideWord() + '-argument was added.');
             // Insert the new card into the column's argument list
             var col = wrapper.closest('.at-col') || (function () {
-              var b = document.getElementById('fs-' + fsId);
+              var b = document.getElementById('fs-' + wrapper.dataset.fs);
               return b ? b.querySelector('.at-col--' + (side === 'pro' ? 'for' : 'against')) : null;
             })();
             if (!col) return;
@@ -2363,13 +2367,19 @@
     btn.addEventListener('click', function () {
       var fsId = btn.dataset.fs;
       var csrf = btn.dataset.csrf;
+      // Capture focus intent BEFORE disabling: setting disabled=true blurs the
+      // button immediately, so checkGateTransition (called later, async) would
+      // otherwise never see it as the active element even though the user just
+      // activated it from the keyboard.
+      btn.dataset.hadFocus = (document.activeElement === btn) ? '1' : '';
       btn.disabled = true;
       var jobs = [];
       [['pro', btn.dataset.proSkipUrl], ['con', btn.dataset.conSkipUrl]].forEach(function (pair) {
         var w = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="' + pair[0] + '"]');
         if (!w) return;
-        var st = w.dataset.state;
-        if (st === 'submitted' || st === 'skipped') return;
+        // Only touch sides that are still untouched: leave 'composing' alone too,
+        // so an in-progress (unsaved) draft is never silently discarded.
+        if (w.dataset.state !== 'idle') return;
         jobs.push(argFetch(pair[1], csrf).then(function (r) {
           if (!r.ok) throw new Error('skip failed: ' + r.status);
           w.dataset.state = 'skipped';
@@ -2377,14 +2387,19 @@
           if (trig) trig.hidden = true;
         }));
       });
-      Promise.all(jobs).then(function () {
+      Promise.allSettled(jobs).then(function (results) {
+        // Re-check the gate regardless of partial failure, so a side that DID
+        // succeed still gets its step-1 progress / reserve-slot update rather
+        // than waiting on a retry of the side that failed.
         var anyW = tab.querySelector('.contribute-wrapper[data-fs="' + fsId + '"][data-side="pro"]');
         if (anyW) checkGateTransition(anyW);
-      }).catch(function () {
-        // A skip POST failed (e.g. expired CSRF / closed conversation). Re-enable the
-        // button and surface the error instead of leaving it stuck disabled.
-        btn.disabled = false;
-        announceArg('Could not skip — please try again.');
+        var anyFailed = results.some(function (r) { return r.status === 'rejected'; });
+        if (anyFailed) {
+          // A skip POST failed (e.g. expired CSRF / closed conversation). Re-enable
+          // the button and surface the error instead of leaving it stuck disabled.
+          btn.disabled = false;
+          announceArg('Could not skip one side — please try again.');
+        }
       });
     });
   });
@@ -2425,7 +2440,21 @@
     if (bothGated) {
       var block = document.getElementById('fs-' + fsId);
       var skipBothBtn = document.getElementById('skipboth-' + fsId);
-      if (skipBothBtn) skipBothBtn.hidden = true;
+      if (skipBothBtn) {
+        // Hiding the just-activated control drops focus to <body> with no
+        // warning to keyboard/screen-reader users. If the user just activated
+        // it (captured before its own click handler disabled/blurred it — see
+        // hadFocus above), move focus to the step-2 area that's about to
+        // unlock before hiding.
+        if (skipBothBtn.dataset.hadFocus === '1') {
+          var step2El = document.getElementById('step2-' + fsId);
+          if (step2El) {
+            if (!step2El.hasAttribute('tabindex')) step2El.setAttribute('tabindex', '-1');
+            step2El.focus();
+          }
+        }
+        skipBothBtn.hidden = true;
+      }
       var kVal  = getK(proW);
       var nPro  = block ? block.querySelectorAll('.argument-card[data-side="pro"]').length : 0;
       var nCon  = block ? block.querySelectorAll('.argument-card[data-side="con"]').length : 0;

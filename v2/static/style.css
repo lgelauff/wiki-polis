@@ -4298,45 +4298,20 @@ button.conv-output-symbol {
 .at-skip-both[disabled] { opacity: .55; cursor: default; }
 .at-skip-both-spacer { display: block; }
 
-/* dashed reserved slot at the top of each column */
-.at-reserve {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  border: 1.5px dashed var(--hairline);
-  border-radius: 9px;
-  padding: 12px 14px;
-  margin-bottom: 12px;
-  font-size: 13px;
-  color: var(--muted);
-}
-/* The `display: flex` above would otherwise beat the UA [hidden] rule (equal
-   specificity), so the slot never hides when JS sets `hidden`. Restore it. */
-.at-reserve[hidden] {
-  display: none;
-}
-.at-reserve-glyph {
-  width: 20px; height: 20px;
-  border-radius: 5px;
-  flex-shrink: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-family: var(--mono); font-weight: 700; font-size: 13px;
-}
-.at-reserve--for .at-reserve-glyph { background: rgba(21,115,74,0.15); color: var(--agree); }
-.at-reserve--against .at-reserve-glyph { background: rgba(178,58,58,0.15); color: var(--disagree); }
+/* The dashed "reserved slot" look for the in-column placeholder is provided by
+   .contribute-affordance--pro/--con (shared with the composer state machine),
+   not a separate ruleset — see the "Idle dashed button" block above. */
 
 @media (max-width: 680px) {
   .at-contribute-row { grid-template-columns: 1fr; gap: 10px; }
+  /* Explicit order on all three controls (not just skip-both) so Tab order
+     — which evergreen browsers follow for `order` — matches this visual
+     sequence: for, against, skip-both. */
+  .at-row-trigger--for { order: 1; }
+  .at-row-trigger--against { order: 2; }
   .at-skip-both { order: 3; justify-self: stretch; text-align: center; }
   .at-skip-both-spacer { display: none; }
 }
-
-/* Reserve slot doubles as a click target to add your own argument (wired in JS) */
-.at-reserve { cursor: pointer; transition: border-color .12s, color .12s, background .12s; }
-.at-reserve:hover { border-color: var(--muted); color: var(--ink); }
-.at-reserve--for:hover { border-color: rgba(21,115,74,0.5); color: var(--agree); }
-.at-reserve--against:hover { border-color: rgba(178,58,58,0.5); color: var(--disagree); }
-.at-reserve:focus-visible { outline: 2px solid var(--pass); outline-offset: 2px; }
 
 /* Step-1 row trigger buttons — solid tinted CTAs that open the composer down in
    the matching For/Against column. (The dashed placeholder in the column is the

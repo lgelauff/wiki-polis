@@ -1,7 +1,9 @@
 """Tests for the argument mapping layer: submit, skip, vote, admin featured."""
 import os
+from unittest.mock import patch
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from db import (Argument, ArgumentSideState, ArgumentVote, ContentFlag, Conversation,
                 ConversationBan, FeaturedStatement, Participant, Participation, db)
@@ -150,6 +152,33 @@ def test_submit_duplicate_silently_redirects(auth_client, arg_conv, arg_part, fs
         proposer_pseudonym=arg_part.pseudonym, featured_statement_id=fs.id, side='pro').count() == 1
 
 
+def test_submit_concurrent_race_does_not_500(auth_client, arg_conv, arg_part, fs, participant):
+    """Two requests racing the check-then-insert on Argument (double-click, or a
+    skip firing at the same time as a submit) must not surface the UNIQUE
+    constraint violation as a bare 500 — the loser should get back the winner's
+    already-committed argument, matching the existing non-racy 'existing' path."""
+    def fake_flush():
+        # Simulate a concurrent request's commit landing in the exact gap between
+        # this request's own "does it exist" check and its own insert — via a
+        # genuinely separate, already-committed connection (not this session), so
+        # it survives this request's own rollback just like a real concurrent
+        # commit would.
+        with db.engine.begin() as conn:
+            conn.execute(Argument.__table__.insert().values(
+                featured_statement_id=fs.id, proposer_pseudonym=arg_part.pseudonym,
+                body='Winner argument.', side='pro',
+            ))
+        raise IntegrityError('stmt', {}, Exception('unique'))
+    with patch('app.db.session.flush', side_effect=fake_flush):
+        resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
+            'side': 'pro', 'body': 'This request lost the race.',
+        })
+    assert resp.status_code == 302
+    args = Argument.query.filter_by(featured_statement_id=fs.id, side='pro').all()
+    assert len(args) == 1
+    assert args[0].body == 'Winner argument.'
+
+
 def test_submit_inserts_into_side_state_order(auth_client, arg_conv, arg_part, fs, participant):
     """After submission the new argument ID appears in the participant's argument_order."""
     resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/arguments', data={
@@ -262,6 +291,30 @@ def test_skip_invalid_side_rejected(auth_client, arg_conv, arg_part, fs):
 def test_skip_idempotent(auth_client, arg_conv, arg_part, fs, participant):
     auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/skip/pro')
     auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/skip/pro')
+    assert ArgumentSideState.query.filter_by(
+        participant_id=participant.id, featured_statement_id=fs.id, side='pro').count() == 1
+
+
+def test_skip_concurrent_race_does_not_500(auth_client, arg_conv, arg_part, fs, participant):
+    """Two requests racing the check-then-insert on ArgumentSideState (e.g. a
+    double-click, or skip-both racing an individual skip) must not surface the
+    UNIQUE constraint violation as a bare 500 — the loser should see the same
+    'skipped' end state the winner already committed."""
+    def fake_commit():
+        # Simulate a concurrent request's commit landing first, then this
+        # request's own commit hitting the unique (participant, fs, side) index —
+        # via a genuinely separate, already-committed connection (not this
+        # session), so it survives this request's own rollback just like a real
+        # concurrent commit would.
+        with db.engine.begin() as conn:
+            conn.execute(ArgumentSideState.__table__.insert().values(
+                participant_id=participant.id, featured_statement_id=fs.id,
+                side='pro', skipped=True, argument_order=[],
+            ))
+        raise IntegrityError('stmt', {}, Exception('unique'))
+    with patch('app.db.session.commit', side_effect=fake_commit):
+        resp = auth_client.post(f'/c/arg-conv/featured-statements/{fs.id}/skip/pro')
+    assert resp.status_code == 302
     assert ArgumentSideState.query.filter_by(
         participant_id=participant.id, featured_statement_id=fs.id, side='pro').count() == 1
 

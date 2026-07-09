@@ -3951,31 +3951,55 @@ def argument_submit(slug, fs_id):
         body=body,
         side=side,
     )
-    db.session.add(arg)
-    db.session.flush()   # get arg.id before commit
+    try:
+        db.session.add(arg)
+        db.session.flush()   # get arg.id before commit — this is where a concurrent
+                              # duplicate's UNIQUE violation actually surfaces, not commit()
 
-    # Insert new argument at a random position in this participant's display order.
-    # Create ArgumentSideState now if the participant hasn't visited the page yet.
-    state = ArgumentSideState.query.filter_by(
-        participant_id=part.participant_id,
-        featured_statement_id=fs_id,
-        side=side,
-    ).first()
-    if state is None:
-        state = ArgumentSideState(
+        # Insert new argument at a random position in this participant's display order.
+        # Create ArgumentSideState now if the participant hasn't visited the page yet.
+        state = ArgumentSideState.query.filter_by(
             participant_id=part.participant_id,
             featured_statement_id=fs_id,
             side=side,
-            argument_order=[],
-        )
-        db.session.add(state)
-        db.session.flush()
-    order = list(state.argument_order)
-    order.insert(random.randint(0, len(order)), arg.id)
-    state.argument_order = order
+        ).first()
+        if state is None:
+            state = ArgumentSideState(
+                participant_id=part.participant_id,
+                featured_statement_id=fs_id,
+                side=side,
+                argument_order=[],
+            )
+            db.session.add(state)
+            db.session.flush()
+        order = list(state.argument_order)
+        order.insert(random.randint(0, len(order)), arg.id)
+        state.argument_order = order
 
-    _touch_last_engagement(part)
-    db.session.commit()
+        _touch_last_engagement(part)
+        db.session.commit()
+    except IntegrityError:
+        # A concurrent request for the same side won the race (double-click, or a
+        # skip firing at the same time as this submit) — fall back to the same
+        # idempotent response the `existing` early-return above gives, rather than
+        # a bare 500.
+        db.session.rollback()
+        existing = Argument.query.filter_by(
+            proposer_pseudonym=part.pseudonym,
+            featured_statement_id=fs_id,
+            side=side,
+        ).first()
+        if not existing:
+            raise
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({
+                'ok': True,
+                'id': existing.id,
+                'body': existing.body,
+                'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=existing.id),
+                'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=existing.id),
+            })
+        return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({
             'ok': True,
@@ -4015,7 +4039,12 @@ def argument_skip(slug, fs_id, side):
         )
         db.session.add(state)
         _touch_last_engagement(part)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            # Concurrent skip (e.g. skip-both racing an individual skip) already
+            # created this row — that's the end state we wanted, so treat as success.
+            db.session.rollback()
     elif not state.skipped:
         state.skipped = True
         _touch_last_engagement(part)
