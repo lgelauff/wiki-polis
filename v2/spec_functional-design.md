@@ -16,9 +16,11 @@ A deliberation tool for the Wikimedia community. Participants vote on atomic sta
 
 **Participant** — logged in via Wikimedia account. Can join conversations, vote, submit statements, and read and vote on arguments.
 
-**Moderator** — a participant with elevated trust for a specific conversation. Can hide statements and arguments.
+**Moderator** — a participant with elevated trust for a *specific* conversation. Can approve or hide statements and arguments and resolve community flags. Phase controls are read-only.
 
-**Admin** — full control. Can create and manage conversations, assign roles, curate featured statements, and control phase toggles.
+**Organizer** — a conversation-scoped role above moderator. In addition to moderation, an organizer can advance the conversation through its phases via the guided "Move on" flow.
+
+**Admin (global)** — site-wide control. Can create and manage any conversation, assign roles, curate featured statements, schedule phase transitions, and use the advanced (non-linear) phase toggles. The three conversation-facing tiers surface in the UI as *Global admin*, *Organizer*, and *Moderator*.
 
 ---
 
@@ -34,6 +36,9 @@ Conversations have three status states:
 Each conversation has an access policy:
 - **Public** — anyone with a Wikimedia account can join
 - **Invite-only** — only explicitly invited Wikimedia usernames can join
+- **Demo** — a demonstration conversation; joining participants are marked as demo accounts and kept out of real analysis
+
+A public conversation may additionally carry an **eligibility gate**: at join time the app checks an external eligibility service (keyed by `eligibility_event_id`) and only admits participants who qualify, caching the result on the participation. When set, a human-readable `eligibility_label` explains the requirement to prospective participants.
 
 Participants must explicitly accept a conversation before entering it. The acceptance screen shows the intro text and asks for confirmation. This is a deliberate friction point — participants should understand what they are joining.
 
@@ -138,7 +143,7 @@ The threshold for moving from "below" to "above" is `min(new_stmt_unlock_at, tot
 
 ## Results
 
-A conversation has five independent toggles that the admin can switch on or off at any time. They can be active simultaneously or sequenced — the admin decides.
+The admin controls what participants see through the conversation's phase flags (the full sequence is in *Phase control* below). Five of these govern participation and results surfaces and can be switched independently — active simultaneously or sequenced, as the admin decides:
 
 **Toggle 1 — Submission open**
 Participants can vote on statements and submit new ones. This is the data collection phase.
@@ -163,15 +168,7 @@ The conversation page uses three distinct result surfaces across the deliberatio
 - **Preliminary results tab** (`phase_public_results` + informed-voting initialised + results available) — side-by-side comparison of initial vs. informed vote per statement, with the shift in agree rate. Shown only when public results are enabled; not shown to participants who have not yet cast any informed votes.
 - **Final report** (`/c/<slug>/report`, published when `closed_at` is set) — the definitive published findings after the organizer closes the consultation.
 
-All five toggles default to off and are designed to be enabled in order — each phase building on the previous. The default sequence is:
-
-1. Open submission — collect votes and statements
-2. Enable personal results — reward participants with a view of how their engagement lands
-3. Enable argument mapping — invite deeper engagement on the most significant statements before opening to the public
-4. Enable full public results — open the findings to the wider community and visitors
-5. Enable informed voting — after argument mapping is substantive, open a second voting round on the featured statements with arguments visible
-
-The admin can deviate from this sequence, but successive activation is the intended default flow.
+All these toggles default to off and are designed to be enabled in order, each phase building on the previous. The authoritative ordering — including the Preparation and Cleanup phases and the choice of phase route — is in *Phase control* below; the guided "Move on" flow walks the admin through it one step at a time. The admin can also deviate and set flags independently via the advanced controls.
 
 ---
 
@@ -293,29 +290,36 @@ Admins can:
 - Enable or disable the argument layer on a featured statement
 
 **Statements:**
-- Add seed statements individually, or **bulk-import** them from a CSV (a `text` column; max 20 rows / 100 KB; the whole file is rejected if over limit; duplicates are ignored by Polis).
+- Add seed statements individually, or **bulk-import** them by pasting text (one statement per line; max 20 lines / 100 KB, ≤280 chars each; the whole paste is rejected if over limit; duplicates are ignored by Polis).
 
 **Phases:** see *Phase control* below.
 
-Admins do not need a separate moderation UI for hiding individual statements or arguments — that is handled in the Polis admin interface directly.
+Statement and argument moderation happens in the wiki-polis admin UI, not the Polis interface: moderators approve or hide items from the moderation queue, participants can **flag** a statement or argument (categories: personal attack, privacy, off-topic, other) into a per-conversation review queue that moderators resolve, and a conversation's moderators can **ban** a participant from it (recorded in a public ban log).
 
 ---
 
 ## Phase control
 
-A conversation moves through a linear sequence of phases, each backed by a boolean flag on the conversation:
+A conversation moves through a linear sequence of phases, each backed by a boolean flag on the conversation. The default (7-step) route is:
 
-| Order | Phase | Flag | What it enables |
+| Order | Phase (UI label) | Flag | What it enables |
 |---|---|---|---|
 | 1 | Preparation | *(none)* | setup only; participants can't act yet |
-| 2 | Submission | `phase_submission` | participants submit statements and vote |
-| 3 | Featured selection | `phase_personal_results` | participants see personal results while the organizer curates featured statements |
-| 4 | Argument mapping | `phase_argument_mapping` | pro/con argument layer on featured statements |
-| 5 | Informed voting | `phase_informed_voting` (+ `phase6_polis_conversation_id`) | second clean vote round on featured statements; requires a one-time **initialise** |
-| — | *Cleanup window* | *(no flag — inferred state)* | organizer reviews results before publishing; participants see preliminary results; see [#163] |
-| 6 | Public results | `phase_public_results` | full aggregate map public to everyone |
+| 2 | Explore | `phase_submission` | participants submit statements and vote on them |
+| 3 | Featured selection | `phase_personal_results` | participants see their personal results while the organizer curates featured statements |
+| 4 | Arguments | `phase_argument_mapping` | pro/con argument layer on featured statements |
+| 5 | Cleanup | `phase_cleanup` | a quiet pause — participants are idle while the organizer moderates the arguments before the informed vote ([#163]) |
+| 6 | Informed vote | `phase_informed_voting` (+ `phase6_polis_conversation_id`) | second clean vote round on featured statements; requires a one-time **initialise** |
+| 7 | Report | `phase_public_results` | full aggregate results, public to everyone |
 
-The **cleanup window** is the period after informed voting ends and before the organizer publishes the final report by closing the conversation (`closed_at` set). No separate flag is needed: the state is inferred from `conv.active AND NOT conv.phase_informed_voting` (or informed voting still on but organizer is reviewing). Participants see a "Preliminary results" banner during this window; the final report at `/c/<slug>/report` is only published once `closed_at` is set. At that moment the `Phase6ResultsFilter` (excluded statements and participants) is snapshotted so the published figures are semi-immutable — see [#163] for implementation.
+**Phase routes.** The sequence above is one of three named routes, chosen once at conversation creation (`phase_route`, read-only afterward):
+- `default_7` — the full 7-step path above.
+- `no_informed_vote` — Explore → Featured selection → Arguments → Cleanup → Report (skips the informed vote).
+- `short_results` — Explore → Featured selection → Report (a short path with no argument layer).
+
+**Cleanup vs. the preliminary-results window — two distinct things.** The **Cleanup phase** above (step 5, flag `phase_cleanup`) is a *pause before* the informed vote, while the organizer moderates arguments. Separately, there is a flag-less **preliminary-results window**: the inferred state where public results are on but the conversation is not yet closed (`active AND phase_public_results AND NOT phase_informed_voting AND closed_at is None`). During it participants see a "Preliminary results" banner, and the final report at `/c/<slug>/report` is only published once `closed_at` is set. At close, the `Phase6ResultsFilter` (excluded statements and participants) is snapshotted so the published figures are semi-immutable.
+
+**Scheduled transitions.** An admin can schedule a future phase advance (`scheduled_transition_at` / `scheduled_transition_target`); a Toolforge cron job (`phase-scheduler`, running `flask process-phase-schedules`) applies it. A pending schedule can be frozen or cancelled.
 
 **Closing is irreversible** and starts the identity-reveal clock. It does not happen automatically — the organizer explicitly publishes the final report as a deliberate action.
 
