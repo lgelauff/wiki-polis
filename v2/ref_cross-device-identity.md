@@ -274,12 +274,13 @@ so it's worth being honest about what that does and does not protect.
 > enumerable `mw_user_id`) still applies **per conversation**.
 
 **But it is not perfect — this is operational protection, not cryptographic unlinkability:**
-- An operator / anyone with **DB or exported-dataset access can link a person's participation
-  across all conversations** (one stable `uid`), and on prod can **confirm which Wikimedia
-  accounts participated** (subject = `sha256(mw_user_id)`, and Wikimedia IDs are enumerable, so
-  the subject is recomputable — #96). "Which editors engaged with contentious topic X" is
-  derivable by a DB holder. The HMAC variant (#236) raises that bar but then makes
-  `TRUSTED_SUB_SECRET` a deanonymisation key that must be guarded like PII.
+- An operator / anyone with **DB or exported-dataset access can still confirm participation**
+  at the Polis layer. The subject is now **HMAC-keyed** (#236, live), so it is **not**
+  recomputable from an enumerable `mw_user_id` without the secret — which makes
+  `TRUSTED_SUB_SECRET` a deanonymisation key that must be guarded like PII. (The old plain
+  `sha256(mw_user_id)` subject was directly recomputable — #96.) Because #246 scopes the
+  subject **per conversation**, cross-conversation linkage no longer exists at the Polis
+  layer, though a DB holder who also holds the secret could recompute per-conversation subjects.
 - The pseudonymity of the *visible* layer therefore depends on a **guardrail being maintained**:
   the dataset/report export and any public results MUST exclude `uid`/`subject`/`issuer`
   (tracked on #226). If that ever slips, the cross-conversation + Wikimedia-pseudonym link

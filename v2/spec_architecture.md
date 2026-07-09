@@ -107,12 +107,13 @@ reached two ways depending on the surface (intended, decision **D-STORE**):
 Same data, two routes; the two clients return slightly different shapes — a minor
 cleanup, not a redesign.
 
-**xid is not anonymous.** `xid = sha256(mw_user_id)`; Wikimedia user IDs are enumerable,
-so the xid is brute-forceable. The store split exists to support independent opinion
+**xid is an identity bridge, not anonymity.** The xid is now `HMAC(secret, mw_user_id)`
+(versioned; forwarded conversation-scoped), which removed the brute-forceability of the
+old plain `sha256(mw_user_id)`. The store split exists to support independent opinion
 formation (anti-herding) during collection, **not** to provide identity protection.
-Cluster positions become public when the admin enables full public results. *(pending —
-[#96](https://github.com/lgelauff/wiki-polis/issues/96): strengthen or delete the xid at
-anonymisation.)*
+Cluster positions become public when the admin enables full public results. *(#96: the
+salt/HMAC half shipped; rotating/deleting the xid mapping at anonymisation is still open —
+see [ADR 0002](adr/0002-auth-proxy-and-xid.md).)*
 
 ---
 
