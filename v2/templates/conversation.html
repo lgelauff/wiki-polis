@@ -1020,7 +1020,7 @@
             {% if participation %}
             <td class="p6-col-mine">
               {% if s.my_p6_label %}
-              <span class="p6-my-vote p6-my-vote--{{ s.my_p6_label|lower }}">{{ msg('conv-vote-' ~ s.my_p6_label|lower) }}</span>
+              <span class="p6-my-vote p6-my-vote--{{ s.my_p6_label|lower }}">{{ msg('conv-p6-mine-' ~ s.my_p6_label|lower) }}</span>
               {% else %}<span class="muted">—</span>{% endif %}
             </td>
             {% endif %}

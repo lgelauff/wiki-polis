@@ -803,5 +803,8 @@
 	"flash-last-featured-remove": "Error: cannot remove the last featured statement during argument mapping.",
 	"flash-arg-already-review": "Info: the argument is already flagged for review.",
 	"flash-flag-thanks": "Confirmation after flagging content for moderation.",
-	"flash-login-failed": "Error: OAuth login failed."
+	"flash-login-failed": "Error: OAuth login failed.",
+	"conv-p6-mine-agreed": "The current user's own informed vote on a statement: agreed (p6-results 'Yours' column).",
+	"conv-p6-mine-disagreed": "The current user's own informed vote on a statement: disagreed.",
+	"conv-p6-mine-passed": "The current user's own informed vote on a statement: passed."
 }

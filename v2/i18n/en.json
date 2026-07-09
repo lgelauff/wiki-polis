@@ -804,5 +804,8 @@
 	"flash-last-featured-remove": "Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first.",
 	"flash-arg-already-review": "This argument is already under moderator review.",
 	"flash-flag-thanks": "Thanks - this has been sent to the moderator for review.",
-	"flash-login-failed": "Login failed — please try again."
+	"flash-login-failed": "Login failed — please try again.",
+	"conv-p6-mine-agreed": "Agreed",
+	"conv-p6-mine-disagreed": "Disagreed",
+	"conv-p6-mine-passed": "Passed"
 }
