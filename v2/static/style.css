@@ -356,6 +356,23 @@ header {
   font-size: 12px;
 }
 
+/* Post-submit confirmation — same popover box as the form it replaces, so the
+   card layout never shifts and voting/arguments stay fully usable underneath. */
+.content-flag-thanks {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  top: 1.6rem;
+  width: 220px;
+  padding: .65rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  box-shadow: 0 12px 28px -18px rgba(0, 0, 0, .35);
+  font-size: 12px;
+  color: var(--body);
+}
+
 /* ── Main container ── */
 
 .container {

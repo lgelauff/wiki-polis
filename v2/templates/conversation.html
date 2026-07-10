@@ -2540,4 +2540,42 @@
 </script>
 {% endif %}
 
+{# Content-flag submission — async everywhere it appears (vote card, featured
+   statement, pro/con arguments), so reporting a concern never reloads the page
+   or interrupts an in-progress vote/argument flow. #}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  document.querySelectorAll('.content-flag').forEach(function (details) {
+    var form = details.querySelector('form');
+    if (!form) return;
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var btn  = form.querySelector('button[type=submit]');
+      var csrf = form.querySelector('[name=csrf_token]').value;
+      if (btn) btn.disabled = true;
+      fetch(form.action, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'fetch', 'X-CSRFToken': csrf },
+        body: new FormData(form),
+        credentials: 'same-origin',
+      }).then(function (r) {
+        if (!r.ok) { if (btn) btn.disabled = false; return; }
+        form.hidden = true;
+        var thanks = details.querySelector('.content-flag-thanks');
+        if (!thanks) {
+          thanks = document.createElement('p');
+          thanks.className = 'content-flag-thanks';
+          thanks.textContent = "Thanks for reporting — we'll take a look.";
+          form.insertAdjacentElement('afterend', thanks);
+        }
+        thanks.hidden = false;
+        setTimeout(function () { details.open = false; }, 2200);
+      }).catch(function () {
+        if (btn) btn.disabled = false;
+      });
+    });
+  });
+}());
+</script>
+
 {% endblock %}

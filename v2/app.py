@@ -4140,6 +4140,8 @@ def argument_flag(slug, arg_id):
     FeaturedStatement.query.filter_by(
         id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
     if arg.hidden:
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({'ok': True, 'already_reviewed': True})
         flash('This argument is already under moderator review.', 'info')
         return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
     category, detail = _parse_content_flag_form()
@@ -4162,6 +4164,8 @@ def argument_flag(slug, arg_id):
         db.session.commit()
         record_audit('content_flag.create', conv_id=conv.id, target_type='argument',
                      target_id=arg.id, category=category)
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True})
     flash('Thanks - this has been sent to the moderator for review.', 'success')
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
 
@@ -4213,6 +4217,8 @@ def statement_flag(slug, tid):
         db.session.commit()
         record_audit('content_flag.create', conv_id=conv.id, target_type='statement',
                      target_id=tid, category=category)
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True})
     flash('Thanks - this has been sent to the moderator for review.', 'success')
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-vote')
 
