@@ -4161,6 +4161,8 @@ def argument_flag(slug, arg_id):
     FeaturedStatement.query.filter_by(
         id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
     if arg.hidden:
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({'ok': True, 'already_reviewed': True})
         flash('This argument is already under moderator review.', 'info')
         return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
     category, detail = _parse_content_flag_form()
@@ -4183,6 +4185,8 @@ def argument_flag(slug, arg_id):
         db.session.commit()
         record_audit('content_flag.create', conv_id=conv.id, target_type='argument',
                      target_id=arg.id, category=category)
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True})
     flash('Thanks - this has been sent to the moderator for review.', 'success')
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
 
@@ -4209,8 +4213,10 @@ def statement_flag(slug, tid):
         matching = [s for s in all_statements if s.get('tid') == tid]
         if not matching:
             abort(404)
-        if matching[0].get('is_seed'):
-            abort(400)
+        # Seed statements (organizer-authored) are just as flaggable as any other —
+        # a moderator's own wording can still need review. Previously excluded here
+        # with no test coverage and no documented rationale; caused every flag on a
+        # featured (often seed-derived) statement to 400.
 
     category, detail = _parse_content_flag_form()
     if not _existing_open_flag(
@@ -4232,6 +4238,8 @@ def statement_flag(slug, tid):
         db.session.commit()
         record_audit('content_flag.create', conv_id=conv.id, target_type='statement',
                      target_id=tid, category=category)
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True})
     flash('Thanks - this has been sent to the moderator for review.', 'success')
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-vote')
 
