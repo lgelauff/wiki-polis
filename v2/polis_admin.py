@@ -169,6 +169,34 @@ _PERSONAL_VOTES_SQL = """
     WHERE v.zid = z.zid AND v.pid = %s
 """
 
+# Issuer namespace wiki-polis asserts to Particiapi's trusted-sub identity (must match
+# the literal used by Particiapi's get_or_create_uid on the X-Particiapi-Sub path).
+PARTICIAPI_ISSUER = 'wiki-polis'
+
+# Personal votes resolved by trusted-sub SUBJECT rather than a pre-known pid. This is how
+# wiki-polis identity actually maps to a Polis uid: the proxy/phase6 vote assert
+# X-Particiapi-Sub = subject, which Particiapi records in particiapi_users(subject → uid).
+# (The legacy `xids` table is NOT populated by trusted-sub, so it can't be used here.)
+# Resolves subject → uid → this conversation's pid, then returns that pid's latest votes.
+# Raw vote sign: -1 = agree, +1 = disagree, 0 = pass (Polis convention).
+_PERSONAL_VOTES_BY_SUBJECT_SQL = """
+    WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s),
+    u AS (
+        SELECT pu.uid
+        FROM particiapi_users pu
+        JOIN particiapi_issuers i ON i.issid = pu.issid
+        WHERE i.issuer = %s AND pu.subject = %s
+    ),
+    p AS (
+        SELECT part.pid
+        FROM participants part, z, u
+        WHERE part.zid = z.zid AND part.uid = u.uid
+    )
+    SELECT v.tid, v.vote
+    FROM votes_latest_unique v, z, p
+    WHERE v.zid = z.zid AND v.pid = p.pid
+"""
+
 _POLIS_STATS_SQL = """
     WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s),
     vd AS (
@@ -739,6 +767,34 @@ class PolisServerClient:
             _PERSONAL_VOTES_SQL,
             (zinvite, polis_pid),
             'get_personal_votes',
+        )
+        if rows is None:
+            return None
+        return {int(r[0]): int(r[1]) for r in rows}
+
+    def get_personal_votes_by_subject(
+        self,
+        zinvite: str,
+        subject: str,
+        issuer: str = PARTICIAPI_ISSUER,
+    ) -> dict[int, int] | None:
+        """Return the participant's own votes in a conversation keyed by tid, resolving
+        their Polis pid from the trusted-sub identity map (particiapi_users) rather than a
+        pre-known pid.
+
+        subject: the X-Particiapi-Sub value wiki-polis binds for this participant in this
+                 conversation (see app._conversation_subject) — Particiapi maps it to a
+                 stable uid, which resolves to the conversation's pid.
+
+        Returns dict[tid → vote] (raw Polis sign: -1 agree, +1 disagree, 0 pass), an empty
+        dict if the participant has no votes/identity here, or None if Postgres is down.
+        """
+        if not self._db_url or not _SAFE_ZINVITE.match(zinvite or '') or not subject:
+            return None
+        rows = self._pg_query(
+            _PERSONAL_VOTES_BY_SUBJECT_SQL,
+            (zinvite, issuer, subject),
+            'get_personal_votes_by_subject',
         )
         if rows is None:
             return None

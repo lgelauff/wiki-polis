@@ -3851,6 +3851,19 @@ def conversation(slug):
         ordered_ids = set(participation.phase6_card_order)
         ordered += [fs for fs in p6_stmts if fs.id not in ordered_ids]
 
+        # Restore the participant's prior Phase 6 votes so a reload shows their choices
+        # (#votes-persist). Read from Polis — the single source of truth — resolving their
+        # pid via the trusted-sub identity they voted under (particiapi_users). Keyed by
+        # phase6 tid; converted from Polis sign (-1=agree) back to the button convention
+        # (1=agree) so it matches data-vote in the template. Empty/None on no votes or PG down.
+        my_p6_votes: dict[int, int] = {}
+        _xid = session.get('xid')
+        if _xid and current_app.config.get('PARTICIAPI_SUB_SECRET'):
+            _raw = _polis_server_client().get_personal_votes_by_subject(
+                conv.phase6_polis_conversation_id, _conversation_subject(_xid, conv))
+            if _raw:
+                my_p6_votes = {tid: -vote for tid, vote in _raw.items()}
+
         for fs in ordered:
             text = fs.statement_text or ''
             if not text:
@@ -3868,7 +3881,16 @@ def conversation(slug):
                 'pro': pro,
                 'con': con,
                 'phase6_stmt_id': fs.phase6_polis_statement_id,
+                # Prior vote in button convention (1=agree, 0=pass, -1=disagree), or None
+                # if not yet voted — drives the server-rendered selected state on reload.
+                'my_vote': my_p6_votes.get(fs.phase6_polis_statement_id),
             })
+
+    # Whether every card already has a vote — so a reload after completing the round
+    # re-shows the "You've completed informed voting" screen (client sets this on the
+    # final vote; this preserves it across reload).
+    phase6_all_voted = bool(phase6_data) and all(
+        d['my_vote'] is not None for d in phase6_data)
 
     # Phase 6 results — built when the results tab is visible or Phase 6 is active.
     # Surface A (preliminary) is shown inside the results tab while the round is live.
@@ -3893,6 +3915,7 @@ def conversation(slug):
                            new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
                            new_stmt_ids=participation.new_stmt_ids if participation else [],
                            phase6_data=phase6_data,
+                           phase6_all_voted=phase6_all_voted,
                            phase6_results=phase6_results,
                            output_items=_output_items(conv),
                            moderation_log_count=moderation_log_count)
@@ -4362,16 +4385,46 @@ def phase6_vote(slug):
     tid           = fs.phase6_polis_statement_id
 
     # Ensure a stable Polis session and CSRF token before voting.
-    # Mirrors the exact pattern used in conversation_statement_new.
+    #
+    # Bind the participant's stable per-conversation identity to Particiapi the same way
+    # the conversation-scoped proxy does (#246): assert X-Particiapi-Sub on the session
+    # bootstrap so the vote lands under the participant's real Polis uid rather than a
+    # fresh anonymous one. Without this a Phase 6 vote fragments the tally (a new uid per
+    # session) and can never be read back to restore the participant's choice on reload.
+    # The subject is keyed by conv.id, so it matches the participant's Phase-2 uid — their
+    # initial and informed votes share one uid (see _conversation_subject).
     pa_cookie = request.cookies.get('pa_session')
     base = current_app.config['PARTICIAPI_BASE']
-    forwarded = {'session': pa_cookie} if pa_cookie else {}
+
+    _xid        = session.get('xid')
+    _sub_secret = current_app.config.get('PARTICIAPI_SUB_SECRET')
+    _sub        = _conversation_subject(_xid, conv) if _xid else None
+    _bind       = bool(_sub) and bool(_sub_secret)
+    if _bind and not _is_secure_pa_transport(base):
+        current_app.logger.warning(
+            'PARTICIAPI_SUB_SECRET is being sent over a cleartext non-loopback transport '
+            '(%s); encrypt the Toolforge<->VPS hop (WireGuard/TLS)', base)
+
+    sess_headers: dict = {}
+    sess_params:  dict = {}
+    # On a bind, deliberately do NOT forward an existing (possibly anonymous) session
+    # cookie — it would make Particiapi skip the bind and pin the user to a throwaway uid.
+    forwarded: dict = {}
+    if _bind:
+        sess_headers['X-Particiapi-Sub']        = _sub
+        sess_headers['X-Particiapi-Sub-Secret'] = _sub_secret
+    elif pa_cookie:
+        forwarded['session'] = pa_cookie
+    else:
+        sess_params['create'] = 'true'
+
     new_pa_cookie = None
     try:
         sess_resp = requests.post(
             f'{base}/api/session',
             cookies=forwarded,
-            params={'create': 'true'},
+            params=sess_params,
+            headers=sess_headers,
             timeout=5,
         )
         if not sess_resp.ok:
@@ -4386,11 +4439,17 @@ def phase6_vote(slug):
 
     vote_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
 
+    # Sign convention: the Phase 6 buttons use the app convention (1=agree, -1=disagree,
+    # 0=pass), but Polis stores the opposite sign (-1=agree, +1=disagree, 0=pass) — the
+    # same raw sign the Phase-2 web component writes and that the vote-count SQL assumes.
+    # Negate so the informed-vote tally is consistent with Phase 2 (pass is unchanged).
+    polis_value = -vote
+
     # Particiapi vote endpoint: PUT /api/conversations/{id}/votes/{tid} with {value: N}.
     try:
         upstream = requests.put(
             f'{base}/api/conversations/{polis_conv_id}/votes/{tid}',
-            json={'value': vote},
+            json={'value': polis_value},
             cookies=vote_cookies,
             headers={'X-CSRF-Token': csrf_token},
             timeout=10,
@@ -4403,8 +4462,10 @@ def phase6_vote(slug):
     if upstream.ok:
         _touch_last_engagement(participation, commit=True)
     if new_pa_cookie:
-        resp.set_cookie('pa_session', new_pa_cookie, httponly=True,
-                        samesite='Lax', secure=not current_app.debug)
+        # Path-scope to this conversation's Phase 6 routes so the session is reused across
+        # informed-vote calls and never collides with the proxy's own pa_session cookie.
+        resp.set_cookie('pa_session', new_pa_cookie, path=f'/c/{conv.slug}/phase6',
+                        httponly=True, samesite='Lax', secure=not current_app.debug)
     return resp
 
 

@@ -882,7 +882,11 @@
     {% endif %}
 
     {% for item in phase6_data %}
-    <div class="p6-card{% if not loop.first %} p6-card--hidden{% endif %}" data-fs-id="{{ item.fs.id }}">
+    {# Prior vote (button convention: 1=agree, 0=pass, -1=disagree) restored from Polis so
+       a reload shows the participant's earlier choice. item.my_vote is None if not voted. #}
+    {% set v_label = {1: 'Agreed', 0: 'Passed', -1: 'Disagreed'}.get(item.my_vote) %}
+    {% set v_cls   = {1: 'agree',  0: 'pass',   -1: 'disagree'}.get(item.my_vote) %}
+    <div class="p6-card{% if not loop.first %} p6-card--hidden{% endif %}{% if item.my_vote is not none %} p6-card--voted{% endif %}" data-fs-id="{{ item.fs.id }}">
       <div tabindex="-1" data-focus-anchor class="sr-only"></div>
 
       {# Card header: progress + post-vote badge #}
@@ -891,7 +895,7 @@
           <span class="stmt-dot"></span>
           INFORMED VOTE &middot; {{ loop.index }} of {{ phase6_data | length }}
         </span>
-        <span class="p6-voted-badge" role="alert" hidden></span>
+        <span class="p6-voted-badge{% if v_cls %} p6-voted-badge--{{ v_cls }}{% endif %}" role="alert"{% if item.my_vote is none %} hidden{% endif %}>{% if v_label %}<span aria-hidden="true">&check;</span> {{ v_label }}{% endif %}</span>
       </div>
 
       <div class="p6-card-inner">
@@ -902,13 +906,13 @@
 
           {% if item.phase6_stmt_id is not none %}
           <div class="vote-choice-row p6-vote-row">
-            <button class="vote-choice btn-p6-vote" data-vote="1">
+            <button class="vote-choice btn-p6-vote{% if item.my_vote == 1 %} p6-voted{% endif %}" data-vote="1">
               <span class="vote-dot vote-dot--agree"></span>Agree
             </button>
-            <button class="vote-choice btn-p6-vote" data-vote="0">
+            <button class="vote-choice btn-p6-vote{% if item.my_vote == 0 %} p6-voted{% endif %}" data-vote="0">
               <span class="vote-dot vote-dot--pass"></span>Pass
             </button>
-            <button class="vote-choice btn-p6-vote" data-vote="-1">
+            <button class="vote-choice btn-p6-vote{% if item.my_vote == -1 %} p6-voted{% endif %}" data-vote="-1">
               <span class="vote-dot vote-dot--disagree"></span>Disagree
             </button>
           </div>
@@ -969,8 +973,10 @@
     </div>{# end p6-card #}
     {% endfor %}
 
-  {# Done screen — shown when all cards are voted or skipped #}
-  <div class="p6-done" hidden>
+  {# Done screen — shown when all cards are voted or skipped. Server-rendered visible when
+     the participant already completed the round, so it survives a reload; otherwise the
+     client reveals it after the final vote. #}
+  <div class="p6-done"{% if not phase6_all_voted %} hidden{% endif %}>
     <h2 class="p6-done-heading">You've completed informed voting.</h2>
     {% if conversation.phase_public_results and phase6_results and phase6_results.statements %}
     <p class="p6-done-text">See the <a href="#" onclick="document.querySelector('[data-tab=tab-p6-results]').click();return false;">Preliminary results</a> tab for the full comparison.</p>
