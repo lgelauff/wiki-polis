@@ -9,9 +9,17 @@ services:
       - "${WIKI_POLIS_DIR:?set WIKI_POLIS_DIR to the wiki-polis checkout}/v2/tmp/postgres-backups:/backups"
 
   particiapi:
+    # Upstream :latest lacks trusted-sub identity binding; use the feature build so the
+    # proxy's X-Particiapi-Sub headers are honoured (matches the pinned particiapi submodule).
+    image: "${PARTICIAPI_IMAGE:-ghcr.io/lgelauff/particiapi:trusted-sub}"
     environment:
       PARTICIAPI_AUTHENTICATION_DISABLED: "True"
       PARTICIAPI_CORS_ORIGINS: "http://127.0.0.1:${FLASK_HOST_PORT:-5001}"
+      # Enables trusted-sub identity binding locally so the wiki-polis proxy's
+      # X-Particiapi-Sub / X-Particiapi-Sub-Secret headers are honoured (maps
+      # subject → uid in particiapi_users → stable per-participant uid). Must
+      # match the Flask side's PARTICIAPI_SUB_SECRET. Dev-only value; export to override.
+      PARTICIAPI_TRUSTED_SUB_SECRET: "${PARTICIAPI_TRUSTED_SUB_SECRET:-wiki-polis-local-dev}"
     ports: !override
       - "127.0.0.1:${PARTICIAPI_HOST_PORT:-8002}:5000"
 
