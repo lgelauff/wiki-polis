@@ -1,2 +1,5 @@
 # Internal Claude planning/working files — never commit
 .claude/
+
+# Run-log written by ops/migrate_phase6_vote_signs.py (per-machine runtime state)
+ops/phase6_sign_fix.applied.log
