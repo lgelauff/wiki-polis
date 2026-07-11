@@ -504,7 +504,7 @@ Run inside the webservice shell, where pod envvars are present (here you do **no
 
 ### Migration history
 
-Ordered chain (oldest → newest); the current head is `f667548e9519`. Run `flask --app app db upgrade` to apply everything up to the head — you do not apply these individually.
+Ordered chain (oldest → newest); the current head is `d5e6f7a8b9c0`. Run `flask --app app db upgrade` to apply everything up to the head — you do not apply these individually.
 
 | Order | Revision | Description |
 |---|---|---|
@@ -513,9 +513,26 @@ Ordered chain (oldest → newest); the current head is `f667548e9519`. Run `flas
 | 3 | `99f8b42af697` | Adds `arguments.hidden`. |
 | 4 | `a3f1c8e2d905` | Adds `participations.new_stmt_ids`. |
 | 5 | `3e86727dbcee` | Phase 6 — adds `phase_informed_voting`, `phase6_polis_conversation_id` to conversations; `phase6_polis_statement_id` to featured_statements; UNIQUE constraints and index. |
-| 6 | `f667548e9519` | Adds `participations.phase6_card_order` (JSON, nullable). **Current head.** |
+| 6 | `f667548e9519` | Adds `participations.phase6_card_order` (JSON, nullable). |
+| 7 | `c1a2b3d4e5f6` | Adds `conversations.phase_cleanup` (#163). |
+| 8 | `d2e3f4a5b6c7` | Adds `audit_events` table, indexed on `(conversation_id, ts)` and `(actor_participant_id, ts)` (#135). |
+| 9 | `e3f4a5b6c7d8` | Adds `statement_provenance` and `statement_similarity_scores` tables (#143). |
+| 10 | `4b6c7d8e9f01` | Adds `participants.xid_key_version` (#96). |
+| 11 | `5c7d8e9f0123` | Adds `arguments.proposer_pseudonym` and `arguments.proposer_id` (nullable — `NULL` = seeded), each unique-indexed per (featured_statement, side) (#113). |
+| 12 | `6d8e9f012345` | Adds `conversations.eligibility_event_id`/`eligibility_label`; `participations.eligibility_status`/`eligibility_checked_at`/`eligibility_detail` (#146). |
+| 13 | `7e9f01234567` | Adds `participants.is_demo` (#223). |
+| 14 | `a4b5c6d7e8f9` | Adds `conversations.recommended_quantities` (JSON, nullable) (#160). |
+| 15 | `b5c6d7e8f9a0` | Adds `conversations.phase_route` (#173). |
+| 16 | `c6d7e8f9a0b1` | Adds `conversations.scheduled_transition_at`/`scheduled_transition_target`/`scheduled_transition_frozen` (#164). |
+| 17 | `d7e8f9a0b1c2` | Adds `conversations.report_filter_snapshot` (JSON, nullable) (#186). |
+| 18 | `a4b5c6d7e8fa` | Expands `admin_roles.role` enum: `moderator` → `moderator`, `organizer` (#154). |
+| 19 | `b4c5d6e7f8a9` | Adds `participations.last_engagement` (#42). |
+| 20 | `c4d5e6f7a8b9` | Adds `conversation_bans` table (#60). |
+| 21 | `d5e6f7a8b9c0` | Adds `content_flags` table (#138). **Current head.** |
 
-Verify the live head with `flask --app app db current`; confirm it matches `f667548e9519` after deploying. When new migrations land, append them here.
+Verify the live head with `flask --app app db current`; confirm it matches `d5e6f7a8b9c0` after deploying. When new migrations land, append them here.
+
+> **If `db upgrade`/`db stamp` ever fails with `Can't locate revision identified by '...'`:** the live `alembic_version` table is stamped at a revision that no longer exists in this chain — almost certainly a squashed/renamed migration from a branch that was reconciled differently than what actually got deployed (this happened once, 2026-07-10, after a long-overdue big-bang deploy — see the `f4a5b6c7d8e9` incident in git/PR history for the full story). Diagnose with `flask --app app db history` and compare against the table above to find where the live stamp actually sits in the *real* chain, then re-point it with `flask --app app db stamp --purge <correct-revision>` (`--purge` is required — a plain `stamp` still tries to resolve the invalid current value and fails the same way) before running `db upgrade` again. Back up any table a skipped/renamed migration touches first.
 
 ### Check whether a migration is needed
 
