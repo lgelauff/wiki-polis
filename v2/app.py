@@ -1231,10 +1231,20 @@ def _current_participant() -> 'Participant | None':
     if 'participant' in g:
         return g.participant
     xid = session.get('xid')
-    if xid:
-        g.participant = Participant.query.filter_by(xid=xid).first()
-        return g.participant
     username = session.get('username')
+    if xid:
+        participant = Participant.query.filter_by(xid=xid).first()
+        if participant is None and username:
+            # A live session can outlast the xid it was issued with: re-deriving a
+            # participant's xid (v1 sha256 → v2 HMAC, or a key rotation) rewrites the
+            # stored value while older sessions still carry the previous one. Resolve
+            # by the authenticated username instead and re-sync the session, so a
+            # stale session heals itself rather than resolving to nobody.
+            participant = Participant.query.filter_by(mw_username=username).first()
+            if participant is not None:
+                session['xid'] = participant.xid
+        g.participant = participant
+        return g.participant
     if not username:
         g.participant = None
         return None

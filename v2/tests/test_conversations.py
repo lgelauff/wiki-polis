@@ -103,6 +103,37 @@ def test_accept_post_creates_participation(auth_client, conv, participant):
     assert p.pseudonym == 'silly-goat'
 
 
+def test_accept_post_heals_stale_session_xid(auth_client, conv, participant):
+    """A session carrying a superseded xid still resolves to its participant.
+
+    Re-deriving a participant's xid (v1 sha256 → v2 HMAC) rewrites the stored value
+    while older sessions keep the previous one. Resolving by xid alone then found
+    nobody and aborted 404, so Join failed for anyone holding a pre-rotation session.
+    """
+    with auth_client.session_transaction() as sess:
+        sess['xid'] = 'stale' * 12          # matches no participants row
+
+    resp = auth_client.post('/accept/test-conv', data={'pseudonym': 'silly-goat'})
+
+    assert resp.status_code == 302
+    assert Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=conv.id).first() is not None
+    with auth_client.session_transaction() as sess:
+        assert sess['xid'] == participant.xid   # session healed to the current xid
+
+
+def test_accept_post_stale_xid_without_username_still_rejected(auth_client, conv):
+    """The fallback keys off the authenticated username — without one, no resolution."""
+    with auth_client.session_transaction() as sess:
+        sess['xid'] = 'stale' * 12
+        del sess['username']
+
+    resp = auth_client.post('/accept/test-conv', data={'pseudonym': 'silly-goat'})
+
+    assert resp.status_code in (302, 404)   # redirected to login, or unresolved
+    assert Participation.query.count() == 0
+
+
 def test_accept_post_invalid_pseudonym_rejected(auth_client, conv):
     resp = auth_client.post('/accept/test-conv', data={'pseudonym': 'bad name!'})
     assert resp.status_code == 400
