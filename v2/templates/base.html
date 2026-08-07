@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}wiki-polis{% endblock %}</title>
+  <title>{% block title %}ProtoWiki{% endblock %}</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="{{ url_for('static', filename='fonts/fonts.css') }}?v={{ git_version }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ git_version }}">
@@ -22,7 +22,7 @@
             <ellipse cx="12" cy="12" rx="9" ry="3.5"/>
             <ellipse cx="12" cy="12" rx="3.5" ry="9"/>
           </svg>
-          <span class="header-title">wiki-polis</span>
+          <span class="header-title">ProtoWiki</span>
         </a>
         {% if request.blueprint == 'admin' %}
           <span class="header-mode-badge">Admin</span>
@@ -86,7 +86,7 @@
       el.appendChild(close);
       close.addEventListener('click', function () { dismiss(el); });
       container.appendChild(el);
-      console.error('[wiki-polis] ' + category + ': ' + message);
+      console.error('[ProtoWiki] ' + category + ': ' + message);
       // 'sticky' category \u2014 stays until user dismisses; no auto-timeout.
       if (category === 'sticky') { el._timer = null; return; }
       var t = setTimeout(function () { dismiss(el); }, DURATIONS[category] || 6000);
