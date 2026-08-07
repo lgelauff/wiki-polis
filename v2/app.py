@@ -1305,19 +1305,30 @@ def _ensure_demo_participation(conversation) -> 'Participation':
             db.session.commit()
         return part
 
-    # A demo session may move freely between demo conversations (#293): if it is
-    # bound to a different demo, rebind to this one rather than forbidding it. The
-    # conversation-scoped proxy (#246) stays safe because this rebinds the session
-    # to `conversation` before any proxied call for it is made.
+    # A demo session may move freely between demo conversations (#293): reuse the
+    # SAME synthetic guest and rebind the session to this demo rather than forbidding
+    # it or minting a fresh guest per hop. The conversation-scoped proxy (#246) stays
+    # safe because this rebinds `demo_conversation_id` to `conversation` before any
+    # proxied call for it is made.
     if participant and participant.is_demo:
         part = Participation.query.filter_by(
             participant_id=participant.id,
             conversation_id=conversation.id,
         ).first()
-        if part:
-            session.pop('username', None)
-            return part
+        if part is None:
+            part = Participation(
+                participant_id=participant.id,
+                conversation_id=conversation.id,
+                pseudonym=_demo_pseudonym(),
+                eligibility_status='not_required',
+            )
+            db.session.add(part)
+            db.session.commit()
+        session['demo_conversation_id'] = conversation.id   # rebind; same guest xid
+        session.pop('username', None)
+        return part
 
+    # Brand-new visitor with no identity yet: mint the synthetic guest.
     for _ in range(20):
         token = secrets.token_hex(4)
         participant = Participant(
@@ -1557,6 +1568,10 @@ def _abort_if_banned(conversation, participant: 'Participant | None') -> None:
 
 
 def _check_conversation_access(conversation, participant) -> None:
+    # NOTE (#293): for a demo session this expects the session to be ALREADY bound
+    # to `conversation` — the conversation view calls _ensure_demo_participation
+    # (which rebinds) before this. Don't reorder those calls, or demo roaming
+    # (visiting a demo the session isn't yet bound to) would 403 here.
     if _is_demo_session():
         if conversation.access_policy == 'demo' and _demo_bound_conversation_id() == conversation.id:
             return
@@ -5231,6 +5246,12 @@ def _register_routes(app: Flask) -> None:
                     mod_ids = {r.conversation_id for r in roles}
                     moderating = Conversation.query.filter(
                         Conversation.id.in_(mod_ids)).all()
+
+        # The real lane never lists demo conversations (#293) — keep demos out of
+        # "You moderate" too (they surface a global admin's demos otherwise). Admins
+        # reach demo moderation via the admin panel or the demo lane. mod_ids stays
+        # full so Browse-exclusion below is unaffected.
+        moderating = [c for c in moderating if c.access_policy != 'demo']
 
         # Exclude moderated conversations from Browse — they already appear in "You moderate"
         available = [c for c in available if c.id not in mod_ids]

@@ -362,6 +362,54 @@ def test_admin_never_sees_space_warning(admin_client, admin_participant, conv):
     assert 'space-warn--real' not in resp.data.decode()
 
 
+def test_consultations_moderating_excludes_demo_for_admin(admin_client, app):
+    # #293: the real lane's "You moderate" must not list demo conversations, even
+    # for a global admin (who moderates everything).
+    demo = Conversation(slug='demo-mod', polis_id='demomod001', title='Demo Mod',
+                        active=True, access_policy='demo')
+    real = Conversation(slug='real-mod', polis_id='realmod001', title='Real Mod',
+                        active=True, access_policy='public')
+    db.session.add_all([demo, real])
+    db.session.commit()
+    html = admin_client.get('/consultations').data.decode()
+    assert 'Real Mod' in html
+    assert 'Demo Mod' not in html
+
+
+def test_demo_roaming_reuses_one_synthetic_guest(app):
+    # #293: roaming across demos reuses the SAME synthetic guest (no orphan rows).
+    # Uses a fresh request context per visit so `g` (which caches the current
+    # participant) is fresh — as it is per-request in production. The shared-client
+    # path can't observe this: conftest holds one app-context for the whole test,
+    # so g leaks between client.get() calls and _current_participant returns stale None.
+    from flask import session, g
+    from app import _ensure_demo_participation
+
+    d1 = Conversation(slug='roam-a', polis_id='roampolisa', title='Roam A',
+                      active=True, access_policy='demo')
+    d2 = Conversation(slug='roam-b', polis_id='roampolisb', title='Roam B',
+                      active=True, access_policy='demo')
+    db.session.add_all([d1, d2])
+    db.session.commit()
+
+    with app.test_request_context('/c/roam-a'):
+        g.pop('participant', None)            # fresh per-request identity (as in prod)
+        p1 = _ensure_demo_participation(d1)   # brand-new guest
+        guest_id = p1.participant_id
+        xid = session['xid']
+
+    with app.test_request_context('/c/roam-b'):
+        g.pop('participant', None)            # fresh per-request identity (as in prod)
+        session['xid'] = xid                  # same guest arrives at another demo
+        session['demo_conversation_id'] = d1.id
+        p2 = _ensure_demo_participation(d2)
+        assert p2.participant_id == guest_id  # reused, not a new guest
+
+    assert Participant.query.filter_by(is_demo=True).count() == 1
+    guest = Participant.query.filter_by(is_demo=True).one()
+    assert Participation.query.filter_by(participant_id=guest.id).count() == 2
+
+
 def test_logged_in_user_stays_logged_in_in_demo(auth_client, participant, app):
     # #293: a logged-in user entering a demo participates as themselves and is
     # NOT logged out; a real (non-synthetic) participation is created.
