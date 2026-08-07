@@ -362,6 +362,41 @@ def test_admin_never_sees_space_warning(admin_client, admin_participant, conv):
     assert 'space-warn--real' not in resp.data.decode()
 
 
+def test_logged_in_user_stays_logged_in_in_demo(auth_client, participant, app):
+    # #293: a logged-in user entering a demo participates as themselves and is
+    # NOT logged out; a real (non-synthetic) participation is created.
+    demo = Conversation(slug='demo-logged-in', polis_id='demologged', title='Demo LoggedIn',
+                        active=True, access_policy='demo', phase_submission=True)
+    db.session.add(demo)
+    db.session.commit()
+
+    resp = auth_client.get('/c/demo-logged-in')
+    assert resp.status_code == 200
+
+    with auth_client.session_transaction() as sess:
+        assert sess.get('username') == 'testuser'         # still logged in
+        assert 'demo_conversation_id' not in sess         # no synthetic demo binding
+
+    part = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=demo.id).one()
+    assert part.participant.is_demo is False               # their real identity
+
+
+def test_logged_out_visitor_gets_synthetic_demo_guest(client, app):
+    demo = Conversation(slug='demo-anon', polis_id='demoanon01', title='Demo Anon',
+                        active=True, access_policy='demo', phase_submission=True)
+    db.session.add(demo)
+    db.session.commit()
+
+    resp = client.get('/c/demo-anon')
+    assert resp.status_code == 200
+    part = Participation.query.filter_by(conversation_id=demo.id).one()
+    assert part.participant.is_demo is True
+    with client.session_transaction() as sess:
+        assert sess['demo_conversation_id'] == demo.id
+        assert 'username' not in sess
+
+
 def test_demo_session_can_roam_between_demos(client, app):
     # #293: a demo session is no longer locked to one demo — it may move freely
     # between demo conversations (rebinding to each).

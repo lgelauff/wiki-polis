@@ -1277,15 +1277,38 @@ def _demo_pseudonym() -> str:
 
 
 def _ensure_demo_participation(conversation) -> 'Participation':
-    """Create or return a session-scoped synthetic participant for one demo conversation."""
+    """Return a participation for a demo conversation.
+
+    A demo is a genuine demonstration conversation that records as usual (#293),
+    so a **logged-in** user participates as themselves and stays logged in — only
+    a **logged-out** visitor gets an anonymous, session-scoped synthetic guest.
+    """
     if conversation.access_policy != 'demo':
         abort(404)
+
+    # Logged-in real user: don't log them out — participate under their real
+    # identity, auto-joining (no accept/pseudonym gate) so "try it" stays frictionless.
+    participant = _current_participant()
+    if 'username' in session and participant and not participant.is_demo:
+        part = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conversation.id,
+        ).first()
+        if part is None:
+            part = Participation(
+                participant_id=participant.id,
+                conversation_id=conversation.id,
+                pseudonym=_demo_pseudonym(),
+                eligibility_status='not_required',
+            )
+            db.session.add(part)
+            db.session.commit()
+        return part
+
     # A demo session may move freely between demo conversations (#293): if it is
     # bound to a different demo, rebind to this one rather than forbidding it. The
     # conversation-scoped proxy (#246) stays safe because this rebinds the session
     # to `conversation` before any proxied call for it is made.
-
-    participant = _current_participant()
     if participant and participant.is_demo:
         part = Participation.query.filter_by(
             participant_id=participant.id,
