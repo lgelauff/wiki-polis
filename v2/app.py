@@ -5161,35 +5161,32 @@ def _register_routes(app: Flask) -> None:
                                header_mode='fork',
                                dev_test_users=dev_test_users)
 
-    @app.get('/demo')
-    def demo_lane():
-        # The "try it out" lane: only demo conversations are reachable here, so
-        # nothing a visitor does touches a real consultation. Available whether
-        # or not they are logged in.
-        session['space'] = 'demo'   # explicit choice of the demo space (#293 state model)
-        dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
-        demo_convos = (Conversation.query
-                       .filter_by(active=True, paused=False, access_policy='demo')
-                       .order_by(Conversation.created_at.desc())
-                       .all())
-        return render_template('home.html',
-                               header_mode='demo',
-                               demo_conversations=demo_convos,
-                               dev_test_users=dev_test_users)
+    def _render_lane(*, demo: bool, header_mode: str):
+        """Render the home listing for one space (#293).
 
-    @app.get('/consultations')
-    def consultations():
-        session['space'] = 'real'   # explicit choice of the real space (#293 state model)
+        The demo and real lanes share the SAME interface (home.html) — same tabs,
+        same cards — and differ only in the set of conversations shown (demo vs
+        real) and the page background (the demo blue wash, via header_mode). This
+        keeps one listing implementation instead of a bespoke demo page.
+        """
         dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
+
         if 'username' not in session:
-            public_convos = (Conversation.query
-                             .filter_by(active=True, paused=False)
-                             .filter(Conversation.access_policy == 'public')
-                             .order_by(Conversation.created_at.desc())
-                             .all())
+            if demo:
+                listing = (Conversation.query
+                           .filter_by(active=True, paused=False, access_policy='demo')
+                           .order_by(Conversation.created_at.desc()).all())
+            else:
+                listing = (Conversation.query
+                           .filter_by(active=True, paused=False)
+                           .filter(Conversation.access_policy == 'public')
+                           .order_by(Conversation.created_at.desc()).all())
+            signals_map = {c.id: {'phases': _active_phases(c),
+                                  'outputs': _output_items(c)} for c in listing}
             return render_template('home.html',
-                                   header_mode='real',
-                                   public_conversations=public_convos,
+                                   header_mode=header_mode,
+                                   public_conversations=listing,
+                                   signals_map=signals_map,
                                    dev_test_users=dev_test_users)
 
         participant = _current_participant()
@@ -5203,33 +5200,35 @@ def _register_routes(app: Flask) -> None:
         )
         joined_ids = {p.conversation_id for p in joined_parts}
 
+        # Each lane lists only its own space's conversations.
         active_joined   = []
         archived_joined = []
         for part in joined_parts:
             conv = part.conversation
-            # Demo never belongs in the real lane. In practice a real (logged-in)
-            # participant can't hold a demo participation — entering demo pops the
-            # username and binds a synthetic is_demo participant — but filter here
-            # too so the lane separation holds structurally, not just by that path.
-            if conv and conv.access_policy != 'demo':
+            if conv and (conv.access_policy == 'demo') == demo:
                 (active_joined if conv.active else archived_joined).append(conv)
 
-        invited_ids = [
-            inv.conversation_id
-            for inv in ConversationInvite.query.filter_by(mw_username=username).all()
-        ]
-        available = (Conversation.query
-                     .filter_by(active=True, paused=False)
-                     .filter(~Conversation.id.in_(joined_ids or [0]))
-                     .filter(db.or_(
-                         Conversation.access_policy == 'public',
-                         db.and_(
-                             Conversation.access_policy == 'invite_only',
-                             Conversation.id.in_(invited_ids or [0]),
-                         ),
-                     ))
-                     .order_by(Conversation.created_at.desc())
-                     .all())
+        if demo:
+            available = (Conversation.query
+                         .filter_by(active=True, paused=False, access_policy='demo')
+                         .filter(~Conversation.id.in_(joined_ids or [0]))
+                         .order_by(Conversation.created_at.desc()).all())
+        else:
+            invited_ids = [
+                inv.conversation_id
+                for inv in ConversationInvite.query.filter_by(mw_username=username).all()
+            ]
+            available = (Conversation.query
+                         .filter_by(active=True, paused=False)
+                         .filter(~Conversation.id.in_(joined_ids or [0]))
+                         .filter(db.or_(
+                             Conversation.access_policy == 'public',
+                             db.and_(
+                                 Conversation.access_policy == 'invite_only',
+                                 Conversation.id.in_(invited_ids or [0]),
+                             ),
+                         ))
+                         .order_by(Conversation.created_at.desc()).all())
 
         mod_ids: set = set()
         moderating = []
@@ -5247,24 +5246,14 @@ def _register_routes(app: Flask) -> None:
                     moderating = Conversation.query.filter(
                         Conversation.id.in_(mod_ids)).all()
 
-        # The real lane never lists demo conversations (#293) — keep demos out of
-        # "You moderate" too (they surface a global admin's demos otherwise). Admins
-        # reach demo moderation via the admin panel or the demo lane. mod_ids stays
-        # full so Browse-exclusion below is unaffected.
-        moderating = [c for c in moderating if c.access_policy != 'demo']
-
+        # "You moderate" is scoped to this lane's space too.
+        moderating = [c for c in moderating if (c.access_policy == 'demo') == demo]
         # Exclude moderated conversations from Browse — they already appear in "You moderate"
         available = [c for c in available if c.id not in mod_ids]
 
-        # keyed by conversation_id, scoped to current user only
-        # assumes at most one Participation per (user, conversation) — last row wins if duplicates exist
         pseudonym_map = {p.conversation_id: p for p in joined_parts}
-
-        # Per-conversation action signals for the home page tiles.
         all_home_convs = active_joined + archived_joined + list(available)
 
-        # Bulk-fetch statements remaining via Polis Postgres (xid → pid via xids table).
-        # Only meaningful for submission-phase conversations; falls back to None on error.
         xid = session.get('xid')
         submission_convs = [c for c in all_home_convs if c.phase_submission and c.active]
         zinvites = [c.polis_id for c in submission_convs if c.polis_id]
@@ -5287,7 +5276,7 @@ def _register_routes(app: Flask) -> None:
             }
 
         return render_template('home.html',
-                               header_mode='real',
+                               header_mode=header_mode,
                                active_joined=active_joined,
                                archived_joined=archived_joined,
                                available=available,
@@ -5295,6 +5284,19 @@ def _register_routes(app: Flask) -> None:
                                pseudonym_map=pseudonym_map,
                                signals_map=signals_map,
                                dev_test_users=dev_test_users)
+
+    @app.get('/demo')
+    def demo_lane():
+        # The demo lane: the same listing UI as the real lane, filtered to demo
+        # conversations and tinted (#293). Available logged in or out.
+        session['space'] = 'demo'
+        return _render_lane(demo=True, header_mode='demo')
+
+    @app.get('/consultations')
+    def consultations():
+        # The real lane: the shared listing UI, filtered to real conversations (#293).
+        session['space'] = 'real'
+        return _render_lane(demo=False, header_mode='real')
 
 
     # ── OAuth ─────────────────────────────────────────────────────────────────
