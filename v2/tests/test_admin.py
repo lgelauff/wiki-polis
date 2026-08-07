@@ -110,6 +110,28 @@ def test_edit_conversation(admin_client, conv):
     assert conv.access_policy == 'invite_only'
 
 
+def test_edit_conversation_can_switch_to_and_from_demo(admin_client, conv):
+    # #293: demo is a genuine (recording) demonstration mode, so an existing
+    # conversation may be switched to demo and back (was blocked pre-#293).
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/edit', data={
+        'polis_id': conv.polis_id,
+        'title': conv.title,
+        'access_policy': 'demo',
+    })
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.access_policy == 'demo'
+
+    resp = admin_client.post(f'/admin/conversations/{conv.id}/edit', data={
+        'polis_id': conv.polis_id,
+        'title': conv.title,
+        'access_policy': 'public',
+    })
+    assert resp.status_code == 302
+    db.session.refresh(conv)
+    assert conv.access_policy == 'public'
+
+
 def test_edit_conversation_missing_title_flashes(admin_client, conv):
     """Blank title flashes and redirects back (not a bare 400) — matches create (#153)."""
     resp = admin_client.post(f'/admin/conversations/{conv.id}/edit', data={

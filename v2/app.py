@@ -2790,11 +2790,11 @@ def admin_conversation_edit(conv_id):
     conv.title         = fields['title']
     conv.intro_text    = fields['intro_text']
     conv.outro_text    = fields['outro_text']
-    if conv.access_policy == 'demo':
-        fields['access_policy'] = 'demo'
-    elif fields['access_policy'] == 'demo':
-        flash('Demo mode is fixed at creation and cannot be enabled on an existing consultation.', 'error')
-        fields['access_policy'] = conv.access_policy
+    # Access policy is freely switchable, including to/from demo (#293): demo
+    # conversations are genuine demonstration conversations that record as usual,
+    # so designating an existing conversation as a demo (or back) is allowed.
+    # Existing participations are untouched; new visitors follow the new policy.
+    # (_parse_conversation_form clamps this to ACCESS_POLICIES.)
     conv.access_policy = fields['access_policy']
     db.session.commit()
     record_audit('conversation.edit', conv_id=conv.id)
