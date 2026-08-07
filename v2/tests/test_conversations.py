@@ -35,36 +35,56 @@ def participation(app, participant, conv):
 
 # ── Index ─────────────────────────────────────────────────────────────────────
 
-def test_index_unauthenticated_shows_public_conversations(client, conv):
+def test_index_shows_fork_between_demo_and_real(client):
+    # The homepage is the explicit demo/real fork (#293).
     resp = client.get('/')
+    assert resp.status_code == 200
+    assert b'Try out the platform' in resp.data
+    assert b'Participate in real consultations' in resp.data
+
+
+def test_consultations_unauthenticated_shows_public_conversations(client, conv):
+    resp = client.get('/consultations')
     assert resp.status_code == 200
     assert b'Test Conversation' in resp.data
 
 
-def test_index_unauthenticated_hides_paused_conversations(client, app):
+def test_consultations_unauthenticated_hides_paused_conversations(client, app):
     c = Conversation(slug='paused', polis_id='xyz9876543', title='Paused Conv',
                      active=True, paused=True, access_policy='public')
     db.session.add(c)
     db.session.commit()
-    resp = client.get('/')
+    resp = client.get('/consultations')
     assert b'Paused Conv' not in resp.data
 
 
-def test_index_unauthenticated_shows_demo_conversations(client, app):
+def test_consultations_excludes_demo_conversations(client, app):
+    # Real lane must not surface demo conversations (#293).
+    c = Conversation(slug='demo-home', polis_id='demohome12', title='Demo Home',
+                     active=True, access_policy='demo')
+    db.session.add(c)
+    db.session.commit()
+    resp = client.get('/consultations')
+    assert resp.status_code == 200
+    assert b'Demo Home' not in resp.data
+
+
+def test_demo_lane_shows_only_demo_conversations(client, conv):
+    # /demo lists demo conversations and excludes real (public) ones (#293).
     c = Conversation(slug='demo-home', polis_id='demohome12', title='Demo Home',
                      active=True, access_policy='demo')
     db.session.add(c)
     db.session.commit()
 
-    resp = client.get('/')
+    resp = client.get('/demo')
 
     assert resp.status_code == 200
     assert b'Demo Home' in resp.data
-    assert b'Demo' in resp.data
+    assert b'Test Conversation' not in resp.data  # the public conv from `conv`
 
 
 def test_index_authenticated_shows_joined_conversations(auth_client, participation, conv):
-    resp = auth_client.get('/')
+    resp = auth_client.get('/consultations')
     assert resp.status_code == 200
     assert b'Test Conversation' in resp.data
 
@@ -235,13 +255,51 @@ def test_demo_conversation_creates_scoped_synthetic_participation(client, app):
 
     assert resp.status_code == 200
     assert b'noindex,nofollow' in resp.data
-    assert b'anonymous vote-only participation' in resp.data
+    assert b'nothing here is recorded' in resp.data
     part = Participation.query.filter_by(conversation_id=demo.id).one()
     assert part.participant.is_demo is True
     assert part.participant.mw_username.startswith('Demo-guest-')
     with client.session_transaction() as sess:
         assert sess['demo_conversation_id'] == demo.id
         assert 'username' not in sess
+
+
+def test_demo_lane_applies_demo_theme_and_switch(client, app):
+    # The demo lane marks the page as demo (blue theme) and offers the switch (#293).
+    c = Conversation(slug='demo-theme', polis_id='demotheme1', title='Demo Theme',
+                     active=True, access_policy='demo')
+    db.session.add(c)
+    db.session.commit()
+    html = client.get('/demo').data.decode()
+    assert 'data-demo="true"' in html
+    assert 'class="mode-switch"' in html
+
+
+def test_consultations_real_lane_has_switch_not_demo_theme(client, conv):
+    html = client.get('/consultations').data.decode()
+    assert 'class="mode-switch"' in html
+    assert 'data-demo="true"' not in html
+
+
+def test_real_conversation_shows_first_vote_confirm(auth_client, conv, participation):
+    # A live (non-demo) conversation carries the one-time first-vote confirm;
+    # a demo one never does (#293).
+    conv.phase_submission = True
+    db.session.commit()
+    html = auth_client.get('/c/test-conv').data.decode()
+    assert 'id="live-vote-confirm"' in html
+    assert 'your vote will be recorded' in html
+    assert 'data-demo="true"' not in html
+
+
+def test_demo_conversation_has_no_first_vote_confirm(client, app):
+    demo = Conversation(slug='demo-noconf', polis_id='demoncf001', title='Demo NoConf',
+                        active=True, access_policy='demo', phase_submission=True)
+    db.session.add(demo)
+    db.session.commit()
+    html = client.get('/c/demo-noconf').data.decode()
+    assert 'id="live-vote-confirm"' not in html
+    assert 'data-demo="true"' in html
 
 
 def test_demo_session_cannot_enter_other_conversation(client, app):

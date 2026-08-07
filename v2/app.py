@@ -3878,6 +3878,7 @@ def conversation(slug):
         phase6_results = _build_phase6_results(conv, participation)
 
     return render_template('conversation.html',
+                           header_mode='conversation',
                            conversation=conv,
                            participation=participation,
                            can_moderate=can_mod,
@@ -4835,6 +4836,10 @@ def create_app(test_config: dict | None = None) -> Flask:
             'username':   session.get('username'),
             'csp_nonce':  g.get('csp_nonce', ''),
             'git_version': _GIT_VERSION,
+            # Header mode drives the demo/real switch + demo theme (#293).
+            # Pages override this via render_template kwargs; default keeps the
+            # switch off on pages outside the fork/lanes (e.g. admin).
+            'header_mode': None,
         }
 
     @app.after_request
@@ -5057,14 +5062,40 @@ def _register_routes(app: Flask) -> None:
 
     @app.get('/')
     def index():
+        # The homepage is an explicit fork between the demo sandbox and real
+        # consultations (#293), so a visitor who only wants to try things can
+        # never drift into a live consultation by accident. Shown every visit.
+        dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
+        return render_template('fork.html',
+                               header_mode='fork',
+                               dev_test_users=dev_test_users)
+
+    @app.get('/demo')
+    def demo_lane():
+        # The "try it out" lane: only demo conversations are reachable here, so
+        # nothing a visitor does touches a real consultation. Available whether
+        # or not they are logged in.
+        dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
+        demo_convos = (Conversation.query
+                       .filter_by(active=True, paused=False, access_policy='demo')
+                       .order_by(Conversation.created_at.desc())
+                       .all())
+        return render_template('home.html',
+                               header_mode='demo',
+                               demo_conversations=demo_convos,
+                               dev_test_users=dev_test_users)
+
+    @app.get('/consultations')
+    def consultations():
         dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
         if 'username' not in session:
             public_convos = (Conversation.query
                              .filter_by(active=True, paused=False)
-                             .filter(Conversation.access_policy.in_(('public', 'demo')))
+                             .filter(Conversation.access_policy == 'public')
                              .order_by(Conversation.created_at.desc())
                              .all())
             return render_template('home.html',
+                                   header_mode='real',
                                    public_conversations=public_convos,
                                    dev_test_users=dev_test_users)
 
@@ -5153,6 +5184,7 @@ def _register_routes(app: Flask) -> None:
             }
 
         return render_template('home.html',
+                               header_mode='real',
                                active_joined=active_joined,
                                archived_joined=archived_joined,
                                available=available,

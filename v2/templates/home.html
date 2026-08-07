@@ -87,9 +87,48 @@
        target="_blank" rel="noopener">Open an issue<span class="sr-only"> (opens in a new tab)</span></a> if you find a bug.
   </div>
 
-{% if not username %}
+{% if header_mode == 'demo' %}
 
-  {# ── Unauthenticated landing ───────────────────────────────────────────── #}
+  {# ── Demo sandbox lane (#293) ──────────────────────────────────────────── #}
+
+  <div class="landing-section">
+    <h1 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Try out the platform.</h1>
+    <p style="font-size:15px;line-height:1.6;color:var(--body);max-width:520px">
+      Pick a demo and vote freely — it's a sandbox, and nothing here is recorded.
+    </p>
+  </div>
+
+  {% if demo_conversations %}
+  <section aria-labelledby="sec-demo">
+    <div class="home-section">
+      <div class="home-section-header">
+        <h2 class="home-section-label" id="sec-demo">Demos</h2>
+        <span class="home-section-count" aria-hidden="true">{{ demo_conversations | length }} total</span>
+      </div>
+      <ul class="conv-list">
+        {% for c in demo_conversations %}
+        <li>
+          <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card"
+             aria-label="{{ c.title }} — demo sandbox, votes are not counted">
+            <div class="conv-card-left">
+              <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
+              <h3 class="conv-card-title">{{ c.title }}</h3>
+              <span class="conv-card-badge conv-card-badge--demo">Demo</span>
+            </div>
+            <span class="conv-card-action" aria-hidden="true">Try it →</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+  {% else %}
+  <div class="landing-section"><p class="muted">No demos are available right now.</p></div>
+  {% endif %}
+
+{% elif not username %}
+
+  {# ── Unauthenticated landing (real lane) ───────────────────────────────── #}
 
   <div class="landing-section">
     <h1 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Where the community actually stands.</h1>
@@ -130,11 +169,10 @@
         {% for c in public_conversations %}
         <li>
           <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card"
-             aria-label="{{ c.title }} — join consultation">
+             aria-label="{{ c.title }} — live consultation, your votes count">
             <div class="conv-card-left">
               <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
               <h3 class="conv-card-title">{{ c.title }}</h3>
-              {% if c.access_policy == 'demo' %}<span class="conv-card-badge" aria-hidden="true">Demo</span>{% endif %}
             </div>
             <span class="conv-card-action" aria-hidden="true">JOIN →</span>
           </a>
