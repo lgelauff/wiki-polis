@@ -1,4 +1,9 @@
 {% extends "base.html" %}
+{% block head %}
+{% if header_mode == 'demo' %}
+<meta name="robots" content="noindex,nofollow">
+{% endif %}
+{% endblock %}
 {% block content %}
 
 {# ── Input timeline macro: progressive participation phases ───────────────── #}

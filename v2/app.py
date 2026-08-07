@@ -5114,7 +5114,11 @@ def _register_routes(app: Flask) -> None:
         archived_joined = []
         for part in joined_parts:
             conv = part.conversation
-            if conv:
+            # Demo never belongs in the real lane. In practice a real (logged-in)
+            # participant can't hold a demo participation — entering demo pops the
+            # username and binds a synthetic is_demo participant — but filter here
+            # too so the lane separation holds structurally, not just by that path.
+            if conv and conv.access_policy != 'demo':
                 (active_joined if conv.active else archived_joined).append(conv)
 
         invited_ids = [

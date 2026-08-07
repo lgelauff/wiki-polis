@@ -89,6 +89,22 @@ def test_index_authenticated_shows_joined_conversations(auth_client, participati
     assert b'Test Conversation' in resp.data
 
 
+def test_consultations_excludes_demo_from_logged_in_joined_list(auth_client, participant, participation, conv):
+    # Defense-in-depth: even a (contrived) demo participation tied to the real
+    # participant must not surface in the real lane (#293).
+    demo = Conversation(slug='demo-joined', polis_id='demojoin001', title='Demo Joined',
+                        active=True, access_policy='demo')
+    db.session.add(demo)
+    db.session.commit()
+    db.session.add(Participation(participant_id=participant.id, conversation_id=demo.id,
+                                 pseudonym='demo-mole'))
+    db.session.commit()
+
+    html = auth_client.get('/consultations').data.decode()
+    assert 'Test Conversation' in html   # the real joined conv still shows
+    assert 'Demo Joined' not in html      # the demo one never does
+
+
 # ── Accept ────────────────────────────────────────────────────────────────────
 
 def test_accept_get_renders_pseudonym_options(auth_client, conv):

@@ -1719,13 +1719,14 @@
       setLiveVoteConfirmed();
       if (liveConfirmEl) liveConfirmEl.hidden = true;
       var b = pendingVoteBtn; pendingVoteBtn = null;
-      if (b) b.click();   // re-dispatch; the gate now passes
+      if (b) b.click();   // re-dispatch; the gate now passes (returns focus to the vote row)
     });
   }
   if (liveConfirmNo) {
     liveConfirmNo.addEventListener('click', function () {
-      pendingVoteBtn = null;
+      var trigger = pendingVoteBtn; pendingVoteBtn = null;
       if (liveConfirmEl) liveConfirmEl.hidden = true;
+      if (trigger) trigger.focus();   // WCAG 2.4.3: return focus to the button that opened the dialog
     });
   }
 
