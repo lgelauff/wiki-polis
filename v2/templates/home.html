@@ -99,7 +99,8 @@
   <div class="landing-section">
     <h1 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Try out the platform.</h1>
     <p style="font-size:15px;line-height:1.6;color:var(--body);max-width:520px">
-      Pick a demo and vote freely — it's a sandbox, and nothing here is recorded.
+      Pick a demonstration conversation and try the full flow — vote, suggest
+      improvements, and see how the platform works. Your input is recorded here.
     </p>
   </div>
 
@@ -114,7 +115,7 @@
         {% for c in demo_conversations %}
         <li>
           <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card"
-             aria-label="{{ c.title }} — demo sandbox, votes are not counted">
+             aria-label="{{ c.title }} — demonstration conversation, try the full flow">
             <div class="conv-card-left">
               <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
               <h3 class="conv-card-title">{{ c.title }}</h3>
@@ -138,8 +139,9 @@
   <div class="landing-section">
     <h1 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Where the community actually stands.</h1>
     <p style="font-size:15px;line-height:1.6;color:var(--body);max-width:520px">
-      Vote on short statements, watch opinion clusters emerge.
-      No threads, no replies — just signal.
+      Vote on short statements, and suggest improvements. Learn how your views
+      compare to other community members — which statements already have
+      consensus, and what topics are divisive, and why.
     </p>
     <a href="{{ url_for('login') }}" class="login-btn" style="margin-top:18px">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"

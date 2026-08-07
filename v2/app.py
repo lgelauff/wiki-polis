@@ -1398,6 +1398,27 @@ def login_required(f):
     return wrapper
 
 
+def login_or_demo_required(f):
+    """Like login_required, but also admits an active demo session.
+
+    Demo conversations are genuine demonstration conversations (#293): an
+    anonymous visitor plays through the full flow — vote, suggest statements,
+    arguments — on a synthetic participant, and it records as usual. The demo
+    session is bound to a single conversation (demo_conversation_id), and each
+    route still runs its own access check (_check_conversation_access / the
+    demo participation lookup), so this only widens *who may reach* the route,
+    not *which conversation* they may act on.
+    """
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        if 'username' not in session and not _is_demo_session():
+            if not request.path.startswith('/proxy/'):
+                session['next'] = request.path
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return wrapper
+
+
 def _is_global_admin(participant: 'Participant | None' = None) -> bool:
     if session.get('username') in ADMIN_USERS:
         return True
@@ -1576,6 +1597,10 @@ def _demo_proxy_allowed(pa_path: str, method: str) -> bool:
     if method == 'GET' and pa_path.startswith(prefix):
         return True
     if method == 'PUT' and pa_path.startswith(prefix + 'votes/'):
+        return True
+    # Demo conversations run the full flow (#293), so a demo session may also
+    # create statements — scoped to its own bound conversation.
+    if method == 'POST' and pa_path.startswith(prefix + 'statements'):
         return True
     return False
 
@@ -1936,8 +1961,6 @@ def _build_featured_data(conv, participation, can_mod=False):
 def _require_arg_participation(slug):
     """Return (conv, participation) or abort. Checks active + argument phase."""
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    if conv.access_policy == 'demo':
-        abort(403)
     if not conv.active or conv.paused or not conv.phase_argument_mapping:
         abort(403)
     participant = _current_participant()
@@ -1987,7 +2010,8 @@ admin_bp = Blueprint('admin', __name__)
 participant_bp = Blueprint('participant', __name__)
 
 @participant_bp.post('/c/<slug>/statements/new')
-@login_required
+@login_or_demo_required
+@limiter.limit('20 per minute')
 def conversation_statement_new(slug):
     """Submit an entirely new statement; enforces per-participant quota and
     records the Polis statement ID for novelty tracking."""
@@ -1998,8 +2022,6 @@ def conversation_statement_new(slug):
     _validate_same_origin(allow_missing_provenance=csrf_validated)
 
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    if conv.access_policy == 'demo':
-        abort(403)
     if not conv.active or conv.paused or not conv.phase_submission:
         abort(403)
     participant = _current_participant()
@@ -3900,7 +3922,7 @@ def conversation(slug):
 
 
 @participant_bp.get('/c/<slug>/outputs/<output_key>')
-@login_required
+@login_or_demo_required
 def conversation_output(slug, output_key):
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
@@ -3935,13 +3957,14 @@ def conversation_moderation_log(slug):
 # ── Arguments ────────────────────────────────────────────────────────────
 
 @participant_bp.post('/c/<slug>/arguments/<int:fs_id>/submit')
-@login_required
+@login_or_demo_required
 def argument_submit_legacy(slug, fs_id):
     return redirect(url_for('participant.argument_submit', slug=slug, fs_id=fs_id),
                     code=307)
 
 @participant_bp.post('/c/<slug>/featured-statements/<int:fs_id>/arguments')
-@login_required
+@login_or_demo_required
+@limiter.limit('20 per minute')
 def argument_submit(slug, fs_id):
     conv, part = _require_arg_participation(slug)
     FeaturedStatement.query.filter_by(
@@ -4009,13 +4032,13 @@ def argument_submit(slug, fs_id):
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
 @participant_bp.post('/c/<slug>/arguments/<int:fs_id>/<side>/skip')
-@login_required
+@login_or_demo_required
 def argument_skip_legacy(slug, fs_id, side):
     return redirect(url_for('participant.argument_skip', slug=slug, fs_id=fs_id, side=side),
                     code=307)
 
 @participant_bp.post('/c/<slug>/featured-statements/<int:fs_id>/skip/<side>')
-@login_required
+@login_or_demo_required
 def argument_skip(slug, fs_id, side):
     conv, part = _require_arg_participation(slug)
     FeaturedStatement.query.filter_by(
@@ -4049,7 +4072,7 @@ def argument_skip(slug, fs_id, side):
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
 @participant_bp.post('/c/<slug>/arguments/<int:arg_id>/vote')
-@login_required
+@login_or_demo_required
 def argument_vote(slug, arg_id):
     conv, part = _require_arg_participation(slug)
     arg = Argument.query.filter_by(id=arg_id).first_or_404()
@@ -4110,7 +4133,7 @@ def argument_vote(slug, arg_id):
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
 
 @participant_bp.post('/c/<slug>/arguments/<int:arg_id>/unvote')
-@login_required
+@login_or_demo_required
 def argument_unvote(slug, arg_id):
     conv, part = _require_arg_participation(slug)
     arg = Argument.query.filter_by(id=arg_id).first_or_404()
@@ -4154,7 +4177,7 @@ def argument_unhide(slug, arg_id):
 
 
 @participant_bp.post('/c/<slug>/arguments/<int:arg_id>/flag')
-@login_required
+@login_or_demo_required
 @limiter.limit('10 per minute')
 def argument_flag(slug, arg_id):
     conv, part = _require_arg_participation(slug)
@@ -4193,7 +4216,7 @@ def argument_flag(slug, arg_id):
 
 
 @participant_bp.post('/c/<slug>/statements/<int:tid>/flag')
-@login_required
+@login_or_demo_required
 @limiter.limit('10 per minute')
 def statement_flag(slug, tid):
     conv = Conversation.query.filter_by(slug=slug).first_or_404()

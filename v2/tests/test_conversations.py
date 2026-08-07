@@ -271,7 +271,8 @@ def test_demo_conversation_creates_scoped_synthetic_participation(client, app):
 
     assert resp.status_code == 200
     assert b'noindex,nofollow' in resp.data
-    assert b'nothing here is recorded' in resp.data
+    assert b'Demonstration conversation' in resp.data
+    assert b'recorded here' in resp.data
     part = Participation.query.filter_by(conversation_id=demo.id).one()
     assert part.participant.is_demo is True
     assert part.participant.mw_username.startswith('Demo-guest-')
@@ -332,7 +333,10 @@ def test_demo_session_cannot_enter_other_conversation(client, app):
     assert resp.status_code == 403
 
 
-def test_demo_conversation_blocks_statement_submission(client, app):
+def test_demo_conversation_allows_statement_route_past_auth(client, app):
+    # Demo runs the full flow (#293): the statement-submit route no longer bounces
+    # a demo session at the auth gate. CSRF still applies, so this is stopped at the
+    # CSRF check (not a 302 login redirect, and Polis is never called).
     demo = Conversation(slug='demo3', polis_id='demopolis3', title='Demo',
                         active=True, access_policy='demo', phase_submission=True)
     db.session.add(demo)
@@ -344,8 +348,8 @@ def test_demo_conversation_blocks_statement_submission(client, app):
                            headers={'Sec-Fetch-Site': 'same-origin'},
                            json={'text': 'anonymous write'})
 
-    assert resp.status_code == 302
-    post.assert_not_called()
+    assert resp.status_code != 302   # was 302 -> /login under the old vote-only rule
+    post.assert_not_called()          # CSRF stops it before any Polis write
 
 
 def test_personal_results_renders_clustering_data(auth_client, conv, participation,

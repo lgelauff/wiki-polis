@@ -47,7 +47,7 @@
   {% if demo_mode %}
   <div class="mode-lock mode-lock--demo" style="margin-bottom:1rem">
     <span class="mode-lock-dot" aria-hidden="true"></span>
-    Sandbox — vote freely, nothing here is recorded.
+    Demonstration conversation — try the full flow. Your input is recorded here, just like a real consultation.
   </div>
   {% else %}
   <div class="live-vote-confirm" id="live-vote-confirm" hidden role="alertdialog"
@@ -261,7 +261,7 @@
         </div>
 
         {# ── V2 Option Triad — always rendered, dimmed pre-vote, active post-vote ── #}
-        <div class="v2-triad" id="v2-triad" {% if demo_mode %}hidden{% endif %}>
+        <div class="v2-triad" id="v2-triad">
           <div class="v2-triad-label" id="v2-triad-label" aria-live="polite">After you vote, you can&hellip;</div>
           <div class="v2-triad-grid" role="group" aria-labelledby="v2-triad-label">
 
@@ -1570,11 +1570,6 @@
     votedBadge.hidden      = false;
     votedLabel.textContent = LABELS[voteType];
     votedBadge.dataset.type = voteType;
-
-    if (DEMO_MODE) {
-      triad.hidden = true;
-      return;
-    }
 
     triad.hidden = false;
     triadLabel.textContent = 'What now?';
