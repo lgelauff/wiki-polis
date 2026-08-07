@@ -1,0 +1,15 @@
+set,set_name,id,statement,source_page,type,expected_split,chars
+F,Collective intelligence and community health,F-01,"Wikimedia's distinctive value lies in the human process that produces its content, rather than in the content itself.","39, 44",value,lean,117
+F,Collective intelligence and community health,F-02,AI tools should help editors reach judgments rather than make editorial judgments in their place.,40,policy,consensus,97
+F,Collective intelligence and community health,F-03,Editors should be permitted to use AI tools to draft article text.,60,policy,divisive,66
+F,Collective intelligence and community health,F-04,AI-generated content submitted without disclosure damages the reliability of Wikipedia.,"22, 35",diagnostic,consensus,87
+F,Collective intelligence and community health,F-05,Wikipedia should require editors to disclose when they have used AI tools to produce content.,60,policy,lean,93
+F,Collective intelligence and community health,F-06,The decline in new editors is driven mainly by falling reader traffic rather than by conditions inside the editing community.,"12, 21",diagnostic,divisive,125
+F,Collective intelligence and community health,F-07,Recruiting new editors should take priority over developing AI technology.,"40, 65",policy,divisive,74
+F,Collective intelligence and community health,F-08,Volunteer editors should hold a formal role in deciding Wikimedia's AI strategy.,"53, 65",policy,lean,80
+F,Collective intelligence and community health,F-09,Wikimedia's AI response should be led by institutional staff rather than by volunteers.,65,policy,divisive,87
+F,Collective intelligence and community health,F-10,Wikimedia communities respond to sudden influxes of readers by protecting articles rather than by recruiting contributors.,16,diagnostic,divisive,122
+F,Collective intelligence and community health,F-11,"Wikimedia should design AI-related volunteer tasks that people find worth doing, rather than tasks that mainly involve repetitive review.",65,policy,consensus,137
+F,Collective intelligence and community health,F-12,Automating editorial work with AI will narrow the range of viewpoints represented on Wikipedia.,40,diagnostic,divisive,95
+F,Collective intelligence and community health,F-13,Wikipedia's model of negotiated consensus among editors cannot be reproduced by an AI system.,"15, 36",value,lean,93
+F,Collective intelligence and community health,F-14,Wikimedia should accept a smaller editing community if AI tools let it maintain the same quality of content.,39–40,value,divisive,108

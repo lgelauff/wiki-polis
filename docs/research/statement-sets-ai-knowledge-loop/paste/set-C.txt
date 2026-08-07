@@ -1,0 +1,14 @@
+AI systems that draw on Wikimedia content should display visible attribution to Wikipedia in their answers.
+Attribution requirements cannot be enforced against large AI companies, so Wikimedia should direct its effort elsewhere.
+AI developers should be required to disclose which Wikimedia content they used to train their models.
+The Share Alike condition should be redesigned to cover AI models trained on Wikimedia content.
+Applying Share Alike to the outputs of AI models would prove unworkable in practice.
+AI companies that use Wikimedia content at scale should pay for that use.
+Requirements to attribute and link matter more to Wikimedia's future than payments from AI companies.
+AI platforms should share data with Wikimedia communities about what readers ask them.
+Accepting usage data from AI platforms would make Wikimedia's editorial priorities dependent on commercial partners.
+Access to Wikimedia content at scale should be conditional on meeting reciprocity requirements.
+Wikimedia should apply the same reuse conditions to every AI developer, rather than negotiating agreements one at a time.
+Reciprocity agreements negotiated company by company will not shift the norms of the wider ecosystem.
+Wikimedia should seek a seat in the bodies that set AI ecosystem protocols such as MCP.
+Wikimedia should publish rules covering how it collects, documents, and licenses the datasets it creates.

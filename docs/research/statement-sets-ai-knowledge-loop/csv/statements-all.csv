@@ -1,0 +1,111 @@
+set,set_name,id,statement,source_page,type,expected_split,chars
+A,Diagnosis: the state of the knowledge loop,A-01,Declining referrals from Google search account for most of the recent fall in human traffic to Wikipedia.,14,diagnostic,lean,105
+A,Diagnosis: the state of the knowledge loop,A-02,Wikipedia's search referral traffic would have declined even if generative AI had not emerged.,13–14,diagnostic,divisive,94
+A,Diagnosis: the state of the knowledge loop,A-03,Machine traffic to Wikimedia projects will eventually exceed human traffic.,22,diagnostic,lean,75
+A,Diagnosis: the state of the knowledge loop,A-04,AI systems that summarise Wikipedia content without linking to it reduce the number of readers who go on to become editors.,"22, 56",diagnostic,lean,123
+A,Diagnosis: the state of the knowledge loop,A-05,"The most serious risk to Wikimedia from AI is the cost of serving machine traffic, rather than the loss of influence over how knowledge is produced.","21, 30",diagnostic,divisive,148
+A,Diagnosis: the state of the knowledge loop,A-06,Wikimedia is on the same trajectory that Stack Overflow followed after 2022.,31,diagnostic,divisive,76
+A,Diagnosis: the state of the knowledge loop,A-07,Stack Overflow declined for reasons specific to programming questions that do not apply to an encyclopedia.,31,diagnostic,divisive,107
+A,Diagnosis: the state of the knowledge loop,A-08,Wikipedia's decision to remain a text-based medium has cost it readers who prefer video.,16,diagnostic,lean,88
+A,Diagnosis: the state of the knowledge loop,A-09,"Readers who prefer quick, low-effort answers have a legitimate need that Wikipedia has not met.",16,value,divisive,95
+A,Diagnosis: the state of the knowledge loop,A-10,Large AI models trained mainly on English Wikipedia present its coverage as global default knowledge.,"19, 36",diagnostic,consensus,101
+A,Diagnosis: the state of the knowledge loop,A-11,Open licensing has allowed AI developers to take value from Wikimedia while returning little in exchange.,"27, 29",diagnostic,lean,105
+A,Diagnosis: the state of the knowledge loop,A-12,Large-scale AI training on Wikipedia content is exactly the kind of reuse that Wikimedia's open licences were written to permit.,27,diagnostic,divisive,128
+A,Diagnosis: the state of the knowledge loop,A-13,Most people who now rely on Wikipedia-derived content do not know that they are doing so.,29,diagnostic,lean,89
+A,Diagnosis: the state of the knowledge loop,A-14,"Paywalls, bot-blocking, and AI-generated web content are making it harder for editors to find citable sources.",22,diagnostic,consensus,110
+B,Strategic posture,B-01,Wikimedia's current approach to AI companies is closer to passive acceptance than to active negotiation.,50,diagnostic,lean,104
+B,Strategic posture,B-02,Rate-limiting AI crawlers protects Wikimedia infrastructure at an acceptable cost to openness.,49,policy,divisive,94
+B,Strategic posture,B-03,Restricting access to Wikimedia content in response to AI scraping would do more damage to the mission than the scraping does.,49–50,policy,divisive,126
+B,Strategic posture,B-04,Wikimedia should offer some AI companies exclusive access to its content in exchange for higher payment.,49–50,policy,divisive,104
+B,Strategic posture,B-05,"Keeping access open without conditions remains the right approach, since reuse eventually returns value to the commons.",49–50,policy,divisive,119
+B,Strategic posture,B-06,"Wikimedia should set conditions on how AI systems use its content, rather than granting permission in advance through open licences.","51, 60",policy,divisive,132
+B,Strategic posture,B-07,Wikimedia has enough influence over AI companies to negotiate terms those companies would otherwise refuse.,"42, 51",diagnostic,divisive,107
+B,Strategic posture,B-08,The volume of openly shared content is no longer an adequate measure of the health of the knowledge commons.,46,value,lean,108
+B,Strategic posture,B-09,"When openness and the financial sustainability of Wikimedia conflict, sustainability should take precedence.",46,value,divisive,108
+B,Strategic posture,B-10,Wikimedia Enterprise shows that large-scale commercial use of the commons can be structured through negotiated agreements.,51,diagnostic,consensus,122
+B,Strategic posture,B-11,"Wikimedia Enterprise revenue, at 4% of Foundation income, is too small to change how AI companies behave.",51,diagnostic,lean,105
+B,Strategic posture,B-12,Taking an active political stance toward AI companies would damage Wikimedia's reputation for neutrality.,66,diagnostic,divisive,105
+B,Strategic posture,B-13,Wikimedia should treat its relationship with AI companies as a negotiation between parties whose interests conflict.,"12, 40",value,lean,116
+C,Reciprocity and the terms of reuse,C-01,AI systems that draw on Wikimedia content should display visible attribution to Wikipedia in their answers.,"40, 51",policy,consensus,107
+C,Reciprocity and the terms of reuse,C-02,"Attribution requirements cannot be enforced against large AI companies, so Wikimedia should direct its effort elsewhere.",12,policy,divisive,120
+C,Reciprocity and the terms of reuse,C-03,AI developers should be required to disclose which Wikimedia content they used to train their models.,"40, 60",policy,lean,101
+C,Reciprocity and the terms of reuse,C-04,The Share Alike condition should be redesigned to cover AI models trained on Wikimedia content.,59–60,policy,divisive,95
+C,Reciprocity and the terms of reuse,C-05,Applying Share Alike to the outputs of AI models would prove unworkable in practice.,59–60,diagnostic,divisive,84
+C,Reciprocity and the terms of reuse,C-06,AI companies that use Wikimedia content at scale should pay for that use.,51,policy,lean,73
+C,Reciprocity and the terms of reuse,C-07,Requirements to attribute and link matter more to Wikimedia's future than payments from AI companies.,"41, 56",value,divisive,101
+C,Reciprocity and the terms of reuse,C-08,AI platforms should share data with Wikimedia communities about what readers ask them.,41,policy,lean,86
+C,Reciprocity and the terms of reuse,C-09,Accepting usage data from AI platforms would make Wikimedia's editorial priorities dependent on commercial partners.,41,diagnostic,divisive,116
+C,Reciprocity and the terms of reuse,C-10,Access to Wikimedia content at scale should be conditional on meeting reciprocity requirements.,57,policy,divisive,95
+C,Reciprocity and the terms of reuse,C-11,"Wikimedia should apply the same reuse conditions to every AI developer, rather than negotiating agreements one at a time.",51,policy,divisive,121
+C,Reciprocity and the terms of reuse,C-12,Reciprocity agreements negotiated company by company will not shift the norms of the wider ecosystem.,51,diagnostic,lean,101
+C,Reciprocity and the terms of reuse,C-13,Wikimedia should seek a seat in the bodies that set AI ecosystem protocols such as MCP.,"42, 60",policy,lean,87
+C,Reciprocity and the terms of reuse,C-14,"Wikimedia should publish rules covering how it collects, documents, and licenses the datasets it creates.",60,policy,consensus,105
+D,Interface agency,D-01,"Wikimedia should build interfaces through which readers reach the commons directly, rather than relying on search engines and AI assistants.",56,policy,divisive,140
+D,Interface agency,D-02,Building reader-facing AI interfaces falls outside the mission of an encyclopedia project.,56,value,divisive,90
+D,Interface agency,D-03,Delegating the reader-facing interface to search engines was a reasonable choice during the search era.,"12, 56",diagnostic,lean,103
+D,Interface agency,D-04,Wikimedia will lose its direct relationship with readers unless it operates an interface of its own.,56,diagnostic,divisive,100
+D,Interface agency,D-05,Any AI interface Wikimedia builds should send readers to Wikipedia articles rather than answering in place of them.,56,policy,lean,115
+D,Interface agency,D-06,An AI interface that answers readers' questions directly would reduce the number of people who go on to edit.,56,diagnostic,lean,109
+D,Interface agency,D-07,Wikimedia should support several competing AI interfaces rather than building one official product.,56,policy,lean,99
+D,Interface agency,D-08,Wikimedia should build its own conversational AI assistant.,56,policy,divisive,59
+D,Interface agency,D-09,Building AI interfaces would divert resources from maintaining the encyclopedia itself.,62,diagnostic,divisive,87
+D,Interface agency,D-10,Wikimedia's credibility with readers depends on it not being seen as a company that builds AI products.,56,diagnostic,divisive,103
+D,Interface agency,D-11,"Readers who receive accurate Wikipedia-derived answers from an AI assistant are being served well, even when they never visit Wikipedia.",56,value,divisive,136
+D,Interface agency,D-12,Wikimedia should aim to be one of the main interfaces through which people reach knowledge by 2030.,56,policy,divisive,99
+D,Interface agency,D-13,Wikimedia should build AI interfaces jointly with public AI developers rather than on its own.,56,policy,lean,94
+E,The Wiki AI technical stack,E-01,Wikimedia should publish machine-readable signals about the editorial quality and review state of its content.,62,policy,consensus,110
+E,The Wiki AI technical stack,E-02,Wikimedia should develop Wikidata as the primary structured knowledge layer that AI systems draw on.,61,policy,lean,100
+E,The Wiki AI technical stack,E-03,Wikimedia should fund a technical environment for AI experimentation that is separate from production infrastructure.,62,policy,lean,117
+E,The Wiki AI technical stack,E-04,Wikimedia's production infrastructure is poorly suited to rapid experimentation with AI tools.,62,diagnostic,lean,94
+E,The Wiki AI technical stack,E-05,A state-of-the-art open AI model is a prerequisite for the rest of Wikimedia's AI strategy.,62,diagnostic,divisive,91
+E,The Wiki AI technical stack,E-06,"Wikimedia should contribute training data and reciprocity standards to public AI models built by partners, rather than training a model itself.",62,policy,lean,143
+E,The Wiki AI technical stack,E-07,Wikimedia should withhold its name from AI models whose behaviour it cannot control.,"43, 62",policy,divisive,84
+E,The Wiki AI technical stack,E-08,Wikimedia should develop Wikimedia Enterprise into the main channel through which AI systems reach its content.,61,policy,divisive,111
+E,The Wiki AI technical stack,E-09,Wikimedia should recruit content partners specifically to supply data that AI systems currently lack.,61,policy,lean,101
+E,The Wiki AI technical stack,E-10,"Wikimedia should fund crowdsourced collection of scarce data types, such as recordings of spoken language.",61,policy,lean,106
+E,The Wiki AI technical stack,E-11,Wikimedia should prioritise AI tools that support existing editors over tools that serve readers.,"59, 63",policy,divisive,97
+E,The Wiki AI technical stack,E-12,Building AI tools for editors will accelerate the decline in the number of active editors.,"39, 45",diagnostic,divisive,90
+E,The Wiki AI technical stack,E-13,Wikimedia should adopt machine learning models built by others rather than developing that capacity in-house.,62,policy,divisive,109
+E,The Wiki AI technical stack,E-14,Wikimedia's AI technology roadmap should follow the Global Majority Technology Priorities set in 2024.,64,policy,lean,102
+F,Collective intelligence and community health,F-01,"Wikimedia's distinctive value lies in the human process that produces its content, rather than in the content itself.","39, 44",value,lean,117
+F,Collective intelligence and community health,F-02,AI tools should help editors reach judgments rather than make editorial judgments in their place.,40,policy,consensus,97
+F,Collective intelligence and community health,F-03,Editors should be permitted to use AI tools to draft article text.,60,policy,divisive,66
+F,Collective intelligence and community health,F-04,AI-generated content submitted without disclosure damages the reliability of Wikipedia.,"22, 35",diagnostic,consensus,87
+F,Collective intelligence and community health,F-05,Wikipedia should require editors to disclose when they have used AI tools to produce content.,60,policy,lean,93
+F,Collective intelligence and community health,F-06,The decline in new editors is driven mainly by falling reader traffic rather than by conditions inside the editing community.,"12, 21",diagnostic,divisive,125
+F,Collective intelligence and community health,F-07,Recruiting new editors should take priority over developing AI technology.,"40, 65",policy,divisive,74
+F,Collective intelligence and community health,F-08,Volunteer editors should hold a formal role in deciding Wikimedia's AI strategy.,"53, 65",policy,lean,80
+F,Collective intelligence and community health,F-09,Wikimedia's AI response should be led by institutional staff rather than by volunteers.,65,policy,divisive,87
+F,Collective intelligence and community health,F-10,Wikimedia communities respond to sudden influxes of readers by protecting articles rather than by recruiting contributors.,16,diagnostic,divisive,122
+F,Collective intelligence and community health,F-11,"Wikimedia should design AI-related volunteer tasks that people find worth doing, rather than tasks that mainly involve repetitive review.",65,policy,consensus,137
+F,Collective intelligence and community health,F-12,Automating editorial work with AI will narrow the range of viewpoints represented on Wikipedia.,40,diagnostic,divisive,95
+F,Collective intelligence and community health,F-13,Wikipedia's model of negotiated consensus among editors cannot be reproduced by an AI system.,"15, 36",value,lean,93
+F,Collective intelligence and community health,F-14,Wikimedia should accept a smaller editing community if AI tools let it maintain the same quality of content.,39–40,value,divisive,108
+G,Equity and the Global Majority,G-01,Machine traffic makes up a larger share of total traffic on small-language Wikipedias than on the largest ones.,35,diagnostic,lean,111
+G,Equity and the Global Majority,G-02,Small-language Wikipedias matter to AI developers because they are often the only structured source in those languages.,35,diagnostic,consensus,119
+G,Equity and the Global Majority,G-03,The communities maintaining small-language Wikipedias have the least capacity to respond to pressure from AI systems.,35,diagnostic,consensus,117
+G,Equity and the Global Majority,G-04,Uncorrected machine translation has become a serious problem for several African-language Wikipedias.,35,diagnostic,lean,101
+G,Equity and the Global Majority,G-05,Wikimedia should be willing to close a language project when AI-generated content threatens the integrity of that language.,35,policy,divisive,123
+G,Equity and the Global Majority,G-06,AI systems trained on Wikimedia freeze the movement's existing gaps in coverage into global default knowledge.,36,diagnostic,lean,110
+G,Equity and the Global Majority,G-07,Wikimedia should commit a fixed share of its AI investment to Global Majority communities.,37,policy,divisive,90
+G,Equity and the Global Majority,G-08,Technical solutions designed for well-resourced communities will widen inequality within the movement by default.,37,diagnostic,divisive,113
+G,Equity and the Global Majority,G-09,"Solutions built for Global Majority communities will also serve Global North communities, while the reverse does not hold.",37,value,divisive,122
+G,Equity and the Global Majority,G-10,"Global Majority partners should hold decision-making authority over the AI mission, not only a role in delivering it.",37,policy,divisive,117
+G,Equity and the Global Majority,G-11,Directing AI investment by geography would slow the movement's technical progress overall.,37,diagnostic,divisive,90
+G,Equity and the Global Majority,G-12,Removing legal barriers to reuse has not produced equity in access to knowledge.,37,diagnostic,lean,80
+G,Equity and the Global Majority,G-13,Wikimedia's citation and verifiability policies exclude forms of knowledge that are not published in writing.,36,diagnostic,divisive,109
+G,Equity and the Global Majority,G-14,Wikipedia should accept oral sources as citations on topics where written sources do not exist.,36,policy,divisive,95
+H,"Coordination, resourcing, and venue",H-01,No single Wikimedia organisation can carry out an AI strategy for the movement on its own.,64,diagnostic,consensus,90
+H,"Coordination, resourcing, and venue",H-02,The Wikimedia Foundation should lead the movement's response to AI.,64,policy,divisive,67
+H,"Coordination, resourcing, and venue",H-03,"A coordinating body spanning movement entities, volunteers, and outside partners should be established for AI work.",64,policy,lean,115
+H,"Coordination, resourcing, and venue",H-04,Creating another movement-wide coordinating body will produce meetings rather than results.,64,diagnostic,divisive,91
+H,"Coordination, resourcing, and venue",H-05,The Wikimedia Endowment should provide seed funding for the movement's AI work.,66,policy,lean,79
+H,"Coordination, resourcing, and venue",H-06,"AI work should be funded jointly by several organisations, so that no single funder sets its direction.",65,policy,lean,103
+H,"Coordination, resourcing, and venue",H-07,Movement organisations should fund AI work from core budgets rather than through grants.,66,policy,lean,88
+H,"Coordination, resourcing, and venue",H-08,Smaller Wikimedia affiliates can move faster on AI experimentation than the largest organisations.,64,diagnostic,lean,98
+H,"Coordination, resourcing, and venue",H-09,"Wikimedia should partner with public AI developers such as Apertus, OLMo, and Pleias.","43, 65",policy,lean,85
+H,"Coordination, resourcing, and venue",H-10,Partnering with named AI developers would compromise Wikimedia's standing as a neutral source.,43,diagnostic,divisive,94
+H,"Coordination, resourcing, and venue",H-11,Movement leaders should take public positions in external debates about AI governance.,66,policy,divisive,86
+H,"Coordination, resourcing, and venue",H-12,Wikimedia should present a position on AI governance at the 2027 Geneva AI Summit.,67,policy,lean,82
+H,"Coordination, resourcing, and venue",H-13,Wikimedia CH should open space for the movement to act in Switzerland rather than lead the work itself.,67,policy,lean,103
+H,"Coordination, resourcing, and venue",H-14,Wikimedia should spend the next two years building agreement across the movement before committing to a technical direction.,68–69,policy,divisive,124

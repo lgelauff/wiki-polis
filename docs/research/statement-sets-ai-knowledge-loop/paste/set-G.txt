@@ -1,0 +1,14 @@
+Machine traffic makes up a larger share of total traffic on small-language Wikipedias than on the largest ones.
+Small-language Wikipedias matter to AI developers because they are often the only structured source in those languages.
+The communities maintaining small-language Wikipedias have the least capacity to respond to pressure from AI systems.
+Uncorrected machine translation has become a serious problem for several African-language Wikipedias.
+Wikimedia should be willing to close a language project when AI-generated content threatens the integrity of that language.
+AI systems trained on Wikimedia freeze the movement's existing gaps in coverage into global default knowledge.
+Wikimedia should commit a fixed share of its AI investment to Global Majority communities.
+Technical solutions designed for well-resourced communities will widen inequality within the movement by default.
+Solutions built for Global Majority communities will also serve Global North communities, while the reverse does not hold.
+Global Majority partners should hold decision-making authority over the AI mission, not only a role in delivering it.
+Directing AI investment by geography would slow the movement's technical progress overall.
+Removing legal barriers to reuse has not produced equity in access to knowledge.
+Wikimedia's citation and verifiability policies exclude forms of knowledge that are not published in writing.
+Wikipedia should accept oral sources as citations on topics where written sources do not exist.

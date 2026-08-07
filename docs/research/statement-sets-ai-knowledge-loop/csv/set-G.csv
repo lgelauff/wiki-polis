@@ -1,0 +1,15 @@
+set,set_name,id,statement,source_page,type,expected_split,chars
+G,Equity and the Global Majority,G-01,Machine traffic makes up a larger share of total traffic on small-language Wikipedias than on the largest ones.,35,diagnostic,lean,111
+G,Equity and the Global Majority,G-02,Small-language Wikipedias matter to AI developers because they are often the only structured source in those languages.,35,diagnostic,consensus,119
+G,Equity and the Global Majority,G-03,The communities maintaining small-language Wikipedias have the least capacity to respond to pressure from AI systems.,35,diagnostic,consensus,117
+G,Equity and the Global Majority,G-04,Uncorrected machine translation has become a serious problem for several African-language Wikipedias.,35,diagnostic,lean,101
+G,Equity and the Global Majority,G-05,Wikimedia should be willing to close a language project when AI-generated content threatens the integrity of that language.,35,policy,divisive,123
+G,Equity and the Global Majority,G-06,AI systems trained on Wikimedia freeze the movement's existing gaps in coverage into global default knowledge.,36,diagnostic,lean,110
+G,Equity and the Global Majority,G-07,Wikimedia should commit a fixed share of its AI investment to Global Majority communities.,37,policy,divisive,90
+G,Equity and the Global Majority,G-08,Technical solutions designed for well-resourced communities will widen inequality within the movement by default.,37,diagnostic,divisive,113
+G,Equity and the Global Majority,G-09,"Solutions built for Global Majority communities will also serve Global North communities, while the reverse does not hold.",37,value,divisive,122
+G,Equity and the Global Majority,G-10,"Global Majority partners should hold decision-making authority over the AI mission, not only a role in delivering it.",37,policy,divisive,117
+G,Equity and the Global Majority,G-11,Directing AI investment by geography would slow the movement's technical progress overall.,37,diagnostic,divisive,90
+G,Equity and the Global Majority,G-12,Removing legal barriers to reuse has not produced equity in access to knowledge.,37,diagnostic,lean,80
+G,Equity and the Global Majority,G-13,Wikimedia's citation and verifiability policies exclude forms of knowledge that are not published in writing.,36,diagnostic,divisive,109
+G,Equity and the Global Majority,G-14,Wikipedia should accept oral sources as citations on topics where written sources do not exist.,36,policy,divisive,95

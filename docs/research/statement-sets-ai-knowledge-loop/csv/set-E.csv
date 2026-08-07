@@ -1,0 +1,15 @@
+set,set_name,id,statement,source_page,type,expected_split,chars
+E,The Wiki AI technical stack,E-01,Wikimedia should publish machine-readable signals about the editorial quality and review state of its content.,62,policy,consensus,110
+E,The Wiki AI technical stack,E-02,Wikimedia should develop Wikidata as the primary structured knowledge layer that AI systems draw on.,61,policy,lean,100
+E,The Wiki AI technical stack,E-03,Wikimedia should fund a technical environment for AI experimentation that is separate from production infrastructure.,62,policy,lean,117
+E,The Wiki AI technical stack,E-04,Wikimedia's production infrastructure is poorly suited to rapid experimentation with AI tools.,62,diagnostic,lean,94
+E,The Wiki AI technical stack,E-05,A state-of-the-art open AI model is a prerequisite for the rest of Wikimedia's AI strategy.,62,diagnostic,divisive,91
+E,The Wiki AI technical stack,E-06,"Wikimedia should contribute training data and reciprocity standards to public AI models built by partners, rather than training a model itself.",62,policy,lean,143
+E,The Wiki AI technical stack,E-07,Wikimedia should withhold its name from AI models whose behaviour it cannot control.,"43, 62",policy,divisive,84
+E,The Wiki AI technical stack,E-08,Wikimedia should develop Wikimedia Enterprise into the main channel through which AI systems reach its content.,61,policy,divisive,111
+E,The Wiki AI technical stack,E-09,Wikimedia should recruit content partners specifically to supply data that AI systems currently lack.,61,policy,lean,101
+E,The Wiki AI technical stack,E-10,"Wikimedia should fund crowdsourced collection of scarce data types, such as recordings of spoken language.",61,policy,lean,106
+E,The Wiki AI technical stack,E-11,Wikimedia should prioritise AI tools that support existing editors over tools that serve readers.,"59, 63",policy,divisive,97
+E,The Wiki AI technical stack,E-12,Building AI tools for editors will accelerate the decline in the number of active editors.,"39, 45",diagnostic,divisive,90
+E,The Wiki AI technical stack,E-13,Wikimedia should adopt machine learning models built by others rather than developing that capacity in-house.,62,policy,divisive,109
+E,The Wiki AI technical stack,E-14,Wikimedia's AI technology roadmap should follow the Global Majority Technology Priorities set in 2024.,64,policy,lean,102
