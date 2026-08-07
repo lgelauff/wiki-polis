@@ -319,6 +319,49 @@ def test_demo_conversation_has_no_first_vote_confirm(client, app):
     assert 'data-demo="true"' in html
 
 
+def test_real_conversation_warns_on_direct_arrival(auth_client, conv, participation):
+    # #293 state model: arriving at a real conversation without having chosen the
+    # real space (deep link) warns once.
+    html = auth_client.get('/c/test-conv').data.decode()
+    assert 'space-warn--real' in html
+
+
+def test_real_conversation_no_warning_after_choosing_real(auth_client, conv, participation):
+    auth_client.get('/consultations')                 # explicit choice of real space
+    html = auth_client.get('/c/test-conv').data.decode()
+    assert 'space-warn--real' not in html
+
+
+def test_demo_conversation_warns_on_direct_arrival(client, app):
+    demo = Conversation(slug='demo-direct', polis_id='demodirect', title='Demo Direct',
+                        active=True, access_policy='demo', phase_submission=True)
+    db.session.add(demo)
+    db.session.commit()
+    html = client.get('/c/demo-direct').data.decode()
+    assert 'space-warn--demo' in html
+
+
+def test_demo_conversation_no_warning_after_choosing_demo(client, app):
+    demo = Conversation(slug='demo-chosen', polis_id='demochosen', title='Demo Chosen',
+                        active=True, access_policy='demo', phase_submission=True)
+    db.session.add(demo)
+    db.session.commit()
+    client.get('/demo')                               # explicit choice of demo space
+    html = client.get('/c/demo-chosen').data.decode()
+    assert 'space-warn--demo' not in html
+
+
+def test_admin_never_sees_space_warning(admin_client, admin_participant, conv):
+    # Admin-access users are exempt from the space warning (#293) even on a
+    # direct arrival that would warn a normal participant.
+    db.session.add(Participation(participant_id=admin_participant.id,
+                                 conversation_id=conv.id, pseudonym='admin-pseudo'))
+    db.session.commit()
+    resp = admin_client.get('/c/test-conv')
+    assert resp.status_code == 200                    # actually renders (not an accept redirect)
+    assert 'space-warn--real' not in resp.data.decode()
+
+
 def test_demo_session_can_roam_between_demos(client, app):
     # #293: a demo session is no longer locked to one demo — it may move freely
     # between demo conversations (rebinding to each).

@@ -4395,3 +4395,40 @@ body[data-demo] {
   background: #eaf1fb;
   border-color: #b5d4f4;
 }
+
+/* Space-mismatch warning banner (#293 state model) — shown once when a viewer
+   lands on a conversation whose space (demo/real) they didn't explicitly choose. */
+.space-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 1rem;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.space-warn a { font-weight: 600; white-space: nowrap; }
+.space-warn--real {
+  border: 1px solid #e6c07a;
+  border-left: 3px solid var(--spot);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--ink);
+}
+.space-warn--demo {
+  border: 1px solid #b5d4f4;
+  border-left: 3px solid var(--blue-dark);
+  background: #eaf1fb;
+  color: var(--blue-dark);
+}
+.space-warn-x {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+}
+.space-warn-x:hover { opacity: 1; }

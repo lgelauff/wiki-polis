@@ -3808,9 +3808,10 @@ def conversation(slug):
     else:
         if _is_demo_session():
             # Leaving the demo for a real consultation: don't forbid — exit the
-            # demo and warn that this one counts, then follow the normal flow (#293).
+            # demo, then follow the normal flow (#293). The space-mismatch banner
+            # below carries the "this is live" warning; `space` stays 'demo' so it
+            # still fires once we render the real conversation.
             _exit_demo_session()
-            flash('You left the demo. This is a real consultation — your votes here will count.', 'warning')
         if 'username' not in session:
             session['next'] = request.path
             return redirect(url_for('login'))
@@ -3828,6 +3829,18 @@ def conversation(slug):
         return redirect(url_for('participant.accept', slug=slug))
 
     can_mod = _can_moderate(conv, participant)
+
+    # Demo/real space state model (#293): warn once when the viewer lands on a
+    # conversation whose space they didn't explicitly choose (e.g. a deep link,
+    # or crossing demo->real directly). Admin-access users are exempt — we expect
+    # them to know what they're doing. Viewing then adopts the conversation's
+    # space, so the warning fires once and normal navigation stays silent.
+    conv_space = 'demo' if conv.access_policy == 'demo' else 'real'
+    has_admin_access = _is_global_admin(participant) or bool(
+        participant and AdminRole.query.filter_by(participant_id=participant.id).first())
+    space_warning = conv_space if (
+        not has_admin_access and session.get('space') != conv_space) else None
+    session['space'] = conv_space
 
     results     = None
     polis_stats = None
@@ -3917,6 +3930,7 @@ def conversation(slug):
 
     return render_template('conversation.html',
                            header_mode='conversation',
+                           space_warning=space_warning,
                            conversation=conv,
                            participation=participation,
                            can_moderate=can_mod,
@@ -5114,6 +5128,7 @@ def _register_routes(app: Flask) -> None:
         # The "try it out" lane: only demo conversations are reachable here, so
         # nothing a visitor does touches a real consultation. Available whether
         # or not they are logged in.
+        session['space'] = 'demo'   # explicit choice of the demo space (#293 state model)
         dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
         demo_convos = (Conversation.query
                        .filter_by(active=True, paused=False, access_policy='demo')
@@ -5126,6 +5141,7 @@ def _register_routes(app: Flask) -> None:
 
     @app.get('/consultations')
     def consultations():
+        session['space'] = 'real'   # explicit choice of the real space (#293 state model)
         dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
         if 'username' not in session:
             public_convos = (Conversation.query

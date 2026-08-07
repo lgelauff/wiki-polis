@@ -44,6 +44,31 @@
 
   <h1 class="sr-only">{{ conversation.title }}</h1>
 
+  {% if space_warning == 'real' %}
+  <div class="space-warn space-warn--real" id="space-warn" role="alert">
+    <span><strong>Live consultation.</strong> These ballots are real — your votes here count.
+      Just exploring? <a href="{{ url_for('demo_lane') }}">Try the demo space →</a></span>
+    <button type="button" class="space-warn-x" id="space-warn-x" aria-label="Dismiss">&times;</button>
+  </div>
+  {% elif space_warning == 'demo' %}
+  <div class="space-warn space-warn--demo" id="space-warn" role="status">
+    <span><strong>Demo.</strong> These are demonstration ballots — not a real consultation.
+      <a href="{{ url_for('demo_lane') }}">Browse the demo space →</a></span>
+    <button type="button" class="space-warn-x" id="space-warn-x" aria-label="Dismiss">&times;</button>
+  </div>
+  {% endif %}
+  {% if space_warning %}
+  <script nonce="{{ csp_nonce }}">
+    (function () {
+      var x = document.getElementById('space-warn-x');
+      if (x) x.addEventListener('click', function () {
+        var b = document.getElementById('space-warn');
+        if (b) b.remove();
+      });
+    })();
+  </script>
+  {% endif %}
+
   {% if demo_mode %}
   <div class="mode-lock mode-lock--demo" style="margin-bottom:1rem">
     <span class="mode-lock-dot" aria-hidden="true"></span>

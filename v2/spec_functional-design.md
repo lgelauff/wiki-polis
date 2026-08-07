@@ -360,14 +360,40 @@ Transitions and phase-critical mutations are protected by **hard guards** (block
 
 ## Home page
 
-The home page shows:
+The home page (`/`) is an explicit **fork** between two spaces, shown every visit: *Try out the platform* (demo) and *Participate in real consultations* (real). It carries no conversation listing itself — picking a lane routes to it.
+
+The **real lane** (`/consultations`) shows:
 
 - **Your conversations — active** — conversations the participant has joined where there is still something to do: open submission, unread arguments, or results to explore
 - **Your conversations — archived** — conversations the participant joined that are now inactive; results remain accessible but no further participation is possible
 - **Available conversations** — conversations the participant is eligible to join but has not yet accepted
 - **Conversations you moderate** — shown only to participants who are moderator or admin on one or more conversations. Lists those conversations regardless of their active or archived status. Hidden entirely if the participant has no such role.
 
-Visitors who are not logged in see a brief explanation of the platform and a login prompt.
+The real lane never lists demo conversations. Visitors who are not logged in see a brief explanation of the platform and a login prompt.
+
+The **demo lane** (`/demo`) lists only demo conversations and is available logged in or out.
+
+---
+
+## Demo & real spaces (state model)
+
+A **demo** conversation (`access_policy = 'demo'`) is a genuine *demonstration* conversation: it runs the full flow and **records votes as usual**, so a newcomer experiences how the platform actually works. It is not a throwaway sandbox. The point of separating it from real consultations is **safety** — someone who only wants to try things must not accidentally act on a live consultation.
+
+Demo conversations are open to anonymous visitors: a logged-out participant gets a synthetic, per-conversation guest identity so they can try without logging in. Real conversations require Wikimedia login as usual.
+
+### States
+
+`Empty` (no space chosen yet) · `Landing` (the fork at `/`) · `Demo` · `Real` · `Admin`. The chosen space is held in the session; visiting `/demo` sets it to demo, `/consultations` sets it to real.
+
+### Transitions and warnings
+
+- **Expected, silent:** `Empty → Landing ↔ Demo ↔ Landing ↔ Real`. Moving between spaces *through the Landing fork* (or the header switch), and roaming freely **between demo conversations**, never warns.
+- **Direct arrival warns once:** landing on a conversation whose space you did **not** explicitly choose — a deep link from `Empty`, or crossing `Demo → Real` (or `Real → Demo`) directly without going through the fork — shows a one-time dismissible banner: *these ballots are live* (real) or *these are demonstration ballots* (demo), with a link to the demo space. Viewing then adopts that conversation's space, so the warning fires once and subsequent navigation within it stays silent.
+- **Admin is exempt:** users with admin access (global admin, or any organizer/moderator role) are never shown the banner — we expect them to know what they are doing.
+
+Leaving a demo for a real consultation is never forbidden: the demo (synthetic) identity is dropped and the normal login-required flow for the real conversation proceeds, with the direct-arrival banner carrying the *this is live* warning.
+
+Independently, the **first vote** on a real consultation shows a one-time, per-conversation confirmation before the vote is recorded (client-side, `localStorage`-gated). Demo conversations never show it.
 
 ---
 
