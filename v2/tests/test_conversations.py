@@ -319,7 +319,25 @@ def test_demo_conversation_has_no_first_vote_confirm(client, app):
     assert 'data-demo="true"' in html
 
 
-def test_demo_session_cannot_enter_other_conversation(client, app):
+def test_demo_session_can_roam_between_demos(client, app):
+    # #293: a demo session is no longer locked to one demo — it may move freely
+    # between demo conversations (rebinding to each).
+    d1 = Conversation(slug='demo-a', polis_id='demopolisa', title='Demo A',
+                      active=True, access_policy='demo')
+    d2 = Conversation(slug='demo-b', polis_id='demopolisb', title='Demo B',
+                      active=True, access_policy='demo')
+    db.session.add_all([d1, d2])
+    db.session.commit()
+
+    assert client.get('/c/demo-a').status_code == 200
+    assert client.get('/c/demo-b').status_code == 200   # was 403 before #293
+    with client.session_transaction() as sess:
+        assert sess['demo_conversation_id'] == d2.id     # rebound to the latest
+
+
+def test_demo_session_entering_real_exits_demo_not_forbidden(client, app):
+    # #293: leaving the demo for a real consultation exits the demo (warn) and
+    # follows the normal login flow — it is not forbidden.
     demo = Conversation(slug='demo2', polis_id='demopolis2', title='Demo',
                         active=True, access_policy='demo')
     public = Conversation(slug='public-after-demo', polis_id='pubdemo123',
@@ -330,7 +348,10 @@ def test_demo_session_cannot_enter_other_conversation(client, app):
 
     resp = client.get('/c/public-after-demo')
 
-    assert resp.status_code == 403
+    assert resp.status_code == 302                       # login redirect, not 403
+    assert '/login' in resp.headers['Location']
+    with client.session_transaction() as sess:
+        assert 'demo_conversation_id' not in sess        # demo binding cleared
 
 
 def test_demo_conversation_allows_statement_route_past_auth(client, app):

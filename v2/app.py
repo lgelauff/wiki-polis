@@ -1256,6 +1256,18 @@ def _demo_bound_conversation_id() -> int | None:
         return None
 
 
+def _exit_demo_session() -> None:
+    """Drop the demo binding so the session can enter a real consultation (#293).
+
+    Demo is a try-it-out space, not a cage: leaving it for a real conversation
+    shouldn't 403. Clears the synthetic identity; the caller then follows the
+    normal (login-required) flow for the real conversation.
+    """
+    session.pop('demo_conversation_id', None)
+    session.pop('xid', None)
+    session.pop('emailable', None)
+
+
 def _demo_pseudonym() -> str:
     for _ in range(50):
         name = f"demo-{secrets.token_hex(4)}"
@@ -1268,9 +1280,10 @@ def _ensure_demo_participation(conversation) -> 'Participation':
     """Create or return a session-scoped synthetic participant for one demo conversation."""
     if conversation.access_policy != 'demo':
         abort(404)
-    bound = _demo_bound_conversation_id()
-    if bound is not None and bound != conversation.id:
-        abort(403)
+    # A demo session may move freely between demo conversations (#293): if it is
+    # bound to a different demo, rebind to this one rather than forbidding it. The
+    # conversation-scoped proxy (#246) stays safe because this rebinds the session
+    # to `conversation` before any proxied call for it is made.
 
     participant = _current_participant()
     if participant and participant.is_demo:
@@ -3794,7 +3807,10 @@ def conversation(slug):
         participant = participation.participant
     else:
         if _is_demo_session():
-            abort(403)
+            # Leaving the demo for a real consultation: don't forbid — exit the
+            # demo and warn that this one counts, then follow the normal flow (#293).
+            _exit_demo_session()
+            flash('You left the demo. This is a real consultation — your votes here will count.', 'warning')
         if 'username' not in session:
             session['next'] = request.path
             return redirect(url_for('login'))
