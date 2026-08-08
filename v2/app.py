@@ -2086,17 +2086,21 @@ def conversation_statement_new(slug):
     ).with_for_update().first_or_404()
     _abort_if_banned(conv, participant)
 
-    new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
-    if len(part.new_stmt_ids or []) >= new_stmt_max:
-        return jsonify({'error': 'quota_exceeded'}), 403
-
     body = request.get_json(silent=True) or {}
     text = (body.get('text') or '').strip()
-    if not text or len(text) > 280:
-        abort(400)
     derived_from = body.get('derived_from')
     if derived_from in ('', None):
         derived_from = None
+
+    # Wording suggestions (derived_from set) are exempt from the new-statement
+    # quota — only genuinely new statements consume it (spec_functional-design.md).
+    if derived_from is None:
+        new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
+        if len(part.new_stmt_ids or []) >= new_stmt_max:
+            return jsonify({'error': 'quota_exceeded'}), 403
+
+    if not text or len(text) > 280:
+        abort(400)
     if derived_from is not None and not isinstance(derived_from, int):
         abort(400)
     parent_text = None
@@ -2154,10 +2158,11 @@ def conversation_statement_new(slug):
     if stmt_resp.status_code == 201:
         stmt_id = stmt_resp.json().get('id')
         if stmt_id is not None:
-            ids = list(part.new_stmt_ids or [])
-            ids.append(stmt_id)
-            part.new_stmt_ids = ids
-            if derived_from is not None:
+            if derived_from is None:
+                ids = list(part.new_stmt_ids or [])
+                ids.append(stmt_id)
+                part.new_stmt_ids = ids
+            else:
                 record_statement_provenance(conv.id, stmt_id, derived_from,
                                             parent_text=parent_text, new_text=text)
         _touch_last_engagement(part)

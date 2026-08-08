@@ -1681,7 +1681,7 @@
         resp.json().then(noteSubmittedStatement);
         composerEl.hidden = true;
         proposeSubmitted.hidden = false;
-        NEW_STMT_USED++;
+        if (derivedFrom == null) NEW_STMT_USED++;
         updateNewstmtCard();
         afterSuccess();
       } else {

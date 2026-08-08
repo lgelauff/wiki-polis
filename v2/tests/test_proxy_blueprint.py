@@ -267,6 +267,37 @@ def test_statement_new_happy_path_records_polis_id(auth_client, participant):
                for c in resp.headers.getlist('Set-Cookie'))
 
 
+def test_statement_new_wording_suggestion_exempt_from_quota(auth_client, participant):
+    """Wording suggestions (derived_from set) must not be blocked by, or count
+    against, the new-statement quota (#296)."""
+    conv = Conversation(slug='q2', polis_id='q2xxxxxxxx', title='Q2', active=True,
+                        access_policy='public', phase_submission=True,
+                        argument_vote_data={'new_stmt_max': 1})
+    db.session.add(conv)
+    db.session.commit()
+    db.session.add(Participation(participant_id=participant.id,
+                                 conversation_id=conv.id, pseudonym='p',
+                                 new_stmt_ids=[101]))  # already at the cap of 1
+    db.session.commit()
+
+    sess_resp = _fake_upstream(cookies={'session': 'NEWPA'})
+    sess_resp.ok = True
+    sess_resp.json = lambda: {'csrf_token': 'TOK'}
+    stmt_resp = _fake_upstream(status_code=201, content=b'{"id":888}')
+    stmt_resp.json = lambda: {'id': 888}
+
+    with patch('app._statement_text_map', return_value={101: 'original wording'}), \
+         patch('app.requests.post', side_effect=[sess_resp, stmt_resp]):
+        resp = auth_client.post('/c/q2/statements/new',
+                                headers={'Sec-Fetch-Site': 'same-origin'},
+                                json={'text': 'original wording, rephrased',
+                                      'derived_from': 101})
+
+    assert resp.status_code == 201  # not 403 quota_exceeded — wording suggestions are unlimited
+    part = Participation.query.filter_by(conversation_id=conv.id).first()
+    assert part.new_stmt_ids == [101]  # unchanged — derivative id must NOT be appended
+
+
 def test_statement_new_requires_csrf_when_csrf_enabled(csrf_enabled_app):
     client = csrf_enabled_app.test_client()
     p = Participant(mw_user_id=10101, mw_username='csrfuser', xid='c' * 64)
