@@ -44,9 +44,35 @@
 
   <h1 class="sr-only">{{ conversation.title }}</h1>
 
+  {% if space_warning == 'real' %}
+  <div class="space-warn space-warn--real" id="space-warn" role="alert">
+    <span><strong>Live consultation.</strong> These ballots are real — your votes here count.
+      Just exploring? <a href="{{ url_for('demo_lane') }}">Try the demo space →</a></span>
+    <button type="button" class="space-warn-ok" id="space-warn-x">I understand</button>
+  </div>
+  {% elif space_warning == 'demo' %}
+  <div class="space-warn space-warn--demo" id="space-warn" role="status">
+    <span><strong>Demo.</strong> These are demonstration ballots — not a real consultation.
+      <a href="{{ url_for('demo_lane') }}">Browse the demo space →</a></span>
+    <button type="button" class="space-warn-ok" id="space-warn-x">I understand</button>
+  </div>
+  {% endif %}
+  {% if space_warning %}
+  <script nonce="{{ csp_nonce }}">
+    (function () {
+      var x = document.getElementById('space-warn-x');
+      if (x) x.addEventListener('click', function () {
+        var b = document.getElementById('space-warn');
+        if (b) b.remove();
+      });
+    })();
+  </script>
+  {% endif %}
+
   {% if demo_mode %}
-  <div class="landing-section" style="margin-bottom:1rem">
-    <p class="muted"><strong>Demo</strong> — anonymous vote-only participation. Responses are not part of a real consultation and may be cleared.</p>
+  <div class="mode-lock mode-lock--demo" style="margin-bottom:1rem">
+    <span class="mode-lock-dot" aria-hidden="true"></span>
+    Demonstration conversation — try the full flow. Your input is recorded here, just like a real consultation.
   </div>
   {% endif %}
 
@@ -250,7 +276,7 @@
         </div>
 
         {# ── V2 Option Triad — always rendered, dimmed pre-vote, active post-vote ── #}
-        <div class="v2-triad" id="v2-triad" {% if demo_mode %}hidden{% endif %}>
+        <div class="v2-triad" id="v2-triad">
           <div class="v2-triad-label" id="v2-triad-label" aria-live="polite">After you vote, you can&hellip;</div>
           <div class="v2-triad-grid" role="group" aria-labelledby="v2-triad-label">
 
@@ -1559,11 +1585,6 @@
     votedBadge.hidden      = false;
     votedLabel.textContent = LABELS[voteType];
     votedBadge.dataset.type = voteType;
-
-    if (DEMO_MODE) {
-      triad.hidden = true;
-      return;
-    }
 
     triad.hidden = false;
     triadLabel.textContent = 'What now?';

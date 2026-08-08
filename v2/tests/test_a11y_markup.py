@@ -103,7 +103,7 @@ def test_home_listing_has_list_and_heading_semantics(client, conv):
     Sibling <a> cards with no list role gave SR users no "list, N items" / item
     position; plain <span> titles were not heading-navigable (1.3.1 / 2.4.6).
     """
-    resp = client.get('/')
+    resp = client.get('/consultations')
     assert resp.status_code == 200
     html = resp.data.decode()
     assert '<ul class="conv-list">' in html
@@ -114,7 +114,7 @@ def test_home_listing_has_list_and_heading_semantics(client, conv):
 def test_home_pseudonym_announced_with_context(auth_client, conv, participation):
     """A joined consultation announces the pseudonym labelled as such, not as a
     bare token, and the redundant visible badge is hidden from AT (1.3.1 / 4.1.2)."""
-    resp = auth_client.get('/')
+    resp = auth_client.get('/consultations')
     assert resp.status_code == 200
     html = resp.data.decode()
     assert 'your pseudonym: happy-fox' in html
@@ -124,7 +124,7 @@ def test_home_pseudonym_announced_with_context(auth_client, conv, participation)
 def test_home_output_symbols_expose_state_and_labels(auth_client, conv, participation):
     conv.phase_personal_results = True
     db.session.commit()
-    resp = auth_client.get('/')
+    resp = auth_client.get('/consultations')
     assert resp.status_code == 200
     html = resp.data.decode()
     assert 'class="conv-output-grid"' in html
