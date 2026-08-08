@@ -4378,18 +4378,6 @@ body[data-demo] {
 }
 .fork-card--demo .fork-card-cta { background: var(--blue-dark); }
 
-/* First-vote confirm on real consultations (#293) */
-.live-vote-confirm {
-  margin: 0 0 1rem;
-  border: 1px solid var(--hairline);
-  border-left: 3px solid var(--spot);
-  border-radius: 8px;
-  background: var(--surface);
-  padding: 12px 14px;
-}
-.live-vote-confirm p { font-size: 14px; margin: 0 0 10px; }
-.live-vote-confirm-actions { display: flex; gap: 8px; }
-
 .conv-card-badge--demo {
   color: var(--blue-dark);
   background: #eaf1fb;
@@ -4421,14 +4409,18 @@ body[data-demo] {
   background: #eaf1fb;
   color: var(--blue-dark);
 }
-.space-warn-x {
+.space-warn-ok {
   margin-left: auto;
+  flex-shrink: 0;
+  align-self: center;
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
   background: none;
-  border: 0;
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
   color: inherit;
-  opacity: 0.6;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
 }
-.space-warn-x:hover { opacity: 1; }
+.space-warn-ok:hover { background: rgba(0, 0, 0, 0.05); }

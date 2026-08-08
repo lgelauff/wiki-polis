@@ -298,32 +298,22 @@ def test_consultations_real_lane_has_switch_not_demo_theme(client, conv):
     assert 'data-demo="true"' not in html
 
 
-def test_real_conversation_shows_first_vote_confirm(auth_client, conv, participation):
-    # A live (non-demo) conversation carries the one-time first-vote confirm;
-    # a demo one never does (#293).
+def test_no_first_vote_confirm_on_real_conversation(auth_client, conv, participation):
+    # #293: the on-vote first-vote confirm was removed in favour of the single
+    # arrival banner (which warns only on an unchosen demo<->real crossing).
     conv.phase_submission = True
     db.session.commit()
     html = auth_client.get('/c/test-conv').data.decode()
-    assert 'id="live-vote-confirm"' in html
-    assert 'your vote will be recorded' in html
-    assert 'data-demo="true"' not in html
-
-
-def test_demo_conversation_has_no_first_vote_confirm(client, app):
-    demo = Conversation(slug='demo-noconf', polis_id='demoncf001', title='Demo NoConf',
-                        active=True, access_policy='demo', phase_submission=True)
-    db.session.add(demo)
-    db.session.commit()
-    html = client.get('/c/demo-noconf').data.decode()
     assert 'id="live-vote-confirm"' not in html
-    assert 'data-demo="true"' in html
+    assert 'your vote will be recorded' not in html
 
 
 def test_real_conversation_warns_on_direct_arrival(auth_client, conv, participation):
     # #293 state model: arriving at a real conversation without having chosen the
-    # real space (deep link) warns once.
+    # real space (deep link) warns once, with an "I understand" acknowledge.
     html = auth_client.get('/c/test-conv').data.decode()
     assert 'space-warn--real' in html
+    assert 'I understand' in html
 
 
 def test_real_conversation_no_warning_after_choosing_real(auth_client, conv, participation):

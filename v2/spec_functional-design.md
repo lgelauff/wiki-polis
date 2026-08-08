@@ -388,12 +388,10 @@ Demo conversations are open to anonymous visitors: a logged-out participant gets
 ### Transitions and warnings
 
 - **Expected, silent:** `Empty → Landing ↔ Demo ↔ Landing ↔ Real`. Moving between spaces *through the Landing fork* (or the header switch), and roaming freely **between demo conversations**, never warns.
-- **Direct arrival warns once:** landing on a conversation whose space you did **not** explicitly choose — a deep link from `Empty`, or crossing `Demo → Real` (or `Real → Demo`) directly without going through the fork — shows a one-time dismissible banner: *these ballots are live* (real) or *these are demonstration ballots* (demo), with a link to the demo space. Viewing then adopts that conversation's space, so the warning fires once and subsequent navigation within it stays silent.
+- **Direct arrival warns once:** landing on a conversation whose space you did **not** explicitly choose — a deep link from `Empty`, or crossing `Demo → Real` (or `Real → Demo`) directly without going through the fork — shows a one-time banner acknowledged with **"I understand"**: *these ballots are live* (real) or *these are demonstration ballots* (demo), with a link to the demo space. Viewing then adopts that conversation's space, so the warning fires once and subsequent navigation within it stays silent. This arrival banner is the **single** live/demo warning — there is no separate per-vote confirmation.
 - **Admin is exempt:** users with admin access (global admin, or any organizer/moderator role) are never shown the banner — we expect them to know what they are doing.
 
 Leaving a demo for a real consultation is never forbidden: the demo (synthetic) identity is dropped and the normal login-required flow for the real conversation proceeds, with the direct-arrival banner carrying the *this is live* warning.
-
-Independently, the **first vote** on a real consultation shows a one-time, per-conversation confirmation before the vote is recorded (client-side, `localStorage`-gated). Demo conversations never show it.
 
 ---
 
