@@ -1,0 +1,14 @@
+Wikimedia should publish machine-readable signals about the editorial quality and review state of its content.
+Wikimedia should develop Wikidata as the primary structured knowledge layer that AI systems draw on.
+Wikimedia should fund a technical environment for AI experimentation that is separate from production infrastructure.
+Wikimedia's production infrastructure is poorly suited to rapid experimentation with AI tools.
+A state-of-the-art open AI model is a prerequisite for the rest of Wikimedia's AI strategy.
+Wikimedia should contribute training data and reciprocity standards to public AI models built by partners, rather than training a model itself.
+Wikimedia should withhold its name from AI models whose behaviour it cannot control.
+Wikimedia should develop Wikimedia Enterprise into the main channel through which AI systems reach its content.
+Wikimedia should recruit content partners specifically to supply data that AI systems currently lack.
+Wikimedia should fund crowdsourced collection of scarce data types, such as recordings of spoken language.
+Wikimedia should prioritise AI tools that support existing editors over tools that serve readers.
+Building AI tools for editors will accelerate the decline in the number of active editors.
+Wikimedia should adopt machine learning models built by others rather than developing that capacity in-house.
+Wikimedia's AI technology roadmap should follow the Global Majority Technology Priorities set in 2024.

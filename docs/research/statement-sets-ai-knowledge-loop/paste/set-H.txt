@@ -1,0 +1,14 @@
+No single Wikimedia organisation can carry out an AI strategy for the movement on its own.
+The Wikimedia Foundation should lead the movement's response to AI.
+A coordinating body spanning movement entities, volunteers, and outside partners should be established for AI work.
+Creating another movement-wide coordinating body will produce meetings rather than results.
+The Wikimedia Endowment should provide seed funding for the movement's AI work.
+AI work should be funded jointly by several organisations, so that no single funder sets its direction.
+Movement organisations should fund AI work from core budgets rather than through grants.
+Smaller Wikimedia affiliates can move faster on AI experimentation than the largest organisations.
+Wikimedia should partner with public AI developers such as Apertus, OLMo, and Pleias.
+Partnering with named AI developers would compromise Wikimedia's standing as a neutral source.
+Movement leaders should take public positions in external debates about AI governance.
+Wikimedia should present a position on AI governance at the 2027 Geneva AI Summit.
+Wikimedia CH should open space for the movement to act in Switzerland rather than lead the work itself.
+Wikimedia should spend the next two years building agreement across the movement before committing to a technical direction.

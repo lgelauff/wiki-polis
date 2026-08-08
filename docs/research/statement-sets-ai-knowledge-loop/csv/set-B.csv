@@ -1,0 +1,14 @@
+set,set_name,id,statement,source_page,type,expected_split,chars
+B,Strategic posture,B-01,Wikimedia's current approach to AI companies is closer to passive acceptance than to active negotiation.,50,diagnostic,lean,104
+B,Strategic posture,B-02,Rate-limiting AI crawlers protects Wikimedia infrastructure at an acceptable cost to openness.,49,policy,divisive,94
+B,Strategic posture,B-03,Restricting access to Wikimedia content in response to AI scraping would do more damage to the mission than the scraping does.,49–50,policy,divisive,126
+B,Strategic posture,B-04,Wikimedia should offer some AI companies exclusive access to its content in exchange for higher payment.,49–50,policy,divisive,104
+B,Strategic posture,B-05,"Keeping access open without conditions remains the right approach, since reuse eventually returns value to the commons.",49–50,policy,divisive,119
+B,Strategic posture,B-06,"Wikimedia should set conditions on how AI systems use its content, rather than granting permission in advance through open licences.","51, 60",policy,divisive,132
+B,Strategic posture,B-07,Wikimedia has enough influence over AI companies to negotiate terms those companies would otherwise refuse.,"42, 51",diagnostic,divisive,107
+B,Strategic posture,B-08,The volume of openly shared content is no longer an adequate measure of the health of the knowledge commons.,46,value,lean,108
+B,Strategic posture,B-09,"When openness and the financial sustainability of Wikimedia conflict, sustainability should take precedence.",46,value,divisive,108
+B,Strategic posture,B-10,Wikimedia Enterprise shows that large-scale commercial use of the commons can be structured through negotiated agreements.,51,diagnostic,consensus,122
+B,Strategic posture,B-11,"Wikimedia Enterprise revenue, at 4% of Foundation income, is too small to change how AI companies behave.",51,diagnostic,lean,105
+B,Strategic posture,B-12,Taking an active political stance toward AI companies would damage Wikimedia's reputation for neutrality.,66,diagnostic,divisive,105
+B,Strategic posture,B-13,Wikimedia should treat its relationship with AI companies as a negotiation between parties whose interests conflict.,"12, 40",value,lean,116

@@ -170,17 +170,39 @@ def test_demo_proxy_allows_bound_vote_endpoint(client):
     assert req.called
 
 
-def test_demo_proxy_blocks_statement_write_endpoint(client):
+def test_demo_proxy_allows_bound_statement_write_endpoint(client):
+    # Demo conversations run the full flow (#293), so a demo session may create
+    # statements — scoped to its own bound conversation.
     conv = Conversation(slug='demo-proxy2', polis_id='demoproxy2', title='Demo',
                         active=True, access_policy='demo', phase_submission=True)
     db.session.add(conv)
     db.session.commit()
     client.get('/c/demo-proxy2')
 
-    with patch('app.requests.request') as req:
+    up = _fake_upstream()
+    with patch('app.requests.request', return_value=up) as req:
         resp = client.post('/proxy/particiapi/api/conversations/demoproxy2/statements/',
                            headers={'Sec-Fetch-Site': 'same-origin'},
-                           json={'text': 'blocked'})
+                           json={'text': 'a demo statement'})
+
+    assert resp.status_code == 200
+    assert req.called
+
+
+def test_demo_proxy_blocks_write_to_other_conversation(client):
+    # The demo session stays scoped: it may not write to a different conversation.
+    demo = Conversation(slug='demo-proxy3', polis_id='demoproxy3', title='Demo',
+                        active=True, access_policy='demo', phase_submission=True)
+    other = Conversation(slug='other-conv', polis_id='otherconv1', title='Other',
+                         active=True, access_policy='public', phase_submission=True)
+    db.session.add_all([demo, other])
+    db.session.commit()
+    client.get('/c/demo-proxy3')
+
+    with patch('app.requests.request') as req:
+        resp = client.post('/proxy/particiapi/api/conversations/otherconv1/statements/',
+                           headers={'Sec-Fetch-Site': 'same-origin'},
+                           json={'text': 'should be blocked'})
 
     assert resp.status_code == 403
     req.assert_not_called()

@@ -1,0 +1,15 @@
+set,set_name,id,statement,source_page,type,expected_split,chars
+A,Diagnosis: the state of the knowledge loop,A-01,Declining referrals from Google search account for most of the recent fall in human traffic to Wikipedia.,14,diagnostic,lean,105
+A,Diagnosis: the state of the knowledge loop,A-02,Wikipedia's search referral traffic would have declined even if generative AI had not emerged.,13–14,diagnostic,divisive,94
+A,Diagnosis: the state of the knowledge loop,A-03,Machine traffic to Wikimedia projects will eventually exceed human traffic.,22,diagnostic,lean,75
+A,Diagnosis: the state of the knowledge loop,A-04,AI systems that summarise Wikipedia content without linking to it reduce the number of readers who go on to become editors.,"22, 56",diagnostic,lean,123
+A,Diagnosis: the state of the knowledge loop,A-05,"The most serious risk to Wikimedia from AI is the cost of serving machine traffic, rather than the loss of influence over how knowledge is produced.","21, 30",diagnostic,divisive,148
+A,Diagnosis: the state of the knowledge loop,A-06,Wikimedia is on the same trajectory that Stack Overflow followed after 2022.,31,diagnostic,divisive,76
+A,Diagnosis: the state of the knowledge loop,A-07,Stack Overflow declined for reasons specific to programming questions that do not apply to an encyclopedia.,31,diagnostic,divisive,107
+A,Diagnosis: the state of the knowledge loop,A-08,Wikipedia's decision to remain a text-based medium has cost it readers who prefer video.,16,diagnostic,lean,88
+A,Diagnosis: the state of the knowledge loop,A-09,"Readers who prefer quick, low-effort answers have a legitimate need that Wikipedia has not met.",16,value,divisive,95
+A,Diagnosis: the state of the knowledge loop,A-10,Large AI models trained mainly on English Wikipedia present its coverage as global default knowledge.,"19, 36",diagnostic,consensus,101
+A,Diagnosis: the state of the knowledge loop,A-11,Open licensing has allowed AI developers to take value from Wikimedia while returning little in exchange.,"27, 29",diagnostic,lean,105
+A,Diagnosis: the state of the knowledge loop,A-12,Large-scale AI training on Wikipedia content is exactly the kind of reuse that Wikimedia's open licences were written to permit.,27,diagnostic,divisive,128
+A,Diagnosis: the state of the knowledge loop,A-13,Most people who now rely on Wikipedia-derived content do not know that they are doing so.,29,diagnostic,lean,89
+A,Diagnosis: the state of the knowledge loop,A-14,"Paywalls, bot-blocking, and AI-generated web content are making it harder for editors to find citable sources.",22,diagnostic,consensus,110

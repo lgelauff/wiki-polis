@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Manage {{ conversation.title }} — wiki-polis{% endblock %}
+{% block title %}Manage {{ conversation.title }} — ProtoWiki{% endblock %}
 {% block header_crumb %}
 <nav class="header-crumb" aria-label="Admin breadcrumb">
   <span class="header-crumb-sep">/</span>
@@ -685,7 +685,7 @@
     });
     var df = document.getElementById('delete-conversation-form');
     if (df) df.addEventListener('submit', function (e) {
-      if (!confirm('Delete this consultation?\n\nThis removes local wiki-polis records after hiding the Polis conversation. This cannot be undone.')) e.preventDefault();
+      if (!confirm('Delete this consultation?\n\nThis removes local ProtoWiki records after hiding the Polis conversation. This cannot be undone.')) e.preventDefault();
     });
   </script>
   {% endif %}{# is_admin #}

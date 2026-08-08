@@ -1,0 +1,14 @@
+Wikimedia's distinctive value lies in the human process that produces its content, rather than in the content itself.
+AI tools should help editors reach judgments rather than make editorial judgments in their place.
+Editors should be permitted to use AI tools to draft article text.
+AI-generated content submitted without disclosure damages the reliability of Wikipedia.
+Wikipedia should require editors to disclose when they have used AI tools to produce content.
+The decline in new editors is driven mainly by falling reader traffic rather than by conditions inside the editing community.
+Recruiting new editors should take priority over developing AI technology.
+Volunteer editors should hold a formal role in deciding Wikimedia's AI strategy.
+Wikimedia's AI response should be led by institutional staff rather than by volunteers.
+Wikimedia communities respond to sudden influxes of readers by protecting articles rather than by recruiting contributors.
+Wikimedia should design AI-related volunteer tasks that people find worth doing, rather than tasks that mainly involve repetitive review.
+Automating editorial work with AI will narrow the range of viewpoints represented on Wikipedia.
+Wikipedia's model of negotiated consensus among editors cannot be reproduced by an AI system.
+Wikimedia should accept a smaller editing community if AI tools let it maintain the same quality of content.

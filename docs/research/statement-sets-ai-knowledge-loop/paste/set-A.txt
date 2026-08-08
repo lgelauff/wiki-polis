@@ -1,0 +1,14 @@
+Declining referrals from Google search account for most of the recent fall in human traffic to Wikipedia.
+Wikipedia's search referral traffic would have declined even if generative AI had not emerged.
+Machine traffic to Wikimedia projects will eventually exceed human traffic.
+AI systems that summarise Wikipedia content without linking to it reduce the number of readers who go on to become editors.
+The most serious risk to Wikimedia from AI is the cost of serving machine traffic, rather than the loss of influence over how knowledge is produced.
+Wikimedia is on the same trajectory that Stack Overflow followed after 2022.
+Stack Overflow declined for reasons specific to programming questions that do not apply to an encyclopedia.
+Wikipedia's decision to remain a text-based medium has cost it readers who prefer video.
+Readers who prefer quick, low-effort answers have a legitimate need that Wikipedia has not met.
+Large AI models trained mainly on English Wikipedia present its coverage as global default knowledge.
+Open licensing has allowed AI developers to take value from Wikimedia while returning little in exchange.
+Large-scale AI training on Wikipedia content is exactly the kind of reuse that Wikimedia's open licences were written to permit.
+Most people who now rely on Wikipedia-derived content do not know that they are doing so.
+Paywalls, bot-blocking, and AI-generated web content are making it harder for editors to find citable sources.

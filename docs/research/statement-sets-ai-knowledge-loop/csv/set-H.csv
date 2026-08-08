@@ -1,0 +1,15 @@
+set,set_name,id,statement,source_page,type,expected_split,chars
+H,"Coordination, resourcing, and venue",H-01,No single Wikimedia organisation can carry out an AI strategy for the movement on its own.,64,diagnostic,consensus,90
+H,"Coordination, resourcing, and venue",H-02,The Wikimedia Foundation should lead the movement's response to AI.,64,policy,divisive,67
+H,"Coordination, resourcing, and venue",H-03,"A coordinating body spanning movement entities, volunteers, and outside partners should be established for AI work.",64,policy,lean,115
+H,"Coordination, resourcing, and venue",H-04,Creating another movement-wide coordinating body will produce meetings rather than results.,64,diagnostic,divisive,91
+H,"Coordination, resourcing, and venue",H-05,The Wikimedia Endowment should provide seed funding for the movement's AI work.,66,policy,lean,79
+H,"Coordination, resourcing, and venue",H-06,"AI work should be funded jointly by several organisations, so that no single funder sets its direction.",65,policy,lean,103
+H,"Coordination, resourcing, and venue",H-07,Movement organisations should fund AI work from core budgets rather than through grants.,66,policy,lean,88
+H,"Coordination, resourcing, and venue",H-08,Smaller Wikimedia affiliates can move faster on AI experimentation than the largest organisations.,64,diagnostic,lean,98
+H,"Coordination, resourcing, and venue",H-09,"Wikimedia should partner with public AI developers such as Apertus, OLMo, and Pleias.","43, 65",policy,lean,85
+H,"Coordination, resourcing, and venue",H-10,Partnering with named AI developers would compromise Wikimedia's standing as a neutral source.,43,diagnostic,divisive,94
+H,"Coordination, resourcing, and venue",H-11,Movement leaders should take public positions in external debates about AI governance.,66,policy,divisive,86
+H,"Coordination, resourcing, and venue",H-12,Wikimedia should present a position on AI governance at the 2027 Geneva AI Summit.,67,policy,lean,82
+H,"Coordination, resourcing, and venue",H-13,Wikimedia CH should open space for the movement to act in Switzerland rather than lead the work itself.,67,policy,lean,103
+H,"Coordination, resourcing, and venue",H-14,Wikimedia should spend the next two years building agreement across the movement before committing to a technical direction.,68–69,policy,divisive,124
