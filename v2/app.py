@@ -180,6 +180,28 @@ _PHASE6_AGG_TTL = float(os.environ.get('PHASE6_RESULTS_CACHE_TTL', '30'))
 _phase6_agg_cache: dict = {}
 _phase6_agg_lock = threading.Lock()
 
+# Phase-6 vote-session bootstrap coordination (#275 thread-safety). Under threaded
+# workers, two concurrent first-time Phase-6 votes from the SAME participant could
+# each POST create=true and mint two different Polis uids — which the aggregate's
+# COUNT(DISTINCT pid) would then count as two voters. We serialize the first bootstrap
+# per (xid, conversation) within a worker and share the resulting session token via a
+# process-local cache (each request holds its own Flask-session copy, so re-reading the
+# session under the lock is not enough). Cross-process double-bootstrap predates the
+# threading change (multi-process workers already allowed it); the complete cross-worker
+# fix is to bind the Phase-6 session to the trusted-sub subject (idempotent uid).
+_p6_bootstrap_locks: dict = {}
+_p6_bootstrap_locks_guard = threading.Lock()
+_p6_session_cache: dict = {}  # (xid, conv_id) -> (pa_cookie, csrf_token)
+
+
+def _p6_bootstrap_lock(key):
+    with _p6_bootstrap_locks_guard:
+        lock = _p6_bootstrap_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _p6_bootstrap_locks[key] = lock
+        return lock
+
 
 def _phase6_agg_cached(key, producer, cacheable=None):
     """Return producer()'s value, memoised per key for _PHASE6_AGG_TTL seconds.
@@ -2206,6 +2228,31 @@ def conversation_statement_new(slug):
                 'threshold': threshold,
             }), 409
 
+    # Establish the Particiapi session + CSRF token BEFORE taking the row lock, so the
+    # ~5s session-create round-trip does not run while holding the FOR UPDATE lock (#275
+    # M3) — that keeps the lock's held time down to just the submit + append. Only the
+    # submit must stay atomic with the quota recheck (so a rejected submit never orphans
+    # a Polis statement); the session bootstrap does not.
+    pa_cookie = request.cookies.get('pa_session')
+    forwarded = {'session': pa_cookie} if pa_cookie else {}
+    base = current_app.config['PARTICIAPI_BASE']
+    try:
+        sess_resp = polis_http.post(
+            f'{base}/api/session',
+            cookies=forwarded,
+            params={'create': 'true'},
+            timeout=5,
+        )
+        if not sess_resp.ok:
+            current_app.logger.error('Particiapi session error: %s', sess_resp.status_code)
+            abort(502)
+        csrf_token = sess_resp.json().get('csrf_token', '')
+        new_pa_cookie = sess_resp.cookies.get('session')
+        submit_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
+    except requests.RequestException:
+        current_app.logger.exception('Particiapi error in conversation_statement_new')
+        abort(502)
+
     # Authoritative quota check under a row lock, held through the submit + append so two
     # concurrent submits from the same participant can't both pass. (Per-participation
     # lock — only serialises one participant's own concurrent submits, not the
@@ -2223,25 +2270,7 @@ def conversation_statement_new(slug):
     if derived_from is None and len(part.new_stmt_ids or []) >= new_stmt_max:
         return jsonify({'error': 'quota_exceeded'}), 403
 
-    # Get CSRF token for this Particiapi session, then submit the statement.
-    pa_cookie = request.cookies.get('pa_session')
-    forwarded = {'session': pa_cookie} if pa_cookie else {}
-    base = current_app.config['PARTICIAPI_BASE']
-
     try:
-        sess_resp = polis_http.post(
-            f'{base}/api/session',
-            cookies=forwarded,
-            params={'create': 'true'},
-            timeout=5,
-        )
-        if not sess_resp.ok:
-            current_app.logger.error('Particiapi session error: %s', sess_resp.status_code)
-            abort(502)
-        csrf_token = sess_resp.json().get('csrf_token', '')
-        new_pa_cookie = sess_resp.cookies.get('session')
-        submit_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
-
         stmt_resp = polis_http.post(
             f'{base}/api/conversations/{conv.polis_id}/statements/',
             json={'text': text},
@@ -4576,9 +4605,12 @@ def phase6_vote(slug):
     # `pa_session` cookie so it never collides with the Phase 2 web component's
     # session. We re-bootstrap only when it is missing or a vote is rejected as a
     # session/CSRF failure (stale token).
+    p6_key = (session.get('xid'), conv.id)
+
     def _bootstrap():
         """(Re)establish the Phase 6 Particiapi session + CSRF token, storing both in
-        the Flask session. Returns (pa, csrf_token); aborts 502 on failure."""
+        the Flask session and the process-local share cache. Returns (pa, csrf_token);
+        aborts 502 on failure."""
         prior = session.get('_p6_pa')
         try:
             r = polis_http.post(
@@ -4595,14 +4627,24 @@ def phase6_vote(slug):
             abort(502)
         session['_p6_pa']   = r.cookies.get('session') or prior
         session['_p6_csrf'] = r.json().get('csrf_token', '')
+        _p6_session_cache[p6_key] = (session['_p6_pa'], session['_p6_csrf'])
         return session['_p6_pa'], session['_p6_csrf']
 
     pa = session.get('_p6_pa')
     csrf_token = session.get('_p6_csrf')
     bootstrapped = False
     if not (pa and csrf_token):
-        pa, csrf_token = _bootstrap()
-        bootstrapped = True
+        # Serialize the first bootstrap per (participant, conversation) within this
+        # worker so concurrent first votes reuse one Polis session instead of minting
+        # two uids (#275). See the _p6_session_cache note above.
+        with _p6_bootstrap_lock(p6_key):
+            shared = _p6_session_cache.get(p6_key)
+            if shared:
+                session['_p6_pa'], session['_p6_csrf'] = shared
+                pa, csrf_token = shared
+            else:
+                pa, csrf_token = _bootstrap()
+                bootstrapped = True
 
     def _put(cookie_val, token):
         try:

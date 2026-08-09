@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import app as app_module
 from db import Conversation, FeaturedStatement, Participation, db
+from tests.conftest import login
 
 
 def _p6_conv():
@@ -53,6 +54,32 @@ def test_phase6_vote_reuses_session_across_votes(auth_client, participant):
     assert r2.status_code == 200
     assert post.call_count == 1   # session bootstrap happens once, then is reused
     assert put.call_count == 2    # both votes forwarded
+
+
+def test_phase6_bootstrap_shared_across_sessions_same_participant(app, participant):
+    # #275 M1: two concurrent first-time Phase-6 votes from the SAME participant
+    # (separate Flask sessions — e.g. two tabs) must reuse ONE Polis session, not
+    # mint two uids that COUNT(DISTINCT pid) would double-count. The process-local
+    # share cache makes the second session reuse the first's bootstrap.
+    c, fs = _p6_conv()
+    db.session.add(Participation(participant_id=participant.id, conversation_id=c.id,
+                                 pseudonym='p6-bear'))
+    db.session.commit()
+
+    client_a = app.test_client()
+    client_b = app.test_client()
+    login(client_a, 'testuser')
+    login(client_b, 'testuser')   # same participant/xid, independent sessions
+
+    with patch.object(app_module.polis_http, 'post', return_value=_session_resp()) as post, \
+         patch.object(app_module.polis_http, 'put', return_value=_put_resp()) as put:
+        ra = client_a.post('/c/p6-conv/phase6/vote', json={'fs_id': fs.id, 'vote': -1})
+        rb = client_b.post('/c/p6-conv/phase6/vote', json={'fs_id': fs.id, 'vote': 1})
+
+    assert ra.status_code == 200
+    assert rb.status_code == 200
+    assert post.call_count == 1   # ONE bootstrap shared across both sessions
+    assert put.call_count == 2
 
 
 def test_phase6_vote_rebootstraps_on_stale_token(auth_client, participant):

@@ -31,9 +31,15 @@ def _disable_phase6_results_cache():
     import app as _app
     saved = _app._PHASE6_AGG_TTL
     _app._PHASE6_AGG_TTL = 0.0
+    # Also clear the process-local Phase-6 vote-session share cache/locks so a
+    # bootstrap from one test can't be reused in another (SQLite ids reset per test).
+    _app._p6_session_cache.clear()
+    _app._p6_bootstrap_locks.clear()
     yield
     _app._PHASE6_AGG_TTL = saved
     _app._invalidate_phase6_results_cache()
+    _app._p6_session_cache.clear()
+    _app._p6_bootstrap_locks.clear()
 
 
 @pytest.fixture

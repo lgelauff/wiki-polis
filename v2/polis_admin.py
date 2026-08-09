@@ -39,6 +39,18 @@ _PG_POOL_MAXCONN = int(os.environ.get('POLIS_PG_POOL_MAXCONN', '20'))
 _PG_POOLS: dict[str, object] = {}
 _PG_POOLS_LOCK = threading.Lock()
 
+# When the pool is exhausted we fall back to a one-off direct connection. Cap how many
+# such one-offs can be open at once, per process, so a spike can't open unbounded
+# connections and blow past Postgres max_connections (#275 M4). Total in-flight PG
+# connections per process are then bounded by maxconn + fallback-max.
+_PG_FALLBACK_MAX = int(os.environ.get('POLIS_PG_FALLBACK_MAX', str(_PG_POOL_MAXCONN)))
+_pg_fallback_sem = threading.BoundedSemaphore(_PG_FALLBACK_MAX)
+
+
+class PgFallbackExhausted(Exception):
+    """Both the pool and the bounded one-off fallback are saturated — shed load
+    (degrade to 'unavailable') rather than open an unbounded connection."""
+
 
 def _get_pg_pool(db_url: str):
     """Return a process-wide ThreadedConnectionPool for db_url, built once.
@@ -90,14 +102,20 @@ def _pg_connection(db_url: str):
     pool = _get_pg_pool(db_url)
     conn = None
     from_pool = False
+    fallback_held = False
     try:
         if pool is not None:
             try:
                 conn = pool.getconn()
                 from_pool = True
             except psycopg2.pool.PoolError:
-                conn = None  # exhausted — fall back to a one-off connection
+                conn = None  # exhausted — fall back to a bounded one-off connection
         if conn is None:
+            # Bound the one-off fallback (#275 M4): if the fallback budget is also
+            # saturated, shed the read rather than open an unbounded connection.
+            if not _pg_fallback_sem.acquire(blocking=False):
+                raise PgFallbackExhausted(db_url)
+            fallback_held = True
             conn = psycopg2.connect(db_url)
         yield conn
     except Exception:
@@ -117,6 +135,8 @@ def _pg_connection(db_url: str):
                     conn.close()
             except Exception:
                 pass
+        if fallback_held:
+            _pg_fallback_sem.release()
 
 # Returns all active statements with vote counts, seeds first then by agree rate.
 # The agree-rate ordering is a heuristic proxy for group-representativeness when
@@ -647,20 +667,33 @@ class PolisServerClient:
         query raises. Callers are responsible for their own zinvite guard.
         """
         try:
-            import psycopg2  # noqa: F401 — importability check; used in _pg_connection
+            import psycopg2  # importability check; used in _pg_connection
         except ImportError:
             logger.exception('psycopg2 not available — %s unavailable', label)
             return None
-        try:
-            with _pg_connection(self._db_url) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(sql, params)
-                    rows = cur.fetchall()
-                conn.rollback()  # end the implicit read-only txn before reuse
-        except Exception:
-            logger.exception('Postgres %s failed', label)
-            return None
-        return rows
+        # A pooled connection can be closed by the server during idle and the pool
+        # does not pre-ping (unlike the SQLAlchemy/HTTP pools). Retry ONCE on a
+        # connection-level error with a fresh borrow — _pg_connection has already
+        # discarded the broken connection — so the first read after idle doesn't
+        # spuriously report the stats/results as unavailable (#275 M2). Query-level
+        # errors are not retried (a retry won't fix them).
+        for attempt in (1, 2):
+            try:
+                with _pg_connection(self._db_url) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(sql, params)
+                        rows = cur.fetchall()
+                    conn.rollback()  # end the implicit read-only txn before reuse
+                return rows
+            except (psycopg2.OperationalError, psycopg2.InterfaceError):
+                if attempt == 1:
+                    logger.warning('Postgres %s hit a stale/broken connection; retrying once', label)
+                    continue
+                logger.exception('Postgres %s failed after retry', label)
+                return None
+            except Exception:
+                logger.exception('Postgres %s failed', label)
+                return None
 
     def get_statements(self, zinvite: str) -> tuple[list, list, list] | None:
         """Return (pending, approved, hidden) from Postgres, or None if unavailable.
