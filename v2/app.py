@@ -8,6 +8,7 @@ import dataclasses
 import functools
 import hashlib
 import hmac
+import ipaddress
 import os
 import random
 import re
@@ -1329,6 +1330,18 @@ def _demo_bound_conversation_id() -> int | None:
         return None
 
 
+def _exit_demo_session() -> None:
+    """Drop the demo binding so the session can enter a real consultation (#293).
+
+    Demo is a try-it-out space, not a cage: leaving it for a real conversation
+    shouldn't 403. Clears the synthetic identity; the caller then follows the
+    normal (login-required) flow for the real conversation.
+    """
+    session.pop('demo_conversation_id', None)
+    session.pop('xid', None)
+    session.pop('emailable', None)
+
+
 def _demo_pseudonym() -> str:
     for _ in range(50):
         name = f"demo-{secrets.token_hex(4)}"
@@ -1338,23 +1351,58 @@ def _demo_pseudonym() -> str:
 
 
 def _ensure_demo_participation(conversation) -> 'Participation':
-    """Create or return a session-scoped synthetic participant for one demo conversation."""
+    """Return a participation for a demo conversation.
+
+    A demo is a genuine demonstration conversation that records as usual (#293),
+    so a **logged-in** user participates as themselves and stays logged in — only
+    a **logged-out** visitor gets an anonymous, session-scoped synthetic guest.
+    """
     if conversation.access_policy != 'demo':
         abort(404)
-    bound = _demo_bound_conversation_id()
-    if bound is not None and bound != conversation.id:
-        abort(403)
 
+    # Logged-in real user: don't log them out — participate under their real
+    # identity, auto-joining (no accept/pseudonym gate) so "try it" stays frictionless.
     participant = _current_participant()
+    if 'username' in session and participant and not participant.is_demo:
+        part = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conversation.id,
+        ).first()
+        if part is None:
+            part = Participation(
+                participant_id=participant.id,
+                conversation_id=conversation.id,
+                pseudonym=_demo_pseudonym(),
+                eligibility_status='not_required',
+            )
+            db.session.add(part)
+            db.session.commit()
+        return part
+
+    # A demo session may move freely between demo conversations (#293): reuse the
+    # SAME synthetic guest and rebind the session to this demo rather than forbidding
+    # it or minting a fresh guest per hop. The conversation-scoped proxy (#246) stays
+    # safe because this rebinds `demo_conversation_id` to `conversation` before any
+    # proxied call for it is made.
     if participant and participant.is_demo:
         part = Participation.query.filter_by(
             participant_id=participant.id,
             conversation_id=conversation.id,
         ).first()
-        if part:
-            session.pop('username', None)
-            return part
+        if part is None:
+            part = Participation(
+                participant_id=participant.id,
+                conversation_id=conversation.id,
+                pseudonym=_demo_pseudonym(),
+                eligibility_status='not_required',
+            )
+            db.session.add(part)
+            db.session.commit()
+        session['demo_conversation_id'] = conversation.id   # rebind; same guest xid
+        session.pop('username', None)
+        return part
 
+    # Brand-new visitor with no identity yet: mint the synthetic guest.
     for _ in range(20):
         token = secrets.token_hex(4)
         participant = Participant(
@@ -1471,6 +1519,27 @@ def login_required(f):
     return wrapper
 
 
+def login_or_demo_required(f):
+    """Like login_required, but also admits an active demo session.
+
+    Demo conversations are genuine demonstration conversations (#293): an
+    anonymous visitor plays through the full flow — vote, suggest statements,
+    arguments — on a synthetic participant, and it records as usual. The demo
+    session is bound to a single conversation (demo_conversation_id), and each
+    route still runs its own access check (_check_conversation_access / the
+    demo participation lookup), so this only widens *who may reach* the route,
+    not *which conversation* they may act on.
+    """
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        if 'username' not in session and not _is_demo_session():
+            if not request.path.startswith('/proxy/'):
+                session['next'] = request.path
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return wrapper
+
+
 def _is_global_admin(participant: 'Participant | None' = None) -> bool:
     if session.get('username') in ADMIN_USERS:
         return True
@@ -1573,6 +1642,10 @@ def _abort_if_banned(conversation, participant: 'Participant | None') -> None:
 
 
 def _check_conversation_access(conversation, participant) -> None:
+    # NOTE (#293): for a demo session this expects the session to be ALREADY bound
+    # to `conversation` — the conversation view calls _ensure_demo_participation
+    # (which rebinds) before this. Don't reorder those calls, or demo roaming
+    # (visiting a demo the session isn't yet bound to) would 403 here.
     if _is_demo_session():
         if conversation.access_policy == 'demo' and _demo_bound_conversation_id() == conversation.id:
             return
@@ -1650,6 +1723,10 @@ def _demo_proxy_allowed(pa_path: str, method: str) -> bool:
         return True
     if method == 'PUT' and pa_path.startswith(prefix + 'votes/'):
         return True
+    # Demo conversations run the full flow (#293), so a demo session may also
+    # create statements — scoped to its own bound conversation.
+    if method == 'POST' and pa_path.startswith(prefix + 'statements'):
+        return True
     return False
 
 
@@ -1663,6 +1740,24 @@ def _proxy_auth_response(pa_path: str):
     if not request.path.startswith('/proxy/'):
         session['next'] = request.path
     return redirect(url_for('login'))
+
+
+def _is_secure_pa_transport(base_url: str) -> bool:
+    """True if the sub-secret can be sent safely: HTTPS, or HTTP to loopback only.
+
+    X-Particiapi-Sub-Secret is a long-lived master credential; combined with an
+    enumerable xid, a wire-capture of it lets an attacker forge any user's identity.
+    Used only to emit a loud warning when it would traverse a cleartext non-loopback
+    link (#245 review) — the actual fix is encrypting that hop.
+    """
+    u = urlparse(base_url)
+    if u.scheme == 'https':
+        return True
+    host = (u.hostname or '').strip('[]')
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host == 'localhost'
 
 
 def _conversation_subject(xid: str, conv) -> str:
@@ -1721,9 +1816,23 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
     # a different uid per conversation (no chain) while staying stable across devices in it.
     _sub = _conversation_subject(_xid, conv) if (_xid and conv is not None) else _xid
     _bind_identity = (
-        pa_path == 'api/session' and request.method == 'POST'
+        # Privacy invariant (#246): only ever bind on the conversation-scoped route.
+        # With conv=None (legacy unscoped route) `_sub` is the bare xid, which would
+        # re-link the participant across conversations — never assert that as identity.
+        conv is not None
+        and pa_path == 'api/session' and request.method == 'POST'
         and bool(_sub) and bool(_sub_secret)
     )
+
+    # Loud warning (#245 review): the sub-secret is a master credential. If the transport
+    # to Particiapi is cleartext non-loopback, a wire-capture forges any user's identity.
+    # We still bind (the link is firewalled-private in prod) but surface it on every bind
+    # so an unencrypted hop can't stay invisible. The real fix is encrypting the hop.
+    if _bind_identity and not _is_secure_pa_transport(current_app.config['PARTICIAPI_BASE']):
+        current_app.logger.warning(
+            'PARTICIAPI_SUB_SECRET is being sent over a cleartext non-loopback transport '
+            '(%s); encrypt the Toolforge<->VPS hop (WireGuard/TLS)',
+            current_app.config['PARTICIAPI_BASE'])
 
     # On a bind we deliberately do NOT forward any existing pa_session cookie: a stale
     # (possibly anonymous) session would make Particiapi skip the bind path and pin the
@@ -1769,6 +1878,11 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
             json=request.get_json(silent=True),
             data=request.form if not request.is_json else None,
             timeout=10,
+            # A proxy must hand 3xx back to the browser, never follow them itself:
+            # `requests` preserves custom headers across cross-host redirects (it only
+            # strips Authorization/Cookie), so following one could replay
+            # X-Particiapi-Sub-Secret to a redirect-chosen host.
+            allow_redirects=False,
         )
     except requests.RequestException:
         current_app.logger.exception('Particiapi proxy error')
@@ -1783,7 +1897,10 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
         return flask_resp
 
     vote_match = re.match(r'^api/conversations/([^/]+)/votes(?:/\d+)?/?$', pa_path)
-    if upstream.ok and request.method in ('POST', 'PUT') and vote_match:
+    # `upstream.ok` (status < 400) also covers 3xx; with allow_redirects=False a
+    # redirect is a reachable terminal response here, so require an actual 2xx
+    # before crediting engagement for a vote that was never confirmed applied.
+    if upstream.status_code < 300 and request.method in ('POST', 'PUT') and vote_match:
         participant = _current_participant()
         if participant:
             conv = Conversation.query.filter_by(polis_id=vote_match.group(1)).first()
@@ -1797,6 +1914,10 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
     flask_resp = make_response(upstream.content, upstream.status_code)
     flask_resp.headers['Content-Type'] = upstream.headers.get(
         'Content-Type', 'application/json')
+    if 'Location' in upstream.headers:
+        # allow_redirects=False means a 3xx reaches here verbatim; forward Location
+        # too or the browser gets a redirect status with nowhere to go (#245 follow-up).
+        flask_resp.headers['Location'] = upstream.headers['Location']
 
     if 'session' in upstream.cookies:
         # Path-scope the session cookie to this conversation's proxy base, so the browser
@@ -1965,8 +2086,6 @@ def _build_featured_data(conv, participation, can_mod=False):
 def _require_arg_participation(slug):
     """Return (conv, participation) or abort. Checks active + argument phase."""
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    if conv.access_policy == 'demo':
-        abort(403)
     if not conv.active or conv.paused or not conv.phase_argument_mapping:
         abort(403)
     participant = _current_participant()
@@ -2016,7 +2135,8 @@ admin_bp = Blueprint('admin', __name__)
 participant_bp = Blueprint('participant', __name__)
 
 @participant_bp.post('/c/<slug>/statements/new')
-@login_required
+@login_or_demo_required
+@limiter.limit('20 per minute')
 def conversation_statement_new(slug):
     """Submit an entirely new statement; enforces per-participant quota and
     records the Polis statement ID for novelty tracking."""
@@ -2027,8 +2147,6 @@ def conversation_statement_new(slug):
     _validate_same_origin(allow_missing_provenance=csrf_validated)
 
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    if conv.access_policy == 'demo':
-        abort(403)
     if not conv.active or conv.paused or not conv.phase_submission:
         abort(403)
     participant = _current_participant()
@@ -2039,11 +2157,19 @@ def conversation_statement_new(slug):
 
     body = request.get_json(silent=True) or {}
     text = (body.get('text') or '').strip()
-    if not text or len(text) > 280:
-        abort(400)
     derived_from = body.get('derived_from')
     if derived_from in ('', None):
         derived_from = None
+
+    # Wording suggestions (derived_from set) are exempt from the new-statement
+    # quota — only genuinely new statements consume it (spec_functional-design.md).
+    if derived_from is None:
+        new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
+        if len(part.new_stmt_ids or []) >= new_stmt_max:
+            return jsonify({'error': 'quota_exceeded'}), 403
+
+    if not text or len(text) > 280:
+        abort(400)
     if derived_from is not None and not isinstance(derived_from, int):
         abort(400)
 
@@ -2135,10 +2261,11 @@ def conversation_statement_new(slug):
     if stmt_resp.status_code == 201:
         stmt_id = stmt_resp.json().get('id')
         if stmt_id is not None:
-            ids = list(part.new_stmt_ids or [])
-            ids.append(stmt_id)
-            part.new_stmt_ids = ids
-            if derived_from is not None:
+            if derived_from is None:
+                ids = list(part.new_stmt_ids or [])
+                ids.append(stmt_id)
+                part.new_stmt_ids = ids
+            else:
                 record_statement_provenance(conv.id, stmt_id, derived_from,
                                             parent_text=parent_text, new_text=text,
                                             scores=scores)
@@ -2831,11 +2958,11 @@ def admin_conversation_edit(conv_id):
     conv.title         = fields['title']
     conv.intro_text    = fields['intro_text']
     conv.outro_text    = fields['outro_text']
-    if conv.access_policy == 'demo':
-        fields['access_policy'] = 'demo'
-    elif fields['access_policy'] == 'demo':
-        flash('Demo mode is fixed at creation and cannot be enabled on an existing consultation.', 'error')
-        fields['access_policy'] = conv.access_policy
+    # Access policy is freely switchable, including to/from demo (#293): demo
+    # conversations are genuine demonstration conversations that record as usual,
+    # so designating an existing conversation as a demo (or back) is allowed.
+    # Existing participations are untouched; new visitors follow the new policy.
+    # (_parse_conversation_form clamps this to ACCESS_POLICIES.)
     conv.access_policy = fields['access_policy']
     db.session.commit()
     record_audit('conversation.edit', conv_id=conv.id)
@@ -3234,6 +3361,21 @@ def _init_phase6(conv) -> tuple[bool, str]:
 def _norm(text) -> str:
     """Case/space-insensitive key for matching statement text across systems."""
     return (text or '').strip().casefold()
+
+
+def _resync_phase6_if_live(conv) -> bool:
+    """Keep an already-running Informed Vote round in sync with the featured set:
+    call after staging (not committing) a confirm/add/remove of a FeaturedStatement.
+    On failure this rolls back the staged change and flashes the error, so a broken
+    Polis sync never leaves a featured-set edit half-applied. Returns whether the
+    caller should proceed to commit."""
+    if not (conv.phase_informed_voting and conv.phase6_polis_conversation_id):
+        return True
+    ok, msg = _sync_phase6_featured(conv)
+    if not ok:
+        db.session.rollback()
+        flash(msg, 'error')
+    return ok
 
 
 def _sync_phase6_featured(conv) -> tuple[bool, str]:
@@ -3649,6 +3791,8 @@ def admin_featured_confirm(conv_id):
             suggested_by_system=request.form.get('system_suggested') == '1',
             confirmed_by_admin=True,
         ))
+        if not _resync_phase6_if_live(conv):
+            return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
         db.session.commit()
         record_audit('featured.confirm', conv_id=conv_id, target_type='statement', target_id=tid)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
@@ -3669,6 +3813,8 @@ def admin_featured_add(conv_id):
             suggested_by_system=False,
             confirmed_by_admin=True,
         ))
+        if not _resync_phase6_if_live(conv):
+            return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
         db.session.commit()
         record_audit('featured.add', conv_id=conv_id, target_type='statement', target_id=tid)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
@@ -3685,6 +3831,8 @@ def admin_featured_remove(conv_id, fs_id):
             flash('Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first.', 'error')
             return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
     db.session.delete(fs)
+    if not _resync_phase6_if_live(conv):
+        return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
     db.session.commit()
     record_audit('featured.remove', conv_id=conv_id, target_type='featured', target_id=fs_id)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
@@ -3817,7 +3965,11 @@ def conversation(slug):
         participant = participation.participant
     else:
         if _is_demo_session():
-            abort(403)
+            # Leaving the demo for a real consultation: don't forbid — exit the
+            # demo, then follow the normal flow (#293). The space-mismatch banner
+            # below carries the "this is live" warning; `space` stays 'demo' so it
+            # still fires once we render the real conversation.
+            _exit_demo_session()
         if 'username' not in session:
             session['next'] = request.path
             return redirect(url_for('login'))
@@ -3835,6 +3987,18 @@ def conversation(slug):
         return redirect(url_for('participant.accept', slug=slug))
 
     can_mod = _can_moderate(conv, participant)
+
+    # Demo/real space state model (#293): warn once when the viewer lands on a
+    # conversation whose space they didn't explicitly choose (e.g. a deep link,
+    # or crossing demo->real directly). Admin-access users are exempt — we expect
+    # them to know what they're doing. Viewing then adopts the conversation's
+    # space, so the warning fires once and normal navigation stays silent.
+    conv_space = 'demo' if conv.access_policy == 'demo' else 'real'
+    has_admin_access = _is_global_admin(participant) or bool(
+        participant and AdminRole.query.filter_by(participant_id=participant.id).first())
+    space_warning = conv_space if (
+        not has_admin_access and session.get('space') != conv_space) else None
+    session['space'] = conv_space
 
     results     = None
     polis_stats = None
@@ -3923,6 +4087,8 @@ def conversation(slug):
         phase6_results = _build_phase6_results(conv, participation)
 
     return render_template('conversation.html',
+                           header_mode='conversation',
+                           space_warning=space_warning,
                            conversation=conv,
                            participation=participation,
                            can_moderate=can_mod,
@@ -3944,7 +4110,7 @@ def conversation(slug):
 
 
 @participant_bp.get('/c/<slug>/outputs/<output_key>')
-@login_required
+@login_or_demo_required
 def conversation_output(slug, output_key):
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
@@ -3979,13 +4145,14 @@ def conversation_moderation_log(slug):
 # ── Arguments ────────────────────────────────────────────────────────────
 
 @participant_bp.post('/c/<slug>/arguments/<int:fs_id>/submit')
-@login_required
+@login_or_demo_required
 def argument_submit_legacy(slug, fs_id):
     return redirect(url_for('participant.argument_submit', slug=slug, fs_id=fs_id),
                     code=307)
 
 @participant_bp.post('/c/<slug>/featured-statements/<int:fs_id>/arguments')
-@login_required
+@login_or_demo_required
+@limiter.limit('20 per minute')
 def argument_submit(slug, fs_id):
     conv, part = _require_arg_participation(slug)
     FeaturedStatement.query.filter_by(
@@ -4053,13 +4220,13 @@ def argument_submit(slug, fs_id):
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
 @participant_bp.post('/c/<slug>/arguments/<int:fs_id>/<side>/skip')
-@login_required
+@login_or_demo_required
 def argument_skip_legacy(slug, fs_id, side):
     return redirect(url_for('participant.argument_skip', slug=slug, fs_id=fs_id, side=side),
                     code=307)
 
 @participant_bp.post('/c/<slug>/featured-statements/<int:fs_id>/skip/<side>')
-@login_required
+@login_or_demo_required
 def argument_skip(slug, fs_id, side):
     conv, part = _require_arg_participation(slug)
     FeaturedStatement.query.filter_by(
@@ -4093,7 +4260,7 @@ def argument_skip(slug, fs_id, side):
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
 
 @participant_bp.post('/c/<slug>/arguments/<int:arg_id>/vote')
-@login_required
+@login_or_demo_required
 def argument_vote(slug, arg_id):
     conv, part = _require_arg_participation(slug)
     arg = Argument.query.filter_by(id=arg_id).first_or_404()
@@ -4154,7 +4321,7 @@ def argument_vote(slug, arg_id):
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
 
 @participant_bp.post('/c/<slug>/arguments/<int:arg_id>/unvote')
-@login_required
+@login_or_demo_required
 def argument_unvote(slug, arg_id):
     conv, part = _require_arg_participation(slug)
     arg = Argument.query.filter_by(id=arg_id).first_or_404()
@@ -4198,7 +4365,7 @@ def argument_unhide(slug, arg_id):
 
 
 @participant_bp.post('/c/<slug>/arguments/<int:arg_id>/flag')
-@login_required
+@login_or_demo_required
 @limiter.limit('10 per minute')
 def argument_flag(slug, arg_id):
     conv, part = _require_arg_participation(slug)
@@ -4206,6 +4373,8 @@ def argument_flag(slug, arg_id):
     FeaturedStatement.query.filter_by(
         id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
     if arg.hidden:
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({'ok': True, 'already_reviewed': True})
         flash('This argument is already under moderator review.', 'info')
         return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
     category, detail = _parse_content_flag_form()
@@ -4228,12 +4397,14 @@ def argument_flag(slug, arg_id):
         db.session.commit()
         record_audit('content_flag.create', conv_id=conv.id, target_type='argument',
                      target_id=arg.id, category=category)
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True})
     flash('Thanks - this has been sent to the moderator for review.', 'success')
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
 
 
 @participant_bp.post('/c/<slug>/statements/<int:tid>/flag')
-@login_required
+@login_or_demo_required
 @limiter.limit('10 per minute')
 def statement_flag(slug, tid):
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
@@ -4254,8 +4425,10 @@ def statement_flag(slug, tid):
         matching = [s for s in all_statements if s.get('tid') == tid]
         if not matching:
             abort(404)
-        if matching[0].get('is_seed'):
-            abort(400)
+        # Seed statements (organizer-authored) are just as flaggable as any other —
+        # a moderator's own wording can still need review. Previously excluded here
+        # with no test coverage and no documented rationale; caused every flag on a
+        # featured (often seed-derived) statement to 400.
 
     category, detail = _parse_content_flag_form()
     if not _existing_open_flag(
@@ -4277,6 +4450,8 @@ def statement_flag(slug, tid):
         db.session.commit()
         record_audit('content_flag.create', conv_id=conv.id, target_type='statement',
                      target_id=tid, category=category)
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True})
     flash('Thanks - this has been sent to the moderator for review.', 'success')
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-vote')
 
@@ -4903,6 +5078,10 @@ def create_app(test_config: dict | None = None) -> Flask:
             'username':   session.get('username'),
             'csp_nonce':  g.get('csp_nonce', ''),
             'git_version': _GIT_VERSION,
+            # Header mode drives the demo/real switch + demo theme (#293).
+            # Pages override this via render_template kwargs; default keeps the
+            # switch off on pages outside the fork/lanes (e.g. admin).
+            'header_mode': None,
         }
 
     @app.after_request
@@ -5125,15 +5304,40 @@ def _register_routes(app: Flask) -> None:
 
     @app.get('/')
     def index():
+        # The homepage is an explicit fork between the demo sandbox and real
+        # consultations (#293), so a visitor who only wants to try things can
+        # never drift into a live consultation by accident. Shown every visit.
         dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
+        return render_template('fork.html',
+                               header_mode='fork',
+                               dev_test_users=dev_test_users)
+
+    def _render_lane(*, demo: bool, header_mode: str):
+        """Render the home listing for one space (#293).
+
+        The demo and real lanes share the SAME interface (home.html) — same tabs,
+        same cards — and differ only in the set of conversations shown (demo vs
+        real) and the page background (the demo blue wash, via header_mode). This
+        keeps one listing implementation instead of a bespoke demo page.
+        """
+        dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
+
         if 'username' not in session:
-            public_convos = (Conversation.query
-                             .filter_by(active=True, paused=False)
-                             .filter(Conversation.access_policy.in_(('public', 'demo')))
-                             .order_by(Conversation.created_at.desc())
-                             .all())
+            if demo:
+                listing = (Conversation.query
+                           .filter_by(active=True, paused=False, access_policy='demo')
+                           .order_by(Conversation.created_at.desc()).all())
+            else:
+                listing = (Conversation.query
+                           .filter_by(active=True, paused=False)
+                           .filter(Conversation.access_policy == 'public')
+                           .order_by(Conversation.created_at.desc()).all())
+            signals_map = {c.id: {'phases': _active_phases(c),
+                                  'outputs': _output_items(c)} for c in listing}
             return render_template('home.html',
-                                   public_conversations=public_convos,
+                                   header_mode=header_mode,
+                                   public_conversations=listing,
+                                   signals_map=signals_map,
                                    dev_test_users=dev_test_users)
 
         participant = _current_participant()
@@ -5147,29 +5351,35 @@ def _register_routes(app: Flask) -> None:
         )
         joined_ids = {p.conversation_id for p in joined_parts}
 
+        # Each lane lists only its own space's conversations.
         active_joined   = []
         archived_joined = []
         for part in joined_parts:
             conv = part.conversation
-            if conv:
+            if conv and (conv.access_policy == 'demo') == demo:
                 (active_joined if conv.active else archived_joined).append(conv)
 
-        invited_ids = [
-            inv.conversation_id
-            for inv in ConversationInvite.query.filter_by(mw_username=username).all()
-        ]
-        available = (Conversation.query
-                     .filter_by(active=True, paused=False)
-                     .filter(~Conversation.id.in_(joined_ids or [0]))
-                     .filter(db.or_(
-                         Conversation.access_policy == 'public',
-                         db.and_(
-                             Conversation.access_policy == 'invite_only',
-                             Conversation.id.in_(invited_ids or [0]),
-                         ),
-                     ))
-                     .order_by(Conversation.created_at.desc())
-                     .all())
+        if demo:
+            available = (Conversation.query
+                         .filter_by(active=True, paused=False, access_policy='demo')
+                         .filter(~Conversation.id.in_(joined_ids or [0]))
+                         .order_by(Conversation.created_at.desc()).all())
+        else:
+            invited_ids = [
+                inv.conversation_id
+                for inv in ConversationInvite.query.filter_by(mw_username=username).all()
+            ]
+            available = (Conversation.query
+                         .filter_by(active=True, paused=False)
+                         .filter(~Conversation.id.in_(joined_ids or [0]))
+                         .filter(db.or_(
+                             Conversation.access_policy == 'public',
+                             db.and_(
+                                 Conversation.access_policy == 'invite_only',
+                                 Conversation.id.in_(invited_ids or [0]),
+                             ),
+                         ))
+                         .order_by(Conversation.created_at.desc()).all())
 
         mod_ids: set = set()
         moderating = []
@@ -5187,18 +5397,14 @@ def _register_routes(app: Flask) -> None:
                     moderating = Conversation.query.filter(
                         Conversation.id.in_(mod_ids)).all()
 
+        # "You moderate" is scoped to this lane's space too.
+        moderating = [c for c in moderating if (c.access_policy == 'demo') == demo]
         # Exclude moderated conversations from Browse — they already appear in "You moderate"
         available = [c for c in available if c.id not in mod_ids]
 
-        # keyed by conversation_id, scoped to current user only
-        # assumes at most one Participation per (user, conversation) — last row wins if duplicates exist
         pseudonym_map = {p.conversation_id: p for p in joined_parts}
-
-        # Per-conversation action signals for the home page tiles.
         all_home_convs = active_joined + archived_joined + list(available)
 
-        # Bulk-fetch statements remaining via Polis Postgres (xid → pid via xids table).
-        # Only meaningful for submission-phase conversations; falls back to None on error.
         xid = session.get('xid')
         submission_convs = [c for c in all_home_convs if c.phase_submission and c.active]
         zinvites = [c.polis_id for c in submission_convs if c.polis_id]
@@ -5221,6 +5427,7 @@ def _register_routes(app: Flask) -> None:
             }
 
         return render_template('home.html',
+                               header_mode=header_mode,
                                active_joined=active_joined,
                                archived_joined=archived_joined,
                                available=available,
@@ -5228,6 +5435,19 @@ def _register_routes(app: Flask) -> None:
                                pseudonym_map=pseudonym_map,
                                signals_map=signals_map,
                                dev_test_users=dev_test_users)
+
+    @app.get('/demo')
+    def demo_lane():
+        # The demo lane: the same listing UI as the real lane, filtered to demo
+        # conversations and tinted (#293). Available logged in or out.
+        session['space'] = 'demo'
+        return _render_lane(demo=True, header_mode='demo')
+
+    @app.get('/consultations')
+    def consultations():
+        # The real lane: the shared listing UI, filtered to real conversations (#293).
+        session['space'] = 'real'
+        return _render_lane(demo=False, header_mode='real')
 
 
     # ── OAuth ─────────────────────────────────────────────────────────────────

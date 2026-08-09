@@ -13,7 +13,13 @@ pass to Polis without handing it Wikimedia usernames.
 - Wikimedia OAuth is handled **entirely by the Flask app** (one consumer registration).
 - Particiapi runs with `PARTICIAPI_AUTHENTICATION_DISABLED=True` on an internal network;
   the browser never talks to it directly — **Flask proxies** all voting calls.
-- The participant identity passed to Polis is the **xid** = `sha256(mw_user_id)`.
+- The participant identity passed to Polis is the **xid**. Originally `sha256(mw_user_id)`;
+  since the [#96](https://github.com/lgelauff/wiki-polis/issues/96) fix it is an **HMAC**
+  keyed by a server secret — `xid = HMAC(secret, mw_user_id)`, versioned by
+  `xid_key_version` (v2 is the default; v1 is the legacy plain-sha256 form). What is
+  actually forwarded to Particiapi/Polis is a further **conversation-scoped** subject,
+  `HMAC(secret, "{xid}:{conv.id}")`, so the same person resolves to a *different* Polis uid
+  in each conversation (no cross-conversation linkage).
 
 ## Consequences
 
@@ -21,6 +27,9 @@ pass to Polis without handing it Wikimedia usernames.
   the trust boundary.
 - The proxy is security-load-bearing (origin checks, `pa_session` cookie rename,
   403→200 rewrite on `/results/`).
-- **xid is not anonymous** — Wikimedia user IDs are enumerable, so it's brute-forceable.
-  It's an identity *bridge*, not a privacy guarantee
-  ([#96](https://github.com/lgelauff/wiki-polis/issues/96)).
+- **xid is an identity bridge, not anonymity.** The plain-`sha256` form was
+  enumerable/brute-forceable from public Wikimedia user IDs; HMAC keying (the "salt the
+  hash" half of [#96](https://github.com/lgelauff/wiki-polis/issues/96)) removes that, and
+  conversation-scoping prevents cross-conversation correlation. The *other* half of #96 —
+  rotating/deleting the xid↔uid mapping at the data-retention window — is **not confirmed
+  done**; treat it as still open until verified.

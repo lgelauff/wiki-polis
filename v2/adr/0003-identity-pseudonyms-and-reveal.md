@@ -22,7 +22,9 @@ a participant trackable across conversations.
 ## Consequences
 
 - Strong per-conversation privacy; reveals are deliberate and permanent.
-- The current code still nullifies reveals at ~60 days — it must change to match this
-  model (D-PRIV).
-- xid reversibility undermines anonymisation at the retention window — see ADR 0002 and
-  [#96](https://github.com/lgelauff/wiki-polis/issues/96).
+- Reveals are permanent in code: there is no longer any nullification path (the earlier
+  ~60-day nullify was removed). Reveal *timing* is gated by a cooldown / opt-in window
+  (`_REVEAL_COOLDOWN_DAYS` / `_REVEAL_WINDOW_DAYS`), but a reveal is never undone afterward.
+- The 180-day account↔pseudonym link removal (data minimisation) depends on the
+  xid-mapping rotation half of [#96](https://github.com/lgelauff/wiki-polis/issues/96),
+  which is **not confirmed done** — see ADR 0002.

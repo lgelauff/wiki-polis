@@ -25,13 +25,24 @@ See the [privacy notice](../v2/pub_privacy.md).
 You don't have to vote on everything. **Passing is fine** — and a Pass on a confusing or
 two-in-one statement is useful signal in itself [1].
 
+After you vote, you'll be offered a choice: suggest different wording for the statement you
+just voted on, move on to the next one, or propose a new statement of your own.
+
 ![The voting screen: one statement shown with Agree, Disagree, and Pass buttons.](assets/phase-vote.png)
 <!-- SCREENSHOT TODO: the voting card — a single statement with the Agree / Disagree / Pass controls and the progress indicator. Drop the PNG at guidance/assets/phase-vote.png -->
 *Voting: read each statement and choose Agree, Disagree, or Pass.*
 
+## Suggesting different wording
+
+If a statement's idea is right but its phrasing isn't, you can suggest a clearer or fairer
+rewording right after voting on it. It has to stay close to the original idea — a rewording
+that drifts too far is rejected as too dissimilar.
+
 ## Submitting a statement
 
-Anyone can add a statement; yours is reviewed before others see it. A good statement:
+Anyone can add a statement; yours is reviewed before others see it. Submitting your own
+statement unlocks only after you've cast a number of votes (10 by default), and each
+participant can submit only a handful (3 by default) — voting comes first. A good statement:
 
 - Makes **one claim** — if you want to say two things, submit two statements.
 - Is **neutral** — describe the situation, don't argue the conclusion; let others make up
@@ -50,8 +61,10 @@ Anyone can add a statement; yours is reviewed before others see it. A good state
 
 ## Writing a good argument
 
-On some statements you can add a short argument explaining your reasoning. Arguments are
-read by other people; they don't change the vote map. A good argument:
+Arguments aren't on every statement — only on the **featured statements** picked for the
+argument-mapping phase (usually the ones that divided voters most). On those, you can add a
+short argument explaining your reasoning. Arguments are read by other people; they don't
+change the vote map. A good argument:
 
 - **States its direction** — for or against.
 - **Gives a reason**, not a restatement ("I agree because it's important" adds nothing).

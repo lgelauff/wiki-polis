@@ -13,6 +13,7 @@ between blueprints or authorization policy changes.
 | `/oauth-callback` | GET | Public, rate-limited. Requires matching OAuth state and PKCE verifier from the browser session. |
 | `/health` | GET | Public, limiter-exempt. Returns DB and Particiapi reachability only. |
 | `/c/<slug>/moderation-log` | GET | Public. Shows conversation-level ban/unban events with pseudonyms and moderator names, excluding private reasons. |
+| `/help/statements`, `/help/arguments` | GET | Public. Static statement/argument writing-guidance pages (no auth). |
 | `/static/*` | GET | Public static assets. |
 
 ## Participant routes
@@ -24,6 +25,9 @@ between blueprints or authorization policy changes.
 | `/c/<slug>` | GET | `login_required`; invite-only access check; redirects non-participants to the accept flow. |
 | `/c/<slug>/statements/new` | POST | `login_required`; Flask-WTF CSRF-protected participant route. Also requires same-origin browser provenance headers, active/unpaused submission phase, current participation, and per-participant quota. |
 | `/c/<slug>/reveal` | GET, POST | `login_required`; current participant must have joined the closed conversation. POST is rate-limited, requires confirmation, and is only accepted during the reveal window. |
+| `/c/<slug>/outputs/<output_key>` | GET | `login_required`; `_check_conversation_access` plus current participation (non-participants are redirected to the accept flow). |
+| `/c/<slug>/report` | GET | **No `@login_required` decorator.** Only reachable once `conv.closed_at` is set (otherwise redirects to the results tab); `_check_conversation_access` applies. Login is required when `phase_personal_results` is set; public when `phase_public_results` is set. |
+| `/c/<slug>/phase6/vote` | POST | **Hand-rolled auth (not `@login_required`):** active/unpaused conversation; either a demo session bound to this demo conversation, or `username` in session; current participation; not banned. Rate-limited; CSRF-validated (participant_bp). |
 | `/logout` | POST | `login_required`; clears the Flask session. |
 
 ## Participant argument routes
@@ -57,6 +61,8 @@ between blueprints or authorization policy changes.
 | `/admin/global-admins/<participant_id>/remove` | POST | `login_required` and `admin_required`. |
 | `/admin/roles/add` | POST | `login_required` and `admin_required`. |
 | `/admin/roles/<role_id>/remove` | POST | `login_required` and `admin_required`. |
+| `/admin/conversations/<conv_id>/recommendations` | POST | `login_required` and `admin_required`. Sets the recommended-quantities tier. |
+| `/admin/conversations/<conv_id>/phase/schedule` | POST | `login_required` and `admin_required`. Sets or cancels a scheduled phase transition. |
 
 ## Conversation moderator routes
 
@@ -78,6 +84,8 @@ the specific conversation. The shared authorization helper is
 | `/admin/conversations/<conv_id>/statements` | GET | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/statements/<tid>/moderate` | POST | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/statements/seed` | POST | Conversation moderator or global admin. |
+| `/admin/conversations/<conv_id>/statements/seed/import-text` | POST | Conversation moderator or global admin (`_require_mod_for_conv`); rate-limited. Paste-text bulk seed import. |
+| `/admin/conversations/<conv_id>/phase6/init` | POST | Conversation moderator or global admin (`_require_mod_for_conv`). Highest-consequence route: creates a dedicated Polis conversation and seeds the confirmed featured statements into it. |
 | `/admin/conversations/<conv_id>/strict-moderation` | POST | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/featured` | GET | Conversation moderator or global admin. |
 | `/admin/conversations/<conv_id>/featured/confirm` | POST | Conversation moderator or global admin. |
@@ -91,10 +99,14 @@ the specific conversation. The shared authorization helper is
 | Routes | Methods | Authorization |
 |---|---|---|
 | `/proxy/particiapi/<path>` | GET, POST, PUT | `login_required`. Path must stay under `api/` and reject `..` segments. Unsafe methods require same-origin browser provenance headers. |
+| `/c/<slug>/proxy/particiapi/<path>` | GET, POST, PUT | Per-conversation scoped proxy (#246): conversation-scoped identity + path-scoped session cookie, so a participant gets a different Polis uid per conversation. Demo-aware auth via `_proxy_auth_response` (not `@login_required`, so demo sessions work); same `api/` path constraints as the global proxy. |
 
-## Local-debug-only routes
+## Dev-login routes (gated)
+
+Most of these run only in local debug, but `/dev/login/<username>` additionally has a
+**token-gated path that runs on the staging Toolforge app** — see its row.
 
 | Routes | Methods | Authorization |
 |---|---|---|
-| `/dev-login` | GET | Registered only when Flask debug mode is on, `DEV_LOGIN_USER` is set, and the app is not on Toolforge. |
-| `/dev/login/<username>` | GET | Registered only when Flask debug mode is on, `DEV_FAKE_LOGIN=1`, and the app is not on Toolforge. |
+| `/dev-login` | GET | Registered only when Flask debug mode is on, `DEV_LOGIN_USER` is set, and the app is **not** on Toolforge. |
+| `/dev/login/<username>` | GET | Registered when **either** (a) local fake-login is on — Flask debug mode, `DEV_FAKE_LOGIN=1`, and **not** on Toolforge — **or** (b) staging dev-login is enabled: the app **is** the staging Toolforge app and a `staging-dev-token` secret of ≥32 chars is set. On path (b) the request must present a matching per-username HMAC `?token=` or it is rejected with `403`. Rate-limited. |

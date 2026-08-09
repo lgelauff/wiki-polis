@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Featured statements — {{ conversation.title }} — wiki-polis{% endblock %}
+{% block title %}Featured statements — {{ conversation.title }} — ProtoWiki{% endblock %}
 {% block header_crumb %}
 <nav class="header-crumb" aria-label="Admin breadcrumb">
   <span class="header-crumb-sep">/</span>
@@ -110,7 +110,11 @@
         <td style="vertical-align:top">
           <form method="post"
                 action="{{ url_for('admin.admin_featured_remove', conv_id=conversation.id, fs_id=fs.id) }}"
-                style="display:inline">
+                style="display:inline"
+                {% if conversation.phase_informed_voting and conversation.phase6_polis_conversation_id %}
+                class="p6-live-confirm"
+                data-confirm-msg="Informed vote is already live. Removing this statement hides it from that round immediately (existing votes are preserved). Continue?"
+                {% endif %}>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn-small btn-danger">remove</button>
           </form>
@@ -170,7 +174,11 @@
         <td>
           <form method="post"
                 action="{{ url_for('admin.admin_featured_confirm', conv_id=conversation.id) }}"
-                style="display:inline">
+                style="display:inline"
+                {% if conversation.phase_informed_voting and conversation.phase6_polis_conversation_id %}
+                class="p6-live-confirm"
+                data-confirm-msg="Informed vote is already live. This statement will be seeded into that round immediately. Continue?"
+                {% endif %}>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="tid" value="{{ c.tid }}">
             <input type="hidden" name="system_suggested" value="1">
@@ -189,7 +197,11 @@
     <p class="muted" style="font-size:13px;margin-bottom:.75rem">
       Enter the Polis statement ID (TID) to feature it directly.
     </p>
-    <form method="post" action="{{ url_for('admin.admin_featured_add', conv_id=conversation.id) }}">
+    <form method="post" action="{{ url_for('admin.admin_featured_add', conv_id=conversation.id) }}"
+          {% if conversation.phase_informed_voting and conversation.phase6_polis_conversation_id %}
+          class="p6-live-confirm"
+          data-confirm-msg="Informed vote is already live. This statement will be seeded into that round immediately. Continue?"
+          {% endif %}>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="edit-row-fields">
         <label>Statement TID
@@ -201,5 +213,13 @@
   </div>
 
 </div>
+
+<script nonce="{{ csp_nonce }}">
+  document.querySelectorAll('form.p6-live-confirm').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      if (!confirm(form.dataset.confirmMsg)) e.preventDefault();
+    });
+  });
+</script>
 
 {% endblock %}

@@ -181,22 +181,21 @@ trick is not the right move here — build a real image. Order matters: get the 
 place **before** the secret, so nothing changes behaviour until the last step.
 
 ### Which xid regime is prod in? (read this first)
-This changes the rollout materially. **Verify before assuming:**
-`git show origin/main:v2/app.py | grep -nE "_derive_xid|sha256\(.*mw_user_id"`.
+**Update (post-#236 merge):** `#236` has merged to `main`, so prod now runs the
+**HMAC-keyed xid** (`_derive_xid` = `HMAC(secret, subject)`, `_XID_HMAC_VERSION = 2`), not
+plain `sha256(mw_user_id)`. Verify with:
+`git show origin/main:v2/app.py | grep -nE "_derive_xid|_XID_HMAC_VERSION"`.
 
-- **Today, prod runs `main` = plain `sha256(mw_user_id)`** (the #96 HMAC change lives on the
-  unmerged `#236` branch). The xid is therefore **stable** on prod → there is **no
-  xid-version transition**. Existing users re-bind automatically on their next `/api/session`
-  (the proxy drops the stale anonymous cookie). **Clearing sessions is optional** here — we do
-  it anyway for a clean, uniform cutover. And because the xid isn't keyed on `main`, the
-  "don't rotate `SECRET_KEY`" caveat below **does not apply** to this rollout.
+Because the xid is now keyed by the server secret, the **"don't rotate `SECRET_KEY`" caveat
+below applies**: rotating the secret changes every xid and re-fragments participants. The
+one-time #96 transition (every existing user's xid changed → re-fragmentation, mandatory
+session clear) happened as part of the `#236` merge; the rollout playbook below is retained
+as the record of how that transition was carried out.
+
 - **The unavoidable one-time effect (either regime):** before the patch, prod users were
   *anonymous* Polis participants (no xid sent). After enabling, each becomes a **new** Polis
   participant on first contact; their old anonymous votes orphan under the old uid. The fix is
   **prospective**; already-fragmented data (e.g. prod zid 9) stays as-is.
-- **When `#236` merges to `main`** it flips the xid to HMAC — *that* is when the real #96
-  transition (every existing user's xid changes → re-fragment) applies, and a session clear
-  becomes **mandatory**. Handle it as part of the `#236` merge, per the section below.
 
 1. **Build the Particiapi image off-VPS.** Build the fork
    (`github.com/lgelauff/particiapi` `feat/trusted-sub-identity`) into an image somewhere
@@ -275,12 +274,13 @@ so it's worth being honest about what that does and does not protect.
 > enumerable `mw_user_id`) still applies **per conversation**.
 
 **But it is not perfect — this is operational protection, not cryptographic unlinkability:**
-- An operator / anyone with **DB or exported-dataset access can link a person's participation
-  across all conversations** (one stable `uid`), and on prod can **confirm which Wikimedia
-  accounts participated** (subject = `sha256(mw_user_id)`, and Wikimedia IDs are enumerable, so
-  the subject is recomputable — #96). "Which editors engaged with contentious topic X" is
-  derivable by a DB holder. The HMAC variant (#236) raises that bar but then makes
-  `TRUSTED_SUB_SECRET` a deanonymisation key that must be guarded like PII.
+- An operator / anyone with **DB or exported-dataset access can still confirm participation**
+  at the Polis layer. The subject is now **HMAC-keyed** (#236, live), so it is **not**
+  recomputable from an enumerable `mw_user_id` without the secret — which makes
+  `TRUSTED_SUB_SECRET` a deanonymisation key that must be guarded like PII. (The old plain
+  `sha256(mw_user_id)` subject was directly recomputable — #96.) Because #246 scopes the
+  subject **per conversation**, cross-conversation linkage no longer exists at the Polis
+  layer, though a DB holder who also holds the secret could recompute per-conversation subjects.
 - The pseudonymity of the *visible* layer therefore depends on a **guardrail being maintained**:
   the dataset/report export and any public results MUST exclude `uid`/`subject`/`issuer`
   (tracked on #226). If that ever slips, the cross-conversation + Wikimedia-pseudonym link

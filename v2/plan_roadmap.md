@@ -30,8 +30,8 @@ plan has been retired to the local-only `archive/`.)
 
 ## 2. Documentation
 
-This documentation effort — see
-[`docs/plan_doc-improvement.md`](docs/plan_doc-improvement.md) for the wave plan.
+This documentation effort is largely complete; the original wave plan has been retired
+to the local-only `archive/`.
 Launch-blocking item: the **privacy statement (N2)**, drafted toward the 180-day
 retention commitment (decision D-PRIV), pending legal/comms review.
 
@@ -86,13 +86,14 @@ retention commitment (decision D-PRIV), pending legal/comms review.
   permanent and is no longer nullified by the app. The remaining work is a separate
   data-minimisation mechanism that removes the *internal* account↔pseudonym link for
   non-revealed participations by the 180-day commitment.
-- **xid is reversible — weak anonymisation.** `xid = sha256(mw_user_id)` and MW user IDs
-  are sequential, so the xid can be brute-forced back to an account. Removing the
-  internal link at the retention window does **not** anonymise the Polis vote data,
-  because the xid is recomputable from a user ID. Fix: **salt** the hash with a
-  per-deployment secret, and/or **delete/rotate** the xid mapping at anonymisation —
-  non-trivial because xid is the live participant identity in Polis (re-keying orphans
-  existing votes). Needs design; relates to the security model (N11). *(pending —
+- **xid anonymisation — salting done, mapping-rotation still open.** The old
+  `sha256(mw_user_id)` form was brute-forceable from sequential MW user IDs. The **salt**
+  half of the fix has shipped: xid is now `HMAC(secret, subject)`, versioned by
+  `xid_key_version`, and forwarded conversation-scoped (#96). Still open: **delete/rotate**
+  the xid↔uid mapping at the retention window so removing the internal link actually
+  anonymises the Polis vote data — non-trivial because xid is the live participant identity
+  in Polis (re-keying orphans existing votes). Relates to the security model (N11).
+  *(partially done — salting shipped; rotation pending —
   [#96](https://github.com/lgelauff/wiki-polis/issues/96))*
 
 ## 5. Deferred / later

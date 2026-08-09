@@ -377,3 +377,56 @@ box never contradicts itself in advanced mode.
 - [x] **Admin stats slice** (#165, informed voting only): Phase 6 participant count, statement count, largest-shift teaser in admin conversation stats panel
 - [x] Done screen updated: closed-state links to final report
 - [x] Docs: `ref_data-model.md` (two-conversation architecture, vote-sign, filter model, result surfaces), `ref_polis-data-model.md` (`votes_latest_unique` Phase 6 note), `guide_organizer.md` (new "Read the informed voting results" section)
+
+---
+
+## Parallel-lanes wave — admin, participant UX, phase model, privacy, ops (2026-06-13 → 2026-07-09)
+
+Merged as [#236](https://github.com/lgelauff/wiki-polis/pull/236) (~50 issues across six work
+lanes) plus follow-ups. This wave took the app from a few phase toggles to the current
+7-phase model with an organizer role, in-app moderation, scheduled transitions, and an
+embedding sidecar. (The lane names were an engineering branch-organization strategy, not a
+product concept.)
+
+**Lane 1 — admin & moderation**
+- [x] Argument moderation queue in the admin panel (#84)
+- [x] Ban conversation participants + public ban log (#60)
+- [x] Community flag review queue — participants flag statements/arguments, moderators resolve (#138)
+- [x] Conversation **organizer** role, distinct from global admin / moderator (#154)
+- [x] Admin participants engagement tab (#42); admin interface visual-mode distinction; disabled-button greying; clearer flag-affordance copy
+
+**Lane 2 — participant voting & arguments** (#57 #71 #82 #185 #202 #219 #220)
+- [x] Participant writing guides (#57); mobile card tap affordance (#71); simplified pseudonym setup (#82); vote-progress label (#185)
+- [x] Skip arguments from the list / easy-skip contribute row (#202); clearer arguments all-done copy and completed-side gating (#219, #220)
+
+**Lane 3 — phase model, scheduling & outputs** (#160 #164 #173 #180 #186 #187 #194 #195 #214 #215 #216 #226)
+- [x] The passive **Cleanup** phase between arguments and informed voting (`phase_cleanup`, #163)
+- [x] Named **phase routes** — `default_7` / `no_informed_vote` / `short_results` via `phase_route` (#173)
+- [x] **Scheduled phase transitions** (`scheduled_transition_*`), applied by the phase-scheduler Toolforge job (#164)
+- [x] Recommended quantities per conversation size (#160); report-filter snapshot at close (#186)
+
+**Lane 4 — privacy, anonymisation & provenance** (#96 #113 #143 #146 #207 #210 #223)
+- [x] xid HMAC keying, versioned by `xid_key_version` (#96); `arguments.proposer_id` → `proposer_pseudonym` (#113)
+- [x] Statement provenance + similarity-scoring tables (#143, #207); conversation eligibility gate (#146); demo participant marker (#223)
+
+**Lane 5 — ops, infra & reliability** (#49 #55 #118 #129 #130 #139 #199 #208 #217)
+- [x] Loki / fluent-bit log-aggregation stack, backup scripts, microservice smoke test + CI; embedding-sidecar similarity contract (#207/#208)
+
+**Lane 6 — routing + particiapi proxy refactor** (#112 #159)
+
+**Cross-cutting**
+- [x] Heuristic statement advising module (#56); delete zero-vote conversations (#145); WCAG AA target-size + toast politeness (#157)
+- [x] Alembic migrations linearized to a single head; internal Claude plan files removed from the repo (`v2/.claude` gitignored)
+
+**Seed-import churn** — raised the bulk limit 20→200 (#227), then reversed: lowered it back 200→20, capped text-area paste at `MAX_FILE_BYTES` (#238), and removed the redundant CSV-upload route/parser/UI in favour of a text-area paste (tests migrated).
+
+**Cross-device / conversation-scoped identity**
+- [x] Pass the user xid to Particiapi for a stable cross-device participant (#245); don't follow upstream redirects, never bind identity on the unscoped route (#263); warn when the identity secret crosses a cleartext hop (#264)
+- [x] **Conversation-scoped** participant identity — a different Polis uid per conversation, no cross-conversation chain (#246/#247)
+
+**MariaDB migration correctness** — FK-before-index reorder for MySQL error 1553; SQLite-safe migration upgrades; a **MariaDB migration check** (local + CI) to catch MySQL-only bugs (#267).
+
+**Post-merge stabilization**
+- [x] Dedup admin per-statement vote counts — `votes_latest_unique` + `COUNT(DISTINCT pid)` (#269 / #271)
+- [x] **Restore the phase-scheduler Toolforge job wiring dropped in the #236 merge (#272 / #274)** — a regression the merge itself introduced
+- [x] Phase-6 auto-resync when featured statements change mid-round, and warn before a live-round featured edit (#276)

@@ -8,9 +8,7 @@
 > *unknown — requires literature review* are open questions we have not resolved.
 
 This guide is for **organizers**: you set up and run a consultation on wiki-polis from
-start to finish. It describes the platform as it works **today** (the four phase
-toggles); forward-looking ideas live in
-[`prop_phase-model.md`](../v2/prop_phase-model.md).
+start to finish. It describes the platform as it works **today**.
 
 ---
 
@@ -33,22 +31,23 @@ can then act on. It is **not**:
 
 ## How a consultation works (the phases)
 
-A consultation moves through a linear sequence of phases — each builds on the last:
+A consultation moves through a linear sequence of phases — each builds on the last. The default route has **seven** steps (the admin UI labels them Explore, Featured selection, Arguments, Cleanup, Informed vote, Report; shorter routes exist, chosen when you create the conversation):
 
-1. **Preparation** — setup only; participants can't do anything yet. You write seed statements, intro text, access and moderation policy, and appoint moderators.
-2. **Submission** — participants submit statements and vote on them (the data-collection phase).
+1. **Preparation** — setup only; participants can't do anything yet. You write seed statements, intro text, access and moderation policy, and appoint moderators and organizers.
+2. **Submission** (UI: *Explore*) — participants submit statements and vote on them (the data-collection phase).
 3. **Featured selection** — participants can see their personal results while you curate the featured statements that the argument layer will use.
-4. **Argument mapping** — opens a pro/con argument layer on the featured statements. Participants read, submit, and vote on short pro/con arguments.
-5. **Informed voting** — a second, independent voting round on the featured statements only, with the Phase 4 arguments shown inline so participants deliberate before casting a clean Agree / Disagree / Pass vote. Participants who skipped earlier phases can join here; the statement set is fixed. Must be **initialised** from the admin panel before the tab appears (see [Enabling informed voting](#enabling-informed-voting)).
-   *After informed voting ends:* participants see **preliminary results** while the organizer reviews and moderates before publishing. This is the **cleanup window** — no new phase flag, just the active conversation in a review state (see [section 7](#7-review-results-and-clean-up-the-cleanup-window)).
-6. **Publish final report** — the organizer explicitly closes the conversation once satisfied with the results. This publishes the final report at `/c/<slug>/report`, freezes the moderation filter (making report figures semi-immutable), and starts the identity-reveal window. Closing is **irreversible**.
+4. **Argument mapping** (UI: *Arguments*) — opens a pro/con argument layer on the featured statements. Participants read, submit, and vote on short pro/con arguments.
+5. **Cleanup** — a quiet pause: participants are idle while you moderate the arguments before the informed vote. This **is** a real phase toggle (`phase_cleanup`) — don't confuse it with the flag-less preliminary-results window under step 6.
+6. **Informed voting** (UI: *Informed vote*) — a second, independent voting round on the featured statements only, with the Cleanup-reviewed arguments shown inline so participants deliberate before casting a clean Agree / Disagree / Pass vote. Participants who skipped earlier phases can join here; the statement set is fixed. Must be **initialised** from the admin panel before the tab appears (see [Enabling informed voting](#enabling-informed-voting)).
+   *After informed voting, once you turn on public results:* participants see **preliminary results** while you review and moderate before publishing. This flag-less **preliminary-results window** is just the active conversation in a review state — not a separate toggle (see [section 7](#7-review-results-and-publish-the-preliminary-results-window)).
+7. **Publish final report** (UI: *Report*) — the organizer explicitly closes the conversation once satisfied with the results. This publishes the final report at `/c/<slug>/report`, freezes the moderation filter (making report figures semi-immutable), and starts the identity-reveal window. Closing is **irreversible**.
 
 ### Moving between phases
 
 There are two ways to advance, both in the conversation's admin panel:
 
 - **Move on (guided, the normal path).** A "Move on to *<next phase>* →" box walks you one step forward. It spells out the consequences (what opens, what closes, what's irreversible) and shows a **readiness checklist** you must confirm before the button enables. Some items are machine-checked (e.g. "at least one featured statement selected" shows a met / not-met badge); the rest are judgement calls you tick off. The server re-checks everything on submit, so the checklist is a real gate, not just a reminder.
-- **Advanced phase controls (admin only).** An "Advanced phase controls" panel exposes each phase as an independent on/off toggle, including moving **backward**. Use this only when you deliberately need a non-linear state; it opens automatically if the conversation is already in one. Only a site admin (not a conversation moderator) can change phases either way.
+- **Advanced phase controls (global admin only).** An "Advanced phase controls" panel exposes each phase as an independent on/off toggle, including moving **backward**. Use this only when you deliberately need a non-linear state; it opens automatically if the conversation is already in one. The guided **Move on** step can be taken by an organizer; the advanced toggles and any backward move are restricted to a global admin, and conversation moderators see phase controls read-only.
 
 **Pause / Resume** is separate from phases: it temporarily disables voting without starting the identity-reveal clock, and is fully reversible. Pausing before informed voting is a good way to buy time to re-invite participants.
 
@@ -107,8 +106,10 @@ statements; the rest only vote [3].
 
 **How many, and how balanced:**
 
-- Start with about **10–15 seed statements** [3]. Fewer leaves the space
-  ill-defined; many more means you're over-determining the landscape.
+- Research suggests about **10–15 seed statements** [3]; wiki-polis's admin panel
+  recommends a smaller starting target you can exceed — **8** for the default *medium*
+  profile (5 for *small*, 12 for *large*). Fewer leaves the space ill-defined; many more
+  means you're over-determining the landscape.
 - **Cover the range of views, not just your own framing** — include positions you
   disagree with. Mix *diagnostic* claims (what's the problem?) and *policy* claims (what
   should be done?), and deliberately include points where you expect **genuine
@@ -155,6 +156,13 @@ links to cluster a statement with its derivatives and avoid over-representing th
 presented set, and to estimate how *semantically similar* a "correction" is to the original ([#207]).
 Leave the field blank for a genuinely new statement.
 
+Participants have a parallel, self-service path: right after voting on a statement they can
+choose **"Suggest different wording"**, which submits a reworded version linked to the
+original (`derived_from`). Unlike the admin `corrects` field, this path **enforces a
+similarity check** — a rewording that drifts too far from the original is rejected
+(`derivative_similarity_too_low`) rather than recorded, keeping it a genuine correction
+rather than a backdoor for new statements.
+
 [#142]: https://github.com/lgelauff/wiki-polis/issues/142
 [#143]: https://github.com/lgelauff/wiki-polis/issues/143
 [#207]: https://github.com/lgelauff/wiki-polis/issues/207
@@ -200,19 +208,23 @@ Either way, don't over-read groupings from few participants.
 Once you can see the groups, curate a small set of **featured statements** (group-
 representative or strongly dividing ones) from the system's suggestions, or add them
 manually. On featured statements participants read, submit, and vote on short pro/con
-arguments. Keep the set small (≈8–12) — curation quality drives the argument layer.
+arguments. Keep the set focused: the admin panel recommends a target for the conversation's
+size — **15** featured statements for the default *medium* profile (8 for *small*, 24 for
+*large*). Curation quality drives the argument layer.
 
-## 7. Review results and clean up (the cleanup window)
+## 7. Review results and publish (the preliminary-results window)
 
-After informed voting ends there is a **cleanup window** before the final report is
-published. This is not a separate phase toggle — the conversation stays active while you
-review. Participants see a **Preliminary results** banner during this time.
+After you turn on public results (and before you close) there is a **preliminary-results
+window** before the final report is published. This is *not* a separate phase toggle — the
+conversation stays active while you review. (Don't confuse it with the **Cleanup phase** in
+step 5, which is a real toggle that pauses participants *before* the informed vote.)
+Participants see a **Preliminary results** banner during this time.
 
-**What to do in the cleanup window:**
+**What to do in the preliminary-results window:**
 - Review the preliminary results (the Results tab shows the same data the final report will).
 - Moderate any remaining flagged statements from the informed voting round.
-- Once issue #60 ships: exclude any participants who violated the terms — their votes will
-  be filtered from the final report counts.
+- Exclude any participants who violated the terms by **banning** them from the conversation —
+  their votes are filtered from the final report counts, and a public ban log records it.
 - When you are satisfied: **publish the final report** by closing the conversation (see
   section 8 below).
 
@@ -220,7 +232,7 @@ review. Participants see a **Preliminary results** banner during this time.
 > aggregate counts in the report become semi-immutable. You can add a narrative and
 > context before publishing, but the vote tallies won't change after close.
 
-### What participants see during the cleanup window
+### What participants see during the preliminary-results window
 The Results tab shows a "Preliminary results" banner. Once you close, it transitions to a
 "Read the final report →" link. Participants are not notified automatically — consider
 sending a talk-page or email notification when the final report goes live.
@@ -229,7 +241,7 @@ sending a talk-page or email notification when the final report goes live.
 
 #### Preliminary results
 Available on the **Results tab** as soon as informed voting is open (and continues through
-the cleanup window). Shows agree/disagree bars side-by-side (Phase 2 initial vote vs Phase 6
+the preliminary-results window). Shows agree/disagree bars side-by-side (Phase 2 initial vote vs Phase 6
 informed vote) and an aggregate shift indicator. Marked **Preliminary** — counts change while
 voting is open.
 

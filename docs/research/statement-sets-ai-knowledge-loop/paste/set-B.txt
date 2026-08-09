@@ -1,0 +1,13 @@
+Wikimedia's current approach to AI companies is closer to passive acceptance than to active negotiation.
+Rate-limiting AI crawlers protects Wikimedia infrastructure at an acceptable cost to openness.
+Restricting access to Wikimedia content in response to AI scraping would do more damage to the mission than the scraping does.
+Wikimedia should offer some AI companies exclusive access to its content in exchange for higher payment.
+Keeping access open without conditions remains the right approach, since reuse eventually returns value to the commons.
+Wikimedia should set conditions on how AI systems use its content, rather than granting permission in advance through open licences.
+Wikimedia has enough influence over AI companies to negotiate terms those companies would otherwise refuse.
+The volume of openly shared content is no longer an adequate measure of the health of the knowledge commons.
+When openness and the financial sustainability of Wikimedia conflict, sustainability should take precedence.
+Wikimedia Enterprise shows that large-scale commercial use of the commons can be structured through negotiated agreements.
+Wikimedia Enterprise revenue, at 4% of Foundation income, is too small to change how AI companies behave.
+Taking an active political stance toward AI companies would damage Wikimedia's reputation for neutrality.
+Wikimedia should treat its relationship with AI companies as a negotiation between parties whose interests conflict.

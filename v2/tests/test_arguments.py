@@ -1,5 +1,6 @@
 """Tests for the argument mapping layer: submit, skip, vote, admin featured."""
 import os
+from unittest.mock import patch
 
 import pytest
 
@@ -523,6 +524,20 @@ def test_participant_can_flag_argument(auth_client, arg_conv, arg_part, fs, part
     assert flag.detail == 'bad'
 
 
+def test_participant_flag_argument_via_fetch_returns_json(auth_client, arg_conv, arg_part, fs, participant):
+    """The flag popover submits via fetch (no page reload) — the route must respond
+    with JSON rather than a redirect when asked, so the card/vote flow underneath
+    is never interrupted."""
+    arg = _make_visible_arg(fs.id)
+    resp = auth_client.post(
+        f'/c/arg-conv/arguments/{arg.id}/flag',
+        data={'category': 'off_topic'},
+        headers={'X-Requested-With': 'fetch'},
+    )
+    assert resp.status_code == 200
+    assert resp.get_json() == {'ok': True}
+
+
 def test_participant_argument_flag_dedupes_open_flags(auth_client, arg_conv,
                                                       arg_part, fs, participant):
     arg = _make_visible_arg(fs.id)
@@ -555,6 +570,36 @@ def test_participant_can_flag_statement(auth_client, arg_conv, arg_part, partici
     ).first()
     assert flag is not None
     assert flag.category == 'privacy'
+
+
+def test_participant_can_flag_seed_statement(auth_client, arg_conv, arg_part, participant):
+    """A seed (organizer-authored) statement must be just as flaggable as any other —
+    previously an unconditional abort(400) here meant flagging any seed-derived
+    featured statement (the common case) failed with Bad Request."""
+    seed_stmt = {'tid': 42, 'txt': 'Seed statement text', 'is_seed': True}
+    with patch('app.PolisServerClient.get_statements', return_value=([], [seed_stmt], [])):
+        resp = auth_client.post(
+            '/c/arg-conv/statements/42/flag',
+            data={'category': 'privacy', 'detail': 'Personal details'},
+        )
+    assert resp.status_code == 302
+    flag = ContentFlag.query.filter_by(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        content_type='statement',
+        statement_tid=42,
+    ).first()
+    assert flag is not None
+
+
+def test_participant_flag_statement_via_fetch_returns_json(auth_client, arg_conv, arg_part, participant):
+    resp = auth_client.post(
+        '/c/arg-conv/statements/42/flag',
+        data={'category': 'privacy'},
+        headers={'X-Requested-With': 'fetch'},
+    )
+    assert resp.status_code == 200
+    assert resp.get_json() == {'ok': True}
 
 
 def test_hide_argument_wrong_conversation_returns_404(admin_client, arg_conv,
