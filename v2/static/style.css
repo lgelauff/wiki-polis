@@ -1063,6 +1063,8 @@ h3.conv-card-title-wrap {
   cursor: pointer;
 }
 .propose-submit-btn:hover { background: var(--accent); }
+.propose-submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.propose-submit-btn:disabled:hover { background: var(--surface2); }
 
 /* State C: submitted — spot/amber (not agree green) */
 /* ── All done message ── */
