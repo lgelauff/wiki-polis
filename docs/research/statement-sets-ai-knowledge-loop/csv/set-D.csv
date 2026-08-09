@@ -1,0 +1,14 @@
+set,set_name,id,statement,source_page,type,expected_split,chars
+D,Interface agency,D-01,"Wikimedia should build interfaces through which readers reach the commons directly, rather than relying on search engines and AI assistants.",56,policy,divisive,140
+D,Interface agency,D-02,Building reader-facing AI interfaces falls outside the mission of an encyclopedia project.,56,value,divisive,90
+D,Interface agency,D-03,Delegating the reader-facing interface to search engines was a reasonable choice during the search era.,"12, 56",diagnostic,lean,103
+D,Interface agency,D-04,Wikimedia will lose its direct relationship with readers unless it operates an interface of its own.,56,diagnostic,divisive,100
+D,Interface agency,D-05,Any AI interface Wikimedia builds should send readers to Wikipedia articles rather than answering in place of them.,56,policy,lean,115
+D,Interface agency,D-06,An AI interface that answers readers' questions directly would reduce the number of people who go on to edit.,56,diagnostic,lean,109
+D,Interface agency,D-07,Wikimedia should support several competing AI interfaces rather than building one official product.,56,policy,lean,99
+D,Interface agency,D-08,Wikimedia should build its own conversational AI assistant.,56,policy,divisive,59
+D,Interface agency,D-09,Building AI interfaces would divert resources from maintaining the encyclopedia itself.,62,diagnostic,divisive,87
+D,Interface agency,D-10,Wikimedia's credibility with readers depends on it not being seen as a company that builds AI products.,56,diagnostic,divisive,103
+D,Interface agency,D-11,"Readers who receive accurate Wikipedia-derived answers from an AI assistant are being served well, even when they never visit Wikipedia.",56,value,divisive,136
+D,Interface agency,D-12,Wikimedia should aim to be one of the main interfaces through which people reach knowledge by 2030.,56,policy,divisive,99
+D,Interface agency,D-13,Wikimedia should build AI interfaces jointly with public AI developers rather than on its own.,56,policy,lean,94

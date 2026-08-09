@@ -1,4 +1,9 @@
 {% extends "base.html" %}
+{% block head %}
+{% if header_mode == 'demo' %}
+<meta name="robots" content="noindex,nofollow">
+{% endif %}
+{% endblock %}
 {% block content %}
 
 {# ── Input timeline macro: progressive participation phases ───────────────── #}
@@ -89,13 +94,14 @@
 
 {% if not username %}
 
-  {# ── Unauthenticated landing ───────────────────────────────────────────── #}
+  {# ── Unauthenticated landing (demo or real lane — same UI, tinted background) ── #}
 
   <div class="landing-section">
     <h1 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Where the community actually stands.</h1>
     <p style="font-size:15px;line-height:1.6;color:var(--body);max-width:520px">
-      Vote on short statements, watch opinion clusters emerge.
-      No threads, no replies — just signal.
+      Vote on short statements, and suggest improvements. Learn how your views
+      compare to other community members — which statements already have
+      consensus, and what topics are divisive, and why.
     </p>
     <a href="{{ url_for('login') }}" class="login-btn" style="margin-top:18px">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -130,11 +136,10 @@
         {% for c in public_conversations %}
         <li>
           <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card"
-             aria-label="{{ c.title }} — join consultation">
+             aria-label="{{ c.title }} — open consultation">
             <div class="conv-card-left">
               <span class="conv-dot conv-dot--available" aria-hidden="true"></span>
               <h3 class="conv-card-title">{{ c.title }}</h3>
-              {% if c.access_policy == 'demo' %}<span class="conv-card-badge" aria-hidden="true">Demo</span>{% endif %}
             </div>
             <span class="conv-card-action" aria-hidden="true">JOIN →</span>
           </a>
@@ -153,7 +158,7 @@
 
   {# ── Flow diagram ─────────────────────────────────────────────────────── #}
   <img src="{{ url_for('static', filename='wiki-polis-flow.svg') }}"
-       alt="How a wiki-polis conversation works"
+       alt="How a ProtoWiki conversation works"
        style="width:100%;max-width:900px;display:block;margin:0 auto 1.5rem">
 
   {# ── Phase journey legend ──────────────────────────────────────────────── #}

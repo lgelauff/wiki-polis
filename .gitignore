@@ -235,3 +235,7 @@ __marimo__/
 
 # Chau7 terminal tool session data (local only)
 .chau7/
+
+# Local-only research/example working files (not product docs)
+examples/arbcomreglement/
+veto-mindset-storyline.md

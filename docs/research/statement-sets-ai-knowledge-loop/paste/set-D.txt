@@ -1,0 +1,13 @@
+Wikimedia should build interfaces through which readers reach the commons directly, rather than relying on search engines and AI assistants.
+Building reader-facing AI interfaces falls outside the mission of an encyclopedia project.
+Delegating the reader-facing interface to search engines was a reasonable choice during the search era.
+Wikimedia will lose its direct relationship with readers unless it operates an interface of its own.
+Any AI interface Wikimedia builds should send readers to Wikipedia articles rather than answering in place of them.
+An AI interface that answers readers' questions directly would reduce the number of people who go on to edit.
+Wikimedia should support several competing AI interfaces rather than building one official product.
+Wikimedia should build its own conversational AI assistant.
+Building AI interfaces would divert resources from maintaining the encyclopedia itself.
+Wikimedia's credibility with readers depends on it not being seen as a company that builds AI products.
+Readers who receive accurate Wikipedia-derived answers from an AI assistant are being served well, even when they never visit Wikipedia.
+Wikimedia should aim to be one of the main interfaces through which people reach knowledge by 2030.
+Wikimedia should build AI interfaces jointly with public AI developers rather than on its own.

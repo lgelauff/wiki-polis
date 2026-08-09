@@ -288,10 +288,39 @@ header {
   font-size: 12px;
 }
 
+.content-flag--corner {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  margin-left: 0;
+  z-index: 5;
+}
+
+/* Inside the arguments-tab featured-statement header, anchor to the left (text)
+   column specifically — the two-step indicator already claims the panel's own
+   top-right corner, so anchoring to .at-panel would collide with it. */
+.at-head-main .content-flag--corner {
+  top: 0;
+  right: 0;
+}
+
 .content-flag summary {
   cursor: pointer;
   color: var(--muted);
   list-style: none;
+}
+
+.content-flag-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+}
+
+.content-flag-trigger:hover {
+  background: var(--hairline);
 }
 
 .content-flag summary::-webkit-details-marker {
@@ -300,6 +329,11 @@ header {
 
 .content-flag[open] summary {
   color: var(--ink);
+}
+
+.content-flag[open] .content-flag-trigger {
+  color: var(--disagree);
+  background: var(--hairline);
 }
 
 .content-flag form {
@@ -320,6 +354,23 @@ header {
   width: 100%;
   margin-bottom: .4rem;
   font-size: 12px;
+}
+
+/* Post-submit confirmation — same popover box as the form it replaces, so the
+   card layout never shifts and voting/arguments stay fully usable underneath. */
+.content-flag-thanks {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  top: 1.6rem;
+  width: 220px;
+  padding: .65rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  box-shadow: 0 12px 28px -18px rgba(0, 0, 0, .35);
+  font-size: 12px;
+  color: var(--body);
 }
 
 /* ── Main container ── */
@@ -710,6 +761,7 @@ h3.conv-card-title-wrap {
 /* ── Statement card ── */
 
 .statement-card {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: 14px;
@@ -3442,6 +3494,7 @@ a { color: var(--pass); }
 
 /* Panel */
 .at-panel {
+  position: relative;
   border: 1px solid var(--hairline);
   border-radius: 14px;
   overflow: hidden;
@@ -3460,7 +3513,7 @@ a { color: var(--pass); }
   align-items: flex-start;
   flex-wrap: wrap;
 }
-.at-head-main { flex: 1; min-width: 240px; }
+.at-head-main { position: relative; flex: 1; min-width: 240px; padding-right: 28px; }
 .at-featured-label {
   display: inline-flex;
   align-items: center;
@@ -3760,7 +3813,8 @@ a { color: var(--pass); }
 /* Hide panel body when collapsed after completion */
 .at-panel--done:not(.at-panel--expanded) .at-head,
 .at-panel--done:not(.at-panel--expanded) .at-cols,
-.at-panel--done:not(.at-panel--expanded) .at-nav { display: none; }
+.at-panel--done:not(.at-panel--expanded) .at-nav,
+.at-panel--done:not(.at-panel--expanded) .content-flag--corner { display: none; }
 .at-panel--done:not(.at-panel--expanded) { padding: 0; border: none; box-shadow: none; background: none; }
 
 /* Mobile */
@@ -4232,3 +4286,141 @@ button.conv-output-symbol {
   margin-top: 2px;
   white-space: nowrap;
 }
+
+/* ── Demo/real mode switch + demo theme (#293) ───────────────────────────── */
+
+/* Faint blue page wash marks the demo sandbox everywhere it appears, so a
+   visitor always knows they are in try-it-out mode. Light-mode only (the app
+   has no dark theme). Surfaces stay white so text contrast is unaffected. */
+body[data-demo] {
+  --bg: #eaf1fb;
+  background: var(--bg);
+}
+
+.mode-switch {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  overflow: hidden;
+  font-size: 12px;
+}
+.mode-switch-opt {
+  padding: 4px 12px;
+  color: var(--muted);
+  text-decoration: none;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.mode-switch-opt:hover { background: var(--surface2); }
+.mode-switch-opt.is-active { color: var(--white); }
+.mode-switch-opt--real.is-active { background: var(--accent); }
+.mode-switch-opt--demo.is-active { background: var(--blue-dark); }
+
+.mode-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.mode-lock--demo {
+  color: var(--blue-dark);
+  border-color: #b5d4f4;
+  background: #eaf1fb;
+}
+.mode-lock-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--blue-dark);
+}
+
+/* Fork landing: the two lanes */
+.fork-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 1.5rem;
+}
+@media (max-width: 560px) { .fork-grid { grid-template-columns: 1fr; } }
+.fork-card {
+  display: block;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 22px;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--surface);
+}
+.fork-card:hover { border-color: var(--muted); }
+.fork-card--demo {
+  background: #eaf1fb;
+  border-color: #b5d4f4;
+}
+.fork-card-icon { color: var(--blue-dark); }
+.fork-card--real .fork-card-icon { color: var(--accent); }
+.fork-card-title { font-size: 17px; font-weight: 600; margin: 10px 0 4px; }
+.fork-card--demo .fork-card-title { color: var(--blue-dark); }
+.fork-card-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+.fork-card--demo .fork-card-sub { color: var(--blue-dark); }
+.fork-card-cta {
+  display: inline-block;
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  color: var(--white);
+  background: var(--accent);
+}
+.fork-card--demo .fork-card-cta { background: var(--blue-dark); }
+
+.conv-card-badge--demo {
+  color: var(--blue-dark);
+  background: #eaf1fb;
+  border-color: #b5d4f4;
+}
+
+/* Space-mismatch warning banner (#293 state model) — shown once when a viewer
+   lands on a conversation whose space (demo/real) they didn't explicitly choose. */
+.space-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 1rem;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.space-warn a { font-weight: 600; white-space: nowrap; }
+.space-warn--real {
+  border: 1px solid #e6c07a;
+  border-left: 3px solid var(--spot);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--ink);
+}
+.space-warn--demo {
+  border: 1px solid #b5d4f4;
+  border-left: 3px solid var(--blue-dark);
+  background: #eaf1fb;
+  color: var(--blue-dark);
+}
+.space-warn-ok {
+  margin-left: auto;
+  flex-shrink: 0;
+  align-self: center;
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.space-warn-ok:hover { background: rgba(0, 0, 0, 0.05); }
