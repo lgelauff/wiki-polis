@@ -32,6 +32,16 @@ them:
 - Centralised log aggregation across the VPS + Toolforge is configured in code and
   sample VPS files, but **⚠️ not live yet** until the Loki/Grafana compose stack and
   Toolforge `LOKI_*` envvars are installed. See [Central log aggregation](#central-log-aggregation).
+- **Scheduled phase transitions (`phase-scheduler` job).** A Toolforge scheduled job, defined
+  in `jobs.yaml` at the repo root, runs `v2/bin/phase-scheduler.sh` →
+  `flask --app app process-phase-schedules` on a `*/5 * * * *` cron cadence, applying any
+  scheduled phase transition whose time has passed. `deploy.sh` reconciles it via
+  `toolforge jobs load ~/wiki-polis/jobs.yaml` on every deploy, so the schedule is re-asserted
+  each time (a failure to load is non-fatal to the web deploy but printed loudly — see
+  `deploy.sh`). **If a scheduled transition didn't fire, this job is where to look:**
+  `toolforge jobs list` shows whether `phase-scheduler` is registered and its last run; the job
+  is configured with `emails: onfailure`, so a crashed run should also show up as an email to
+  the tool's maintainers.
 
 ## Logs
 

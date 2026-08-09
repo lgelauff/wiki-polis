@@ -10,7 +10,7 @@
 
 In standard Polis, the only participant actions are voting (Agree / Disagree / Pass) and submitting new statements. Voting data produces the opinion map; the algorithm can show *what* people think but not *why*.
 
-wiki-polis introduces an **arguments feature** — participants can write a supporting or opposing argument for a specific statement. Arguments are annotations on the voting data, not inputs to the clustering algorithm. Their purpose is to capture the reasoning behind votes, providing qualitative depth that the vote matrix cannot.
+wiki-polis introduces an **arguments feature** — participants can write a supporting or opposing argument, but only for **featured statements** (a subset selected for argument mapping, typically the ones that most divided voters), during the argument-mapping phase — not for every statement a participant votes on. Arguments are annotations on the voting data, not inputs to the clustering algorithm. Their purpose is to capture the reasoning behind votes, providing qualitative depth that the vote matrix cannot.
 
 This distinction matters for how arguments should be written and moderated:
 - Statements are neutral claims designed to be voted on. Arguments are directional by design.

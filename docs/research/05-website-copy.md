@@ -49,13 +49,17 @@ Anyone can submit a new statement. Yours will be reviewed before it appears to o
 
 **Good:** "The Wikimedia Foundation should publish a detailed annual report on how discretionary grants are allocated."
 
+Submitting a statement of your own unlocks only after you've cast a number of votes (10 by default) — this keeps the emphasis on voting first and reading before contributing. Each participant is also capped at a small number of submissions (3 by default) for the same reason.
+
+After you vote on a statement, you'll also be offered **"Suggest different wording"** — a way to propose a clearer or fairer rephrasing of the statement you just voted on. It stays close to the original idea; a rewording that drifts too far from it is rejected as too dissimilar.
+
 ---
 
 ### How to write a good argument *(wiki-polis feature)*
 
 > **Note:** Arguments are not part of standard Polis. This is a feature specific to wiki-polis.
 
-After voting on a statement, you can add an argument explaining your reasoning. Arguments are read by other participants and facilitators — they are not used by the algorithm.
+Arguments aren't attached to every statement you vote on — only to the **featured statements** selected for the argument-mapping phase (typically the ones that divided voters most). On those, you can add an argument explaining your reasoning. Arguments are read by other participants and facilitators — they are not used by the algorithm.
 
 **A good argument:**
 
