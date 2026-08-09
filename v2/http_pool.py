@@ -76,4 +76,11 @@ def _build_session() -> requests.Session:
 
 
 # Process-wide shared client. Import this; do not build your own per-call Session.
+#
+# Built at import, which is pre-fork when uWSGI loads the app in the master (the
+# default, without lazy-apps). That is safe ONLY because urllib3 opens sockets
+# lazily on first request — post-fork — so no file descriptors are shared across
+# workers. INVARIANT: never issue an upstream HTTP call at import / master scope.
+# (We keep master-preloading rather than lazy-apps so workers share the app via
+# copy-on-write and stay within the pod's memory budget.)
 session = _build_session()

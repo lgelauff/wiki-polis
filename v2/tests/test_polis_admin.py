@@ -116,6 +116,44 @@ def test_stats_connection_error_returns_none():
         assert client.get_polis_stats('abc123') is None
 
 
+def test_stats_retries_once_on_stale_connection(monkeypatch):
+    # #275 M2: a pooled connection closed by the server during idle raises
+    # OperationalError on first use; _pg_query retries once with a fresh borrow
+    # instead of falsely reporting the stats unavailable.
+    import psycopg2
+    import polis_admin
+    monkeypatch.setattr(polis_admin, '_get_pg_pool', lambda db_url: None)  # force fallback path
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw',
+                               db_url='postgresql://localhost/polis')
+    stale = MagicMock()
+    stale.cursor.return_value.__enter__.return_value.execute.side_effect = \
+        psycopg2.OperationalError('server closed the connection unexpectedly')
+    fresh = MagicMock()
+    fresh.cursor.return_value.__enter__.return_value.fetchall.return_value = \
+        [(10, 150, 15.0, 12.5, 8, 3)]
+    with patch('psycopg2.connect', side_effect=[stale, fresh]) as connect:
+        result = client.get_polis_stats('abc123')
+    assert result is not None and result['n_participants'] == 10
+    assert connect.call_count == 2   # retried once on the stale connection
+
+
+def test_pg_fallback_is_bounded_and_sheds_when_saturated(monkeypatch):
+    # #275 M4: when the pool is exhausted AND the one-off fallback budget is
+    # saturated, the read is shed (returns None / degraded) rather than opening an
+    # unbounded connection that could exceed Postgres max_connections.
+    import threading
+    import polis_admin
+    monkeypatch.setattr(polis_admin, '_get_pg_pool', lambda db_url: None)  # force fallback path
+    saturated = threading.BoundedSemaphore(1)
+    saturated.acquire()  # no fallback slots left
+    monkeypatch.setattr(polis_admin, '_pg_fallback_sem', saturated)
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw',
+                               db_url='postgresql://localhost/polis')
+    with patch('psycopg2.connect') as connect:
+        assert client.get_polis_stats('abc123') is None
+        connect.assert_not_called()   # never opened an unbounded one-off connection
+
+
 def test_stats_empty_row_returns_none():
     client, mock_conn = _make_stats_client(db_rows=None)
     with patch('psycopg2.connect', return_value=mock_conn):

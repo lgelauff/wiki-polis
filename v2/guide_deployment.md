@@ -372,7 +372,7 @@ Or write it directly:
 printf '[uwsgi]\nbuffer-size = 65536\nenable-threads = true\nprocesses = 4\nthreads = 20\n' > ~/www/python/uwsgi.ini
 ```
 
-The `[uwsgi]` section header is mandatory; without it uWSGI silently ignores the file and uses its 4 KB default (and single-threaded workers). The `processes`/`threads` values are a starting point for ~1000 concurrent voters — **tune them with the load test** (`synthetic_traffic.py`), reconciling `processes × threads` with ToolsDB `max_user_connections`, the connection pools (`POLIS_HTTP_POOL_MAXSIZE` / `POLIS_PG_POOL_MAXCONN` / `TOOLSDB_POOL_SIZE`+`TOOLSDB_MAX_OVERFLOW`, all default 20), and the pod's memory (raise with `toolforge webservice --mem 2Gi --cpu 1 python3.13 start`). See [`v2/ops/uwsgi.ini`](ops/uwsgi.ini) for the full rationale.
+The `[uwsgi]` section header is mandatory; without it uWSGI silently ignores the file and uses its 4 KB default (and single-threaded workers). The `processes`/`threads` values are a starting point for ~1000 concurrent voters — **tune them with the load test** (`synthetic_traffic.py`), reconciling `processes × threads` with ToolsDB `max_user_connections`, the connection pools (`POLIS_HTTP_POOL_MAXSIZE` and `POLIS_PG_POOL_MAXCONN` default 20; `TOOLSDB_POOL_SIZE`+`TOOLSDB_MAX_OVERFLOW` default 10+10 = 20 total), and the pod's memory (raise with `toolforge webservice --mem 2Gi --cpu 1 python3.13 start`). See [`v2/ops/uwsgi.ini`](ops/uwsgi.ini) for the full rationale.
 
 ### Set secrets
 
