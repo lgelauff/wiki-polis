@@ -199,7 +199,7 @@ def test_demo_proxy_blocks_write_to_other_conversation(client):
     db.session.commit()
     client.get('/c/demo-proxy3')
 
-    with patch('app.requests.request') as req:
+    with patch('app.polis_http.request') as req:
         resp = client.post('/proxy/particiapi/api/conversations/otherconv1/statements/',
                            headers={'Sec-Fetch-Site': 'same-origin'},
                            json={'text': 'should be blocked'})
@@ -287,7 +287,7 @@ def test_statement_new_wording_suggestion_exempt_from_quota(auth_client, partici
     stmt_resp.json = lambda: {'id': 888}
 
     with patch('app._statement_text_map', return_value={101: 'original wording'}), \
-         patch('app.requests.post', side_effect=[sess_resp, stmt_resp]):
+         patch('app.polis_http.post', side_effect=[sess_resp, stmt_resp]):
         resp = auth_client.post('/c/q2/statements/new',
                                 headers={'Sec-Fetch-Site': 'same-origin'},
                                 json={'text': 'original wording, rephrased',
@@ -404,7 +404,7 @@ def test_proxy_does_not_follow_upstream_redirect(auth_client):
     cross-host redirects, so following one could replay the shared secret."""
     up = _fake_upstream(status_code=302, content=b'')
     up.headers = {'Content-Type': 'text/html', 'Location': 'https://evil.example/'}
-    with patch('app.requests.request', return_value=up) as req:
+    with patch('app.polis_http.request', return_value=up) as req:
         resp = auth_client.get('/proxy/particiapi/api/conversations/abc/')
     assert resp.status_code == 302  # passed back unchanged, not chased
     assert req.call_args.kwargs['allow_redirects'] is False
@@ -418,7 +418,7 @@ def test_proxy_vote_redirect_does_not_count_as_engagement(bind_client):
     conv = _make_conv('bind-r', 'bindr00001')
     up = _fake_upstream(status_code=302, content=b'')
     up.headers = {'Location': 'https://particiapi.example/'}
-    with patch('app.requests.request', return_value=up):
+    with patch('app.polis_http.request', return_value=up):
         with patch('app._touch_last_engagement') as touch:
             bind_client.post(f'/c/bind-r/proxy/particiapi/api/conversations/{conv.polis_id}/votes',
                              headers=_SAME_ORIGIN, json={})
@@ -463,7 +463,7 @@ def _expected_subject(xid, conv_id):
 def test_scoped_session_post_binds_conversation_subject(bind_client, participant):
     conv = _make_conv('bind-a', 'binda00001')
     up = _fake_upstream(cookies={'session': 'NEWBOUND'})
-    with patch('app.requests.request', return_value=up) as req:
+    with patch('app.polis_http.request', return_value=up) as req:
         resp = bind_client.post('/c/bind-a/proxy/particiapi/api/session',
                                 headers=_SAME_ORIGIN, json={})
     assert resp.status_code == 200
@@ -482,7 +482,7 @@ def test_scoped_subject_differs_per_conversation(bind_client, participant):
     subs = []
     for slug in ('bind-1', 'bind-2'):
         up = _fake_upstream()
-        with patch('app.requests.request', return_value=up) as req:
+        with patch('app.polis_http.request', return_value=up) as req:
             bind_client.post(f'/c/{slug}/proxy/particiapi/api/session',
                              headers=_SAME_ORIGIN, json={})
         subs.append(req.call_args.kwargs['headers']['X-Particiapi-Sub'])
@@ -495,7 +495,7 @@ def test_scoped_subject_stable_within_conversation(bind_client):
     seen = []
     for _ in range(2):
         up = _fake_upstream()
-        with patch('app.requests.request', return_value=up) as req:
+        with patch('app.polis_http.request', return_value=up) as req:
             bind_client.post('/c/bind-s/proxy/particiapi/api/session',
                              headers=_SAME_ORIGIN, json={})
         seen.append(req.call_args.kwargs['headers']['X-Particiapi-Sub'])
@@ -508,7 +508,7 @@ def test_bind_drops_stale_pa_session_cookie(bind_client):
     _make_conv('bind-c', 'bindc00001')
     bind_client.set_cookie('pa_session', 'STALE_ANON')
     up = _fake_upstream()
-    with patch('app.requests.request', return_value=up) as req:
+    with patch('app.polis_http.request', return_value=up) as req:
         bind_client.post('/c/bind-c/proxy/particiapi/api/session',
                          headers=_SAME_ORIGIN, json={})
     assert 'session' not in req.call_args.kwargs['cookies']
@@ -519,7 +519,7 @@ def test_bind_only_on_session_post(bind_client):
     never on other paths or methods."""
     _make_conv('bind-x', 'bindx00001')
     up = _fake_upstream()
-    with patch('app.requests.request', return_value=up) as req:
+    with patch('app.polis_http.request', return_value=up) as req:
         bind_client.post('/c/bind-x/proxy/particiapi/api/votes/3',
                          headers=_SAME_ORIGIN, json={})
         post_headers = req.call_args.kwargs['headers']
@@ -534,7 +534,7 @@ def test_no_bind_without_secret(auth_client):
     """Secret unset → legacy anonymous behaviour: no sub headers, ?create=true added."""
     _make_conv('bind-n', 'bindn00001')
     up = _fake_upstream()
-    with patch('app.requests.request', return_value=up) as req:
+    with patch('app.polis_http.request', return_value=up) as req:
         auth_client.post('/c/bind-n/proxy/particiapi/api/session',
                          headers=_SAME_ORIGIN, json={})
     sent = req.call_args.kwargs
@@ -549,7 +549,7 @@ def test_unscoped_route_never_emits_identity_headers(bind_client):
     no-secret `auth_client` it would pass even if the `conv is None` guard were
     deleted, i.e. it would test nothing. Do not 'simplify' the fixture."""
     up = _fake_upstream()
-    with patch('app.requests.request', return_value=up) as req:
+    with patch('app.polis_http.request', return_value=up) as req:
         bind_client.post('/proxy/particiapi/api/session',
                          headers=_SAME_ORIGIN, json={})
     sent = req.call_args.kwargs
@@ -578,7 +578,7 @@ def test_bind_warns_on_cleartext_but_still_binds(bind_client, app, caplog):
     _make_conv('bind-w', 'bindw00001')
     up = _fake_upstream()
     with caplog.at_level(logging.WARNING), \
-            patch('app.requests.request', return_value=up) as req:
+            patch('app.polis_http.request', return_value=up) as req:
         bind_client.post('/c/bind-w/proxy/particiapi/api/session',
                          headers=_SAME_ORIGIN, json={})
     assert 'X-Particiapi-Sub-Secret' in req.call_args.kwargs['headers']  # still binds
@@ -591,7 +591,7 @@ def test_bind_no_warning_on_loopback(bind_client, app, caplog):
     _make_conv('bind-l', 'bindl00001')
     up = _fake_upstream()
     with caplog.at_level(logging.WARNING), \
-            patch('app.requests.request', return_value=up):
+            patch('app.polis_http.request', return_value=up):
         bind_client.post('/c/bind-l/proxy/particiapi/api/session',
                          headers=_SAME_ORIGIN, json={})
     assert not any('cleartext non-loopback' in r.message for r in caplog.records)

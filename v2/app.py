@@ -2161,13 +2161,6 @@ def conversation_statement_new(slug):
     if derived_from in ('', None):
         derived_from = None
 
-    # Wording suggestions (derived_from set) are exempt from the new-statement
-    # quota — only genuinely new statements consume it (spec_functional-design.md).
-    if derived_from is None:
-        new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
-        if len(part.new_stmt_ids or []) >= new_stmt_max:
-            return jsonify({'error': 'quota_exceeded'}), 403
-
     if not text or len(text) > 280:
         abort(400)
     if derived_from is not None and not isinstance(derived_from, int):
@@ -2177,11 +2170,13 @@ def conversation_statement_new(slug):
 
     # Optimistic quota fast-fail (unlocked read): reject an over-quota submit before the
     # upstream statement fetch + similarity work. The authoritative check runs under the
-    # lock below, right before the submit, so the quota stays race-safe.
+    # lock below, right before the submit, so the quota stays race-safe. Wording
+    # suggestions (derived_from set) are exempt — only genuinely new statements count
+    # against the quota (#296 / spec_functional-design.md).
     part = Participation.query.filter_by(
         participant_id=participant.id, conversation_id=conv.id,
     ).first_or_404()
-    if len(part.new_stmt_ids or []) >= new_stmt_max:
+    if derived_from is None and len(part.new_stmt_ids or []) >= new_stmt_max:
         return jsonify({'error': 'quota_exceeded'}), 403
 
     # Derivative gate — statement fetch + similarity + threshold. Read-only w.r.t. the
@@ -2225,7 +2220,7 @@ def conversation_statement_new(slug):
     part = Participation.query.filter_by(
         participant_id=participant.id, conversation_id=conv.id,
     ).populate_existing().with_for_update().first_or_404()
-    if len(part.new_stmt_ids or []) >= new_stmt_max:
+    if derived_from is None and len(part.new_stmt_ids or []) >= new_stmt_max:
         return jsonify({'error': 'quota_exceeded'}), 403
 
     # Get CSRF token for this Particiapi session, then submit the statement.
