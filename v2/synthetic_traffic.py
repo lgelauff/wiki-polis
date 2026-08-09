@@ -127,6 +127,19 @@ class Health:
     def _fail(self, action, method, path, status, detail):
         self.failures.append((action, method, path, status, detail))
 
+    def check_action_exercised(self, action, exercised_statuses):
+        """After a run, fail if `action` was attempted but never returned a status
+        that means the route actually ran its logic. For submit, only ever seeing
+        401/404 means the accept step never established a Participation, so the
+        submit path was never soaked — a false green this turns into a failure (#130).
+        """
+        with self._lock:
+            seen = [s for (a, s, _lat) in self.records if a == action]
+            if seen and not any(s in exercised_statuses for s in seen):
+                self._fail(action, "-", f"({action})", seen[-1],
+                           f"{action} attempted {len(seen)}× but never exercised "
+                           f"(only saw {sorted(set(seen))}) — check the setup step")
+
     def summary(self, elapsed_s):
         by_action = {}
         for action, status, lat in self.records:
@@ -436,6 +449,13 @@ def main(argv=None):
         print("\n  interrupted — stopping workers...", file=sys.stderr)
         stop.set()
     elapsed = time.monotonic() - t0
+
+    # #130: a soak where every submit returned 401/404 (the accept step never
+    # established a Participation) means submit was never actually exercised — fail
+    # that instead of reporting a green run. A route-level 201/403(quota)/409 counts
+    # as exercised.
+    if not args.dry_run and "submit" in args.actions:
+        health.check_action_exercised("submit", {201, 403, 409})
 
     print(health.summary(elapsed))
     return 1 if health.failures else 0

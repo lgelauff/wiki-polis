@@ -357,13 +357,22 @@ exit
 
 ### Add uwsgi.ini
 
-Wikimedia OAuth tokens exceed uWSGI's default 4 KB header buffer, causing silent failures. Create `~/www/python/uwsgi.ini`:
+Wikimedia OAuth tokens exceed uWSGI's default 4 KB header buffer, causing silent failures. The webservice also needs **threaded workers** to handle concurrent voters — the app is I/O-bound (each request blocks on Particiapi / Polis Postgres), so threads clear far more in-flight requests than the default single-threaded workers.
+
+The canonical config lives in the repo at [`v2/ops/uwsgi.ini`](ops/uwsgi.ini) (record of truth). Toolforge reads it from `~/www/python/uwsgi.ini` — that is the required location, and `deploy.sh` does **not** copy it — so install it once per tool:
 
 ```bash
-printf '[uwsgi]\nbuffer-size = 65536\n' > ~/www/python/uwsgi.ini
+cp ~/wiki-polis/v2/ops/uwsgi.ini ~/www/python/uwsgi.ini
+cd ~ && toolforge webservice restart
 ```
 
-Toolforge picks this up from `~/www/python/uwsgi.ini` — this is the required location. The `[uwsgi]` section header is mandatory; without it uWSGI silently ignores the file and uses its 4 KB default.
+Or write it directly:
+
+```bash
+printf '[uwsgi]\nbuffer-size = 65536\nenable-threads = true\nprocesses = 4\nthreads = 20\n' > ~/www/python/uwsgi.ini
+```
+
+The `[uwsgi]` section header is mandatory; without it uWSGI silently ignores the file and uses its 4 KB default (and single-threaded workers). The `processes`/`threads` values are a starting point for ~1000 concurrent voters — **tune them with the load test** (`synthetic_traffic.py`), reconciling `processes × threads` with ToolsDB `max_user_connections`, the connection pools (`POLIS_HTTP_POOL_MAXSIZE` and `POLIS_PG_POOL_MAXCONN` default 20; `TOOLSDB_POOL_SIZE`+`TOOLSDB_MAX_OVERFLOW` default 10+10 = 20 total), and the pod's memory (raise with `toolforge webservice --mem 2Gi --cpu 1 python3.13 start`). See [`v2/ops/uwsgi.ini`](ops/uwsgi.ini) for the full rationale.
 
 ### Set secrets
 

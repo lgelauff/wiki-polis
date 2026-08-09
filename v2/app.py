@@ -13,6 +13,7 @@ import os
 import random
 import re
 import secrets
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse, urljoin
@@ -41,6 +42,7 @@ from db import (ACCESS_POLICIES, ADMIN_ROLES, FLAG_CATEGORIES, AdminRole, Argume
                 Participation, StatementProvenance, StatementSimilarityScore, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError)
+from http_pool import session as polis_http
 from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
                       RowError, strip_formula_prefixes)
 from logging_setup import configure_logging
@@ -167,6 +169,83 @@ def _pct(n: int, total: int) -> float:
     return round(n / total * 100, 1) if total else 0.0
 
 
+# ── Phase 6 results aggregate cache ───────────────────────────────────────────
+# The results / report surfaces recompute ~5 Postgres + Particiapi round trips per
+# view, and the aggregate is identical for every viewer. Memoise the fetched
+# aggregate (NOT the assembled result — the per-participant overlay stays
+# per-request) for a short TTL so a Results-tab spike collapses to ~one fetch per
+# TTL per conversation. In-process only (no Redis); a few duplicate fetches per pod
+# per TTL are fine. Set PHASE6_RESULTS_CACHE_TTL=0 to disable (tests do this).
+_PHASE6_AGG_TTL = float(os.environ.get('PHASE6_RESULTS_CACHE_TTL', '30'))
+_phase6_agg_cache: dict = {}
+_phase6_agg_lock = threading.Lock()
+
+# Phase-6 vote-session bootstrap coordination (#275 thread-safety). Under threaded
+# workers, two concurrent first-time Phase-6 votes from the SAME participant could
+# each POST create=true and mint two different Polis uids — which the aggregate's
+# COUNT(DISTINCT pid) would then count as two voters. We serialize the first bootstrap
+# per (xid, conversation) within a worker and share the resulting session token via a
+# process-local cache (each request holds its own Flask-session copy, so re-reading the
+# session under the lock is not enough). Cross-process double-bootstrap predates the
+# threading change (multi-process workers already allowed it); the complete cross-worker
+# fix is to bind the Phase-6 session to the trusted-sub subject (idempotent uid).
+_p6_bootstrap_locks: dict = {}
+_p6_bootstrap_locks_guard = threading.Lock()
+_p6_session_cache: dict = {}  # (xid, conv_id) -> (pa_cookie, csrf_token)
+
+
+def _p6_bootstrap_lock(key):
+    with _p6_bootstrap_locks_guard:
+        lock = _p6_bootstrap_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _p6_bootstrap_locks[key] = lock
+        return lock
+
+
+def _phase6_agg_cached(key, producer, cacheable=None):
+    """Return producer()'s value, memoised per key for _PHASE6_AGG_TTL seconds.
+
+    TTL <= 0 disables caching. The producer runs outside the lock, so a burst may
+    recompute a few times before the entry is warm — acceptable, and it keeps one
+    slow fetch from blocking every other viewer.
+
+    `cacheable`, if given, is called with the produced value; the value is cached
+    only when it returns truthy. Used to avoid memoising a transient/degraded fetch
+    (e.g. a momentary Postgres failure) for the full TTL.
+    """
+    ttl = _PHASE6_AGG_TTL
+    if ttl <= 0:
+        return producer()
+    now = time.monotonic()
+    with _phase6_agg_lock:
+        hit = _phase6_agg_cache.get(key)
+        if hit is not None and hit[0] > now:
+            return hit[1]
+    value = producer()
+    if cacheable is None or cacheable(value):
+        with _phase6_agg_lock:
+            _phase6_agg_cache[key] = (now + ttl, value)
+    return value
+
+
+def _invalidate_phase6_results_cache(conv=None) -> None:
+    """Drop cached Phase 6 aggregates — all, or just one conversation's.
+
+    Called on transitions that change what results should show (phase toggles,
+    close). The short TTL bounds staleness even without an explicit call; keys are
+    (p6_zinvite, ...), so a per-conversation drop matches on the first element.
+    """
+    with _phase6_agg_lock:
+        if conv is None:
+            _phase6_agg_cache.clear()
+            return
+        z = conv.phase6_polis_conversation_id
+        if z:
+            for k in [k for k in _phase6_agg_cache if k and k[0] == z]:
+                _phase6_agg_cache.pop(k, None)
+
+
 def _build_phase6_results(
     conv,
     participation,
@@ -234,21 +313,47 @@ def _build_phase6_results(
 
     client = _polis_server_client()
 
-    # ── Primary source: Postgres ──────────────────────────────────────────────
-    p6_counts = client.get_phase6_vote_counts(p6_zinvite, allowed_p6_tids, excluded_pids)
-    p6_total_participants = client.get_phase6_participant_count(p6_zinvite, excluded_pids)
-    pg_available = p6_counts is not None
-
     # Phase 2 counts keyed by polis_statement_id (Phase 2 tid).
     p2_tids = [fs.polis_statement_id for fs in confirmed if fs.polis_statement_id]
-    p2_counts_raw = None
-    p2_total_participants = None
-    if p2_tids and pg_available:
-        # Reuse get_phase6_vote_counts against the Phase 2 zinvite — same SQL works.
-        p2_counts_raw = client.get_phase6_vote_counts(p2_zinvite, p2_tids, excluded_pids)
-        p2_total_participants = client.get_phase6_participant_count(p2_zinvite, excluded_pids)
 
-    # ── Personal votes (only when participation is present) ───────────────────
+    # ── Aggregate fetches (cached) ────────────────────────────────────────────
+    # ~5 Postgres/Particiapi round trips, identical for every viewer. Memoise them
+    # for a short TTL (see _phase6_agg_cached). The per-participant overlay below
+    # stays per-request, outside the cache.
+    def _fetch_phase6_aggregate():
+        p6c = client.get_phase6_vote_counts(p6_zinvite, allowed_p6_tids, excluded_pids)
+        p6t = client.get_phase6_participant_count(p6_zinvite, excluded_pids)
+        pg_ok = p6c is not None
+        p2c = p2t = None
+        if p2_tids and pg_ok:
+            # Reuse get_phase6_vote_counts against the Phase 2 zinvite — same SQL works.
+            p2c = client.get_phase6_vote_counts(p2_zinvite, p2_tids, excluded_pids)
+            p2t = client.get_phase6_participant_count(p2_zinvite, excluded_pids)
+        pa = None
+        try:
+            pa = PolisParticipantClient(
+                current_app.config['PARTICIAPI_BASE']).get_results(p6_zinvite)
+        except Exception:
+            current_app.logger.exception(
+                'Particiapi get_results failed for Phase 6 zinvite %s', p6_zinvite)
+        return {'p6_counts': p6c, 'p6_total': p6t, 'pg_available': pg_ok,
+                'p2_counts_raw': p2c, 'p2_total': p2t, 'pa_results': pa}
+
+    _agg = _phase6_agg_cached(
+        (p6_zinvite, p2_zinvite, tuple(sorted(allowed_p6_tids)),
+         tuple(sorted(p2_tids)), tuple(sorted(excluded_pids))),
+        _fetch_phase6_aggregate,
+        # Don't memoise a degraded fetch (transient Postgres failure) for the full TTL.
+        cacheable=lambda v: v['pg_available'],
+    )
+    p6_counts             = _agg['p6_counts']
+    p6_total_participants = _agg['p6_total']
+    pg_available          = _agg['pg_available']
+    p2_counts_raw         = _agg['p2_counts_raw']
+    p2_total_participants = _agg['p2_total']
+    pa_results            = _agg['pa_results']
+
+    # ── Personal votes (per-request; only when participation is present) ───────
     my_p2_votes: dict[int, int] = {}
     my_p6_votes: dict[int, int] = {}
     if participation and pg_available:
@@ -258,15 +363,6 @@ def _build_phase6_results(
         # For now this is left as empty dicts (personal votes show as None).
         # TODO: store or derive Polis pid to enable per-participant vote display.
         pass
-
-    # ── Comparison source: Particiapi ─────────────────────────────────────────
-    pa_results = None
-    try:
-        pa_results = PolisParticipantClient(
-            current_app.config['PARTICIAPI_BASE']
-        ).get_results(p6_zinvite)
-    except Exception:
-        current_app.logger.exception('Particiapi get_results failed for Phase 6 zinvite %s', p6_zinvite)
 
     clusters = None
     source_divergence = None
@@ -1795,7 +1891,7 @@ def _proxy_to_particiapi(pa_path: str, conv=None):
         headers['X-Particiapi-Sub-Secret'] = _sub_secret
 
     try:
-        upstream = requests.request(
+        upstream = polis_http.request(
             method=request.method,
             url=url,
             params=params,
@@ -2079,11 +2175,6 @@ def conversation_statement_new(slug):
     if not participant:
         abort(401)
 
-    # Lock the participation row for the duration of this transaction to
-    # prevent two concurrent requests from both passing the quota check.
-    part = Participation.query.filter_by(
-        participant_id=participant.id, conversation_id=conv.id,
-    ).with_for_update().first_or_404()
     _abort_if_banned(conv, participant)
 
     body = request.get_json(silent=True) or {}
@@ -2092,18 +2183,30 @@ def conversation_statement_new(slug):
     if derived_from in ('', None):
         derived_from = None
 
-    # Wording suggestions (derived_from set) are exempt from the new-statement
-    # quota — only genuinely new statements consume it (spec_functional-design.md).
-    if derived_from is None:
-        new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
-        if len(part.new_stmt_ids or []) >= new_stmt_max:
-            return jsonify({'error': 'quota_exceeded'}), 403
-
     if not text or len(text) > 280:
         abort(400)
     if derived_from is not None and not isinstance(derived_from, int):
         abort(400)
+
+    new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
+
+    # Optimistic quota fast-fail (unlocked read): reject an over-quota submit before the
+    # upstream statement fetch + similarity work. The authoritative check runs under the
+    # lock below, right before the submit, so the quota stays race-safe. Wording
+    # suggestions (derived_from set) are exempt — only genuinely new statements count
+    # against the quota (#296 / spec_functional-design.md).
+    part = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=conv.id,
+    ).first_or_404()
+    if derived_from is None and len(part.new_stmt_ids or []) >= new_stmt_max:
+        return jsonify({'error': 'quota_exceeded'}), 403
+
+    # Derivative gate — statement fetch + similarity + threshold. Read-only w.r.t. the
+    # participation row, and a rejection here means we never submit, so it runs OFF the
+    # quota lock (keeping the lock's held time off the statement fetch and the similarity
+    # sidecar). `scores` is reused for provenance below — computed once, not twice.
     parent_text = None
+    scores = None
     if derived_from is not None:
         try:
             text_map = _statement_text_map(conv.polis_id)
@@ -2125,13 +2228,16 @@ def conversation_statement_new(slug):
                 'threshold': threshold,
             }), 409
 
-    # Get CSRF token for this Particiapi session, then submit the statement.
+    # Establish the Particiapi session + CSRF token BEFORE taking the row lock, so the
+    # ~5s session-create round-trip does not run while holding the FOR UPDATE lock (#275
+    # M3) — that keeps the lock's held time down to just the submit + append. Only the
+    # submit must stay atomic with the quota recheck (so a rejected submit never orphans
+    # a Polis statement); the session bootstrap does not.
     pa_cookie = request.cookies.get('pa_session')
     forwarded = {'session': pa_cookie} if pa_cookie else {}
     base = current_app.config['PARTICIAPI_BASE']
-
     try:
-        sess_resp = requests.post(
+        sess_resp = polis_http.post(
             f'{base}/api/session',
             cookies=forwarded,
             params={'create': 'true'},
@@ -2143,8 +2249,29 @@ def conversation_statement_new(slug):
         csrf_token = sess_resp.json().get('csrf_token', '')
         new_pa_cookie = sess_resp.cookies.get('session')
         submit_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
+    except requests.RequestException:
+        current_app.logger.exception('Particiapi error in conversation_statement_new')
+        abort(502)
 
-        stmt_resp = requests.post(
+    # Authoritative quota check under a row lock, held through the submit + append so two
+    # concurrent submits from the same participant can't both pass. (Per-participation
+    # lock — only serialises one participant's own concurrent submits, not the
+    # conversation.) The submit stays inside the lock so a quota-rejected request never
+    # creates an orphaned Polis statement.
+    #
+    # populate_existing() is REQUIRED: the optimistic read above already loaded this row
+    # into the session identity map, so without it the locking SELECT returns the stale
+    # cached instance (SQLAlchemy does not refresh an already-loaded object on
+    # with_for_update) and the recheck below would run on pre-lock data — defeating the
+    # lock entirely.
+    part = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=conv.id,
+    ).populate_existing().with_for_update().first_or_404()
+    if derived_from is None and len(part.new_stmt_ids or []) >= new_stmt_max:
+        return jsonify({'error': 'quota_exceeded'}), 403
+
+    try:
+        stmt_resp = polis_http.post(
             f'{base}/api/conversations/{conv.polis_id}/statements/',
             json={'text': text},
             cookies=submit_cookies,
@@ -2164,7 +2291,8 @@ def conversation_statement_new(slug):
                 part.new_stmt_ids = ids
             else:
                 record_statement_provenance(conv.id, stmt_id, derived_from,
-                                            parent_text=parent_text, new_text=text)
+                                            parent_text=parent_text, new_text=text,
+                                            scores=scores)
         _touch_last_engagement(part)
         db.session.commit()
         flask_resp = make_response(stmt_resp.content, 201)
@@ -2665,7 +2793,17 @@ def admin_conversation_participants(conv_id):
     )
 
     client = _polis_server_client()
-    statement_progress_unavailable = bool(current_app.config.get('POLIS_DATABASE_URL'))
+    pg_configured = bool(current_app.config.get('POLIS_DATABASE_URL'))
+    statement_progress_unavailable = pg_configured
+    # One batched query for every participant's progress — previously this issued a
+    # fresh Postgres connection per participant (O(N) connects on this page, which
+    # stalled at 1000 participants).
+    progress_by_xid = None
+    if pg_configured:
+        progress_by_xid = client.get_statement_progress_for_participants(
+            conv.polis_id, [p.participant.xid for p in participations])
+        if progress_by_xid is not None:
+            statement_progress_unavailable = False
     active_bans = {
         ban.participant_id: ban
         for ban in ConversationBan.query.filter_by(
@@ -2675,12 +2813,10 @@ def admin_conversation_participants(conv_id):
     }
     rows = []
     for part in participations:
-        progress_row = None
-        if current_app.config.get('POLIS_DATABASE_URL'):
-            progress = client.get_statement_progress_bulk([conv.polis_id], part.participant.xid)
-            if progress is not None:
-                statement_progress_unavailable = False
-                progress_row = progress.get(conv.polis_id)
+        progress_row = (
+            progress_by_xid.get(part.participant.xid)
+            if progress_by_xid is not None else None
+        )
         rows.append({
             'participation': part,
             'participant': part.participant,
@@ -2890,6 +3026,7 @@ def admin_conversation_close(conv_id):
             return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     filt = _publish_final_report(conv)
     db.session.commit()
+    _invalidate_phase6_results_cache(conv)  # report view must reflect the close immediately
     record_audit('conversation.close', conv_id=conv.id,
                  excluded_tids=len(filt.excluded_tids),
                  excluded_pids=len(filt.excluded_pids))
@@ -3034,6 +3171,8 @@ def admin_conversation_phases(conv_id):
     if not _sync_vis_type(conv):
         flash('Phases saved, but updating results visibility in Polis failed — '
               'results may not appear until you save phases again.', 'error')
+    # A vis_type change alters what /results/ returns — drop any cached aggregate.
+    _invalidate_phase6_results_cache(conv)
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 
@@ -4458,50 +4597,78 @@ def phase6_vote(slug):
     polis_conv_id = conv.phase6_polis_conversation_id
     tid           = fs.phase6_polis_statement_id
 
-    # Ensure a stable Polis session and CSRF token before voting.
-    # Mirrors the exact pattern used in conversation_statement_new.
-    pa_cookie = request.cookies.get('pa_session')
     base = current_app.config['PARTICIAPI_BASE']
-    forwarded = {'session': pa_cookie} if pa_cookie else {}
-    new_pa_cookie = None
-    try:
-        sess_resp = requests.post(
-            f'{base}/api/session',
-            cookies=forwarded,
-            params={'create': 'true'},
-            timeout=5,
-        )
-        if not sess_resp.ok:
-            current_app.logger.error('Particiapi session error in phase6_vote: %s',
-                                     sess_resp.status_code)
+
+    # Manage the Phase 6 Particiapi session entirely server-side, in the Flask
+    # session, and reuse its CSRF token across votes — instead of bootstrapping a
+    # fresh session (two upstream calls) on every vote. Kept out of the browser's
+    # `pa_session` cookie so it never collides with the Phase 2 web component's
+    # session. We re-bootstrap only when it is missing or a vote is rejected as a
+    # session/CSRF failure (stale token).
+    p6_key = (session.get('xid'), conv.id)
+
+    def _bootstrap():
+        """(Re)establish the Phase 6 Particiapi session + CSRF token, storing both in
+        the Flask session and the process-local share cache. Returns (pa, csrf_token);
+        aborts 502 on failure."""
+        prior = session.get('_p6_pa')
+        try:
+            r = polis_http.post(
+                f'{base}/api/session',
+                cookies={'session': prior} if prior else {},
+                params={'create': 'true'},
+                timeout=5,
+            )
+        except requests.RequestException:
+            current_app.logger.exception('Particiapi session bootstrap failed in phase6_vote')
             abort(502)
-        csrf_token    = sess_resp.json().get('csrf_token', '')
-        new_pa_cookie = sess_resp.cookies.get('session')
-    except requests.RequestException:
-        current_app.logger.exception('Particiapi session bootstrap failed in phase6_vote')
-        abort(502)
+        if not r.ok:
+            current_app.logger.error('Particiapi session error in phase6_vote: %s', r.status_code)
+            abort(502)
+        session['_p6_pa']   = r.cookies.get('session') or prior
+        session['_p6_csrf'] = r.json().get('csrf_token', '')
+        _p6_session_cache[p6_key] = (session['_p6_pa'], session['_p6_csrf'])
+        return session['_p6_pa'], session['_p6_csrf']
 
-    vote_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
+    pa = session.get('_p6_pa')
+    csrf_token = session.get('_p6_csrf')
+    bootstrapped = False
+    if not (pa and csrf_token):
+        # Serialize the first bootstrap per (participant, conversation) within this
+        # worker so concurrent first votes reuse one Polis session instead of minting
+        # two uids (#275). See the _p6_session_cache note above.
+        with _p6_bootstrap_lock(p6_key):
+            shared = _p6_session_cache.get(p6_key)
+            if shared:
+                session['_p6_pa'], session['_p6_csrf'] = shared
+                pa, csrf_token = shared
+            else:
+                pa, csrf_token = _bootstrap()
+                bootstrapped = True
 
-    # Particiapi vote endpoint: PUT /api/conversations/{id}/votes/{tid} with {value: N}.
-    try:
-        upstream = requests.put(
-            f'{base}/api/conversations/{polis_conv_id}/votes/{tid}',
-            json={'value': vote},
-            cookies=vote_cookies,
-            headers={'X-CSRF-Token': csrf_token},
-            timeout=10,
-        )
-    except requests.RequestException:
-        current_app.logger.exception('Particiapi error in phase6_vote')
-        abort(502)
+    def _put(cookie_val, token):
+        try:
+            return polis_http.put(
+                f'{base}/api/conversations/{polis_conv_id}/votes/{tid}',
+                json={'value': vote},
+                cookies={'session': cookie_val} if cookie_val else {},
+                headers={'X-CSRF-Token': token},
+                timeout=10,
+            )
+        except requests.RequestException:
+            current_app.logger.exception('Particiapi error in phase6_vote')
+            abort(502)
+
+    upstream = _put(pa, csrf_token)
+    # A reused token can be stale (the session expired). If a vote we did NOT just
+    # bootstrap for is rejected, refresh the session once and retry.
+    if upstream.status_code in (401, 403) and not bootstrapped:
+        pa, csrf_token = _bootstrap()
+        upstream = _put(pa, csrf_token)
 
     resp = make_response('', upstream.status_code)
     if upstream.ok:
         _touch_last_engagement(participation, commit=True)
-    if new_pa_cookie:
-        resp.set_cookie('pa_session', new_pa_cookie, httponly=True,
-                        samesite='Lax', secure=not current_app.debug)
     return resp
 
 
@@ -4617,12 +4784,16 @@ def _derivative_similarity_threshold() -> float:
 
 
 def record_statement_provenance(conv_id, new_tid, derived_from_tid,
-                                parent_text=None, new_text=None):
+                                parent_text=None, new_text=None, scores=None):
     """Record that `new_tid` is a derivative of `derived_from_tid` (#143), best-effort.
 
     Writes one StatementProvenance row (declared link) plus a StatementSimilarityScore row
     per scorer that yields a value. A scorer failure never blocks the link; a provenance
     write failure is swallowed (logged). Returns the row, or None on failure.
+
+    Pass `scores` (from an earlier `_statement_similarity_scores` call) to avoid
+    recomputing them — the caller already scores the pair for the derivative gate,
+    so recomputing here would repeat the similarity sidecar call.
     """
     try:
         row = StatementProvenance(
@@ -4631,8 +4802,10 @@ def record_statement_provenance(conv_id, new_tid, derived_from_tid,
             link_method='declared')
         db.session.add(row)
         db.session.flush()        # need row.id for the score FKs
-        if parent_text is not None and new_text is not None:
-            for name, value in _statement_similarity_scores(new_text, parent_text).items():
+        if scores is None and parent_text is not None and new_text is not None:
+            scores = _statement_similarity_scores(new_text, parent_text)
+        if scores:
+            for name, value in scores.items():
                 db.session.add(StatementSimilarityScore(
                     provenance_id=row.id, model=name, value=value))
         db.session.commit()
@@ -4728,7 +4901,17 @@ def create_app(test_config: dict | None = None) -> Flask:
         or _secret_key
     )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['SQLALCHEMY_ENGINE_OPTIONS']      = {'pool_recycle': 280, 'pool_pre_ping': True}
+    # On MariaDB/MySQL (prod ToolsDB) size the pool so threaded uWSGI workers don't
+    # starve waiting on a connection, and fail fast (pool_timeout) rather than hang
+    # under exhaustion. SQLite (dev/tests) keeps the default pool — pool_size /
+    # max_overflow are for QueuePool and don't apply to its thread-local connections.
+    # Reconcile processes x (pool_size + max_overflow) with ToolsDB max_user_connections.
+    _engine_options = {'pool_recycle': 280, 'pool_pre_ping': True}
+    if not str(app.config.get('SQLALCHEMY_DATABASE_URI', '')).startswith('sqlite'):
+        _engine_options['pool_size']    = int(os.environ.get('TOOLSDB_POOL_SIZE', '10'))
+        _engine_options['max_overflow'] = int(os.environ.get('TOOLSDB_MAX_OVERFLOW', '10'))
+        _engine_options['pool_timeout'] = int(os.environ.get('TOOLSDB_POOL_TIMEOUT', '10'))
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = _engine_options
 
     app.config['SESSION_TYPE']               = 'sqlalchemy'
     app.config['SESSION_SQLALCHEMY']         = db

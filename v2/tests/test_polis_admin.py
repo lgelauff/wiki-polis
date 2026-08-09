@@ -44,7 +44,7 @@ def test_get_statements_returns_all_as_approved():
     """Particiapi returns a dict; all statements normalised into approved."""
     client = PolisParticipantClient('http://localhost:8000')
     data = {'0': {'text': 'first stmt'}, '1': {'text': 'second stmt'}}
-    with patch('polis_admin.requests.request', return_value=_mock_ok(data)) as mock_req:
+    with patch('polis_admin._http.request', return_value=_mock_ok(data)) as mock_req:
         pending, approved, hid = client.get_statements('abc123')
 
     assert pending == [] and hid == []
@@ -57,21 +57,21 @@ def test_get_statements_returns_all_as_approved():
 
 def test_get_statements_non_dict_returns_empty():
     client = PolisParticipantClient('http://localhost:8000')
-    with patch('polis_admin.requests.request', return_value=_mock_ok([])):
+    with patch('polis_admin._http.request', return_value=_mock_ok([])):
         pending, approved, hid = client.get_statements('abc123')
     assert pending == approved == hid == []
 
 
 def test_get_statements_http_error_raises():
     client = PolisParticipantClient('http://localhost:8000')
-    with patch('polis_admin.requests.request', return_value=_mock_err(503)):
+    with patch('polis_admin._http.request', return_value=_mock_err(503)):
         with pytest.raises(PolisParticipantError, match='503'):
             client.get_statements('abc123')
 
 
 def test_get_statements_network_error_raises():
     client = PolisParticipantClient('http://localhost:8000')
-    with patch('polis_admin.requests.request',
+    with patch('polis_admin._http.request',
                side_effect=_requests.RequestException('timeout')):
         with pytest.raises(PolisParticipantError, match='timeout'):
             client.get_statements('abc123')
@@ -79,7 +79,7 @@ def test_get_statements_network_error_raises():
 
 def test_get_results_returns_none_on_error():
     client = PolisParticipantClient('http://localhost:8000')
-    with patch('polis_admin.requests.request', return_value=_mock_err(404)):
+    with patch('polis_admin._http.request', return_value=_mock_err(404)):
         assert client.get_results('abc123') is None
 
 
@@ -116,6 +116,44 @@ def test_stats_connection_error_returns_none():
         assert client.get_polis_stats('abc123') is None
 
 
+def test_stats_retries_once_on_stale_connection(monkeypatch):
+    # #275 M2: a pooled connection closed by the server during idle raises
+    # OperationalError on first use; _pg_query retries once with a fresh borrow
+    # instead of falsely reporting the stats unavailable.
+    import psycopg2
+    import polis_admin
+    monkeypatch.setattr(polis_admin, '_get_pg_pool', lambda db_url: None)  # force fallback path
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw',
+                               db_url='postgresql://localhost/polis')
+    stale = MagicMock()
+    stale.cursor.return_value.__enter__.return_value.execute.side_effect = \
+        psycopg2.OperationalError('server closed the connection unexpectedly')
+    fresh = MagicMock()
+    fresh.cursor.return_value.__enter__.return_value.fetchall.return_value = \
+        [(10, 150, 15.0, 12.5, 8, 3)]
+    with patch('psycopg2.connect', side_effect=[stale, fresh]) as connect:
+        result = client.get_polis_stats('abc123')
+    assert result is not None and result['n_participants'] == 10
+    assert connect.call_count == 2   # retried once on the stale connection
+
+
+def test_pg_fallback_is_bounded_and_sheds_when_saturated(monkeypatch):
+    # #275 M4: when the pool is exhausted AND the one-off fallback budget is
+    # saturated, the read is shed (returns None / degraded) rather than opening an
+    # unbounded connection that could exceed Postgres max_connections.
+    import threading
+    import polis_admin
+    monkeypatch.setattr(polis_admin, '_get_pg_pool', lambda db_url: None)  # force fallback path
+    saturated = threading.BoundedSemaphore(1)
+    saturated.acquire()  # no fallback slots left
+    monkeypatch.setattr(polis_admin, '_pg_fallback_sem', saturated)
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw',
+                               db_url='postgresql://localhost/polis')
+    with patch('psycopg2.connect') as connect:
+        assert client.get_polis_stats('abc123') is None
+        connect.assert_not_called()   # never opened an unbounded one-off connection
+
+
 def test_stats_empty_row_returns_none():
     client, mock_conn = _make_stats_client(db_rows=None)
     with patch('psycopg2.connect', return_value=mock_conn):
@@ -130,7 +168,8 @@ def test_stats_returns_correct_dict():
         'n_participants': 10, 'n_votes': 150, 'avg_votes': 15.0,
         'median_votes': 12.5, 'n_statements': 8, 'n_seed': 3,
     }
-    mock_conn.close.assert_called_once()
+    # Pooled: a successful read returns the connection to the pool, not close().
+    mock_conn.close.assert_not_called()
 
 
 def test_valid_vote_count_returns_latest_vote_rows():
@@ -166,7 +205,8 @@ def test_queue_math_recompute_inserts_worker_task():
     assert 'INSERT INTO worker_tasks' in sql
     assert cur.execute.call_args.args[1] == ('abc123',)
     mock_conn.commit.assert_called_once()
-    mock_conn.close.assert_called_once()
+    # Pooled: a successful write returns the connection to the pool, not close().
+    mock_conn.close.assert_not_called()
 
 
 def test_queue_math_recompute_logs_worker_task_privilege_gap(caplog):
@@ -186,6 +226,32 @@ def test_queue_math_recompute_logs_worker_task_privilege_gap(caplog):
 
     assert 'grant INSERT on worker_tasks' in caplog.text
     mock_conn.close.assert_called_once()
+
+
+# ── PolisServerClient.get_statement_progress_for_participants ────────────────
+
+def test_statement_progress_for_participants_maps_by_xid():
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw',
+                               db_url='postgresql://localhost/polis')
+    mock_conn = MagicMock()
+    cur = mock_conn.cursor.return_value.__enter__.return_value
+    cur.fetchall.return_value = [('xidA', 5, 3, 2), ('xidB', 5, 0, 5)]
+    with patch('psycopg2.connect', return_value=mock_conn):
+        result = client.get_statement_progress_for_participants('abc123', ['xidA', 'xidB'])
+    assert result == {
+        'xidA': {'total': 5, 'voted': 3, 'remaining': 2},
+        'xidB': {'total': 5, 'voted': 0, 'remaining': 5},
+    }
+    cur.execute.assert_called_once()  # one query for all participants, not per-participant
+
+
+def test_statement_progress_for_participants_guards():
+    no_db = PolisServerClient('http://polis', 'a@b.com', 'pw', db_url='')
+    assert no_db.get_statement_progress_for_participants('abc123', ['x']) is None
+    client = PolisServerClient('http://polis', 'a@b.com', 'pw',
+                               db_url='postgresql://localhost/polis')
+    assert client.get_statement_progress_for_participants('bad zinvite!', ['x']) is None
+    assert client.get_statement_progress_for_participants('abc123', []) == {}
 
 
 # ── PolisServerClient.create_conversation ────────────────────────────────────

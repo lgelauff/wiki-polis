@@ -1467,8 +1467,8 @@ def test_participants_page_shows_engagement_metrics(app, admin_client, conv, par
     db.session.commit()
 
     server = MagicMock()
-    server.get_statement_progress_bulk.return_value = {
-        conv.polis_id: {'total': 5, 'voted': 3, 'remaining': 2},
+    server.get_statement_progress_for_participants.return_value = {
+        participant.xid: {'total': 5, 'voted': 3, 'remaining': 2},
     }
     with patch('app._polis_server_client', return_value=server):
         resp = admin_client.get(f'/admin/conversations/{conv.id}/participants')

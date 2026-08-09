@@ -15,13 +15,128 @@ Used for featured candidates and stats — data not exposed by the Polis API.
 """
 
 import logging
+import os
 import re
+import threading
+from contextlib import contextmanager
 
 import requests
+
+from http_pool import session as _http
 
 logger = logging.getLogger(__name__)
 
 _SAFE_ZINVITE = re.compile(r'^[A-Za-z0-9]{6,20}$')
+
+
+# ── Direct-Postgres connection pool ───────────────────────────────────────────
+# Stats / results / progress reads to Polis Postgres used to open and close a fresh
+# connection per query. Under load (and the admin surfaces especially) that is a
+# connect+teardown per call over the VPS private network. Pool connections per
+# db_url instead. Size to the uWSGI threads-per-process; reconcile with the VPS
+# Postgres max_connections. Override with POLIS_PG_POOL_MAXCONN.
+_PG_POOL_MAXCONN = int(os.environ.get('POLIS_PG_POOL_MAXCONN', '20'))
+_PG_POOLS: dict[str, object] = {}
+_PG_POOLS_LOCK = threading.Lock()
+
+# When the pool is exhausted we fall back to a one-off direct connection. Cap how many
+# such one-offs can be open at once, per process, so a spike can't open unbounded
+# connections and blow past Postgres max_connections (#275 M4). Total in-flight PG
+# connections per process are then bounded by maxconn + fallback-max.
+_PG_FALLBACK_MAX = int(os.environ.get('POLIS_PG_FALLBACK_MAX', str(_PG_POOL_MAXCONN)))
+_pg_fallback_sem = threading.BoundedSemaphore(_PG_FALLBACK_MAX)
+
+
+class PgFallbackExhausted(Exception):
+    """Both the pool and the bounded one-off fallback are saturated — shed load
+    (degrade to 'unavailable') rather than open an unbounded connection."""
+
+
+def _get_pg_pool(db_url: str):
+    """Return a process-wide ThreadedConnectionPool for db_url, built once.
+
+    Returns None when psycopg2's pool is unavailable or the pool can't be built,
+    so callers fall back to a one-off direct connection — Postgres reads then
+    degrade in latency, not availability.
+    """
+    try:
+        import psycopg2.pool
+    except ImportError:
+        return None
+    pool = _PG_POOLS.get(db_url)
+    if pool is not None:
+        return pool
+    with _PG_POOLS_LOCK:
+        pool = _PG_POOLS.get(db_url)
+        if pool is None:
+            try:
+                pool = psycopg2.pool.ThreadedConnectionPool(1, _PG_POOL_MAXCONN, db_url)
+            except Exception:
+                logger.exception('Postgres connection pool init failed')
+                return None
+            _PG_POOLS[db_url] = pool
+        return pool
+
+
+def _reset_pg_pools() -> None:
+    """Close and drop every pooled connection. For clean shutdown and tests."""
+    with _PG_POOLS_LOCK:
+        for pool in _PG_POOLS.values():
+            try:
+                pool.closeall()
+            except Exception:
+                pass
+        _PG_POOLS.clear()
+
+
+@contextmanager
+def _pg_connection(db_url: str):
+    """Yield a Postgres connection, returning it to the pool afterward.
+
+    Prefers a pooled connection; falls back to a one-off direct connection if the
+    pool is exhausted or unavailable. A connection that raises is discarded
+    (never returned to the pool) so a broken/aborted-transaction connection is not
+    handed to the next caller.
+    """
+    import psycopg2  # caller has already verified importability
+    pool = _get_pg_pool(db_url)
+    conn = None
+    from_pool = False
+    fallback_held = False
+    try:
+        if pool is not None:
+            try:
+                conn = pool.getconn()
+                from_pool = True
+            except psycopg2.pool.PoolError:
+                conn = None  # exhausted — fall back to a bounded one-off connection
+        if conn is None:
+            # Bound the one-off fallback (#275 M4): if the fallback budget is also
+            # saturated, shed the read rather than open an unbounded connection.
+            if not _pg_fallback_sem.acquire(blocking=False):
+                raise PgFallbackExhausted(db_url)
+            fallback_held = True
+            conn = psycopg2.connect(db_url)
+        yield conn
+    except Exception:
+        if conn is not None and from_pool and pool is not None:
+            try:
+                pool.putconn(conn, close=True)  # discard the broken connection
+            except Exception:
+                pass
+            conn, from_pool = None, False
+        raise
+    finally:
+        if conn is not None:
+            try:
+                if from_pool and pool is not None:
+                    pool.putconn(conn)
+                else:
+                    conn.close()
+            except Exception:
+                pass
+        if fallback_held:
+            _pg_fallback_sem.release()
 
 # Returns all active statements with vote counts, seeds first then by agree rate.
 # The agree-rate ordering is a heuristic proxy for group-representativeness when
@@ -159,6 +274,46 @@ _STATEMENTS_REMAINING_BULK_SQL = """
     LEFT JOIN voted_stmts vs USING (zinvite)
 """
 
+# Statement vote progress for MANY participants in ONE conversation, in a single
+# query — the batched inverse of _STATEMENTS_REMAINING_BULK_SQL (one zinvite, many
+# xids, grouped by xid). Replaces the per-participant loop on the admin participants
+# page: one round trip instead of one Postgres connection per participant. The
+# xid -> Polis pid mapping mirrors the per-participant query exactly. Driving the
+# result from `req` (the requested xids) means every participant gets a row with
+# n_total filled and n_voted = 0 when they have no recorded votes.
+_STATEMENT_PROGRESS_BY_XID_SQL = """
+    WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s),
+    req AS (SELECT UNNEST(%s::text[]) AS xid),
+    total AS (
+        SELECT COUNT(c.tid)::int AS n_total
+        FROM comments c, z
+        WHERE c.zid = z.zid AND c.active = TRUE AND c.mod = 1
+    ),
+    pid_map AS (
+        SELECT x.xid, p.pid
+        FROM xids x
+        JOIN req ON req.xid = x.xid
+        JOIN z ON x.zid = z.zid
+        JOIN participants p ON p.uid = x.uid AND p.zid = x.zid
+    ),
+    voted AS (
+        SELECT pm.xid, COUNT(DISTINCT v.tid)::int AS n_voted
+        FROM votes_latest_unique v
+        JOIN z ON v.zid = z.zid
+        JOIN pid_map pm ON pm.pid = v.pid
+        JOIN comments c ON c.zid = z.zid AND c.tid = v.tid
+          AND c.active = TRUE AND c.mod = 1
+        GROUP BY pm.xid
+    )
+    SELECT
+        req.xid,
+        (SELECT n_total FROM total)                                        AS n_total,
+        COALESCE(vd.n_voted, 0)                                            AS n_voted,
+        GREATEST(0, (SELECT n_total FROM total) - COALESCE(vd.n_voted, 0)) AS n_remaining
+    FROM req
+    LEFT JOIN voted vd USING (xid)
+"""
+
 # Personal votes: the logged-in participant's own votes in a given conversation,
 # keyed by statement tid. Used to show "You: Agreed / Disagreed / Passed" on
 # the results surfaces. Requires the participant's Polis pid.
@@ -215,7 +370,7 @@ class PolisParticipantClient:
     def _req(self, method: str, path: str, **kwargs):
         url = f"{self._base}/{path.lstrip('/')}"
         try:
-            resp = requests.request(method, url, timeout=10, **kwargs)
+            resp = _http.request(method, url, timeout=10, **kwargs)
         except requests.RequestException as exc:
             raise PolisParticipantError(str(exc)) from exc
         if not resp.ok:
@@ -283,8 +438,12 @@ class PolisServerClient:
         That domain never matches our internal VPS hostname, so requests won't send the
         cookie automatically.  We extract the raw token from the response and return it
         as an explicit Cookie header for callers to merge into their requests.
+
+        Uses the shared connection-pooled session (http_pool). Safe because the auth
+        token is returned as an explicit header, never relied on via session cookies,
+        and no session state is mutated here.
         """
-        sess = requests.Session()
+        sess = _http
         try:
             resp = sess.post(
                 f'{self._base}/api/v3/auth/login',
@@ -508,22 +667,33 @@ class PolisServerClient:
         query raises. Callers are responsible for their own zinvite guard.
         """
         try:
-            import psycopg2
+            import psycopg2  # importability check; used in _pg_connection
         except ImportError:
             logger.exception('psycopg2 not available — %s unavailable', label)
             return None
-        try:
-            conn = psycopg2.connect(self._db_url)
+        # A pooled connection can be closed by the server during idle and the pool
+        # does not pre-ping (unlike the SQLAlchemy/HTTP pools). Retry ONCE on a
+        # connection-level error with a fresh borrow — _pg_connection has already
+        # discarded the broken connection — so the first read after idle doesn't
+        # spuriously report the stats/results as unavailable (#275 M2). Query-level
+        # errors are not retried (a retry won't fix them).
+        for attempt in (1, 2):
             try:
-                with conn.cursor() as cur:
-                    cur.execute(sql, params)
-                    rows = cur.fetchall()
-            finally:
-                conn.close()
-        except Exception:
-            logger.exception('Postgres %s failed', label)
-            return None
-        return rows
+                with _pg_connection(self._db_url) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(sql, params)
+                        rows = cur.fetchall()
+                    conn.rollback()  # end the implicit read-only txn before reuse
+                return rows
+            except (psycopg2.OperationalError, psycopg2.InterfaceError):
+                if attempt == 1:
+                    logger.warning('Postgres %s hit a stale/broken connection; retrying once', label)
+                    continue
+                logger.exception('Postgres %s failed after retry', label)
+                return None
+            except Exception:
+                logger.exception('Postgres %s failed', label)
+                return None
 
     def get_statements(self, zinvite: str) -> tuple[list, list, list] | None:
         """Return (pending, approved, hidden) from Postgres, or None if unavailable.
@@ -723,6 +893,34 @@ class PolisServerClient:
             for r in rows
         }
 
+    def get_statement_progress_for_participants(
+        self,
+        zinvite: str,
+        xids: list[str],
+    ) -> dict[str, dict] | None:
+        """Return statement vote progress for many participants in one query.
+
+        The batched inverse of get_statement_progress_bulk: one conversation, many
+        participant xids. Returns dict[xid -> {total, voted, remaining}], or None if
+        Postgres is unavailable ({} when xids is empty). Every requested xid appears
+        with total filled and voted = 0 when it has no recorded votes.
+        """
+        if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
+            return None
+        if not xids:
+            return {}
+        rows = self._pg_query(
+            _STATEMENT_PROGRESS_BY_XID_SQL,
+            (zinvite, list(xids)),
+            'get_statement_progress_for_participants',
+        )
+        if rows is None:
+            return None
+        return {
+            r[0]: {'total': int(r[1]), 'voted': int(r[2]), 'remaining': int(r[3])}
+            for r in rows
+        }
+
     def get_personal_votes(
         self,
         zinvite: str,
@@ -767,13 +965,10 @@ class PolisServerClient:
             logger.exception('psycopg2 not available — queue_math_recompute unavailable')
             return False
         try:
-            conn = psycopg2.connect(self._db_url)
-            try:
+            with _pg_connection(self._db_url) as conn:
                 with conn.cursor() as cur:
                     cur.execute(sql, (zinvite,))
                 conn.commit()
-            finally:
-                conn.close()
         except psycopg2.errors.InsufficientPrivilege:
             logger.exception(
                 'queue_math_recompute lacks worker_tasks privileges for %s; '

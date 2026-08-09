@@ -5,8 +5,41 @@ from unittest.mock import patch
 import pytest
 from cachelib.file import FileSystemCache
 
+import polis_admin
 from app import create_app
 from db import Conversation, Participant, db
+
+
+@pytest.fixture(autouse=True)
+def _reset_polis_pg_pools():
+    """Drop the process-wide Polis-Postgres connection pools around each test.
+
+    _pg_query pools connections per db_url for the life of the process. Tests
+    patch psycopg2.connect per-test; without a reset the first test's pooled
+    (mock) connection would be reused by later tests. Cheap no-op when no pool
+    has been built.
+    """
+    polis_admin._reset_pg_pools()
+    yield
+    polis_admin._reset_pg_pools()
+
+
+@pytest.fixture(autouse=True)
+def _disable_phase6_results_cache():
+    """Disable the in-process Phase 6 results cache in tests so mocked client
+    return values are always seen fresh (no cross-test or within-test staleness)."""
+    import app as _app
+    saved = _app._PHASE6_AGG_TTL
+    _app._PHASE6_AGG_TTL = 0.0
+    # Also clear the process-local Phase-6 vote-session share cache/locks so a
+    # bootstrap from one test can't be reused in another (SQLite ids reset per test).
+    _app._p6_session_cache.clear()
+    _app._p6_bootstrap_locks.clear()
+    yield
+    _app._PHASE6_AGG_TTL = saved
+    _app._invalidate_phase6_results_cache()
+    _app._p6_session_cache.clear()
+    _app._p6_bootstrap_locks.clear()
 
 
 @pytest.fixture
