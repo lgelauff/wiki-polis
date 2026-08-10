@@ -20,6 +20,7 @@ Usage (from v2/ directory):
   uv run python simulate_cats_vs_dogs.py --conversation-id <existing_zinvite>
   uv run python simulate_cats_vs_dogs.py --particiapi-url http://127.0.0.1:8002
   uv run python simulate_cats_vs_dogs.py --skip-flask
+  uv run python simulate_cats_vs_dogs.py --phase6   # also advance into informed voting
 """
 
 import argparse
@@ -447,6 +448,78 @@ def run_simulation(conv_id: str) -> None:
     return text_to_tid
 
 
+INFORMED_VOTERS = 30
+
+
+def _cast_informed_votes(p6_zinvite: str, tids: list[int]) -> None:
+    """Cast a batch of grouped informed votes on the Phase 6 statements so the round
+    has real cluster structure. Uses Polis-native signs directly (-1=agree, +1=disagree,
+    0=pass) — the same signs the app's phase6_vote route writes after its `-vote`
+    negation, so the resulting `votes` rows match production."""
+    cast = 0
+    for v in range(INFORMED_VOTERS):
+        g = v % 3                         # three synthetic opinion groups
+        cookie, csrf = new_session()
+        for j, tid in enumerate(tids):
+            if g == 2:                    # group 2 is noisy/undecided
+                val = 0 if random.random() < 0.5 else random.choice((-1, 1))
+            else:                         # groups 0/1 take opposite stances per statement
+                base = -1 if ((j % 2 == 0) == (g == 0)) else 1
+                val = add_noise(base)
+            if cast_vote(cookie, csrf, p6_zinvite, tid, val):
+                cast += 1
+    print(f"  Cast {cast} informed votes across {INFORMED_VOTERS} participants")
+
+
+def advance_to_phase6(conv_id: str) -> None:
+    """Advance the conversation into Phase 6 (informed voting).
+
+    Creates the dedicated Phase 6 Polis conversation, seeds it with the confirmed
+    featured statements (recording each phase6 tid onto the FeaturedStatement row),
+    wires the id onto the conversation, flips `phase_informed_voting`, and casts a
+    batch of informed votes. Mirrors the app's `_init_phase6` but via the same
+    raw-SQL + HTTP path the rest of this simulator uses, so it needs no Polis admin
+    credentials (which the local dev stack does not set)."""
+    from app import create_app
+    from db import Conversation, FeaturedStatement, db as flask_db
+
+    app = create_app()
+    with app.app_context():
+        conv = Conversation.query.filter_by(polis_id=conv_id).first()
+        if conv is None:
+            print("  [skip] conversation not found in Flask DB")
+            return
+        featured = (FeaturedStatement.query
+                    .filter_by(conversation_id=conv.id, confirmed_by_admin=True)
+                    .all())
+        if not featured:
+            print("  [skip] no confirmed featured statements to seed into Phase 6")
+            return
+
+        p6_zinvite = create_polis_conversation(
+            f"{conv.title} — Informed Voting",
+            "Informed voting round on the featured statements.")
+        print(f"  Phase 6 Polis conversation: {p6_zinvite}")
+
+        admin_cookie, admin_csrf = new_session()
+        p6_tids: list[int] = []
+        for fs in featured:
+            tid = submit_statement(admin_cookie, admin_csrf, p6_zinvite, fs.statement_text)
+            if tid is None:
+                print(f"  [warn] could not seed featured statement fs={fs.id}")
+                continue
+            fs.phase6_polis_statement_id = tid
+            p6_tids.append(tid)
+
+        conv.phase6_polis_conversation_id = p6_zinvite
+        conv.phase_informed_voting = True
+        flask_db.session.commit()
+        print(f"  Seeded {len(p6_tids)} statement(s); phase_informed_voting=True")
+
+        if p6_tids:
+            _cast_informed_votes(p6_zinvite, p6_tids)
+
+
 def main():
     global FLASK, PARTICIAPI
 
@@ -456,6 +529,10 @@ def main():
                         help="Use an existing Polis conversation instead of creating one")
     parser.add_argument("--skip-flask", action="store_true",
                         help="Skip wiki-polis Flask DB registration")
+    parser.add_argument("--phase6", action="store_true",
+                        help="Also advance into Phase 6 (informed voting): create the "
+                             "dedicated Polis conversation, seed featured statements, flip "
+                             "the phase, and cast informed votes. Requires Flask registration.")
     parser.add_argument("--flask-url", metavar="URL", default=FLASK,
                         help=f"Base URL of the wiki-polis Flask app (default: {FLASK})")
     parser.add_argument("--particiapi-url", metavar="URL", default=PARTICIAPI,
@@ -499,6 +576,15 @@ def main():
             seed_featured_statements(conv_id, text_to_tid)
         except Exception as e:
             print(f"  Featured statement seeding failed: {e} (continuing anyway)")
+
+        if args.phase6:
+            print("\nAdvancing into Phase 6 (informed voting)...")
+            try:
+                advance_to_phase6(conv_id)
+            except Exception as e:
+                print(f"  Phase 6 setup failed: {e} (continuing anyway)")
+    elif args.phase6:
+        print("\n[skip] --phase6 requires Flask registration (drop --skip-flask)")
 
 
 if __name__ == "__main__":
