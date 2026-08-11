@@ -257,10 +257,8 @@ def create_polis_conversation(topic: str, description: str) -> str:
 
 def seed_featured_statements(conv_id: str, text_to_tid: dict) -> None:
     """Create FeaturedStatement + seeded Argument records in the Flask DB."""
-    from app import create_app
+    from app import app
     from db import Argument, Conversation, FeaturedStatement, db as flask_db
-
-    app = create_app()
     with app.app_context():
         conv = Conversation.query.filter_by(polis_id=conv_id).first()
         if not conv:
@@ -294,7 +292,7 @@ def seed_featured_statements(conv_id: str, text_to_tid: dict) -> None:
                     if not exists:
                         flask_db.session.add(Argument(
                             featured_statement_id=fs.id,
-                            proposer_id=None,
+                            proposer_pseudonym=None,   # NULL = admin-seeded
                             body=body,
                             side=side,
                         ))
@@ -306,10 +304,8 @@ def seed_featured_statements(conv_id: str, text_to_tid: dict) -> None:
 
 def register_in_flask(zinvite: str) -> None:
     """Register the conversation in the wiki-polis Flask DB directly via SQLAlchemy."""
-    from app import create_app
+    from app import app
     from db import Conversation, db as flask_db
-
-    app = create_app()
     base_slug = f"cats-vs-dogs-{zinvite[:6]}"
     with app.app_context():
         slug = base_slug
@@ -480,10 +476,8 @@ def advance_to_phase6(conv_id: str) -> None:
     batch of informed votes. Mirrors the app's `_init_phase6` but via the same
     raw-SQL + HTTP path the rest of this simulator uses, so it needs no Polis admin
     credentials (which the local dev stack does not set)."""
-    from app import create_app
+    from app import app
     from db import Conversation, FeaturedStatement, db as flask_db
-
-    app = create_app()
     with app.app_context():
         conv = Conversation.query.filter_by(polis_id=conv_id).first()
         if conv is None:
