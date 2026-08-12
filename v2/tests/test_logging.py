@@ -84,6 +84,31 @@ def test_startup_fingerprint_logs_scheme_not_secrets(tmp_path, caplog):
     assert 'super-secret-key' not in msg      # no SECRET_KEY in the line
 
 
+def test_startup_warns_when_polis_http_admin_is_not_configured(tmp_path, caplog):
+    from cachelib.file import FileSystemCache
+
+    from app import create_app
+
+    session_dir = tmp_path / 'polis-warning-sessions'
+    session_dir.mkdir()
+    with caplog.at_level(logging.WARNING):
+        create_app({
+            'TESTING': True,
+            'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/polis-warning.db',
+            'WTF_CSRF_ENABLED': False,
+            'RATELIMIT_ENABLED': False,
+            'SECRET_KEY': 'test-secret',
+            'SESSION_TYPE': 'cachelib',
+            'SESSION_CACHELIB': FileSystemCache(str(session_dir)),
+            'SESSION_PERMANENT': False,
+            'POLIS_SERVER_URL': '',
+            'POLIS_ADMIN_EMAIL': '',
+            'POLIS_ADMIN_PASSWORD': '',
+        })
+
+    assert 'Polis server is not configured' in caplog.text
+
+
 # ── configure_logging idempotency (non-testing app) ─────────────────────────
 
 def test_configure_logging_idempotent():

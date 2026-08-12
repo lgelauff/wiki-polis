@@ -41,7 +41,8 @@ from db import (ACCESS_POLICIES, ADMIN_ROLES, FLAG_CATEGORIES, AdminRole, Argume
                 ConversationBan, ConversationInvite, FeaturedStatement, Participant,
                 Participation, StatementProvenance, StatementSimilarityScore, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
-                         PolisServerClient, PolisServerError)
+                         PolisServerClient, PolisServerError,
+                         polis_server_config_error)
 from http_pool import session as polis_http
 from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
                       RowError, strip_formula_prefixes)
@@ -2465,9 +2466,14 @@ def _import_seed_statement_texts(conv: Conversation, texts: list[str]) -> dict:
                 current_app.logger.warning('Polis rejected imported row (%s, may already exist): %s',
                                            type(exc).__name__, exc)
                 polis_skipped.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
-        except PolisServerError:
+        except PolisServerError as exc:
             current_app.logger.exception('Polis login failed during bulk import')
             polis_errors = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
+            polis_failure_message = exc.admin_message
+        else:
+            polis_failure_message = None
+    else:
+        polis_failure_message = None
 
     if dedup_check_failed:
         flash('Could not check for existing statements — some may be duplicates. Check server logs.', 'warning')
@@ -2488,7 +2494,7 @@ def _import_seed_statement_texts(conv: Conversation, texts: list[str]) -> dict:
     elif successes:
         flash(f'✓ {successes} imported — ⚠ {n_skipped} skipped', 'import_result')
     elif n_errors:
-        flash('✗ Import failed — could not reach Polis. Check server logs.', 'import_result')
+        flash(f'✗ Import failed — {polis_failure_message}', 'import_result')
     elif n_skipped:
         flash(f'⚠ 0 imported — {n_skipped} already existed in Polis', 'import_result')
     else:
@@ -3741,9 +3747,9 @@ def admin_statement_seed(conv_id):
             _polis_server_client().add_seed(conv.polis_id, text)
             flash('Seed statement added.', 'success')
             record_audit('statement.seed', conv_id=conv_id)   # no text (statement content)
-    except PolisServerError:
+    except PolisServerError as exc:
         current_app.logger.exception('add_seed failed')
-        flash('Could not add seed statement. Check server logs for details.', 'error')
+        flash(exc.admin_message, 'error')
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed/import-text')
@@ -4973,6 +4979,14 @@ def create_app(test_config: dict | None = None) -> Flask:
     # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
     if test_config is not None:
         app.config.update(test_config)
+
+    _polis_config_error = polis_server_config_error(
+        app.config.get('POLIS_SERVER_URL', ''),
+        app.config.get('POLIS_ADMIN_EMAIL', ''),
+        app.config.get('POLIS_ADMIN_PASSWORD', ''),
+    )
+    if _polis_config_error:
+        app.logger.warning('Polis HTTP admin configuration: %s', _polis_config_error)
 
     # Migration mode: set by deploy.sh --migrate to skip web-server-only
     # startup checks (rate limiting, trusted hosts) that require

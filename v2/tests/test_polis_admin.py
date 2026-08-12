@@ -5,6 +5,7 @@ import pytest
 import requests as _requests
 
 from polis_admin import (
+    POLIS_NOT_CONFIGURED_MESSAGE, POLIS_UNREACHABLE_MESSAGE,
     PolisParticipantClient, PolisParticipantError,
     PolisServerClient, PolisServerError,
 )
@@ -36,6 +37,40 @@ def _mock_login(client):
     """Patch _login to return a mock session + empty auth headers."""
     sess = MagicMock()
     return patch.object(type(client), '_login', return_value=(sess, {})), sess
+
+
+@pytest.mark.parametrize('url', ['', 'polis:8001', 'ftp://polis:8001'])
+def test_server_login_rejects_missing_or_invalid_http_config(url):
+    client = PolisServerClient(url, 'admin@test.com', 'pass')
+
+    with patch('polis_admin._http.post') as post, \
+         pytest.raises(PolisServerError) as exc_info:
+        client._login()
+
+    assert str(exc_info.value) == POLIS_NOT_CONFIGURED_MESSAGE
+    assert exc_info.value.admin_message == POLIS_NOT_CONFIGURED_MESSAGE
+    post.assert_not_called()
+
+
+def test_server_login_rejects_missing_credentials_before_request():
+    client = PolisServerClient('http://polis:8001', '', '')
+
+    with patch('polis_admin._http.post') as post, \
+         pytest.raises(PolisServerError) as exc_info:
+        client._login()
+
+    assert exc_info.value.admin_message == POLIS_NOT_CONFIGURED_MESSAGE
+    post.assert_not_called()
+
+
+def test_server_login_classifies_unreachable_server_for_admins():
+    client = _server_client()
+
+    with patch('polis_admin._http.post', side_effect=_requests.ConnectionError('refused')), \
+         pytest.raises(PolisServerError) as exc_info:
+        client._login()
+
+    assert exc_info.value.admin_message == POLIS_UNREACHABLE_MESSAGE
 
 
 # ── PolisParticipantClient.get_statements ─────────────────────────────────────
@@ -296,6 +331,17 @@ def test_create_conversation_raises_on_polis_error():
     with login_patch:
         with pytest.raises(PolisServerError):
             client.create_conversation('My conversation')
+
+
+def test_add_seed_classifies_post_login_disconnect_for_admins():
+    client = _server_client()
+    login_patch, sess = _mock_login(client)
+    sess.post.side_effect = _requests.ConnectionError('connection reset')
+
+    with login_patch, pytest.raises(PolisServerError) as exc_info:
+        client.add_seed('abc123', 'A seed statement')
+
+    assert exc_info.value.admin_message == POLIS_UNREACHABLE_MESSAGE
 
 
 def test_close_and_hide_conversation_deactivates_and_hides_results():

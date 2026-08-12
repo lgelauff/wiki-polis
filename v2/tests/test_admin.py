@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from db import AdminRole, ContentFlag, Conversation, ConversationInvite, Participant, db
-from polis_admin import PolisServerError
+from polis_admin import POLIS_NOT_CONFIGURED_MESSAGE, PolisServerError
 from tests.conftest import login
 
 
@@ -96,6 +96,22 @@ def test_create_conversation_polis_failure_redirects(app, admin_client):
         })
     assert resp.status_code == 302
     assert Conversation.query.filter_by(slug='should-not-exist').first() is None
+
+
+def test_single_seed_surfaces_safe_polis_configuration_error(admin_client, conv):
+    error = PolisServerError(
+        'internal configuration detail',
+        admin_message=POLIS_NOT_CONFIGURED_MESSAGE,
+    )
+    with patch('app.PolisServerClient.add_seed', side_effect=error):
+        resp = admin_client.post(
+            f'/admin/conversations/{conv.id}/statements/seed',
+            data={'txt': 'A seed statement'},
+            follow_redirects=True,
+        )
+
+    assert POLIS_NOT_CONFIGURED_MESSAGE.encode() in resp.data
+    assert b'internal configuration detail' not in resp.data
 
 
 def test_edit_conversation(admin_client, conv):

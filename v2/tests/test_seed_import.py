@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from db import Conversation, db
-from polis_admin import PolisServerError
+from polis_admin import POLIS_NOT_CONFIGURED_MESSAGE, PolisServerError
 from tests.conftest import login
 
 
@@ -96,6 +96,19 @@ def test_single_statement_grammar(admin_client, conv):
     with _mock_polis():
         resp = _text_import(admin_client, conv.id, 'Only one')
     assert b'1 statement imported' in resp.data
+
+
+def test_bulk_seed_surfaces_same_safe_polis_configuration_error(admin_client, conv):
+    error = PolisServerError(
+        'internal configuration detail',
+        admin_message=POLIS_NOT_CONFIGURED_MESSAGE,
+    )
+    with _mock_polis() as mock:
+        mock.return_value.bulk_add_seeds.side_effect = error
+        resp = _text_import(admin_client, conv.id, 'A seed statement')
+
+    assert POLIS_NOT_CONFIGURED_MESSAGE.encode() in resp.data
+    assert b'internal configuration detail' not in resp.data
 
 
 def test_text_imports_one_statement_per_non_empty_line(admin_client, conv):

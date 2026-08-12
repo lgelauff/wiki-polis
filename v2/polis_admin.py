@@ -19,6 +19,7 @@ import os
 import re
 import threading
 from contextlib import contextmanager
+from urllib.parse import urlparse
 
 import requests
 
@@ -407,8 +408,37 @@ class PolisParticipantClient:
 
 # ── Polis server admin client ─────────────────────────────────────────────────
 
+POLIS_NOT_CONFIGURED_MESSAGE = (
+    'Polis server is not configured. Set POLIS_SERVER_URL, '
+    'POLIS_ADMIN_EMAIL, and POLIS_ADMIN_PASSWORD.'
+)
+POLIS_UNREACHABLE_MESSAGE = (
+    'Could not reach Polis. Check the server connection and try again.'
+)
+
+
+def polis_server_config_error(url: str, email: str, password: str) -> str | None:
+    """Return an operator-facing HTTP-admin config error, if any.
+
+    Direct Postgres reads do not use this configuration, so callers invoke this
+    only before HTTP admin operations rather than rejecting the entire client.
+    """
+    parsed = urlparse((url or '').strip())
+    if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+        return POLIS_NOT_CONFIGURED_MESSAGE
+    if not (email or '').strip() or not password:
+        return POLIS_NOT_CONFIGURED_MESSAGE
+    return None
+
+
 class PolisServerError(Exception):
-    pass
+    """Internal Polis failure with a safe message suitable for admin UI."""
+
+    def __init__(self, message: str, *, admin_message: str | None = None):
+        super().__init__(message)
+        self.admin_message = admin_message or (
+            'Could not complete the Polis operation. Check server logs for details.'
+        )
 
 
 class PolisServerClient:
@@ -443,6 +473,12 @@ class PolisServerClient:
         token is returned as an explicit header, never relied on via session cookies,
         and no session state is mutated here.
         """
+        config_error = polis_server_config_error(
+            self._base, self._email, self._password,
+        )
+        if config_error:
+            raise PolisServerError(config_error, admin_message=config_error)
+
         sess = _http
         try:
             resp = sess.post(
@@ -452,11 +488,16 @@ class PolisServerClient:
                 timeout=10,
             )
         except requests.RequestException as exc:
-            raise PolisServerError(str(exc)) from exc
+            raise PolisServerError(
+                str(exc), admin_message=POLIS_UNREACHABLE_MESSAGE,
+            ) from exc
         if not resp.ok:
             raise PolisServerError(
                 f'Polis login failed (HTTP {resp.status_code}). '
-                'Check POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD env vars.'
+                'Check POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD env vars.',
+                admin_message=(
+                    'Could not authenticate with Polis. Check the admin credentials.'
+                ),
             )
         token = resp.json().get('token')
         extra = {'x-polis': token} if token else {}
@@ -608,7 +649,9 @@ class PolisServerClient:
                 timeout=10,
             )
         except requests.RequestException as exc:
-            raise PolisServerError(str(exc)) from exc
+            raise PolisServerError(
+                str(exc), admin_message=POLIS_UNREACHABLE_MESSAGE,
+            ) from exc
         if not resp.ok:
             raise PolisServerError(
                 f'Polis seed statement creation failed (HTTP {resp.status_code}): '
