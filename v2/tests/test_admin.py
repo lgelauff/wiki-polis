@@ -1420,6 +1420,65 @@ def test_add_invite(admin_client, conv):
     assert usernames == {'Alice', 'Bob'}
 
 
+def test_add_invite_reports_existing_and_duplicate_input(admin_client, conv):
+    db.session.add(ConversationInvite(conversation_id=conv.id, mw_username='Alice'))
+    db.session.commit()
+
+    resp = admin_client.post(
+        f'/admin/conversations/{conv.id}/invites/add',
+        data={'mw_usernames': 'Alice\nBob\nBob\n'},
+        follow_redirects=True,
+    )
+
+    assert b'1 added' in resp.data
+    assert b'1 already present' in resp.data
+    assert b'1 duplicate input' in resp.data
+    assert {row.mw_username for row in ConversationInvite.query.all()} == {'Alice', 'Bob'}
+
+
+def test_add_invite_keeps_non_conflicting_rows_when_one_insert_loses_race(
+        admin_client, conv, monkeypatch):
+    """A unique race for X must not roll back unrelated Y/Z additions (#242)."""
+    db.session.add(ConversationInvite(conversation_id=conv.id, mw_username='X'))
+    db.session.commit()
+    original_scalars = db.session.scalars
+    first_read = True
+
+    def stale_existing_snapshot(*args, **kwargs):
+        nonlocal first_read
+        if first_read:
+            first_read = False
+            return iter(())  # X was inserted after the command's conceptual snapshot.
+        return original_scalars(*args, **kwargs)
+
+    monkeypatch.setattr(db.session, 'scalars', stale_existing_snapshot)
+    resp = admin_client.post(
+        f'/admin/conversations/{conv.id}/invites/add',
+        data={'mw_usernames': 'X\nY\nZ\n'},
+        follow_redirects=True,
+    )
+
+    assert resp.status_code == 200
+    assert b'2 added' in resp.data
+    assert b'1 added concurrently by another moderator' in resp.data
+    assert {row.mw_username for row in ConversationInvite.query.all()} == {'X', 'Y', 'Z'}
+
+
+def test_add_invite_reports_batch_save_failure(admin_client, conv):
+    from services.invites import InviteBatchSaveError
+
+    with patch('app.add_conversation_invites',
+               side_effect=InviteBatchSaveError('database unavailable')):
+        resp = admin_client.post(
+            f'/admin/conversations/{conv.id}/invites/add',
+            data={'mw_usernames': 'Alice'},
+            follow_redirects=True,
+        )
+
+    assert resp.status_code == 200
+    assert b'save invites' in resp.data
+
+
 def test_remove_invite(admin_client, conv):
     inv = ConversationInvite(conversation_id=conv.id, mw_username='Charlie')
     db.session.add(inv)

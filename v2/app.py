@@ -48,6 +48,7 @@ from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
 from logging_setup import configure_logging
 from api.v1 import create_api_v1_blueprint, register_api_error_handlers
 from services.identity import reconcile_participant_login
+from services.invites import InviteBatchSaveError, add_conversation_invites
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -3582,21 +3583,30 @@ def admin_invite_add(conv_id):
     usernames = [u for u in raw if 1 <= len(u) <= 255]
     if not usernames:
         return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
-    existing = {inv.mw_username for inv in
-                ConversationInvite.query.filter_by(conversation_id=conv_id).all()}
-    added = 0
-    for username in usernames:
-        if username not in existing:
-            db.session.add(ConversationInvite(
-                conversation_id=conv_id, mw_username=username))
-            added += 1
     try:
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-    else:
-        if added:
-            record_audit('invite.add', conv_id=conv_id, count=added)  # count only — no usernames (PII)
+        result = add_conversation_invites(
+            db.session,
+            conversation_id=conv_id,
+            usernames=usernames,
+        )
+    except InviteBatchSaveError:
+        current_app.logger.exception('invite batch save failed for conversation %s', conv_id)
+        flash("Couldn't save invites — please review the list and retry.", 'error')
+        return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
+
+    if result.added:
+        record_audit('invite.add', conv_id=conv_id,
+                     count=result.added)  # counts only — no usernames (PII)
+
+    summary = [f'{result.added} added']
+    if result.already_present:
+        summary.append(f'{result.already_present} already present')
+    if result.duplicate_inputs:
+        summary.append(f'{result.duplicate_inputs} duplicate input')
+    if result.concurrent_conflicts:
+        summary.append(f'{result.concurrent_conflicts} added concurrently by another moderator')
+    flash('Invites: ' + '; '.join(summary) + '.',
+          'info' if result.concurrent_conflicts else 'success')
     return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/invites/<int:invite_id>/remove')
