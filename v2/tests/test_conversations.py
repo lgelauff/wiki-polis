@@ -43,6 +43,22 @@ def test_index_shows_fork_between_demo_and_real(client):
     assert b'Participate in real consultations' in resp.data
 
 
+def test_spa_history_routes_serve_the_same_built_shell(client, monkeypatch, tmp_path):
+    import app as app_module
+
+    shell = tmp_path / 'index.html'
+    shell.write_text('<div id="root">SPA shell</div>', encoding='utf-8')
+    monkeypatch.setattr(app_module, '_SPA_BUILD_DIR', str(tmp_path))
+
+    root_response = client.get('/app')
+    nested_response = client.get('/app/demo/conversations')
+
+    assert root_response.status_code == 200
+    assert nested_response.status_code == 200
+    assert root_response.data == nested_response.data
+    assert b'id="root"' in root_response.data
+
+
 def test_consultations_unauthenticated_shows_public_conversations(client, conv):
     resp = client.get('/consultations')
     assert resp.status_code == 200

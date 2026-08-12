@@ -44,6 +44,17 @@ echo "    Last   : $LAST_HASH $LAST_MSG ($LAST_AGO)"
 echo "==> Syncing dependencies (v2)..."
 ~/www/python/venv/bin/pip install -e ~/wiki-polis/v2
 
+echo "==> Building React frontend..."
+if ! command -v npm >/dev/null 2>&1; then
+  echo "!!  ERROR: npm is required to build v2/frontend before deployment." >&2
+  exit 1
+fi
+(
+  cd ~/wiki-polis/v2/frontend
+  npm ci
+  npm run build
+)
+
 # Existing Toolforge secrets (secret-key, database-url, oauth-*, admin-users) are reused unchanged.
 # Only new secret needed: particiapi-base-url
 #   read -rsp "particiapi-base-url: " V && printf '%s' "$V" | toolforge secrets create wiki-polis-particiapi-base-url --from-file=value=/dev/stdin

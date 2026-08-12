@@ -20,7 +20,8 @@ CSRF behavior is preserved without CORS.
 
 `src/api/schema.ts` is generated from `../openapi.json`. Do not edit it manually; run
 `npm run api:generate` after changing the API contract. Production output is written to
-`../static/spa` and is intentionally ignored by Git.
+`../static/spa` and is intentionally ignored by Git. Flask serves that shell for every
+`/app/*` path; `deploy.sh` runs the locked production build before restarting the service.
 
 ## State ownership
 

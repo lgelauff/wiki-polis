@@ -24,7 +24,7 @@ import requests
 from dotenv import load_dotenv
 from flask import (Blueprint, Flask, abort, current_app, flash, g, jsonify,
                    has_request_context, make_response, redirect, render_template,
-                   request, session, url_for)
+                   request, send_from_directory, session, url_for)
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
@@ -55,6 +55,7 @@ from services.conversation_lanes import build_conversation_lane
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
 _MW_USER_AGENT   = 'wiki-polis/2.0 (Toolforge tool; https://wiki-polis.toolforge.org)'
+_SPA_BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'spa')
 _TEXT_ALLOWED_TAGS  = {'p', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'br'}
 _TEXT_ALLOWED_ATTRS = {'a': {'href', 'title'}}
 _POLIS_ID_RE     = re.compile(r'^[A-Za-z0-9]{6,20}$')
@@ -5397,6 +5398,12 @@ def _register_routes(app: Flask) -> None:
         return render_template('fork.html',
                                header_mode='fork',
                                dev_test_users=dev_test_users)
+
+    @app.get('/app')
+    @app.get('/app/<path:spa_path>')
+    def spa_shell(spa_path: str = ''):
+        """Serve the built React shell; client routing owns the remaining path."""
+        return send_from_directory(_SPA_BUILD_DIR, 'index.html')
 
     def _render_lane(*, demo: bool, header_mode: str):
         """Render the home listing for one space (#293).
