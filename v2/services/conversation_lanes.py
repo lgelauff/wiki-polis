@@ -98,6 +98,7 @@ class ConversationLane:
 
     def to_api(self, *, conversation_link: Callable[[str], str],
                about_link: Callable[[str], str],
+               explore_link: Callable[[str], str],
                admin_link: Callable[[int], str]) -> dict:
         moderated_ids = {conv.id for conv in self.moderating}
 
@@ -123,6 +124,8 @@ class ConversationLane:
                 'self': conversation_link(conv.slug),
                 'about': about_link(conv.slug),
             }
+            if relationship == 'joined' and action_open and 'submission' in phases:
+                links['explore'] = explore_link(conv.slug)
             if conv.id in moderated_ids:
                 links['admin'] = admin_link(conv.id)
             return {

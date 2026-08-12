@@ -361,6 +361,7 @@ export interface components {
         ConversationLinks: {
             self: string;
             about: string;
+            explore?: string;
             admin?: string;
         };
         ErrorResponse: {

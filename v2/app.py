@@ -1659,6 +1659,9 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
     return lane.to_api(
         conversation_link=lambda slug: url_for('participant.conversation', slug=slug),
         about_link=lambda slug: url_for('participant.conversation_about', slug=slug),
+        explore_link=lambda slug: url_for(
+            'spa_shell', spa_path=f'conversations/{slug}/explore',
+        ),
         admin_link=lambda conv_id: url_for(
             'admin.admin_conversation_detail', conv_id=conv_id,
         ),

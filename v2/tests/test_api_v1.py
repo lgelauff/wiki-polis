@@ -123,6 +123,7 @@ def test_authenticated_lane_uses_participant_workload_projection(
     assert card['capabilities']['participate'] is True
     assert card['links']['self'] == '/c/test-conv'
     assert card['links']['about'] == '/c/test-conv/about'
+    assert card['links']['explore'] == '/app/conversations/test-conv/explore'
     serialized = json.dumps(data)
     assert participant.xid not in serialized
     assert str(participant.mw_user_id) not in serialized

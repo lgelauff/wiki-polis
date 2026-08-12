@@ -749,6 +749,7 @@
         "properties": {
           "self": {"type": "string"},
           "about": {"type": "string"},
+          "explore": {"type": "string"},
           "admin": {"type": "string"}
         }
       },
