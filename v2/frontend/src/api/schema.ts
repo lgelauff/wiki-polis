@@ -55,6 +55,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/pseudonym-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return available pseudonym suggestions for a join form */
+        get: operations["getPseudonymSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{slug}/participation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Join a conversation with a globally unique pseudonym
+         * @description Idempotent for an already joined participant; a replay returns the existing participation with HTTP 200.
+         */
+        post: operations["createParticipation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -133,6 +170,34 @@ export interface components {
         };
         ConversationAboutResponse: {
             data: components["schemas"]["ConversationAbout"];
+        };
+        PseudonymSuggestionsResponse: {
+            data: {
+                pseudonyms: string[];
+            };
+        };
+        CreateParticipationRequest: {
+            pseudonym: string;
+            /** @default false */
+            notifyEmail: boolean;
+            /** @default false */
+            notifyTalkPage: boolean;
+        };
+        ParticipationResponse: {
+            data: components["schemas"]["Participation"];
+        };
+        Participation: {
+            pseudonym: string;
+            notifications: {
+                email: boolean;
+                talkPage: boolean;
+            };
+            /** @enum {string|null} */
+            eligibilityStatus: "eligible" | "not_required" | null;
+            links: {
+                conversation: string;
+                about: string;
+            };
         };
         ConversationAbout: {
             slug: string;
@@ -303,6 +368,108 @@ export interface operations {
             };
             /** @description Conversation not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getPseudonymSuggestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fresh pseudonym suggestions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PseudonymSuggestionsResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createParticipation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateParticipationRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing participation returned for an idempotent replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationResponse"];
+                };
+            };
+            /** @description Participation created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationResponse"];
+                };
+            };
+            /** @description Invalid command */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access or eligibility denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Pseudonym conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -53,6 +53,8 @@ from services.invites import InviteBatchSaveError, add_conversation_invites
 from services.conversation_about import build_conversation_about
 from services.conversation_lanes import (build_conversation_lane,
                                          scheduled_transition)
+from services.participations import (EligibilityDenied, InvalidPseudonym,
+                                     PseudonymUnavailable, join_conversation)
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -62,7 +64,6 @@ _TEXT_ALLOWED_TAGS  = {'p', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'br'}
 _TEXT_ALLOWED_ATTRS = {'a': {'href', 'title'}}
 _POLIS_ID_RE     = re.compile(r'^[A-Za-z0-9]{6,20}$')
 _SLUG_RE         = re.compile(r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
-_PSEUDONYM_RE    = re.compile(r'^[a-z]{2,20}-[a-z]{2,20}$')
 _REDIS_RATELIMIT_SCHEMES = ('redis://', 'rediss://')
 _MIN_RATELIMIT_IDENTITY_SECRET_LEN = 32
 _XID_HMAC_VERSION = 2
@@ -1695,6 +1696,49 @@ def _conversation_about_api_payload(slug: str) -> dict:
             'participant.conversation_moderation_log', slug=slug,
         ),
     )
+
+
+def _pseudonym_suggestions_api_payload(slug: str) -> list[str]:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    return _generate_pseudonyms(5)
+
+
+def _join_conversation_api_payload(slug: str, body: dict) -> tuple[dict, int]:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    if conv.access_policy == 'demo':
+        abort(409, description='Demo conversations are joined automatically.')
+    result = join_conversation(
+        conversation=conv,
+        participant=participant,
+        pseudonym=body['pseudonym'],
+        notify_email=body.get('notifyEmail', False),
+        notify_talk_page=body.get('notifyTalkPage', False),
+        emailable=bool(session.get('emailable')),
+        check_eligibility=_check_join_eligibility,
+    )
+    participation = result.participation
+    return ({
+        'pseudonym': participation.pseudonym,
+        'notifications': {
+            'email': bool(participation.notify_email),
+            'talkPage': bool(participation.notify_talk_page),
+        },
+        'eligibilityStatus': participation.eligibility_status,
+        'links': {
+            'conversation': url_for('participant.conversation', slug=slug),
+            'about': url_for('participant.conversation_about', slug=slug),
+        },
+    }, 201 if result.created else 200)
+
+
 def _require_mod_for_conv(conv_id: int) -> 'Conversation':
     """Return conversation or abort 403 if the current user can't moderate it."""
     conv = Conversation.query.get_or_404(conv_id)
@@ -4004,41 +4048,28 @@ def accept_post(slug):
         abort(404)
     _check_conversation_access(conv, participant)
 
-    if Participation.query.filter_by(
-            participant_id=participant.id,
-            conversation_id=conv.id).first():
-        return redirect(url_for('participant.conversation', slug=slug))
-
     pseudonym = request.form.get('pseudonym', '').strip()
     emailable = session.get('emailable', False)
-
-    if not _PSEUDONYM_RE.match(pseudonym):
+    try:
+        join_conversation(
+            conversation=conv,
+            participant=participant,
+            pseudonym=pseudonym,
+            notify_email=bool(request.form.get('notify_email')),
+            notify_talk_page=bool(request.form.get('notify_talk_page')),
+            emailable=bool(emailable),
+            check_eligibility=_check_join_eligibility,
+        )
+    except InvalidPseudonym:
         abort(400)
-
-    allowed, eligibility_status, eligibility_detail = _check_join_eligibility(conv, participant)
-    if not allowed:
+    except EligibilityDenied as exc:
         return make_response(render_template(
             'forbidden_eligibility.html',
             conversation=conv,
-            status=eligibility_status,
-            detail=eligibility_detail,
+            status=exc.status,
+            detail=exc.detail,
         ), 403)
-
-    db.session.add(Participation(
-        participant_id=participant.id,
-        conversation_id=conv.id,
-        pseudonym=pseudonym,
-        notify_email=bool(request.form.get('notify_email')) and emailable,
-        notify_talk_page=bool(request.form.get('notify_talk_page')),
-        eligibility_status=eligibility_status,
-        eligibility_checked_at=datetime.now(timezone.utc)
-        if eligibility_status != 'not_required' else None,
-        eligibility_detail=eligibility_detail or None,
-    ))
-    try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
+    except PseudonymUnavailable:
         pseudonyms = _generate_pseudonyms(5)
         return render_template('accept.html', conversation=conv,
                                emailable=emailable, pseudonyms=pseudonyms,
@@ -5277,6 +5308,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_global_admin=_is_global_admin,
         resolve_conversation_lane=_conversation_lane_api_payload,
         resolve_conversation_about=_conversation_about_api_payload,
+        join_conversation=_join_conversation_api_payload,
+        resolve_pseudonym_suggestions=_pseudonym_suggestions_api_payload,
     ))
     register_api_error_handlers(app)
     csrf.exempt(proxy_bp)

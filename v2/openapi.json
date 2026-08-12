@@ -101,6 +101,111 @@
         }
       }
     },
+    "/conversations/{slug}/pseudonym-suggestions": {
+      "get": {
+        "operationId": "getPseudonymSuggestions",
+        "summary": "Return available pseudonym suggestions for a join form",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "minLength": 1}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fresh pseudonym suggestions",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/PseudonymSuggestionsResponse"}
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversations/{slug}/participation": {
+      "post": {
+        "operationId": "createParticipation",
+        "summary": "Join a conversation with a globally unique pseudonym",
+        "description": "Idempotent for an already joined participant; a replay returns the existing participation with HTTP 200.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "minLength": 1}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/CreateParticipationRequest"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing participation returned for an idempotent replay",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ParticipationResponse"}
+              }
+            }
+          },
+          "201": {
+            "description": "Participation created",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ParticipationResponse"}
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid command",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+              }
+            }
+          },
+          "403": {
+            "description": "Access or eligibility denied",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+              }
+            }
+          },
+          "409": {
+            "description": "Pseudonym conflict",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+              }
+            }
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -230,6 +335,76 @@
         "additionalProperties": false,
         "properties": {
           "data": {"$ref": "#/components/schemas/ConversationAbout"}
+        }
+      },
+      "PseudonymSuggestionsResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["pseudonyms"],
+            "additionalProperties": false,
+            "properties": {
+              "pseudonyms": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "pattern": "^[a-z]{2,20}-[a-z]{2,20}$"}
+              }
+            }
+          }
+        }
+      },
+      "CreateParticipationRequest": {
+        "type": "object",
+        "required": ["pseudonym"],
+        "additionalProperties": false,
+        "properties": {
+          "pseudonym": {
+            "type": "string",
+            "pattern": "^[a-z]{2,20}-[a-z]{2,20}$"
+          },
+          "notifyEmail": {"type": "boolean", "default": false},
+          "notifyTalkPage": {"type": "boolean", "default": false}
+        }
+      },
+      "ParticipationResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {
+          "data": {"$ref": "#/components/schemas/Participation"}
+        }
+      },
+      "Participation": {
+        "type": "object",
+        "required": ["pseudonym", "notifications", "eligibilityStatus", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "pseudonym": {"type": "string"},
+          "notifications": {
+            "type": "object",
+            "required": ["email", "talkPage"],
+            "additionalProperties": false,
+            "properties": {
+              "email": {"type": "boolean"},
+              "talkPage": {"type": "boolean"}
+            }
+          },
+          "eligibilityStatus": {
+            "type": ["string", "null"],
+            "enum": ["eligible", "not_required", null]
+          },
+          "links": {
+            "type": "object",
+            "required": ["conversation", "about"],
+            "additionalProperties": false,
+            "properties": {
+              "conversation": {"type": "string"},
+              "about": {"type": "string"}
+            }
+          }
         }
       },
       "ConversationAbout": {
