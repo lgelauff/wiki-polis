@@ -50,8 +50,7 @@ from logging_setup import configure_logging
 from api.v1 import create_api_v1_blueprint, register_api_error_handlers
 from services.identity import reconcile_participant_login
 from services.invites import InviteBatchSaveError, add_conversation_invites
-from services.conversation_lanes import (build_conversation_lane,
-                                         classify_joined_conversation)
+from services.conversation_lanes import build_conversation_lane
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -5408,138 +5407,23 @@ def _register_routes(app: Flask) -> None:
         keeps one listing implementation instead of a bespoke demo page.
         """
         dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
-
-        if 'username' not in session:
-            if demo:
-                listing = (Conversation.query
-                           .filter_by(active=True, paused=False, access_policy='demo')
-                           .order_by(Conversation.created_at.desc()).all())
-            else:
-                listing = (Conversation.query
-                           .filter_by(active=True, paused=False)
-                           .filter(Conversation.access_policy == 'public')
-                           .order_by(Conversation.created_at.desc()).all())
-            signals_map = {c.id: {'phases': _active_phases(c),
-                                  'outputs': _output_items(c)} for c in listing}
-            return render_template('home.html',
-                                   header_mode=header_mode,
-                                   public_conversations=listing,
-                                   signals_map=signals_map,
-                                   dev_test_users=dev_test_users)
-
         participant = _current_participant()
-        username    = session['username']
-
-        joined_parts = (
-            Participation.query
-            .options(joinedload(Participation.conversation))
-            .filter_by(participant_id=participant.id).all()
-            if participant else []
+        lane = build_conversation_lane(
+            demo=demo,
+            username=session.get('username'),
+            participant=participant,
+            global_admin=_is_global_admin(participant),
+            active_phases=_active_phases,
+            output_items=_output_items,
+            reveal_context=_reveal_context,
+            polis_client=_polis_server_client(),
         )
-        joined_ids = {p.conversation_id for p in joined_parts}
-
-        # Each lane lists only its own space's conversations.
-        lane_joined_parts = [
-            part for part in joined_parts
-            if part.conversation
-            and (part.conversation.access_policy == 'demo') == demo
-        ]
-        joined_conversations = [part.conversation for part in lane_joined_parts]
-
-        if demo:
-            available = (Conversation.query
-                         .filter_by(active=True, paused=False, access_policy='demo')
-                         .filter(~Conversation.id.in_(joined_ids or [0]))
-                         .order_by(Conversation.created_at.desc()).all())
-        else:
-            invited_ids = [
-                inv.conversation_id
-                for inv in ConversationInvite.query.filter_by(mw_username=username).all()
-            ]
-            available = (Conversation.query
-                         .filter_by(active=True, paused=False)
-                         .filter(~Conversation.id.in_(joined_ids or [0]))
-                         .filter(db.or_(
-                             Conversation.access_policy == 'public',
-                             db.and_(
-                                 Conversation.access_policy == 'invite_only',
-                                 Conversation.id.in_(invited_ids or [0]),
-                             ),
-                         ))
-                         .order_by(Conversation.created_at.desc()).all())
-
-        mod_ids: set = set()
-        moderating = []
-        if participant:
-            if _is_global_admin(participant):
-                moderating = (Conversation.query
-                              .order_by(Conversation.created_at.desc()).all())
-                mod_ids = {c.id for c in moderating}
-            else:
-                roles = AdminRole.query.filter(
-                    AdminRole.participant_id == participant.id,
-                ).all()
-                if roles:
-                    mod_ids = {r.conversation_id for r in roles}
-                    moderating = Conversation.query.filter(
-                        Conversation.id.in_(mod_ids)).all()
-
-        # "You moderate" is scoped to this lane's space too.
-        moderating = [c for c in moderating if (c.access_policy == 'demo') == demo]
-        # Exclude moderated conversations from Browse — they already appear in "You moderate"
-        available = [c for c in available if c.id not in mod_ids]
-
-        pseudonym_map = {p.conversation_id: p for p in joined_parts}
-        all_home_convs = joined_conversations + list(available)
-
-        xid = session.get('xid')
-        submission_convs = [c for c in all_home_convs if c.phase_submission and c.active]
-        zinvites = [c.polis_id for c in submission_convs if c.polis_id]
-        remaining_by_zinvite: dict = {}
-        if zinvites and xid:
-            result = _polis_server_client().get_statements_remaining_bulk(zinvites, xid)
-            if result:
-                remaining_by_zinvite = result
-        signals_map: dict = {}
-        for conv in all_home_convs:
-            part = pseudonym_map.get(conv.id)
-            reveal = _reveal_context(conv, part) if conv.closed_at else None
-            remaining = remaining_by_zinvite.get(
-                conv.polis_id) if conv.polis_id else None
-            signals_map[conv.id] = {
-                'phases':               _active_phases(conv),
-                'outputs':              _output_items(conv),
-                'statements_remaining': remaining,
-                'reveal':               reveal,
-            }
-
-        joined_buckets = {
-            'needs_attention': [],
-            'caught_up': [],
-            'inactive': [],
-            'archived': [],
-        }
-        for conv in joined_conversations:
-            signal = signals_map[conv.id]
-            bucket = classify_joined_conversation(
-                active=conv.active,
-                paused=conv.paused,
-                phases=signal['phases'],
-                statements_remaining=signal['statements_remaining'],
-            )
-            joined_buckets[bucket].append(conv)
-
-        return render_template('home.html',
-                               header_mode=header_mode,
-                               attention_joined=joined_buckets['needs_attention'],
-                               caught_up_joined=joined_buckets['caught_up'],
-                               inactive_joined=joined_buckets['inactive'],
-                               archived_joined=joined_buckets['archived'],
-                               available=available,
-                               moderating=moderating,
-                               pseudonym_map=pseudonym_map,
-                               signals_map=signals_map,
-                               dev_test_users=dev_test_users)
+        return render_template(
+            'home.html',
+            header_mode=header_mode,
+            dev_test_users=dev_test_users,
+            **lane.template_context(),
+        )
 
     @app.get('/demo')
     def demo_lane():
