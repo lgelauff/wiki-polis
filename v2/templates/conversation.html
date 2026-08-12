@@ -415,7 +415,7 @@
   <div id="tab-results" class="tab-panel{% if tabs|length > 1 and tabs[0] != 'results' %} tab-panel--hidden{% endif %}"
        role="tabpanel" aria-labelledby="tab-btn-results">
     <div class="landing-section results-section">
-      <h3>Results{% if polis_stats and polis_stats.n_participants %}<span class="muted" style="font-size:13px;font-weight:400;margin-left:.75rem">{{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}</span>{% endif %}</h3>
+      <h2>Results{% if polis_stats and polis_stats.n_participants %}<span class="muted" style="font-size:13px;font-weight:400;margin-left:.75rem">{{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}</span>{% endif %}</h2>
 
       {% if conversation.phase_public_results or conversation.phase_personal_results %}
 

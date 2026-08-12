@@ -144,7 +144,8 @@
   {# ── Unauthenticated landing (demo or real lane — same UI, tinted background) ── #}
 
   <div class="landing-section">
-    <h1 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Where the community actually stands.</h1>
+    <h1 class="sr-only">Consultations</h1>
+    <h2 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Where the community actually stands.</h2>
     <p style="font-size:15px;line-height:1.6;color:var(--body);max-width:520px">
       Vote on short statements, and suggest improvements. Learn how your views
       compare to other community members — which statements already have
@@ -201,7 +202,7 @@
 
   {# ── Authenticated view ────────────────────────────────────────────────── #}
 
-  <h1 class="sr-only">Your consultations</h1>
+  <h1 class="sr-only">Consultations</h1>
 
   {# ── Flow diagram ─────────────────────────────────────────────────────── #}
   <img src="{{ url_for('static', filename='wiki-polis-flow.svg') }}"

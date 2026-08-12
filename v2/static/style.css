@@ -1402,7 +1402,7 @@ h3.conv-card-title-wrap {
   border-top: 1px solid var(--hairline);
 }
 
-.accept-section h3 {
+.accept-section h2 {
   font-size: 15px;
   margin-bottom: 0.5rem;
   color: var(--ink);
@@ -1908,7 +1908,7 @@ a { color: var(--pass); }
   margin-bottom: 1rem;
 }
 
-.results-section h3 { margin-bottom: 1rem; }
+.results-section h2 { margin-bottom: 1rem; }
 
 .results-block { margin-bottom: 1.25rem; }
 
