@@ -46,6 +46,8 @@ from http_pool import session as polis_http
 from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
                       RowError, strip_formula_prefixes)
 from logging_setup import configure_logging
+from api.v1 import create_api_v1_blueprint, register_api_error_handlers
+from services.identity import reconcile_participant_login
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -5173,6 +5175,11 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(proxy_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(participant_bp)
+    app.register_blueprint(create_api_v1_blueprint(
+        resolve_participant=_current_participant,
+        resolve_global_admin=_is_global_admin,
+    ))
+    register_api_error_handlers(app)
     csrf.exempt(proxy_bp)
 
     # Startup fingerprint — config-only, no secrets, no live probe. Answers
@@ -5265,21 +5272,18 @@ def _register_routes(app: Flask) -> None:
         def dev_login():
             username = _dev_login_user
             xid = _derive_xid(f'dev:{username}')
-            participant = Participant.query.filter_by(mw_username=username).first()
-            if participant is None:
-                participant = Participant(
-                    mw_user_id=abs(hash(username)) % 10**9,
-                    mw_username=username,
-                    xid=xid,
-                    xid_key_version=_XID_HMAC_VERSION,
-                )
+            participant = reconcile_participant_login(
+                Participant.query.filter_by(mw_username=username).first(),
+                mw_user_id=abs(hash(username)) % 10**9,
+                mw_username=username,
+                new_xid=xid,
+                xid_key_version=_XID_HMAC_VERSION,
+            )
+            if participant.id is None:
                 db.session.add(participant)
-            else:
-                participant.xid = xid
-                participant.xid_key_version = _XID_HMAC_VERSION
             db.session.commit()
             session['username']  = username
-            session['xid']       = xid
+            session['xid']       = participant.xid
             session['emailable'] = _is_emailable(username)
             return redirect(url_for('index'))
 
@@ -5318,22 +5322,18 @@ def _register_routes(app: Flask) -> None:
                 if not hmac.compare_digest(supplied, expected):
                     abort(403)
             xid = _derive_xid(f'dev-fake:{user["mw_user_id"]}:{username}')
-            participant = Participant.query.filter_by(mw_user_id=user['mw_user_id']).first()
-            if participant is None:
-                participant = Participant(
-                    mw_user_id=user['mw_user_id'],
-                    mw_username=username,
-                    xid=xid,
-                    xid_key_version=_XID_HMAC_VERSION,
-                )
+            participant = reconcile_participant_login(
+                Participant.query.filter_by(mw_user_id=user['mw_user_id']).first(),
+                mw_user_id=user['mw_user_id'],
+                mw_username=username,
+                new_xid=xid,
+                xid_key_version=_XID_HMAC_VERSION,
+            )
+            if participant.id is None:
                 db.session.add(participant)
-            else:
-                participant.mw_username = username
-                participant.xid = xid
-                participant.xid_key_version = _XID_HMAC_VERSION
             db.session.commit()
             session['username']  = username
-            session['xid']       = xid
+            session['xid']       = participant.xid
             session['emailable'] = False
             return redirect(url_for('index'))
 
@@ -5566,22 +5566,21 @@ def _register_routes(app: Flask) -> None:
 
         xid = _derive_xid(f'mw:{mw_user_id}')
 
-        participant = Participant.query.filter_by(mw_user_id=mw_user_id).first()
-        if participant is None:
-            participant = Participant(mw_user_id=mw_user_id, mw_username=username, xid=xid,
-                                      xid_key_version=_XID_HMAC_VERSION)
+        participant = reconcile_participant_login(
+            Participant.query.filter_by(mw_user_id=mw_user_id).first(),
+            mw_user_id=mw_user_id,
+            mw_username=username,
+            new_xid=xid,
+            xid_key_version=_XID_HMAC_VERSION,
+        )
+        if participant.id is None:
             db.session.add(participant)
-        elif participant.mw_username != username:
-            participant.mw_username = username
-        if participant.xid != xid:
-            participant.xid = xid
-            participant.xid_key_version = _XID_HMAC_VERSION
         db.session.commit()
 
         next_url = session.pop('next', None)
         session.clear()
         session['username']   = username
-        session['xid']        = xid
+        session['xid']        = participant.xid
         session['emailable']  = _is_emailable(username)
 
         return redirect(_safe_redirect(next_url or '', url_for('index')))

@@ -1,0 +1,114 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ProtoWiki application API",
+    "version": "1.0.0",
+    "description": "Same-origin API contract between the browser application and Flask. Polis and Particiapi remain behind Flask."
+  },
+  "servers": [
+    {"url": "/api/v1"}
+  ],
+  "paths": {
+    "/session": {
+      "get": {
+        "operationId": "getSession",
+        "summary": "Return the current browser session and its site-wide capabilities",
+        "responses": {
+          "200": {
+            "description": "Current session",
+            "headers": {
+              "Cache-Control": {
+                "schema": {"type": "string", "const": "no-store"}
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SessionResponse"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "getOpenApiDocument",
+        "summary": "Return this OpenAPI document",
+        "responses": {
+          "200": {"description": "OpenAPI 3.1 document"}
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SessionResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {
+          "data": {"$ref": "#/components/schemas/Session"}
+        }
+      },
+      "Session": {
+        "type": "object",
+        "required": ["state", "user", "capabilities", "csrfToken", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "state": {"type": "string", "enum": ["anonymous", "authenticated", "demo"]},
+          "user": {
+            "oneOf": [
+              {"$ref": "#/components/schemas/SessionUser"},
+              {"type": "null"}
+            ]
+          },
+          "capabilities": {"$ref": "#/components/schemas/SiteCapabilities"},
+          "csrfToken": {"type": "string", "minLength": 1},
+          "links": {"$ref": "#/components/schemas/SessionLinks"}
+        }
+      },
+      "SessionUser": {
+        "type": "object",
+        "required": ["username", "emailable"],
+        "additionalProperties": false,
+        "properties": {
+          "username": {"type": "string", "minLength": 1},
+          "emailable": {"type": "boolean"}
+        }
+      },
+      "SiteCapabilities": {
+        "type": "object",
+        "required": ["administerSite"],
+        "additionalProperties": false,
+        "properties": {
+          "administerSite": {"type": "boolean"}
+        }
+      },
+      "SessionLinks": {
+        "type": "object",
+        "required": ["login", "logout"],
+        "additionalProperties": false,
+        "properties": {
+          "login": {"type": "string"},
+          "logout": {"type": "string"}
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {"type": "string"},
+              "message": {"type": "string"},
+              "details": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}
