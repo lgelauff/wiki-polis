@@ -50,6 +50,7 @@ from logging_setup import configure_logging
 from api.v1 import create_api_v1_blueprint, register_api_error_handlers
 from services.identity import reconcile_participant_login
 from services.invites import InviteBatchSaveError, add_conversation_invites
+from services.conversation_lanes import classify_joined_conversation
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -5415,12 +5416,12 @@ def _register_routes(app: Flask) -> None:
         joined_ids = {p.conversation_id for p in joined_parts}
 
         # Each lane lists only its own space's conversations.
-        active_joined   = []
-        archived_joined = []
-        for part in joined_parts:
-            conv = part.conversation
-            if conv and (conv.access_policy == 'demo') == demo:
-                (active_joined if conv.active else archived_joined).append(conv)
+        lane_joined_parts = [
+            part for part in joined_parts
+            if part.conversation
+            and (part.conversation.access_policy == 'demo') == demo
+        ]
+        joined_conversations = [part.conversation for part in lane_joined_parts]
 
         if demo:
             available = (Conversation.query
@@ -5466,7 +5467,7 @@ def _register_routes(app: Flask) -> None:
         available = [c for c in available if c.id not in mod_ids]
 
         pseudonym_map = {p.conversation_id: p for p in joined_parts}
-        all_home_convs = active_joined + archived_joined + list(available)
+        all_home_convs = joined_conversations + list(available)
 
         xid = session.get('xid')
         submission_convs = [c for c in all_home_convs if c.phase_submission and c.active]
@@ -5489,10 +5490,28 @@ def _register_routes(app: Flask) -> None:
                 'reveal':               reveal,
             }
 
+        joined_buckets = {
+            'needs_attention': [],
+            'caught_up': [],
+            'inactive': [],
+            'archived': [],
+        }
+        for conv in joined_conversations:
+            signal = signals_map[conv.id]
+            bucket = classify_joined_conversation(
+                active=conv.active,
+                paused=conv.paused,
+                phases=signal['phases'],
+                statements_remaining=signal['statements_remaining'],
+            )
+            joined_buckets[bucket].append(conv)
+
         return render_template('home.html',
                                header_mode=header_mode,
-                               active_joined=active_joined,
-                               archived_joined=archived_joined,
+                               attention_joined=joined_buckets['needs_attention'],
+                               caught_up_joined=joined_buckets['caught_up'],
+                               inactive_joined=joined_buckets['inactive'],
+                               archived_joined=joined_buckets['archived'],
                                available=available,
                                moderating=moderating,
                                pseudonym_map=pseudonym_map,
