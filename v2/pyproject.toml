@@ -37,6 +37,7 @@ dependencies = [
 dev = [
     "playwright>=1.59.0",
     "pytest>=9.0",
+    "tinycss2>=1.4",
 ]
 
 [tool.setuptools]
