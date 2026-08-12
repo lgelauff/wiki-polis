@@ -3225,7 +3225,7 @@ a { color: var(--pass); }
 .p6-col-shift { width: 10%; min-width: 56px;  white-space: nowrap; }
 .p6-col-mine  { width: 10%; min-width: 70px;  }
 
-/* Stacked agree/disagree bar */
+/* Stacked agree/disagree/pass bar */
 .p6-vote-bar {
   display: flex;
   height: 8px;
@@ -3236,6 +3236,7 @@ a { color: var(--pass); }
 }
 .p6-bar-agree    { background: var(--agree);    transition: width .2s; }
 .p6-bar-disagree { background: var(--disagree); transition: width .2s; }
+.p6-bar-pass     { background: var(--pass);     transition: width .2s; }
 
 .p6-bar-label {
   font-size: 11px;

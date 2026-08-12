@@ -289,6 +289,26 @@ def test_statement_progress_for_participants_guards():
     assert client.get_statement_progress_for_participants('abc123', []) == {}
 
 
+def test_featured_candidates_expose_passes_and_total_votes():
+    client = PolisServerClient(
+        'http://polis', 'a@b.com', 'pw', db_url='postgresql://localhost/polis',
+    )
+    row = (7, 'Candidate', False, 4, 2, 3, 9)
+
+    with patch.object(client, '_pg_query', return_value=[row]):
+        candidates = client.get_featured_candidates('abc123')
+
+    assert candidates == [{
+        'tid': 7,
+        'text': 'Candidate',
+        'is_seed': False,
+        'n_agree': 4,
+        'n_disagree': 2,
+        'n_pass': 3,
+        'n_votes': 9,
+    }]
+
+
 # ── PolisServerClient.create_conversation ────────────────────────────────────
 
 def _setup_create(zinvite='abc123'):

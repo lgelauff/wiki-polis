@@ -177,7 +177,8 @@ _FEATURED_CANDIDATES_SQL = """
         v.tid,
         COUNT(DISTINCT v.pid) FILTER (WHERE v.vote = -1)::int  AS n_agree,
         COUNT(DISTINCT v.pid) FILTER (WHERE v.vote =  1)::int  AS n_disagree,
-        COUNT(DISTINCT v.pid) FILTER (WHERE v.vote != 0)::int  AS n_votes
+        COUNT(DISTINCT v.pid) FILTER (WHERE v.vote =  0)::int  AS n_pass,
+        COUNT(DISTINCT v.pid)::int                            AS n_votes
       FROM votes_latest_unique v, z WHERE v.zid = z.zid GROUP BY v.tid
     )
     SELECT
@@ -186,6 +187,7 @@ _FEATURED_CANDIDATES_SQL = """
       c.is_seed,
       COALESCE(vs.n_agree,    0) AS n_agree,
       COALESCE(vs.n_disagree, 0) AS n_disagree,
+      COALESCE(vs.n_pass,     0) AS n_pass,
       COALESCE(vs.n_votes,    0) AS n_votes
     FROM comments c
     JOIN z ON c.zid = z.zid
@@ -193,8 +195,9 @@ _FEATURED_CANDIDATES_SQL = """
     WHERE c.active = TRUE AND c.mod >= 0
     ORDER BY
       c.is_seed DESC,
-      (COALESCE(vs.n_votes, 0) >= 3) DESC,
-      COALESCE(vs.n_agree, 0)::float / NULLIF(vs.n_votes, 0) DESC NULLS LAST
+      (COALESCE(vs.n_votes, 0) - COALESCE(vs.n_pass, 0) >= 3) DESC,
+      COALESCE(vs.n_agree, 0)::float
+        / NULLIF(COALESCE(vs.n_votes, 0) - COALESCE(vs.n_pass, 0), 0) DESC NULLS LAST
     LIMIT %s
 """
 
@@ -773,7 +776,7 @@ class PolisServerClient:
                                 max_statements: int = 20) -> list[dict] | None:
         """Return candidate statements for featuring, or None if unavailable.
 
-        Each item: {tid, text, is_seed, n_agree, n_disagree, n_votes}.
+        Each item: {tid, text, is_seed, n_agree, n_disagree, n_pass, n_votes}.
         Seeds always appear first; remainder ranked by agree rate.
         Returns None when db_url is absent or the query fails.
         """
@@ -785,7 +788,7 @@ class PolisServerClient:
             return None
         return [
             {'tid': r[0], 'text': r[1], 'is_seed': r[2],
-             'n_agree': r[3], 'n_disagree': r[4], 'n_votes': r[5]}
+             'n_agree': r[3], 'n_disagree': r[4], 'n_pass': r[5], 'n_votes': r[6]}
             for r in rows
         ]
 

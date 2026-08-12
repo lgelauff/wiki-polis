@@ -1053,19 +1053,21 @@
             <td class="p6-col-stmt">{{ s.text }}</td>
             <td class="p6-col-phase">
               {% if s.p2 %}
-              <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}%">
+              <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}% · Pass {{ s.p2.pct_pass }}%">
                 <div class="p6-bar-agree" style="width:{{ s.p2.pct_agree }}%"></div>
                 <div class="p6-bar-disagree" style="width:{{ s.p2.pct_disagree }}%"></div>
+                <div class="p6-bar-pass" style="width:{{ s.p2.pct_pass }}%"></div>
               </div>
-              <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree</span>
+              <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree · {{ s.p2.pct_pass }}% pass</span>
               {% else %}<span class="muted">—</span>{% endif %}
             </td>
             <td class="p6-col-phase">
-              <div class="p6-vote-bar" title="Agree {{ s.p6.pct_agree }}% · Disagree {{ s.p6.pct_disagree }}%">
+              <div class="p6-vote-bar" title="Agree {{ s.p6.pct_agree }}% · Disagree {{ s.p6.pct_disagree }}% · Pass {{ s.p6.pct_pass }}%">
                 <div class="p6-bar-agree" style="width:{{ s.p6.pct_agree }}%"></div>
                 <div class="p6-bar-disagree" style="width:{{ s.p6.pct_disagree }}%"></div>
+                <div class="p6-bar-pass" style="width:{{ s.p6.pct_pass }}%"></div>
               </div>
-              <span class="p6-bar-label">{{ s.p6.pct_agree }}% agree</span>
+              <span class="p6-bar-label">{{ s.p6.pct_agree }}% agree · {{ s.p6.pct_pass }}% pass</span>
             </td>
             <td class="p6-col-shift">
               {% if s.shift is not none %}
