@@ -74,6 +74,12 @@ def app(tmp_path):
             'SESSION_TYPE': 'cachelib',
             'SESSION_CACHELIB': FileSystemCache(str(session_dir)),
             'SESSION_PERMANENT': False,
+            # Test behavior must not depend on developer .env/secrets or live
+            # local Polis processes. Individual tests opt in with config/mocks.
+            'POLIS_DATABASE_URL': '',
+            'POLIS_SERVER_URL': '',
+            'POLIS_ADMIN_EMAIL': '',
+            'POLIS_ADMIN_PASSWORD': '',
         })
     with a.app_context():
         db.create_all()
