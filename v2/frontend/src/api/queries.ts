@@ -97,3 +97,66 @@ export async function createStatement(
     }))
   ).data;
 }
+
+export const argumentMappingQuery = (slug: string) => queryOptions({
+  queryKey: ['argument-mapping', slug],
+  queryFn: async () => (
+    await requireApiData(api.GET('/conversations/{slug}/arguments', {
+      params: {path: {slug}},
+    }))
+  ).data,
+  staleTime: 0,
+});
+
+export async function createArgument(
+  slug: string,
+  featuredStatementId: number,
+  body: components['schemas']['CreateArgumentRequest'],
+  csrfToken: string,
+) {
+  return (
+    await requireApiData(api.POST(
+      '/conversations/{slug}/featured-statements/{featuredStatementId}/arguments',
+      {
+        params: {path: {slug, featuredStatementId}},
+        body,
+        headers: {'X-CSRFToken': csrfToken},
+      },
+    ))
+  ).data;
+}
+
+export async function skipArgumentContribution(
+  slug: string,
+  featuredStatementId: number,
+  side: 'pro' | 'con',
+  csrfToken: string,
+) {
+  return (
+    await requireApiData(api.PUT(
+      '/conversations/{slug}/featured-statements/{featuredStatementId}/contributions/{side}/skip',
+      {
+        params: {path: {slug, featuredStatementId, side}},
+        headers: {'X-CSRFToken': csrfToken},
+      },
+    ))
+  ).data;
+}
+
+export async function putArgumentPriority(
+  slug: string,
+  argumentId: number,
+  selected: boolean,
+  csrfToken: string,
+) {
+  return (
+    await requireApiData(api.PUT(
+      '/conversations/{slug}/arguments/{argumentId}/priority',
+      {
+        params: {path: {slug, argumentId}},
+        body: {selected},
+        headers: {'X-CSRFToken': csrfToken},
+      },
+    ))
+  ).data;
+}

@@ -129,6 +129,7 @@ export const handlers = [
           self: '/api/v1/conversations/community-strategy/explore',
           about: '/c/community-strategy/about',
           conversation: '/c/community-strategy',
+          arguments: '/app/conversations/community-strategy/arguments',
         },
       },
     }),
@@ -164,6 +165,82 @@ export const handlers = [
           links: {explore: '/api/v1/conversations/community-strategy/explore'},
         },
       }, {status: 201});
+    },
+  ),
+  http.get(
+    new URL('/api/v1/conversations/community-strategy/arguments', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      data: {
+        slug: 'community-strategy',
+        title: 'Community strategy',
+        pseudonym: 'quiet-otter',
+        progress: {completed: 0, total: 1, allDone: false, currentFeaturedStatementId: 8},
+        featuredStatements: [{
+          id: 8,
+          statement: {id: 12, text: 'Our movement should invest more in shared technical infrastructure.'},
+          contributionsComplete: false,
+          complete: false,
+          sides: {
+            pro: {
+              contribution: {status: 'pending', argumentId: null, capabilities: {submit: true, skip: true}},
+              prioritization: {available: false, requiredArgumentCount: 3, argumentCount: 3, selectionBudget: 2, selectedCount: 0, complete: false},
+              arguments: [],
+            },
+            con: {
+              contribution: {status: 'skipped', argumentId: null, capabilities: {submit: true, skip: false}},
+              prioritization: {available: false, requiredArgumentCount: 3, argumentCount: 2, selectionBudget: 2, selectedCount: 0, complete: true},
+              arguments: [],
+            },
+          },
+          capabilities: {flagStatement: true},
+        }],
+        capabilities: {contribute: true, prioritize: true, flag: true},
+        links: {
+          self: '/api/v1/conversations/community-strategy/arguments',
+          about: '/app/conversations/community-strategy/about',
+          conversation: '/c/community-strategy',
+          explore: '/app/conversations/community-strategy/explore',
+        },
+      },
+    }),
+  ),
+  http.post(
+    new URL('/api/v1/conversations/community-strategy/featured-statements/8/arguments', globalThis.location.origin).toString(),
+    async ({request}) => {
+      const body = await request.json() as {side: 'pro' | 'con'; body: string};
+      return HttpResponse.json({
+        data: {
+          featuredStatementId: 8,
+          side: body.side,
+          status: 'submitted',
+          argument: {id: 91, body: body.body, own: true, selected: false, capabilities: {prioritize: false, flag: false}},
+          links: {arguments: '/api/v1/conversations/community-strategy/arguments'},
+        },
+      }, {status: 201});
+    },
+  ),
+  http.put(
+    new URL('/api/v1/conversations/community-strategy/featured-statements/8/contributions/:side/skip', globalThis.location.origin).toString(),
+    ({params}) => HttpResponse.json({
+      data: {
+        featuredStatementId: 8,
+        side: params.side,
+        status: 'skipped',
+        links: {arguments: '/api/v1/conversations/community-strategy/arguments'},
+      },
+    }),
+  ),
+  http.put(
+    new URL('/api/v1/conversations/community-strategy/arguments/:argumentId/priority', globalThis.location.origin).toString(),
+    async ({params, request}) => {
+      const body = await request.json() as {selected: boolean};
+      return HttpResponse.json({
+        data: {
+          argumentId: Number(params.argumentId), selected: body.selected,
+          selectedCount: body.selected ? 2 : 1, selectionBudget: 2,
+          links: {arguments: '/api/v1/conversations/community-strategy/arguments'},
+        },
+      });
     },
   ),
 ];

@@ -154,3 +154,31 @@ test('freezes a statement attempt when the upstream outcome is unknown', async (
   expect(screen.getByRole('textbox', {name: 'Statement text'})).toBeDisabled();
   expect(screen.getByRole('button', {name: 'Submit statement'})).toBeDisabled();
 });
+
+test('renders explicit argument contribution states and submits through the typed API', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/arguments']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {
+    name: 'Our movement should invest more in shared technical infrastructure.',
+  })).toBeVisible();
+  expect(screen.getByText(/For:/).parentElement).toHaveTextContent('response needed');
+  expect(screen.getByText(/Against:/).parentElement).toHaveTextContent('nothing to add');
+  expect(screen.getByText(/Complete both responses/)).toBeVisible();
+
+  fireEvent.click(screen.getByRole('button', {name: 'Add a for argument'}));
+  fireEvent.change(screen.getByRole('textbox', {name: 'Your for argument'}), {
+    target: {value: 'Shared maintenance reduces duplicated work.'},
+  });
+  fireEvent.click(screen.getByRole('button', {name: 'Submit argument'}));
+
+  expect(await screen.findByText('Your for argument was saved.')).toBeVisible();
+  expect(screen.getByRole('link', {name: 'Explore'})).toHaveAttribute(
+    'href', '/app/conversations/community-strategy/explore',
+  );
+});

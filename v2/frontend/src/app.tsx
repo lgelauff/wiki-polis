@@ -14,6 +14,7 @@ import {
   type ConversationSpace,
 } from './api/queries';
 import {StatementComposer} from './features/explore/statement-composer';
+import {ArgumentMappingPage} from './features/arguments/argument-mapping-page';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -416,6 +417,7 @@ function ExplorePage() {
           </div>
           <nav className="activity-nav" aria-label="Conversation activity">
             <span aria-current="page">Explore</span>
+            {data.links.arguments && <Link to={data.links.arguments}>Arguments</Link>}
             <Link to={`/app/conversations/${slug}/about`}>About</Link>
           </nav>
         </header>
@@ -502,6 +504,17 @@ function ExplorePage() {
   );
 }
 
+function ArgumentMappingRoute() {
+  const {slug = ''} = useParams();
+  const {data: session} = useSuspenseQuery(sessionQuery());
+  return (
+    <>
+      <Header />
+      <ArgumentMappingPage slug={slug} csrfToken={session.csrfToken} />
+    </>
+  );
+}
+
 function ConversationGroup({definition, conversations, primary}: {
   definition: (typeof groupDefinitions)[number];
   conversations: ConversationCard[];
@@ -577,6 +590,7 @@ export function App() {
           <Route path="/app/conversations/:slug/about" element={<ConversationAboutPage />} />
           <Route path="/app/conversations/:slug/join" element={<ConversationJoinPage />} />
           <Route path="/app/conversations/:slug/explore" element={<ExplorePage />} />
+          <Route path="/app/conversations/:slug/arguments" element={<ArgumentMappingRoute />} />
           <Route path="*" element={<Navigate to="/app/real" replace />} />
         </Routes>
       </Suspense>
