@@ -54,3 +54,28 @@ export async function createParticipation(
     }))
   ).data;
 }
+
+export const exploreStateQuery = (slug: string) => queryOptions({
+  queryKey: ['explore-state', slug],
+  queryFn: async () => (
+    await requireApiData(api.GET('/conversations/{slug}/explore', {
+      params: {path: {slug}},
+    }))
+  ).data,
+  staleTime: 0,
+});
+
+export async function putExploreVote(
+  slug: string,
+  statementId: number,
+  choice: components['schemas']['ExploreVoteRequest']['choice'],
+  csrfToken: string,
+) {
+  return (
+    await requireApiData(api.PUT('/conversations/{slug}/statements/{statementId}/vote', {
+      params: {path: {slug, statementId}},
+      body: {choice},
+      headers: {'X-CSRFToken': csrfToken},
+    }))
+  ).data;
+}

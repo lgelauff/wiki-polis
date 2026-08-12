@@ -324,6 +324,36 @@ a { color: inherit; }
 .join-success h2 { margin: 0 0 2rem; font-size: clamp(1.6rem, 4vw, 2.4rem); }
 .join-success code { font: .8em var(--mono); }
 
+.explore-shell { width: min(980px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 5rem; }
+.explore-heading { display: flex; justify-content: space-between; align-items: end; gap: 2rem; padding: 2.5rem 0 1.5rem; border-bottom: 1px solid var(--ink); }
+.explore-heading h1 { margin: 0; font-size: clamp(1.7rem, 4vw, 3rem); letter-spacing: -.045em; }
+.activity-nav { display: flex; gap: 1rem; font: .7rem var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+.activity-nav span[aria-current="page"] { color: var(--civic); border-bottom: 2px solid var(--civic); }
+.explore-progress { display: grid; grid-template-columns: auto minmax(180px, 1fr); align-items: center; gap: 1.5rem; padding: 1rem 0 2rem; color: var(--muted); font-size: .75rem; }
+.explore-progress strong { color: var(--ink); font-family: var(--mono); }
+.explore-progress progress { width: 100%; height: 5px; accent-color: var(--civic); }
+.explore-card { min-height: 470px; display: flex; flex-direction: column; padding: clamp(1.5rem, 5vw, 4rem); border: 1px solid var(--rule); background: var(--surface); box-shadow: 0 18px 55px rgba(34, 45, 65, .06); }
+.explore-card--voted { border-color: color-mix(in srgb, var(--consensus) 55%, var(--rule)); }
+.explore-card__meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font: .65rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+.explore-statement { margin: auto 0; padding: 3rem 0; max-width: 800px; font-size: clamp(1.8rem, 4.8vw, 3.7rem); font-weight: 620; line-height: 1.08; letter-spacing: -.045em; }
+.explore-choices { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--rule); }
+.explore-choices button { min-height: 58px; display: flex; justify-content: center; align-items: center; gap: .55rem; border: 0; border-right: 1px solid var(--rule); background: transparent; cursor: pointer; font-weight: 620; }
+.explore-choices button:last-child { border-right: 0; }
+.explore-choices button:hover:not(:disabled) { background: var(--paper); }
+.choice-dot { width: 11px; height: 11px; border: 2px solid currentColor; border-radius: 50%; }
+.choice-dot--agree { color: var(--consensus); }
+.choice-dot--pass { color: var(--signal); }
+.choice-dot--disagree { color: var(--dissent); }
+.vote-receipt > p { margin: 0 0 1rem; text-align: center; font: .76rem var(--mono); text-transform: uppercase; letter-spacing: .055em; }
+.post-vote-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.5rem; margin-top: 1.3rem; }
+.post-vote-actions a { color: var(--muted); font-size: .76rem; }
+.next-statement, .explore-complete button { min-height: 44px; padding: .7rem 1rem; border: 0; color: white; background: var(--ink); cursor: pointer; }
+.explore-complete { padding: clamp(3rem, 8vw, 7rem) 0; border-bottom: 1px solid var(--ink); }
+.explore-complete h2 { max-width: 760px; margin: 0 0 1.2rem; font-size: clamp(2.4rem, 6vw, 5rem); line-height: .95; letter-spacing: -.06em; }
+.explore-complete p:not(.eyebrow) { max-width: 600px; color: var(--muted); line-height: 1.6; }
+.explore-complete code, .explore-footer code { font: .9em var(--mono); }
+.explore-footer { display: flex; justify-content: space-between; gap: 1rem; padding-top: 1.2rem; color: var(--muted); font-size: .72rem; }
+
 @keyframes ledger-in {
   from { opacity: 0; translate: 0 10px; }
 }
@@ -348,4 +378,12 @@ a { color: inherit; }
   .record-facts > div, .contribution-list > div { grid-template-columns: 1fr; gap: .3rem; }
   .join-shell { width: min(100% - 24px, 760px); }
   .pseudonym-options { grid-template-columns: 1fr; }
+  .explore-shell { width: min(100% - 24px, 980px); }
+  .explore-heading { align-items: start; flex-direction: column; }
+  .explore-progress { grid-template-columns: 1fr; gap: .7rem; }
+  .explore-card { min-height: 480px; padding: 1.25rem; }
+  .explore-choices { grid-template-columns: 1fr; border: 1px solid var(--rule); }
+  .explore-choices button { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .explore-choices button:last-child { border-bottom: 0; }
+  .explore-footer { flex-direction: column; }
 }

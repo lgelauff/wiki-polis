@@ -54,3 +54,19 @@ test('joins a conversation through the typed command', async () => {
   expect(screen.getByRole('link', {name: 'Enter the conversation'}))
     .toHaveAttribute('href', '/c/community-strategy');
 });
+
+test('votes in Explore through the wiki-polis API contract', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/explore']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText(/shared technical infrastructure/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Agree'}));
+
+  expect(await screen.findByText(/You voted/)).toHaveTextContent('agree');
+  expect(screen.getByRole('button', {name: 'Next statement'})).toBeVisible();
+});

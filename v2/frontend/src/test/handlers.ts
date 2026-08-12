@@ -34,7 +34,11 @@ export const handlers = [
             scheduledTransition: null,
             outputs: [],
             capabilities: {join: false, participate: true, moderate: false},
-            links: {self: '/c/community-strategy', about: '/c/community-strategy/about'},
+            links: {
+              self: '/c/community-strategy',
+              about: '/c/community-strategy/about',
+              explore: '/app/conversations/community-strategy/explore',
+            },
           }],
           caughtUp: [],
           inactive: [],
@@ -104,5 +108,44 @@ export const handlers = [
         },
       },
     }, {status: 201}),
+  ),
+  http.get(
+    new URL('/api/v1/conversations/community-strategy/explore', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      data: {
+        slug: 'community-strategy',
+        title: 'Community strategy',
+        pseudonym: 'quiet-otter',
+        currentStatement: {
+          id: 12,
+          text: 'Our movement should invest more in shared technical infrastructure.',
+          isMeta: false,
+          isSeed: true,
+        },
+        progress: {completed: 3, total: 12, remaining: 9, allDone: false},
+        newStatement: {unlocked: false, unlockAfter: 10, quota: 3, used: 0, remaining: 3},
+        capabilities: {vote: true, suggestWording: true, submitNewStatement: false},
+        links: {
+          self: '/api/v1/conversations/community-strategy/explore',
+          about: '/c/community-strategy/about',
+          conversation: '/c/community-strategy',
+        },
+      },
+    }),
+  ),
+  http.put(
+    new URL('/api/v1/conversations/community-strategy/statements/12/vote', globalThis.location.origin).toString(),
+    async ({request}) => {
+      const body = await request.json() as {
+        choice: 'agree' | 'pass' | 'disagree';
+      };
+      return HttpResponse.json({
+        data: {
+          statementId: 12,
+          choice: body.choice,
+          links: {explore: '/api/v1/conversations/community-strategy/explore'},
+        },
+      });
+    },
   ),
 ];

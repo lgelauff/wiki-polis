@@ -7,7 +7,9 @@ import {
   createParticipation,
   conversationAboutQuery,
   conversationLaneQuery,
+  exploreStateQuery,
   pseudonymSuggestionsQuery,
+  putExploreVote,
   sessionQuery,
   type ConversationSpace,
 } from './api/queries';
@@ -118,6 +120,8 @@ function ConversationRow({conversation, index}: {conversation: ConversationCard;
       </div>
       {conversation.capabilities.join ? (
         <Link className="conversation-row__action" to={`/app/conversations/${conversation.slug}/join`}>{action}</Link>
+      ) : conversation.links.explore ? (
+        <Link className="conversation-row__action" to={conversation.links.explore}>{action}</Link>
       ) : (
         <a className="conversation-row__action" href={conversation.links.self}>{action}</a>
       )}
@@ -356,6 +360,115 @@ function ConversationJoinPage() {
   );
 }
 
+type ExploreChoice = components['schemas']['ExploreVoteRequest']['choice'];
+
+function ExploreVoteButtons({onVote, disabled}: {
+  onVote: (choice: ExploreChoice) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="explore-choices" aria-label="Your position">
+      <button type="button" data-choice="agree" disabled={disabled} onClick={() => onVote('agree')}>
+        <span className="choice-dot choice-dot--agree" />Agree
+      </button>
+      <button type="button" data-choice="pass" disabled={disabled} onClick={() => onVote('pass')}>
+        <span className="choice-dot choice-dot--pass" />Pass
+      </button>
+      <button type="button" data-choice="disagree" disabled={disabled} onClick={() => onVote('disagree')}>
+        <span className="choice-dot choice-dot--disagree" />Disagree
+      </button>
+    </div>
+  );
+}
+
+function ExplorePage() {
+  const {slug = ''} = useParams();
+  const {data: session} = useSuspenseQuery(sessionQuery());
+  const {data, refetch, isFetching} = useSuspenseQuery(exploreStateQuery(slug));
+  const [receipt, setReceipt] = useState<components['schemas']['ExploreVoteReceipt'] | null>(null);
+  const vote = useMutation({
+    mutationFn: (choice: ExploreChoice) => {
+      if (!data.currentStatement) throw new Error('There is no statement to vote on.');
+      return putExploreVote(
+        slug, data.currentStatement.id, choice, session.csrfToken,
+      );
+    },
+    onSuccess: setReceipt,
+  });
+
+  async function nextStatement() {
+    setReceipt(null);
+    await refetch();
+  }
+
+  return (
+    <>
+      <Header />
+      <main className="explore-shell" id="main">
+        <header className="explore-heading">
+          <div>
+            <p className="eyebrow">Explore · private vote</p>
+            <h1>{data.title}</h1>
+          </div>
+          <nav className="activity-nav" aria-label="Conversation activity">
+            <span aria-current="page">Explore</span>
+            <Link to={`/app/conversations/${slug}/about`}>About</Link>
+          </nav>
+        </header>
+
+        <div className="explore-progress">
+          <div><strong>{data.progress.completed}</strong> of {data.progress.total} statements covered</div>
+          <progress value={data.progress.completed} max={Math.max(1, data.progress.total)}>
+            {data.progress.completed} of {data.progress.total}
+          </progress>
+        </div>
+
+        {data.progress.allDone ? (
+          <section className="explore-complete" role="status">
+            <p className="eyebrow">Queue complete</p>
+            <h2>You’ve covered every available statement.</h2>
+            <p>Your votes are recorded as <code>{data.pseudonym}</code>. New statements may appear while Explore remains open.</p>
+            <button type="button" onClick={() => refetch()} disabled={isFetching}>
+              {isFetching ? 'Checking…' : 'Check for new statements'}
+            </button>
+          </section>
+        ) : data.currentStatement && (
+          <section className={`explore-card${receipt ? ' explore-card--voted' : ''}`}>
+            <div className="explore-card__meta">
+              <span>{data.currentStatement.isMeta ? 'Process' : data.currentStatement.isSeed ? 'Starting statement' : 'Community statement'}</span>
+              <span>Statement {data.progress.completed + 1}</span>
+            </div>
+            <p className="explore-statement">{data.currentStatement.text}</p>
+            {receipt ? (
+              <div className="vote-receipt" role="status">
+                <p>You voted <strong>{receipt.choice}</strong>.</p>
+                <ExploreVoteButtons onVote={(choice) => vote.mutate(choice)} disabled={vote.isPending} />
+                <div className="post-vote-actions">
+                  <button type="button" className="next-statement" onClick={nextStatement} disabled={isFetching}>
+                    {isFetching ? 'Loading…' : 'Next statement'}
+                  </button>
+                  <a href={`${data.links.conversation}#tab-vote`}>Suggest clearer wording</a>
+                  {data.newStatement.unlocked && (
+                    <a href={`${data.links.conversation}#tab-vote`}>Add a new statement</a>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <ExploreVoteButtons onVote={(choice) => vote.mutate(choice)} disabled={vote.isPending} />
+            )}
+            {vote.error && <p className="command-error" role="alert">{vote.error.message}</p>}
+          </section>
+        )}
+
+        <footer className="explore-footer">
+          <span>Participating as <code>{data.pseudonym}</code></span>
+          <a href={data.links.conversation}>Open legacy conversation view</a>
+        </footer>
+      </main>
+    </>
+  );
+}
+
 function ConversationGroup({definition, conversations, primary}: {
   definition: (typeof groupDefinitions)[number];
   conversations: ConversationCard[];
@@ -430,6 +543,7 @@ export function App() {
           <Route path="/app/:space" element={<ConversationLanePage />} />
           <Route path="/app/conversations/:slug/about" element={<ConversationAboutPage />} />
           <Route path="/app/conversations/:slug/join" element={<ConversationJoinPage />} />
+          <Route path="/app/conversations/:slug/explore" element={<ExplorePage />} />
           <Route path="*" element={<Navigate to="/app/real" replace />} />
         </Routes>
       </Suspense>
