@@ -377,6 +377,7 @@ export interface components {
             self: string;
             about: string;
             conversation: string;
+            arguments?: string;
         };
         ExploreVoteRequest: {
             /** @enum {string} */

@@ -742,7 +742,8 @@
         "properties": {
           "self": {"type": "string"},
           "about": {"type": "string"},
-          "conversation": {"type": "string"}
+          "conversation": {"type": "string"},
+          "arguments": {"type": "string"}
         }
       },
       "ExploreVoteRequest": {

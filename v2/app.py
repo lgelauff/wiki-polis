@@ -1812,6 +1812,15 @@ def _explore_state_payload(conv: Conversation, participant: Participant,
         new_statement_max=int(config.get('new_stmt_max', 3)),
         new_statements_used=len(participation.new_stmt_ids or []),
     )
+    links = {
+        'self': url_for('api_v1.get_explore_state', slug=conv.slug),
+        'about': url_for('participant.conversation_about', slug=conv.slug),
+        'conversation': url_for('participant.conversation', slug=conv.slug),
+    }
+    if conv.phase_argument_mapping:
+        links['arguments'] = url_for(
+            'spa_shell', spa_path=f'conversations/{conv.slug}/arguments',
+        )
     return {
         'slug': conv.slug,
         'title': conv.title,
@@ -1822,11 +1831,7 @@ def _explore_state_payload(conv: Conversation, participant: Participant,
             'suggestWording': projection['currentStatement'] is not None,
             'submitNewStatement': projection['newStatement']['unlocked'],
         },
-        'links': {
-            'self': url_for('api_v1.get_explore_state', slug=conv.slug),
-            'about': url_for('participant.conversation_about', slug=conv.slug),
-            'conversation': url_for('participant.conversation', slug=conv.slug),
-        },
+        'links': links,
     }
 
 

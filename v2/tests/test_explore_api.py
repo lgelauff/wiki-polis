@@ -63,6 +63,8 @@ def test_explore_api_owns_upstream_session_and_returns_privacy_safe_state(
     auth_client, participant, conversation, app,
 ):
     _join(participant, conversation)
+    conversation.phase_argument_mapping = True
+    db.session.commit()
     app.config['PARTICIAPI_SUB_SECRET'] = 'shared-upstream-secret'
     session_response = _response(
         {'csrf_token': 'upstream-csrf'}, cookies={'session': 'upstream-cookie'},
@@ -93,6 +95,7 @@ def test_explore_api_owns_upstream_session_and_returns_privacy_safe_state(
         'completed': 1, 'total': 2, 'remaining': 1, 'allDone': False,
     }
     assert data['capabilities']['vote'] is True
+    assert data['links']['arguments'] == '/app/conversations/test-conv/arguments'
     serialized = json.dumps(data)
     assert participant.xid not in serialized
     assert conversation.polis_id not in serialized
