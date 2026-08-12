@@ -15,6 +15,7 @@ from werkzeug.exceptions import HTTPException
 from db import Participant
 from services.participations import (EligibilityDenied, InvalidPseudonym,
                                      PseudonymUnavailable)
+from services.explore import ExploreUpstreamError
 
 _OPENAPI_SPEC = json.loads(
     (Path(__file__).resolve().parents[1] / 'openapi.json').read_text(encoding='utf-8')
@@ -42,6 +43,8 @@ def create_api_v1_blueprint(
     resolve_conversation_about: Callable[[str], dict],
     join_conversation: Callable[[str, dict], tuple[dict, int]],
     resolve_pseudonym_suggestions: Callable[[str], list[str]],
+    resolve_explore_state: Callable[[str], dict],
+    submit_explore_vote: Callable[[str, int, str], dict],
 ) -> Blueprint:
     """Build API v1 with explicit dependencies on the current auth context."""
     bp = Blueprint('api_v1', __name__, url_prefix='/api/v1')
@@ -161,6 +164,40 @@ def create_api_v1_blueprint(
                 details={'status': exc.status},
             )
         return _no_store(jsonify({'data': data})), status
+
+    @bp.get('/conversations/<slug>/explore')
+    def get_explore_state(slug: str):
+        try:
+            data = resolve_explore_state(slug)
+        except ExploreUpstreamError:
+            return error_response(
+                'upstream_unavailable',
+                'The voting service is temporarily unavailable.',
+                502,
+            )
+        return _no_store(jsonify({'data': data}))
+
+    @bp.put('/conversations/<slug>/statements/<int:statement_id>/vote')
+    def put_explore_vote(slug: str, statement_id: int):
+        body = request.get_json(silent=True)
+        choice = body.get('choice') if isinstance(body, dict) else None
+        if (choice not in {'agree', 'pass', 'disagree'}
+                or set(body or {}) - {'choice'}):
+            return error_response(
+                'validation_failed', 'Check the highlighted fields.', 400,
+                details={'fields': {'choice': [
+                    'Choose agree, pass, or disagree.',
+                ]}},
+            )
+        try:
+            data = submit_explore_vote(slug, statement_id, choice)
+        except ExploreUpstreamError:
+            return error_response(
+                'upstream_unavailable',
+                'The vote could not reach the voting service.',
+                502,
+            )
+        return _no_store(jsonify({'data': data}))
 
     return bp
 

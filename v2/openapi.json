@@ -206,6 +206,105 @@
         }
       }
     },
+    "/conversations/{slug}/explore": {
+      "get": {
+        "operationId": "getExploreState",
+        "summary": "Return the current participant Explore queue state",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "minLength": 1}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current Explore state",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ExploreStateResponse"}
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "403": {
+            "description": "Conversation access denied or participant banned",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "409": {
+            "description": "Participation or Explore phase is not active",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "502": {
+            "description": "Voting service unavailable",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          }
+        }
+      }
+    },
+    "/conversations/{slug}/statements/{statementId}/vote": {
+      "put": {
+        "operationId": "putExploreVote",
+        "summary": "Set the participant's vote on an Explore statement",
+        "description": "Idempotent: repeated PUT requests replace the vote with the requested choice.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "minLength": 1}
+          },
+          {
+            "name": "statementId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer", "minimum": 0}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/ExploreVoteRequest"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vote stored",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ExploreVoteResponse"}
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid vote choice",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "403": {
+            "description": "Conversation access denied or participant banned",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "404": {
+            "description": "Conversation or statement not found",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "409": {
+            "description": "Participation or Explore phase is not active",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "502": {
+            "description": "Voting service unavailable",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -404,6 +503,119 @@
               "conversation": {"type": "string"},
               "about": {"type": "string"}
             }
+          }
+        }
+      },
+      "ExploreStateResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {
+          "data": {"$ref": "#/components/schemas/ExploreState"}
+        }
+      },
+      "ExploreState": {
+        "type": "object",
+        "required": ["slug", "title", "pseudonym", "currentStatement", "progress", "newStatement", "capabilities", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {"type": "string"},
+          "title": {"type": "string"},
+          "pseudonym": {"type": "string"},
+          "currentStatement": {
+            "oneOf": [
+              {"$ref": "#/components/schemas/ExploreStatement"},
+              {"type": "null"}
+            ]
+          },
+          "progress": {"$ref": "#/components/schemas/ExploreProgress"},
+          "newStatement": {"$ref": "#/components/schemas/NewStatementAvailability"},
+          "capabilities": {"$ref": "#/components/schemas/ExploreCapabilities"},
+          "links": {"$ref": "#/components/schemas/ExploreLinks"}
+        }
+      },
+      "ExploreStatement": {
+        "type": "object",
+        "required": ["id", "text", "isMeta", "isSeed"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "integer", "minimum": 0},
+          "text": {"type": "string", "minLength": 1},
+          "isMeta": {"type": "boolean"},
+          "isSeed": {"type": "boolean"}
+        }
+      },
+      "ExploreProgress": {
+        "type": "object",
+        "required": ["completed", "total", "remaining", "allDone"],
+        "additionalProperties": false,
+        "properties": {
+          "completed": {"type": "integer", "minimum": 0},
+          "total": {"type": "integer", "minimum": 0},
+          "remaining": {"type": "integer", "minimum": 0},
+          "allDone": {"type": "boolean"}
+        }
+      },
+      "NewStatementAvailability": {
+        "type": "object",
+        "required": ["unlocked", "unlockAfter", "quota", "used", "remaining"],
+        "additionalProperties": false,
+        "properties": {
+          "unlocked": {"type": "boolean"},
+          "unlockAfter": {"type": "integer", "minimum": 0},
+          "quota": {"type": "integer", "minimum": 0},
+          "used": {"type": "integer", "minimum": 0},
+          "remaining": {"type": "integer", "minimum": 0}
+        }
+      },
+      "ExploreCapabilities": {
+        "type": "object",
+        "required": ["vote", "suggestWording", "submitNewStatement"],
+        "additionalProperties": false,
+        "properties": {
+          "vote": {"type": "boolean"},
+          "suggestWording": {"type": "boolean"},
+          "submitNewStatement": {"type": "boolean"}
+        }
+      },
+      "ExploreLinks": {
+        "type": "object",
+        "required": ["self", "about", "conversation"],
+        "additionalProperties": false,
+        "properties": {
+          "self": {"type": "string"},
+          "about": {"type": "string"},
+          "conversation": {"type": "string"}
+        }
+      },
+      "ExploreVoteRequest": {
+        "type": "object",
+        "required": ["choice"],
+        "additionalProperties": false,
+        "properties": {
+          "choice": {"type": "string", "enum": ["agree", "pass", "disagree"]}
+        }
+      },
+      "ExploreVoteResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {
+          "data": {"$ref": "#/components/schemas/ExploreVoteReceipt"}
+        }
+      },
+      "ExploreVoteReceipt": {
+        "type": "object",
+        "required": ["statementId", "choice", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "statementId": {"type": "integer", "minimum": 0},
+          "choice": {"type": "string", "enum": ["agree", "pass", "disagree"]},
+          "links": {
+            "type": "object",
+            "required": ["explore"],
+            "additionalProperties": false,
+            "properties": {"explore": {"type": "string"}}
           }
         }
       },

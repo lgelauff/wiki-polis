@@ -55,6 +55,8 @@ from services.conversation_lanes import (build_conversation_lane,
                                          scheduled_transition)
 from services.participations import (EligibilityDenied, InvalidPseudonym,
                                      PseudonymUnavailable, join_conversation)
+from services.explore import (ExploreGateway, ParticiapiSessionState,
+                              build_explore_state, normalise_statements)
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -1737,6 +1739,107 @@ def _join_conversation_api_payload(slug: str, body: dict) -> tuple[dict, int]:
             'about': url_for('participant.conversation_about', slug=slug),
         },
     }, 201 if result.created else 200)
+
+
+def _require_explore_api_context(slug: str):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        abort(409, description='Join this conversation before participating.')
+    if not conv.active or conv.paused or not conv.phase_submission:
+        abort(409, description='Explore voting is not open.')
+    _abort_if_banned(conv, participant)
+    return conv, participant, participation
+
+
+def _explore_gateway(conv: Conversation, participant: Participant):
+    states = dict(session.get('particiapi_api_sessions') or {})
+    state = ParticiapiSessionState.from_dict(states.get(str(conv.id)))
+    subject_secret = current_app.config.get('PARTICIAPI_SUB_SECRET')
+    gateway = ExploreGateway(
+        base_url=current_app.config['PARTICIAPI_BASE'],
+        transport=polis_http,
+        state=state,
+        subject=_conversation_subject(participant.xid, conv) if subject_secret else None,
+        subject_secret=subject_secret,
+    )
+    return gateway, states
+
+
+def _save_explore_gateway_state(
+    conv: Conversation, gateway: ExploreGateway, states: dict,
+) -> None:
+    states[str(conv.id)] = gateway.state.to_dict()
+    session['particiapi_api_sessions'] = states
+
+
+def _explore_state_payload(conv: Conversation, participant: Participant,
+                           participation: Participation, gateway: ExploreGateway) -> dict:
+    statements, upstream_participant = gateway.read(conv.polis_id)
+    config = conv.argument_vote_data or {}
+    projection = build_explore_state(
+        statements_payload=statements,
+        participant_payload=upstream_participant,
+        ordering_key=f'{participant.xid}:{conv.id}',
+        new_statement_unlock_at=int(config.get('new_stmt_unlock_at', 10)),
+        new_statement_max=int(config.get('new_stmt_max', 3)),
+        new_statements_used=len(participation.new_stmt_ids or []),
+    )
+    return {
+        'slug': conv.slug,
+        'title': conv.title,
+        'pseudonym': participation.pseudonym,
+        **projection,
+        'capabilities': {
+            'vote': True,
+            'suggestWording': projection['currentStatement'] is not None,
+            'submitNewStatement': projection['newStatement']['unlocked'],
+        },
+        'links': {
+            'self': url_for('api_v1.get_explore_state', slug=conv.slug),
+            'about': url_for('participant.conversation_about', slug=conv.slug),
+            'conversation': url_for('participant.conversation', slug=conv.slug),
+        },
+    }
+
+
+def _explore_api_payload(slug: str) -> dict:
+    conv, participant, participation = _require_explore_api_context(slug)
+    gateway, states = _explore_gateway(conv, participant)
+    try:
+        return _explore_state_payload(conv, participant, participation, gateway)
+    finally:
+        _save_explore_gateway_state(conv, gateway, states)
+
+
+def _explore_vote_api_payload(slug: str, statement_id: int, choice: str) -> dict:
+    conv, participant, participation = _require_explore_api_context(slug)
+    gateway, states = _explore_gateway(conv, participant)
+    try:
+        statements, _ = gateway.read(conv.polis_id)
+        known_ids = {item['id'] for item in normalise_statements(statements)}
+        if statement_id not in known_ids:
+            abort(404, description='Statement not found in this conversation.')
+        polis_values = {'agree': -1, 'pass': 0, 'disagree': 1}
+        gateway.vote(conv.polis_id, statement_id, polis_values[choice])
+        _touch_last_engagement(participation)
+        db.session.commit()
+        return {
+            'statementId': statement_id,
+            'choice': choice,
+            'links': {
+                'explore': url_for('api_v1.get_explore_state', slug=conv.slug),
+            },
+        }
+    finally:
+        _save_explore_gateway_state(conv, gateway, states)
 
 
 def _require_mod_for_conv(conv_id: int) -> 'Conversation':
@@ -5310,6 +5413,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_conversation_about=_conversation_about_api_payload,
         join_conversation=_join_conversation_api_payload,
         resolve_pseudonym_suggestions=_pseudonym_suggestions_api_payload,
+        resolve_explore_state=_explore_api_payload,
+        submit_explore_vote=_explore_vote_api_payload,
     ))
     register_api_error_handlers(app)
     csrf.exempt(proxy_bp)

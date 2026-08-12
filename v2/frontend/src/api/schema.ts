@@ -92,6 +92,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/explore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the current participant Explore queue state */
+        get: operations["getExploreState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{slug}/statements/{statementId}/vote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the participant's vote on an Explore statement
+         * @description Idempotent: repeated PUT requests replace the vote with the requested choice.
+         */
+        put: operations["putExploreVote"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -197,6 +234,63 @@ export interface components {
             links: {
                 conversation: string;
                 about: string;
+            };
+        };
+        ExploreStateResponse: {
+            data: components["schemas"]["ExploreState"];
+        };
+        ExploreState: {
+            slug: string;
+            title: string;
+            pseudonym: string;
+            currentStatement: components["schemas"]["ExploreStatement"] | null;
+            progress: components["schemas"]["ExploreProgress"];
+            newStatement: components["schemas"]["NewStatementAvailability"];
+            capabilities: components["schemas"]["ExploreCapabilities"];
+            links: components["schemas"]["ExploreLinks"];
+        };
+        ExploreStatement: {
+            id: number;
+            text: string;
+            isMeta: boolean;
+            isSeed: boolean;
+        };
+        ExploreProgress: {
+            completed: number;
+            total: number;
+            remaining: number;
+            allDone: boolean;
+        };
+        NewStatementAvailability: {
+            unlocked: boolean;
+            unlockAfter: number;
+            quota: number;
+            used: number;
+            remaining: number;
+        };
+        ExploreCapabilities: {
+            vote: boolean;
+            suggestWording: boolean;
+            submitNewStatement: boolean;
+        };
+        ExploreLinks: {
+            self: string;
+            about: string;
+            conversation: string;
+        };
+        ExploreVoteRequest: {
+            /** @enum {string} */
+            choice: "agree" | "pass" | "disagree";
+        };
+        ExploreVoteResponse: {
+            data: components["schemas"]["ExploreVoteReceipt"];
+        };
+        ExploreVoteReceipt: {
+            statementId: number;
+            /** @enum {string} */
+            choice: "agree" | "pass" | "disagree";
+            links: {
+                explore: string;
             };
         };
         ConversationAbout: {
@@ -470,6 +564,136 @@ export interface operations {
             };
             /** @description Pseudonym conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getExploreState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current Explore state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExploreStateResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation access denied or participant banned */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Participation or Explore phase is not active */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Voting service unavailable */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putExploreVote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                statementId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExploreVoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Vote stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExploreVoteResponse"];
+                };
+            };
+            /** @description Invalid vote choice */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation access denied or participant banned */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or statement not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Participation or Explore phase is not active */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Voting service unavailable */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
