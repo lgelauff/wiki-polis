@@ -79,3 +79,21 @@ export async function putExploreVote(
     }))
   ).data;
 }
+
+export async function createStatement(
+  slug: string,
+  body: components['schemas']['CreateStatementRequest'],
+  csrfToken: string,
+  idempotencyKey: string,
+) {
+  return (
+    await requireApiData(api.POST('/conversations/{slug}/statements', {
+      params: {
+        path: {slug},
+        header: {'Idempotency-Key': idempotencyKey},
+      },
+      body,
+      headers: {'X-CSRFToken': csrfToken},
+    }))
+  ).data;
+}

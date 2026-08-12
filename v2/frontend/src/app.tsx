@@ -13,6 +13,7 @@ import {
   sessionQuery,
   type ConversationSpace,
 } from './api/queries';
+import {StatementComposer} from './features/explore/statement-composer';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -386,6 +387,7 @@ function ExplorePage() {
   const {data: session} = useSuspenseQuery(sessionQuery());
   const {data, refetch, isFetching} = useSuspenseQuery(exploreStateQuery(slug));
   const [receipt, setReceipt] = useState<components['schemas']['ExploreVoteReceipt'] | null>(null);
+  const [composerMode, setComposerMode] = useState<'derivative' | 'new' | null>(null);
   const vote = useMutation({
     mutationFn: (choice: ExploreChoice) => {
       if (!data.currentStatement) throw new Error('There is no statement to vote on.');
@@ -393,11 +395,13 @@ function ExplorePage() {
         slug, data.currentStatement.id, choice, session.csrfToken,
       );
     },
+    onMutate: () => setComposerMode(null),
     onSuccess: setReceipt,
   });
 
   async function nextStatement() {
     setReceipt(null);
+    setComposerMode(null);
     await refetch();
   }
 
@@ -428,9 +432,22 @@ function ExplorePage() {
             <p className="eyebrow">Queue complete</p>
             <h2>You’ve covered every available statement.</h2>
             <p>Your votes are recorded as <code>{data.pseudonym}</code>. New statements may appear while Explore remains open.</p>
-            <button type="button" onClick={() => refetch()} disabled={isFetching}>
+            <button type="button" className="explore-refresh" onClick={() => refetch()} disabled={isFetching}>
               {isFetching ? 'Checking…' : 'Check for new statements'}
             </button>
+            {data.newStatement.unlocked && composerMode !== 'new' && (
+              <button type="button" className="composer-link" onClick={() => setComposerMode('new')}>
+                Add a new statement
+              </button>
+            )}
+            {composerMode === 'new' && (
+              <StatementComposer
+                slug={slug}
+                csrfToken={session.csrfToken}
+                onCancel={() => setComposerMode(null)}
+                onCreated={() => nextStatement()}
+              />
+            )}
           </section>
         ) : data.currentStatement && (
           <section className={`explore-card${receipt ? ' explore-card--voted' : ''}`}>
@@ -447,11 +464,27 @@ function ExplorePage() {
                   <button type="button" className="next-statement" onClick={nextStatement} disabled={isFetching}>
                     {isFetching ? 'Loading…' : 'Next statement'}
                   </button>
-                  <a href={`${data.links.conversation}#tab-vote`}>Suggest clearer wording</a>
+                  <button type="button" className="composer-link" onClick={() => setComposerMode('derivative')}>
+                    Suggest clearer wording
+                  </button>
                   {data.newStatement.unlocked && (
-                    <a href={`${data.links.conversation}#tab-vote`}>Add a new statement</a>
+                    <button type="button" className="composer-link" onClick={() => setComposerMode('new')}>
+                      Add a new statement
+                    </button>
                   )}
                 </div>
+                {composerMode && (
+                  <StatementComposer
+                    key={`${composerMode}-${data.currentStatement.id}`}
+                    slug={slug}
+                    csrfToken={session.csrfToken}
+                    {...(composerMode === 'derivative'
+                      ? {parentStatement: data.currentStatement}
+                      : {})}
+                    onCancel={() => setComposerMode(null)}
+                    onCreated={() => nextStatement()}
+                  />
+                )}
               </div>
             ) : (
               <ExploreVoteButtons onVote={(choice) => vote.mutate(choice)} disabled={vote.isPending} />

@@ -123,8 +123,8 @@ export const handlers = [
           isSeed: true,
         },
         progress: {completed: 3, total: 12, remaining: 9, allDone: false},
-        newStatement: {unlocked: false, unlockAfter: 10, quota: 3, used: 0, remaining: 3},
-        capabilities: {vote: true, suggestWording: true, submitNewStatement: false},
+        newStatement: {unlocked: true, unlockAfter: 0, quota: 3, used: 0, remaining: 3},
+        capabilities: {vote: true, suggestWording: true, submitNewStatement: true},
         links: {
           self: '/api/v1/conversations/community-strategy/explore',
           about: '/c/community-strategy/about',
@@ -146,6 +146,24 @@ export const handlers = [
           links: {explore: '/api/v1/conversations/community-strategy/explore'},
         },
       });
+    },
+  ),
+  http.post(
+    new URL('/api/v1/conversations/community-strategy/statements', globalThis.location.origin).toString(),
+    async ({request}) => {
+      const body = await request.json() as {
+        text: string;
+        derivedFromStatementId?: number;
+      };
+      return HttpResponse.json({
+        data: {
+          statementId: 44,
+          kind: body.derivedFromStatementId === undefined ? 'new' : 'derivative',
+          derivedFromStatementId: body.derivedFromStatementId ?? null,
+          newStatementQuotaRemaining: 2,
+          links: {explore: '/api/v1/conversations/community-strategy/explore'},
+        },
+      }, {status: 201});
     },
   ),
 ];
