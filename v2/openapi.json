@@ -30,6 +30,37 @@
         }
       }
     },
+    "/conversations": {
+      "get": {
+        "operationId": "getConversationLane",
+        "summary": "Return participant-facing conversation groups for one space",
+        "parameters": [
+          {
+            "name": "space",
+            "in": "query",
+            "schema": {"type": "string", "enum": ["real", "demo"], "default": "real"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation lane",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ConversationLaneResponse"}
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid space",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+              }
+            }
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -91,6 +122,107 @@
         "properties": {
           "login": {"type": "string"},
           "logout": {"type": "string"}
+        }
+      },
+      "ConversationLaneResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {
+          "data": {"$ref": "#/components/schemas/ConversationLane"}
+        }
+      },
+      "ConversationLane": {
+        "type": "object",
+        "required": ["space", "authenticated", "groups"],
+        "additionalProperties": false,
+        "properties": {
+          "space": {"type": "string", "enum": ["real", "demo"]},
+          "authenticated": {"type": "boolean"},
+          "groups": {"$ref": "#/components/schemas/ConversationGroups"}
+        }
+      },
+      "ConversationGroups": {
+        "type": "object",
+        "required": ["needsAttention", "caughtUp", "inactive", "archived", "available", "moderating"],
+        "additionalProperties": false,
+        "properties": {
+          "needsAttention": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationCard"}},
+          "caughtUp": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationCard"}},
+          "inactive": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationCard"}},
+          "archived": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationCard"}},
+          "available": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationCard"}},
+          "moderating": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationCard"}}
+        }
+      },
+      "ConversationCard": {
+        "type": "object",
+        "required": ["slug", "title", "relationship", "participantState", "pseudonym", "status", "phases", "statementsRemaining", "scheduledTransition", "outputs", "capabilities", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "relationship": {"type": "string", "enum": ["joined", "available", "moderating"]},
+          "participantState": {
+            "oneOf": [
+              {"type": "string", "enum": ["needs_attention", "caught_up", "inactive", "archived"]},
+              {"type": "null"}
+            ]
+          },
+          "pseudonym": {"type": ["string", "null"]},
+          "status": {"type": "string", "enum": ["open", "paused", "archived"]},
+          "phases": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "statementsRemaining": {"type": ["integer", "null"], "minimum": 0},
+          "scheduledTransition": {
+            "oneOf": [
+              {"$ref": "#/components/schemas/ScheduledTransition"},
+              {"type": "null"}
+            ]
+          },
+          "outputs": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationOutput"}},
+          "capabilities": {"$ref": "#/components/schemas/ConversationCapabilities"},
+          "links": {"$ref": "#/components/schemas/ConversationLinks"}
+        }
+      },
+      "ScheduledTransition": {
+        "type": "object",
+        "required": ["at", "target", "targetLabel"],
+        "additionalProperties": false,
+        "properties": {
+          "at": {"type": "string", "format": "date-time"},
+          "target": {"type": "string"},
+          "targetLabel": {"type": "string"}
+        }
+      },
+      "ConversationOutput": {
+        "type": "object",
+        "required": ["key", "label", "status", "ready", "href"],
+        "additionalProperties": false,
+        "properties": {
+          "key": {"type": "string"},
+          "label": {"type": "string"},
+          "status": {"type": "string"},
+          "ready": {"type": "boolean"},
+          "href": {"type": ["string", "null"]}
+        }
+      },
+      "ConversationCapabilities": {
+        "type": "object",
+        "required": ["join", "participate", "moderate"],
+        "additionalProperties": false,
+        "properties": {
+          "join": {"type": "boolean"},
+          "participate": {"type": "boolean"},
+          "moderate": {"type": "boolean"}
+        }
+      },
+      "ConversationLinks": {
+        "type": "object",
+        "required": ["self"],
+        "additionalProperties": false,
+        "properties": {
+          "self": {"type": "string"},
+          "admin": {"type": "string"}
         }
       },
       "ErrorResponse": {

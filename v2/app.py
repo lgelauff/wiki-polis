@@ -50,7 +50,8 @@ from logging_setup import configure_logging
 from api.v1 import create_api_v1_blueprint, register_api_error_handlers
 from services.identity import reconcile_participant_login
 from services.invites import InviteBatchSaveError, add_conversation_invites
-from services.conversation_lanes import classify_joined_conversation
+from services.conversation_lanes import (build_conversation_lane,
+                                         classify_joined_conversation)
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -1634,6 +1635,27 @@ def _polis_server_client() -> PolisServerClient:
         current_app.config.get('POLIS_ADMIN_EMAIL', ''),
         current_app.config.get('POLIS_ADMIN_PASSWORD', ''),
         db_url=current_app.config.get('POLIS_DATABASE_URL', ''),
+    )
+
+
+def _conversation_lane_api_payload(demo: bool) -> dict:
+    """Build the privacy-safe browser projection for one conversation space."""
+    participant = _current_participant()
+    lane = build_conversation_lane(
+        demo=demo,
+        username=session.get('username'),
+        participant=participant,
+        global_admin=_is_global_admin(participant),
+        active_phases=_active_phases,
+        output_items=_output_items,
+        reveal_context=_reveal_context,
+        polis_client=_polis_server_client(),
+    )
+    return lane.to_api(
+        conversation_link=lambda slug: url_for('participant.conversation', slug=slug),
+        admin_link=lambda conv_id: url_for(
+            'admin.admin_conversation_detail', conv_id=conv_id,
+        ),
     )
 
 
@@ -5205,6 +5227,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(create_api_v1_blueprint(
         resolve_participant=_current_participant,
         resolve_global_admin=_is_global_admin,
+        resolve_conversation_lane=_conversation_lane_api_payload,
     ))
     register_api_error_handlers(app)
     csrf.exempt(proxy_bp)

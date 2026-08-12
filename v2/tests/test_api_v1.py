@@ -2,7 +2,10 @@
 
 import json
 
-from db import Participant, db
+from datetime import datetime
+from unittest.mock import patch
+
+from db import Conversation, Participant, Participation, db
 
 
 def test_session_contract_for_anonymous_browser(client):
@@ -74,3 +77,80 @@ def test_openapi_document_is_served_and_describes_session(client):
     spec = response.get_json()
     assert spec['openapi'] == '3.1.0'
     assert spec['paths']['/session']['get']['operationId'] == 'getSession'
+
+
+def test_anonymous_conversation_lane_exposes_public_contract_without_internal_ids(
+    client, conversation,
+):
+    response = client.get('/api/v1/conversations?space=real')
+
+    assert response.status_code == 200
+    assert response.headers['Cache-Control'] == 'no-store'
+    data = response.get_json()['data']
+    assert data['space'] == 'real'
+    assert data['authenticated'] is False
+    card = data['groups']['available'][0]
+    assert card['slug'] == conversation.slug
+    assert card['capabilities'] == {
+        'join': False, 'participate': False, 'moderate': False,
+    }
+    serialized = json.dumps(data)
+    assert conversation.polis_id not in serialized
+    assert 'conversation_id' not in serialized
+
+
+def test_authenticated_lane_uses_participant_workload_projection(
+    auth_client, participant, conversation,
+):
+    conversation.phase_submission = True
+    db.session.add(Participation(
+        participant_id=participant.id,
+        conversation_id=conversation.id,
+        pseudonym='api-otter',
+    ))
+    db.session.commit()
+
+    with patch(
+        'app.PolisServerClient.get_statements_remaining_bulk',
+        return_value={conversation.polis_id: 0},
+    ):
+        data = auth_client.get('/api/v1/conversations').get_json()['data']
+
+    card = data['groups']['caughtUp'][0]
+    assert card['participantState'] == 'caught_up'
+    assert card['pseudonym'] == 'api-otter'
+    assert card['statementsRemaining'] == 0
+    assert card['capabilities']['participate'] is True
+    assert card['links']['self'] == '/c/test-conv'
+    serialized = json.dumps(data)
+    assert participant.xid not in serialized
+    assert str(participant.mw_user_id) not in serialized
+
+
+def test_conversation_lane_exposes_scheduled_transition_as_utc(
+    client, conversation,
+):
+    conversation.scheduled_transition_at = datetime(2026, 8, 20, 14, 30)
+    conversation.scheduled_transition_target = 'argument_mapping'
+    db.session.commit()
+
+    card = client.get('/api/v1/conversations').get_json()['data']['groups']['available'][0]
+
+    assert card['scheduledTransition'] == {
+        'at': '2026-08-20T14:30:00Z',
+        'target': 'argument_mapping',
+        'targetLabel': 'Arguments',
+    }
+
+
+def test_conversation_lane_rejects_unknown_space(client):
+    response = client.get('/api/v1/conversations?space=production')
+
+    assert response.status_code == 400
+    assert response.get_json() == {
+        'error': {
+            'code': 'validation_failed',
+            'message': 'The requested conversation space is invalid.',
+            'details': {'fields': {'space': ['Choose real or demo.']}},
+        },
+    }

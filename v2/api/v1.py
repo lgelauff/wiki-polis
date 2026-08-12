@@ -36,6 +36,7 @@ def create_api_v1_blueprint(
     *,
     resolve_participant: Callable[[], Participant | None],
     resolve_global_admin: Callable[[Participant | None], bool],
+    resolve_conversation_lane: Callable[[bool], dict],
 ) -> Blueprint:
     """Build API v1 with explicit dependencies on the current auth context."""
     bp = Blueprint('api_v1', __name__, url_prefix='/api/v1')
@@ -78,6 +79,20 @@ def create_api_v1_blueprint(
     @bp.get('/openapi.json')
     def openapi_spec():
         return _no_store(jsonify(_OPENAPI_SPEC))
+
+    @bp.get('/conversations')
+    def get_conversation_lane():
+        space = request.args.get('space', 'real')
+        if space not in {'real', 'demo'}:
+            return error_response(
+                'validation_failed',
+                'The requested conversation space is invalid.',
+                400,
+                details={'fields': {'space': ['Choose real or demo.']}},
+            )
+        return _no_store(jsonify({
+            'data': resolve_conversation_lane(space == 'demo'),
+        }))
 
     return bp
 
