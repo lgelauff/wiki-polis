@@ -85,4 +85,24 @@ export const handlers = [
       },
     }),
   ),
+  http.get(
+    new URL('/api/v1/conversations/community-strategy/pseudonym-suggestions', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      data: {pseudonyms: ['quiet-otter', 'bright-fox', 'steady-heron']},
+    }),
+  ),
+  http.post(
+    new URL('/api/v1/conversations/community-strategy/participation', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      data: {
+        pseudonym: 'quiet-otter',
+        notifications: {email: false, talkPage: false},
+        eligibilityStatus: 'not_required',
+        links: {
+          conversation: '/c/community-strategy',
+          about: '/c/community-strategy/about',
+        },
+      },
+    }, {status: 201}),
+  ),
 ];

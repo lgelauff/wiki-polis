@@ -1,11 +1,13 @@
-import {Suspense, type CSSProperties} from 'react';
-import {useSuspenseQuery} from '@tanstack/react-query';
+import {Suspense, useState, type CSSProperties, type FormEvent} from 'react';
+import {useMutation, useSuspenseQuery} from '@tanstack/react-query';
 import {Link, Navigate, NavLink, Route, Routes, useParams} from 'react-router-dom';
 
 import type {components} from './api/schema';
 import {
+  createParticipation,
   conversationAboutQuery,
   conversationLaneQuery,
+  pseudonymSuggestionsQuery,
   sessionQuery,
   type ConversationSpace,
 } from './api/queries';
@@ -114,7 +116,11 @@ function ConversationRow({conversation, index}: {conversation: ConversationCard;
           <Link to={`/app/conversations/${conversation.slug}/about`}>About</Link>
         </div>
       </div>
-      <a className="conversation-row__action" href={conversation.links.self}>{action}</a>
+      {conversation.capabilities.join ? (
+        <Link className="conversation-row__action" to={`/app/conversations/${conversation.slug}/join`}>{action}</Link>
+      ) : (
+        <a className="conversation-row__action" href={conversation.links.self}>{action}</a>
+      )}
     </li>
   );
 }
@@ -239,6 +245,117 @@ function ConversationAboutPage() {
   );
 }
 
+function JoinForm({slug, csrfToken, emailable}: {
+  slug: string;
+  csrfToken: string;
+  emailable: boolean;
+}) {
+  const {data} = useSuspenseQuery(pseudonymSuggestionsQuery(slug));
+  const [pseudonym, setPseudonym] = useState(data.pseudonyms[0] ?? '');
+  const [notifyEmail, setNotifyEmail] = useState(false);
+  const [notifyTalkPage, setNotifyTalkPage] = useState(false);
+  const mutation = useMutation({
+    mutationFn: () => createParticipation(slug, {
+      pseudonym,
+      notifyEmail,
+      notifyTalkPage,
+    }, csrfToken),
+  });
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    mutation.mutate();
+  }
+
+  if (mutation.data) {
+    return (
+      <div className="join-success" role="status">
+        <p className="eyebrow">You're in</p>
+        <h2>You’ll participate as <code>{mutation.data.pseudonym}</code>.</h2>
+        <a className="record-actions__primary" href={mutation.data.links.conversation}>Enter the conversation</a>
+      </div>
+    );
+  }
+
+  return (
+    <form className="join-form" onSubmit={submit}>
+      <fieldset>
+        <legend>Choose your pseudonym</legend>
+        <p>Your contributions use this name throughout the conversation.</p>
+        <div className="pseudonym-options">
+          {data.pseudonyms.map((suggestion) => (
+            <label key={suggestion}>
+              <input
+                type="radio"
+                name="pseudonym"
+                value={suggestion}
+                checked={pseudonym === suggestion}
+                onChange={() => setPseudonym(suggestion)}
+              />
+              <code>{suggestion}</code>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Updates</legend>
+        {emailable && (
+          <label className="join-check">
+            <input type="checkbox" checked={notifyEmail} onChange={(event) => setNotifyEmail(event.target.checked)} />
+            Email me when this conversation needs my attention
+          </label>
+        )}
+        <label className="join-check">
+          <input type="checkbox" checked={notifyTalkPage} onChange={(event) => setNotifyTalkPage(event.target.checked)} />
+          Notify me on my Wikimedia talk page
+        </label>
+      </fieldset>
+      {mutation.error && (
+        <p className="command-error" role="alert">{mutation.error.message}</p>
+      )}
+      <button className="join-submit" type="submit" disabled={mutation.isPending || !pseudonym}>
+        {mutation.isPending ? 'Joining…' : 'Join conversation'}
+      </button>
+      <p className="record-note">Joining records your chosen pseudonym and notification preferences. Your private identity is not shown to other participants.</p>
+    </form>
+  );
+}
+
+function ConversationJoinPage() {
+  const {slug = ''} = useParams();
+  const {data: session} = useSuspenseQuery(sessionQuery());
+  const {data: conversation} = useSuspenseQuery(conversationAboutQuery(slug));
+
+  return (
+    <>
+      <Header />
+      <main className="join-shell" id="main">
+        <nav className="record-breadcrumb" aria-label="Breadcrumb">
+          <Link to="/app/real">Conversations</Link><span>/</span><span>Join</span>
+        </nav>
+        <header className="join-title">
+          <p className="eyebrow">Join a conversation</p>
+          <h1>{conversation.title}</h1>
+          <RichText html={conversation.descriptionHtml} className="record-prose" />
+        </header>
+        {session.state === 'authenticated' ? (
+          <JoinForm
+            slug={slug}
+            csrfToken={session.csrfToken}
+            emailable={Boolean(session.user?.emailable)}
+          />
+        ) : (
+          <div className="join-login">
+            <h2>Log in to participate</h2>
+            <p>A Wikimedia account is required for real conversations.</p>
+            <a className="record-actions__primary" href={session.links.login}>Log in</a>
+          </div>
+        )}
+      </main>
+    </>
+  );
+}
+
 function ConversationGroup({definition, conversations, primary}: {
   definition: (typeof groupDefinitions)[number];
   conversations: ConversationCard[];
@@ -312,6 +429,7 @@ export function App() {
         <Routes>
           <Route path="/app/:space" element={<ConversationLanePage />} />
           <Route path="/app/conversations/:slug/about" element={<ConversationAboutPage />} />
+          <Route path="/app/conversations/:slug/join" element={<ConversationJoinPage />} />
           <Route path="*" element={<Navigate to="/app/real" replace />} />
         </Routes>
       </Suspense>

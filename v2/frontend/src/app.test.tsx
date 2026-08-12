@@ -1,5 +1,5 @@
 import {QueryClientProvider} from '@tanstack/react-query';
-import {render, screen} from '@testing-library/react';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test} from 'vitest';
 
@@ -35,5 +35,22 @@ test('renders a conversation record from the generated API contract', async () =
   expect(screen.getByText('quiet-otter')).toBeVisible();
   expect(screen.getByRole('heading', {name: 'Your contribution'})).toBeVisible();
   expect(screen.getByRole('link', {name: 'Continue participating'}))
+    .toHaveAttribute('href', '/c/community-strategy');
+});
+
+test('joins a conversation through the typed command', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/join']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: 'Community strategy'})).toBeVisible();
+  fireEvent.click(await screen.findByRole('button', {name: 'Join conversation'}));
+
+  expect(await screen.findByText(/You’ll participate as/)).toBeVisible();
+  expect(screen.getByRole('link', {name: 'Enter the conversation'}))
     .toHaveAttribute('href', '/c/community-strategy');
 });

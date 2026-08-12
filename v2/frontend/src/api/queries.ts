@@ -1,5 +1,6 @@
 import {queryOptions} from '@tanstack/react-query';
 
+import type {components} from './schema';
 import {api, requireApiData} from './client';
 
 export type ConversationSpace = 'real' | 'demo';
@@ -29,3 +30,27 @@ export const conversationAboutQuery = (slug: string) => queryOptions({
   ).data,
   staleTime: 15_000,
 });
+
+export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
+  queryKey: ['pseudonym-suggestions', slug],
+  queryFn: async () => (
+    await requireApiData(api.GET('/conversations/{slug}/pseudonym-suggestions', {
+      params: {path: {slug}},
+    }))
+  ).data,
+  staleTime: 0,
+});
+
+export async function createParticipation(
+  slug: string,
+  body: components['schemas']['CreateParticipationRequest'],
+  csrfToken: string,
+) {
+  return (
+    await requireApiData(api.POST('/conversations/{slug}/participation', {
+      params: {path: {slug}},
+      body,
+      headers: {'X-CSRFToken': csrfToken},
+    }))
+  ).data;
+}
