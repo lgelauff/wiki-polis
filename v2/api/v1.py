@@ -16,6 +16,13 @@ from db import Participant
 from services.participations import (EligibilityDenied, InvalidPseudonym,
                                      PseudonymUnavailable)
 from services.explore import ExploreUpstreamError
+from services.idempotency import (CommandOutcomeUnknown, IdempotencyConflict,
+                                  InvalidIdempotencyKey,
+                                  validate_idempotency_key)
+from services.statements import (DerivativeSimilarityTooLow,
+                                 StatementPreparationUnavailable,
+                                 StatementQuotaExceeded,
+                                 UnknownParentStatement)
 
 _OPENAPI_SPEC = json.loads(
     (Path(__file__).resolve().parents[1] / 'openapi.json').read_text(encoding='utf-8')
@@ -45,6 +52,7 @@ def create_api_v1_blueprint(
     resolve_pseudonym_suggestions: Callable[[str], list[str]],
     resolve_explore_state: Callable[[str], dict],
     submit_explore_vote: Callable[[str, int, str], dict],
+    submit_statement: Callable[[str, dict, str], tuple[dict, int]],
 ) -> Blueprint:
     """Build API v1 with explicit dependencies on the current auth context."""
     bp = Blueprint('api_v1', __name__, url_prefix='/api/v1')
@@ -198,6 +206,91 @@ def create_api_v1_blueprint(
                 502,
             )
         return _no_store(jsonify({'data': data}))
+
+    @bp.post('/conversations/<slug>/statements')
+    def create_statement(slug: str):
+        body = request.get_json(silent=True)
+        fields = {}
+        if not isinstance(body, dict):
+            return error_response(
+                'validation_failed', 'A JSON request body is required.', 400,
+            )
+        unknown = sorted(set(body) - {'text', 'derivedFromStatementId'})
+        if unknown:
+            fields['_request'] = [
+                f"Unknown field{'s' if len(unknown) > 1 else ''}: {', '.join(unknown)}.",
+            ]
+        text_value = body.get('text')
+        if not isinstance(text_value, str):
+            fields['text'] = ['Write a statement.']
+        elif not text_value.strip() or len(text_value.strip()) > 280:
+            fields['text'] = ['Write between 1 and 280 characters.']
+        parent = body.get('derivedFromStatementId')
+        if parent is not None and (not isinstance(parent, int) or isinstance(parent, bool)):
+            fields['derivedFromStatementId'] = ['Use a statement identifier.']
+        if fields:
+            return error_response(
+                'validation_failed', 'Check the highlighted fields.', 400,
+                details={'fields': fields},
+            )
+        idempotency_key = request.headers.get('Idempotency-Key', '')
+        try:
+            validate_idempotency_key(idempotency_key)
+            data, status = submit_statement(slug, body, idempotency_key)
+        except InvalidIdempotencyKey:
+            return error_response(
+                'invalid_idempotency_key',
+                'Provide an Idempotency-Key of 8 to 128 safe characters.',
+                400,
+            )
+        except IdempotencyConflict:
+            return error_response(
+                'idempotency_conflict',
+                'That Idempotency-Key was already used for another request.',
+                409,
+            )
+        except CommandOutcomeUnknown:
+            return error_response(
+                'command_outcome_unknown',
+                'The original statement submission may still have succeeded. Do not retry with a new key.',
+                409,
+            )
+        except StatementQuotaExceeded:
+            return error_response(
+                'statement_quota_exceeded',
+                'Your new-statement quota is exhausted.',
+                409,
+            )
+        except UnknownParentStatement:
+            return error_response(
+                'unknown_parent_statement',
+                'The original statement is not available in this conversation.',
+                400,
+            )
+        except DerivativeSimilarityTooLow as exc:
+            return error_response(
+                'derivative_similarity_too_low',
+                'This looks like a different claim. Keep it closer to the original or submit a new statement.',
+                409,
+                details={
+                    'model': exc.model,
+                    'similarity': exc.similarity,
+                    'threshold': exc.threshold,
+                },
+            )
+        except StatementPreparationUnavailable:
+            return error_response(
+                'upstream_unavailable',
+                'The voting service is temporarily unavailable. It is safe to retry with the same key.',
+                502,
+            )
+        except ExploreUpstreamError:
+            return error_response(
+                'command_outcome_unknown',
+                'The statement may have reached the voting service. Do not retry with a new key.',
+                502,
+            )
+        return _no_store(jsonify({'data': data})), status
 
     return bp
 

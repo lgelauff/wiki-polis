@@ -129,6 +129,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a new or derivative statement during Explore
+         * @description A durable idempotency receipt prevents duplicate upstream statements. Reusing a completed key with the same body returns HTTP 200; a pending receipt reports an unknown outcome.
+         */
+        post: operations["createStatement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -289,6 +309,23 @@ export interface components {
             statementId: number;
             /** @enum {string} */
             choice: "agree" | "pass" | "disagree";
+            links: {
+                explore: string;
+            };
+        };
+        CreateStatementRequest: {
+            text: string;
+            derivedFromStatementId?: number | null;
+        };
+        StatementCreationResponse: {
+            data: components["schemas"]["StatementCreationReceipt"];
+        };
+        StatementCreationReceipt: {
+            statementId: number;
+            /** @enum {string} */
+            kind: "new" | "derivative";
+            derivedFromStatementId: number | null;
+            newStatementQuotaRemaining: number;
             links: {
                 explore: string;
             };
@@ -694,6 +731,88 @@ export interface operations {
                 };
             };
             /** @description Voting service unavailable */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createStatement: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStatementRequest"];
+            };
+        };
+        responses: {
+            /** @description Completed command replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatementCreationResponse"];
+                };
+            };
+            /** @description Statement created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatementCreationResponse"];
+                };
+            };
+            /** @description Invalid request, idempotency key, or parent statement */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation access denied or participant banned */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Quota, derivative similarity, idempotency conflict, or unknown outcome */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The upstream command outcome is unknown */
             502: {
                 headers: {
                     [name: string]: unknown;

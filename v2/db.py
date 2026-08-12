@@ -210,6 +210,47 @@ class ConversationInvite(db.Model):
     conversation = db.relationship('Conversation', back_populates='invites')
 
 
+class CommandReceipt(db.Model):
+    """Durable idempotency record for non-idempotent browser commands.
+
+    A pending row blocks blind retries when an upstream POST may have succeeded
+    without a response. Completed rows replay the original privacy-safe result.
+    """
+    __tablename__ = 'command_receipts'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'participant_id', 'conversation_id', 'command', 'idempotency_key',
+            name='uq_command_receipt_scope_key',
+        ),
+        db.CheckConstraint(
+            "(state = 'pending' AND response IS NULL AND completed_at IS NULL) "
+            "OR (state = 'completed' AND response IS NOT NULL "
+            "AND completed_at IS NOT NULL)",
+            name='ck_command_receipt_lifecycle',
+        ),
+        db.Index('ix_command_receipts_created_at', 'created_at'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    participant_id = db.Column(
+        db.Integer, db.ForeignKey('participants.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    conversation_id = db.Column(
+        db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    command = db.Column(db.String(64), nullable=False)
+    idempotency_key = db.Column(db.String(128), nullable=False)
+    request_hash = db.Column(db.String(64), nullable=False)
+    state = db.Column(db.String(16), nullable=False, default='pending')
+    response = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(
+        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc),
+    )
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+
 class AdminRole(db.Model):
     __tablename__  = 'admin_roles'
     __table_args__ = (db.UniqueConstraint('participant_id', 'conversation_id', 'role'),)

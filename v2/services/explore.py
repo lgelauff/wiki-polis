@@ -115,6 +115,36 @@ class ExploreGateway:
                 f'Particiapi vote failed with HTTP {response.status_code}.',
             )
 
+    def submit_statement(self, conversation_id: str, text: str) -> int:
+        """Create one upstream statement. Callers must provide idempotency."""
+        self.ensure_session()
+        try:
+            response = self.transport.post(
+                f'{self.base_url}/api/conversations/{conversation_id}/statements/',
+                cookies=self._cookies(),
+                headers={
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': self.state.csrf_token,
+                },
+                json={'text': text},
+                timeout=10,
+            )
+        except requests.RequestException as exc:
+            raise ExploreUpstreamError(
+                'The statement outcome is unknown; do not retry with a new key.',
+            ) from exc
+        if response.status_code != 201:
+            raise ExploreUpstreamError(
+                f'Particiapi statement outcome is unknown after HTTP {response.status_code}.',
+            )
+        payload = response.json() if response.content else {}
+        statement_id = payload.get('id') if isinstance(payload, dict) else None
+        if not isinstance(statement_id, int):
+            raise ExploreUpstreamError(
+                'Particiapi created a statement but returned no usable identifier.',
+            )
+        return statement_id
+
 
 def normalise_statements(payload: dict) -> list[dict]:
     statements = []

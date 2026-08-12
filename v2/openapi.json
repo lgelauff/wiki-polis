@@ -305,6 +305,65 @@
         }
       }
     },
+    "/conversations/{slug}/statements": {
+      "post": {
+        "operationId": "createStatement",
+        "summary": "Submit a new or derivative statement during Explore",
+        "description": "A durable idempotency receipt prevents duplicate upstream statements. Reusing a completed key with the same body returns HTTP 200; a pending receipt reports an unknown outcome.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "minLength": 1}
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {"type": "string", "minLength": 8, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/CreateStatementRequest"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed command replay",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StatementCreationResponse"}}}
+          },
+          "201": {
+            "description": "Statement created",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StatementCreationResponse"}}}
+          },
+          "400": {
+            "description": "Invalid request, idempotency key, or parent statement",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "403": {
+            "description": "Conversation access denied or participant banned",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "409": {
+            "description": "Quota, derivative similarity, idempotency conflict, or unknown outcome",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "502": {
+            "description": "The upstream command outcome is unknown",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -611,6 +670,40 @@
         "properties": {
           "statementId": {"type": "integer", "minimum": 0},
           "choice": {"type": "string", "enum": ["agree", "pass", "disagree"]},
+          "links": {
+            "type": "object",
+            "required": ["explore"],
+            "additionalProperties": false,
+            "properties": {"explore": {"type": "string"}}
+          }
+        }
+      },
+      "CreateStatementRequest": {
+        "type": "object",
+        "required": ["text"],
+        "additionalProperties": false,
+        "properties": {
+          "text": {"type": "string", "minLength": 1, "maxLength": 280},
+          "derivedFromStatementId": {"type": ["integer", "null"], "minimum": 0}
+        }
+      },
+      "StatementCreationResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {
+          "data": {"$ref": "#/components/schemas/StatementCreationReceipt"}
+        }
+      },
+      "StatementCreationReceipt": {
+        "type": "object",
+        "required": ["statementId", "kind", "derivedFromStatementId", "newStatementQuotaRemaining", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "statementId": {"type": "integer", "minimum": 0},
+          "kind": {"type": "string", "enum": ["new", "derivative"]},
+          "derivedFromStatementId": {"type": ["integer", "null"], "minimum": 0},
+          "newStatementQuotaRemaining": {"type": "integer", "minimum": 0},
           "links": {
             "type": "object",
             "required": ["explore"],

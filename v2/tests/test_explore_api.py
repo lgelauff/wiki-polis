@@ -3,7 +3,10 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from db import Participation, db
+import requests
+
+from db import (CommandReceipt, Participation, StatementProvenance,
+                StatementSimilarityScore, db)
 from services.explore import build_explore_state
 
 
@@ -227,3 +230,169 @@ def test_openapi_documents_idempotent_explore_vote(client):
     assert spec['paths']['/conversations/{slug}/explore']['get'][
         'operationId'
     ] == 'getExploreState'
+
+
+def _store_upstream_session(client, conversation):
+    with client.session_transaction() as browser_session:
+        browser_session['particiapi_api_sessions'] = {
+            str(conversation.id): {
+                'cookie': 'existing-cookie', 'csrfToken': 'existing-csrf',
+            },
+        }
+
+
+def test_statement_command_creates_once_and_replays_completed_receipt(
+    auth_client, participant, conversation,
+):
+    participation = _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+
+    with patch(
+        'app.polis_http.post', return_value=_response({'id': 41}, status=201),
+    ) as post:
+        first = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': '  A clearer shared claim.  '},
+            headers={'Idempotency-Key': 'statement-key-41'},
+        )
+        replay = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'A clearer shared claim.'},
+            headers={'Idempotency-Key': 'statement-key-41'},
+        )
+
+    assert first.status_code == 201
+    assert replay.status_code == 200
+    assert first.get_json() == replay.get_json()
+    assert first.get_json()['data'] == {
+        'statementId': 41,
+        'kind': 'new',
+        'derivedFromStatementId': None,
+        'newStatementQuotaRemaining': 2,
+        'links': {'explore': '/api/v1/conversations/test-conv/explore'},
+    }
+    post.assert_called_once()
+    assert post.call_args.kwargs['json'] == {'text': 'A clearer shared claim.'}
+    db.session.refresh(participation)
+    assert participation.new_stmt_ids == [41]
+    receipt = CommandReceipt.query.one()
+    assert receipt.state == 'completed'
+    assert receipt.response['statementId'] == 41
+
+
+def test_statement_command_rejects_key_reuse_with_changed_body(
+    auth_client, participant, conversation,
+):
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    with patch(
+        'app.polis_http.post', return_value=_response({'id': 42}, status=201),
+    ) as post:
+        auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'First claim'},
+            headers={'Idempotency-Key': 'statement-key-42'},
+        )
+        conflict = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'Changed claim'},
+            headers={'Idempotency-Key': 'statement-key-42'},
+        )
+
+    assert conflict.status_code == 409
+    assert conflict.get_json()['error']['code'] == 'idempotency_conflict'
+    post.assert_called_once()
+
+
+def test_statement_command_blocks_retry_after_ambiguous_upstream_failure(
+    auth_client, participant, conversation,
+):
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    with patch('app.polis_http.post', side_effect=requests.Timeout) as post:
+        failed = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'Possibly accepted claim'},
+            headers={'Idempotency-Key': 'statement-key-43'},
+        )
+        retry = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'Possibly accepted claim'},
+            headers={'Idempotency-Key': 'statement-key-43'},
+        )
+
+    assert failed.status_code == 502
+    assert retry.status_code == 409
+    assert failed.get_json()['error']['code'] == 'command_outcome_unknown'
+    assert retry.get_json()['error']['code'] == 'command_outcome_unknown'
+    post.assert_called_once()
+    assert CommandReceipt.query.one().state == 'pending'
+
+
+def test_statement_command_releases_receipt_when_session_bootstrap_fails(
+    auth_client, participant, conversation,
+):
+    _join(participant, conversation)
+    with patch(
+        'app.polis_http.post', return_value=_response({}, status=503),
+    ):
+        response = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'Safe to retry claim'},
+            headers={'Idempotency-Key': 'statement-key-44'},
+        )
+
+    assert response.status_code == 502
+    assert response.get_json()['error']['code'] == 'upstream_unavailable'
+    assert CommandReceipt.query.count() == 0
+
+
+def test_derivative_statement_records_provenance_without_consuming_quota(
+    auth_client, participant, conversation,
+):
+    participation = _join(participant, conversation)
+    participation.new_stmt_ids = [5]
+    db.session.commit()
+    _store_upstream_session(auth_client, conversation)
+
+    with (
+        patch('app._statement_text_map', return_value={7: 'Original claim'}),
+        patch('app._statement_similarity_scores', return_value={
+            'char': 0.88, 'semantic-v1': 0.91,
+        }),
+        patch(
+            'app.polis_http.post', return_value=_response({'id': 45}, status=201),
+        ),
+    ):
+        response = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={
+                'text': 'Clearer original claim',
+                'derivedFromStatementId': 7,
+            },
+            headers={'Idempotency-Key': 'statement-key-45'},
+        )
+
+    assert response.status_code == 201
+    assert response.get_json()['data']['kind'] == 'derivative'
+    provenance = StatementProvenance.query.one()
+    assert (provenance.polis_statement_id, provenance.derived_from_tid) == (45, 7)
+    assert {
+        score.model: score.value
+        for score in StatementSimilarityScore.query.all()
+    } == {'char': 0.88, 'semantic-v1': 0.91}
+    db.session.refresh(participation)
+    assert participation.new_stmt_ids == [5]
+
+
+def test_openapi_documents_idempotent_statement_command(client):
+    spec = client.get('/api/v1/openapi.json').get_json()
+    operation = spec['paths']['/conversations/{slug}/statements']['post']
+
+    assert operation['operationId'] == 'createStatement'
+    idempotency = next(
+        parameter for parameter in operation['parameters']
+        if parameter['name'] == 'Idempotency-Key'
+    )
+    assert idempotency['required'] is True
+    assert {'200', '201', '409', '502'} <= set(operation['responses'])

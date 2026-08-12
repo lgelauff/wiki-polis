@@ -56,7 +56,14 @@ from services.conversation_lanes import (build_conversation_lane,
 from services.participations import (EligibilityDenied, InvalidPseudonym,
                                      PseudonymUnavailable, join_conversation)
 from services.explore import (ExploreGateway, ParticiapiSessionState,
-                              build_explore_state, normalise_statements)
+                              ExploreUpstreamError, build_explore_state,
+                              normalise_statements)
+from services.idempotency import (complete_command, release_reservation,
+                                  request_digest, reserve_command)
+from services.statements import (DerivativeSimilarityTooLow,
+                                 StatementPreparationUnavailable,
+                                 StatementQuotaExceeded,
+                                 UnknownParentStatement)
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -1841,6 +1848,118 @@ def _explore_vote_api_payload(slug: str, statement_id: int, choice: str) -> dict
                 'explore': url_for('api_v1.get_explore_state', slug=conv.slug),
             },
         }
+    finally:
+        _save_explore_gateway_state(conv, gateway, states)
+
+
+def _statement_api_payload(
+    slug: str, body: dict, idempotency_key: str,
+) -> tuple[dict, int]:
+    conv, participant, participation = _require_explore_api_context(slug)
+    text_value = body['text'].strip()
+    if not text_value or len(text_value) > 280:
+        abort(400, description='Statement text must contain 1 to 280 characters.')
+    derived_from = body.get('derivedFromStatementId')
+    config = conv.argument_vote_data or {}
+    new_statement_max = int(config.get('new_stmt_max', 3))
+    if derived_from is None and len(participation.new_stmt_ids or []) >= new_statement_max:
+        raise StatementQuotaExceeded()
+
+    parent_text = None
+    scores = None
+    if derived_from is not None:
+        try:
+            parent_text = _statement_text_map(conv.polis_id).get(derived_from)
+        except PolisParticipantError as exc:
+            raise ExploreUpstreamError('Could not load the original statement.') from exc
+        if parent_text is None:
+            raise UnknownParentStatement(derived_from)
+        scores = _statement_similarity_scores(text_value, parent_text)
+        model, score = _preferred_similarity_score(scores)
+        threshold = _derivative_similarity_threshold()
+        if threshold and score is not None and score < threshold:
+            raise DerivativeSimilarityTooLow(
+                model=model, similarity=score, threshold=threshold,
+            )
+
+    canonical_request = {
+        'text': text_value,
+        'derivedFromStatementId': derived_from,
+    }
+    reservation = reserve_command(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        command='statement.create',
+        idempotency_key=idempotency_key,
+        request_hash=request_digest(canonical_request),
+    )
+    if reservation.replay is not None:
+        return reservation.replay, 200
+
+    gateway, states = _explore_gateway(conv, participant)
+    try:
+        gateway.ensure_session()
+    except ExploreUpstreamError as exc:
+        # No statement POST has occurred, so a retry with the same key is safe.
+        release_reservation(reservation.receipt)
+        _save_explore_gateway_state(conv, gateway, states)
+        raise StatementPreparationUnavailable() from exc
+    try:
+        # Bootstrap outside the participation-row lock: only the non-idempotent
+        # POST and its local bookkeeping need serialization.
+        participation = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+        ).populate_existing().with_for_update().one()
+        if (derived_from is None
+                and len(participation.new_stmt_ids or []) >= new_statement_max):
+            release_reservation(reservation.receipt)
+            raise StatementQuotaExceeded()
+
+        statement_id = gateway.submit_statement(conv.polis_id, text_value)
+        if derived_from is None:
+            ids = list(participation.new_stmt_ids or [])
+            ids.append(statement_id)
+            participation.new_stmt_ids = ids
+            kind = 'new'
+        else:
+            provenance = StatementProvenance(
+                conversation_id=conv.id,
+                polis_statement_id=statement_id,
+                derived_from_tid=derived_from,
+                provenance_type='derivative',
+                link_method='declared',
+            )
+            db.session.add(provenance)
+            db.session.flush()
+            for name, value in (scores or {}).items():
+                db.session.add(StatementSimilarityScore(
+                    provenance_id=provenance.id,
+                    model=name,
+                    value=value,
+                ))
+            kind = 'derivative'
+        response = {
+            'statementId': statement_id,
+            'kind': kind,
+            'derivedFromStatementId': derived_from,
+            'newStatementQuotaRemaining': max(
+                0,
+                new_statement_max - len(participation.new_stmt_ids or []),
+            ),
+            'links': {
+                'explore': url_for('api_v1.get_explore_state', slug=conv.slug),
+            },
+        }
+        _touch_last_engagement(participation)
+        complete_command(reservation.receipt, response)
+        db.session.commit()
+        return response, 201
+    except ExploreUpstreamError:
+        db.session.rollback()
+        # The committed pending receipt survives the rollback and blocks a blind
+        # retry after an ambiguous upstream POST.
+        raise
     finally:
         _save_explore_gateway_state(conv, gateway, states)
 
@@ -5418,6 +5537,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_pseudonym_suggestions=_pseudonym_suggestions_api_payload,
         resolve_explore_state=_explore_api_payload,
         submit_explore_vote=_explore_vote_api_payload,
+        submit_statement=_statement_api_payload,
     ))
     register_api_error_handlers(app)
     csrf.exempt(proxy_bp)
