@@ -145,3 +145,112 @@ def test_openapi_documents_argument_mapping_read(client):
     assert operation['operationId'] == 'getArgumentMapping'
     argument = spec['components']['schemas']['ArgumentItem']['properties']
     assert 'importanceVoteCount' not in argument
+
+
+def test_argument_submission_is_idempotent_for_same_body_and_conflicts_for_edit(
+    auth_client, participant,
+):
+    _conversation, _participation, featured, _arguments = _argument_fixture(participant)
+    path = (
+        f'/api/v1/conversations/argument-api/featured-statements/'
+        f'{featured.id}/arguments'
+    )
+
+    first = auth_client.post(path, json={
+        'side': 'pro', 'body': '  Shared maintenance reduces duplicated work.  ',
+    })
+    replay = auth_client.post(path, json={
+        'side': 'pro', 'body': 'Shared maintenance reduces duplicated work.',
+    })
+    conflict = auth_client.post(path, json={
+        'side': 'pro', 'body': 'A different replacement argument.',
+    })
+
+    assert first.status_code == 201
+    assert replay.status_code == 200
+    assert first.get_json() == replay.get_json()
+    assert first.get_json()['data']['argument']['body'] == (
+        'Shared maintenance reduces duplicated work.'
+    )
+    assert conflict.status_code == 409
+    assert conflict.get_json()['error']['code'] == 'argument_already_submitted'
+    assert Argument.query.filter_by(
+        featured_statement_id=featured.id,
+        proposer_pseudonym='careful-heron',
+        side='pro',
+    ).count() == 1
+
+
+def test_argument_skip_put_is_idempotent(auth_client, participant):
+    _conversation, _participation, featured, _arguments = _argument_fixture(participant)
+    path = (
+        f'/api/v1/conversations/argument-api/featured-statements/'
+        f'{featured.id}/contributions/con/skip'
+    )
+
+    first = auth_client.put(path)
+    replay = auth_client.put(path)
+
+    assert first.status_code == replay.status_code == 200
+    assert first.get_json()['data']['status'] == 'skipped'
+    assert ArgumentSideState.query.filter_by(
+        participant_id=participant.id,
+        featured_statement_id=featured.id,
+        side='con',
+    ).count() == 1
+
+
+def test_argument_priority_put_enforces_budget_and_allows_unselect(
+    auth_client, participant,
+):
+    _conversation, _participation, _featured, arguments = _argument_fixture(participant)
+
+    selected = auth_client.put(
+        f'/api/v1/conversations/argument-api/arguments/{arguments[1].id}/priority',
+        json={'selected': True},
+    )
+    over_budget = auth_client.put(
+        f'/api/v1/conversations/argument-api/arguments/{arguments[2].id}/priority',
+        json={'selected': True},
+    )
+    unselected = auth_client.put(
+        f'/api/v1/conversations/argument-api/arguments/{arguments[0].id}/priority',
+        json={'selected': False},
+    )
+
+    assert selected.status_code == 200
+    assert selected.get_json()['data']['selectedCount'] == 2
+    assert over_budget.status_code == 409
+    assert over_budget.get_json()['error']['code'] == 'priority_budget_exceeded'
+    assert unselected.status_code == 200
+    assert unselected.get_json()['data']['selectedCount'] == 1
+
+
+def test_argument_priority_put_enforces_minimum_visible_volume(
+    auth_client, participant,
+):
+    _conversation, _participation, _featured, arguments = _argument_fixture(participant)
+    arguments[2].hidden = True
+    db.session.commit()
+
+    response = auth_client.put(
+        f'/api/v1/conversations/argument-api/arguments/{arguments[1].id}/priority',
+        json={'selected': True},
+    )
+
+    assert response.status_code == 409
+    assert response.get_json()['error']['code'] == 'prioritization_unavailable'
+
+
+def test_openapi_documents_argument_commands(client):
+    spec = client.get('/api/v1/openapi.json').get_json()
+
+    assert spec['paths'][
+        '/conversations/{slug}/featured-statements/{featuredStatementId}/arguments'
+    ]['post']['operationId'] == 'createArgument'
+    assert spec['paths'][
+        '/conversations/{slug}/featured-statements/{featuredStatementId}/contributions/{side}/skip'
+    ]['put']['operationId'] == 'putArgumentContributionSkip'
+    assert spec['paths'][
+        '/conversations/{slug}/arguments/{argumentId}/priority'
+    ]['put']['operationId'] == 'putArgumentPriority'

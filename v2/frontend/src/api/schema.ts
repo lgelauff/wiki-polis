@@ -129,6 +129,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/featured-statements/{featuredStatementId}/arguments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit one argument for a featured-statement side
+         * @description Idempotent for an identical replay. One contribution per participant, featured statement, and side is enforced by the database.
+         */
+        post: operations["createArgument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{slug}/featured-statements/{featuredStatementId}/contributions/{side}/skip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Explicitly skip one argument-contribution side
+         * @description Idempotent state replacement; repeated PUT requests keep the side skipped.
+         */
+        put: operations["putArgumentContributionSkip"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{slug}/arguments/{argumentId}/priority": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set whether an argument is one of the participant's priorities
+         * @description Idempotent state replacement serialized per participant, featured statement, and side.
+         */
+        put: operations["putArgumentPriority"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{slug}/statements/{statementId}/vote": {
         parameters: {
             query?: never;
@@ -410,6 +470,50 @@ export interface components {
             about: string;
             conversation: string;
             explore?: string;
+        };
+        CreateArgumentRequest: {
+            /** @enum {string} */
+            side: "pro" | "con";
+            body: string;
+        };
+        ArgumentCommandLinks: {
+            arguments: string;
+        };
+        ArgumentSubmissionResponse: {
+            data: components["schemas"]["ArgumentSubmissionReceipt"];
+        };
+        ArgumentSubmissionReceipt: {
+            featuredStatementId: number;
+            /** @enum {string} */
+            side: "pro" | "con";
+            /** @constant */
+            status: "submitted";
+            argument: components["schemas"]["ArgumentItem"];
+            links: components["schemas"]["ArgumentCommandLinks"];
+        };
+        ArgumentSkipResponse: {
+            data: components["schemas"]["ArgumentSkipReceipt"];
+        };
+        ArgumentSkipReceipt: {
+            featuredStatementId: number;
+            /** @enum {string} */
+            side: "pro" | "con";
+            /** @constant */
+            status: "skipped";
+            links: components["schemas"]["ArgumentCommandLinks"];
+        };
+        ArgumentPriorityRequest: {
+            selected: boolean;
+        };
+        ArgumentPriorityResponse: {
+            data: components["schemas"]["ArgumentPriorityReceipt"];
+        };
+        ArgumentPriorityReceipt: {
+            argumentId: number;
+            selected: boolean;
+            selectedCount: number;
+            selectionBudget: number;
+            links: components["schemas"]["ArgumentCommandLinks"];
         };
         CreateStatementRequest: {
             text: string;
@@ -816,6 +920,228 @@ export interface operations {
                 };
             };
             /** @description Participation is missing or argument mapping is not open */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createArgument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                featuredStatementId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateArgumentRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing identical argument returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArgumentSubmissionResponse"];
+                };
+            };
+            /** @description Argument created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArgumentSubmissionResponse"];
+                };
+            };
+            /** @description Invalid argument */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or featured statement not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Phase conflict or a different argument already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putArgumentContributionSkip: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                featuredStatementId: number;
+                side: "pro" | "con";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contribution side is skipped */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArgumentSkipResponse"];
+                };
+            };
+            /** @description Invalid side */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or featured statement not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Phase conflict or the side already has an argument */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putArgumentPriority: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                argumentId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArgumentPriorityRequest"];
+            };
+        };
+        responses: {
+            /** @description Priority state stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArgumentPriorityResponse"];
+                };
+            };
+            /** @description Invalid selection state */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or argument not found/available */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Contribution gate, volume gate, budget, or phase conflict */
             409: {
                 headers: {
                     [name: string]: unknown;

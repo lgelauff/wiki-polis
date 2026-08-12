@@ -59,6 +59,12 @@ from services.explore import (ExploreGateway, ParticiapiSessionState,
                               ExploreUpstreamError, build_explore_state,
                               normalise_statements)
 from services.argument_mapping import build_argument_mapping_state
+from services.argument_commands import (
+    ContributionGateClosed, ExistingArgumentConflict, HiddenArgument,
+    InvalidArgument, PrioritizationUnavailable, PriorityBudgetExceeded,
+    set_argument_priority, skip_argument_contribution,
+    submit_argument as submit_argument_command,
+)
 from services.idempotency import (complete_command, release_reservation,
                                   request_digest, reserve_command)
 from services.statements import (DerivativeSimilarityTooLow,
@@ -1891,6 +1897,79 @@ def _require_argument_api_context(slug: str):
         abort(409, description='Argument mapping is not open.')
     _abort_if_banned(conv, participant)
     return conv, participant, participation
+
+
+def _argument_links(slug: str) -> dict:
+    return {
+        'arguments': url_for('api_v1.get_argument_mapping', slug=slug),
+    }
+
+
+def _submit_argument_api_payload(
+    slug: str, featured_statement_id: int, body: dict,
+) -> tuple[dict, int]:
+    conv, _participant, participation = _require_argument_api_context(slug)
+    result = submit_argument_command(
+        conversation=conv,
+        participation=participation,
+        featured_statement_id=featured_statement_id,
+        side=body['side'],
+        body=body['body'],
+        touch=_touch_last_engagement,
+    )
+    argument = result.argument
+    return ({
+        'featuredStatementId': featured_statement_id,
+        'side': argument.side,
+        'status': 'submitted',
+        'argument': {
+            'id': argument.id,
+            'body': argument.body,
+            'own': True,
+            'selected': False,
+            'capabilities': {'prioritize': False, 'flag': False},
+        },
+        'links': _argument_links(slug),
+    }, 201 if result.created else 200)
+
+
+def _skip_argument_api_payload(
+    slug: str, featured_statement_id: int, side: str,
+) -> dict:
+    conv, _participant, participation = _require_argument_api_context(slug)
+    skip_argument_contribution(
+        conversation=conv,
+        participation=participation,
+        featured_statement_id=featured_statement_id,
+        side=side,
+        touch=_touch_last_engagement,
+    )
+    return {
+        'featuredStatementId': featured_statement_id,
+        'side': side,
+        'status': 'skipped',
+        'links': _argument_links(slug),
+    }
+
+
+def _set_argument_priority_api_payload(
+    slug: str, argument_id: int, selected: bool,
+) -> dict:
+    conv, _participant, participation = _require_argument_api_context(slug)
+    _vote, selected_count, budget = set_argument_priority(
+        conversation=conv,
+        participation=participation,
+        argument_id=argument_id,
+        selected=selected,
+        touch=_touch_last_engagement,
+    )
+    return {
+        'argumentId': argument_id,
+        'selected': selected,
+        'selectedCount': selected_count,
+        'selectionBudget': budget,
+        'links': _argument_links(slug),
+    }
 
 
 def _statement_api_payload(
@@ -4567,65 +4646,42 @@ def argument_submit_legacy(slug, fs_id):
 @limiter.limit('20 per minute')
 def argument_submit(slug, fs_id):
     conv, part = _require_arg_participation(slug)
-    FeaturedStatement.query.filter_by(
-        id=fs_id, conversation_id=conv.id).first_or_404()
     side = request.form.get('side', '').strip()
-    body = nh3.clean(request.form.get('body', '').strip(), tags=frozenset())
-    if side not in ('pro', 'con') or not body or len(body) > 280:
+    body = request.form.get('body', '')
+    try:
+        result = submit_argument_command(
+            conversation=conv,
+            participation=part,
+            featured_statement_id=fs_id,
+            side=side,
+            body=body,
+            touch=_touch_last_engagement,
+        )
+    except InvalidArgument:
         abort(400)
-
-    existing = Argument.query.filter_by(
-        proposer_pseudonym=part.pseudonym,
-        featured_statement_id=fs_id,
-        side=side,
-    ).first()
-    if existing:
+    except ExistingArgumentConflict:
+        # Preserve the legacy form's first-write-wins behavior. The API returns
+        # a typed conflict so SPA clients never mistake changed text for a replay.
+        argument = Argument.query.filter_by(
+            proposer_pseudonym=part.pseudonym,
+            featured_statement_id=fs_id,
+            side=side,
+        ).one()
         if request.headers.get('X-Requested-With') == 'fetch':
             return jsonify({
                 'ok': True,
-                'id': existing.id,
-                'body': existing.body,
-                'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=existing.id),
-                'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=existing.id),
+                'id': argument.id,
+                'body': argument.body,
+                'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=argument.id),
+                'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=argument.id),
             })
         return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
-
-    arg = Argument(
-        featured_statement_id=fs_id,
-        proposer_pseudonym=part.pseudonym,
-        body=body,
-        side=side,
-    )
-    db.session.add(arg)
-    db.session.flush()   # get arg.id before commit
-
-    # Insert new argument at a random position in this participant's display order.
-    # Create ArgumentSideState now if the participant hasn't visited the page yet.
-    state = ArgumentSideState.query.filter_by(
-        participant_id=part.participant_id,
-        featured_statement_id=fs_id,
-        side=side,
-    ).first()
-    if state is None:
-        state = ArgumentSideState(
-            participant_id=part.participant_id,
-            featured_statement_id=fs_id,
-            side=side,
-            argument_order=[],
-        )
-        db.session.add(state)
-        db.session.flush()
-    order = list(state.argument_order)
-    order.insert(random.randint(0, len(order)), arg.id)
-    state.argument_order = order
-
-    _touch_last_engagement(part)
-    db.session.commit()
+    arg = result.argument
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({
             'ok': True,
             'id': arg.id,
-            'body': body,
+            'body': arg.body,
             'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=arg.id),
             'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=arg.id),
         })
@@ -4641,32 +4697,18 @@ def argument_skip_legacy(slug, fs_id, side):
 @login_or_demo_required
 def argument_skip(slug, fs_id, side):
     conv, part = _require_arg_participation(slug)
-    FeaturedStatement.query.filter_by(
-        id=fs_id, conversation_id=conv.id).first_or_404()
-    if side not in ('pro', 'con'):
-        abort(400)
-
-    state = ArgumentSideState.query.filter_by(
-        participant_id=part.participant_id,
-        featured_statement_id=fs_id,
-        side=side,
-    ).first()
-    if state is None:
-        state = ArgumentSideState(
-            participant_id=part.participant_id,
+    try:
+        skip_argument_contribution(
+            conversation=conv,
+            participation=part,
             featured_statement_id=fs_id,
             side=side,
-            skipped=True,
+            touch=_touch_last_engagement,
         )
-        db.session.add(state)
-        _touch_last_engagement(part)
-        db.session.commit()
-    elif not state.skipped:
-        state.skipped = True
-        _touch_last_engagement(part)
-        db.session.commit()
-    else:
-        _touch_last_engagement(part, commit=True)
+    except InvalidArgument:
+        abort(400)
+    except ExistingArgumentConflict:
+        pass
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
@@ -4675,59 +4717,31 @@ def argument_skip(slug, fs_id, side):
 @login_or_demo_required
 def argument_vote(slug, arg_id):
     conv, part = _require_arg_participation(slug)
-    arg = Argument.query.filter_by(id=arg_id).first_or_404()
-    fs  = FeaturedStatement.query.filter_by(
-        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-
-    # Gate: participant must have proposed or skipped both sides.
-    pro_state = ArgumentSideState.query.filter_by(
-        participant_id=part.participant_id,
-        featured_statement_id=fs.id, side='pro').first()
-    con_state = ArgumentSideState.query.filter_by(
-        participant_id=part.participant_id,
-        featured_statement_id=fs.id, side='con').first()
-    pro_proposed = Argument.query.filter_by(
-        proposer_pseudonym=part.pseudonym,
-        featured_statement_id=fs.id, side='pro').first()
-    con_proposed = Argument.query.filter_by(
-        proposer_pseudonym=part.pseudonym,
-        featured_statement_id=fs.id, side='con').first()
-    pro_gate = bool(pro_proposed or (pro_state and pro_state.skipped))
-    con_gate = bool(con_proposed or (con_state and con_state.skipped))
     is_ajax = request.headers.get('X-Requested-With') == 'fetch'
-    if not (pro_gate and con_gate):
+    try:
+        set_argument_priority(
+            conversation=conv,
+            participation=part,
+            argument_id=arg_id,
+            selected=True,
+            touch=_touch_last_engagement,
+        )
+    except ContributionGateClosed:
         if is_ajax:
             return jsonify({'ok': False, 'reason': 'gate'}), 403
         abort(403)
-
-    # K-approval cap: count existing votes for this side.
-    k = int((conv.argument_vote_data or {}).get('K', 2))
-    side_arg_ids = [a.id for a in
-                    Argument.query.filter_by(
-                        featured_statement_id=fs.id, side=arg.side).all()]
-    existing_votes = ArgumentVote.query.filter(
-        ArgumentVote.participant_id == part.participant_id,
-        ArgumentVote.argument_id.in_(side_arg_ids),
-    ).count()
-    if existing_votes >= k:
+    except PrioritizationUnavailable:
+        if is_ajax:
+            return jsonify({'ok': False, 'reason': 'volume'}), 409
+        abort(409)
+    except PriorityBudgetExceeded:
         if is_ajax:
             return jsonify({'ok': False, 'reason': 'cap'}), 409
-        abort(409)   # cap reached
-
-    # Can't vote on a hidden argument.
-    if arg.hidden:
+        abort(409)
+    except HiddenArgument:
         if is_ajax:
             return jsonify({'ok': False, 'reason': 'hidden'}), 403
         abort(403)
-    existing = ArgumentVote.query.filter_by(
-        participant_id=part.participant_id, argument_id=arg_id).first()
-    if not existing:
-        db.session.add(ArgumentVote(
-            argument_id=arg_id,
-            participant_id=part.participant_id,
-        ))
-        _touch_last_engagement(part)
-        db.session.commit()
     if is_ajax:
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
@@ -4736,15 +4750,13 @@ def argument_vote(slug, arg_id):
 @login_or_demo_required
 def argument_unvote(slug, arg_id):
     conv, part = _require_arg_participation(slug)
-    arg = Argument.query.filter_by(id=arg_id).first_or_404()
-    FeaturedStatement.query.filter_by(
-        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-    existing = ArgumentVote.query.filter_by(
-        participant_id=part.participant_id, argument_id=arg_id).first()
-    if existing:
-        db.session.delete(existing)
-        _touch_last_engagement(part)
-        db.session.commit()
+    set_argument_priority(
+        conversation=conv,
+        participation=part,
+        argument_id=arg_id,
+        selected=False,
+        touch=_touch_last_engagement,
+    )
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
@@ -5578,6 +5590,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_pseudonym_suggestions=_pseudonym_suggestions_api_payload,
         resolve_explore_state=_explore_api_payload,
         resolve_argument_mapping=_argument_mapping_api_payload,
+        submit_argument=_submit_argument_api_payload,
+        skip_argument=_skip_argument_api_payload,
+        set_argument_priority=_set_argument_priority_api_payload,
         submit_explore_vote=_explore_vote_api_payload,
         submit_statement=_statement_api_payload,
     ))

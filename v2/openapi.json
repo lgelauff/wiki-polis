@@ -283,6 +283,67 @@
         }
       }
     },
+    "/conversations/{slug}/featured-statements/{featuredStatementId}/arguments": {
+      "post": {
+        "operationId": "createArgument",
+        "summary": "Submit one argument for a featured-statement side",
+        "description": "Idempotent for an identical replay. One contribution per participant, featured statement, and side is enforced by the database.",
+        "parameters": [
+          {"name": "slug", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}},
+          {"name": "featuredStatementId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}
+        ],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateArgumentRequest"}}}},
+        "responses": {
+          "200": {"description": "Existing identical argument returned", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ArgumentSubmissionResponse"}}}},
+          "201": {"description": "Argument created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ArgumentSubmissionResponse"}}}},
+          "400": {"description": "Invalid argument", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "401": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Access denied", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "404": {"description": "Conversation or featured statement not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Phase conflict or a different argument already exists", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
+    "/conversations/{slug}/featured-statements/{featuredStatementId}/contributions/{side}/skip": {
+      "put": {
+        "operationId": "putArgumentContributionSkip",
+        "summary": "Explicitly skip one argument-contribution side",
+        "description": "Idempotent state replacement; repeated PUT requests keep the side skipped.",
+        "parameters": [
+          {"name": "slug", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}},
+          {"name": "featuredStatementId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
+          {"name": "side", "in": "path", "required": true, "schema": {"type": "string", "enum": ["pro", "con"]}}
+        ],
+        "responses": {
+          "200": {"description": "Contribution side is skipped", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ArgumentSkipResponse"}}}},
+          "400": {"description": "Invalid side", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "401": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Access denied", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "404": {"description": "Conversation or featured statement not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Phase conflict or the side already has an argument", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
+    "/conversations/{slug}/arguments/{argumentId}/priority": {
+      "put": {
+        "operationId": "putArgumentPriority",
+        "summary": "Set whether an argument is one of the participant's priorities",
+        "description": "Idempotent state replacement serialized per participant, featured statement, and side.",
+        "parameters": [
+          {"name": "slug", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}},
+          {"name": "argumentId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}
+        ],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ArgumentPriorityRequest"}}}},
+        "responses": {
+          "200": {"description": "Priority state stored", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ArgumentPriorityResponse"}}}},
+          "400": {"description": "Invalid selection state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "401": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Access denied", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "404": {"description": "Conversation or argument not found/available", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Contribution gate, volume gate, budget, or phase conflict", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/conversations/{slug}/statements/{statementId}/vote": {
       "put": {
         "operationId": "putExploreVote",
@@ -848,6 +909,80 @@
           "about": {"type": "string"},
           "conversation": {"type": "string"},
           "explore": {"type": "string"}
+        }
+      },
+      "CreateArgumentRequest": {
+        "type": "object",
+        "required": ["side", "body"],
+        "additionalProperties": false,
+        "properties": {
+          "side": {"type": "string", "enum": ["pro", "con"]},
+          "body": {"type": "string", "minLength": 1, "maxLength": 280}
+        }
+      },
+      "ArgumentCommandLinks": {
+        "type": "object",
+        "required": ["arguments"],
+        "additionalProperties": false,
+        "properties": {"arguments": {"type": "string"}}
+      },
+      "ArgumentSubmissionResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/ArgumentSubmissionReceipt"}}
+      },
+      "ArgumentSubmissionReceipt": {
+        "type": "object",
+        "required": ["featuredStatementId", "side", "status", "argument", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "featuredStatementId": {"type": "integer"},
+          "side": {"type": "string", "enum": ["pro", "con"]},
+          "status": {"type": "string", "const": "submitted"},
+          "argument": {"$ref": "#/components/schemas/ArgumentItem"},
+          "links": {"$ref": "#/components/schemas/ArgumentCommandLinks"}
+        }
+      },
+      "ArgumentSkipResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/ArgumentSkipReceipt"}}
+      },
+      "ArgumentSkipReceipt": {
+        "type": "object",
+        "required": ["featuredStatementId", "side", "status", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "featuredStatementId": {"type": "integer"},
+          "side": {"type": "string", "enum": ["pro", "con"]},
+          "status": {"type": "string", "const": "skipped"},
+          "links": {"$ref": "#/components/schemas/ArgumentCommandLinks"}
+        }
+      },
+      "ArgumentPriorityRequest": {
+        "type": "object",
+        "required": ["selected"],
+        "additionalProperties": false,
+        "properties": {"selected": {"type": "boolean"}}
+      },
+      "ArgumentPriorityResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/ArgumentPriorityReceipt"}}
+      },
+      "ArgumentPriorityReceipt": {
+        "type": "object",
+        "required": ["argumentId", "selected", "selectedCount", "selectionBudget", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "argumentId": {"type": "integer"},
+          "selected": {"type": "boolean"},
+          "selectedCount": {"type": "integer", "minimum": 0},
+          "selectionBudget": {"type": "integer", "minimum": 1},
+          "links": {"$ref": "#/components/schemas/ArgumentCommandLinks"}
         }
       },
       "CreateStatementRequest": {

@@ -320,9 +320,9 @@ def test_vote_blocked_below_k_threshold(auth_client, arg_conv, arg_part, fs,
     _pass_gate(auth_client, 'arg-conv', fs.id)
     args = _make_args(fs.id, None, 'pro', 1)
     resp = auth_client.post(f'/c/arg-conv/arguments/{args[0].id}/vote')
-    # Only 1 pro arg, K=2 — threshold not met, but gate passes; vote button
-    # should not be shown in UI. Route doesn't enforce threshold, only K-cap.
-    assert resp.status_code == 302
+    # Only 1 pro arg, K=2 — enforce the same minimum-volume gate in the route
+    # that the UI advertises, so direct requests cannot bypass it.
+    assert resp.status_code == 409
 
 
 def test_vote_cast_and_recorded(auth_client, arg_conv, arg_part, fs,
@@ -349,6 +349,7 @@ def test_vote_k_cap_enforced(auth_client, arg_conv, arg_part, fs,
 def test_vote_own_argument_allowed(auth_client, arg_conv, arg_part, fs,
                                    participant, app):
     _pass_gate(auth_client, 'arg-conv', fs.id)
+    _make_args(fs.id, None, 'pro', 2)
     own = Argument(featured_statement_id=fs.id, proposer_pseudonym=arg_part.pseudonym,
                    body='My argument.', side='pro')
     db.session.add(own)

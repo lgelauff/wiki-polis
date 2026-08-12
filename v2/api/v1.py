@@ -23,6 +23,10 @@ from services.statements import (DerivativeSimilarityTooLow,
                                  StatementPreparationUnavailable,
                                  StatementQuotaExceeded,
                                  UnknownParentStatement)
+from services.argument_commands import (
+    ContributionGateClosed, ExistingArgumentConflict, HiddenArgument,
+    InvalidArgument, PrioritizationUnavailable, PriorityBudgetExceeded,
+)
 
 _OPENAPI_SPEC = json.loads(
     (Path(__file__).resolve().parents[1] / 'openapi.json').read_text(encoding='utf-8')
@@ -52,6 +56,9 @@ def create_api_v1_blueprint(
     resolve_pseudonym_suggestions: Callable[[str], list[str]],
     resolve_explore_state: Callable[[str], dict],
     resolve_argument_mapping: Callable[[str], dict],
+    submit_argument: Callable[[str, int, dict], tuple[dict, int]],
+    skip_argument: Callable[[str, int, str], dict],
+    set_argument_priority: Callable[[str, int, bool], dict],
     submit_explore_vote: Callable[[str, int, str], dict],
     submit_statement: Callable[[str, dict, str], tuple[dict, int]],
 ) -> Blueprint:
@@ -191,6 +198,82 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({
             'data': resolve_argument_mapping(slug),
         }))
+
+    @bp.post('/conversations/<slug>/featured-statements/<int:featured_statement_id>/arguments')
+    def create_argument(slug: str, featured_statement_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict)
+                or set(body) - {'side', 'body'}
+                or body.get('side') not in {'pro', 'con'}
+                or not isinstance(body.get('body'), str)
+                or not body['body'].strip()
+                or len(body['body'].strip()) > 280):
+            return error_response(
+                'validation_failed', 'Check the argument side and text.', 400,
+            )
+        try:
+            data, status = submit_argument(slug, featured_statement_id, body)
+        except InvalidArgument:
+            return error_response(
+                'validation_failed', 'Check the argument side and text.', 400,
+            )
+        except ExistingArgumentConflict:
+            return error_response(
+                'argument_already_submitted',
+                'You already submitted a different argument for this side.', 409,
+            )
+        return _no_store(jsonify({'data': data})), status
+
+    @bp.put('/conversations/<slug>/featured-statements/<int:featured_statement_id>/contributions/<side>/skip')
+    def put_argument_skip(slug: str, featured_statement_id: int, side: str):
+        if side not in {'pro', 'con'}:
+            return error_response(
+                'validation_failed', 'Choose the for or against side.', 400,
+            )
+        try:
+            data = skip_argument(slug, featured_statement_id, side)
+        except InvalidArgument:
+            return error_response(
+                'validation_failed', 'Choose the for or against side.', 400,
+            )
+        except ExistingArgumentConflict:
+            return error_response(
+                'argument_already_submitted',
+                'This side already has your argument and cannot be skipped.', 409,
+            )
+        return _no_store(jsonify({'data': data}))
+
+    @bp.put('/conversations/<slug>/arguments/<int:argument_id>/priority')
+    def put_argument_priority(slug: str, argument_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'selected'}
+                or not isinstance(body.get('selected'), bool)):
+            return error_response(
+                'validation_failed', 'Use selected true or false.', 400,
+            )
+        try:
+            data = set_argument_priority(slug, argument_id, body['selected'])
+        except ContributionGateClosed:
+            return error_response(
+                'contribution_gate_closed',
+                'Add an argument or explicitly skip both sides first.', 409,
+            )
+        except PrioritizationUnavailable:
+            return error_response(
+                'prioritization_unavailable',
+                'Prioritization opens when this side has enough arguments.', 409,
+            )
+        except PriorityBudgetExceeded:
+            return error_response(
+                'priority_budget_exceeded',
+                'Unmark another argument before selecting this one.', 409,
+            )
+        except HiddenArgument:
+            return error_response(
+                'argument_unavailable',
+                'This argument is no longer available.', 404,
+            )
+        return _no_store(jsonify({'data': data}))
 
     @bp.put('/conversations/<slug>/statements/<int:statement_id>/vote')
     def put_explore_vote(slug: str, statement_id: int):
