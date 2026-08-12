@@ -6,6 +6,33 @@ on:
     branches: [main]
 
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v2/frontend
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: v2/frontend/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Generate API types and typecheck
+        run: npm run typecheck
+
+      - name: Component and contract tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
   test:
     runs-on: ubuntu-latest
     defaults:
