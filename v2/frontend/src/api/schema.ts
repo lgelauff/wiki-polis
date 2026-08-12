@@ -109,6 +109,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/arguments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the participant's argument-mapping task state
+         * @description Contribution status, stable argument ordering, prioritization gates, and capabilities are computed server-side. Aggregate importance counts are withheld during the open phase to avoid anchoring.
+         */
+        get: operations["getArgumentMapping"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{slug}/statements/{statementId}/vote": {
         parameters: {
             query?: never;
@@ -313,6 +333,84 @@ export interface components {
                 explore: string;
             };
         };
+        ArgumentMappingResponse: {
+            data: components["schemas"]["ArgumentMapping"];
+        };
+        ArgumentMapping: {
+            slug: string;
+            title: string;
+            pseudonym: string;
+            progress: components["schemas"]["ArgumentMappingProgress"];
+            featuredStatements: components["schemas"]["ArgumentFeaturedStatement"][];
+            capabilities: components["schemas"]["ArgumentMappingCapabilities"];
+            links: components["schemas"]["ArgumentMappingLinks"];
+        };
+        ArgumentMappingProgress: {
+            completed: number;
+            total: number;
+            allDone: boolean;
+            currentFeaturedStatementId: number | null;
+        };
+        ArgumentFeaturedStatement: {
+            id: number;
+            statement: components["schemas"]["ArgumentStatement"];
+            contributionsComplete: boolean;
+            complete: boolean;
+            sides: {
+                pro: components["schemas"]["ArgumentSide"];
+                con: components["schemas"]["ArgumentSide"];
+            };
+            capabilities: {
+                flagStatement: boolean;
+            };
+        };
+        ArgumentStatement: {
+            id: number;
+            text: string;
+        };
+        ArgumentSide: {
+            contribution: components["schemas"]["ArgumentContribution"];
+            prioritization: components["schemas"]["ArgumentPrioritization"];
+            arguments: components["schemas"]["ArgumentItem"][];
+        };
+        ArgumentContribution: {
+            /** @enum {string} */
+            status: "pending" | "submitted" | "skipped";
+            argumentId: number | null;
+            capabilities: {
+                submit: boolean;
+                skip: boolean;
+            };
+        };
+        ArgumentPrioritization: {
+            available: boolean;
+            requiredArgumentCount: number;
+            argumentCount: number;
+            selectionBudget: number;
+            selectedCount: number;
+            complete: boolean;
+        };
+        ArgumentItem: {
+            id: number;
+            body: string;
+            own: boolean;
+            selected: boolean;
+            capabilities: {
+                prioritize: boolean;
+                flag: boolean;
+            };
+        };
+        ArgumentMappingCapabilities: {
+            contribute: boolean;
+            prioritize: boolean;
+            flag: boolean;
+        };
+        ArgumentMappingLinks: {
+            self: string;
+            about: string;
+            conversation: string;
+            explore?: string;
+        };
         CreateStatementRequest: {
             text: string;
             derivedFromStatementId?: number | null;
@@ -399,6 +497,7 @@ export interface components {
             self: string;
             about: string;
             explore?: string;
+            arguments?: string;
             admin?: string;
         };
         ErrorResponse: {
@@ -660,6 +759,64 @@ export interface operations {
             };
             /** @description Voting service unavailable */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getArgumentMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current argument-mapping state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArgumentMappingResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation access is denied or the participant is banned */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Participation is missing or argument mapping is not open */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

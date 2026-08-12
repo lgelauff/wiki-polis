@@ -51,6 +51,7 @@ def create_api_v1_blueprint(
     join_conversation: Callable[[str, dict], tuple[dict, int]],
     resolve_pseudonym_suggestions: Callable[[str], list[str]],
     resolve_explore_state: Callable[[str], dict],
+    resolve_argument_mapping: Callable[[str], dict],
     submit_explore_vote: Callable[[str, int, str], dict],
     submit_statement: Callable[[str, dict, str], tuple[dict, int]],
 ) -> Blueprint:
@@ -184,6 +185,12 @@ def create_api_v1_blueprint(
                 502,
             )
         return _no_store(jsonify({'data': data}))
+
+    @bp.get('/conversations/<slug>/arguments')
+    def get_argument_mapping(slug: str):
+        return _no_store(jsonify({
+            'data': resolve_argument_mapping(slug),
+        }))
 
     @bp.put('/conversations/<slug>/statements/<int:statement_id>/vote')
     def put_explore_vote(slug: str, statement_id: int):

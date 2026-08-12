@@ -246,6 +246,43 @@
         }
       }
     },
+    "/conversations/{slug}/arguments": {
+      "get": {
+        "operationId": "getArgumentMapping",
+        "summary": "Return the participant's argument-mapping task state",
+        "description": "Contribution status, stable argument ordering, prioritization gates, and capabilities are computed server-side. Aggregate importance counts are withheld during the open phase to avoid anchoring.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "minLength": 1}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current argument-mapping state",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ArgumentMappingResponse"}}}
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "403": {
+            "description": "Conversation access is denied or the participant is banned",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "404": {
+            "description": "Conversation not found",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "409": {
+            "description": "Participation is missing or argument mapping is not open",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          }
+        }
+      }
+    },
     "/conversations/{slug}/statements/{statementId}/vote": {
       "put": {
         "operationId": "putExploreVote",
@@ -678,6 +715,141 @@
           }
         }
       },
+      "ArgumentMappingResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/ArgumentMapping"}}
+      },
+      "ArgumentMapping": {
+        "type": "object",
+        "required": ["slug", "title", "pseudonym", "progress", "featuredStatements", "capabilities", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {"type": "string"},
+          "title": {"type": "string"},
+          "pseudonym": {"type": "string"},
+          "progress": {"$ref": "#/components/schemas/ArgumentMappingProgress"},
+          "featuredStatements": {"type": "array", "items": {"$ref": "#/components/schemas/ArgumentFeaturedStatement"}},
+          "capabilities": {"$ref": "#/components/schemas/ArgumentMappingCapabilities"},
+          "links": {"$ref": "#/components/schemas/ArgumentMappingLinks"}
+        }
+      },
+      "ArgumentMappingProgress": {
+        "type": "object",
+        "required": ["completed", "total", "allDone", "currentFeaturedStatementId"],
+        "additionalProperties": false,
+        "properties": {
+          "completed": {"type": "integer", "minimum": 0},
+          "total": {"type": "integer", "minimum": 0},
+          "allDone": {"type": "boolean"},
+          "currentFeaturedStatementId": {"type": ["integer", "null"]}
+        }
+      },
+      "ArgumentFeaturedStatement": {
+        "type": "object",
+        "required": ["id", "statement", "contributionsComplete", "complete", "sides", "capabilities"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "integer"},
+          "statement": {"$ref": "#/components/schemas/ArgumentStatement"},
+          "contributionsComplete": {"type": "boolean"},
+          "complete": {"type": "boolean"},
+          "sides": {
+            "type": "object",
+            "required": ["pro", "con"],
+            "additionalProperties": false,
+            "properties": {
+              "pro": {"$ref": "#/components/schemas/ArgumentSide"},
+              "con": {"$ref": "#/components/schemas/ArgumentSide"}
+            }
+          },
+          "capabilities": {
+            "type": "object",
+            "required": ["flagStatement"],
+            "additionalProperties": false,
+            "properties": {"flagStatement": {"type": "boolean"}}
+          }
+        }
+      },
+      "ArgumentStatement": {
+        "type": "object",
+        "required": ["id", "text"],
+        "additionalProperties": false,
+        "properties": {"id": {"type": "integer"}, "text": {"type": "string"}}
+      },
+      "ArgumentSide": {
+        "type": "object",
+        "required": ["contribution", "prioritization", "arguments"],
+        "additionalProperties": false,
+        "properties": {
+          "contribution": {"$ref": "#/components/schemas/ArgumentContribution"},
+          "prioritization": {"$ref": "#/components/schemas/ArgumentPrioritization"},
+          "arguments": {"type": "array", "items": {"$ref": "#/components/schemas/ArgumentItem"}}
+        }
+      },
+      "ArgumentContribution": {
+        "type": "object",
+        "required": ["status", "argumentId", "capabilities"],
+        "additionalProperties": false,
+        "properties": {
+          "status": {"type": "string", "enum": ["pending", "submitted", "skipped"]},
+          "argumentId": {"type": ["integer", "null"]},
+          "capabilities": {
+            "type": "object",
+            "required": ["submit", "skip"],
+            "additionalProperties": false,
+            "properties": {"submit": {"type": "boolean"}, "skip": {"type": "boolean"}}
+          }
+        }
+      },
+      "ArgumentPrioritization": {
+        "type": "object",
+        "required": ["available", "requiredArgumentCount", "argumentCount", "selectionBudget", "selectedCount", "complete"],
+        "additionalProperties": false,
+        "properties": {
+          "available": {"type": "boolean"},
+          "requiredArgumentCount": {"type": "integer", "minimum": 1},
+          "argumentCount": {"type": "integer", "minimum": 0},
+          "selectionBudget": {"type": "integer", "minimum": 1},
+          "selectedCount": {"type": "integer", "minimum": 0},
+          "complete": {"type": "boolean"}
+        }
+      },
+      "ArgumentItem": {
+        "type": "object",
+        "required": ["id", "body", "own", "selected", "capabilities"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "integer"},
+          "body": {"type": "string", "maxLength": 280},
+          "own": {"type": "boolean"},
+          "selected": {"type": "boolean"},
+          "capabilities": {
+            "type": "object",
+            "required": ["prioritize", "flag"],
+            "additionalProperties": false,
+            "properties": {"prioritize": {"type": "boolean"}, "flag": {"type": "boolean"}}
+          }
+        }
+      },
+      "ArgumentMappingCapabilities": {
+        "type": "object",
+        "required": ["contribute", "prioritize", "flag"],
+        "additionalProperties": false,
+        "properties": {"contribute": {"type": "boolean"}, "prioritize": {"type": "boolean"}, "flag": {"type": "boolean"}}
+      },
+      "ArgumentMappingLinks": {
+        "type": "object",
+        "required": ["self", "about", "conversation"],
+        "additionalProperties": false,
+        "properties": {
+          "self": {"type": "string"},
+          "about": {"type": "string"},
+          "conversation": {"type": "string"},
+          "explore": {"type": "string"}
+        }
+      },
       "CreateStatementRequest": {
         "type": "object",
         "required": ["text"],
@@ -843,6 +1015,7 @@
           "self": {"type": "string"},
           "about": {"type": "string"},
           "explore": {"type": "string"},
+          "arguments": {"type": "string"},
           "admin": {"type": "string"}
         }
       },

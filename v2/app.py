@@ -58,6 +58,7 @@ from services.participations import (EligibilityDenied, InvalidPseudonym,
 from services.explore import (ExploreGateway, ParticiapiSessionState,
                               ExploreUpstreamError, build_explore_state,
                               normalise_statements)
+from services.argument_mapping import build_argument_mapping_state
 from services.idempotency import (complete_command, release_reservation,
                                   request_digest, reserve_command)
 from services.statements import (DerivativeSimilarityTooLow,
@@ -1669,6 +1670,9 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
         explore_link=lambda slug: url_for(
             'spa_shell', spa_path=f'conversations/{slug}/explore',
         ),
+        arguments_link=lambda slug: url_for(
+            'spa_shell', spa_path=f'conversations/{slug}/arguments',
+        ),
         admin_link=lambda conv_id: url_for(
             'admin.admin_conversation_detail', conv_id=conv_id,
         ),
@@ -1850,6 +1854,43 @@ def _explore_vote_api_payload(slug: str, statement_id: int, choice: str) -> dict
         }
     finally:
         _save_explore_gateway_state(conv, gateway, states)
+
+
+def _argument_mapping_api_payload(slug: str) -> dict:
+    conv, _participant, participation = _require_argument_api_context(slug)
+    links = {
+        'self': url_for('api_v1.get_argument_mapping', slug=slug),
+        'about': url_for('spa_shell', spa_path=f'conversations/{slug}/about'),
+        'conversation': url_for('participant.conversation', slug=slug),
+    }
+    if conv.phase_submission:
+        links['explore'] = url_for(
+            'spa_shell', spa_path=f'conversations/{slug}/explore',
+        )
+    return build_argument_mapping_state(
+        conversation=conv,
+        participation=participation,
+        featured_data=_build_featured_data(conv, participation),
+        links=links,
+    )
+
+
+def _require_argument_api_context(slug: str):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        abort(409, description='Join this conversation before participating.')
+    if not conv.active or conv.paused or not conv.phase_argument_mapping:
+        abort(409, description='Argument mapping is not open.')
+    _abort_if_banned(conv, participant)
+    return conv, participant, participation
 
 
 def _statement_api_payload(
@@ -5536,6 +5577,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         join_conversation=_join_conversation_api_payload,
         resolve_pseudonym_suggestions=_pseudonym_suggestions_api_payload,
         resolve_explore_state=_explore_api_payload,
+        resolve_argument_mapping=_argument_mapping_api_payload,
         submit_explore_vote=_explore_vote_api_payload,
         submit_statement=_statement_api_payload,
     ))
