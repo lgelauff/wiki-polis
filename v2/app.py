@@ -2564,9 +2564,11 @@ def _delete_local_conversation(conv: Conversation) -> None:
 def _parse_content_flag_form() -> tuple[str, str | None]:
     category = (request.form.get('category') or '').strip()
     if category not in FLAG_CATEGORIES:
-        abort(400)
+        abort(400, description='Choose a valid reason for the flag.')
     detail = nh3.clean((request.form.get('detail') or '').strip(),
                        tags=_NH3_NO_TAGS)[:1000]
+    if category == 'other' and not detail:
+        abort(400, description='Explain the reason when choosing Other.')
     return category, detail or None
 
 

@@ -28,6 +28,7 @@
     </select>
     <label class="sr-only" for="flag-detail-{{ uid }}">Details</label>
     <textarea id="flag-detail-{{ uid }}" name="detail" rows="2" maxlength="1000"
+              data-required-for-category="other"
               placeholder="Optional details"></textarea>
     <button type="submit" class="btn-small">Send</button>
   </form>
@@ -238,6 +239,7 @@
               </select>
               <label class="sr-only" for="stmt-flag-detail">Details</label>
               <textarea id="stmt-flag-detail" name="detail" rows="2" maxlength="1000"
+                        data-required-for-category="other"
                         placeholder="Optional details"></textarea>
               <button type="submit" class="btn-small">Send</button>
             </form>
@@ -2569,6 +2571,16 @@
   document.querySelectorAll('.content-flag').forEach(function (details) {
     var form = details.querySelector('form');
     if (!form) return;
+    var category = form.querySelector('[name=category]');
+    var detail = form.querySelector('[name=detail][data-required-for-category]');
+    function syncDetailRequirement() {
+      if (!category || !detail) return;
+      var required = category.value === detail.dataset.requiredForCategory;
+      detail.required = required;
+      detail.placeholder = required ? 'Please explain this reason' : 'Optional details';
+    }
+    if (category) category.addEventListener('change', syncDetailRequirement);
+    syncDetailRequirement();
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var btn  = form.querySelector('button[type=submit]');

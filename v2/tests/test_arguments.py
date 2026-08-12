@@ -538,6 +538,26 @@ def test_participant_flag_argument_via_fetch_returns_json(auth_client, arg_conv,
     assert resp.get_json() == {'ok': True}
 
 
+def test_participant_flag_argument_requires_detail_for_other(
+    auth_client, arg_conv, arg_part, fs, participant,
+):
+    arg = _make_visible_arg(fs.id)
+
+    resp = auth_client.post(
+        f'/c/arg-conv/arguments/{arg.id}/flag',
+        data={'category': 'other', 'detail': '<b></b>'},
+        headers={'X-Requested-With': 'fetch'},
+    )
+
+    assert resp.status_code == 400
+    assert ContentFlag.query.filter_by(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        content_type='argument',
+        argument_id=arg.id,
+    ).count() == 0
+
+
 def test_participant_argument_flag_dedupes_open_flags(auth_client, arg_conv,
                                                       arg_part, fs, participant):
     arg = _make_visible_arg(fs.id)
@@ -600,6 +620,42 @@ def test_participant_flag_statement_via_fetch_returns_json(auth_client, arg_conv
     )
     assert resp.status_code == 200
     assert resp.get_json() == {'ok': True}
+
+
+def test_participant_flag_statement_requires_detail_for_other(
+    auth_client, arg_conv, arg_part, participant,
+):
+    resp = auth_client.post(
+        '/c/arg-conv/statements/42/flag',
+        data={'category': 'other', 'detail': '   '},
+        headers={'X-Requested-With': 'fetch'},
+    )
+
+    assert resp.status_code == 400
+    assert ContentFlag.query.filter_by(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        content_type='statement',
+        statement_tid=42,
+    ).count() == 0
+
+
+def test_participant_can_flag_other_with_explanation(
+    auth_client, arg_conv, arg_part, participant,
+):
+    resp = auth_client.post(
+        '/c/arg-conv/statements/42/flag',
+        data={'category': 'other', 'detail': 'This needs contextual review.'},
+    )
+
+    assert resp.status_code == 302
+    flag = ContentFlag.query.filter_by(
+        conversation_id=arg_conv.id,
+        participant_id=participant.id,
+        content_type='statement',
+        statement_tid=42,
+    ).one()
+    assert flag.detail == 'This needs contextual review.'
 
 
 def test_hide_argument_wrong_conversation_returns_404(admin_client, arg_conv,

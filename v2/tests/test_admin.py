@@ -1746,3 +1746,24 @@ def test_admin_flag_queue_resolves_statement_flag(admin_client, conv, participan
     db.session.refresh(flag)
     assert flag.status == 'resolved'
     assert flag.resolution_note == 'handled'
+
+
+def test_admin_flag_queue_explains_legacy_other_flag_without_detail(
+    admin_client, conv, participant,
+):
+    flag = ContentFlag(
+        conversation_id=conv.id,
+        participant_id=participant.id,
+        content_type='statement',
+        statement_tid=8,
+        category='other',
+        detail=None,
+        status='open',
+    )
+    db.session.add(flag)
+    db.session.commit()
+
+    with patch('app._statement_text_map', return_value={8: 'Legacy statement'}):
+        page = admin_client.get(f'/admin/conversations/{conv.id}/flags').data.decode()
+
+    assert '(no explanation provided)' in page
