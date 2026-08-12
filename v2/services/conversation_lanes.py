@@ -38,10 +38,10 @@ def classify_joined_conversation(
     return 'needs_attention'
 
 
-def _scheduled_transition(conv: Conversation) -> dict | None:
+def scheduled_transition(conv: Conversation) -> dict | None:
     at = conv.scheduled_transition_at
     target = conv.scheduled_transition_target
-    if at is None or not target:
+    if at is None or not target or conv.scheduled_transition_frozen:
         return None
     if at.tzinfo is None:
         at = at.replace(tzinfo=timezone.utc)
@@ -123,7 +123,7 @@ class ConversationLane:
                            'paused' if conv.paused else 'open'),
                 'phases': phases,
                 'statementsRemaining': signal.get('statements_remaining'),
-                'scheduledTransition': _scheduled_transition(conv),
+                'scheduledTransition': scheduled_transition(conv),
                 'outputs': outputs,
                 'capabilities': {
                     'join': relationship == 'available' and self.authenticated,
@@ -171,7 +171,11 @@ def build_conversation_lane(
                  query.filter(Conversation.access_policy == 'public'))
         lane.public_conversations = query.order_by(Conversation.created_at.desc()).all()
         lane.signals_map = {
-            conv.id: {'phases': active_phases(conv), 'outputs': output_items(conv)}
+            conv.id: {
+                'phases': active_phases(conv),
+                'outputs': output_items(conv),
+                'scheduled_transition': scheduled_transition(conv),
+            }
             for conv in lane.public_conversations
         }
         return lane
@@ -247,6 +251,7 @@ def build_conversation_lane(
             'outputs': output_items(conv),
             'statements_remaining': remaining_by_zinvite.get(conv.polis_id),
             'reveal': reveal_context(conv, participation) if conv.closed_at else None,
+            'scheduled_transition': scheduled_transition(conv),
         }
 
     buckets: dict[ConversationBucket, list[Conversation]] = {

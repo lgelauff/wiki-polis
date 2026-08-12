@@ -324,6 +324,20 @@ def test_no_first_vote_confirm_on_real_conversation(auth_client, conv, participa
     assert 'your vote will be recorded' not in html
 
 
+def test_conversation_shows_scheduled_transition_target_and_localizable_time(
+    auth_client, conv, participation,
+):
+    conv.phase_submission = True
+    conv.scheduled_transition_at = datetime(2026, 8, 20, 14, 30)
+    conv.scheduled_transition_target = 'informed_voting'
+    db.session.commit()
+
+    html = auth_client.get('/c/test-conv').data.decode()
+
+    assert 'Next: <strong>Informed vote</strong>' in html
+    assert 'datetime="2026-08-20T14:30:00Z"' in html
+
+
 def test_real_conversation_warns_on_direct_arrival(auth_client, conv, participation):
     # #293 state model: arriving at a real conversation without having chosen the
     # real space (deep link) warns once, with an "I understand" acknowledge.

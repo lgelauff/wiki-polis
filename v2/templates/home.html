@@ -73,6 +73,12 @@
 
 {# ── Action chips macro ─────────────────────────────────────────────────────── #}
 {% macro conv_chips(sig) %}
+{%- if sig and sig.get('scheduled_transition') -%}
+{%- set transition = sig.get('scheduled_transition') -%}
+<span class="conv-chip">Next: {{ transition.targetLabel }}
+  <time datetime="{{ transition.at }}" data-local-datetime>{{ transition.at | replace('T', ' ') | replace('Z', ' UTC') }}</time>
+</span>
+{%- endif -%}
 {%- if sig and sig.get('statements_remaining') is not none and sig.get('statements_remaining') > 0 -%}
 <span class="conv-chip">{{ sig.get('statements_remaining') }} to vote</span>
 {%- endif -%}

@@ -50,7 +50,8 @@ from logging_setup import configure_logging
 from api.v1 import create_api_v1_blueprint, register_api_error_handlers
 from services.identity import reconcile_participant_login
 from services.invites import InviteBatchSaveError, add_conversation_invites
-from services.conversation_lanes import build_conversation_lane
+from services.conversation_lanes import (build_conversation_lane,
+                                         scheduled_transition)
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -4172,6 +4173,7 @@ def conversation(slug):
                            new_stmt_ids=participation.new_stmt_ids if participation else [],
                            phase6_data=phase6_data,
                            phase6_results=phase6_results,
+                           scheduled_transition=scheduled_transition(conv),
                            output_items=_output_items(conv),
                            moderation_log_count=moderation_log_count)
 

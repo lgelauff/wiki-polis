@@ -1,5 +1,7 @@
 """Tests for participant-facing dashboard bucketing (#253)."""
 
+from datetime import datetime
+
 import pytest
 
 from db import Participation, db
@@ -86,3 +88,18 @@ def test_joined_participant_with_explore_work_needs_attention(
 
     assert 'Needs attention' in page
     assert '3 to vote' in page
+
+
+def test_dashboard_shows_scheduled_transition_target_and_semantic_time(
+    auth_client, joined_conversation,
+):
+    joined_conversation.phase_submission = True
+    joined_conversation.scheduled_transition_at = datetime(2026, 8, 20, 14, 30)
+    joined_conversation.scheduled_transition_target = 'argument_mapping'
+    db.session.commit()
+
+    page = auth_client.get('/consultations').data.decode()
+
+    assert 'Next: Arguments' in page
+    assert 'datetime="2026-08-20T14:30:00Z"' in page
+    assert 'data-local-datetime' in page

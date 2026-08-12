@@ -85,6 +85,17 @@
     <code>{{ git_version }}</code>
   </footer>
 
+  <script nonce="{{ csp_nonce }}">
+  document.querySelectorAll('time[data-local-datetime]').forEach(function (el) {
+    var instant = new Date(el.getAttribute('datetime'));
+    if (Number.isNaN(instant.getTime())) return;
+    el.textContent = new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium', timeStyle: 'short'
+    }).format(instant);
+    el.title = 'Shown in your local timezone';
+  });
+  </script>
+
   {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
   <script nonce="{{ csp_nonce }}">
