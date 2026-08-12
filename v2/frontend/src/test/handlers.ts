@@ -34,7 +34,7 @@ export const handlers = [
             scheduledTransition: null,
             outputs: [],
             capabilities: {join: false, participate: true, moderate: false},
-            links: {self: '/c/community-strategy'},
+            links: {self: '/c/community-strategy', about: '/c/community-strategy/about'},
           }],
           caughtUp: [],
           inactive: [],
@@ -45,5 +45,44 @@ export const handlers = [
       },
     });
     },
+  ),
+  http.get(
+    new URL('/api/v1/conversations/community-strategy/about', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      data: {
+        slug: 'community-strategy',
+        title: 'Community strategy',
+        descriptionHtml: '<p>Shape the next chapter together.</p>',
+        outroHtml: null,
+        status: 'open',
+        phases: [{key: 'submission', label: 'Explore'}],
+        scheduledTransition: null,
+        pseudonym: 'quiet-otter',
+        statistics: {
+          participants: 24,
+          statementVotes: 312,
+          statements: 42,
+          arguments: 9,
+          argumentContributors: 6,
+        },
+        personal: {
+          statementsSuggested: 2,
+          statementVotes: 18,
+          statementVotesAvailable: true,
+          argumentsAdded: 1,
+          argumentsRated: 3,
+        },
+        outputs: [{
+          key: 'report', label: 'Final report', status: 'final', ready: false,
+          href: '/c/community-strategy/report',
+        }],
+        moderation: {eventCount: 1, href: '/c/community-strategy/moderation-log'},
+        capabilities: {participate: true, moderate: false},
+        links: {
+          self: '/api/v1/conversations/community-strategy/about',
+          conversation: '/c/community-strategy',
+        },
+      },
+    }),
   ),
 ];
