@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}About — {{ conversation.title }} — ProtoWiki{% endblock %}
+{% block header_crumb %}
+<nav class="header-crumb" aria-label="Conversation context">
+  <span class="header-crumb-sep">/</span>
+  <a href="{{ url_for('participant.conversation', slug=conversation.slug) }}">{{ conversation.title | truncate(32, True, '…') }}</a>
+  <span class="header-crumb-sep">/</span>
+  <span>About</span>
+</nav>
+{% endblock %}
+{% block content %}
+<div class="container">
+  <p class="muted" style="font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Conversation record</p>
+  <h1>About {{ conversation.title }}</h1>
+
+  {% if conversation.intro_text %}<div class="intro-text" style="margin-top:1rem">{{ conversation.intro_text | safe }}</div>{% endif %}
+  {% if conversation.outro_text %}<div class="outro-text" style="margin-top:1rem">{{ conversation.outro_text | safe }}</div>{% endif %}
+
+  <div class="landing-section" style="margin-top:1.5rem">
+    <h2 class="section-heading">Where it stands</h2>
+    <p><strong>Status:</strong> {{ 'Closed' if not conversation.active else ('Paused' if conversation.paused else 'Open') }}</p>
+    <p><strong>Current phase:</strong> {{ phases | map(attribute='label') | join(', ') }}</p>
+    {% if scheduled_transition %}
+    <p><strong>Next:</strong> {{ scheduled_transition.targetLabel }} on
+      <time datetime="{{ scheduled_transition.at }}" data-local-datetime>{{ scheduled_transition.at | replace('T', ' ') | replace('Z', ' UTC') }}</time>
+    </p>
+    {% endif %}
+    {% if participation %}<p><strong>Your pseudonym:</strong> <code>{{ participation.pseudonym }}</code></p>{% endif %}
+  </div>
+
+  <div class="landing-section" style="margin-top:1rem">
+    <h2 class="section-heading">Conversation statistics</h2>
+    <div class="stat-row" style="display:flex;gap:2rem;flex-wrap:wrap">
+      <span><strong>{{ statistics.participants if statistics.participants is not none else '—' }}</strong><br><span class="muted">participants</span></span>
+      <span><strong>{{ statistics.statementVotes if statistics.statementVotes is not none else '—' }}</strong><br><span class="muted">statement votes</span></span>
+      <span><strong>{{ statistics.statements if statistics.statements is not none else '—' }}</strong><br><span class="muted">statements</span></span>
+      <span><strong>{{ statistics.arguments }}</strong><br><span class="muted">arguments</span></span>
+      <span><strong>{{ statistics.argumentContributors }}</strong><br><span class="muted">argument contributors</span></span>
+    </div>
+    {% if statistics.participants is none %}<p class="muted" style="font-size:12px;margin-top:.8rem">Polis vote statistics are unavailable right now; local argument totals remain current.</p>{% endif %}
+  </div>
+
+  {% if personal %}
+  <div class="landing-section" style="margin-top:1rem">
+    <h2 class="section-heading">Your contributions</h2>
+    <ul>
+      <li>{{ personal.statementsSuggested }} new statement{{ '' if personal.statementsSuggested == 1 else 's' }} suggested</li>
+      <li>{{ personal.statementVotes if personal.statementVotesAvailable else 'Vote count unavailable' }}{% if personal.statementVotesAvailable %} statement vote{{ '' if personal.statementVotes == 1 else 's' }}{% endif %}</li>
+      <li>{{ personal.argumentsAdded }} argument{{ '' if personal.argumentsAdded == 1 else 's' }} added</li>
+      <li>{{ personal.argumentsRated }} argument{{ '' if personal.argumentsRated == 1 else 's' }} rated</li>
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="landing-section" style="margin-top:1rem">
+    <h2 class="section-heading">Outputs</h2>
+    <ul>
+      {% for output in outputs %}
+      <li>{% if output.ready %}<a href="{{ output.href }}">{{ output.label }}</a>{% else %}{{ output.label }} <span class="muted">— pending</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <p style="margin-top:1.25rem">
+    <a href="{{ url_for('participant.conversation_moderation_log', slug=conversation.slug) }}">Moderation log{% if moderation_log_count %} ({{ moderation_log_count }}){% endif %}</a>
+    · <a href="{{ url_for('participant.conversation', slug=conversation.slug) }}">Return to conversation</a>
+  </p>
+</div>
+{% endblock %}

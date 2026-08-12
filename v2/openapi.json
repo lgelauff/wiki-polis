@@ -61,6 +61,46 @@
         }
       }
     },
+    "/conversations/{slug}/about": {
+      "get": {
+        "operationId": "getConversationAbout",
+        "summary": "Return the participant-safe record for one conversation",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "minLength": 1}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation record",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ConversationAboutResponse"}
+              }
+            }
+          },
+          "403": {
+            "description": "The current browser cannot access this conversation",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+              }
+            }
+          },
+          "404": {
+            "description": "Conversation not found",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+              }
+            }
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -184,6 +224,105 @@
           "links": {"$ref": "#/components/schemas/ConversationLinks"}
         }
       },
+      "ConversationAboutResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {
+          "data": {"$ref": "#/components/schemas/ConversationAbout"}
+        }
+      },
+      "ConversationAbout": {
+        "type": "object",
+        "required": ["slug", "title", "descriptionHtml", "outroHtml", "status", "phases", "scheduledTransition", "pseudonym", "statistics", "personal", "outputs", "moderation", "capabilities", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "descriptionHtml": {"type": ["string", "null"]},
+          "outroHtml": {"type": ["string", "null"]},
+          "status": {"type": "string", "enum": ["open", "paused", "archived"]},
+          "phases": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationPhase"}},
+          "scheduledTransition": {
+            "oneOf": [
+              {"$ref": "#/components/schemas/ScheduledTransition"},
+              {"type": "null"}
+            ]
+          },
+          "pseudonym": {"type": ["string", "null"]},
+          "statistics": {"$ref": "#/components/schemas/ConversationStatistics"},
+          "personal": {
+            "oneOf": [
+              {"$ref": "#/components/schemas/PersonalContributions"},
+              {"type": "null"}
+            ]
+          },
+          "outputs": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationOutput"}},
+          "moderation": {"$ref": "#/components/schemas/ConversationModeration"},
+          "capabilities": {"$ref": "#/components/schemas/ConversationAboutCapabilities"},
+          "links": {"$ref": "#/components/schemas/ConversationAboutLinks"}
+        }
+      },
+      "ConversationPhase": {
+        "type": "object",
+        "required": ["key", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "key": {"type": "string"},
+          "label": {"type": "string"}
+        }
+      },
+      "ConversationStatistics": {
+        "type": "object",
+        "required": ["participants", "statementVotes", "statements", "arguments", "argumentContributors"],
+        "additionalProperties": false,
+        "properties": {
+          "participants": {"type": ["integer", "null"], "minimum": 0},
+          "statementVotes": {"type": ["integer", "null"], "minimum": 0},
+          "statements": {"type": ["integer", "null"], "minimum": 0},
+          "arguments": {"type": "integer", "minimum": 0},
+          "argumentContributors": {"type": "integer", "minimum": 0}
+        }
+      },
+      "PersonalContributions": {
+        "type": "object",
+        "required": ["statementsSuggested", "statementVotes", "statementVotesAvailable", "argumentsAdded", "argumentsRated"],
+        "additionalProperties": false,
+        "properties": {
+          "statementsSuggested": {"type": "integer", "minimum": 0},
+          "statementVotes": {"type": ["integer", "null"], "minimum": 0},
+          "statementVotesAvailable": {"type": "boolean"},
+          "argumentsAdded": {"type": "integer", "minimum": 0},
+          "argumentsRated": {"type": "integer", "minimum": 0}
+        }
+      },
+      "ConversationModeration": {
+        "type": "object",
+        "required": ["eventCount", "href"],
+        "additionalProperties": false,
+        "properties": {
+          "eventCount": {"type": "integer", "minimum": 0},
+          "href": {"type": "string"}
+        }
+      },
+      "ConversationAboutCapabilities": {
+        "type": "object",
+        "required": ["participate", "moderate"],
+        "additionalProperties": false,
+        "properties": {
+          "participate": {"type": "boolean"},
+          "moderate": {"type": "boolean"}
+        }
+      },
+      "ConversationAboutLinks": {
+        "type": "object",
+        "required": ["self", "conversation"],
+        "additionalProperties": false,
+        "properties": {
+          "self": {"type": "string"},
+          "conversation": {"type": "string"}
+        }
+      },
       "ScheduledTransition": {
         "type": "object",
         "required": ["at", "target", "targetLabel"],
@@ -218,10 +357,11 @@
       },
       "ConversationLinks": {
         "type": "object",
-        "required": ["self"],
+        "required": ["self", "about"],
         "additionalProperties": false,
         "properties": {
           "self": {"type": "string"},
+          "about": {"type": "string"},
           "admin": {"type": "string"}
         }
       },

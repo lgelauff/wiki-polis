@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the participant-safe record for one conversation */
+        get: operations["getConversationAbout"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -114,6 +131,56 @@ export interface components {
             capabilities: components["schemas"]["ConversationCapabilities"];
             links: components["schemas"]["ConversationLinks"];
         };
+        ConversationAboutResponse: {
+            data: components["schemas"]["ConversationAbout"];
+        };
+        ConversationAbout: {
+            slug: string;
+            title: string;
+            descriptionHtml: string | null;
+            outroHtml: string | null;
+            /** @enum {string} */
+            status: "open" | "paused" | "archived";
+            phases: components["schemas"]["ConversationPhase"][];
+            scheduledTransition: components["schemas"]["ScheduledTransition"] | null;
+            pseudonym: string | null;
+            statistics: components["schemas"]["ConversationStatistics"];
+            personal: components["schemas"]["PersonalContributions"] | null;
+            outputs: components["schemas"]["ConversationOutput"][];
+            moderation: components["schemas"]["ConversationModeration"];
+            capabilities: components["schemas"]["ConversationAboutCapabilities"];
+            links: components["schemas"]["ConversationAboutLinks"];
+        };
+        ConversationPhase: {
+            key: string;
+            label: string;
+        };
+        ConversationStatistics: {
+            participants: number | null;
+            statementVotes: number | null;
+            statements: number | null;
+            arguments: number;
+            argumentContributors: number;
+        };
+        PersonalContributions: {
+            statementsSuggested: number;
+            statementVotes: number | null;
+            statementVotesAvailable: boolean;
+            argumentsAdded: number;
+            argumentsRated: number;
+        };
+        ConversationModeration: {
+            eventCount: number;
+            href: string;
+        };
+        ConversationAboutCapabilities: {
+            participate: boolean;
+            moderate: boolean;
+        };
+        ConversationAboutLinks: {
+            self: string;
+            conversation: string;
+        };
         ScheduledTransition: {
             /** Format: date-time */
             at: string;
@@ -134,6 +201,7 @@ export interface components {
         };
         ConversationLinks: {
             self: string;
+            about: string;
             admin?: string;
         };
         ErrorResponse: {
@@ -195,6 +263,46 @@ export interface operations {
             };
             /** @description Invalid space */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getConversationAbout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversation record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationAboutResponse"];
+                };
+            };
+            /** @description The current browser cannot access this conversation */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

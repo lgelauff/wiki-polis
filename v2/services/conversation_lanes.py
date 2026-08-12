@@ -12,7 +12,13 @@ from db import (AdminRole, Conversation, ConversationInvite, Participant,
 
 ConversationBucket = Literal['needs_attention', 'caught_up', 'inactive', 'archived']
 
-_ACTION_PHASES = frozenset({'submission', 'argument_mapping', 'informed_voting'})
+ACTION_PHASES = frozenset({'submission', 'argument_mapping', 'informed_voting'})
+
+
+def participant_can_act(*, active: bool, paused: bool,
+                        phases: set[str] | frozenset[str]) -> bool:
+    """Return whether participant-facing work is open in the current state."""
+    return active and not paused and bool(set(phases) & ACTION_PHASES)
 
 
 def classify_joined_conversation(
@@ -30,7 +36,7 @@ def classify_joined_conversation(
     """
     if not active:
         return 'archived'
-    action_phases = set(phases) & _ACTION_PHASES
+    action_phases = set(phases) & ACTION_PHASES
     if paused or not action_phases:
         return 'inactive'
     if action_phases == {'submission'} and statements_remaining == 0:
@@ -91,6 +97,7 @@ class ConversationLane:
         }
 
     def to_api(self, *, conversation_link: Callable[[str], str],
+               about_link: Callable[[str], str],
                admin_link: Callable[[int], str]) -> dict:
         moderated_ids = {conv.id for conv in self.moderating}
 
@@ -99,7 +106,9 @@ class ConversationLane:
             signal = self.signals_map.get(conv.id, {})
             participation = self.pseudonym_map.get(conv.id)
             phases = sorted(signal.get('phases', set()))
-            action_open = bool(set(phases) & _ACTION_PHASES) and not conv.paused and conv.active
+            action_open = participant_can_act(
+                active=conv.active, paused=conv.paused, phases=set(phases),
+            )
             outputs = [
                 {
                     'key': item['key'],
@@ -110,7 +119,10 @@ class ConversationLane:
                 }
                 for item in signal.get('outputs', [])
             ]
-            links = {'self': conversation_link(conv.slug)}
+            links = {
+                'self': conversation_link(conv.slug),
+                'about': about_link(conv.slug),
+            }
             if conv.id in moderated_ids:
                 links['admin'] = admin_link(conv.id)
             return {

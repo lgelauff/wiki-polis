@@ -50,6 +50,7 @@ from logging_setup import configure_logging
 from api.v1 import create_api_v1_blueprint, register_api_error_handlers
 from services.identity import reconcile_participant_login
 from services.invites import InviteBatchSaveError, add_conversation_invites
+from services.conversation_about import build_conversation_about
 from services.conversation_lanes import (build_conversation_lane,
                                          scheduled_transition)
 
@@ -1654,12 +1655,46 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
     )
     return lane.to_api(
         conversation_link=lambda slug: url_for('participant.conversation', slug=slug),
+        about_link=lambda slug: url_for('participant.conversation_about', slug=slug),
         admin_link=lambda conv_id: url_for(
             'admin.admin_conversation_detail', conv_id=conv_id,
         ),
     )
 
 
+def _conversation_about_model(conv: Conversation, participant: Participant | None):
+    participation = (
+        Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+        ).first()
+        if participant else None
+    )
+    phase_labels = {stage['key']: stage['label'] for stage in PHASE_SEQUENCE}
+    phase_labels.update({'cleanup_window': 'Cleanup', 'closed': 'Closed'})
+    return build_conversation_about(
+        conversation=conv,
+        participant=participant,
+        participation=participation,
+        active_phases=_active_phases,
+        phase_labels=phase_labels,
+        output_items=_output_items,
+        polis_client=_polis_server_client(),
+        can_moderate=_can_moderate(conv, participant),
+    )
+
+
+def _conversation_about_api_payload(slug: str) -> dict:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    _check_conversation_access(conv, participant)
+    return _conversation_about_model(conv, participant).to_api(
+        self_link=url_for('api_v1.get_conversation_about', slug=slug),
+        conversation_link=url_for('participant.conversation', slug=slug),
+        moderation_log_link=url_for(
+            'participant.conversation_moderation_log', slug=slug,
+        ),
+    )
 def _require_mod_for_conv(conv_id: int) -> 'Conversation':
     """Return conversation or abort 403 if the current user can't moderate it."""
     conv = Conversation.query.get_or_404(conv_id)
@@ -1717,6 +1752,8 @@ def _check_conversation_access(conversation, participant) -> None:
         mw_username=username,
     ).first()
     if not invited:
+        if request.path.startswith('/api/v1/'):
+            abort(403)
         can_mod = _can_moderate(conversation, participant)
         abort(make_response(render_template(
             'forbidden_invite_only.html',
@@ -4098,11 +4135,6 @@ def conversation(slug):
     if conv.phase_argument_mapping and participation:
         featured_data = _build_featured_data(conv, participation, can_mod=can_mod)
 
-    moderation_log_count = AuditEvent.query.filter(
-        AuditEvent.conversation_id == conv.id,
-        AuditEvent.operation.in_(('participant.ban', 'participant.unban')),
-    ).count()
-
     # Phase 6 — build card data: each confirmed featured statement with its
     # top-10 visible arguments per side, sorted by usefulness vote count.
     # Eager-load arguments + votes to avoid N+1 queries.
@@ -4174,8 +4206,21 @@ def conversation(slug):
                            phase6_data=phase6_data,
                            phase6_results=phase6_results,
                            scheduled_transition=scheduled_transition(conv),
-                           output_items=_output_items(conv),
-                           moderation_log_count=moderation_log_count)
+                           output_items=_output_items(conv))
+
+
+@participant_bp.get('/c/<slug>/about')
+@limiter.limit('120 per minute')
+def conversation_about(slug):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    _check_conversation_access(conv, participant)
+    about = _conversation_about_model(conv, participant)
+    return render_template(
+        'conversation_about.html',
+        header_mode='conversation',
+        **about.template_context(),
+    )
 
 
 @participant_bp.get('/c/<slug>/outputs/<output_key>')
@@ -4205,6 +4250,7 @@ def conversation_output(slug, output_key):
 @participant_bp.get('/c/<slug>/moderation-log')
 def conversation_moderation_log(slug):
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    _check_conversation_access(conv, _current_participant())
     return render_template(
         'moderation_log.html',
         conversation=conv,
@@ -5230,6 +5276,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_participant=_current_participant,
         resolve_global_admin=_is_global_admin,
         resolve_conversation_lane=_conversation_lane_api_payload,
+        resolve_conversation_about=_conversation_about_api_payload,
     ))
     register_api_error_handlers(app)
     csrf.exempt(proxy_bp)

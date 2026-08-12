@@ -5,6 +5,7 @@
 <nav class="header-crumb" aria-label="Conversation context">
   <span class="header-crumb-sep">/</span>
   <span>{{ conversation.title | truncate(40, True, '…') }}</span>
+  <a class="header-manage-link" href="{{ url_for('participant.conversation_about', slug=conversation.slug) }}">About</a>
   {% if can_moderate %}
     <a class="header-manage-link" href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">Manage</a>
   {% endif %}
@@ -1278,12 +1279,6 @@
 
   {% endif %}{# end tabs | length > 0 #}
   {% endif %}{# end active/paused/else #}
-
-  {% if moderation_log_count %}
-  <p class="muted" style="font-size:13px;margin-top:1.5rem">
-    <a href="{{ url_for('participant.conversation_moderation_log', slug=conversation.slug) }}">Moderation log</a>
-  </p>
-  {% endif %}
 
   {% if conversation.outro_text %}
   <div class="outro-text">
