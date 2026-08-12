@@ -16,6 +16,7 @@ test('renders a conversation lane from the API contract', async () => {
   );
 
   expect(screen.getByRole('status')).toHaveTextContent('Loading conversations');
+  expect(await screen.findByRole('heading', {name: 'See where you stand.'})).toBeVisible();
   expect(await screen.findByRole('link', {name: 'Community strategy'}))
     .toHaveAttribute('href', '/c/community-strategy');
 });

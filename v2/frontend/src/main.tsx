@@ -5,6 +5,7 @@ import {BrowserRouter} from 'react-router-dom';
 
 import {App} from './app';
 import {createQueryClient} from './query-client';
+import './styles.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('SPA root element is missing.');
