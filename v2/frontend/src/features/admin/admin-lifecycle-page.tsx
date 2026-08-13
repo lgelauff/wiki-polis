@@ -9,6 +9,7 @@ import {
   createAdminPublication,
   putAdminPause,
   putAdminPhase,
+  putAdminSchedule,
 } from '../../api/queries';
 
 type Lifecycle = components['schemas']['AdminLifecycle'];
@@ -54,6 +55,45 @@ function ReadinessList({rows, confirmed, onToggle}: {
 
 function allHumanChecksConfirmed(rows: Readiness[], confirmed: string[]) {
   return rows.every((row) => row.met === true || (row.met === null && confirmed.includes(row.id)));
+}
+
+function localDateTime(value: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function ScheduleControl({conversationId, csrfToken, data, onChange, onReceipt}: {
+  conversationId: number; csrfToken: string; data: Lifecycle;
+  onChange: (lifecycle: Lifecycle) => void; onReceipt: (message: string) => void;
+}) {
+  const [scheduledAt, setScheduledAt] = useState(localDateTime(data.schedule.scheduledAt));
+  const mutation = useMutation({
+    mutationFn: (body: components['schemas']['AdminScheduleRequest']) => (
+      putAdminSchedule(conversationId, body, csrfToken)
+    ),
+    onSuccess: (result) => {
+      onChange(result.lifecycle);
+      onReceipt(result.changed ? 'Schedule updated.' : 'Schedule already up to date.');
+    },
+  });
+  const error = commandError(mutation.error);
+  if (!data.schedule.canSchedule && !data.schedule.scheduledAt) return null;
+  return (
+    <div className="lifecycle-scheduler">
+      <label htmlFor="phase-scheduled-at">Move to {data.schedule.targetLabel ?? 'next phase'} at</label>
+      <input id="phase-scheduled-at" type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} />
+      <div>
+        <button type="button" disabled={!scheduledAt || mutation.isPending} onClick={() => mutation.mutate({scheduledAt: new Date(scheduledAt).toISOString(), frozen: false})}>Schedule</button>
+        {data.schedule.scheduledAt && <>
+          <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate({scheduledAt: data.schedule.scheduledAt, frozen: !data.schedule.frozen})}>{data.schedule.frozen ? 'Unfreeze' : 'Freeze'}</button>
+          <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate({scheduledAt: null, frozen: false})}>Cancel</button>
+        </>}
+      </div>
+      {error && <p role="alert">{error}</p>}
+    </div>
+  );
 }
 
 export function AdminLifecyclePage({conversationId, csrfToken}: {
@@ -223,6 +263,11 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {
               <time dateTime={data.schedule.scheduledAt}>{new Date(data.schedule.scheduledAt).toLocaleString()}</time>
             </p>
           )}
+          <ScheduleControl
+            key={`${data.schedule.scheduledAt}-${data.schedule.frozen}-${data.schedule.targetKey}`}
+            conversationId={conversationId} csrfToken={csrfToken} data={data}
+            onChange={replaceLifecycle} onReceipt={setReceipt}
+          />
           {data.capabilities.pause ? (
             <button
               type="button"

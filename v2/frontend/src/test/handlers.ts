@@ -2,6 +2,22 @@ import {http, HttpResponse} from 'msw';
 
 type Role = 'moderator' | 'organizer';
 
+function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as string | null, targetKey: null as string | null, targetLabel: null as string | null, frozen: false}) {
+  return {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: schedule.scheduledAt && !schedule.frozen ? 'scheduled' : 'active', publication: 'not_applicable', closedAt: null},
+    operator: {roleLabel: 'Global admin'},
+    phase: {linear: true, currentIndex: 0, activeKeys: ['preparation'], steps: [
+      {key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'current'},
+      {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'upcoming'},
+      {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'},
+    ], transition: {source: {key: 'preparation', label: 'Preparation'}, target: {key: 'submission', label: 'Explore'}, consequence: {opens: 'Participant statement submission and voting', closes: 'Conversation setup'}, preconditions: [{id: 'ready', label: 'The statement set and introduction are ready', met: null, note: null}], requiresPhase6Initialization: false}},
+    schedule,
+    publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
+    counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true},
+    links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings'},
+  };
+}
+
 export const handlers = [
   http.get(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', introHtml: '<p>Shape the future.</p>', outroHtml: '', accessPolicy: 'public', phaseRoute: 'default_7'},
@@ -21,35 +37,11 @@ export const handlers = [
       eligibility: {configured: true, label: 'Extended-confirmed editors', configurationMode: 'legacy_read_only', note: 'Eligibility changes are unavailable until curated criteria and wiki mappings are configured.'}, capabilities: {edit: true}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/app/admin/conversations/7'},
     }}});
   }),
-  http.get(new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
-    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', publication: 'not_applicable', closedAt: null},
-    operator: {roleLabel: 'Global admin'},
-    phase: {
-      linear: true, currentIndex: 0, activeKeys: ['preparation'],
-      steps: [
-        {key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'current'},
-        {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'upcoming'},
-        {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'},
-      ],
-      transition: {
-        source: {key: 'preparation', label: 'Preparation'}, target: {key: 'submission', label: 'Explore'},
-        consequence: {opens: 'Participant statement submission and voting', closes: 'Conversation setup'},
-        preconditions: [{id: 'ready', label: 'The statement set and introduction are ready', met: null, note: null}],
-        requiresPhase6Initialization: false,
-      },
-    },
-    schedule: {canSchedule: true, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
-    publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
-    counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
-    capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true},
-    links: {
-      self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy',
-      participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation',
-      invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles',
-      statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured',
-      settings: '/app/admin/conversations/7/settings',
-    },
-  }})),
+  http.get(new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString(), () => HttpResponse.json({data: lifecycleFixture()})),
+  http.put(new URL('/api/v1/admin/conversations/7/schedule', globalThis.location.origin).toString(), async ({request}) => {
+    const body = await request.json() as {scheduledAt: string | null; frozen: boolean};
+    return HttpResponse.json({data: {changed: true, lifecycle: lifecycleFixture({canSchedule: true, scheduledAt: body.scheduledAt, targetKey: body.scheduledAt ? 'submission' : null, targetLabel: body.scheduledAt ? 'Explore' : null, frozen: body.frozen})}});
+  }),
   http.put(new URL('/api/v1/admin/conversations/7/phase', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     transition: {sourceKey: 'preparation', targetKey: 'submission', targetLabel: 'Explore', phase6Created: false, phase6SyncMessage: null, visibilitySynced: true},
     lifecycle: {

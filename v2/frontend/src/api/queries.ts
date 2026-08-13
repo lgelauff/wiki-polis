@@ -231,6 +231,17 @@ export async function putAdminPause(
   }))).data;
 }
 
+export async function putAdminSchedule(
+  conversationId: number,
+  body: components['schemas']['AdminScheduleRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT('/admin/conversations/{conversationId}/schedule', {
+    params: {path: {conversationId}}, body,
+    headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
 export async function createAdminPublication(
   conversationId: number,
   body: components['schemas']['AdminPublicationRequest'],

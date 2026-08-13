@@ -46,6 +46,17 @@ test('advances a conversation from the server-described lifecycle console', asyn
   );
 });
 
+test('schedules and cancels a lifecycle transition', async () => {
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
+  await screen.findByRole('heading', {name: 'Community strategy'});
+  fireEvent.change(screen.getByLabelText(/Move to next phase at/), {target: {value: '2030-01-02T12:30'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Schedule'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Schedule updated');
+  expect(screen.getByRole('button', {name: 'Freeze'})).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+  expect(await screen.findByLabelText(/Move to next phase at/)).toHaveValue('');
+});
+
 test('edits settings while keeping legacy eligibility observable and read-only', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings']}><App /></MemoryRouter></QueryClientProvider>);
   expect(await screen.findByRole('heading', {name: 'Conversation settings'})).toBeVisible();

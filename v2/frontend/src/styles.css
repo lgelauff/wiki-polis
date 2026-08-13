@@ -705,6 +705,14 @@ a { color: inherit; }
 .lifecycle-operations { padding-left: clamp(2rem, 4vw, 4rem); }
 .lifecycle-operations > p { font-size: .8rem; }
 .lifecycle-schedule { padding: .8rem; border: 1px solid var(--rule); }
+.lifecycle-scheduler { margin: 1.4rem 0; padding-top: 1rem; border-top: 1px solid var(--rule); }
+.lifecycle-scheduler > label { display: block; margin-bottom: .45rem; font-size: .68rem; font-weight: 650; }
+.lifecycle-scheduler > input { width: 100%; padding: .6rem; border: 1px solid var(--ink); background: white; font: .72rem var(--mono); }
+.lifecycle-scheduler > div { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .6rem; }
+.lifecycle-scheduler button { padding: .45rem .6rem; border: 1px solid var(--ink); background: white; cursor: pointer; font-size: .66rem; }
+.lifecycle-scheduler button:first-child { color: white; background: var(--ink); }
+.lifecycle-scheduler button:last-child:not(:first-child) { color: var(--dissent); border-color: var(--dissent); }
+.lifecycle-scheduler > p { color: var(--dissent); font-size: .68rem; }
 .lifecycle-publication { margin-top: 4rem; padding: 2rem; border: 1px solid var(--dissent); background: color-mix(in srgb, var(--dissent) 4%, white); }
 .lifecycle-publication > header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .7fr); align-items: end; gap: 3rem; }
 .lifecycle-publication > header > p { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.5; }
