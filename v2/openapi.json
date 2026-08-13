@@ -567,6 +567,76 @@
         }
       }
     },
+    "/admin/conversations/{conversationId}/participants": {
+      "parameters": [
+        {
+          "name": "conversationId",
+          "in": "path",
+          "required": true,
+          "schema": {"type": "integer", "minimum": 1}
+        }
+      ],
+      "get": {
+        "operationId": "getAdminConversationParticipants",
+        "summary": "Return the authorized participant engagement roster",
+        "responses": {
+          "200": {
+            "description": "Participant roster",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminParticipantRosterResponse"}}}
+          },
+          "403": {
+            "description": "Conversation moderation permission required",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "404": {
+            "description": "Conversation not found",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          }
+        }
+      }
+    },
+    "/admin/conversations/{conversationId}/participants/{participantId}/access": {
+      "parameters": [
+        {
+          "name": "conversationId",
+          "in": "path",
+          "required": true,
+          "schema": {"type": "integer", "minimum": 1}
+        },
+        {
+          "name": "participantId",
+          "in": "path",
+          "required": true,
+          "schema": {"type": "integer", "minimum": 1}
+        }
+      ],
+      "put": {
+        "operationId": "putAdminParticipantAccess",
+        "summary": "Set whether a participant is banned from one conversation",
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminParticipantAccessRequest"}}}
+        },
+        "responses": {
+          "200": {
+            "description": "Current participant access state",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminParticipantAccessResponse"}}}
+          },
+          "400": {
+            "description": "Invalid desired access state",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "403": {
+            "description": "Conversation moderation permission required",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "404": {
+            "description": "Conversation or participant membership not found",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -579,6 +649,131 @@
   },
   "components": {
     "schemas": {
+      "AdminParticipantRosterResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/AdminParticipantRoster"}}
+      },
+      "AdminParticipantRoster": {
+        "type": "object",
+        "required": ["conversation", "participants", "dataAvailability", "capabilities", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "conversation": {
+            "type": "object",
+            "required": ["id", "slug", "title"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {"type": "integer", "minimum": 1},
+              "slug": {"type": "string"},
+              "title": {"type": "string"}
+            }
+          },
+          "participants": {"type": "array", "items": {"$ref": "#/components/schemas/AdminParticipant"}},
+          "dataAvailability": {
+            "type": "object",
+            "required": ["statementProgress"],
+            "additionalProperties": false,
+            "properties": {"statementProgress": {"type": "boolean"}}
+          },
+          "capabilities": {
+            "type": "object",
+            "required": ["setParticipantAccess"],
+            "additionalProperties": false,
+            "properties": {"setParticipantAccess": {"type": "boolean"}}
+          },
+          "links": {
+            "type": "object",
+            "required": ["self", "conversation"],
+            "additionalProperties": false,
+            "properties": {
+              "self": {"type": "string"},
+              "conversation": {"type": "string"}
+            }
+          }
+        }
+      },
+      "AdminParticipant": {
+        "type": "object",
+        "required": ["participantId", "username", "pseudonym", "statementProgress", "arguments", "lastEngagementAt", "access"],
+        "additionalProperties": false,
+        "properties": {
+          "participantId": {"type": "integer", "minimum": 1},
+          "username": {"type": "string"},
+          "pseudonym": {"type": "string"},
+          "statementProgress": {
+            "oneOf": [
+              {"$ref": "#/components/schemas/AdminStatementProgress"},
+              {"type": "null"}
+            ]
+          },
+          "arguments": {
+            "type": "object",
+            "required": ["submitted", "prioritized"],
+            "additionalProperties": false,
+            "properties": {
+              "submitted": {"type": "integer", "minimum": 0},
+              "prioritized": {"type": "integer", "minimum": 0}
+            }
+          },
+          "lastEngagementAt": {"type": ["string", "null"], "format": "date-time"},
+          "access": {"$ref": "#/components/schemas/AdminParticipantAccess"}
+        }
+      },
+      "AdminStatementProgress": {
+        "type": "object",
+        "required": ["total", "voted", "remaining"],
+        "additionalProperties": false,
+        "properties": {
+          "total": {"type": "integer", "minimum": 0},
+          "voted": {"type": "integer", "minimum": 0},
+          "remaining": {"type": "integer", "minimum": 0}
+        }
+      },
+      "AdminParticipantAccess": {
+        "type": "object",
+        "required": ["banned", "changedAt", "summary"],
+        "additionalProperties": false,
+        "properties": {
+          "banned": {"type": "boolean"},
+          "changedAt": {"type": ["string", "null"], "format": "date-time"},
+          "summary": {"type": ["string", "null"]}
+        }
+      },
+      "AdminParticipantAccessRequest": {
+        "type": "object",
+        "required": ["banned"],
+        "additionalProperties": false,
+        "properties": {
+          "banned": {"type": "boolean"},
+          "summary": {"type": ["string", "null"], "maxLength": 1000}
+        }
+      },
+      "AdminParticipantAccessResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/AdminParticipantAccessReceipt"}}
+      },
+      "AdminParticipantAccessReceipt": {
+        "type": "object",
+        "required": ["participantId", "banned", "changed", "changedAt", "summary", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "participantId": {"type": "integer", "minimum": 1},
+          "banned": {"type": "boolean"},
+          "changed": {"type": "boolean"},
+          "changedAt": {"type": ["string", "null"], "format": "date-time"},
+          "summary": {"type": ["string", "null"]},
+          "links": {
+            "type": "object",
+            "required": ["participants"],
+            "additionalProperties": false,
+            "properties": {"participants": {"type": "string"}}
+          }
+        }
+      },
       "SessionResponse": {
         "type": "object",
         "required": ["data"],

@@ -63,6 +63,8 @@ def create_api_v1_blueprint(
     resolve_informed_voting: Callable[[str], dict],
     submit_informed_vote: Callable[[str, int, str], dict],
     resolve_results_report: Callable[[str], dict],
+    resolve_admin_participants: Callable[[int], dict],
+    set_admin_participant_access: Callable[[int, int, dict], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
@@ -251,6 +253,33 @@ def create_api_v1_blueprint(
     def get_results_report(slug: str):
         return _no_store(jsonify({
             'data': resolve_results_report(slug),
+        }))
+
+    @bp.get('/admin/conversations/<int:conversation_id>/participants')
+    def get_admin_conversation_participants(conversation_id: int):
+        return _no_store(jsonify({
+            'data': resolve_admin_participants(conversation_id),
+        }))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/participants/<int:participant_id>/access')
+    def put_admin_participant_access(conversation_id: int, participant_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict)
+                or set(body) - {'banned', 'summary'}
+                or not isinstance(body.get('banned'), bool)
+                or ('summary' in body and body['summary'] is not None
+                    and not isinstance(body['summary'], str))):
+            return error_response(
+                'validation_failed', 'Check the participant access state.', 400,
+                details={'fields': {
+                    'banned': ['Use true or false.'],
+                    'summary': ['Use text or null.'],
+                }},
+            )
+        return _no_store(jsonify({
+            'data': set_admin_participant_access(
+                conversation_id, participant_id, body,
+            ),
         }))
 
     @bp.put('/conversations/<slug>/featured-statements/<int:featured_statement_id>/informed-vote')

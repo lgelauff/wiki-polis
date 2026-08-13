@@ -74,6 +74,10 @@ from services.argument_commands import (
     submit_argument as submit_argument_command,
 )
 from services.content_flags import InvalidFlag, submit_content_flag
+from services.admin_participants import (
+    ParticipantNotInConversation, build_admin_participant_roster,
+    set_participant_access,
+)
 from services.idempotency import (complete_command, release_reservation,
                                   request_digest, reserve_command)
 from services.statements import (DerivativeSimilarityTooLow,
@@ -2381,6 +2385,70 @@ def _require_organizer_for_conv(conv_id: int) -> 'Conversation':
     return conv
 
 
+def _admin_participant_roster_model(conv: Conversation):
+    scoped_subjects = bool(current_app.config.get('PARTICIAPI_SUB_SECRET'))
+    return build_admin_participant_roster(
+        conversation=conv,
+        polis_client=_polis_server_client(),
+        polis_pg_configured=bool(current_app.config.get('POLIS_DATABASE_URL')),
+        participant_subject=(
+            lambda participant: _conversation_subject(participant.xid, conv)
+            if scoped_subjects else participant.xid
+        ),
+    )
+
+
+def _admin_participant_roster_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    roster = _admin_participant_roster_model(conv)
+    return roster.to_api(
+        self_link=url_for(
+            'api_v1.get_admin_conversation_participants',
+            conversation_id=conv.id,
+        ),
+        conversation_link=url_for(
+            'admin.admin_conversation_detail', conv_id=conv.id,
+        ),
+    )
+
+
+def _set_admin_participant_access_api_payload(
+    conv_id: int, participant_id: int, body: dict,
+) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    try:
+        result = set_participant_access(
+            conversation=conv,
+            participant_id=participant_id,
+            banned=body['banned'],
+            summary=body.get('summary'),
+            actor=_current_participant(),
+            audit=record_audit,
+        )
+    except ParticipantNotInConversation:
+        abort(404, description='Participant not found in this conversation.')
+
+    def utc_iso(value):
+        if value is None:
+            return None
+        aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return aware.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+    return {
+        'participantId': result.participant_id,
+        'banned': result.banned,
+        'changed': result.changed,
+        'changedAt': utc_iso(result.changed_at),
+        'summary': result.summary,
+        'links': {
+            'participants': url_for(
+                'api_v1.get_admin_conversation_participants',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
 def _active_conversation_ban(conversation, participant: 'Participant | None'):
     if participant is None:
         return None
@@ -3474,81 +3542,13 @@ def admin_conversation_detail(conv_id):
 @login_required
 def admin_conversation_participants(conv_id):
     conv = _require_mod_for_conv(conv_id)
-    participations = (Participation.query
-                      .join(Participant)
-                      .filter(Participation.conversation_id == conv_id)
-                      .options(joinedload(Participation.participant))
-                      .order_by(Participant.mw_username)
-                      .all())
-
-    # Arguments store the proposer's pseudonym (not a participant FK) for privacy (#113),
-    # so attribute submitted-argument counts by pseudonym within this conversation.
-    submitted_counts = dict(
-        db.session.query(Argument.proposer_pseudonym, db.func.count(Argument.id))
-        .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
-        .filter(FeaturedStatement.conversation_id == conv_id,
-                Argument.proposer_pseudonym.isnot(None))
-        .group_by(Argument.proposer_pseudonym)
-        .all()
-    )
-    voted_counts = dict(
-        db.session.query(ArgumentVote.participant_id, db.func.count(ArgumentVote.id))
-        .join(Argument, ArgumentVote.argument_id == Argument.id)
-        .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
-        .filter(FeaturedStatement.conversation_id == conv_id)
-        .group_by(ArgumentVote.participant_id)
-        .all()
-    )
-
-    client = _polis_server_client()
-    pg_configured = bool(current_app.config.get('POLIS_DATABASE_URL'))
-    statement_progress_unavailable = pg_configured
-    # One batched query for every participant's progress — previously this issued a
-    # fresh Postgres connection per participant (O(N) connects on this page, which
-    # stalled at 1000 participants).
-    progress_by_xid = None
-    if pg_configured:
-        progress_keys = {
-            part.participant_id: (
-                _conversation_subject(part.participant.xid, conv)
-                if current_app.config.get('PARTICIAPI_SUB_SECRET')
-                else part.participant.xid
-            )
-            for part in participations
-        }
-        progress_by_xid = client.get_statement_progress_for_participants(
-            conv.polis_id, list(progress_keys.values()))
-        if progress_by_xid is not None:
-            statement_progress_unavailable = False
-    else:
-        progress_keys = {}
-    active_bans = {
-        ban.participant_id: ban
-        for ban in ConversationBan.query.filter_by(
-            conversation_id=conv_id,
-            lifted_at=None,
-        ).all()
-    }
-    rows = []
-    for part in participations:
-        progress_row = (
-            progress_by_xid.get(progress_keys[part.participant_id])
-            if progress_by_xid is not None else None
-        )
-        rows.append({
-            'participation': part,
-            'participant': part.participant,
-            'statement_progress': progress_row,
-            'arguments_submitted': int(submitted_counts.get(part.pseudonym, 0)),
-            'arguments_voted': int(voted_counts.get(part.participant_id, 0)),
-            'active_ban': active_bans.get(part.participant_id),
-        })
+    roster = _admin_participant_roster_model(conv)
 
     return render_template(
         'admin_participants.html',
         conversation=conv,
-        rows=rows,
-        statement_progress_unavailable=statement_progress_unavailable,
+        rows=roster.rows,
+        statement_progress_unavailable=roster.statement_progress_unavailable,
     )
 
 
@@ -3592,32 +3592,20 @@ def admin_flag_resolve(conv_id, flag_id):
 @login_required
 def admin_participant_ban(conv_id, participant_id):
     conv = _require_mod_for_conv(conv_id)
-    Participation.query.filter_by(
-        conversation_id=conv_id,
-        participant_id=participant_id,
-    ).first_or_404()
-    existing = ConversationBan.query.filter_by(
-        conversation_id=conv_id,
-        participant_id=participant_id,
-        lifted_at=None,
-    ).first()
-    if existing:
+    try:
+        result = set_participant_access(
+            conversation=conv,
+            participant_id=participant_id,
+            banned=True,
+            summary=request.form.get('summary'),
+            actor=_current_participant(),
+            audit=record_audit,
+        )
+    except ParticipantNotInConversation:
+        abort(404)
+    if not result.changed:
         flash('Participant is already banned from this conversation.', 'warning')
         return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
-
-    summary = nh3.clean((request.form.get('summary') or '').strip(), tags=_NH3_NO_TAGS)[:1000]
-    actor = _current_participant()
-    ban = ConversationBan(
-        conversation_id=conv_id,
-        participant_id=participant_id,
-        banned_by_id=actor.id if actor else None,
-        summary=summary or None,
-    )
-    db.session.add(ban)
-    db.session.commit()
-    record_audit('participant.ban', conv_id=conv.id, target_type='participant',
-                 target_id=participant_id, scope='conversation',
-                 summary_present=bool(summary))
     flash('Participant banned from this conversation.', 'success')
     return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
 
@@ -3626,20 +3614,20 @@ def admin_participant_ban(conv_id, participant_id):
 @login_required
 def admin_participant_unban(conv_id, participant_id):
     conv = _require_mod_for_conv(conv_id)
-    ban = ConversationBan.query.filter_by(
-        conversation_id=conv_id,
-        participant_id=participant_id,
-        lifted_at=None,
-    ).first_or_404()
-    summary = nh3.clean((request.form.get('summary') or '').strip(), tags=_NH3_NO_TAGS)[:1000]
-    actor = _current_participant()
-    ban.lifted_at = datetime.now(timezone.utc)
-    ban.lifted_by_id = actor.id if actor else None
-    ban.lift_summary = summary or None
-    db.session.commit()
-    record_audit('participant.unban', conv_id=conv.id, target_type='participant',
-                 target_id=participant_id, scope='conversation',
-                 summary_present=bool(summary))
+    try:
+        result = set_participant_access(
+            conversation=conv,
+            participant_id=participant_id,
+            banned=False,
+            summary=request.form.get('summary'),
+            actor=_current_participant(),
+            audit=record_audit,
+        )
+    except ParticipantNotInConversation:
+        abort(404)
+    if not result.changed:
+        flash('Participant is already allowed in this conversation.', 'warning')
+        return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
     flash('Participant unbanned from this conversation.', 'success')
     return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
 
@@ -5828,6 +5816,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_informed_voting=_informed_voting_api_payload,
         submit_informed_vote=_informed_vote_api_payload,
         resolve_results_report=_results_report_api_payload,
+        resolve_admin_participants=_admin_participant_roster_api_payload,
+        set_admin_participant_access=_set_admin_participant_access_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,

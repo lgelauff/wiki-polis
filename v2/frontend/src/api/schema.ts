@@ -329,6 +329,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/participants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /** Return the authorized participant engagement roster */
+        get: operations["getAdminConversationParticipants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/conversations/{conversationId}/participants/{participantId}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                participantId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Set whether a participant is banned from one conversation */
+        put: operations["putAdminParticipantAccess"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -350,6 +389,69 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdminParticipantRosterResponse: {
+            data: components["schemas"]["AdminParticipantRoster"];
+        };
+        AdminParticipantRoster: {
+            conversation: {
+                id: number;
+                slug: string;
+                title: string;
+            };
+            participants: components["schemas"]["AdminParticipant"][];
+            dataAvailability: {
+                statementProgress: boolean;
+            };
+            capabilities: {
+                setParticipantAccess: boolean;
+            };
+            links: {
+                self: string;
+                conversation: string;
+            };
+        };
+        AdminParticipant: {
+            participantId: number;
+            username: string;
+            pseudonym: string;
+            statementProgress: components["schemas"]["AdminStatementProgress"] | null;
+            arguments: {
+                submitted: number;
+                prioritized: number;
+            };
+            /** Format: date-time */
+            lastEngagementAt: string | null;
+            access: components["schemas"]["AdminParticipantAccess"];
+        };
+        AdminStatementProgress: {
+            total: number;
+            voted: number;
+            remaining: number;
+        };
+        AdminParticipantAccess: {
+            banned: boolean;
+            /** Format: date-time */
+            changedAt: string | null;
+            summary: string | null;
+        };
+        AdminParticipantAccessRequest: {
+            banned: boolean;
+            summary?: string | null;
+        };
+        AdminParticipantAccessResponse: {
+            data: components["schemas"]["AdminParticipantAccessReceipt"];
+        };
+        AdminParticipantAccessReceipt: {
+            participantId: number;
+            banned: boolean;
+            changed: boolean;
+            /** Format: date-time */
+            changedAt: string | null;
+            summary: string | null;
+            links: {
+                participants: string;
+            };
+        };
         SessionResponse: {
             data: components["schemas"]["Session"];
         };
@@ -1945,6 +2047,100 @@ export interface operations {
             };
             /** @description The upstream command outcome is unknown */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminConversationParticipants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Participant roster */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminParticipantRosterResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminParticipantAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                participantId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminParticipantAccessRequest"];
+            };
+        };
+        responses: {
+            /** @description Current participant access state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminParticipantAccessResponse"];
+                };
+            };
+            /** @description Invalid desired access state */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or participant membership not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
