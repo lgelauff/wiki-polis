@@ -95,6 +95,24 @@ class ExploreGateway:
             raise ExploreUpstreamError('Particiapi returned an invalid Explore payload.')
         return statement_payload, participant_payload
 
+    def read_participant(self, conversation_id: str) -> dict:
+        self.ensure_session()
+        try:
+            response = self.transport.get(
+                f'{self.base_url}/api/conversations/{conversation_id}/participant',
+                cookies=self._cookies(), timeout=10,
+            )
+        except requests.RequestException as exc:
+            raise ExploreUpstreamError('Particiapi is unavailable.') from exc
+        if not response.ok:
+            raise ExploreUpstreamError(
+                f'Particiapi participant read failed with HTTP {response.status_code}.',
+            )
+        payload = response.json() if response.content else {}
+        if not isinstance(payload, dict):
+            raise ExploreUpstreamError('Particiapi returned an invalid participant payload.')
+        return payload
+
     def vote(self, conversation_id: str, statement_id: int, polis_value: int) -> None:
         self.ensure_session()
         try:

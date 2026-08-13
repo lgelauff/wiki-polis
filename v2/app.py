@@ -54,6 +54,7 @@ from services.identity_reveal import (
     build_reveal_context as _reveal_context,
     reveal_identity as reveal_identity_command,
 )
+from services.informed_voting import build_informed_voting_state
 from services.invites import InviteBatchSaveError, add_conversation_invites
 from services.conversation_about import build_conversation_about
 from services.conversation_lanes import (build_conversation_lane,
@@ -1647,6 +1648,9 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
         arguments_link=lambda slug: url_for(
             'spa_shell', spa_path=f'conversations/{slug}/arguments',
         ),
+        informed_voting_link=lambda slug: url_for(
+            'spa_shell', spa_path=f'conversations/{slug}/informed-voting',
+        ),
         reveal_link=lambda slug: url_for(
             'spa_shell', spa_path=f'conversations/{slug}/identity-reveal',
         ),
@@ -1916,6 +1920,126 @@ def _explore_vote_api_payload(
         }
     finally:
         _save_explore_gateway_state(conv, gateway, states)
+
+
+def _require_informed_voting_api_context(slug: str):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        abort(409, description='Join this conversation before informed voting.')
+    if (not conv.active or conv.paused or not conv.phase_informed_voting
+            or not conv.phase6_polis_conversation_id):
+        abort(409, description='Informed voting is not open.')
+    _abort_if_banned(conv, participant)
+    return conv, participant, participation
+
+
+def _phase6_gateway(conv: Conversation, participant: Participant):
+    key = (participant.xid, conv.id)
+    state = ParticiapiSessionState(
+        cookie=session.get('_p6_pa'),
+        csrf_token=session.get('_p6_csrf'),
+    )
+    gateway = ExploreGateway(
+        base_url=current_app.config['PARTICIAPI_BASE'],
+        transport=polis_http,
+        state=state,
+        subject=None,
+        subject_secret=None,
+    )
+    if not (state.cookie and state.csrf_token):
+        with _p6_bootstrap_lock(key):
+            shared = _p6_session_cache.get(key)
+            if shared:
+                state.cookie, state.csrf_token = shared
+            else:
+                gateway.ensure_session()
+                _p6_session_cache[key] = (state.cookie, state.csrf_token)
+    return gateway, key
+
+
+def _save_phase6_gateway(gateway: ExploreGateway, key) -> None:
+    session['_p6_pa'] = gateway.state.cookie
+    session['_p6_csrf'] = gateway.state.csrf_token
+    _p6_session_cache[key] = (gateway.state.cookie, gateway.state.csrf_token)
+
+
+def _informed_voting_api_payload(slug: str) -> dict:
+    conv, participant, participation = _require_informed_voting_api_context(slug)
+    gateway, key = _phase6_gateway(conv, participant)
+    try:
+        participant_payload = gateway.read_participant(
+            conv.phase6_polis_conversation_id,
+        )
+        projection = build_informed_voting_state(
+            conversation_id=conv.id,
+            participation=participation,
+            participant_payload=participant_payload,
+        )
+        links = {
+            'self': url_for('api_v1.get_informed_voting', slug=slug),
+            'about': url_for('spa_shell', spa_path=f'conversations/{slug}/about'),
+            'conversation': url_for('participant.conversation', slug=slug),
+        }
+        if conv.phase_submission:
+            links['explore'] = url_for(
+                'spa_shell', spa_path=f'conversations/{slug}/explore',
+            )
+        if conv.phase_argument_mapping:
+            links['arguments'] = url_for(
+                'spa_shell', spa_path=f'conversations/{slug}/arguments',
+            )
+        return {
+            'slug': conv.slug,
+            'title': conv.title,
+            'pseudonym': participation.pseudonym,
+            **projection,
+            'capabilities': {'vote': True},
+            'links': links,
+        }
+    finally:
+        _save_phase6_gateway(gateway, key)
+
+
+def _informed_vote_api_payload(
+    slug: str, featured_statement_id: int, choice: str,
+) -> dict:
+    conv, participant, participation = _require_informed_voting_api_context(slug)
+    featured = FeaturedStatement.query.filter_by(
+        id=featured_statement_id,
+        conversation_id=conv.id,
+        confirmed_by_admin=True,
+    ).first()
+    if featured is None or featured.phase6_polis_statement_id is None:
+        abort(404, description='Featured statement is not available in this round.')
+    gateway, key = _phase6_gateway(conv, participant)
+    try:
+        polis_values = {'agree': 1, 'pass': 0, 'disagree': -1}
+        gateway.vote(
+            conv.phase6_polis_conversation_id,
+            featured.phase6_polis_statement_id,
+            polis_values[choice],
+        )
+        _touch_last_engagement(participation)
+        db.session.commit()
+        return {
+            'featuredStatementId': featured.id,
+            'choice': choice,
+            'links': {
+                'informedVoting': url_for(
+                    'api_v1.get_informed_voting', slug=slug,
+                ),
+            },
+        }
+    finally:
+        _save_phase6_gateway(gateway, key)
 
 
 def _argument_mapping_api_payload(slug: str) -> dict:
@@ -5643,6 +5767,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_pseudonym_suggestions=_pseudonym_suggestions_api_payload,
         resolve_explore_state=_explore_api_payload,
         resolve_argument_mapping=_argument_mapping_api_payload,
+        resolve_informed_voting=_informed_voting_api_payload,
+        submit_informed_vote=_informed_vote_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,

@@ -320,6 +320,39 @@
         }
       }
     },
+    "/conversations/{slug}/informed-voting": {
+      "get": {
+        "operationId": "getInformedVoting",
+        "summary": "Return the participant's informed-voting cards and progress",
+        "parameters": [{"name": "slug", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}],
+        "responses": {
+          "200": {"description": "Current informed-voting state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/InformedVotingResponse"}}}},
+          "401": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Conversation access is denied or participant is banned", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Participation or informed-voting phase is not active", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "502": {"description": "Voting service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
+    "/conversations/{slug}/featured-statements/{featuredStatementId}/informed-vote": {
+      "put": {
+        "operationId": "putInformedVote",
+        "summary": "Set the participant's informed vote for a featured statement",
+        "description": "Idempotent replacement command. Phase 6 Polis identifiers are resolved server-side.",
+        "parameters": [
+          {"name": "slug", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}},
+          {"name": "featuredStatementId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}
+        ],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/InformedVoteRequest"}}}},
+        "responses": {
+          "200": {"description": "Informed vote stored", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/InformedVoteResponse"}}}},
+          "400": {"description": "Invalid choice", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "404": {"description": "Featured statement is not available in this round", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Informed voting is not active", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "502": {"description": "Voting service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/conversations/{slug}/featured-statements/{featuredStatementId}/arguments": {
       "post": {
         "operationId": "createArgument",
@@ -904,6 +937,99 @@
           }
         }
       },
+      "InformedVotingResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/InformedVoting"}}
+      },
+      "InformedVoting": {
+        "type": "object",
+        "required": ["slug", "title", "pseudonym", "cards", "progress", "capabilities", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {"type": "string"},
+          "title": {"type": "string"},
+          "pseudonym": {"type": "string"},
+          "cards": {"type": "array", "items": {"$ref": "#/components/schemas/InformedVotingCard"}},
+          "progress": {"$ref": "#/components/schemas/ExploreProgress"},
+          "capabilities": {
+            "type": "object",
+            "required": ["vote"],
+            "additionalProperties": false,
+            "properties": {"vote": {"type": "boolean"}}
+          },
+          "links": {"$ref": "#/components/schemas/InformedVotingLinks"}
+        }
+      },
+      "InformedVotingCard": {
+        "type": "object",
+        "required": ["featuredStatementId", "statement", "voted", "arguments"],
+        "additionalProperties": false,
+        "properties": {
+          "featuredStatementId": {"type": "integer", "minimum": 1},
+          "statement": {"type": "string", "minLength": 1},
+          "voted": {"type": "boolean"},
+          "arguments": {
+            "type": "object",
+            "required": ["for", "against"],
+            "additionalProperties": false,
+            "properties": {
+              "for": {"type": "array", "items": {"$ref": "#/components/schemas/InformedVotingArgument"}},
+              "against": {"type": "array", "items": {"$ref": "#/components/schemas/InformedVotingArgument"}}
+            }
+          }
+        }
+      },
+      "InformedVotingArgument": {
+        "type": "object",
+        "required": ["id", "body", "helpfulVotes"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "body": {"type": "string"},
+          "helpfulVotes": {"type": "integer", "minimum": 0}
+        }
+      },
+      "InformedVotingLinks": {
+        "type": "object",
+        "required": ["self", "about", "conversation"],
+        "additionalProperties": false,
+        "properties": {
+          "self": {"type": "string"},
+          "about": {"type": "string"},
+          "conversation": {"type": "string"},
+          "explore": {"type": "string"},
+          "arguments": {"type": "string"}
+        }
+      },
+      "InformedVoteRequest": {
+        "type": "object",
+        "required": ["choice"],
+        "additionalProperties": false,
+        "properties": {"choice": {"type": "string", "enum": ["agree", "pass", "disagree"]}}
+      },
+      "InformedVoteResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/InformedVoteReceipt"}}
+      },
+      "InformedVoteReceipt": {
+        "type": "object",
+        "required": ["featuredStatementId", "choice", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "featuredStatementId": {"type": "integer", "minimum": 1},
+          "choice": {"type": "string", "enum": ["agree", "pass", "disagree"]},
+          "links": {
+            "type": "object",
+            "required": ["informedVoting"],
+            "additionalProperties": false,
+            "properties": {"informedVoting": {"type": "string"}}
+          }
+        }
+      },
       "ArgumentMappingResponse": {
         "type": "object",
         "required": ["data"],
@@ -1314,6 +1440,7 @@
           "about": {"type": "string"},
           "explore": {"type": "string"},
           "arguments": {"type": "string"},
+          "informedVoting": {"type": "string"},
           "identityReveal": {"type": "string"},
           "admin": {"type": "string"}
         }

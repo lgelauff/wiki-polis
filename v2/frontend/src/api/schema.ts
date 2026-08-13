@@ -152,6 +152,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/informed-voting": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the participant's informed-voting cards and progress */
+        get: operations["getInformedVoting"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{slug}/featured-statements/{featuredStatementId}/informed-vote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the participant's informed vote for a featured statement
+         * @description Idempotent replacement command. Phase 6 Polis identifiers are resolved server-side.
+         */
+        put: operations["putInformedVote"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{slug}/featured-statements/{featuredStatementId}/arguments": {
         parameters: {
             query?: never;
@@ -482,6 +519,56 @@ export interface components {
                 explore: string;
             };
         };
+        InformedVotingResponse: {
+            data: components["schemas"]["InformedVoting"];
+        };
+        InformedVoting: {
+            slug: string;
+            title: string;
+            pseudonym: string;
+            cards: components["schemas"]["InformedVotingCard"][];
+            progress: components["schemas"]["ExploreProgress"];
+            capabilities: {
+                vote: boolean;
+            };
+            links: components["schemas"]["InformedVotingLinks"];
+        };
+        InformedVotingCard: {
+            featuredStatementId: number;
+            statement: string;
+            voted: boolean;
+            arguments: {
+                for: components["schemas"]["InformedVotingArgument"][];
+                against: components["schemas"]["InformedVotingArgument"][];
+            };
+        };
+        InformedVotingArgument: {
+            id: number;
+            body: string;
+            helpfulVotes: number;
+        };
+        InformedVotingLinks: {
+            self: string;
+            about: string;
+            conversation: string;
+            explore?: string;
+            arguments?: string;
+        };
+        InformedVoteRequest: {
+            /** @enum {string} */
+            choice: "agree" | "pass" | "disagree";
+        };
+        InformedVoteResponse: {
+            data: components["schemas"]["InformedVoteReceipt"];
+        };
+        InformedVoteReceipt: {
+            featuredStatementId: number;
+            /** @enum {string} */
+            choice: "agree" | "pass" | "disagree";
+            links: {
+                informedVoting: string;
+            };
+        };
         ArgumentMappingResponse: {
             data: components["schemas"]["ArgumentMapping"];
         };
@@ -715,6 +802,7 @@ export interface components {
             about: string;
             explore?: string;
             arguments?: string;
+            informedVoting?: string;
             identityReveal?: string;
             admin?: string;
         };
@@ -1128,6 +1216,127 @@ export interface operations {
             };
             /** @description Participation is missing or argument mapping is not open */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getInformedVoting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current informed-voting state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InformedVotingResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation access is denied or participant is banned */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Participation or informed-voting phase is not active */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Voting service unavailable */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putInformedVote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                featuredStatementId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InformedVoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Informed vote stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InformedVoteResponse"];
+                };
+            };
+            /** @description Invalid choice */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Featured statement is not available in this round */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Informed voting is not active */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Voting service unavailable */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

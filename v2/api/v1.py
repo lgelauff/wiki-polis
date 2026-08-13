@@ -60,6 +60,8 @@ def create_api_v1_blueprint(
     resolve_pseudonym_suggestions: Callable[[str], list[str]],
     resolve_explore_state: Callable[[str], dict],
     resolve_argument_mapping: Callable[[str], dict],
+    resolve_informed_voting: Callable[[str], dict],
+    submit_informed_vote: Callable[[str, int, str], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
@@ -232,6 +234,39 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({
             'data': resolve_argument_mapping(slug),
         }))
+
+    @bp.get('/conversations/<slug>/informed-voting')
+    def get_informed_voting(slug: str):
+        try:
+            data = resolve_informed_voting(slug)
+        except ExploreUpstreamError:
+            return error_response(
+                'upstream_unavailable',
+                'Informed-voting progress is temporarily unavailable.', 502,
+            )
+        return _no_store(jsonify({'data': data}))
+
+    @bp.put('/conversations/<slug>/featured-statements/<int:featured_statement_id>/informed-vote')
+    def put_informed_vote(slug: str, featured_statement_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'choice'}
+                or body.get('choice') not in {'agree', 'pass', 'disagree'}):
+            return error_response(
+                'validation_failed', 'Choose agree, pass, or disagree.', 400,
+                details={'fields': {'choice': [
+                    'Choose agree, pass, or disagree.',
+                ]}},
+            )
+        try:
+            data = submit_informed_vote(
+                slug, featured_statement_id, body['choice'],
+            )
+        except ExploreUpstreamError:
+            return error_response(
+                'upstream_unavailable',
+                'The informed vote could not reach the voting service.', 502,
+            )
+        return _no_store(jsonify({'data': data}))
 
     @bp.post('/conversations/<slug>/featured-statements/<int:featured_statement_id>/arguments')
     def create_argument(slug: str, featured_statement_id: int):
