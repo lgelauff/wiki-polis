@@ -368,6 +368,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /** Return the privacy-safe moderation queue */
+        get: operations["getAdminConversationFlags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/conversations/{conversationId}/flags/{flagId}/resolution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                flagId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Resolve one content flag */
+        put: operations["putAdminFlagResolution"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -389,6 +428,72 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdminFlagQueueResponse: {
+            data: components["schemas"]["AdminFlagQueue"];
+        };
+        AdminFlagQueue: {
+            conversation: {
+                id: number;
+                slug: string;
+                title: string;
+            };
+            open: components["schemas"]["AdminContentFlag"][];
+            resolved: components["schemas"]["AdminContentFlag"][];
+            dataAvailability: {
+                statementText: boolean;
+            };
+            capabilities: {
+                resolveFlags: boolean;
+            };
+            links: {
+                self: string;
+                conversation: string;
+            };
+        };
+        AdminContentFlag: {
+            id: number;
+            /** @enum {string} */
+            status: "open" | "resolved";
+            /** @enum {string} */
+            category: "personal_attack" | "privacy" | "off_topic" | "other";
+            categoryLabel: string;
+            detail: string | null;
+            /** Format: date-time */
+            flaggedAt: string | null;
+            target: components["schemas"]["AdminFlagTarget"];
+            resolution: components["schemas"]["AdminFlagResolution"] | null;
+        };
+        AdminFlagTarget: {
+            /** @enum {string} */
+            type: "statement" | "argument";
+            id: number;
+            label: string;
+            text: string;
+            reviewHref: string;
+        };
+        AdminFlagResolution: {
+            /** Format: date-time */
+            resolvedAt: string | null;
+            note: string | null;
+        };
+        AdminFlagResolutionRequest: {
+            /** @constant */
+            resolved: true;
+            note?: string | null;
+        };
+        AdminFlagResolutionResponse: {
+            data: components["schemas"]["AdminFlagResolutionReceipt"];
+        };
+        AdminFlagResolutionReceipt: {
+            flagId: number;
+            /** @constant */
+            status: "resolved";
+            changed: boolean;
+            resolution: components["schemas"]["AdminFlagResolution"];
+            links: {
+                flags: string;
+            };
+        };
         AdminParticipantRosterResponse: {
             data: components["schemas"]["AdminParticipantRoster"];
         };
@@ -2140,6 +2245,91 @@ export interface operations {
                 };
             };
             /** @description Conversation or participant membership not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminConversationFlags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Moderation queue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFlagQueueResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminFlagResolution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                flagId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminFlagResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Current resolution state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFlagResolutionResponse"];
+                };
+            };
+            /** @description Invalid resolution */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or flag not found */
             404: {
                 headers: {
                     [name: string]: unknown;

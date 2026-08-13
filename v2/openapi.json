@@ -637,6 +637,49 @@
         }
       }
     },
+    "/admin/conversations/{conversationId}/flags": {
+      "parameters": [{
+        "name": "conversationId", "in": "path", "required": true,
+        "schema": {"type": "integer", "minimum": 1}
+      }],
+      "get": {
+        "operationId": "getAdminConversationFlags",
+        "summary": "Return the privacy-safe moderation queue",
+        "responses": {
+          "200": {
+            "description": "Moderation queue",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFlagQueueResponse"}}}
+          },
+          "403": {
+            "description": "Conversation moderation permission required",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          }
+        }
+      }
+    },
+    "/admin/conversations/{conversationId}/flags/{flagId}/resolution": {
+      "parameters": [
+        {"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
+        {"name": "flagId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}
+      ],
+      "put": {
+        "operationId": "putAdminFlagResolution",
+        "summary": "Resolve one content flag",
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFlagResolutionRequest"}}}
+        },
+        "responses": {
+          "200": {
+            "description": "Current resolution state",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFlagResolutionResponse"}}}
+          },
+          "400": {"description": "Invalid resolution", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "404": {"description": "Conversation or flag not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -649,6 +692,93 @@
   },
   "components": {
     "schemas": {
+      "AdminFlagQueueResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/AdminFlagQueue"}}
+      },
+      "AdminFlagQueue": {
+        "type": "object",
+        "required": ["conversation", "open", "resolved", "dataAvailability", "capabilities", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "conversation": {
+            "type": "object", "required": ["id", "slug", "title"], "additionalProperties": false,
+            "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}}
+          },
+          "open": {"type": "array", "items": {"$ref": "#/components/schemas/AdminContentFlag"}},
+          "resolved": {"type": "array", "items": {"$ref": "#/components/schemas/AdminContentFlag"}},
+          "dataAvailability": {
+            "type": "object", "required": ["statementText"], "additionalProperties": false,
+            "properties": {"statementText": {"type": "boolean"}}
+          },
+          "capabilities": {
+            "type": "object", "required": ["resolveFlags"], "additionalProperties": false,
+            "properties": {"resolveFlags": {"type": "boolean"}}
+          },
+          "links": {
+            "type": "object", "required": ["self", "conversation"], "additionalProperties": false,
+            "properties": {"self": {"type": "string"}, "conversation": {"type": "string"}}
+          }
+        }
+      },
+      "AdminContentFlag": {
+        "type": "object",
+        "required": ["id", "status", "category", "categoryLabel", "detail", "flaggedAt", "target", "resolution"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "status": {"type": "string", "enum": ["open", "resolved"]},
+          "category": {"type": "string", "enum": ["personal_attack", "privacy", "off_topic", "other"]},
+          "categoryLabel": {"type": "string"},
+          "detail": {"type": ["string", "null"]},
+          "flaggedAt": {"type": ["string", "null"], "format": "date-time"},
+          "target": {"$ref": "#/components/schemas/AdminFlagTarget"},
+          "resolution": {"oneOf": [{"$ref": "#/components/schemas/AdminFlagResolution"}, {"type": "null"}]}
+        }
+      },
+      "AdminFlagTarget": {
+        "type": "object", "required": ["type", "id", "label", "text", "reviewHref"], "additionalProperties": false,
+        "properties": {
+          "type": {"type": "string", "enum": ["statement", "argument"]},
+          "id": {"type": "integer", "minimum": 0},
+          "label": {"type": "string"},
+          "text": {"type": "string"},
+          "reviewHref": {"type": "string"}
+        }
+      },
+      "AdminFlagResolution": {
+        "type": "object", "required": ["resolvedAt", "note"], "additionalProperties": false,
+        "properties": {
+          "resolvedAt": {"type": ["string", "null"], "format": "date-time"},
+          "note": {"type": ["string", "null"]}
+        }
+      },
+      "AdminFlagResolutionRequest": {
+        "type": "object", "required": ["resolved"], "additionalProperties": false,
+        "properties": {
+          "resolved": {"type": "boolean", "const": true},
+          "note": {"type": ["string", "null"], "maxLength": 1000}
+        }
+      },
+      "AdminFlagResolutionResponse": {
+        "type": "object", "required": ["data"], "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/AdminFlagResolutionReceipt"}}
+      },
+      "AdminFlagResolutionReceipt": {
+        "type": "object", "required": ["flagId", "status", "changed", "resolution", "links"], "additionalProperties": false,
+        "properties": {
+          "flagId": {"type": "integer", "minimum": 1},
+          "status": {"type": "string", "const": "resolved"},
+          "changed": {"type": "boolean"},
+          "resolution": {"$ref": "#/components/schemas/AdminFlagResolution"},
+          "links": {
+            "type": "object", "required": ["flags"], "additionalProperties": false,
+            "properties": {"flags": {"type": "string"}}
+          }
+        }
+      },
       "AdminParticipantRosterResponse": {
         "type": "object",
         "required": ["data"],

@@ -65,6 +65,8 @@ def create_api_v1_blueprint(
     resolve_results_report: Callable[[str], dict],
     resolve_admin_participants: Callable[[int], dict],
     set_admin_participant_access: Callable[[int, int, dict], dict],
+    resolve_admin_flags: Callable[[int], dict],
+    resolve_admin_flag: Callable[[int, int, dict], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
@@ -280,6 +282,31 @@ def create_api_v1_blueprint(
             'data': set_admin_participant_access(
                 conversation_id, participant_id, body,
             ),
+        }))
+
+    @bp.get('/admin/conversations/<int:conversation_id>/flags')
+    def get_admin_conversation_flags(conversation_id: int):
+        return _no_store(jsonify({
+            'data': resolve_admin_flags(conversation_id),
+        }))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/flags/<int:flag_id>/resolution')
+    def put_admin_flag_resolution(conversation_id: int, flag_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict)
+                or set(body) - {'resolved', 'note'}
+                or body.get('resolved') is not True
+                or ('note' in body and body['note'] is not None
+                    and not isinstance(body['note'], str))):
+            return error_response(
+                'validation_failed', 'Confirm this flag is resolved.', 400,
+                details={'fields': {
+                    'resolved': ['Set resolved to true.'],
+                    'note': ['Use text or null.'],
+                }},
+            )
+        return _no_store(jsonify({
+            'data': resolve_admin_flag(conversation_id, flag_id, body),
         }))
 
     @bp.put('/conversations/<slug>/featured-statements/<int:featured_statement_id>/informed-vote')

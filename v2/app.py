@@ -78,6 +78,9 @@ from services.admin_participants import (
     ParticipantNotInConversation, build_admin_participant_roster,
     set_participant_access,
 )
+from services.admin_moderation import (
+    FlagNotInConversation, build_admin_flag_queue, resolve_content_flag,
+)
 from services.idempotency import (complete_command, release_reservation,
                                   request_digest, reserve_command)
 from services.statements import (DerivativeSimilarityTooLow,
@@ -3366,34 +3369,69 @@ def _delete_local_conversation(conv: Conversation) -> None:
     db.session.delete(conv)
 
 
-def _flag_rows_for_admin(conv: Conversation) -> list[dict]:
-    flags = (ContentFlag.query
-             .filter_by(conversation_id=conv.id)
-             .options(joinedload(ContentFlag.argument))
-             .order_by(ContentFlag.status, ContentFlag.created_at.desc())
-             .all())
-    statement_tids = [f.statement_tid for f in flags if f.content_type == 'statement']
-    statement_texts = {}
-    if statement_tids:
-        try:
-            statement_texts = _statement_text_map(conv.polis_id)
-        except PolisParticipantError:
-            statement_texts = {}
-    rows = []
-    for flag in flags:
-        if flag.content_type == 'argument':
-            target_text = flag.argument.body if flag.argument else 'Argument removed'
-            target_label = f'Argument #{flag.argument_id}'
-        else:
-            target_text = statement_texts.get(flag.statement_tid, 'Statement text unavailable')
-            target_label = f'Statement #{flag.statement_tid}'
-        rows.append({
-            'flag': flag,
-            'category_label': _FLAG_CATEGORY_LABELS.get(flag.category, flag.category),
-            'target_label': target_label,
-            'target_text': target_text,
-        })
-    return rows
+def _admin_flag_queue_model(conv: Conversation):
+    return build_admin_flag_queue(
+        conversation=conv,
+        read_statement_texts=lambda: _statement_text_map(conv.polis_id),
+        statement_read_errors=(PolisParticipantError,),
+        category_labels=_FLAG_CATEGORY_LABELS,
+    )
+
+
+def _admin_flag_queue_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    queue = _admin_flag_queue_model(conv)
+    return queue.to_api(
+        self_link=url_for(
+            'api_v1.get_admin_conversation_flags', conversation_id=conv.id,
+        ),
+        conversation_link=url_for(
+            'admin.admin_conversation_detail', conv_id=conv.id,
+        ),
+        statement_review_link=url_for(
+            'admin.admin_conversation_statements', conv_id=conv.id,
+        ),
+        argument_review_link=url_for(
+            'admin.admin_conversation_featured', conv_id=conv.id,
+        ),
+    )
+
+
+def _resolve_admin_flag_api_payload(
+    conv_id: int, flag_id: int, body: dict,
+) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    try:
+        result = resolve_content_flag(
+            conversation=conv,
+            flag_id=flag_id,
+            note=body.get('note'),
+            actor=_current_participant(),
+            audit=record_audit,
+        )
+    except FlagNotInConversation:
+        abort(404, description='Flag not found in this conversation.')
+    flag = result.flag
+    resolved_at = flag.resolved_at
+    if resolved_at and not resolved_at.tzinfo:
+        resolved_at = resolved_at.replace(tzinfo=timezone.utc)
+    return {
+        'flagId': flag.id,
+        'status': flag.status,
+        'changed': result.changed,
+        'resolution': {
+            'resolvedAt': (
+                resolved_at.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+                if resolved_at else None
+            ),
+            'note': flag.resolution_note,
+        },
+        'links': {
+            'flags': url_for(
+                'api_v1.get_admin_conversation_flags', conversation_id=conv.id,
+            ),
+        },
+    }
 
 
 def _conversation_ban_log_rows(conv: Conversation) -> list[dict]:
@@ -3556,13 +3594,17 @@ def admin_conversation_participants(conv_id):
 @login_required
 def admin_conversation_flags(conv_id):
     conv = _require_mod_for_conv(conv_id)
-    rows = _flag_rows_for_admin(conv)
-    open_count = sum(1 for row in rows if row['flag'].status == 'open')
+    queue = _admin_flag_queue_model(conv)
     return render_template(
         'admin_flags.html',
         conversation=conv,
-        rows=rows,
-        open_count=open_count,
+        rows=[{
+            'flag': row.flag,
+            'category_label': row.category_label,
+            'target_label': row.target_label,
+            'target_text': row.target_text,
+        } for row in queue.rows],
+        open_count=queue.open_count,
     )
 
 
@@ -3570,21 +3612,20 @@ def admin_conversation_flags(conv_id):
 @login_required
 def admin_flag_resolve(conv_id, flag_id):
     conv = _require_mod_for_conv(conv_id)
-    flag = ContentFlag.query.filter_by(
-        id=flag_id,
-        conversation_id=conv.id,
-    ).first_or_404()
-    note = nh3.clean((request.form.get('resolution_note') or '').strip(),
-                     tags=_NH3_NO_TAGS)[:1000]
-    actor = _current_participant()
-    flag.status = 'resolved'
-    flag.resolved_at = datetime.now(timezone.utc)
-    flag.resolved_by_id = actor.id if actor else None
-    flag.resolution_note = note or None
-    db.session.commit()
-    record_audit('content_flag.resolve', conv_id=conv.id, target_type='content_flag',
-                 target_id=flag.id, content_type=flag.content_type)
-    flash('Flag marked resolved.', 'success')
+    try:
+        result = resolve_content_flag(
+            conversation=conv,
+            flag_id=flag_id,
+            note=request.form.get('resolution_note'),
+            actor=_current_participant(),
+            audit=record_audit,
+        )
+    except FlagNotInConversation:
+        abort(404)
+    flash(
+        'Flag marked resolved.' if result.changed else 'Flag was already resolved.',
+        'success' if result.changed else 'warning',
+    )
     return redirect(url_for('admin.admin_conversation_flags', conv_id=conv.id))
 
 
@@ -5818,6 +5859,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_results_report=_results_report_api_payload,
         resolve_admin_participants=_admin_participant_roster_api_payload,
         set_admin_participant_access=_set_admin_participant_access_api_payload,
+        resolve_admin_flags=_admin_flag_queue_api_payload,
+        resolve_admin_flag=_resolve_admin_flag_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,
