@@ -73,6 +73,30 @@ test('votes in Explore through the wiki-polis API contract', async () => {
   expect(screen.getByRole('button', {name: 'Next statement'})).toBeVisible();
 });
 
+test('can explain a pass as confusing without changing its vote meaning', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/explore']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText(/shared technical infrastructure/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Pass'}));
+
+  const confusing = await screen.findByRole('button', {
+    name: 'The wording is confusing',
+  });
+  expect(confusing).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(confusing);
+
+  expect(await screen.findByRole('button', {
+    name: 'The wording is confusing', pressed: true,
+  })).toBeVisible();
+  expect(screen.getByRole('button', {name: 'Suggest clearer wording'})).toBeVisible();
+});
+
 test('submits clearer wording through the idempotent statement contract', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

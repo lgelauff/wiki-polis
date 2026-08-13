@@ -68,13 +68,13 @@ export const exploreStateQuery = (slug: string) => queryOptions({
 export async function putExploreVote(
   slug: string,
   statementId: number,
-  choice: components['schemas']['ExploreVoteRequest']['choice'],
+  body: components['schemas']['ExploreVoteRequest'],
   csrfToken: string,
 ) {
   return (
     await requireApiData(api.PUT('/conversations/{slug}/statements/{statementId}/vote', {
       params: {path: {slug, statementId}},
-      body: {choice},
+      body,
       headers: {'X-CSRFToken': csrfToken},
     }))
   ).data;

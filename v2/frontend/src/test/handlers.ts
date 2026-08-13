@@ -139,11 +139,13 @@ export const handlers = [
     async ({request}) => {
       const body = await request.json() as {
         choice: 'agree' | 'pass' | 'disagree';
+        passReason?: 'unsure' | 'confusing';
       };
       return HttpResponse.json({
         data: {
           statementId: 12,
           choice: body.choice,
+          passReason: body.passReason ?? null,
           links: {explore: '/api/v1/conversations/community-strategy/explore'},
         },
       });

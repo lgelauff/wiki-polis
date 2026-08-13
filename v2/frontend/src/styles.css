@@ -346,6 +346,13 @@ a { color: inherit; }
 .choice-dot--pass { color: var(--signal); }
 .choice-dot--disagree { color: var(--dissent); }
 .vote-receipt > p { margin: 0 0 1rem; text-align: center; font: .76rem var(--mono); text-transform: uppercase; letter-spacing: .055em; }
+.pass-reason { margin: 1.25rem 0 0; padding: 1.25rem; border: 1px solid var(--rule); background: var(--paper); }
+.pass-reason legend { padding: 0 .4rem; font-weight: 650; }
+.pass-reason > p { margin: 0 0 1rem; color: var(--muted); font-size: .78rem; line-height: 1.45; }
+.pass-reason__choices { display: flex; flex-wrap: wrap; gap: .6rem; }
+.pass-reason__choices button { min-height: 40px; padding: .6rem .8rem; border: 1px solid var(--rule); color: var(--ink); background: var(--surface); cursor: pointer; }
+.pass-reason__choices button[aria-pressed="true"] { border-color: var(--signal); box-shadow: inset 3px 0 0 var(--signal); background: color-mix(in srgb, var(--signal) 7%, white); }
+.pass-reason__choices button:disabled { opacity: .6; cursor: wait; }
 .post-vote-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.5rem; margin-top: 1.3rem; }
 .next-statement, .explore-refresh { min-height: 44px; padding: .7rem 1rem; border: 0; color: white; background: var(--ink); cursor: pointer; }
 .composer-link { padding: 0; border: 0; color: var(--muted); background: none; cursor: pointer; font-size: .76rem; text-decoration: underline; text-underline-offset: .2em; }

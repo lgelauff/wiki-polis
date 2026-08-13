@@ -364,6 +364,8 @@ function ConversationJoinPage() {
 }
 
 type ExploreChoice = components['schemas']['ExploreVoteRequest']['choice'];
+type ExploreVoteRequest = components['schemas']['ExploreVoteRequest'];
+type PassReason = NonNullable<ExploreVoteRequest['passReason']>;
 
 function ExploreVoteButtons({onVote, disabled}: {
   onVote: (choice: ExploreChoice) => void;
@@ -384,6 +386,37 @@ function ExploreVoteButtons({onVote, disabled}: {
   );
 }
 
+function PassReasonControl({selected, onSelect, disabled}: {
+  selected: PassReason | null;
+  onSelect: (reason: PassReason) => void;
+  disabled: boolean;
+}) {
+  return (
+    <fieldset className="pass-reason">
+      <legend>Why did you pass?</legend>
+      <p>This stays within Wiki-Polis and helps distinguish uncertainty from unclear wording.</p>
+      <div className="pass-reason__choices">
+        <button
+          type="button"
+          aria-pressed={selected === 'unsure'}
+          disabled={disabled}
+          onClick={() => onSelect('unsure')}
+        >
+          I’m unsure
+        </button>
+        <button
+          type="button"
+          aria-pressed={selected === 'confusing'}
+          disabled={disabled}
+          onClick={() => onSelect('confusing')}
+        >
+          The wording is confusing
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
 function ExplorePage() {
   const {slug = ''} = useParams();
   const {data: session} = useSuspenseQuery(sessionQuery());
@@ -391,10 +424,10 @@ function ExplorePage() {
   const [receipt, setReceipt] = useState<components['schemas']['ExploreVoteReceipt'] | null>(null);
   const [composerMode, setComposerMode] = useState<'derivative' | 'new' | null>(null);
   const vote = useMutation({
-    mutationFn: (choice: ExploreChoice) => {
+    mutationFn: (request: ExploreVoteRequest) => {
       if (!data.currentStatement) throw new Error('There is no statement to vote on.');
       return putExploreVote(
-        slug, data.currentStatement.id, choice, session.csrfToken,
+        slug, data.currentStatement.id, request, session.csrfToken,
       );
     },
     onMutate: () => setComposerMode(null),
@@ -470,7 +503,14 @@ function ExplorePage() {
             {receipt ? (
               <div className="vote-receipt" role="status">
                 <p>You voted <strong>{receipt.choice}</strong>.</p>
-                <ExploreVoteButtons onVote={(choice) => vote.mutate(choice)} disabled={vote.isPending} />
+                <ExploreVoteButtons onVote={(choice) => vote.mutate({choice})} disabled={vote.isPending} />
+                {receipt.choice === 'pass' && (
+                  <PassReasonControl
+                    selected={receipt.passReason}
+                    disabled={vote.isPending}
+                    onSelect={(passReason) => vote.mutate({choice: 'pass', passReason})}
+                  />
+                )}
                 <div className="post-vote-actions">
                   <button type="button" className="next-statement" onClick={nextStatement} disabled={isFetching}>
                     {isFetching ? 'Loading…' : 'Next statement'}
@@ -498,7 +538,7 @@ function ExplorePage() {
                 )}
               </div>
             ) : (
-              <ExploreVoteButtons onVote={(choice) => vote.mutate(choice)} disabled={vote.isPending} />
+              <ExploreVoteButtons onVote={(choice) => vote.mutate({choice})} disabled={vote.isPending} />
             )}
             {vote.error && <p className="command-error" role="alert">{vote.error.message}</p>}
           </section>
