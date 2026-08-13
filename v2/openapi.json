@@ -811,6 +811,39 @@
         "502": {"description": "Statement service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
+    "/admin/conversations/{conversationId}/featured-statements": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "get": {"operationId": "getAdminFeaturedStatements", "summary": "Return selected statements, transparent candidate metrics, and argument moderation state", "responses": {
+        "200": {"description": "Featured workspace", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFeaturedWorkspaceResponse"}}}},
+        "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
+    "/admin/conversations/{conversationId}/featured-statements/{statementId}": {
+      "parameters": [
+        {"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
+        {"name": "statementId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 0}}
+      ],
+      "put": {"operationId": "putAdminFeaturedStatement", "summary": "Idempotently select a verified statement for argument mapping", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFeaturedSelectionRequest"}}}}, "responses": {
+        "200": {"description": "Selection receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFeaturedSelectionResponse"}}}},
+        "400": {"description": "Invalid selection source", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "404": {"description": "Statement not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Command outcome unknown", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "502": {"description": "Live round synchronization failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "503": {"description": "Statement verification unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
+    "/admin/conversations/{conversationId}/featured-selections/{featuredId}": {
+      "parameters": [
+        {"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
+        {"name": "featuredId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}
+      ],
+      "delete": {"operationId": "deleteAdminFeaturedSelection", "summary": "Remove a featured selection and reconcile a live informed-voting round", "responses": {
+        "200": {"description": "Removal receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFeaturedRemovalResponse"}}}},
+        "404": {"description": "Featured selection not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Last selection protected or command outcome unknown", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "502": {"description": "Live round synchronization failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/phase": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "put": {
@@ -897,6 +930,28 @@
         "outcome": {"type": "object", "required": ["imported", "skippedExisting", "skippedDuplicateInput", "failedUpstream"], "additionalProperties": false, "properties": {"imported": {"type": "integer", "minimum": 0}, "skippedExisting": {"type": "integer", "minimum": 0}, "skippedDuplicateInput": {"type": "integer", "minimum": 0}, "failedUpstream": {"type": "integer", "minimum": 0}}},
         "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}
       }}}},
+      "AdminFeaturedWorkspaceResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminFeaturedWorkspace"}}},
+      "AdminFeaturedSelectionRequest": {"type": "object", "required": ["source"], "additionalProperties": false, "properties": {"source": {"type": "string", "enum": ["system", "manual"]}}},
+      "AdminFeaturedSelectionResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["featuredId", "statementId", "changed", "links"], "additionalProperties": false, "properties": {"featuredId": {"type": "integer", "minimum": 1}, "statementId": {"type": "integer", "minimum": 0}, "changed": {"type": "boolean"}, "links": {"type": "object", "required": ["featured"], "additionalProperties": false, "properties": {"featured": {"type": "string"}}}}}}},
+      "AdminFeaturedRemovalResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["featuredId", "statementId", "removed", "links"], "additionalProperties": false, "properties": {"featuredId": {"type": "integer", "minimum": 1}, "statementId": {"type": "integer", "minimum": 0}, "removed": {"type": "boolean", "const": true}, "links": {"type": "object", "required": ["featured"], "additionalProperties": false, "properties": {"featured": {"type": "string"}}}}}}},
+      "AdminFeaturedWorkspace": {"type": "object", "required": ["conversation", "selected", "candidates", "dataAvailability", "guidance", "capabilities", "links"], "additionalProperties": false, "properties": {
+        "conversation": {"type": "object", "required": ["id", "slug", "title"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}}},
+        "selected": {"type": "array", "items": {"$ref": "#/components/schemas/AdminFeaturedSelection"}},
+        "candidates": {"type": "array", "items": {"$ref": "#/components/schemas/AdminFeaturedCandidate"}},
+        "dataAvailability": {"type": "object", "required": ["candidates"], "additionalProperties": false, "properties": {"candidates": {"type": "boolean"}}},
+        "guidance": {"type": "object", "required": ["recommendedCount", "note"], "additionalProperties": false, "properties": {"recommendedCount": {"type": "integer", "minimum": 1}, "note": {"type": "string"}}},
+        "capabilities": {"type": "object", "required": ["manage"], "additionalProperties": false, "properties": {"manage": {"type": "boolean"}}},
+        "links": {"type": "object", "required": ["self", "lifecycle"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "lifecycle": {"type": "string"}}}
+      }},
+      "AdminFeaturedSelection": {"type": "object", "required": ["featuredId", "statementId", "text", "systemSuggested", "provenance", "arguments"], "additionalProperties": false, "properties": {
+        "featuredId": {"type": "integer", "minimum": 1}, "statementId": {"type": "integer", "minimum": 0}, "text": {"type": ["string", "null"]}, "systemSuggested": {"type": "boolean"}, "provenance": {"oneOf": [{"type": "null"}, {"$ref": "#/components/schemas/AdminStatementProvenance"}]},
+        "arguments": {"type": "array", "items": {"type": "object", "required": ["id", "side", "body", "proposerPseudonym", "hidden", "createdAt"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "side": {"type": "string", "enum": ["pro", "con"]}, "body": {"type": "string"}, "proposerPseudonym": {"type": ["string", "null"]}, "hidden": {"type": "boolean"}, "createdAt": {"type": ["string", "null"], "format": "date-time"}}}}
+      }},
+      "AdminFeaturedCandidate": {"type": "object", "required": ["statementId", "text", "seed", "votes", "provenance"], "additionalProperties": false, "properties": {
+        "statementId": {"type": "integer", "minimum": 0}, "text": {"type": "string"}, "seed": {"type": "boolean"}, "provenance": {"oneOf": [{"type": "null"}, {"$ref": "#/components/schemas/AdminStatementProvenance"}]},
+        "votes": {"type": "object", "required": ["agree", "pass", "disagree", "total", "agreementPercent"], "additionalProperties": false, "properties": {"agree": {"type": "integer", "minimum": 0}, "pass": {"type": "integer", "minimum": 0}, "disagree": {"type": "integer", "minimum": 0}, "total": {"type": "integer", "minimum": 0}, "agreementPercent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}}}
+      }},
+      "AdminStatementProvenance": {"type": "object", "required": ["derivedFromId", "scores"], "additionalProperties": false, "properties": {"derivedFromId": {"type": "integer", "minimum": 0}, "scores": {"type": "array", "items": {"type": "object", "required": ["model", "value"], "additionalProperties": false, "properties": {"model": {"type": "string"}, "value": {"type": "number", "minimum": 0, "maximum": 1}}}}}},
       "AdminStatementWorkspace": {"type": "object", "required": ["conversation", "statements", "moderationPolicy", "dataAvailability", "seeding", "capabilities", "links"], "additionalProperties": false, "properties": {
         "conversation": {"type": "object", "required": ["id", "slug", "title"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}}},
         "statements": {"type": "object", "required": ["pending", "approved", "hidden"], "additionalProperties": false, "properties": {"pending": {"type": "array", "items": {"$ref": "#/components/schemas/AdminStatement"}}, "approved": {"type": "array", "items": {"$ref": "#/components/schemas/AdminStatement"}}, "hidden": {"type": "array", "items": {"$ref": "#/components/schemas/AdminStatement"}}}},

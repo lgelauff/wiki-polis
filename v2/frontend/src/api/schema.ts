@@ -603,6 +603,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/featured-statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /** Return selected statements, transparent candidate metrics, and argument moderation state */
+        get: operations["getAdminFeaturedStatements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/conversations/{conversationId}/featured-statements/{statementId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                statementId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Idempotently select a verified statement for argument mapping */
+        put: operations["putAdminFeaturedStatement"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/conversations/{conversationId}/featured-selections/{featuredId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                featuredId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a featured selection and reconcile a live informed-voting round */
+        delete: operations["deleteAdminFeaturedSelection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/phase": {
         parameters: {
             query?: never;
@@ -800,6 +859,94 @@ export interface components {
                     statements: string;
                 };
             };
+        };
+        AdminFeaturedWorkspaceResponse: {
+            data: components["schemas"]["AdminFeaturedWorkspace"];
+        };
+        AdminFeaturedSelectionRequest: {
+            /** @enum {string} */
+            source: "system" | "manual";
+        };
+        AdminFeaturedSelectionResponse: {
+            data: {
+                featuredId: number;
+                statementId: number;
+                changed: boolean;
+                links: {
+                    featured: string;
+                };
+            };
+        };
+        AdminFeaturedRemovalResponse: {
+            data: {
+                featuredId: number;
+                statementId: number;
+                /** @constant */
+                removed: true;
+                links: {
+                    featured: string;
+                };
+            };
+        };
+        AdminFeaturedWorkspace: {
+            conversation: {
+                id: number;
+                slug: string;
+                title: string;
+            };
+            selected: components["schemas"]["AdminFeaturedSelection"][];
+            candidates: components["schemas"]["AdminFeaturedCandidate"][];
+            dataAvailability: {
+                candidates: boolean;
+            };
+            guidance: {
+                recommendedCount: number;
+                note: string;
+            };
+            capabilities: {
+                manage: boolean;
+            };
+            links: {
+                self: string;
+                lifecycle: string;
+            };
+        };
+        AdminFeaturedSelection: {
+            featuredId: number;
+            statementId: number;
+            text: string | null;
+            systemSuggested: boolean;
+            provenance: null | components["schemas"]["AdminStatementProvenance"];
+            arguments: {
+                id: number;
+                /** @enum {string} */
+                side: "pro" | "con";
+                body: string;
+                proposerPseudonym: string | null;
+                hidden: boolean;
+                /** Format: date-time */
+                createdAt: string | null;
+            }[];
+        };
+        AdminFeaturedCandidate: {
+            statementId: number;
+            text: string;
+            seed: boolean;
+            provenance: null | components["schemas"]["AdminStatementProvenance"];
+            votes: {
+                agree: number;
+                pass: number;
+                disagree: number;
+                total: number;
+                agreementPercent: number | null;
+            };
+        };
+        AdminStatementProvenance: {
+            derivedFromId: number;
+            scores: {
+                model: string;
+                value: number;
+            }[];
         };
         AdminStatementWorkspace: {
             conversation: {
@@ -3696,6 +3843,159 @@ export interface operations {
             };
             /** @description Existing statements could not be verified */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminFeaturedStatements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Featured workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFeaturedWorkspaceResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminFeaturedStatement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                statementId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminFeaturedSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Selection receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFeaturedSelectionResponse"];
+                };
+            };
+            /** @description Invalid selection source */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Statement not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Command outcome unknown */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Live round synchronization failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Statement verification unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteAdminFeaturedSelection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                featuredId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removal receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFeaturedRemovalResponse"];
+                };
+            };
+            /** @description Featured selection not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Last selection protected or command outcome unknown */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Live round synchronization failed */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

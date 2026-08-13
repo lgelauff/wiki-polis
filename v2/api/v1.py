@@ -48,6 +48,11 @@ from services.admin_statements import (
     SeedImportUpstreamFailed, SeedImportValidationFailed,
     SeedImportVerificationUnavailable,
 )
+from services.admin_featured import (
+    FeaturedCommandOutcomeUnknown, FeaturedRoundSyncFailed,
+    FeaturedSourceUnavailable, FeaturedStatementNotFound,
+    LastFeaturedSelectionProtected,
+)
 
 _OPENAPI_SPEC = json.loads(
     (Path(__file__).resolve().parents[1] / 'openapi.json').read_text(encoding='utf-8')
@@ -99,6 +104,9 @@ def create_api_v1_blueprint(
     resolve_admin_statements: Callable[[int], dict],
     moderate_admin_statement: Callable[[int, int, dict], dict],
     import_admin_seed_statements: Callable[[int, dict], dict],
+    resolve_admin_featured: Callable[[int], dict],
+    select_admin_featured: Callable[[int, int, dict], dict],
+    remove_admin_featured: Callable[[int, int], dict],
     advance_admin_phase: Callable[[int, dict], dict],
     set_admin_pause: Callable[[int, dict], dict],
     set_admin_archive: Callable[[int, dict], dict],
@@ -514,6 +522,61 @@ def create_api_v1_blueprint(
             )
         except SeedImportUpstreamFailed as exc:
             return error_response('upstream_unavailable', exc.message, 502)
+        return _no_store(jsonify({'data': data}))
+
+    @bp.get('/admin/conversations/<int:conversation_id>/featured-statements')
+    def get_admin_featured_statements(conversation_id: int):
+        return _no_store(jsonify({
+            'data': resolve_admin_featured(conversation_id),
+        }))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/featured-statements/<int:statement_id>')
+    def put_admin_featured_statement(conversation_id: int, statement_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'source'}
+                or body['source'] not in {'system', 'manual'}):
+            return error_response(
+                'validation_failed', 'Choose the system or manual source.', 400,
+            )
+        try:
+            data = select_admin_featured(conversation_id, statement_id, body)
+        except FeaturedSourceUnavailable:
+            return error_response(
+                'verification_unavailable',
+                'The statement could not be verified; nothing was selected.', 503,
+            )
+        except FeaturedStatementNotFound:
+            return error_response(
+                'statement_not_found',
+                'That statement does not belong to this conversation.', 404,
+            )
+        except FeaturedRoundSyncFailed as exc:
+            return error_response('round_sync_failed', exc.message, 502)
+        except FeaturedCommandOutcomeUnknown:
+            return error_response(
+                'command_outcome_unknown',
+                'The informed-voting round changed, but the local save failed. Do not retry.',
+                409,
+            )
+        return _no_store(jsonify({'data': data}))
+
+    @bp.delete('/admin/conversations/<int:conversation_id>/featured-selections/<int:featured_id>')
+    def delete_admin_featured_selection(conversation_id: int, featured_id: int):
+        try:
+            data = remove_admin_featured(conversation_id, featured_id)
+        except LastFeaturedSelectionProtected:
+            return error_response(
+                'last_featured_statement_protected',
+                'Keep one featured statement while argument mapping is active.', 409,
+            )
+        except FeaturedRoundSyncFailed as exc:
+            return error_response('round_sync_failed', exc.message, 502)
+        except FeaturedCommandOutcomeUnknown:
+            return error_response(
+                'command_outcome_unknown',
+                'The informed-voting round changed, but the local save failed. Do not retry.',
+                409,
+            )
         return _no_store(jsonify({'data': data}))
 
     @bp.put('/admin/conversations/<int:conversation_id>/phase')

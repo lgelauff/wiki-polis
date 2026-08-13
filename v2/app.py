@@ -102,6 +102,13 @@ from services.admin_statements import (
     SeedImportVerificationUnavailable, build_statement_workspace,
     import_seed_statements, moderate_statement,
 )
+from services.admin_featured import (
+    FeaturedCommandOutcomeUnknown, FeaturedRoundSyncFailed,
+    FeaturedSourceUnavailable, FeaturedStatementNotFound,
+    LastFeaturedSelectionProtected,
+    build_featured_workspace, remove_featured_statement,
+    select_featured_statement,
+)
 from services.admin_lifecycle import (
     PhasePreparationFailed, PhaseReadinessBlocked,
     PhaseReadinessUnconfirmed, PhaseTransitionConflict,
@@ -2736,6 +2743,130 @@ def _import_admin_seed_statements_api_payload(conv_id: int, body: dict) -> dict:
         'links': {
             'statements': url_for(
                 'api_v1.get_admin_conversation_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _admin_featured_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    confirmed = (
+        FeaturedStatement.query.filter_by(conversation_id=conv.id)
+        .options(joinedload(FeaturedStatement.arguments))
+        .order_by(FeaturedStatement.created_at).all()
+    )
+    for selection in confirmed:
+        selection.arguments.sort(
+            key=lambda argument: (
+                argument.side.value
+                if hasattr(argument.side, 'value') else str(argument.side)
+            ),
+        )
+    confirmed_tids = {row.polis_statement_id for row in confirmed}
+    candidates = _polis_server_client().get_featured_candidates(conv.polis_id)
+    if candidates is not None:
+        candidates = [
+            row for row in candidates if row['tid'] not in confirmed_tids
+        ]
+    candidate_tids = [row['tid'] for row in candidates or []]
+    statement_text_by_tid = {
+        row['tid']: row['text'] for row in candidates or []
+    }
+    if any(not row.statement_text for row in confirmed):
+        try:
+            statement_text_by_tid.update(_statement_text_map(conv.polis_id))
+        except PolisParticipantError:
+            pass
+    return build_featured_workspace(
+        conversation=conv,
+        confirmed=confirmed,
+        candidates=candidates,
+        provenance_by_tid=_provenance_map(
+            conv.id, list(confirmed_tids) + candidate_tids,
+        ),
+        statement_text_by_tid=statement_text_by_tid,
+        recommendation=_recommended_quantity(conv, 'featured_statements'),
+        self_link=url_for(
+            'api_v1.get_admin_featured_statements', conversation_id=conv.id,
+        ),
+        lifecycle_link=url_for(
+            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
+        ),
+    )
+
+
+def _select_admin_featured_api_payload(
+    conv_id: int, statement_id: int, body: dict,
+) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    try:
+        text = _statement_text_map(conv.polis_id).get(statement_id, '')
+    except PolisParticipantError as exc:
+        raise FeaturedSourceUnavailable() from exc
+    result = select_featured_statement(
+        conversation=conv,
+        statement_id=statement_id,
+        text=text,
+        system_suggested=body['source'] == 'system',
+        find_existing=lambda tid: FeaturedStatement.query.filter_by(
+            conversation_id=conv.id, polis_statement_id=tid,
+        ).first(),
+        create_selection=lambda tid, statement_text, suggested: FeaturedStatement(
+            conversation_id=conv.id,
+            polis_statement_id=tid,
+            statement_text=statement_text,
+            suggested_by_system=suggested,
+            confirmed_by_admin=True,
+        ),
+        session=db.session,
+        sync_live_round=_sync_phase6_featured,
+        audit=lambda row: record_audit(
+            'featured.select', conv_id=conv.id,
+            target_type='statement', target_id=row.polis_statement_id,
+            source=body['source'],
+        ),
+    )
+    return {
+        'featuredId': result.featured_id,
+        'statementId': result.statement_id,
+        'changed': result.changed,
+        'links': {
+            'featured': url_for(
+                'api_v1.get_admin_featured_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _remove_admin_featured_api_payload(conv_id: int, featured_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    selection = FeaturedStatement.query.filter_by(
+        id=featured_id, conversation_id=conv.id,
+    ).first_or_404()
+    statement_id = selection.polis_statement_id
+    remove_featured_statement(
+        conversation=conv,
+        selection=selection,
+        selection_count=FeaturedStatement.query.filter_by(
+            conversation_id=conv.id,
+        ).with_for_update().count(),
+        session=db.session,
+        sync_live_round=_sync_phase6_featured,
+        audit=lambda removed_id: record_audit(
+            'featured.remove', conv_id=conv.id,
+            target_type='featured', target_id=removed_id,
+            statement_id=statement_id,
+        ),
+    )
+    return {
+        'featuredId': featured_id,
+        'statementId': statement_id,
+        'removed': True,
+        'links': {
+            'featured': url_for(
+                'api_v1.get_admin_featured_statements',
                 conversation_id=conv.id,
             ),
         },
@@ -6335,6 +6466,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_admin_statements=_admin_statements_api_payload,
         moderate_admin_statement=_moderate_admin_statement_api_payload,
         import_admin_seed_statements=_import_admin_seed_statements_api_payload,
+        resolve_admin_featured=_admin_featured_api_payload,
+        select_admin_featured=_select_admin_featured_api_payload,
+        remove_admin_featured=_remove_admin_featured_api_payload,
         advance_admin_phase=_advance_admin_phase_api_payload,
         set_admin_pause=_set_admin_pause_api_payload,
         set_admin_archive=_set_admin_archive_api_payload,
