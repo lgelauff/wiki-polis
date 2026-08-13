@@ -1557,6 +1557,41 @@ def test_participants_page_shows_engagement_metrics(app, admin_client, conv, par
     assert '2026-06-23 12:30' in page
 
 
+def test_participants_progress_uses_conversation_scoped_polis_subject(
+    app, admin_client, conv, participant,
+):
+    from db import Participation
+
+    app.config['POLIS_DATABASE_URL'] = 'postgres://stats.example/db'
+    app.config['PARTICIAPI_SUB_SECRET'] = 'subject-secret'
+    part = Participation(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        pseudonym='scoped-lion',
+    )
+    db.session.add(part)
+    db.session.commit()
+    server = MagicMock()
+    server.get_statement_progress_for_participants.return_value = {
+        'scoped-subject': {'total': 5, 'voted': 3, 'remaining': 2},
+    }
+
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app._conversation_subject', return_value='scoped-subject') as subject,
+    ):
+        response = admin_client.get(
+            f'/admin/conversations/{conv.id}/participants',
+        )
+
+    assert response.status_code == 200
+    assert '3 / 5' in response.data.decode()
+    subject.assert_called_once_with(participant.xid, conv)
+    server.get_statement_progress_for_participants.assert_called_once_with(
+        conv.polis_id, ['scoped-subject'],
+    )
+
+
 def test_admin_can_ban_and_unban_participant(admin_client, conv, participant):
     from db import ConversationBan, Participation
 

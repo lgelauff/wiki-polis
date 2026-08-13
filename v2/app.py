@@ -3508,10 +3508,20 @@ def admin_conversation_participants(conv_id):
     # stalled at 1000 participants).
     progress_by_xid = None
     if pg_configured:
+        progress_keys = {
+            part.participant_id: (
+                _conversation_subject(part.participant.xid, conv)
+                if current_app.config.get('PARTICIAPI_SUB_SECRET')
+                else part.participant.xid
+            )
+            for part in participations
+        }
         progress_by_xid = client.get_statement_progress_for_participants(
-            conv.polis_id, [p.participant.xid for p in participations])
+            conv.polis_id, list(progress_keys.values()))
         if progress_by_xid is not None:
             statement_progress_unavailable = False
+    else:
+        progress_keys = {}
     active_bans = {
         ban.participant_id: ban
         for ban in ConversationBan.query.filter_by(
@@ -3522,7 +3532,7 @@ def admin_conversation_participants(conv_id):
     rows = []
     for part in participations:
         progress_row = (
-            progress_by_xid.get(part.participant.xid)
+            progress_by_xid.get(progress_keys[part.participant_id])
             if progress_by_xid is not None else None
         )
         rows.append({
