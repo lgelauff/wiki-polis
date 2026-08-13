@@ -52,6 +52,29 @@ test('manages participant access in the distinct admin workspace', async () => {
   expect(screen.getByRole('status')).toHaveTextContent('Access updated');
 });
 
+test('resolves a privacy-safe moderation item through the typed contract', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/admin/conversations/7/moderation']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: 'Moderation queue'})).toBeVisible();
+  expect(screen.getByText('A statement containing private information.')).toBeVisible();
+  expect(screen.getByText('Privacy violation')).toBeVisible();
+  expect(screen.getByText(/Reporter identities are intentionally excluded/)).toBeVisible();
+  fireEvent.change(screen.getByLabelText('Resolution note (optional)'), {
+    target: {value: 'Removed private detail'},
+  });
+  fireEvent.click(screen.getByRole('button', {name: 'Resolve Statement #12'}));
+
+  expect(await screen.findByText('No open flags.')).toBeVisible();
+  expect(screen.getByText('Removed private detail')).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Resolved'}).parentElement).toHaveTextContent('1');
+});
+
 test('renders a conversation record from the generated API contract', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

@@ -459,7 +459,7 @@
         <div class="manage-card-title">Participants</div>
         <div class="manage-card-desc">Review per-participant engagement and drop-off signals</div>
       </a>
-      <a class="manage-card" href="{{ url_for('admin.admin_conversation_flags', conv_id=conversation.id) }}">
+      <a class="manage-card" href="{{ url_for('spa_shell', spa_path='admin/conversations/' ~ conversation.id ~ '/moderation') }}">
         <div class="manage-card-top"><span class="manage-card-count">{{ open_flag_count }} open</span></div>
         <div class="manage-card-title">Moderation queue</div>
         <div class="manage-card-desc">Review participant flags for statements and arguments</div>

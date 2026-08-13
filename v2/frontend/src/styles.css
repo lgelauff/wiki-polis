@@ -588,6 +588,36 @@ a { color: inherit; }
 .admin-access .admin-access__receipt { color: var(--consensus); }
 .admin-roster__empty { padding: 2rem 1rem; border-bottom: 1px solid var(--rule); color: var(--muted); background: var(--surface); }
 
+.moderation-shell { width: min(1120px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 6rem; }
+.moderation-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 2rem; padding: clamp(3rem, 7vw, 6rem) 0 2rem; border-bottom: 1px solid var(--ink); }
+.moderation-heading h1 { margin: .3rem 0 1rem; font-size: clamp(2.7rem, 7vw, 5.8rem); line-height: .92; letter-spacing: -.065em; }
+.moderation-heading > div > p:last-child { margin: 0; color: var(--muted); line-height: 1.5; }
+.moderation-count { display: flex; align-items: baseline; gap: .5rem; }
+.moderation-count strong { font: 550 4rem/.8 var(--mono); }
+.moderation-count span { color: var(--muted); font: .66rem var(--mono); text-transform: uppercase; }
+.moderation-privacy { max-width: 720px; margin: 1.5rem 0 0; color: var(--muted); font-size: .8rem; line-height: 1.55; }
+.moderation-section { margin-top: 3.5rem; }
+.moderation-section > header { display: flex; align-items: baseline; gap: .7rem; padding-bottom: .65rem; border-bottom: 1px solid var(--ink); }
+.moderation-section > header h2 { margin: 0; font-size: .78rem; letter-spacing: .07em; text-transform: uppercase; }
+.moderation-section > header span { color: var(--muted); font: .68rem var(--mono); }
+.moderation-list { margin: 0; padding: 0; list-style: none; }
+.moderation-list > li { display: grid; grid-template-columns: minmax(260px, 1.5fr) minmax(170px, .8fr) minmax(140px, .6fr) minmax(260px, 1fr); gap: 1.5rem; padding: 1.5rem 0; border-bottom: 1px solid var(--rule); }
+.moderation-section--resolved .moderation-list > li { grid-template-columns: minmax(260px, 1.5fr) minmax(170px, .8fr) minmax(260px, 1fr); }
+.moderation-target > span, .moderation-meta > span { display: block; color: var(--muted); font: .62rem var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+.moderation-target blockquote { margin: .55rem 0; font-size: .9rem; line-height: 1.5; }
+.moderation-target a { color: var(--civic); font-size: .7rem; text-underline-offset: .2em; }
+.moderation-reason strong { font-size: .8rem; }
+.moderation-reason p, .moderation-resolution p { margin: .5rem 0 0; color: var(--muted); font-size: .72rem; line-height: 1.45; }
+.moderation-meta time, .moderation-resolution > span { display: block; margin-top: .5rem; color: var(--muted); font-size: .7rem; }
+.moderation-resolve label { display: block; margin-bottom: .4rem; font-size: .65rem; }
+.moderation-resolve label span { color: var(--muted); }
+.moderation-resolve > div { display: grid; grid-template-columns: minmax(90px, 1fr) auto; }
+.moderation-resolve input { min-width: 0; padding: .5rem; border: 1px solid var(--rule); border-right: 0; }
+.moderation-resolve button { padding: .5rem .65rem; border: 1px solid var(--civic); color: var(--civic); background: white; cursor: pointer; font-size: .66rem; }
+.moderation-resolve button:disabled { opacity: .5; cursor: wait; }
+.moderation-resolve > p { margin: .5rem 0 0; color: var(--dissent); font-size: .7rem; }
+.moderation-empty { margin: 0; padding: 2rem 0; color: var(--muted); border-bottom: 1px solid var(--rule); }
+
 @keyframes ledger-in {
   from { opacity: 0; translate: 0 10px; }
 }
@@ -595,7 +625,7 @@ a { color: inherit; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
 }
 @media (max-width: 720px) {
-  .app-header__inner, .lane-shell, .record-shell, .admin-roster { width: min(100% - 24px, 1120px); }
+  .app-header__inner, .lane-shell, .record-shell, .admin-roster, .moderation-shell { width: min(100% - 24px, 1120px); }
   .brand__beta, .account-link, .account-form span { display: none; }
   .admin-mode a { display: none; }
   .app-header__inner { gap: .6rem; }
@@ -649,4 +679,6 @@ a { color: inherit; }
   .argument-composer__footer { align-items: start; flex-wrap: wrap; }
   .argument-composer__footer span { width: 100%; }
   .admin-roster__heading { grid-template-columns: 1fr; align-items: start; }
+  .moderation-heading { grid-template-columns: 1fr; align-items: start; }
+  .moderation-list > li, .moderation-section--resolved .moderation-list > li { grid-template-columns: 1fr; gap: 1rem; }
 }

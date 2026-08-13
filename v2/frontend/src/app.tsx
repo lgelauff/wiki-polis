@@ -21,6 +21,7 @@ import {ContentFlagControl} from './features/flags/content-flag-control';
 import {InformedVotingPage} from './features/informed-voting/informed-voting-page';
 import {ResultsPage} from './features/results/results-page';
 import {AdminParticipantsPage} from './features/admin/admin-participants-page';
+import {AdminModerationPage} from './features/admin/admin-moderation-page';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -716,6 +717,20 @@ function AdminParticipantsRoute() {
   );
 }
 
+function AdminModerationRoute() {
+  const {conversationId = ''} = useParams();
+  const {data: session} = useSuspenseQuery(sessionQuery());
+  return (
+    <>
+      <Header admin />
+      <AdminModerationPage
+        conversationId={Number(conversationId)}
+        csrfToken={session.csrfToken}
+      />
+    </>
+  );
+}
+
 function ConversationGroup({definition, conversations, primary}: {
   definition: (typeof groupDefinitions)[number];
   conversations: ConversationCard[];
@@ -796,6 +811,7 @@ export function App() {
           <Route path="/app/conversations/:slug/results" element={<ResultsRoute />} />
           <Route path="/app/conversations/:slug/identity-reveal" element={<IdentityRevealPage />} />
           <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
+          <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminModerationRoute />} />
           <Route path="*" element={<Navigate to="/app/real" replace />} />
         </Routes>
       </Suspense>

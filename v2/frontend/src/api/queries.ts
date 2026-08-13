@@ -117,6 +117,34 @@ export async function putAdminParticipantAccess(
   ).data;
 }
 
+export const adminFlagQueueQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-flag-queue', conversationId],
+  queryFn: async () => (
+    await requireApiData(api.GET('/admin/conversations/{conversationId}/flags', {
+      params: {path: {conversationId}},
+    }))
+  ).data,
+  staleTime: 5_000,
+});
+
+export async function putAdminFlagResolution(
+  conversationId: number,
+  flagId: number,
+  body: components['schemas']['AdminFlagResolutionRequest'],
+  csrfToken: string,
+) {
+  return (
+    await requireApiData(api.PUT(
+      '/admin/conversations/{conversationId}/flags/{flagId}/resolution',
+      {
+        params: {path: {conversationId, flagId}},
+        body,
+        headers: {'X-CSRFToken': csrfToken},
+      },
+    ))
+  ).data;
+}
+
 export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
   queryKey: ['pseudonym-suggestions', slug],
   queryFn: async () => (

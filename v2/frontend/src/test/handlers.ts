@@ -2,6 +2,45 @@ import {http, HttpResponse} from 'msw';
 
 export const handlers = [
   http.get(
+    new URL('/api/v1/admin/conversations/7/flags', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      data: {
+        conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+        open: [{
+          id: 41,
+          status: 'open',
+          category: 'privacy',
+          categoryLabel: 'Privacy violation',
+          detail: 'Includes a real name.',
+          flaggedAt: '2026-08-13T09:30:00Z',
+          target: {
+            type: 'statement', id: 12, label: 'Statement #12',
+            text: 'A statement containing private information.',
+            reviewHref: '/admin/conversations/7/statements',
+          },
+          resolution: null,
+        }],
+        resolved: [],
+        dataAvailability: {statementText: true},
+        capabilities: {resolveFlags: true},
+        links: {self: '/api/v1/admin/conversations/7/flags', conversation: '/admin/conversations/7'},
+      },
+    }),
+  ),
+  http.put(
+    new URL('/api/v1/admin/conversations/7/flags/41/resolution', globalThis.location.origin).toString(),
+    async ({request}) => {
+      const body = await request.json() as {resolved: true; note?: string | null};
+      return HttpResponse.json({data: {
+        flagId: 41,
+        status: 'resolved',
+        changed: true,
+        resolution: {resolvedAt: '2026-08-13T10:00:00Z', note: body.note ?? null},
+        links: {flags: '/api/v1/admin/conversations/7/flags'},
+      }});
+    },
+  ),
+  http.get(
     new URL('/api/v1/admin/conversations/7/participants', globalThis.location.origin).toString(),
     () => HttpResponse.json({
       data: {
