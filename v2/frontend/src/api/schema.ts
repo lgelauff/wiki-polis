@@ -641,6 +641,15 @@ export interface components {
                 targetLabel: string | null;
                 frozen: boolean;
             };
+            publicationReadiness: {
+                windowOpen: boolean;
+                preconditions: {
+                    id: string;
+                    label: string;
+                    met: boolean | null;
+                    note: string | null;
+                }[];
+            };
             counts: {
                 participants: number;
                 invitations: number;

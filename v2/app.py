@@ -2500,11 +2500,23 @@ def _admin_role_roster_api_payload(conv_id: int) -> dict:
     )
 
 
+_PUBLICATION_READINESS = (
+    ('cleanup_reviewed_results', 'Reviewed preliminary results'),
+    ('cleanup_moderated_flagged',
+     'Moderated any remaining flagged informed-voting statements'),
+    ('cleanup_reviewed_exclusions', 'Reviewed participant exclusions'),
+    ('cleanup_report_intro', 'Written or reviewed the report introduction text'),
+)
+_PUBLICATION_READINESS_IDS = {key for key, _label in _PUBLICATION_READINESS}
+
+
 def _admin_lifecycle_api_payload(conv_id: int) -> dict:
     conv = _require_mod_for_conv(conv_id)
     participant = _current_participant()
     sequence = _phase_sequence_for(conv)
     active = _active_phases(conv)
+    phase6_required = _route_has_phase(conv, 'informed_voting')
+    phase6_ready = bool(conv.phase6_polis_conversation_id) or not phase6_required
     return build_admin_lifecycle(
         conversation=conv,
         role_label=_conversation_role_label(conv, participant),
@@ -2514,6 +2526,20 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
         linear=_is_linear_phase_state(conv),
         transition=_transition_context(conv),
         schedule=_schedule_context(conv),
+        publication_readiness={
+            'windowOpen': _in_cleanup_window(conv),
+            'preconditions': [
+                {'id': key, 'label': label, 'met': None, 'note': None}
+                for key, label in _PUBLICATION_READINESS
+            ] + [{
+                'id': 'phase6_initialized',
+                'label': 'Informed voting round initialized',
+                'met': phase6_ready,
+                'note': None if phase6_ready else (
+                    'Initialize informed voting before publishing.'
+                ),
+            }],
+        },
         counts={
             'participants': Participation.query.filter_by(conversation_id=conv.id).count(),
             'invitations': ConversationInvite.query.filter_by(conversation_id=conv.id).count(),
@@ -2568,14 +2594,6 @@ def _advance_admin_phase_api_payload(conv_id: int, body: dict) -> dict:
         },
         'lifecycle': _admin_lifecycle_api_payload(conv.id),
     }
-
-
-_PUBLICATION_READINESS_IDS = {
-    'cleanup_reviewed_results',
-    'cleanup_moderated_flagged',
-    'cleanup_reviewed_exclusions',
-    'cleanup_report_intro',
-}
 
 
 def _set_admin_pause_api_payload(conv_id: int, body: dict) -> dict:

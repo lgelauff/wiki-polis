@@ -822,7 +822,7 @@
         }
       },
       "AdminLifecycle": {
-        "type": "object", "required": ["conversation", "operator", "phase", "schedule", "counts", "capabilities", "links"], "additionalProperties": false,
+        "type": "object", "required": ["conversation", "operator", "phase", "schedule", "publicationReadiness", "counts", "capabilities", "links"], "additionalProperties": false,
         "properties": {
           "conversation": {"$ref": "#/components/schemas/AdminLifecycleConversation"},
           "operator": {"type": "object", "required": ["roleLabel"], "additionalProperties": false, "properties": {"roleLabel": {"type": "string"}}},
@@ -833,6 +833,10 @@
           }},
           "schedule": {"type": "object", "required": ["canSchedule", "scheduledAt", "targetKey", "targetLabel", "frozen"], "additionalProperties": false, "properties": {
             "canSchedule": {"type": "boolean"}, "scheduledAt": {"type": ["string", "null"], "format": "date-time"}, "targetKey": {"type": ["string", "null"]}, "targetLabel": {"type": ["string", "null"]}, "frozen": {"type": "boolean"}
+          }},
+          "publicationReadiness": {"type": "object", "required": ["windowOpen", "preconditions"], "additionalProperties": false, "properties": {
+            "windowOpen": {"type": "boolean"},
+            "preconditions": {"type": "array", "items": {"type": "object", "required": ["id", "label", "met", "note"], "additionalProperties": false, "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "met": {"type": ["boolean", "null"]}, "note": {"type": ["string", "null"]}}}}
           }},
           "counts": {"type": "object", "required": ["participants", "invitations", "openFlags", "featuredStatements"], "additionalProperties": false, "properties": {
             "participants": {"type": "integer", "minimum": 0}, "invitations": {"type": "integer", "minimum": 0}, "openFlags": {"type": "integer", "minimum": 0}, "featuredStatements": {"type": "integer", "minimum": 0}

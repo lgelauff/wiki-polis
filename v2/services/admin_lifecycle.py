@@ -17,6 +17,7 @@ def build_admin_lifecycle(
     *, conversation, role_label: str, phase_sequence: list[dict],
     current_stage_index: int, active_phase_keys: set[str], linear: bool,
     transition: dict | None, schedule: dict, counts: dict,
+    publication_readiness: dict,
     can_organize: bool, can_administer: bool, links: dict,
 ) -> dict:
     if conversation.closed_at:
@@ -91,11 +92,20 @@ def build_admin_lifecycle(
             'targetLabel': schedule['scheduled_label'],
             'frozen': schedule['frozen'],
         },
+        'publicationReadiness': publication_readiness,
         'counts': counts,
         'capabilities': {
             'advancePhase': can_organize and transition is not None,
             'pause': can_administer and bool(conversation.active),
-            'publish': can_administer and publication == 'pending',
+            'publish': (
+                can_administer
+                and publication == 'pending'
+                and publication_readiness['windowOpen']
+                and all(
+                    row['met'] is not False
+                    for row in publication_readiness['preconditions']
+                )
+            ),
             'editSettings': can_organize,
             'useAdvancedPhases': can_administer,
         },

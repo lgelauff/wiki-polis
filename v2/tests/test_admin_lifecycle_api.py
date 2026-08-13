@@ -12,6 +12,7 @@ def test_lifecycle_contract_separates_phase_from_publication(
     admin_client, conversation,
 ):
     conversation.phase_public_results = True
+    conversation.phase6_polis_conversation_id = 'p6-private'
     db.session.commit()
 
     pending = admin_client.get(
@@ -21,6 +22,8 @@ def test_lifecycle_contract_separates_phase_from_publication(
     assert pending['conversation']['publication'] == 'pending'
     assert pending['phase']['steps'][-1]['state'] == 'current'
     assert pending['capabilities']['publish'] is True
+    assert pending['publicationReadiness']['windowOpen'] is True
+    assert pending['publicationReadiness']['preconditions'][-1]['met'] is True
     assert pending['phase']['transition'] is None
     assert pending['links']['participants'].endswith(
         f'/app/admin/conversations/{conversation.id}/participants'
@@ -49,6 +52,14 @@ def test_lifecycle_contract_exposes_server_evaluated_transition(
     assert transition['target'] == {'key': 'submission', 'label': 'Explore'}
     assert len(transition['preconditions']) == 6
     assert all({'id', 'label', 'met', 'note'} == set(row) for row in transition['preconditions'])
+    publication = response.get_json()['data']['publicationReadiness']
+    assert publication['windowOpen'] is False
+    assert publication['preconditions'][-1] == {
+        'id': 'phase6_initialized',
+        'label': 'Informed voting round initialized',
+        'met': False,
+        'note': 'Initialize informed voting before publishing.',
+    }
 
 
 def test_scoped_moderator_lifecycle_capabilities_are_read_only(
