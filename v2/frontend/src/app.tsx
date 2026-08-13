@@ -23,6 +23,7 @@ import {ResultsPage} from './features/results/results-page';
 import {AdminParticipantsPage} from './features/admin/admin-participants-page';
 import {AdminModerationPage} from './features/admin/admin-moderation-page';
 import {AdminInvitationsPage} from './features/admin/admin-invitations-page';
+import {AdminRolesPage} from './features/admin/admin-roles-page';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -743,6 +744,12 @@ function AdminInvitationsRoute() {
   );
 }
 
+function AdminRolesRoute() {
+  const {conversationId = ''} = useParams();
+  const {data: session} = useSuspenseQuery(sessionQuery());
+  return <><Header admin /><AdminRolesPage conversationId={Number(conversationId)} csrfToken={session.csrfToken} /></>;
+}
+
 function ConversationGroup({definition, conversations, primary}: {
   definition: (typeof groupDefinitions)[number];
   conversations: ConversationCard[];
@@ -825,6 +832,7 @@ export function App() {
           <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
           <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminModerationRoute />} />
           <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminInvitationsRoute />} />
+          <Route path="/app/admin/conversations/:conversationId/roles" element={<AdminRolesRoute />} />
           <Route path="*" element={<Navigate to="/app/real" replace />} />
         </Routes>
       </Suspense>

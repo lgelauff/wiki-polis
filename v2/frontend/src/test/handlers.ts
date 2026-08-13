@@ -1,6 +1,19 @@
 import {http, HttpResponse} from 'msw';
 
+type Role = 'moderator' | 'organizer';
+
 export const handlers = [
+  http.get(new URL('/api/v1/admin/conversations/7/roles', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+    assignments: [{participantId: 23, username: 'Example editor', roles: ['moderator'], grantedAt: ['2026-08-01T10:00:00Z']}],
+    candidates: [{participantId: 23, username: 'Example editor'}],
+    availableRoles: ['moderator', 'organizer'], capabilities: {manageRoles: true},
+    links: {self: '/api/v1/admin/conversations/7/roles', conversation: '/admin/conversations/7'},
+  }})),
+  http.put(new URL('/api/v1/admin/conversations/7/roles/23', globalThis.location.origin).toString(), async ({request}) => {
+    const body = await request.json() as {roles: Role[]};
+    return HttpResponse.json({data: {participantId: 23, username: 'Example editor', roles: body.roles, changed: true, added: ['organizer'], removed: [], links: {roles: '/api/v1/admin/conversations/7/roles'}}});
+  }),
   http.get(
     new URL('/api/v1/admin/conversations/7/invitations', globalThis.location.origin).toString(),
     () => HttpResponse.json({data: {

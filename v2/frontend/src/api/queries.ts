@@ -183,6 +183,22 @@ export async function deleteAdminInvitation(
   ).data;
 }
 
+export const adminRoleRosterQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-role-roster', conversationId],
+  queryFn: async () => (await requireApiData(api.GET('/admin/conversations/{conversationId}/roles', {params: {path: {conversationId}}}))).data,
+  staleTime: 10_000,
+});
+
+export async function putAdminRoles(
+  conversationId: number, participantId: number,
+  body: components['schemas']['AdminRoleSetRequest'], csrfToken: string,
+) {
+  return (await requireApiData(api.PUT('/admin/conversations/{conversationId}/roles/{participantId}', {
+    params: {path: {conversationId, participantId}}, body,
+    headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
 export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
   queryKey: ['pseudonym-suggestions', slug],
   queryFn: async () => (

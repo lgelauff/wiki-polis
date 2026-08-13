@@ -98,6 +98,17 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(await screen.findByText('No invitations yet.')).toBeVisible();
 });
 
+test('replaces a conversation role set from the admin workspace', async () => {
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/roles']}><App /></MemoryRouter></QueryClientProvider>);
+  expect(await screen.findByRole('heading', {name: 'Conversation roles'})).toBeVisible();
+  expect(screen.getByRole('listitem')).toHaveTextContent('Example editor');
+  fireEvent.change(screen.getByLabelText('Participant'), {target: {value: '23'}});
+  fireEvent.click(screen.getByRole('checkbox', {name: 'organizer'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save role set'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Added: organizer');
+  expect(screen.getByText('moderator + organizer')).toBeVisible();
+});
+
 test('renders a conversation record from the generated API contract', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

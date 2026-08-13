@@ -641,6 +641,25 @@ a { color: inherit; }
 .invitation-roster li { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(140px, .7fr) auto; align-items: center; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--rule); }
 .invitation-roster li span { color: var(--muted); font-size: .7rem; }
 .invitation-roster li button { padding: .4rem 0; border: 0; color: var(--dissent); background: none; cursor: pointer; font-size: .68rem; text-decoration: underline; }
+.roles-shell { width: min(900px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 6rem; }
+.roles-heading { padding: clamp(3rem, 7vw, 6rem) 0 2rem; border-bottom: 1px solid var(--ink); }
+.roles-heading h1 { margin: .3rem 0 1rem; font-size: clamp(2.7rem, 7vw, 5.5rem); line-height: .92; letter-spacing: -.065em; }
+.roles-heading > p:last-child, .roles-editor > div > p:last-child { color: var(--muted); }
+.roles-roster { margin-top: 3rem; }
+.roles-roster > header { display: flex; gap: .7rem; align-items: baseline; border-bottom: 1px solid var(--ink); }
+.roles-roster h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .07em; }
+.roles-roster header span { color: var(--muted); font: .68rem var(--mono); }
+.roles-roster ul { margin: 0; padding: 0; list-style: none; }
+.roles-roster li { display: flex; justify-content: space-between; padding: 1rem 0; border-bottom: 1px solid var(--rule); }
+.roles-roster li span { color: var(--civic); font: .7rem var(--mono); text-transform: uppercase; }
+.roles-editor { display: grid; grid-template-columns: .8fr 1fr; gap: 3rem; margin-top: 4rem; padding-top: 3rem; border-top: 1px solid var(--ink); }
+.roles-editor h2 { margin: 0; font-size: 1.7rem; }
+.roles-editor form > label { display: block; margin-bottom: .4rem; font-weight: 650; }
+.roles-editor select { width: 100%; padding: .7rem; border: 1px solid var(--ink); background: white; }
+.roles-editor fieldset { display: flex; gap: 1.2rem; margin: 1rem 0; border: 1px solid var(--rule); }
+.roles-editor fieldset label { text-transform: capitalize; }
+.roles-editor button { padding: .65rem .8rem; border: 0; color: white; background: var(--ink); cursor: pointer; }
+.roles-editor form > p, .roles-readonly { color: var(--muted); font-size: .72rem; }
 
 @keyframes ledger-in {
   from { opacity: 0; translate: 0 10px; }
@@ -649,7 +668,7 @@ a { color: inherit; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
 }
 @media (max-width: 720px) {
-  .app-header__inner, .lane-shell, .record-shell, .admin-roster, .moderation-shell, .invitation-shell { width: min(100% - 24px, 1120px); }
+  .app-header__inner, .lane-shell, .record-shell, .admin-roster, .moderation-shell, .invitation-shell, .roles-shell { width: min(100% - 24px, 1120px); }
   .brand__beta, .account-link, .account-form span { display: none; }
   .admin-mode a { display: none; }
   .app-header__inner { gap: .6rem; }
@@ -708,4 +727,5 @@ a { color: inherit; }
   .invitation-heading, .invitation-add { grid-template-columns: 1fr; align-items: start; gap: 1.5rem; }
   .invitation-roster li { grid-template-columns: 1fr auto; }
   .invitation-roster li span { grid-column: 1 / -1; }
+  .roles-editor { grid-template-columns: 1fr; gap: 1.5rem; }
 }
