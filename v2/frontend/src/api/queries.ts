@@ -199,6 +199,49 @@ export async function putAdminRoles(
   }))).data;
 }
 
+export const adminLifecycleQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-lifecycle', conversationId],
+  queryFn: async () => (
+    await requireApiData(api.GET('/admin/conversations/{conversationId}', {
+      params: {path: {conversationId}},
+    }))
+  ).data,
+  staleTime: 5_000,
+});
+
+export async function putAdminPhase(
+  conversationId: number,
+  body: components['schemas']['AdminPhaseAdvanceRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT('/admin/conversations/{conversationId}/phase', {
+    params: {path: {conversationId}}, body,
+    headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
+export async function putAdminPause(
+  conversationId: number,
+  body: components['schemas']['AdminPauseRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT('/admin/conversations/{conversationId}/pause', {
+    params: {path: {conversationId}}, body,
+    headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
+export async function createAdminPublication(
+  conversationId: number,
+  body: components['schemas']['AdminPublicationRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.POST('/admin/conversations/{conversationId}/publication', {
+    params: {path: {conversationId}}, body,
+    headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
 export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
   queryKey: ['pseudonym-suggestions', slug],
   queryFn: async () => (

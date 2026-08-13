@@ -23,6 +23,29 @@ test('renders a conversation lane from the API contract', async () => {
     .toHaveAttribute('href', '/c/community-strategy');
 });
 
+test('advances a conversation from the server-described lifecycle console', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: 'Community strategy'})).toBeVisible();
+  expect(screen.getByText('not applicable')).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Preparation → Explore'})).toBeVisible();
+  const advance = screen.getByRole('button', {name: 'Move to Explore'});
+  expect(advance).toBeDisabled();
+  fireEvent.click(screen.getByRole('checkbox', {name: /statement set and introduction/}));
+  expect(advance).toBeEnabled();
+  fireEvent.click(advance);
+
+  expect(await screen.findByRole('status')).toHaveTextContent('Moved to Explore');
+  expect(screen.getByRole('heading', {name: 'No guided transition'})).toBeVisible();
+  expect(screen.getByRole('link', {name: /Participants/})).toHaveAttribute(
+    'href', '/app/admin/conversations/7/participants',
+  );
+});
+
 test('manages participant access in the distinct admin workspace', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

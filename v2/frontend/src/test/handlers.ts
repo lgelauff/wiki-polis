@@ -3,6 +3,47 @@ import {http, HttpResponse} from 'msw';
 type Role = 'moderator' | 'organizer';
 
 export const handlers = [
+  http.get(new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', publication: 'not_applicable', closedAt: null},
+    operator: {roleLabel: 'Global admin'},
+    phase: {
+      linear: true, currentIndex: 0, activeKeys: ['preparation'],
+      steps: [
+        {key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'current'},
+        {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'upcoming'},
+        {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'},
+      ],
+      transition: {
+        source: {key: 'preparation', label: 'Preparation'}, target: {key: 'submission', label: 'Explore'},
+        consequence: {opens: 'Participant statement submission and voting', closes: 'Conversation setup'},
+        preconditions: [{id: 'ready', label: 'The statement set and introduction are ready', met: null, note: null}],
+        requiresPhase6Initialization: false,
+      },
+    },
+    schedule: {canSchedule: true, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
+    publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
+    counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
+    capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true},
+    links: {
+      self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy',
+      participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation',
+      invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles',
+      statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured',
+    },
+  }})),
+  http.put(new URL('/api/v1/admin/conversations/7/phase', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
+    transition: {sourceKey: 'preparation', targetKey: 'submission', targetLabel: 'Explore', phase6Created: false, phase6SyncMessage: null, visibilitySynced: true},
+    lifecycle: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', publication: 'not_applicable', closedAt: null},
+      operator: {roleLabel: 'Global admin'},
+      phase: {linear: true, currentIndex: 1, activeKeys: ['submission'], steps: [{key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'completed'}, {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'current'}, {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'}], transition: null},
+      schedule: {canSchedule: true, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
+      publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
+      counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
+      capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true},
+      links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured'},
+    },
+  }})),
   http.get(new URL('/api/v1/admin/conversations/7/roles', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     assignments: [{participantId: 23, username: 'Example editor', roles: ['moderator'], grantedAt: ['2026-08-01T10:00:00Z']}],
