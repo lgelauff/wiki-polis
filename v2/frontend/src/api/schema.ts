@@ -524,6 +524,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the desired pause state */
+        put: operations["putAdminConversationPause"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/conversations/{conversationId}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Irreversibly publish the frozen final report */
+        post: operations["createAdminConversationPublication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -550,6 +588,24 @@ export interface components {
         };
         AdminPhaseAdvanceRequest: {
             confirmedPreconditionIds: string[];
+        };
+        AdminPauseRequest: {
+            paused: boolean;
+        };
+        AdminPauseResponse: {
+            data: {
+                paused: boolean;
+                changed: boolean;
+                lifecycle: components["schemas"]["AdminLifecycle"];
+            };
+        };
+        AdminPublicationRequest: {
+            confirmedPreconditionIds: string[];
+        };
+        AdminPublicationResponse: {
+            data: {
+                lifecycle: components["schemas"]["AdminLifecycle"];
+            };
         };
         AdminPhaseAdvanceResponse: {
             data: components["schemas"]["AdminPhaseAdvanceReceipt"];
@@ -2975,6 +3031,112 @@ export interface operations {
             };
             /** @description The phase transition could not be saved */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminConversationPause: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPauseRequest"];
+            };
+        };
+        responses: {
+            /** @description Pause receipt and refreshed lifecycle */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPauseResponse"];
+                };
+            };
+            /** @description Invalid state */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createAdminConversationPublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPublicationRequest"];
+            };
+        };
+        responses: {
+            /** @description Published lifecycle */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPublicationResponse"];
+                };
+            };
+            /** @description Invalid confirmations */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Publication state or readiness conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

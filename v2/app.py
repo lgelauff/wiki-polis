@@ -93,7 +93,10 @@ from services.admin_lifecycle import (
     PhasePreparationFailed, PhaseReadinessBlocked,
     PhaseReadinessUnconfirmed, PhaseTransitionConflict,
     PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
+    ConversationClosed, PublicationPhase6Missing,
+    PublicationReadinessUnconfirmed, PublicationUnavailable,
     advance_conversation_phase, build_admin_lifecycle,
+    publish_final_report, set_conversation_paused,
 )
 from services.idempotency import (complete_command, release_reservation,
                                   request_digest, reserve_command)
@@ -2565,6 +2568,47 @@ def _advance_admin_phase_api_payload(conv_id: int, body: dict) -> dict:
         },
         'lifecycle': _admin_lifecycle_api_payload(conv.id),
     }
+
+
+_PUBLICATION_READINESS_IDS = {
+    'cleanup_reviewed_results',
+    'cleanup_moderated_flagged',
+    'cleanup_reviewed_exclusions',
+    'cleanup_report_intro',
+}
+
+
+def _set_admin_pause_api_payload(conv_id: int, body: dict) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    changed = set_conversation_paused(
+        conversation=conv, paused=body['paused'],
+        session=db.session, audit=record_audit,
+    )
+    return {
+        'paused': bool(conv.paused),
+        'changed': changed,
+        'lifecycle': _admin_lifecycle_api_payload(conv.id),
+    }
+
+
+def _publish_admin_report_api_payload(conv_id: int, body: dict) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    publish_final_report(
+        conversation=conv,
+        in_cleanup_window=_in_cleanup_window(conv),
+        required_precondition_ids=_PUBLICATION_READINESS_IDS,
+        confirmed_precondition_ids=set(body['confirmedPreconditionIds']),
+        phase6_required=_route_has_phase(conv, 'informed_voting'),
+        publish=_publish_final_report,
+        session=db.session,
+        invalidate_results=_invalidate_phase6_results_cache,
+        audit=record_audit,
+    )
+    return {'lifecycle': _admin_lifecycle_api_payload(conv.id)}
 
 
 def _replace_admin_roles_api_payload(
@@ -6017,6 +6061,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         replace_admin_roles=_replace_admin_roles_api_payload,
         resolve_admin_lifecycle=_admin_lifecycle_api_payload,
         advance_admin_phase=_advance_admin_phase_api_payload,
+        set_admin_pause=_set_admin_pause_api_payload,
+        publish_admin_report=_publish_admin_report_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,

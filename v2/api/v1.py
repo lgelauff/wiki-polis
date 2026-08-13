@@ -34,6 +34,8 @@ from services.admin_lifecycle import (
     PhasePreparationFailed, PhaseReadinessBlocked,
     PhaseReadinessUnconfirmed, PhaseTransitionConflict,
     PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
+    ConversationClosed, PublicationPhase6Missing,
+    PublicationReadinessUnconfirmed, PublicationUnavailable,
 )
 
 _OPENAPI_SPEC = json.loads(
@@ -80,6 +82,8 @@ def create_api_v1_blueprint(
     replace_admin_roles: Callable[[int, int, dict], dict],
     resolve_admin_lifecycle: Callable[[int], dict],
     advance_admin_phase: Callable[[int, dict], dict],
+    set_admin_pause: Callable[[int, dict], dict],
+    publish_admin_report: Callable[[int, dict], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
@@ -415,6 +419,39 @@ def create_api_v1_blueprint(
                 409 if exc.outcome_unknown else 503,
             )
         return _no_store(jsonify({'data': data}))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/pause')
+    def put_admin_conversation_pause(conversation_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'paused'}
+                or not isinstance(body.get('paused'), bool)):
+            return error_response('validation_failed', 'Use paused true or false.', 400)
+        try:
+            data = set_admin_pause(conversation_id, body)
+        except ConversationClosed:
+            return error_response('conversation_closed', 'A closed conversation cannot be paused.', 409)
+        return _no_store(jsonify({'data': data}))
+
+    @bp.post('/admin/conversations/<int:conversation_id>/publication')
+    def create_admin_conversation_publication(conversation_id: int):
+        body = request.get_json(silent=True)
+        confirmed = body.get('confirmedPreconditionIds') if isinstance(body, dict) else None
+        if (not isinstance(body, dict) or set(body) != {'confirmedPreconditionIds'}
+                or not isinstance(confirmed, list)
+                or any(not isinstance(value, str) or not value for value in confirmed)
+                or len(set(confirmed)) != len(confirmed)):
+            return error_response('validation_failed', 'Confirm the publication readiness checks.', 400)
+        try:
+            data = publish_admin_report(conversation_id, body)
+        except ConversationClosed:
+            return error_response('conversation_closed', 'The report is already published.', 409)
+        except PublicationUnavailable:
+            return error_response('publication_unavailable', 'Enter the report cleanup window before publishing.', 409)
+        except PublicationReadinessUnconfirmed as exc:
+            return error_response('readiness_unconfirmed', 'Confirm every publication readiness check.', 409, details={'preconditionIds': exc.ids})
+        except PublicationPhase6Missing:
+            return error_response('phase6_missing', 'Initialize informed voting before publishing.', 409)
+        return _no_store(jsonify({'data': data})), 201
 
     @bp.put('/admin/conversations/<int:conversation_id>/roles/<int:participant_id>')
     def put_admin_conversation_roles(conversation_id: int, participant_id: int):

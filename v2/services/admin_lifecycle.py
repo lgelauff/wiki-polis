@@ -134,6 +134,23 @@ class PhaseTransitionSaveFailed(RuntimeError):
         self.orphaned_phase6_id = orphaned_phase6_id
 
 
+class ConversationClosed(RuntimeError):
+    pass
+
+
+class PublicationUnavailable(RuntimeError):
+    pass
+
+
+class PublicationReadinessUnconfirmed(ValueError):
+    def __init__(self, ids: list[str]):
+        self.ids = ids
+
+
+class PublicationPhase6Missing(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class PhaseTransitionResult:
     source_key: str
@@ -221,4 +238,43 @@ def advance_conversation_phase(
         phase6_created=bool(created_phase6_id),
         sync_message=sync_message,
         visibility_synced=visibility_synced,
+    )
+
+
+def set_conversation_paused(
+    *, conversation, paused: bool, session, audit,
+) -> bool:
+    if not conversation.active:
+        raise ConversationClosed()
+    changed = bool(conversation.paused) != paused
+    if changed:
+        conversation.paused = paused
+        session.commit()
+        audit('conversation.pause', conv_id=conversation.id, paused=paused)
+    else:
+        session.commit()
+    return changed
+
+
+def publish_final_report(
+    *, conversation, in_cleanup_window: bool,
+    required_precondition_ids: set[str], confirmed_precondition_ids: set[str],
+    phase6_required: bool, publish, session, invalidate_results, audit,
+) -> None:
+    if not conversation.active:
+        raise ConversationClosed()
+    if not in_cleanup_window:
+        raise PublicationUnavailable()
+    missing = sorted(required_precondition_ids - confirmed_precondition_ids)
+    if missing:
+        raise PublicationReadinessUnconfirmed(missing)
+    if phase6_required and not conversation.phase6_polis_conversation_id:
+        raise PublicationPhase6Missing()
+    result_filter = publish(conversation)
+    session.commit()
+    invalidate_results(conversation)
+    audit(
+        'conversation.close', conv_id=conversation.id,
+        excluded_tids=len(result_filter.excluded_tids),
+        excluded_pids=len(result_filter.excluded_pids),
     )

@@ -766,6 +766,24 @@
         }
       }
     },
+    "/admin/conversations/{conversationId}/pause": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "put": {"operationId": "putAdminConversationPause", "summary": "Set the desired pause state", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPauseRequest"}}}}, "responses": {
+        "200": {"description": "Pause receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPauseResponse"}}}},
+        "400": {"description": "Invalid state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Conversation closed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
+    "/admin/conversations/{conversationId}/publication": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "post": {"operationId": "createAdminConversationPublication", "summary": "Irreversibly publish the frozen final report", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPublicationRequest"}}}}, "responses": {
+        "201": {"description": "Published lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPublicationResponse"}}}},
+        "400": {"description": "Invalid confirmations", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Publication state or readiness conflict", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -786,6 +804,10 @@
         "type": "object", "required": ["confirmedPreconditionIds"], "additionalProperties": false,
         "properties": {"confirmedPreconditionIds": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}}
       },
+      "AdminPauseRequest": {"type": "object", "required": ["paused"], "additionalProperties": false, "properties": {"paused": {"type": "boolean"}}},
+      "AdminPauseResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["paused", "changed", "lifecycle"], "additionalProperties": false, "properties": {"paused": {"type": "boolean"}, "changed": {"type": "boolean"}, "lifecycle": {"$ref": "#/components/schemas/AdminLifecycle"}}}}},
+      "AdminPublicationRequest": {"type": "object", "required": ["confirmedPreconditionIds"], "additionalProperties": false, "properties": {"confirmedPreconditionIds": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}}},
+      "AdminPublicationResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["lifecycle"], "additionalProperties": false, "properties": {"lifecycle": {"$ref": "#/components/schemas/AdminLifecycle"}}}}},
       "AdminPhaseAdvanceResponse": {
         "type": "object", "required": ["data"], "additionalProperties": false,
         "properties": {"data": {"$ref": "#/components/schemas/AdminPhaseAdvanceReceipt"}}

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from db import AdminRole, FeaturedStatement, db
+from db import AdminRole, AuditEvent, FeaturedStatement, db
 from tests.conftest import login
 from services.admin_lifecycle import PhaseTransitionSaveFailed
 from unittest.mock import patch
@@ -194,3 +194,58 @@ def test_phase_advance_api_requires_organizer(
         json={'confirmedPreconditionIds': []},
     )
     assert response.status_code == 403
+
+
+def test_pause_api_is_desired_state_and_idempotent(
+    admin_client, conversation,
+):
+    endpoint = f'/api/v1/admin/conversations/{conversation.id}/pause'
+    first = admin_client.put(endpoint, json={'paused': True})
+    replay = admin_client.put(endpoint, json={'paused': True})
+    resumed = admin_client.put(endpoint, json={'paused': False})
+
+    assert first.get_json()['data']['changed'] is True
+    assert replay.get_json()['data']['changed'] is False
+    assert resumed.get_json()['data']['lifecycle']['conversation']['status'] == 'active'
+    assert [event.operation for event in AuditEvent.query.order_by(AuditEvent.id)] == [
+        'conversation.pause', 'conversation.pause',
+    ]
+
+
+def test_publication_api_enforces_cleanup_and_readiness(
+    admin_client, conversation,
+):
+    endpoint = f'/api/v1/admin/conversations/{conversation.id}/publication'
+    early = admin_client.post(endpoint, json={'confirmedPreconditionIds': []})
+    conversation.phase_public_results = True
+    conversation.phase6_polis_conversation_id = 'p6-private'
+    db.session.commit()
+    incomplete = admin_client.post(endpoint, json={'confirmedPreconditionIds': []})
+
+    assert early.status_code == 409
+    assert early.get_json()['error']['code'] == 'publication_unavailable'
+    assert incomplete.status_code == 409
+    assert incomplete.get_json()['error']['code'] == 'readiness_unconfirmed'
+
+
+def test_publication_api_freezes_report_and_returns_published_lifecycle(
+    admin_client, conversation,
+):
+    conversation.phase_public_results = True
+    conversation.phase6_polis_conversation_id = 'p6-private'
+    db.session.commit()
+    confirmed = [
+        'cleanup_reviewed_results', 'cleanup_moderated_flagged',
+        'cleanup_reviewed_exclusions', 'cleanup_report_intro',
+    ]
+    with patch('app.PolisServerClient.get_statements', return_value=([], [], [])):
+        response = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/publication',
+            json={'confirmedPreconditionIds': confirmed},
+        )
+
+    assert response.status_code == 201
+    lifecycle = response.get_json()['data']['lifecycle']
+    assert lifecycle['conversation']['publication'] == 'published'
+    assert lifecycle['conversation']['status'] == 'closed'
+    assert 'p6-private' not in response.text
