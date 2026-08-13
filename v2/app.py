@@ -1647,6 +1647,9 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
         arguments_link=lambda slug: url_for(
             'spa_shell', spa_path=f'conversations/{slug}/arguments',
         ),
+        reveal_link=lambda slug: url_for(
+            'spa_shell', spa_path=f'conversations/{slug}/identity-reveal',
+        ),
         admin_link=lambda conv_id: url_for(
             'admin.admin_conversation_detail', conv_id=conv_id,
         ),

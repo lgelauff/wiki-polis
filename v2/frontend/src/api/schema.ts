@@ -715,6 +715,7 @@ export interface components {
             about: string;
             explore?: string;
             arguments?: string;
+            identityReveal?: string;
             admin?: string;
         };
         ErrorResponse: {

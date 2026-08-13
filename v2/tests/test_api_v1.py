@@ -2,7 +2,7 @@
 
 import json
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from db import Conversation, Participant, Participation, db
@@ -143,6 +143,27 @@ def test_conversation_lane_exposes_scheduled_transition_as_utc(
         'target': 'argument_mapping',
         'targetLabel': 'Arguments',
     }
+
+
+def test_closed_joined_conversation_advertises_identity_reveal_route(
+    auth_client, participant, conversation,
+):
+    conversation.active = False
+    conversation.closed_at = datetime.now(timezone.utc) - timedelta(days=45)
+    db.session.add(Participation(
+        participant_id=participant.id,
+        conversation_id=conversation.id,
+        pseudonym='api-otter',
+    ))
+    db.session.commit()
+
+    card = auth_client.get('/api/v1/conversations').get_json()['data'][
+        'groups'
+    ]['archived'][0]
+
+    assert card['links']['identityReveal'] == (
+        '/app/conversations/test-conv/identity-reveal'
+    )
 
 
 def test_conversation_lane_rejects_unknown_space(client):

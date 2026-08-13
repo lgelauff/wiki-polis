@@ -1314,6 +1314,7 @@
           "about": {"type": "string"},
           "explore": {"type": "string"},
           "arguments": {"type": "string"},
+          "identityReveal": {"type": "string"},
           "admin": {"type": "string"}
         }
       },
