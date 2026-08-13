@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from db import (CommandReceipt, Participation, StatementProvenance,
-                StatementSimilarityScore, db)
+from db import (CommandReceipt, Participation, StatementPassSignal,
+                StatementProvenance, StatementSimilarityScore, db)
 from services.explore import build_explore_state
 
 
@@ -140,6 +140,7 @@ def test_explore_vote_is_idempotent_put_and_translates_agree_sign(
     assert response.get_json()['data'] == {
         'statementId': 7,
         'choice': 'agree',
+        'passReason': None,
         'links': {'explore': '/api/v1/conversations/test-conv/explore'},
     }
     bootstrap.assert_not_called()
@@ -148,6 +149,65 @@ def test_explore_vote_is_idempotent_put_and_translates_agree_sign(
     assert put.call_args.kwargs['headers']['X-CSRF-Token'] == 'existing-csrf'
     db.session.refresh(participation)
     assert participation.last_engagement is not None
+
+
+def test_explore_pass_reason_is_created_updated_preserved_and_cleared(
+    auth_client, participant, conversation,
+):
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    statements = {'7': {'id': 7, 'text': 'Vote on this'}}
+
+    with (
+        patch('app.polis_http.get', side_effect=[
+            _response(statements), _response({'votes': [], 'statements': []}),
+            _response(statements), _response({'votes': [], 'statements': []}),
+            _response(statements), _response({'votes': [], 'statements': []}),
+            _response(statements), _response({'votes': [], 'statements': []}),
+        ]),
+        patch('app.polis_http.put', return_value=_response({})) as put,
+    ):
+        created = auth_client.put(
+            '/api/v1/conversations/test-conv/statements/7/vote',
+            json={'choice': 'pass', 'passReason': 'unsure'},
+        )
+        updated = auth_client.put(
+            '/api/v1/conversations/test-conv/statements/7/vote',
+            json={'choice': 'pass', 'passReason': 'confusing'},
+        )
+        replayed = auth_client.put(
+            '/api/v1/conversations/test-conv/statements/7/vote',
+            json={'choice': 'pass'},
+        )
+        cleared = auth_client.put(
+            '/api/v1/conversations/test-conv/statements/7/vote',
+            json={'choice': 'disagree'},
+        )
+
+    assert created.get_json()['data']['passReason'] == 'unsure'
+    assert updated.get_json()['data']['passReason'] == 'confusing'
+    assert replayed.get_json()['data']['passReason'] == 'confusing'
+    assert cleared.get_json()['data']['passReason'] is None
+    assert StatementPassSignal.query.count() == 0
+    assert [call.kwargs['json'] for call in put.call_args_list] == [
+        {'value': 0}, {'value': 0}, {'value': 0}, {'value': 1},
+    ]
+
+
+def test_explore_vote_rejects_pass_reason_for_non_pass_choice(
+    auth_client, participant, conversation,
+):
+    _join(participant, conversation)
+
+    with patch('app.polis_http.put') as put:
+        response = auth_client.put(
+            '/api/v1/conversations/test-conv/statements/7/vote',
+            json={'choice': 'agree', 'passReason': 'confusing'},
+        )
+
+    assert response.status_code == 400
+    assert response.get_json()['error']['code'] == 'validation_failed'
+    put.assert_not_called()
 
 
 def test_explore_vote_rejects_statement_from_another_conversation(
@@ -230,6 +290,12 @@ def test_openapi_documents_idempotent_explore_vote(client):
 
     assert operation['operationId'] == 'putExploreVote'
     assert 'Idempotent' in operation['description']
+    request_schema = spec['components']['schemas']['ExploreVoteRequest']
+    receipt_schema = spec['components']['schemas']['ExploreVoteReceipt']
+    assert request_schema['properties']['passReason']['enum'] == [
+        'unsure', 'confusing',
+    ]
+    assert 'passReason' in receipt_schema['required']
     assert spec['paths']['/conversations/{slug}/explore']['get'][
         'operationId'
     ] == 'getExploreState'

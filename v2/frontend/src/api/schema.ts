@@ -402,6 +402,11 @@ export interface components {
         ExploreVoteRequest: {
             /** @enum {string} */
             choice: "agree" | "pass" | "disagree";
+            /**
+             * @description Optional local reason for a pass vote. Valid only when choice is pass.
+             * @enum {string}
+             */
+            passReason?: "unsure" | "confusing";
         };
         ExploreVoteResponse: {
             data: components["schemas"]["ExploreVoteReceipt"];
@@ -410,6 +415,8 @@ export interface components {
             statementId: number;
             /** @enum {string} */
             choice: "agree" | "pass" | "disagree";
+            /** @enum {string|null} */
+            passReason: "unsure" | "confusing" | null;
             links: {
                 explore: string;
             };

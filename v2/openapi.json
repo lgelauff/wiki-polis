@@ -772,7 +772,12 @@
         "required": ["choice"],
         "additionalProperties": false,
         "properties": {
-          "choice": {"type": "string", "enum": ["agree", "pass", "disagree"]}
+          "choice": {"type": "string", "enum": ["agree", "pass", "disagree"]},
+          "passReason": {
+            "type": "string",
+            "enum": ["unsure", "confusing"],
+            "description": "Optional local reason for a pass vote. Valid only when choice is pass."
+          }
         }
       },
       "ExploreVoteResponse": {
@@ -785,11 +790,15 @@
       },
       "ExploreVoteReceipt": {
         "type": "object",
-        "required": ["statementId", "choice", "links"],
+        "required": ["statementId", "choice", "passReason", "links"],
         "additionalProperties": false,
         "properties": {
           "statementId": {"type": "integer", "minimum": 0},
           "choice": {"type": "string", "enum": ["agree", "pass", "disagree"]},
+          "passReason": {
+            "type": ["string", "null"],
+            "enum": ["unsure", "confusing", null]
+          },
           "links": {
             "type": "object",
             "required": ["explore"],

@@ -58,6 +58,7 @@ from services.participations import (EligibilityDenied, InvalidPseudonym,
 from services.explore import (ExploreGateway, ParticiapiSessionState,
                               ExploreUpstreamError, build_explore_state,
                               normalise_statements)
+from services.explore_votes import update_pass_signal
 from services.argument_mapping import build_argument_mapping_state
 from services.argument_commands import (
     ContributionGateClosed, ExistingArgumentConflict, HiddenArgument,
@@ -1845,7 +1846,9 @@ def _explore_api_payload(slug: str) -> dict:
         _save_explore_gateway_state(conv, gateway, states)
 
 
-def _explore_vote_api_payload(slug: str, statement_id: int, choice: str) -> dict:
+def _explore_vote_api_payload(
+    slug: str, statement_id: int, choice: str, pass_reason: str | None,
+) -> dict:
     conv, participant, participation = _require_explore_api_context(slug)
     gateway, states = _explore_gateway(conv, participant)
     try:
@@ -1855,11 +1858,19 @@ def _explore_vote_api_payload(slug: str, statement_id: int, choice: str) -> dict
             abort(404, description='Statement not found in this conversation.')
         polis_values = {'agree': -1, 'pass': 0, 'disagree': 1}
         gateway.vote(conv.polis_id, statement_id, polis_values[choice])
+        stored_pass_reason = update_pass_signal(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+            statement_id=statement_id,
+            choice=choice,
+            pass_reason=pass_reason,
+        )
         _touch_last_engagement(participation)
         db.session.commit()
         return {
             'statementId': statement_id,
             'choice': choice,
+            'passReason': stored_pass_reason,
             'links': {
                 'explore': url_for('api_v1.get_explore_state', slug=conv.slug),
             },

@@ -251,6 +251,40 @@ class CommandReceipt(db.Model):
     completed_at = db.Column(db.DateTime, nullable=True)
 
 
+class StatementPassSignal(db.Model):
+    """Optional participant reason attached to a Polis pass vote (#287)."""
+    __tablename__ = 'statement_pass_signals'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'participant_id', 'conversation_id', 'statement_id',
+            name='uq_statement_pass_signal_target',
+        ),
+        db.CheckConstraint(
+            "reason IN ('unsure', 'confusing')",
+            name='ck_statement_pass_signal_reason',
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    participant_id = db.Column(
+        db.Integer, db.ForeignKey('participants.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    conversation_id = db.Column(
+        db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    statement_id = db.Column(db.Integer, nullable=False)
+    reason = db.Column(db.String(16), nullable=False)
+    created_at = db.Column(
+        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class AdminRole(db.Model):
     __tablename__  = 'admin_roles'
     __table_args__ = (db.UniqueConstraint('participant_id', 'conversation_id', 'role'),)

@@ -61,7 +61,7 @@ def create_api_v1_blueprint(
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
     submit_content_flag: Callable[[str, dict], tuple[dict, int]],
-    submit_explore_vote: Callable[[str, int, str], dict],
+    submit_explore_vote: Callable[[str, int, str, str | None], dict],
     submit_statement: Callable[[str, dict, str], tuple[dict, int]],
 ) -> Blueprint:
     """Build API v1 with explicit dependencies on the current auth context."""
@@ -312,16 +312,20 @@ def create_api_v1_blueprint(
     def put_explore_vote(slug: str, statement_id: int):
         body = request.get_json(silent=True)
         choice = body.get('choice') if isinstance(body, dict) else None
+        pass_reason = body.get('passReason') if isinstance(body, dict) else None
         if (choice not in {'agree', 'pass', 'disagree'}
-                or set(body or {}) - {'choice'}):
+                or set(body or {}) - {'choice', 'passReason'}
+                or pass_reason not in {None, 'unsure', 'confusing'}
+                or (choice != 'pass' and pass_reason is not None)):
             return error_response(
                 'validation_failed', 'Check the highlighted fields.', 400,
-                details={'fields': {'choice': [
-                    'Choose agree, pass, or disagree.',
-                ]}},
+                details={'fields': {
+                    'choice': ['Choose agree, pass, or disagree.'],
+                    'passReason': ['Use unsure or confusing only with pass.'],
+                }},
             )
         try:
-            data = submit_explore_vote(slug, statement_id, choice)
+            data = submit_explore_vote(slug, statement_id, choice, pass_reason)
         except ExploreUpstreamError:
             return error_response(
                 'upstream_unavailable',
