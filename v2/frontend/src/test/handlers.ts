@@ -39,6 +39,7 @@ export const handlers = [
               about: '/c/community-strategy/about',
               explore: '/app/conversations/community-strategy/explore',
               informedVoting: '/app/conversations/community-strategy/informed-voting',
+              results: '/app/conversations/community-strategy/results',
               identityReveal: '/app/conversations/community-strategy/identity-reveal',
             },
           }],
@@ -87,6 +88,54 @@ export const handlers = [
         links: {
           self: '/api/v1/conversations/community-strategy/about',
           conversation: '/c/community-strategy',
+        },
+      },
+    }),
+  ),
+  http.get(
+    new URL('/api/v1/conversations/community-strategy/results', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      data: {
+        slug: 'community-strategy',
+        title: 'Community strategy',
+        publication: 'final',
+        openedAt: '2026-05-01T12:00:00Z',
+        closedAt: '2026-07-01T12:00:00Z',
+        context: {
+          phase: 'Publish',
+          status: 'final',
+          method: 'Informed-voting tallies frozen at publication.',
+        },
+        participation: {initialRound: 25, informedRound: 22, matchedRounds: null},
+        dataAvailability: {detailedCounts: true, opinionGroups: true},
+        moderation: {excludedStatements: 1, excludedParticipants: 0},
+        statements: [{
+          featuredStatementId: 31,
+          statement: 'Regional communities should share infrastructure funding.',
+          initial: {
+            counts: {agree: 12, pass: 3, disagree: 5, voters: 20},
+            percentages: {agree: 60, pass: 15, disagree: 25},
+          },
+          informed: {
+            counts: {agree: 14, pass: 4, disagree: 2, voters: 20},
+            percentages: {agree: 70, pass: 20, disagree: 10},
+          },
+          agreementShift: 10,
+        }],
+        opinionGroups: [{
+          label: 'Group 1',
+          memberCount: 11,
+          positions: [{
+            choice: 'agree',
+            statement: 'Shared maintenance matters.',
+            percentage: 82,
+          }],
+        }],
+        links: {
+          self: '/api/v1/conversations/community-strategy/results',
+          conversation: '/c/community-strategy',
+          about: '/app/conversations/community-strategy/about',
+          identityReveal: '/app/conversations/community-strategy/identity-reveal',
         },
       },
     }),

@@ -147,6 +147,29 @@ test('completes informed voting through the typed replacement command', async ()
   expect(await screen.findByText(/You voted/)).toHaveTextContent('agree');
 });
 
+test('renders final results with pass tallies and publication provenance', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/results']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: 'Community strategy'})).toBeVisible();
+  expect(screen.getByText('final')).toBeVisible();
+  expect(screen.getByText(/filter was frozen at publication/)).toBeVisible();
+  expect(screen.getByText('+10% agreement')).toBeVisible();
+  expect(screen.getByRole('img', {
+    name: 'Initial vote: 60% agree, 15% pass, 25% disagree',
+  })).toBeVisible();
+  expect(screen.getByRole('img', {
+    name: 'Informed vote: 70% agree, 20% pass, 10% disagree',
+  })).toBeVisible();
+  expect(screen.getAllByText('Pass')).toHaveLength(2);
+  expect(screen.getByRole('heading', {name: 'Opinion groups'})).toBeVisible();
+});
+
 test('submits clearer wording through the idempotent statement contract', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

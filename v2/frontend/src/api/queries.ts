@@ -79,6 +79,16 @@ export async function putInformedVote(
   ).data;
 }
 
+export const resultsReportQuery = (slug: string) => queryOptions({
+  queryKey: ['results-report', slug],
+  queryFn: async () => (
+    await requireApiData(api.GET('/conversations/{slug}/results', {
+      params: {path: {slug}},
+    }))
+  ).data,
+  staleTime: 30_000,
+});
+
 export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
   queryKey: ['pseudonym-suggestions', slug],
   queryFn: async () => (
