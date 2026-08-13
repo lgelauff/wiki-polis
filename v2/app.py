@@ -65,6 +65,7 @@ from services.argument_commands import (
     set_argument_priority, skip_argument_contribution,
     submit_argument as submit_argument_command,
 )
+from services.content_flags import InvalidFlag, submit_content_flag
 from services.idempotency import (complete_command, release_reservation,
                                   request_digest, reserve_command)
 from services.statements import (DerivativeSimilarityTooLow,
@@ -1977,6 +1978,59 @@ def _set_argument_priority_api_payload(
     }
 
 
+def _submit_content_flag_api_payload(slug: str, body: dict) -> tuple[dict, int]:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        abort(409, description='Join this conversation before flagging content.')
+    if not conv.active or conv.paused:
+        abort(409, description='Content flags are not open.')
+    _abort_if_banned(conv, participant)
+    content_type = body['contentType']
+    target_id = body['targetId']
+    if content_type == 'argument':
+        argument = (
+            Argument.query.join(FeaturedStatement)
+            .filter(
+                Argument.id == target_id,
+                FeaturedStatement.conversation_id == conv.id,
+                Argument.hidden.is_(False),
+            ).first_or_404()
+        )
+    else:
+        try:
+            statement_exists = target_id in _statement_text_map(conv.polis_id)
+        except PolisParticipantError as exc:
+            raise ExploreUpstreamError('Could not validate the statement.') from exc
+        if not statement_exists:
+            abort(404, description='Statement not found in this conversation.')
+    result = submit_content_flag(
+        conversation=conv,
+        participation=participation,
+        content_type=content_type,
+        target_id=target_id,
+        category=body['category'],
+        detail=body.get('detail'),
+        audit=record_audit,
+    )
+    return ({
+        'contentType': content_type,
+        'targetId': target_id,
+        'category': result.flag.category,
+        'status': 'open',
+        'created': result.created,
+        'links': {
+            'conversation': url_for('participant.conversation', slug=slug),
+        },
+    }, 201 if result.created else 200)
+
+
 def _statement_api_payload(
     slug: str, body: dict, idempotency_key: str,
 ) -> tuple[dict, int]:
@@ -3020,40 +3074,6 @@ def _delete_local_conversation(conv: Conversation) -> None:
         synchronize_session=False,
     )
     db.session.delete(conv)
-
-
-def _parse_content_flag_form() -> tuple[str, str | None]:
-    category = (request.form.get('category') or '').strip()
-    if category not in FLAG_CATEGORIES:
-        abort(400, description='Choose a valid reason for the flag.')
-    detail = nh3.clean((request.form.get('detail') or '').strip(),
-                       tags=_NH3_NO_TAGS)[:1000]
-    if category == 'other' and not detail:
-        abort(400, description='Explain the reason when choosing Other.')
-    return category, detail or None
-
-
-def _existing_open_flag(
-    conv_id: int,
-    participant_id: int,
-    content_type: str,
-    category: str,
-    *,
-    statement_tid: int | None = None,
-    argument_id: int | None = None,
-) -> ContentFlag | None:
-    query = ContentFlag.query.filter_by(
-        conversation_id=conv_id,
-        participant_id=participant_id,
-        content_type=content_type,
-        category=category,
-        status='open',
-    )
-    if content_type == 'statement':
-        query = query.filter_by(statement_tid=statement_tid)
-    else:
-        query = query.filter_by(argument_id=argument_id)
-    return query.first()
 
 
 def _flag_rows_for_admin(conv: Conversation) -> list[dict]:
@@ -4806,26 +4826,15 @@ def argument_flag(slug, arg_id):
             return jsonify({'ok': True, 'already_reviewed': True})
         flash('This argument is already under moderator review.', 'info')
         return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
-    category, detail = _parse_content_flag_form()
-    if not _existing_open_flag(
-        conv.id,
-        part.participant_id,
-        'argument',
-        category,
-        argument_id=arg.id,
-    ):
-        db.session.add(ContentFlag(
-            conversation_id=conv.id,
-            participant_id=part.participant_id,
-            content_type='argument',
-            argument_id=arg.id,
-            category=category,
-            detail=detail,
-            status='open',
-        ))
-        db.session.commit()
-        record_audit('content_flag.create', conv_id=conv.id, target_type='argument',
-                     target_id=arg.id, category=category)
+    try:
+        submit_content_flag(
+            conversation=conv, participation=part,
+            content_type='argument', target_id=arg.id,
+            category=(request.form.get('category') or '').strip(),
+            detail=request.form.get('detail'), audit=record_audit,
+        )
+    except InvalidFlag:
+        abort(400, description='Choose a valid reason and explain Other.')
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     flash('Thanks - this has been sent to the moderator for review.', 'success')
@@ -4859,26 +4868,15 @@ def statement_flag(slug, tid):
         # with no test coverage and no documented rationale; caused every flag on a
         # featured (often seed-derived) statement to 400.
 
-    category, detail = _parse_content_flag_form()
-    if not _existing_open_flag(
-        conv.id,
-        part.participant_id,
-        'statement',
-        category,
-        statement_tid=tid,
-    ):
-        db.session.add(ContentFlag(
-            conversation_id=conv.id,
-            participant_id=part.participant_id,
-            content_type='statement',
-            statement_tid=tid,
-            category=category,
-            detail=detail,
-            status='open',
-        ))
-        db.session.commit()
-        record_audit('content_flag.create', conv_id=conv.id, target_type='statement',
-                     target_id=tid, category=category)
+    try:
+        submit_content_flag(
+            conversation=conv, participation=part,
+            content_type='statement', target_id=tid,
+            category=(request.form.get('category') or '').strip(),
+            detail=request.form.get('detail'), audit=record_audit,
+        )
+    except InvalidFlag:
+        abort(400, description='Choose a valid reason and explain Other.')
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     flash('Thanks - this has been sent to the moderator for review.', 'success')
@@ -5598,6 +5596,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,
+        submit_content_flag=_submit_content_flag_api_payload,
         submit_explore_vote=_explore_vote_api_payload,
         submit_statement=_statement_api_payload,
     ))

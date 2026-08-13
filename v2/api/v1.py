@@ -27,6 +27,7 @@ from services.argument_commands import (
     ContributionGateClosed, ExistingArgumentConflict, HiddenArgument,
     InvalidArgument, PrioritizationUnavailable, PriorityBudgetExceeded,
 )
+from services.content_flags import InvalidFlag
 
 _OPENAPI_SPEC = json.loads(
     (Path(__file__).resolve().parents[1] / 'openapi.json').read_text(encoding='utf-8')
@@ -59,6 +60,7 @@ def create_api_v1_blueprint(
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
+    submit_content_flag: Callable[[str, dict], tuple[dict, int]],
     submit_explore_vote: Callable[[str, int, str], dict],
     submit_statement: Callable[[str, dict, str], tuple[dict, int]],
 ) -> Blueprint:
@@ -274,6 +276,37 @@ def create_api_v1_blueprint(
                 'This argument is no longer available.', 404,
             )
         return _no_store(jsonify({'data': data}))
+
+    @bp.post('/conversations/<slug>/flags')
+    def create_content_flag(slug: str):
+        body = request.get_json(silent=True)
+        allowed = {'contentType', 'targetId', 'category', 'detail'}
+        if (not isinstance(body, dict) or set(body) - allowed
+                or body.get('contentType') not in {'statement', 'argument'}
+                or not isinstance(body.get('targetId'), int)
+                or isinstance(body.get('targetId'), bool)
+                or body.get('targetId', 0) < 0
+                or body.get('category') not in {
+                    'personal_attack', 'privacy', 'off_topic', 'other',
+                }
+                or ('detail' in body and body['detail'] is not None
+                    and not isinstance(body['detail'], str))):
+            return error_response(
+                'validation_failed', 'Check the flag target and reason.', 400,
+            )
+        try:
+            data, status = submit_content_flag(slug, body)
+        except InvalidFlag:
+            return error_response(
+                'validation_failed', 'Explain the reason when choosing Other.', 400,
+                details={'fields': {'detail': ['An explanation is required.']}},
+            )
+        except ExploreUpstreamError:
+            return error_response(
+                'upstream_unavailable',
+                'The statement could not be validated right now.', 502,
+            )
+        return _no_store(jsonify({'data': data})), status
 
     @bp.put('/conversations/<slug>/statements/<int:statement_id>/vote')
     def put_explore_vote(slug: str, statement_id: int):

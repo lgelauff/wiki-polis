@@ -189,6 +189,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Flag a statement or argument for moderator review
+         * @description Idempotent for the same participant, target, and category while a flag remains open. Other requires an explanation.
+         */
+        post: operations["createContentFlag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{slug}/statements/{statementId}/vote": {
         parameters: {
             query?: never;
@@ -515,6 +535,30 @@ export interface components {
             selectedCount: number;
             selectionBudget: number;
             links: components["schemas"]["ArgumentCommandLinks"];
+        };
+        CreateContentFlagRequest: {
+            /** @enum {string} */
+            contentType: "statement" | "argument";
+            targetId: number;
+            /** @enum {string} */
+            category: "personal_attack" | "privacy" | "off_topic" | "other";
+            detail?: string | null;
+        };
+        ContentFlagResponse: {
+            data: components["schemas"]["ContentFlagReceipt"];
+        };
+        ContentFlagReceipt: {
+            /** @enum {string} */
+            contentType: "statement" | "argument";
+            targetId: number;
+            /** @enum {string} */
+            category: "personal_attack" | "privacy" | "off_topic" | "other";
+            /** @constant */
+            status: "open";
+            created: boolean;
+            links: {
+                conversation: string;
+            };
         };
         CreateStatementRequest: {
             text: string;
@@ -1144,6 +1188,95 @@ export interface operations {
             };
             /** @description Contribution gate, volume gate, budget, or phase conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createContentFlag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateContentFlagRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing open flag returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentFlagResponse"];
+                };
+            };
+            /** @description Flag created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentFlagResponse"];
+                };
+            };
+            /** @description Invalid target, category, or missing Other explanation */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or target not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Participation missing or flags closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Statement validation service unavailable */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

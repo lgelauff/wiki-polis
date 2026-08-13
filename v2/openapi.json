@@ -344,6 +344,27 @@
         }
       }
     },
+    "/conversations/{slug}/flags": {
+      "post": {
+        "operationId": "createContentFlag",
+        "summary": "Flag a statement or argument for moderator review",
+        "description": "Idempotent for the same participant, target, and category while a flag remains open. Other requires an explanation.",
+        "parameters": [
+          {"name": "slug", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}
+        ],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateContentFlagRequest"}}}},
+        "responses": {
+          "200": {"description": "Existing open flag returned", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContentFlagResponse"}}}},
+          "201": {"description": "Flag created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContentFlagResponse"}}}},
+          "400": {"description": "Invalid target, category, or missing Other explanation", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "401": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Access denied", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "404": {"description": "Conversation or target not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Participation missing or flags closed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "502": {"description": "Statement validation service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/conversations/{slug}/statements/{statementId}/vote": {
       "put": {
         "operationId": "putExploreVote",
@@ -984,6 +1005,41 @@
           "selectedCount": {"type": "integer", "minimum": 0},
           "selectionBudget": {"type": "integer", "minimum": 1},
           "links": {"$ref": "#/components/schemas/ArgumentCommandLinks"}
+        }
+      },
+      "CreateContentFlagRequest": {
+        "type": "object",
+        "required": ["contentType", "targetId", "category"],
+        "additionalProperties": false,
+        "properties": {
+          "contentType": {"type": "string", "enum": ["statement", "argument"]},
+          "targetId": {"type": "integer", "minimum": 0},
+          "category": {"type": "string", "enum": ["personal_attack", "privacy", "off_topic", "other"]},
+          "detail": {"type": ["string", "null"], "maxLength": 1000}
+        }
+      },
+      "ContentFlagResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/ContentFlagReceipt"}}
+      },
+      "ContentFlagReceipt": {
+        "type": "object",
+        "required": ["contentType", "targetId", "category", "status", "created", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "contentType": {"type": "string", "enum": ["statement", "argument"]},
+          "targetId": {"type": "integer", "minimum": 0},
+          "category": {"type": "string", "enum": ["personal_attack", "privacy", "off_topic", "other"]},
+          "status": {"type": "string", "const": "open"},
+          "created": {"type": "boolean"},
+          "links": {
+            "type": "object",
+            "required": ["conversation"],
+            "additionalProperties": false,
+            "properties": {"conversation": {"type": "string"}}
+          }
         }
       },
       "CreateStatementRequest": {

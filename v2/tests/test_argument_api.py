@@ -3,8 +3,8 @@
 import json
 from unittest.mock import patch
 
-from db import (Argument, ArgumentSideState, ArgumentVote, Conversation,
-                FeaturedStatement, Participation, db)
+from db import (Argument, ArgumentSideState, ArgumentVote, AuditEvent,
+                ContentFlag, Conversation, FeaturedStatement, Participation, db)
 
 
 def _argument_fixture(participant):
@@ -254,3 +254,62 @@ def test_openapi_documents_argument_commands(client):
     assert spec['paths'][
         '/conversations/{slug}/arguments/{argumentId}/priority'
     ]['put']['operationId'] == 'putArgumentPriority'
+
+
+def test_content_flag_api_creates_and_deduplicates_argument_flag(
+    auth_client, participant,
+):
+    _conversation, _participation, _featured, arguments = _argument_fixture(participant)
+    payload = {
+        'contentType': 'argument', 'targetId': arguments[1].id,
+        'category': 'off_topic', 'detail': '<b>Needs review</b>',
+    }
+
+    first = auth_client.post(
+        '/api/v1/conversations/argument-api/flags', json=payload,
+    )
+    replay = auth_client.post(
+        '/api/v1/conversations/argument-api/flags', json=payload,
+    )
+
+    assert first.status_code == 201
+    assert replay.status_code == 200
+    assert first.get_json()['data']['created'] is True
+    assert replay.get_json()['data']['created'] is False
+    assert ContentFlag.query.one().detail == 'Needs review'
+    assert AuditEvent.query.filter_by(operation='content_flag.create').count() == 1
+
+
+def test_content_flag_api_requires_explanation_for_other(
+    auth_client, participant,
+):
+    _conversation, _participation, _featured, arguments = _argument_fixture(participant)
+
+    response = auth_client.post(
+        '/api/v1/conversations/argument-api/flags',
+        json={
+            'contentType': 'argument', 'targetId': arguments[1].id,
+            'category': 'other', 'detail': ' ',
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()['error']['code'] == 'validation_failed'
+    assert ContentFlag.query.count() == 0
+
+
+def test_content_flag_api_validates_statement_target(
+    auth_client, participant,
+):
+    _argument_fixture(participant)
+    with patch('app._statement_text_map', return_value={73: 'Known statement'}):
+        response = auth_client.post(
+            '/api/v1/conversations/argument-api/flags',
+            json={
+                'contentType': 'statement', 'targetId': 73,
+                'category': 'privacy',
+            },
+        )
+
+    assert response.status_code == 201
+    assert ContentFlag.query.one().statement_tid == 73
