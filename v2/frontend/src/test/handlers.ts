@@ -20,7 +20,7 @@ function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as st
     ]},
     schedule,
     publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
-    counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true},
+    counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, archive: true},
     links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings'},
   };
 }
@@ -67,7 +67,7 @@ export const handlers = [
       schedule: {canSchedule: true, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
       publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
       counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
-      capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true},
+      capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, archive: true},
       links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings'},
     },
   }})),

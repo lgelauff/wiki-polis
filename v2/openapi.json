@@ -795,6 +795,15 @@
         "409": {"description": "Conversation closed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
+    "/admin/conversations/{conversationId}/archive": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "put": {"operationId": "putAdminConversationArchive", "summary": "Set reversible archive state without publishing", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminArchiveRequest"}}}}, "responses": {
+        "200": {"description": "Archive receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminArchiveResponse"}}}},
+        "400": {"description": "Invalid desired state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Published conversations cannot be archived", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/schedule": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "put": {"operationId": "putAdminConversationSchedule", "summary": "Replace or cancel the pending phase schedule", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminScheduleRequest"}}}}, "responses": {
@@ -850,6 +859,8 @@
       "AdminAdvancedPhasesResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["changed", "activeKeys", "visibilitySynced", "lifecycle"], "additionalProperties": false, "properties": {"changed": {"type": "boolean"}, "activeKeys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}, "visibilitySynced": {"type": "boolean"}, "lifecycle": {"$ref": "#/components/schemas/AdminLifecycle"}}}}},
       "AdminPauseRequest": {"type": "object", "required": ["paused"], "additionalProperties": false, "properties": {"paused": {"type": "boolean"}}},
       "AdminPauseResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["paused", "changed", "lifecycle"], "additionalProperties": false, "properties": {"paused": {"type": "boolean"}, "changed": {"type": "boolean"}, "lifecycle": {"$ref": "#/components/schemas/AdminLifecycle"}}}}},
+      "AdminArchiveRequest": {"type": "object", "required": ["archived"], "additionalProperties": false, "properties": {"archived": {"type": "boolean"}}},
+      "AdminArchiveResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["archived", "changed", "lifecycle"], "additionalProperties": false, "properties": {"archived": {"type": "boolean"}, "changed": {"type": "boolean"}, "lifecycle": {"$ref": "#/components/schemas/AdminLifecycle"}}}}},
       "AdminScheduleRequest": {"type": "object", "required": ["scheduledAt", "frozen"], "additionalProperties": false, "properties": {"scheduledAt": {"type": ["string", "null"], "format": "date-time"}, "frozen": {"type": "boolean"}}},
       "AdminScheduleResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["changed", "lifecycle"], "additionalProperties": false, "properties": {"changed": {"type": "boolean"}, "lifecycle": {"$ref": "#/components/schemas/AdminLifecycle"}}}}},
       "AdminPublicationRequest": {"type": "object", "required": ["confirmedPreconditionIds"], "additionalProperties": false, "properties": {"confirmedPreconditionIds": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}}},
@@ -888,8 +899,8 @@
           "counts": {"type": "object", "required": ["participants", "invitations", "openFlags", "featuredStatements"], "additionalProperties": false, "properties": {
             "participants": {"type": "integer", "minimum": 0}, "invitations": {"type": "integer", "minimum": 0}, "openFlags": {"type": "integer", "minimum": 0}, "featuredStatements": {"type": "integer", "minimum": 0}
           }},
-          "capabilities": {"type": "object", "required": ["advancePhase", "pause", "publish", "editSettings", "useAdvancedPhases"], "additionalProperties": false, "properties": {
-            "advancePhase": {"type": "boolean"}, "pause": {"type": "boolean"}, "publish": {"type": "boolean"}, "editSettings": {"type": "boolean"}, "useAdvancedPhases": {"type": "boolean"}
+          "capabilities": {"type": "object", "required": ["advancePhase", "pause", "publish", "editSettings", "useAdvancedPhases", "archive"], "additionalProperties": false, "properties": {
+            "advancePhase": {"type": "boolean"}, "pause": {"type": "boolean"}, "publish": {"type": "boolean"}, "editSettings": {"type": "boolean"}, "useAdvancedPhases": {"type": "boolean"}, "archive": {"type": "boolean"}
           }},
           "links": {"type": "object", "required": ["self", "participantView", "participants", "moderation", "invitations", "roles", "statements", "featuredStatements", "settings"], "additionalProperties": false, "properties": {
             "self": {"type": "string"}, "participantView": {"type": "string"}, "participants": {"type": "string"}, "moderation": {"type": "string"}, "invitations": {"type": "string"}, "roles": {"type": "string"}, "statements": {"type": "string"}, "featuredStatements": {"type": "string"}, "settings": {"type": "string"}
@@ -898,7 +909,7 @@
       },
       "AdminLifecycleConversation": {
         "type": "object", "required": ["id", "slug", "title", "accessPolicy", "status", "publication", "closedAt"], "additionalProperties": false,
-        "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "status": {"type": "string", "enum": ["active", "paused", "scheduled", "closed"]}, "publication": {"type": "string", "enum": ["not_applicable", "pending", "published"]}, "closedAt": {"type": ["string", "null"], "format": "date-time"}}
+        "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "status": {"type": "string", "enum": ["active", "paused", "scheduled", "archived", "closed"]}, "publication": {"type": "string", "enum": ["not_applicable", "pending", "published"]}, "closedAt": {"type": ["string", "null"], "format": "date-time"}}
       },
       "AdminLifecycleStep": {
         "type": "object", "required": ["key", "label", "effect", "state"], "additionalProperties": false,

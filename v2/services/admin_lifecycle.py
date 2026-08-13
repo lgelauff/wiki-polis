@@ -22,6 +22,8 @@ def build_admin_lifecycle(
 ) -> dict:
     if conversation.closed_at:
         status = 'closed'
+    elif not conversation.active:
+        status = 'archived'
     elif conversation.paused:
         status = 'paused'
     elif schedule['scheduled_at'] and not schedule['frozen']:
@@ -30,6 +32,8 @@ def build_admin_lifecycle(
         status = 'active'
     if conversation.closed_at:
         publication = 'published'
+    elif not conversation.active:
+        publication = 'not_applicable'
     elif 'public_results' in active_phase_keys:
         publication = 'pending'
     else:
@@ -97,7 +101,11 @@ def build_admin_lifecycle(
             } for stage in phase_sequence if stage['flag']],
         },
         'schedule': {
-            'canSchedule': schedule['can_schedule'] and can_administer,
+            'canSchedule': (
+                bool(conversation.active)
+                and schedule['can_schedule']
+                and can_administer
+            ),
             'scheduledAt': _utc_iso(schedule['scheduled_at']),
             'targetKey': schedule['scheduled_target'],
             'targetLabel': schedule['scheduled_label'],
@@ -106,7 +114,11 @@ def build_admin_lifecycle(
         'publicationReadiness': publication_readiness,
         'counts': counts,
         'capabilities': {
-            'advancePhase': can_organize and transition is not None,
+            'advancePhase': (
+                bool(conversation.active)
+                and can_organize
+                and transition is not None
+            ),
             'pause': can_administer and bool(conversation.active),
             'publish': (
                 can_administer
@@ -119,6 +131,7 @@ def build_admin_lifecycle(
             ),
             'editSettings': can_organize,
             'useAdvancedPhases': can_administer,
+            'archive': can_administer and conversation.closed_at is None,
         },
         'links': links,
     }
@@ -373,6 +386,30 @@ def set_conversation_paused(
         conversation.paused = paused
         session.commit()
         audit('conversation.pause', conv_id=conversation.id, paused=paused)
+    else:
+        session.commit()
+    return changed
+
+
+def set_conversation_archived(
+    *, conversation, archived: bool, clear_schedule, session, audit,
+) -> bool:
+    """Archive reversibly without report publication or identity-reveal effects."""
+    if conversation.closed_at is not None:
+        raise ConversationClosed()
+    currently_archived = not bool(conversation.active)
+    changed = currently_archived != archived
+    if changed:
+        conversation.active = not archived
+        if archived:
+            conversation.paused = False
+            conversation.phase_public_results = False
+            clear_schedule(conversation)
+        session.commit()
+        audit(
+            'conversation.archive' if archived else 'conversation.reopen',
+            conv_id=conversation.id,
+        )
     else:
         session.commit()
     return changed

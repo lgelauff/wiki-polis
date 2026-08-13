@@ -582,6 +582,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Set reversible archive state without publishing */
+        put: operations["putAdminConversationArchive"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/schedule": {
         parameters: {
             query?: never;
@@ -725,6 +744,16 @@ export interface components {
                 lifecycle: components["schemas"]["AdminLifecycle"];
             };
         };
+        AdminArchiveRequest: {
+            archived: boolean;
+        };
+        AdminArchiveResponse: {
+            data: {
+                archived: boolean;
+                changed: boolean;
+                lifecycle: components["schemas"]["AdminLifecycle"];
+            };
+        };
         AdminScheduleRequest: {
             /** Format: date-time */
             scheduledAt: string | null;
@@ -807,6 +836,7 @@ export interface components {
                 publish: boolean;
                 editSettings: boolean;
                 useAdvancedPhases: boolean;
+                archive: boolean;
             };
             links: {
                 self: string;
@@ -827,7 +857,7 @@ export interface components {
             /** @enum {string} */
             accessPolicy: "public" | "invite_only" | "demo";
             /** @enum {string} */
-            status: "active" | "paused" | "scheduled" | "closed";
+            status: "active" | "paused" | "scheduled" | "archived" | "closed";
             /** @enum {string} */
             publication: "not_applicable" | "pending" | "published";
             /** Format: date-time */
@@ -3357,6 +3387,59 @@ export interface operations {
                 };
             };
             /** @description Conversation closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminConversationArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminArchiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Archive receipt and refreshed lifecycle */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminArchiveResponse"];
+                };
+            };
+            /** @description Invalid desired state */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Published conversations cannot be archived */
             409: {
                 headers: {
                     [name: string]: unknown;

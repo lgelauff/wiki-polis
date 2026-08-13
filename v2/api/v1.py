@@ -87,6 +87,7 @@ def create_api_v1_blueprint(
     update_admin_settings: Callable[[int, dict], dict],
     advance_admin_phase: Callable[[int, dict], dict],
     set_admin_pause: Callable[[int, dict], dict],
+    set_admin_archive: Callable[[int, dict], dict],
     set_admin_schedule: Callable[[int, dict], dict],
     set_admin_phases: Callable[[int, dict], dict],
     publish_admin_report: Callable[[int, dict], dict],
@@ -495,6 +496,23 @@ def create_api_v1_blueprint(
             data = set_admin_pause(conversation_id, body)
         except ConversationClosed:
             return error_response('conversation_closed', 'A closed conversation cannot be paused.', 409)
+        return _no_store(jsonify({'data': data}))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/archive')
+    def put_admin_conversation_archive(conversation_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'archived'}
+                or not isinstance(body.get('archived'), bool)):
+            return error_response(
+                'validation_failed', 'Use archived true or false.', 400,
+            )
+        try:
+            data = set_admin_archive(conversation_id, body)
+        except ConversationClosed:
+            return error_response(
+                'conversation_closed',
+                'A published conversation cannot be archived or reopened.', 409,
+            )
         return _no_store(jsonify({'data': data}))
 
     @bp.put('/admin/conversations/<int:conversation_id>/schedule')

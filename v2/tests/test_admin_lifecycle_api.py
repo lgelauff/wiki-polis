@@ -90,6 +90,7 @@ def test_scoped_moderator_lifecycle_capabilities_are_read_only(
         'publish': False,
         'editSettings': False,
         'useAdvancedPhases': False,
+        'archive': False,
     }
 
 
@@ -348,3 +349,58 @@ def test_advanced_phase_api_rejects_key_outside_locked_route(
         'message': 'One or more phases are not part of this conversation route.',
         'details': {'phaseKeys': ['argument_mapping']},
     }
+
+
+def test_archive_api_is_reversible_without_publication_side_effects(
+    admin_client, conversation,
+):
+    conversation.paused = True
+    conversation.phase_public_results = True
+    conversation.scheduled_transition_at = datetime.now(timezone.utc) + timedelta(days=1)
+    conversation.scheduled_transition_target = 'closed'
+    db.session.commit()
+    endpoint = f'/api/v1/admin/conversations/{conversation.id}/archive'
+
+    archived = admin_client.put(endpoint, json={'archived': True})
+    replay = admin_client.put(endpoint, json={'archived': True})
+    reopened = admin_client.put(endpoint, json={'archived': False})
+
+    assert archived.status_code == replay.status_code == reopened.status_code == 200
+    assert archived.get_json()['data']['lifecycle']['conversation'] == {
+        'id': conversation.id,
+        'slug': conversation.slug,
+        'title': conversation.title,
+        'accessPolicy': conversation.access_policy,
+        'status': 'archived',
+        'publication': 'not_applicable',
+        'closedAt': None,
+    }
+    assert archived.get_json()['data']['changed'] is True
+    assert archived.get_json()['data']['lifecycle']['capabilities']['advancePhase'] is False
+    assert archived.get_json()['data']['lifecycle']['schedule']['canSchedule'] is False
+    assert replay.get_json()['data']['changed'] is False
+    assert reopened.get_json()['data']['lifecycle']['conversation']['status'] == 'active'
+    db.session.refresh(conversation)
+    assert conversation.active is True
+    assert conversation.paused is False
+    assert conversation.phase_public_results is False
+    assert conversation.closed_at is None
+    assert conversation.report_filter_snapshot is None
+    assert conversation.scheduled_transition_at is None
+    assert AuditEvent.query.filter(
+        AuditEvent.operation.in_(['conversation.archive', 'conversation.reopen']),
+    ).count() == 2
+
+
+def test_archive_api_refuses_published_conversation(admin_client, conversation):
+    conversation.active = False
+    conversation.closed_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    response = admin_client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/archive',
+        json={'archived': True},
+    )
+
+    assert response.status_code == 409
+    assert response.get_json()['error']['code'] == 'conversation_closed'

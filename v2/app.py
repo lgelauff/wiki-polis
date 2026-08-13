@@ -100,7 +100,8 @@ from services.admin_lifecycle import (
     PublicationReadinessUnconfirmed, PublicationUnavailable,
     ScheduleInPast, ScheduleUnavailable,
     advance_conversation_phase, build_admin_lifecycle,
-    publish_final_report, set_advanced_phases, set_conversation_paused,
+    publish_final_report, set_advanced_phases, set_conversation_archived,
+    set_conversation_paused,
     set_phase_schedule,
 )
 from services.idempotency import (complete_command, release_reservation,
@@ -2638,6 +2639,22 @@ def _set_admin_pause_api_payload(conv_id: int, body: dict) -> dict:
     )
     return {
         'paused': bool(conv.paused),
+        'changed': changed,
+        'lifecycle': _admin_lifecycle_api_payload(conv.id),
+    }
+
+
+def _set_admin_archive_api_payload(conv_id: int, body: dict) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    changed = set_conversation_archived(
+        conversation=conv, archived=body['archived'],
+        clear_schedule=_clear_scheduled_transition,
+        session=db.session, audit=record_audit,
+    )
+    return {
+        'archived': not bool(conv.active),
         'changed': changed,
         'lifecycle': _admin_lifecycle_api_payload(conv.id),
     }
@@ -6147,6 +6164,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         update_admin_settings=_update_admin_settings_api_payload,
         advance_admin_phase=_advance_admin_phase_api_payload,
         set_admin_pause=_set_admin_pause_api_payload,
+        set_admin_archive=_set_admin_archive_api_payload,
         set_admin_schedule=_set_admin_schedule_api_payload,
         set_admin_phases=_set_admin_phases_api_payload,
         publish_admin_report=_publish_admin_report_api_payload,
