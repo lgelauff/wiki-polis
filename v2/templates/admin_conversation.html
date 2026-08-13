@@ -108,8 +108,18 @@
         </div>
         <div class="phase-now-head" style="margin-top:2px">
           <span class="phase-now-name">{{ phase_sequence[current_stage_index].label }}</span>
+          {% if phase_sequence[current_stage_index].key == 'public_results' %}
+          <span class="status-pill {{ 'status-pill--closed' if conversation.closed_at else 'status-pill--paused' }}">
+            <span class="status-pill-dot"></span>
+            {{ 'Published' if conversation.closed_at else 'Not yet published' }}
+          </span>
+          {% endif %}
         </div>
+        {% if phase_sequence[current_stage_index].key == 'public_results' and conversation.closed_at %}
+        <p class="phase-now-desc">The final aggregate report is published and participant activity is closed.</p>
+        {% else %}
         <p class="phase-now-desc">{{ phase_sequence[current_stage_index].effect }}</p>
+        {% endif %}
         {% else %}
         {# Advanced/non-linear: several phase flags are on at once — name them all rather
            than only the furthest-along one. #}
@@ -320,7 +330,11 @@
           {% if is_admin %}Use Advanced below to adjust.{% else %}A site admin can adjust this.{% endif %}
         </p>
       {% else %}
-        <p class="muted" style="margin-top:14px;font-size:13px">Final phase reached — the report is open.</p>
+        {% if conversation.closed_at %}
+        <p class="muted" style="margin-top:14px;font-size:13px"><strong>Final report published.</strong> The frozen aggregate results are open.</p>
+        {% else %}
+        <p class="muted" style="margin-top:14px;font-size:13px"><strong>Report phase reached — not yet published.</strong> Complete cleanup and use “Publish final report” below to open the frozen results.</p>
+        {% endif %}
       {% endif %}
 
       {% if is_admin and schedule.can_schedule %}

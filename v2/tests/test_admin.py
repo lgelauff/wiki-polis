@@ -293,6 +293,30 @@ def test_move_at_final_stage_is_noop(admin_client, conv):
     assert _current_stage_index(conv) == len(PHASE_SEQUENCE) - 1
 
 
+def test_report_phase_distinguishes_pending_publication_from_published(
+    admin_client, conv,
+):
+    conv.phase_public_results = True
+    db.session.commit()
+
+    pending = admin_client.get(f'/admin/conversations/{conv.id}').data
+
+    assert b'Not yet published' in pending
+    assert b'Report phase reached' in pending
+    assert b'Publish final report' in pending
+    assert b'Final report published' not in pending
+
+    conv.active = False
+    conv.closed_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    published = admin_client.get(f'/admin/conversations/{conv.id}').data
+
+    assert b'Published' in published
+    assert b'Final report published' in published
+    assert b'not yet published' not in published.lower()
+
+
 def test_move_forbidden_for_regular_participant(auth_client, conv):
     resp = auth_client.post(f'/admin/conversations/{conv.id}/phase/advance')
     assert resp.status_code == 403

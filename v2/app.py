@@ -539,7 +539,7 @@ PHASE_SEQUENCE = [
     {'key': 'informed_voting',    'label': 'Informed vote',      'flag': 'phase_informed_voting',
      'effect': 'participants vote again on featured statements (requires initialising Phase 6)'},
     {'key': 'public_results',     'label': 'Report',             'flag': 'phase_public_results',
-     'effect': 'everyone can see the full aggregate results'},
+     'effect': 'participant activity has ended; review preliminary results before final publication'},
 ]
 _PHASE_BY_KEY = {stage['key']: stage for stage in PHASE_SEQUENCE}
 
