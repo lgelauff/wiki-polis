@@ -169,6 +169,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return privacy-safe preliminary or final aggregate results
+         * @description Uses the live moderation filter for preliminary results and the publication snapshot for a final report.
+         */
+        get: operations["getResultsReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{slug}/featured-statements/{featuredStatementId}/informed-vote": {
         parameters: {
             query?: never;
@@ -553,6 +573,7 @@ export interface components {
             conversation: string;
             explore?: string;
             arguments?: string;
+            results?: string;
         };
         InformedVoteRequest: {
             /** @enum {string} */
@@ -568,6 +589,78 @@ export interface components {
             links: {
                 informedVoting: string;
             };
+        };
+        ResultsReportResponse: {
+            data: components["schemas"]["ResultsReport"];
+        };
+        ResultsReport: {
+            slug: string;
+            title: string;
+            /** @enum {string} */
+            publication: "preliminary" | "final";
+            /** Format: date-time */
+            openedAt: string;
+            /** Format: date-time */
+            closedAt: string | null;
+            context: {
+                phase: string;
+                /** @enum {string} */
+                status: "provisional" | "final";
+                method: string;
+            };
+            participation: {
+                initialRound: number | null;
+                informedRound: number | null;
+                matchedRounds: number | null;
+            };
+            dataAvailability: {
+                detailedCounts: boolean;
+                opinionGroups: boolean;
+            };
+            moderation: {
+                excludedStatements: number;
+                excludedParticipants: number;
+            };
+            statements: components["schemas"]["ResultsStatement"][];
+            opinionGroups: components["schemas"]["ResultsOpinionGroup"][];
+            links: components["schemas"]["ResultsLinks"];
+        };
+        ResultsStatement: {
+            featuredStatementId: number;
+            statement: string;
+            initial: components["schemas"]["VoteTally"] | null;
+            informed: components["schemas"]["VoteTally"] | null;
+            agreementShift: number | null;
+        };
+        VoteTally: {
+            counts: {
+                agree: number;
+                pass: number;
+                disagree: number;
+                voters: number;
+            };
+            percentages: {
+                agree: number;
+                pass: number;
+                disagree: number;
+            };
+        };
+        ResultsOpinionGroup: {
+            label: string;
+            memberCount: number | null;
+            positions: components["schemas"]["ResultsGroupPosition"][];
+        };
+        ResultsGroupPosition: {
+            /** @enum {string} */
+            choice: "agree" | "disagree";
+            statement: string;
+            percentage: number | null;
+        };
+        ResultsLinks: {
+            self: string;
+            conversation: string;
+            about: string;
+            identityReveal?: string;
         };
         ArgumentMappingResponse: {
             data: components["schemas"]["ArgumentMapping"];
@@ -802,6 +895,7 @@ export interface components {
             about: string;
             explore?: string;
             arguments?: string;
+            results?: string;
             informedVoting?: string;
             identityReveal?: string;
             admin?: string;
@@ -1274,6 +1368,55 @@ export interface operations {
             };
             /** @description Voting service unavailable */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getResultsReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Aggregate results report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsReportResponse"];
+                };
+            };
+            /** @description Authentication required for personal-only results */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Results are not published */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

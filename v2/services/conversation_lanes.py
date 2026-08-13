@@ -101,6 +101,7 @@ class ConversationLane:
                explore_link: Callable[[str], str],
                arguments_link: Callable[[str], str],
                informed_voting_link: Callable[[str], str],
+               results_link: Callable[[str], str],
                reveal_link: Callable[[str], str],
                admin_link: Callable[[int], str]) -> dict:
         moderated_ids = {conv.id for conv in self.moderating}
@@ -133,6 +134,11 @@ class ConversationLane:
                 links['arguments'] = arguments_link(conv.slug)
             if relationship == 'joined' and action_open and 'informed_voting' in phases:
                 links['informedVoting'] = informed_voting_link(conv.slug)
+            if relationship == 'joined' and any(
+                output['ready'] and output['key'] in {'preliminary-results', 'report'}
+                for output in outputs
+            ):
+                links['results'] = results_link(conv.slug)
             if relationship == 'joined' and signal.get('reveal') is not None:
                 links['identityReveal'] = reveal_link(conv.slug)
             if conv.id in moderated_ids:

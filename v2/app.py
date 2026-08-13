@@ -55,6 +55,7 @@ from services.identity_reveal import (
     reveal_identity as reveal_identity_command,
 )
 from services.informed_voting import build_informed_voting_state
+from services.results_report import build_results_report
 from services.invites import InviteBatchSaveError, add_conversation_invites
 from services.conversation_about import build_conversation_about
 from services.conversation_lanes import (build_conversation_lane,
@@ -1651,6 +1652,9 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
         informed_voting_link=lambda slug: url_for(
             'spa_shell', spa_path=f'conversations/{slug}/informed-voting',
         ),
+        results_link=lambda slug: url_for(
+            'spa_shell', spa_path=f'conversations/{slug}/results',
+        ),
         reveal_link=lambda slug: url_for(
             'spa_shell', spa_path=f'conversations/{slug}/identity-reveal',
         ),
@@ -1996,6 +2000,10 @@ def _informed_voting_api_payload(slug: str) -> dict:
             links['arguments'] = url_for(
                 'spa_shell', spa_path=f'conversations/{slug}/arguments',
             )
+        if conv.phase_public_results or conv.phase_personal_results:
+            links['results'] = url_for(
+                'spa_shell', spa_path=f'conversations/{slug}/results',
+            )
         return {
             'slug': conv.slug,
             'title': conv.title,
@@ -2040,6 +2048,46 @@ def _informed_vote_api_payload(
         }
     finally:
         _save_phase6_gateway(gateway, key)
+
+
+def _results_report_api_payload(slug: str) -> dict:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    _check_conversation_access(conv, participant)
+    if not (conv.phase_public_results or conv.phase_personal_results):
+        abort(409, description='Results are not published for this conversation.')
+    if conv.phase_personal_results and not conv.phase_public_results and participant is None:
+        abort(401)
+    participation = (
+        Participation.query.filter_by(
+            participant_id=participant.id, conversation_id=conv.id,
+        ).first()
+        if participant else None
+    )
+    result_filter = (
+        Phase6ResultsFilter.from_snapshot(conv.report_filter_snapshot)
+        if conv.closed_at else _current_phase6_results_filter(conv)
+    )
+    results = _build_phase6_results(
+        conv, participation=None, results_filter=result_filter,
+    )
+    output_key = 'report' if conv.closed_at else 'preliminary-results'
+    output_context = next(
+        item for item in _output_items(conv) if item['key'] == output_key
+    )
+    reveal = _reveal_context(conv, participation)
+    return build_results_report(
+        conversation=conv,
+        phase6_results=results,
+        output_context=output_context,
+        self_link=url_for('api_v1.get_results_report', slug=slug),
+        conversation_link=url_for('participant.conversation', slug=slug),
+        about_link=url_for('spa_shell', spa_path=f'conversations/{slug}/about'),
+        identity_reveal_link=(
+            url_for('spa_shell', spa_path=f'conversations/{slug}/identity-reveal')
+            if reveal else None
+        ),
+    )
 
 
 def _argument_mapping_api_payload(slug: str) -> dict:
@@ -5769,6 +5817,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_argument_mapping=_argument_mapping_api_payload,
         resolve_informed_voting=_informed_voting_api_payload,
         submit_informed_vote=_informed_vote_api_payload,
+        resolve_results_report=_results_report_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,

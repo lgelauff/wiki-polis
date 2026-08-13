@@ -62,6 +62,7 @@ def create_api_v1_blueprint(
     resolve_argument_mapping: Callable[[str], dict],
     resolve_informed_voting: Callable[[str], dict],
     submit_informed_vote: Callable[[str, int, str], dict],
+    resolve_results_report: Callable[[str], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
@@ -245,6 +246,12 @@ def create_api_v1_blueprint(
                 'Informed-voting progress is temporarily unavailable.', 502,
             )
         return _no_store(jsonify({'data': data}))
+
+    @bp.get('/conversations/<slug>/results')
+    def get_results_report(slug: str):
+        return _no_store(jsonify({
+            'data': resolve_results_report(slug),
+        }))
 
     @bp.put('/conversations/<slug>/featured-statements/<int:featured_statement_id>/informed-vote')
     def put_informed_vote(slug: str, featured_statement_id: int):

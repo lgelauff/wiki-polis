@@ -334,6 +334,20 @@
         }
       }
     },
+    "/conversations/{slug}/results": {
+      "get": {
+        "operationId": "getResultsReport",
+        "summary": "Return privacy-safe preliminary or final aggregate results",
+        "description": "Uses the live moderation filter for preliminary results and the publication snapshot for a final report.",
+        "parameters": [{"name": "slug", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}],
+        "responses": {
+          "200": {"description": "Aggregate results report", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ResultsReportResponse"}}}},
+          "401": {"description": "Authentication required for personal-only results", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Conversation access denied", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Results are not published", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/conversations/{slug}/featured-statements/{featuredStatementId}/informed-vote": {
       "put": {
         "operationId": "putInformedVote",
@@ -1000,7 +1014,8 @@
           "about": {"type": "string"},
           "conversation": {"type": "string"},
           "explore": {"type": "string"},
-          "arguments": {"type": "string"}
+          "arguments": {"type": "string"},
+          "results": {"type": "string"}
         }
       },
       "InformedVoteRequest": {
@@ -1028,6 +1043,136 @@
             "additionalProperties": false,
             "properties": {"informedVoting": {"type": "string"}}
           }
+        }
+      },
+      "ResultsReportResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/ResultsReport"}}
+      },
+      "ResultsReport": {
+        "type": "object",
+        "required": ["slug", "title", "publication", "openedAt", "closedAt", "context", "participation", "dataAvailability", "moderation", "statements", "opinionGroups", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {"type": "string"},
+          "title": {"type": "string"},
+          "publication": {"type": "string", "enum": ["preliminary", "final"]},
+          "openedAt": {"type": "string", "format": "date-time"},
+          "closedAt": {"type": ["string", "null"], "format": "date-time"},
+          "context": {
+            "type": "object",
+            "required": ["phase", "status", "method"],
+            "additionalProperties": false,
+            "properties": {
+              "phase": {"type": "string"},
+              "status": {"type": "string", "enum": ["provisional", "final"]},
+              "method": {"type": "string"}
+            }
+          },
+          "participation": {
+            "type": "object",
+            "required": ["initialRound", "informedRound", "matchedRounds"],
+            "additionalProperties": false,
+            "properties": {
+              "initialRound": {"type": ["integer", "null"], "minimum": 0},
+              "informedRound": {"type": ["integer", "null"], "minimum": 0},
+              "matchedRounds": {"type": ["integer", "null"], "minimum": 0}
+            }
+          },
+          "dataAvailability": {
+            "type": "object",
+            "required": ["detailedCounts", "opinionGroups"],
+            "additionalProperties": false,
+            "properties": {
+              "detailedCounts": {"type": "boolean"},
+              "opinionGroups": {"type": "boolean"}
+            }
+          },
+          "moderation": {
+            "type": "object",
+            "required": ["excludedStatements", "excludedParticipants"],
+            "additionalProperties": false,
+            "properties": {
+              "excludedStatements": {"type": "integer", "minimum": 0},
+              "excludedParticipants": {"type": "integer", "minimum": 0}
+            }
+          },
+          "statements": {"type": "array", "items": {"$ref": "#/components/schemas/ResultsStatement"}},
+          "opinionGroups": {"type": "array", "items": {"$ref": "#/components/schemas/ResultsOpinionGroup"}},
+          "links": {"$ref": "#/components/schemas/ResultsLinks"}
+        }
+      },
+      "ResultsStatement": {
+        "type": "object",
+        "required": ["featuredStatementId", "statement", "initial", "informed", "agreementShift"],
+        "additionalProperties": false,
+        "properties": {
+          "featuredStatementId": {"type": "integer", "minimum": 1},
+          "statement": {"type": "string"},
+          "initial": {"oneOf": [{"$ref": "#/components/schemas/VoteTally"}, {"type": "null"}]},
+          "informed": {"oneOf": [{"$ref": "#/components/schemas/VoteTally"}, {"type": "null"}]},
+          "agreementShift": {"type": ["number", "null"]}
+        }
+      },
+      "VoteTally": {
+        "type": "object",
+        "required": ["counts", "percentages"],
+        "additionalProperties": false,
+        "properties": {
+          "counts": {
+            "type": "object",
+            "required": ["agree", "pass", "disagree", "voters"],
+            "additionalProperties": false,
+            "properties": {
+              "agree": {"type": "integer", "minimum": 0},
+              "pass": {"type": "integer", "minimum": 0},
+              "disagree": {"type": "integer", "minimum": 0},
+              "voters": {"type": "integer", "minimum": 0}
+            }
+          },
+          "percentages": {
+            "type": "object",
+            "required": ["agree", "pass", "disagree"],
+            "additionalProperties": false,
+            "properties": {
+              "agree": {"type": "number", "minimum": 0, "maximum": 100},
+              "pass": {"type": "number", "minimum": 0, "maximum": 100},
+              "disagree": {"type": "number", "minimum": 0, "maximum": 100}
+            }
+          }
+        }
+      },
+      "ResultsOpinionGroup": {
+        "type": "object",
+        "required": ["label", "memberCount", "positions"],
+        "additionalProperties": false,
+        "properties": {
+          "label": {"type": "string"},
+          "memberCount": {"type": ["integer", "null"], "minimum": 0},
+          "positions": {"type": "array", "items": {"$ref": "#/components/schemas/ResultsGroupPosition"}}
+        }
+      },
+      "ResultsGroupPosition": {
+        "type": "object",
+        "required": ["choice", "statement", "percentage"],
+        "additionalProperties": false,
+        "properties": {
+          "choice": {"type": "string", "enum": ["agree", "disagree"]},
+          "statement": {"type": "string"},
+          "percentage": {"type": ["number", "null"], "minimum": 0, "maximum": 100}
+        }
+      },
+      "ResultsLinks": {
+        "type": "object",
+        "required": ["self", "conversation", "about"],
+        "additionalProperties": false,
+        "properties": {
+          "self": {"type": "string"},
+          "conversation": {"type": "string"},
+          "about": {"type": "string"},
+          "identityReveal": {"type": "string"}
         }
       },
       "ArgumentMappingResponse": {
@@ -1440,6 +1585,7 @@
           "about": {"type": "string"},
           "explore": {"type": "string"},
           "arguments": {"type": "string"},
+          "results": {"type": "string"},
           "informedVoting": {"type": "string"},
           "identityReveal": {"type": "string"},
           "admin": {"type": "string"}
