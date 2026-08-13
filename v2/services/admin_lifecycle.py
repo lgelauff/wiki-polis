@@ -1,7 +1,7 @@
 """Admin conversation lifecycle projection and guided transition command."""
 
 from dataclasses import dataclass
-from datetime import timezone
+from datetime import datetime, timezone
 
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -161,6 +161,14 @@ class PublicationPhase6Missing(RuntimeError):
     pass
 
 
+class ScheduleUnavailable(RuntimeError):
+    pass
+
+
+class ScheduleInPast(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class PhaseTransitionResult:
     source_key: str
@@ -169,6 +177,54 @@ class PhaseTransitionResult:
     phase6_created: bool
     sync_message: str | None
     visibility_synced: bool
+
+
+def set_phase_schedule(
+    *, conversation, transition: dict | None, schedulable: bool,
+    scheduled_at: datetime | None, frozen: bool, now: datetime,
+    clear_schedule, session, audit,
+) -> bool:
+    """Converge the pending transition schedule on one desired representation."""
+    current_at = conversation.scheduled_transition_at
+    current_at = (
+        current_at if current_at is None or current_at.tzinfo
+        else current_at.replace(tzinfo=timezone.utc)
+    )
+    if scheduled_at is None:
+        changed = current_at is not None
+        target = conversation.scheduled_transition_target
+        if changed:
+            clear_schedule(conversation)
+            session.commit()
+            audit(
+                'phase.schedule.cancel', conv_id=conversation.id,
+                target_type='phase', target_id=target,
+            )
+        else:
+            session.commit()
+        return changed
+    if scheduled_at <= now:
+        raise ScheduleInPast()
+    if not schedulable or transition is None:
+        raise ScheduleUnavailable()
+    target = transition['target']['key']
+    changed = (
+        current_at != scheduled_at
+        or conversation.scheduled_transition_target != target
+        or bool(conversation.scheduled_transition_frozen) != frozen
+    )
+    if changed:
+        conversation.scheduled_transition_at = scheduled_at
+        conversation.scheduled_transition_target = target
+        conversation.scheduled_transition_frozen = frozen
+        session.commit()
+        audit(
+            'phase.schedule.set', conv_id=conversation.id,
+            target_type='phase', target_id=target, frozen=frozen,
+        )
+    else:
+        session.commit()
+    return changed
 
 
 def advance_conversation_phase(

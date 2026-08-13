@@ -787,6 +787,15 @@
         "409": {"description": "Conversation closed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
+    "/admin/conversations/{conversationId}/schedule": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "put": {"operationId": "putAdminConversationSchedule", "summary": "Replace or cancel the pending phase schedule", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminScheduleRequest"}}}}, "responses": {
+        "200": {"description": "Schedule receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminScheduleResponse"}}}},
+        "400": {"description": "Invalid or past date-time", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "The current transition cannot be scheduled", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/publication": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "post": {"operationId": "createAdminConversationPublication", "summary": "Irreversibly publish the frozen final report", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPublicationRequest"}}}}, "responses": {
@@ -831,6 +840,8 @@
       },
       "AdminPauseRequest": {"type": "object", "required": ["paused"], "additionalProperties": false, "properties": {"paused": {"type": "boolean"}}},
       "AdminPauseResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["paused", "changed", "lifecycle"], "additionalProperties": false, "properties": {"paused": {"type": "boolean"}, "changed": {"type": "boolean"}, "lifecycle": {"$ref": "#/components/schemas/AdminLifecycle"}}}}},
+      "AdminScheduleRequest": {"type": "object", "required": ["scheduledAt", "frozen"], "additionalProperties": false, "properties": {"scheduledAt": {"type": ["string", "null"], "format": "date-time"}, "frozen": {"type": "boolean"}}},
+      "AdminScheduleResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["changed", "lifecycle"], "additionalProperties": false, "properties": {"changed": {"type": "boolean"}, "lifecycle": {"$ref": "#/components/schemas/AdminLifecycle"}}}}},
       "AdminPublicationRequest": {"type": "object", "required": ["confirmedPreconditionIds"], "additionalProperties": false, "properties": {"confirmedPreconditionIds": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}}},
       "AdminPublicationResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["lifecycle"], "additionalProperties": false, "properties": {"lifecycle": {"$ref": "#/components/schemas/AdminLifecycle"}}}}},
       "AdminPhaseAdvanceResponse": {

@@ -97,8 +97,9 @@ from services.admin_lifecycle import (
     PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
     ConversationClosed, PublicationPhase6Missing,
     PublicationReadinessUnconfirmed, PublicationUnavailable,
+    ScheduleInPast, ScheduleUnavailable,
     advance_conversation_phase, build_admin_lifecycle,
-    publish_final_report, set_conversation_paused,
+    publish_final_report, set_conversation_paused, set_phase_schedule,
 )
 from services.idempotency import (complete_command, release_reservation,
                                   request_digest, reserve_command)
@@ -2635,6 +2636,30 @@ def _set_admin_pause_api_payload(conv_id: int, body: dict) -> dict:
     )
     return {
         'paused': bool(conv.paused),
+        'changed': changed,
+        'lifecycle': _admin_lifecycle_api_payload(conv.id),
+    }
+
+
+def _set_admin_schedule_api_payload(conv_id: int, body: dict) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    scheduled_at = (
+        _parse_utc_timestamp(body['scheduledAt'])
+        if body['scheduledAt'] is not None else None
+    )
+    if body['scheduledAt'] is not None and scheduled_at is None:
+        raise ScheduleInPast()
+    context = _schedule_context(conv)
+    changed = set_phase_schedule(
+        conversation=conv, transition=context['transition'],
+        schedulable=context['can_schedule'], scheduled_at=scheduled_at,
+        frozen=body['frozen'], now=datetime.now(timezone.utc),
+        clear_schedule=_clear_scheduled_transition,
+        session=db.session, audit=record_audit,
+    )
+    return {
         'changed': changed,
         'lifecycle': _admin_lifecycle_api_payload(conv.id),
     }
@@ -6105,6 +6130,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         update_admin_settings=_update_admin_settings_api_payload,
         advance_admin_phase=_advance_admin_phase_api_payload,
         set_admin_pause=_set_admin_pause_api_payload,
+        set_admin_schedule=_set_admin_schedule_api_payload,
         publish_admin_report=_publish_admin_report_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,

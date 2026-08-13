@@ -563,6 +563,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace or cancel the pending phase schedule */
+        put: operations["putAdminConversationSchedule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/publication": {
         parameters: {
             query?: never;
@@ -672,6 +691,17 @@ export interface components {
         AdminPauseResponse: {
             data: {
                 paused: boolean;
+                changed: boolean;
+                lifecycle: components["schemas"]["AdminLifecycle"];
+            };
+        };
+        AdminScheduleRequest: {
+            /** Format: date-time */
+            scheduledAt: string | null;
+            frozen: boolean;
+        };
+        AdminScheduleResponse: {
+            data: {
                 changed: boolean;
                 lifecycle: components["schemas"]["AdminLifecycle"];
             };
@@ -3245,6 +3275,59 @@ export interface operations {
                 };
             };
             /** @description Conversation closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminConversationSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description Schedule receipt and refreshed lifecycle */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminScheduleResponse"];
+                };
+            };
+            /** @description Invalid or past date-time */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The current transition cannot be scheduled */
             409: {
                 headers: {
                     [name: string]: unknown;

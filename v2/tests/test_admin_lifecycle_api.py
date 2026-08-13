@@ -1,6 +1,6 @@
 """Admin lifecycle read-contract tests."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from db import AdminRole, AuditEvent, FeaturedStatement, db
 from tests.conftest import login
@@ -260,3 +260,47 @@ def test_publication_api_freezes_report_and_returns_published_lifecycle(
     assert lifecycle['conversation']['publication'] == 'published'
     assert lifecycle['conversation']['status'] == 'closed'
     assert 'p6-private' not in response.text
+
+
+def test_schedule_api_converges_and_cancels(admin_client, conversation):
+    conversation.phase_submission = True
+    db.session.commit()
+    endpoint = f'/api/v1/admin/conversations/{conversation.id}/schedule'
+    scheduled_at = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+    body = {'scheduledAt': scheduled_at.isoformat(), 'frozen': False}
+
+    first = admin_client.put(endpoint, json=body)
+    replay = admin_client.put(endpoint, json=body)
+    cancel = admin_client.put(
+        endpoint, json={'scheduledAt': None, 'frozen': False},
+    )
+    cancel_replay = admin_client.put(
+        endpoint, json={'scheduledAt': None, 'frozen': False},
+    )
+
+    assert first.status_code == replay.status_code == 200
+    assert first.get_json()['data']['changed'] is True
+    assert replay.get_json()['data']['changed'] is False
+    assert first.get_json()['data']['lifecycle']['schedule']['targetKey'] == 'featured_selection'
+    assert cancel.get_json()['data']['changed'] is True
+    assert cancel_replay.get_json()['data']['changed'] is False
+    assert cancel.get_json()['data']['lifecycle']['schedule']['scheduledAt'] is None
+
+
+def test_schedule_api_rejects_unschedulable_and_past_transitions(
+    admin_client, conversation,
+):
+    endpoint = f'/api/v1/admin/conversations/{conversation.id}/schedule'
+    future = datetime.now(timezone.utc) + timedelta(days=1)
+    unavailable = admin_client.put(
+        endpoint, json={'scheduledAt': future.isoformat(), 'frozen': False},
+    )
+    past = admin_client.put(
+        endpoint,
+        json={'scheduledAt': '2020-01-01T00:00:00Z', 'frozen': False},
+    )
+
+    assert unavailable.status_code == 409
+    assert unavailable.get_json()['error']['code'] == 'schedule_unavailable'
+    assert past.status_code == 400
+    assert past.get_json()['error']['code'] == 'schedule_time_invalid'

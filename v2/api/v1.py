@@ -36,6 +36,7 @@ from services.admin_lifecycle import (
     PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
     ConversationClosed, PublicationPhase6Missing,
     PublicationReadinessUnconfirmed, PublicationUnavailable,
+    ScheduleInPast, ScheduleUnavailable,
 )
 
 _OPENAPI_SPEC = json.loads(
@@ -85,6 +86,7 @@ def create_api_v1_blueprint(
     update_admin_settings: Callable[[int, dict], dict],
     advance_admin_phase: Callable[[int, dict], dict],
     set_admin_pause: Callable[[int, dict], dict],
+    set_admin_schedule: Callable[[int, dict], dict],
     publish_admin_report: Callable[[int, dict], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
@@ -470,6 +472,33 @@ def create_api_v1_blueprint(
             data = set_admin_pause(conversation_id, body)
         except ConversationClosed:
             return error_response('conversation_closed', 'A closed conversation cannot be paused.', 409)
+        return _no_store(jsonify({'data': data}))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/schedule')
+    def put_admin_conversation_schedule(conversation_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict)
+                or set(body) != {'scheduledAt', 'frozen'}
+                or body.get('scheduledAt') is not None
+                and not isinstance(body.get('scheduledAt'), str)
+                or not isinstance(body.get('frozen'), bool)
+                or body.get('scheduledAt') is None and body.get('frozen') is True):
+            return error_response(
+                'validation_failed',
+                'Use a date-time and frozen state, or null to cancel.', 400,
+            )
+        try:
+            data = set_admin_schedule(conversation_id, body)
+        except ScheduleInPast:
+            return error_response(
+                'schedule_time_invalid',
+                'Choose a valid future date and time.', 400,
+            )
+        except ScheduleUnavailable:
+            return error_response(
+                'schedule_unavailable',
+                'Only an active-to-passive next phase can be scheduled.', 409,
+            )
         return _no_store(jsonify({'data': data}))
 
     @bp.post('/admin/conversations/<int:conversation_id>/publication')
