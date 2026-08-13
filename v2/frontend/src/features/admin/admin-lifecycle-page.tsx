@@ -225,6 +225,10 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {
     {label: 'Roles', count: null, href: data.links.roles, detail: 'Moderators and organizers'},
     {label: 'Statements', count: null, href: data.links.statements, detail: 'Review and import'},
     {label: 'Featured', count: data.counts.featuredStatements, href: data.links.featuredStatements, detail: 'Confirmed statements'},
+    ...(data.capabilities.archive ? [{
+      label: 'Delete', count: null, href: data.links.termination,
+      detail: 'Permanent empty-record removal',
+    }] : []),
   ];
 
   return (

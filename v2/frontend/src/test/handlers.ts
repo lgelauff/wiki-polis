@@ -26,6 +26,14 @@ function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as st
 }
 
 export const handlers = [
+  http.get(new URL('/api/v1/admin/conversations/7/termination', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+    deletion: {state: 'eligible', validVoteCount: 0, reason: 'No valid votes were found.'},
+    links: {self: '/api/v1/admin/conversations/7/termination', lifecycle: '/app/admin/conversations/7'},
+  }})),
+  http.delete(new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
+    conversationId: 7, deleted: true, links: {admin: '/admin'},
+  }})),
   http.get(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', introHtml: '<p>Shape the future.</p>', outroHtml: '', accessPolicy: 'public', phaseRoute: 'default_7'},
     recommendations: {tier: 'medium', tiers: [

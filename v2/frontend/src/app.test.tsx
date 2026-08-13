@@ -44,6 +44,9 @@ test('advances a conversation from the server-described lifecycle console', asyn
   expect(screen.getByRole('link', {name: /Participants/})).toHaveAttribute(
     'href', '/app/admin/conversations/7/participants',
   );
+  expect(screen.getByRole('link', {name: /Delete/})).toHaveAttribute(
+    'href', '/app/admin/conversations/7/termination',
+  );
 });
 
 test('schedules and cancels a lifecycle transition', async () => {
@@ -90,6 +93,24 @@ test('edits settings while keeping legacy eligibility observable and read-only',
   fireEvent.click(screen.getByRole('radio', {name: /Complex topic/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
   expect(await screen.findByRole('status')).toHaveTextContent('Settings saved');
+});
+
+test('deletes a verified empty conversation through a deliberate receipt flow', async () => {
+  vi.spyOn(globalThis, 'confirm').mockReturnValueOnce(true);
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/termination']}><App /></MemoryRouter></QueryClientProvider>);
+
+  expect(await screen.findByRole('heading', {name: 'Delete conversation'})).toBeVisible();
+  expect(screen.getByText('Valid votes').parentElement).toHaveTextContent('0');
+  const deletion = screen.getByRole('button', {name: 'Permanently delete conversation'});
+  expect(deletion).toBeDisabled();
+  fireEvent.change(screen.getByLabelText(/Type Community strategy to confirm/), {
+    target: {value: 'Community strategy'},
+  });
+  expect(deletion).toBeEnabled();
+  fireEvent.click(deletion);
+
+  expect(await screen.findByRole('heading', {name: 'Conversation deleted'})).toBeVisible();
+  expect(screen.getByRole('link', {name: 'Return to admin panel'})).toHaveAttribute('href', '/admin');
 });
 
 test('manages participant access in the distinct admin workspace', async () => {

@@ -295,6 +295,28 @@ export async function putAdminSettings(
   ))).data;
 }
 
+export const adminTerminationQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-termination', conversationId],
+  queryFn: async () => (await requireApiData(api.GET(
+    '/admin/conversations/{conversationId}/termination',
+    {params: {path: {conversationId}}},
+  ))).data,
+  staleTime: 0,
+});
+
+export async function deleteAdminConversation(
+  conversationId: number,
+  csrfToken: string,
+) {
+  return (await requireApiData(api.DELETE(
+    '/admin/conversations/{conversationId}',
+    {
+      params: {path: {conversationId}},
+      headers: {'X-CSRFToken': csrfToken},
+    },
+  ))).data;
+}
+
 export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
   queryKey: ['pseudonym-suggestions', slug],
   queryFn: async () => (

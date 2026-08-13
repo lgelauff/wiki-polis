@@ -768,6 +768,29 @@ a { color: inherit; }
 .settings-form > footer { display: flex; align-items: center; gap: 1rem; padding-top: 2rem; }
 .settings-form > footer button { padding: .7rem 1rem; border: 0; color: white; background: var(--ink); cursor: pointer; }
 .settings-form > footer p { color: var(--consensus); font-size: .72rem; }
+.termination-shell { width: min(920px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 7rem; }
+.termination-heading { padding: clamp(3rem, 7vw, 6rem) 0 2rem; border-bottom: 1px solid var(--ink); }
+.termination-heading h1, .termination-receipt h1 { margin: .3rem 0 1rem; font-size: clamp(3rem, 8vw, 6rem); line-height: .9; letter-spacing: -.07em; }
+.termination-heading > p:last-child, .termination-receipt > p { max-width: 680px; color: var(--muted); line-height: 1.5; }
+.termination-record { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 3rem; padding: 2.5rem 0; border-bottom: 1px solid var(--ink); }
+.termination-record > div > span, .termination-record dt { color: var(--muted); font: .62rem var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.termination-record h2 { margin: .5rem 0; font-size: 2rem; letter-spacing: -.04em; }
+.termination-record code { color: var(--muted); font-size: .7rem; }
+.termination-record dl { display: flex; gap: 2.5rem; margin: 0; }
+.termination-record dd { margin: .35rem 0 0; font: 650 .85rem var(--mono); text-transform: uppercase; }
+.termination-record[data-state="eligible"] dd { color: var(--consensus); }
+.termination-record:not([data-state="eligible"]) dd { color: var(--dissent); }
+.termination-decision { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, .75fr); gap: 4rem; padding: 4rem 0; }
+.termination-decision h2 { margin: .3rem 0 .8rem; font-size: 2rem; letter-spacing: -.04em; }
+.termination-decision > div > p:last-of-type, .termination-decision form > p { color: var(--muted); font-size: .75rem; line-height: 1.5; }
+.termination-decision form { padding: 1.2rem; border: 1px solid var(--dissent); background: color-mix(in srgb, var(--dissent) 4%, white); }
+.termination-decision label { display: block; font-size: .72rem; line-height: 1.45; }
+.termination-decision input { width: 100%; margin: .75rem 0; padding: .7rem; border: 1px solid var(--ink); background: white; }
+.termination-decision button { width: 100%; padding: .75rem; border: 0; color: white; background: var(--dissent); cursor: pointer; }
+.termination-decision button:disabled { opacity: .4; cursor: not-allowed; }
+.termination-decision .termination-error { color: var(--dissent); }
+.termination-receipt { margin-top: clamp(4rem, 12vw, 10rem); padding: 3rem; border: 1px solid var(--consensus); background: white; }
+.termination-receipt > a { display: inline-block; margin-top: 1rem; color: var(--civic); }
 .settings-form > footer p[role="alert"] { color: var(--dissent); }
 .settings-readonly { color: var(--muted); }
 
@@ -778,7 +801,7 @@ a { color: inherit; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
 }
 @media (max-width: 720px) {
-  .app-header__inner, .lane-shell, .record-shell, .admin-roster, .moderation-shell, .invitation-shell, .roles-shell, .lifecycle-shell, .settings-shell { width: min(100% - 24px, 1120px); }
+  .app-header__inner, .lane-shell, .record-shell, .admin-roster, .moderation-shell, .invitation-shell, .roles-shell, .lifecycle-shell, .settings-shell, .termination-shell { width: min(100% - 24px, 1120px); }
   .brand__beta, .account-link, .account-form span { display: none; }
   .admin-mode a { display: none; }
   .app-header__inner { gap: .6rem; }
@@ -852,4 +875,6 @@ a { color: inherit; }
   .lifecycle-management ul { grid-template-columns: 1fr; }
   .lifecycle-management li, .lifecycle-management li:nth-child(3n), .lifecycle-management li:nth-last-child(-n + 3) { border-right: 0; border-bottom: 1px solid var(--rule); }
   .lifecycle-management li:last-child { border-bottom: 0; }
+  .termination-record, .termination-decision { grid-template-columns: 1fr; gap: 1.5rem; }
+  .termination-record dl { flex-wrap: wrap; }
 }
