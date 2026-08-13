@@ -46,6 +46,17 @@ test('advances a conversation from the server-described lifecycle console', asyn
   );
 });
 
+test('edits settings while keeping legacy eligibility observable and read-only', async () => {
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings']}><App /></MemoryRouter></QueryClientProvider>);
+  expect(await screen.findByRole('heading', {name: 'Conversation settings'})).toBeVisible();
+  expect(screen.getByText('Extended-confirmed editors')).toBeVisible();
+  expect(screen.getByText(/Eligibility changes are unavailable/)).toBeVisible();
+  fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Updated strategy'}});
+  fireEvent.click(screen.getByRole('radio', {name: /Complex topic/}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved');
+});
+
 test('manages participant access in the distinct admin workspace', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

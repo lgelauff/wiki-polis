@@ -128,6 +128,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {
   }
 
   const management = [
+    {label: 'Settings', count: null, href: data.links.settings, detail: 'Description, access, guidance'},
     {label: 'Participants', count: data.counts.participants, href: data.links.participants, detail: 'Participation and access'},
     {label: 'Moderation', count: data.counts.openFlags, href: data.links.moderation, detail: 'Open content flags'},
     {label: 'Invitations', count: data.counts.invitations, href: data.links.invitations, detail: 'Pending invitations'},

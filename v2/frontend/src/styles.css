@@ -721,6 +721,31 @@ a { color: inherit; }
 .lifecycle-management a:hover > span { color: #cbd1dc; }
 .lifecycle-management a > b { position: absolute; inset: 1rem 1rem auto auto; color: var(--civic); font: 550 1.5rem var(--mono); }
 .lifecycle-management a:hover > b { color: white; }
+.settings-shell { width: min(920px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 7rem; }
+.settings-heading { padding: clamp(3rem, 7vw, 6rem) 0 2rem; border-bottom: 1px solid var(--ink); }
+.settings-heading h1 { margin: .3rem 0 1rem; font-size: clamp(3rem, 7vw, 5.8rem); line-height: .9; letter-spacing: -.07em; }
+.settings-heading > p:last-child { max-width: 650px; color: var(--muted); line-height: 1.5; }
+.settings-form > section { padding: 3.5rem 0; border-bottom: 1px solid var(--ink); }
+.settings-form section > header { display: grid; grid-template-columns: 45px 1fr; gap: 1rem; margin-bottom: 2rem; }
+.settings-form section > header > span { color: var(--civic); font: .65rem var(--mono); }
+.settings-form h2 { margin: 0; font-size: 1.8rem; letter-spacing: -.04em; }
+.settings-form section > header p { margin: .4rem 0 0; color: var(--muted); font-size: .78rem; }
+.settings-form section > label { display: block; margin: 1rem 0; font-size: .72rem; font-weight: 650; }
+.settings-form input:not([type="radio"]), .settings-form textarea, .settings-form select { display: block; width: 100%; margin-top: .45rem; padding: .75rem; border: 1px solid var(--ink); background: white; font: .85rem/1.45 var(--mono); }
+.settings-hint, .settings-eligibility p { color: var(--muted); font-size: .7rem; }
+.settings-eligibility { display: grid; gap: .4rem; margin-top: 1.5rem; padding: 1rem; border-left: 4px solid var(--rule); background: white; }
+.settings-eligibility[data-configured="true"] { border-color: var(--signal); }
+.settings-eligibility span { color: var(--signal); font: .7rem var(--mono); }
+.settings-form fieldset { margin: 0; padding: 0; border: 0; }
+.settings-form legend { margin-bottom: .7rem; font-size: .72rem; font-weight: 650; }
+.settings-tier { display: grid; grid-template-columns: auto 1fr auto; gap: 1rem; padding: 1rem 0; border-top: 1px solid var(--rule); cursor: pointer; }
+.settings-tier:last-child { border-bottom: 1px solid var(--rule); }
+.settings-tier span { color: var(--muted); font: .65rem var(--mono); }
+.settings-form > footer { display: flex; align-items: center; gap: 1rem; padding-top: 2rem; }
+.settings-form > footer button { padding: .7rem 1rem; border: 0; color: white; background: var(--ink); cursor: pointer; }
+.settings-form > footer p { color: var(--consensus); font-size: .72rem; }
+.settings-form > footer p[role="alert"] { color: var(--dissent); }
+.settings-readonly { color: var(--muted); }
 
 @keyframes ledger-in {
   from { opacity: 0; translate: 0 10px; }
@@ -729,7 +754,7 @@ a { color: inherit; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
 }
 @media (max-width: 720px) {
-  .app-header__inner, .lane-shell, .record-shell, .admin-roster, .moderation-shell, .invitation-shell, .roles-shell, .lifecycle-shell { width: min(100% - 24px, 1120px); }
+  .app-header__inner, .lane-shell, .record-shell, .admin-roster, .moderation-shell, .invitation-shell, .roles-shell, .lifecycle-shell, .settings-shell { width: min(100% - 24px, 1120px); }
   .brand__beta, .account-link, .account-form span { display: none; }
   .admin-mode a { display: none; }
   .app-header__inner { gap: .6rem; }

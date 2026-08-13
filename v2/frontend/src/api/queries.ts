@@ -242,6 +242,26 @@ export async function createAdminPublication(
   }))).data;
 }
 
+export const adminSettingsQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-settings', conversationId],
+  queryFn: async () => (await requireApiData(api.GET(
+    '/admin/conversations/{conversationId}/settings',
+    {params: {path: {conversationId}}},
+  ))).data,
+  staleTime: 10_000,
+});
+
+export async function putAdminSettings(
+  conversationId: number,
+  body: components['schemas']['AdminSettingsRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT(
+    '/admin/conversations/{conversationId}/settings',
+    {params: {path: {conversationId}}, body, headers: {'X-CSRFToken': csrfToken}},
+  ))).data;
+}
+
 export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
   queryKey: ['pseudonym-suggestions', slug],
   queryFn: async () => (

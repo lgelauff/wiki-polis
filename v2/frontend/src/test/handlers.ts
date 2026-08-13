@@ -3,6 +3,24 @@ import {http, HttpResponse} from 'msw';
 type Role = 'moderator' | 'organizer';
 
 export const handlers = [
+  http.get(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', introHtml: '<p>Shape the future.</p>', outroHtml: '', accessPolicy: 'public', phaseRoute: 'default_7'},
+    recommendations: {tier: 'medium', tiers: [
+      {key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5, featured_statements: 8}},
+      {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8, featured_statements: 15}},
+      {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12, featured_statements: 24}},
+    ]},
+    eligibility: {configured: true, label: 'Extended-confirmed editors', configurationMode: 'legacy_read_only', note: 'Eligibility changes are unavailable until curated criteria and wiki mappings are configured.'},
+    capabilities: {edit: true}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/app/admin/conversations/7'},
+  }})),
+  http.put(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), async ({request}) => {
+    const body = await request.json() as {title: string; introHtml: string; outroHtml: string; accessPolicy: 'public' | 'invite_only' | 'demo'; recommendationTier: 'simple' | 'medium' | 'complex'};
+    return HttpResponse.json({data: {changed: true, changedFields: ['title'], settings: {
+      conversation: {id: 7, slug: 'community-strategy', title: body.title.trim(), introHtml: body.introHtml, outroHtml: body.outroHtml, accessPolicy: body.accessPolicy, phaseRoute: 'default_7'},
+      recommendations: {tier: body.recommendationTier, tiers: [{key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5}}, {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8}}, {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}}]},
+      eligibility: {configured: true, label: 'Extended-confirmed editors', configurationMode: 'legacy_read_only', note: 'Eligibility changes are unavailable until curated criteria and wiki mappings are configured.'}, capabilities: {edit: true}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/app/admin/conversations/7'},
+    }}});
+  }),
   http.get(new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', publication: 'not_applicable', closedAt: null},
     operator: {roleLabel: 'Global admin'},
@@ -29,6 +47,7 @@ export const handlers = [
       participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation',
       invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles',
       statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured',
+      settings: '/app/admin/conversations/7/settings',
     },
   }})),
   http.put(new URL('/api/v1/admin/conversations/7/phase', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
@@ -41,7 +60,7 @@ export const handlers = [
       publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
       counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
       capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true},
-      links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured'},
+      links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings'},
     },
   }})),
   http.get(new URL('/api/v1/admin/conversations/7/roles', globalThis.location.origin).toString(), () => HttpResponse.json({data: {

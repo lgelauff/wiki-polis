@@ -25,6 +25,7 @@ import {AdminModerationPage} from './features/admin/admin-moderation-page';
 import {AdminInvitationsPage} from './features/admin/admin-invitations-page';
 import {AdminRolesPage} from './features/admin/admin-roles-page';
 import {AdminLifecyclePage} from './features/admin/admin-lifecycle-page';
+import {AdminSettingsPage} from './features/admin/admin-settings-page';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -726,6 +727,12 @@ function AdminLifecycleRoute() {
   return <><Header admin /><AdminLifecyclePage conversationId={Number(conversationId)} csrfToken={session.csrfToken} /></>;
 }
 
+function AdminSettingsRoute() {
+  const {conversationId = ''} = useParams();
+  const {data: session} = useSuspenseQuery(sessionQuery());
+  return <><Header admin /><AdminSettingsPage conversationId={Number(conversationId)} csrfToken={session.csrfToken} /></>;
+}
+
 function AdminModerationRoute() {
   const {conversationId = ''} = useParams();
   const {data: session} = useSuspenseQuery(sessionQuery());
@@ -837,6 +844,7 @@ export function App() {
           <Route path="/app/conversations/:slug/results" element={<ResultsRoute />} />
           <Route path="/app/conversations/:slug/identity-reveal" element={<IdentityRevealPage />} />
           <Route path="/app/admin/conversations/:conversationId" element={<AdminLifecycleRoute />} />
+          <Route path="/app/admin/conversations/:conversationId/settings" element={<AdminSettingsRoute />} />
           <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
           <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminModerationRoute />} />
           <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminInvitationsRoute />} />
