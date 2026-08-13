@@ -357,6 +357,69 @@ export async function postAdminStatementImport(
   ))).data;
 }
 
+export const adminFeaturedWorkspaceQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-featured-workspace', conversationId],
+  queryFn: async () => (await requireApiData(api.GET(
+    '/admin/conversations/{conversationId}/featured-statements',
+    {params: {path: {conversationId}}},
+  ))).data,
+  staleTime: 5_000,
+});
+
+export async function putAdminFeaturedStatement(
+  conversationId: number,
+  statementId: number,
+  body: components['schemas']['AdminFeaturedSelectionRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT(
+    '/admin/conversations/{conversationId}/featured-statements/{statementId}',
+    {
+      params: {path: {conversationId, statementId}}, body,
+      headers: {'X-CSRFToken': csrfToken},
+    },
+  ))).data;
+}
+
+export async function deleteAdminFeaturedSelection(
+  conversationId: number, featuredId: number, csrfToken: string,
+) {
+  return (await requireApiData(api.DELETE(
+    '/admin/conversations/{conversationId}/featured-selections/{featuredId}',
+    {
+      params: {path: {conversationId, featuredId}},
+      headers: {'X-CSRFToken': csrfToken},
+    },
+  ))).data;
+}
+
+export async function putAdminFeaturedArgument(
+  conversationId: number,
+  argumentId: number,
+  body: components['schemas']['AdminFeaturedArgumentRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT(
+    '/admin/conversations/{conversationId}/featured-arguments/{argumentId}',
+    {
+      params: {path: {conversationId, argumentId}}, body,
+      headers: {'X-CSRFToken': csrfToken},
+    },
+  ))).data;
+}
+
+export async function deleteAdminFeaturedArgument(
+  conversationId: number, argumentId: number, csrfToken: string,
+) {
+  return (await requireApiData(api.DELETE(
+    '/admin/conversations/{conversationId}/featured-arguments/{argumentId}',
+    {
+      params: {path: {conversationId, argumentId}},
+      headers: {'X-CSRFToken': csrfToken},
+    },
+  ))).data;
+}
+
 export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
   queryKey: ['pseudonym-suggestions', slug],
   queryFn: async () => (

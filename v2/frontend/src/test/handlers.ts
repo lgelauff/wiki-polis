@@ -21,11 +21,25 @@ function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as st
     schedule,
     publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
     counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, archive: true},
-    links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/app/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
+    links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/app/admin/conversations/7/statements', featuredStatements: '/app/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
   };
 }
 
 export const handlers = [
+  http.get(new URL('/api/v1/admin/conversations/7/featured-statements', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+    selected: [{featuredId: 61, statementId: 12, text: 'An approved seed statement.', systemSuggested: true, provenance: null, arguments: [{id: 71, side: 'pro', body: 'A useful supporting argument.', proposerPseudonym: 'quiet-otter', hidden: false, createdAt: '2026-08-13T10:00:00Z'}]}],
+    candidates: [{statementId: 13, text: 'A candidate preserving another viewpoint.', seed: false, votes: {agree: 3, pass: 2, disagree: 1, total: 6, agreementPercent: 75}, provenance: null}],
+    dataAvailability: {candidates: true}, guidance: {recommendedCount: 15, note: 'Preserve meaningful viewpoints; agreement percentage is descriptive, not a selection score.'}, capabilities: {manage: true},
+    links: {self: '/api/v1/admin/conversations/7/featured-statements', lifecycle: '/app/admin/conversations/7'},
+  }})),
+  http.put(new URL('/api/v1/admin/conversations/7/featured-statements/:statementId', globalThis.location.origin).toString(), ({params}) => HttpResponse.json({data: {featuredId: 62, statementId: Number(params.statementId), changed: true, links: {featured: '/api/v1/admin/conversations/7/featured-statements'}}})),
+  http.delete(new URL('/api/v1/admin/conversations/7/featured-selections/:featuredId', globalThis.location.origin).toString(), ({params}) => HttpResponse.json({data: {featuredId: Number(params.featuredId), statementId: 12, removed: true, links: {featured: '/api/v1/admin/conversations/7/featured-statements'}}})),
+  http.put(new URL('/api/v1/admin/conversations/7/featured-arguments/:argumentId', globalThis.location.origin).toString(), async ({params, request}) => {
+    const body = await request.json() as {hidden: boolean};
+    return HttpResponse.json({data: {argumentId: Number(params.argumentId), hidden: body.hidden, changed: true, links: {featured: '/api/v1/admin/conversations/7/featured-statements'}}});
+  }),
+  http.delete(new URL('/api/v1/admin/conversations/7/featured-arguments/:argumentId', globalThis.location.origin).toString(), ({params}) => HttpResponse.json({data: {argumentId: Number(params.argumentId), featuredId: 61, deleted: true, links: {featured: '/api/v1/admin/conversations/7/featured-statements'}}})),
   http.get(new URL('/api/v1/admin/conversations/7/statements', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     statements: {
@@ -107,7 +121,7 @@ export const handlers = [
       publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
       counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
       capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, archive: true},
-      links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/app/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
+      links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/app/admin/conversations/7/statements', featuredStatements: '/app/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
     },
   }})),
   http.get(new URL('/api/v1/admin/conversations/7/roles', globalThis.location.origin).toString(), () => HttpResponse.json({data: {

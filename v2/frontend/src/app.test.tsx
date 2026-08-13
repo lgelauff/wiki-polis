@@ -131,6 +131,21 @@ test('moderates statements and imports approved seeds through typed commands', a
   expect(await screen.findByRole('status')).toHaveTextContent('2 imported');
 });
 
+test('manages featured statements with transparent vote metrics and argument review', async () => {
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/featured']}><App /></MemoryRouter></QueryClientProvider>);
+
+  expect(await screen.findByRole('heading', {name: 'Featured statements'})).toBeVisible();
+  expect(screen.getByText('A candidate preserving another viewpoint.')).toBeVisible();
+  expect(screen.getByText('Pass').parentElement).toHaveTextContent('2');
+  expect(screen.getByText('Agreement').parentElement).toHaveTextContent('75%');
+  expect(screen.queryByText(/divisiv/i)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name: 'Select'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Statement #13 selected');
+
+  fireEvent.click(screen.getByRole('button', {name: 'Hide'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Argument hidden');
+});
+
 test('manages participant access in the distinct admin workspace', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

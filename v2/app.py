@@ -2578,7 +2578,9 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
             'statements': url_for(
                 'spa_shell', spa_path=f'admin/conversations/{conv.id}/statements',
             ),
-            'featuredStatements': url_for('admin.admin_conversation_featured', conv_id=conv.id),
+            'featuredStatements': url_for(
+                'spa_shell', spa_path=f'admin/conversations/{conv.id}/featured',
+            ),
             'settings': url_for('api_v1.get_admin_conversation_settings', conversation_id=conv.id),
             'termination': url_for(
                 'spa_shell', spa_path=f'admin/conversations/{conv.id}/termination',
