@@ -728,8 +728,9 @@ PHASE_TRANSITIONS = {
     ]},
 }
 
-# Recommended quantities are advisory unless a transition has a separate machine
-# check. Organizers can choose a tier and override individual values per conversation.
+# Recommended quantities are tool-owned guidance unless a transition has a separate
+# machine check. Organizers characterize scope with a tier; they do not override the
+# guidance values individually (#278).
 _RECOMMENDATION_TIERS = {
     'simple': {
         'label': 'Simple topic',
@@ -760,9 +761,6 @@ _RECOMMENDATION_LABELS = {
     'arguments_per_featured': 'arguments per featured statement',
     'votes_per_statement': 'votes per statement before advancing',
 }
-_RECOMMENDED_FEATURED = _RECOMMENDATION_TIERS[_DEFAULT_RECOMMENDATION_TIER]['featured_statements']
-
-
 def _recommendation_profile(conv) -> dict:
     raw = getattr(conv, 'recommended_quantities', None) or {}
     tier = raw.get('tier', _DEFAULT_RECOMMENDATION_TIER)
@@ -770,10 +768,6 @@ def _recommendation_profile(conv) -> dict:
         tier = _DEFAULT_RECOMMENDATION_TIER
     profile = dict(_RECOMMENDATION_TIERS[tier])
     profile['tier'] = tier
-    for key in _RECOMMENDATION_LABELS:
-        value = raw.get(key)
-        if isinstance(value, int) and value > 0:
-            profile[key] = value
     return profile
 
 
@@ -4032,18 +4026,12 @@ def admin_conversation_close(conv_id):
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/recommendations')
 @login_required
-@admin_required
 def admin_conversation_recommendations(conv_id):
-    conv = Conversation.query.get_or_404(conv_id)
+    conv = _require_organizer_for_conv(conv_id)
     tier = request.form.get('tier', _DEFAULT_RECOMMENDATION_TIER)
     if tier not in _RECOMMENDATION_TIERS:
         tier = _DEFAULT_RECOMMENDATION_TIER
-    config = {'tier': tier}
-    for key in _RECOMMENDATION_LABELS:
-        value = request.form.get(key, type=int)
-        if value is not None and value > 0:
-            config[key] = min(value, 999)
-    conv.recommended_quantities = config
+    conv.recommended_quantities = {'tier': tier}
     db.session.commit()
     record_audit('recommendations.set', conv_id=conv.id, tier=tier)
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))

@@ -1817,6 +1817,17 @@ a { color: var(--pass); }
 }
 
 .edit-row-fields label { flex: 1; min-width: 160px; }
+.recommendation-value {
+  flex: 1;
+  min-width: 160px;
+  padding: .5rem .65rem;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+}
+.recommendation-value span,
+.recommendation-value strong { display: block; }
+.recommendation-value span { color: var(--muted); font-size: .75rem; }
+.recommendation-value strong { margin-top: .25rem; font: 650 1.1rem var(--mono); }
 
 .edit-row-texts {
   display: flex;

@@ -916,20 +916,53 @@ def test_featured_check_shows_selected_count_and_recommendation(admin_client, co
     assert b'2 selected, 15 recommended' in resp.data
 
 
-def test_recommendation_override_updates_featured_guidance(admin_client, conv):
+def test_recommendation_tier_owns_featured_guidance(admin_client, conv):
     conv.phase_personal_results = True
     db.session.commit()
     _add_featured(conv)
     admin_client.post(f'/admin/conversations/{conv.id}/recommendations', data={
         'tier': 'complex',
-        'seed_statements': '11',
+        # Legacy numeric inputs are ignored: guidance belongs to the tool (#278).
         'featured_statements': '21',
-        'arguments_per_featured': '4',
-        'votes_per_statement': '60',
     })
     resp = admin_client.get(f'/admin/conversations/{conv.id}')
     assert resp.status_code == 200
-    assert b'1 selected, 21 recommended' in resp.data
+    assert b'1 selected, 24 recommended' in resp.data
+    assert conv.recommended_quantities == {'tier': 'complex'}
+
+
+def test_legacy_recommendation_overrides_are_ignored(admin_client, conv):
+    conv.phase_personal_results = True
+    conv.recommended_quantities = {
+        'tier': 'simple',
+        'featured_statements': 999,
+    }
+    db.session.commit()
+    _add_featured(conv)
+
+    resp = admin_client.get(f'/admin/conversations/{conv.id}')
+
+    assert b'1 selected, 8 recommended' in resp.data
+    assert b'999 recommended' not in resp.data
+
+
+def test_organizer_can_select_recommendation_tier(client, conv, participant):
+    db.session.add(AdminRole(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        role='organizer',
+    ))
+    db.session.commit()
+    login(client, 'testuser')
+
+    response = client.post(
+        f'/admin/conversations/{conv.id}/recommendations',
+        data={'tier': 'simple'},
+    )
+
+    assert response.status_code == 302
+    db.session.refresh(conv)
+    assert conv.recommended_quantities == {'tier': 'simple'}
 
 
 def test_featured_check_zero_confirmed_suppresses_count(admin_client, conv):

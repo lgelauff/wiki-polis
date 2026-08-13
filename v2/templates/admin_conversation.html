@@ -592,9 +592,10 @@
             </select>
           </label>
           {% for key, label in recommendation_labels.items() %}
-          <label>{{ label | capitalize }}
-            <input type="number" min="1" max="999" name="{{ key }}" value="{{ recommendation_profile[key] }}">
-          </label>
+          <div class="recommendation-value">
+            <span>{{ label | capitalize }}</span>
+            <strong>{{ recommendation_profile[key] }}</strong>
+          </div>
           {% endfor %}
         </div>
         <button type="submit">Save recommendations</button>
