@@ -21,6 +21,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/termination": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /** Inspect live empty-conversation deletion eligibility */
+        get: operations["getAdminConversationTermination"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations": {
         parameters: {
             query?: never;
@@ -499,7 +518,8 @@ export interface paths {
         get: operations["getAdminConversationLifecycle"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete a verified empty conversation after hiding it upstream */
+        delete: operations["deleteAdminConversation"];
         options?: never;
         head?: never;
         patch?: never;
@@ -660,6 +680,36 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdminTerminationResponse: {
+            data: components["schemas"]["AdminTermination"];
+        };
+        AdminTermination: {
+            conversation: {
+                id: number;
+                slug: string;
+                title: string;
+            };
+            deletion: {
+                /** @enum {string} */
+                state: "eligible" | "blocked_by_votes" | "unavailable";
+                validVoteCount: number | null;
+                reason: string;
+            };
+            links: {
+                self: string;
+                lifecycle: string;
+            };
+        };
+        AdminDeletionResponse: {
+            data: {
+                conversationId: number;
+                /** @constant */
+                deleted: true;
+                links: {
+                    admin: string;
+                };
+            };
+        };
         AdminSettingsResponse: {
             data: components["schemas"]["AdminSettings"];
         };
@@ -848,6 +898,7 @@ export interface components {
                 statements: string;
                 featuredStatements: string;
                 settings: string;
+                termination: string;
             };
         };
         AdminLifecycleConversation: {
@@ -1704,6 +1755,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+        };
+    };
+    getAdminConversationTermination: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Termination state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTerminationResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -3145,6 +3236,73 @@ export interface operations {
             };
             /** @description Conversation not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteAdminConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deletion receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDeletionResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Votes block deletion or command outcome is unknown */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Voting service hide failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Vote verification unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

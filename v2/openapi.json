@@ -30,6 +30,14 @@
         }
       }
     },
+    "/admin/conversations/{conversationId}/termination": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "get": {"operationId": "getAdminConversationTermination", "summary": "Inspect live empty-conversation deletion eligibility", "responses": {
+        "200": {"description": "Termination state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminTerminationResponse"}}}},
+        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/conversations": {
       "get": {
         "operationId": "getConversationLane",
@@ -749,7 +757,15 @@
           "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
-      }
+      },
+      "delete": {"operationId": "deleteAdminConversation", "summary": "Delete a verified empty conversation after hiding it upstream", "responses": {
+        "200": {"description": "Deletion receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminDeletionResponse"}}}},
+        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Votes block deletion or command outcome is unknown", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "502": {"description": "Voting service hide failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "503": {"description": "Vote verification unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
     },
     "/admin/conversations/{conversationId}/settings": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
@@ -834,6 +850,13 @@
   },
   "components": {
     "schemas": {
+      "AdminTerminationResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminTermination"}}},
+      "AdminTermination": {"type": "object", "required": ["conversation", "deletion", "links"], "additionalProperties": false, "properties": {
+        "conversation": {"type": "object", "required": ["id", "slug", "title"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}}},
+        "deletion": {"type": "object", "required": ["state", "validVoteCount", "reason"], "additionalProperties": false, "properties": {"state": {"type": "string", "enum": ["eligible", "blocked_by_votes", "unavailable"]}, "validVoteCount": {"type": ["integer", "null"], "minimum": 0}, "reason": {"type": "string"}}},
+        "links": {"type": "object", "required": ["self", "lifecycle"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "lifecycle": {"type": "string"}}}
+      }},
+      "AdminDeletionResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["conversationId", "deleted", "links"], "additionalProperties": false, "properties": {"conversationId": {"type": "integer", "minimum": 1}, "deleted": {"type": "boolean", "const": true}, "links": {"type": "object", "required": ["admin"], "additionalProperties": false, "properties": {"admin": {"type": "string"}}}}}}},
       "AdminSettingsResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminSettings"}}},
       "AdminSettingsRequest": {"type": "object", "required": ["title", "introHtml", "outroHtml", "accessPolicy", "recommendationTier"], "additionalProperties": false, "properties": {
         "title": {"type": "string", "minLength": 1, "maxLength": 255}, "introHtml": {"type": "string"}, "outroHtml": {"type": "string"},
@@ -902,8 +925,8 @@
           "capabilities": {"type": "object", "required": ["advancePhase", "pause", "publish", "editSettings", "useAdvancedPhases", "archive"], "additionalProperties": false, "properties": {
             "advancePhase": {"type": "boolean"}, "pause": {"type": "boolean"}, "publish": {"type": "boolean"}, "editSettings": {"type": "boolean"}, "useAdvancedPhases": {"type": "boolean"}, "archive": {"type": "boolean"}
           }},
-          "links": {"type": "object", "required": ["self", "participantView", "participants", "moderation", "invitations", "roles", "statements", "featuredStatements", "settings"], "additionalProperties": false, "properties": {
-            "self": {"type": "string"}, "participantView": {"type": "string"}, "participants": {"type": "string"}, "moderation": {"type": "string"}, "invitations": {"type": "string"}, "roles": {"type": "string"}, "statements": {"type": "string"}, "featuredStatements": {"type": "string"}, "settings": {"type": "string"}
+          "links": {"type": "object", "required": ["self", "participantView", "participants", "moderation", "invitations", "roles", "statements", "featuredStatements", "settings", "termination"], "additionalProperties": false, "properties": {
+            "self": {"type": "string"}, "participantView": {"type": "string"}, "participants": {"type": "string"}, "moderation": {"type": "string"}, "invitations": {"type": "string"}, "roles": {"type": "string"}, "statements": {"type": "string"}, "featuredStatements": {"type": "string"}, "settings": {"type": "string"}, "termination": {"type": "string"}
           }}
         }
       },

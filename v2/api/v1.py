@@ -39,6 +39,10 @@ from services.admin_lifecycle import (
     PublicationReadinessUnconfirmed, PublicationUnavailable,
     ScheduleInPast, ScheduleUnavailable,
 )
+from services.admin_termination import (
+    DeletionBlockedByVotes, DeletionOutcomeUnknown, DeletionUpstreamFailed,
+    DeletionVerificationUnavailable,
+)
 
 _OPENAPI_SPEC = json.loads(
     (Path(__file__).resolve().parents[1] / 'openapi.json').read_text(encoding='utf-8')
@@ -85,6 +89,8 @@ def create_api_v1_blueprint(
     resolve_admin_lifecycle: Callable[[int], dict],
     resolve_admin_settings: Callable[[int], dict],
     update_admin_settings: Callable[[int, dict], dict],
+    resolve_admin_termination: Callable[[int], dict],
+    delete_admin_conversation: Callable[[int], dict],
     advance_admin_phase: Callable[[int, dict], dict],
     set_admin_pause: Callable[[int, dict], dict],
     set_admin_archive: Callable[[int, dict], dict],
@@ -416,6 +422,40 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({
             'data': update_admin_settings(conversation_id, body),
         }))
+
+    @bp.get('/admin/conversations/<int:conversation_id>/termination')
+    def get_admin_conversation_termination(conversation_id: int):
+        return _no_store(jsonify({
+            'data': resolve_admin_termination(conversation_id),
+        }))
+
+    @bp.delete('/admin/conversations/<int:conversation_id>')
+    def delete_admin_conversation_route(conversation_id: int):
+        try:
+            data = delete_admin_conversation(conversation_id)
+        except DeletionVerificationUnavailable:
+            return error_response(
+                'deletion_verification_unavailable',
+                'Voting data could not be verified; nothing was deleted.', 503,
+            )
+        except DeletionBlockedByVotes as exc:
+            return error_response(
+                'deletion_blocked_by_votes',
+                'A conversation with votes must be retained or archived.', 409,
+                details={'validVoteCount': exc.count},
+            )
+        except DeletionUpstreamFailed:
+            return error_response(
+                'upstream_unavailable',
+                'The voting service could not be hidden; nothing was deleted.', 502,
+            )
+        except DeletionOutcomeUnknown:
+            return error_response(
+                'command_outcome_unknown',
+                'The voting service was hidden, but local deletion failed. Do not retry.',
+                409,
+            )
+        return _no_store(jsonify({'data': data}))
 
     @bp.put('/admin/conversations/<int:conversation_id>/phase')
     def put_admin_conversation_phase(conversation_id: int):

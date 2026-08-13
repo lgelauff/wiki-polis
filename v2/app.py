@@ -91,6 +91,11 @@ from services.admin_roles import (
 )
 from services.admin_settings import (build_admin_settings,
                                      update_conversation_settings)
+from services.admin_termination import (
+    DeletionBlockedByVotes, DeletionOutcomeUnknown, DeletionUpstreamFailed,
+    DeletionVerificationUnavailable, build_termination_state,
+    delete_empty_conversation,
+)
 from services.admin_lifecycle import (
     PhasePreparationFailed, PhaseReadinessBlocked,
     PhaseReadinessUnconfirmed, PhaseTransitionConflict,
@@ -2558,6 +2563,9 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
             'statements': url_for('admin.admin_conversation_statements', conv_id=conv.id),
             'featuredStatements': url_for('admin.admin_conversation_featured', conv_id=conv.id),
             'settings': url_for('api_v1.get_admin_conversation_settings', conversation_id=conv.id),
+            'termination': url_for(
+                'spa_shell', spa_path=f'admin/conversations/{conv.id}/termination',
+            ),
         },
     )
 
@@ -2576,6 +2584,46 @@ def _admin_settings_api_payload(conv_id: int) -> dict:
             'spa_shell', spa_path=f'admin/conversations/{conv.id}',
         ),
     )
+
+
+def _admin_termination_api_payload(conv_id: int) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    return build_termination_state(
+        conversation=conv,
+        valid_vote_count=_polis_server_client().get_valid_vote_count(conv.polis_id),
+        self_link=url_for(
+            'api_v1.get_admin_conversation_termination', conversation_id=conv.id,
+        ),
+        lifecycle_link=url_for(
+            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
+        ),
+    )
+
+
+def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    client = _polis_server_client()
+    result = delete_empty_conversation(
+        conversation=conv,
+        valid_vote_count=client.get_valid_vote_count(conv.polis_id),
+        hide_upstream=client.close_and_hide_conversation,
+        delete_local=_delete_local_conversation,
+        session=db.session,
+        audit_deleted=lambda deleted_id: record_audit(
+            'conversation.delete', target_type='conversation',
+            target_id=deleted_id, valid_vote_count=0,
+        ),
+        upstream_errors=(PolisServerError,),
+    )
+    return {
+        'conversationId': result.conversation_id,
+        'deleted': True,
+        'links': {'admin': url_for('admin.admin')},
+    }
 
 
 def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
@@ -4178,34 +4226,26 @@ def admin_conversation_phase_schedule(conv_id):
 @login_required
 @admin_required
 def admin_conversation_delete(conv_id):
-    conv = Conversation.query.get_or_404(conv_id)
-    client = _polis_server_client()
-    valid_vote_count = client.get_valid_vote_count(conv.polis_id)
-    if valid_vote_count is None:
+    try:
+        _delete_admin_conversation_api_payload(conv_id)
+    except DeletionVerificationUnavailable:
         flash('Cannot delete this conversation because Polis vote data could not be verified.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    if valid_vote_count != 0:
+    except DeletionBlockedByVotes as exc:
         flash(
-            f'Cannot delete this conversation because it has {valid_vote_count} valid vote'
-            f'{"s" if valid_vote_count != 1 else ""}.',
+            f'Cannot delete this conversation because it has {exc.count} valid vote'
+            f'{"s" if exc.count != 1 else ""}. Archive it instead.',
             'error',
         )
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    try:
-        client.close_and_hide_conversation(conv.polis_id)
-    except PolisServerError:
+    except DeletionUpstreamFailed:
         current_app.logger.exception('Polis conversation close/hide failed')
         flash('Could not hide the Polis conversation. Nothing was deleted.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    slug = conv.slug
-    polis_id = conv.polis_id
-    record_audit('conversation.delete', conv_id=conv.id, target_type='conversation',
-                 target_id=conv.id, valid_vote_count=valid_vote_count)
-    _delete_local_conversation(conv)
-    db.session.commit()
-    current_app.logger.info('deleted empty conversation slug=%s polis_id=%s', slug, polis_id)
+    except DeletionOutcomeUnknown:
+        current_app.logger.exception('Local deletion failed after Polis hide')
+        flash('The voting service was hidden but local deletion failed. Do not retry until an administrator checks the record.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     flash('Conversation deleted.', 'success')
     return redirect(url_for('admin.admin'))
 
@@ -6162,6 +6202,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_admin_lifecycle=_admin_lifecycle_api_payload,
         resolve_admin_settings=_admin_settings_api_payload,
         update_admin_settings=_update_admin_settings_api_payload,
+        resolve_admin_termination=_admin_termination_api_payload,
+        delete_admin_conversation=_delete_admin_conversation_api_payload,
         advance_admin_phase=_advance_admin_phase_api_payload,
         set_admin_pause=_set_admin_pause_api_payload,
         set_admin_archive=_set_admin_archive_api_payload,
