@@ -2,11 +2,12 @@
 
 from dataclasses import dataclass
 from collections.abc import Iterable
+from datetime import timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from db import ConversationInvite
+from db import Conversation, ConversationInvite
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,53 @@ class InviteBatchResult:
 
 class InviteBatchSaveError(RuntimeError):
     """The batch transaction failed and no new invitation was persisted."""
+
+
+def _utc_iso(value) -> str:
+    aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return aware.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+
+def build_invitation_roster(
+    *, conversation: Conversation, self_link: str, conversation_link: str,
+) -> dict:
+    rows = (
+        ConversationInvite.query
+        .filter_by(conversation_id=conversation.id)
+        .order_by(ConversationInvite.mw_username)
+        .all()
+    )
+    return {
+        'conversation': {
+            'id': conversation.id,
+            'slug': conversation.slug,
+            'title': conversation.title,
+            'accessPolicy': conversation.access_policy,
+        },
+        'invitations': [{
+            'id': row.id,
+            'username': row.mw_username,
+            'createdAt': _utc_iso(row.created_at),
+        } for row in rows],
+        'capabilities': {'manageInvitations': True},
+        'links': {'self': self_link, 'conversation': conversation_link},
+    }
+
+
+class InvitationNotInConversation(LookupError):
+    pass
+
+
+def remove_conversation_invite(session, *, conversation_id: int, invite_id: int):
+    invite = ConversationInvite.query.filter_by(
+        id=invite_id, conversation_id=conversation_id,
+    ).first()
+    if invite is None:
+        raise InvitationNotInConversation()
+    username = invite.mw_username
+    session.delete(invite)
+    session.commit()
+    return username
 
 
 def add_conversation_invites(session, *, conversation_id: int,

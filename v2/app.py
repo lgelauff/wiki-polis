@@ -56,7 +56,11 @@ from services.identity_reveal import (
 )
 from services.informed_voting import build_informed_voting_state
 from services.results_report import build_results_report
-from services.invites import InviteBatchSaveError, add_conversation_invites
+from services.invites import (
+    InvitationNotInConversation, InviteBatchSaveError,
+    add_conversation_invites, build_invitation_roster,
+    remove_conversation_invite,
+)
 from services.conversation_about import build_conversation_about
 from services.conversation_lanes import (build_conversation_lane,
                                          scheduled_transition)
@@ -2452,6 +2456,65 @@ def _set_admin_participant_access_api_payload(
     }
 
 
+def _admin_invitation_links(conv: Conversation) -> tuple[str, str]:
+    return (
+        url_for('api_v1.get_admin_conversation_invites', conversation_id=conv.id),
+        url_for('admin.admin_conversation_detail', conv_id=conv.id),
+    )
+
+
+def _admin_invitation_roster_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    self_link, conversation_link = _admin_invitation_links(conv)
+    return build_invitation_roster(
+        conversation=conv,
+        self_link=self_link,
+        conversation_link=conversation_link,
+    )
+
+
+def _add_admin_invitations_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    usernames = [username.strip() for username in body['usernames']]
+    result = add_conversation_invites(
+        db.session, conversation_id=conv.id, usernames=usernames,
+    )
+    if result.added:
+        record_audit('invite.add', conv_id=conv.id, count=result.added)
+    roster = _admin_invitation_roster_api_payload(conv.id)
+    return {
+        'outcome': {
+            'added': result.added,
+            'alreadyPresent': result.already_present,
+            'concurrentConflicts': result.concurrent_conflicts,
+            'duplicateInputs': result.duplicate_inputs,
+        },
+        'invitations': roster['invitations'],
+        'links': {'invitations': roster['links']['self']},
+    }
+
+
+def _remove_admin_invitation_api_payload(conv_id: int, invite_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    try:
+        remove_conversation_invite(
+            db.session, conversation_id=conv.id, invite_id=invite_id,
+        )
+    except InvitationNotInConversation:
+        abort(404, description='Invitation not found in this conversation.')
+    record_audit(
+        'invite.remove', conv_id=conv.id,
+        target_type='invite', target_id=invite_id,
+    )
+    roster = _admin_invitation_roster_api_payload(conv.id)
+    return {
+        'invitationId': invite_id,
+        'removed': True,
+        'invitations': roster['invitations'],
+        'links': {'invitations': roster['links']['self']},
+    }
+
+
 def _active_conversation_ban(conversation, participant: 'Participant | None'):
     if participant is None:
         return None
@@ -4357,10 +4420,12 @@ def admin_invite_add(conv_id):
 @login_required
 def admin_invite_remove(conv_id, invite_id):
     _require_mod_for_conv(conv_id)
-    invite = ConversationInvite.query.filter_by(
-        id=invite_id, conversation_id=conv_id).first_or_404()
-    db.session.delete(invite)
-    db.session.commit()
+    try:
+        remove_conversation_invite(
+            db.session, conversation_id=conv_id, invite_id=invite_id,
+        )
+    except InvitationNotInConversation:
+        abort(404)
     record_audit('invite.remove', conv_id=conv_id, target_type='invite', target_id=invite_id)
     return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
 
@@ -5861,6 +5926,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         set_admin_participant_access=_set_admin_participant_access_api_payload,
         resolve_admin_flags=_admin_flag_queue_api_payload,
         resolve_admin_flag=_resolve_admin_flag_api_payload,
+        resolve_admin_invites=_admin_invitation_roster_api_payload,
+        add_admin_invites=_add_admin_invitations_api_payload,
+        remove_admin_invite=_remove_admin_invitation_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,

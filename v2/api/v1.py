@@ -29,6 +29,7 @@ from services.argument_commands import (
 )
 from services.content_flags import InvalidFlag
 from services.identity_reveal import RevealUnavailable
+from services.invites import InviteBatchSaveError
 
 _OPENAPI_SPEC = json.loads(
     (Path(__file__).resolve().parents[1] / 'openapi.json').read_text(encoding='utf-8')
@@ -67,6 +68,9 @@ def create_api_v1_blueprint(
     set_admin_participant_access: Callable[[int, int, dict], dict],
     resolve_admin_flags: Callable[[int], dict],
     resolve_admin_flag: Callable[[int, int, dict], dict],
+    resolve_admin_invites: Callable[[int], dict],
+    add_admin_invites: Callable[[int, dict], dict],
+    remove_admin_invite: Callable[[int, int], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
@@ -307,6 +311,40 @@ def create_api_v1_blueprint(
             )
         return _no_store(jsonify({
             'data': resolve_admin_flag(conversation_id, flag_id, body),
+        }))
+
+    @bp.get('/admin/conversations/<int:conversation_id>/invitations')
+    def get_admin_conversation_invites(conversation_id: int):
+        return _no_store(jsonify({
+            'data': resolve_admin_invites(conversation_id),
+        }))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/invitations')
+    def put_admin_conversation_invites(conversation_id: int):
+        body = request.get_json(silent=True)
+        usernames = body.get('usernames') if isinstance(body, dict) else None
+        if (not isinstance(body, dict) or set(body) != {'usernames'}
+                or not isinstance(usernames, list) or not usernames
+                or any(not isinstance(value, str) or not value.strip()
+                       or len(value.strip()) > 255 for value in usernames)):
+            return error_response(
+                'validation_failed', 'Provide one or more Wikimedia usernames.', 400,
+                details={'fields': {'usernames': [
+                    'Use a non-empty list of usernames up to 255 characters each.',
+                ]}},
+            )
+        try:
+            data = add_admin_invites(conversation_id, body)
+        except InviteBatchSaveError:
+            return error_response(
+                'save_failed', 'The invitations could not be saved safely.', 503,
+            )
+        return _no_store(jsonify({'data': data}))
+
+    @bp.delete('/admin/conversations/<int:conversation_id>/invitations/<int:invite_id>')
+    def delete_admin_conversation_invite(conversation_id: int, invite_id: int):
+        return _no_store(jsonify({
+            'data': remove_admin_invite(conversation_id, invite_id),
         }))
 
     @bp.put('/conversations/<slug>/featured-statements/<int:featured_statement_id>/informed-vote')

@@ -407,6 +407,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /** Return the invitation roster and access policy */
+        get: operations["getAdminConversationInvitations"];
+        /** Add a batch of invitations idempotently */
+        put: operations["putAdminConversationInvitations"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/conversations/{conversationId}/invitations/{inviteId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                inviteId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove one invitation */
+        delete: operations["deleteAdminConversationInvitation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -428,6 +468,62 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdminInvitationRosterResponse: {
+            data: components["schemas"]["AdminInvitationRoster"];
+        };
+        AdminInvitationRoster: {
+            conversation: {
+                id: number;
+                slug: string;
+                title: string;
+                /** @enum {string} */
+                accessPolicy: "public" | "invite_only" | "demo";
+            };
+            invitations: components["schemas"]["AdminInvitation"][];
+            capabilities: {
+                manageInvitations: boolean;
+            };
+            links: {
+                self: string;
+                conversation: string;
+            };
+        };
+        AdminInvitation: {
+            id: number;
+            username: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminInvitationBatchRequest: {
+            usernames: string[];
+        };
+        AdminInvitationBatchResponse: {
+            data: components["schemas"]["AdminInvitationBatchReceipt"];
+        };
+        AdminInvitationBatchReceipt: {
+            outcome: {
+                added: number;
+                alreadyPresent: number;
+                concurrentConflicts: number;
+                duplicateInputs: number;
+            };
+            invitations: components["schemas"]["AdminInvitation"][];
+            links: {
+                invitations: string;
+            };
+        };
+        AdminInvitationRemovalResponse: {
+            data: components["schemas"]["AdminInvitationRemovalReceipt"];
+        };
+        AdminInvitationRemovalReceipt: {
+            invitationId: number;
+            /** @constant */
+            removed: true;
+            invitations: components["schemas"]["AdminInvitation"][];
+            links: {
+                invitations: string;
+            };
+        };
         AdminFlagQueueResponse: {
             data: components["schemas"]["AdminFlagQueue"];
         };
@@ -2330,6 +2426,131 @@ export interface operations {
                 };
             };
             /** @description Conversation or flag not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminConversationInvitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Invitation roster */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminInvitationRosterResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminConversationInvitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminInvitationBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Batch outcome and refreshed roster */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminInvitationBatchResponse"];
+                };
+            };
+            /** @description Invalid usernames */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invitations could not be saved atomically */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteAdminConversationInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                inviteId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removal receipt and refreshed roster */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminInvitationRemovalResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or invitation not found */
             404: {
                 headers: {
                     [name: string]: unknown;

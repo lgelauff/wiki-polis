@@ -680,6 +680,40 @@
         }
       }
     },
+    "/admin/conversations/{conversationId}/invitations": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "get": {
+        "operationId": "getAdminConversationInvitations", "summary": "Return the invitation roster and access policy",
+        "responses": {
+          "200": {"description": "Invitation roster", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminInvitationRosterResponse"}}}},
+          "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      },
+      "put": {
+        "operationId": "putAdminConversationInvitations", "summary": "Add a batch of invitations idempotently",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminInvitationBatchRequest"}}}},
+        "responses": {
+          "200": {"description": "Batch outcome and refreshed roster", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminInvitationBatchResponse"}}}},
+          "400": {"description": "Invalid usernames", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "503": {"description": "Invitations could not be saved atomically", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
+    "/admin/conversations/{conversationId}/invitations/{inviteId}": {
+      "parameters": [
+        {"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
+        {"name": "inviteId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}
+      ],
+      "delete": {
+        "operationId": "deleteAdminConversationInvitation", "summary": "Remove one invitation",
+        "responses": {
+          "200": {"description": "Removal receipt and refreshed roster", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminInvitationRemovalResponse"}}}},
+          "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "404": {"description": "Conversation or invitation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -692,6 +726,63 @@
   },
   "components": {
     "schemas": {
+      "AdminInvitationRosterResponse": {
+        "type": "object", "required": ["data"], "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/AdminInvitationRoster"}}
+      },
+      "AdminInvitationRoster": {
+        "type": "object", "required": ["conversation", "invitations", "capabilities", "links"], "additionalProperties": false,
+        "properties": {
+          "conversation": {
+            "type": "object", "required": ["id", "slug", "title", "accessPolicy"], "additionalProperties": false,
+            "properties": {
+              "id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"},
+              "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}
+            }
+          },
+          "invitations": {"type": "array", "items": {"$ref": "#/components/schemas/AdminInvitation"}},
+          "capabilities": {"type": "object", "required": ["manageInvitations"], "additionalProperties": false, "properties": {"manageInvitations": {"type": "boolean"}}},
+          "links": {"type": "object", "required": ["self", "conversation"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "conversation": {"type": "string"}}}
+        }
+      },
+      "AdminInvitation": {
+        "type": "object", "required": ["id", "username", "createdAt"], "additionalProperties": false,
+        "properties": {"id": {"type": "integer", "minimum": 1}, "username": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}
+      },
+      "AdminInvitationBatchRequest": {
+        "type": "object", "required": ["usernames"], "additionalProperties": false,
+        "properties": {"usernames": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 255}}}
+      },
+      "AdminInvitationBatchResponse": {
+        "type": "object", "required": ["data"], "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/AdminInvitationBatchReceipt"}}
+      },
+      "AdminInvitationBatchReceipt": {
+        "type": "object", "required": ["outcome", "invitations", "links"], "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "type": "object", "required": ["added", "alreadyPresent", "concurrentConflicts", "duplicateInputs"], "additionalProperties": false,
+            "properties": {
+              "added": {"type": "integer", "minimum": 0}, "alreadyPresent": {"type": "integer", "minimum": 0},
+              "concurrentConflicts": {"type": "integer", "minimum": 0}, "duplicateInputs": {"type": "integer", "minimum": 0}
+            }
+          },
+          "invitations": {"type": "array", "items": {"$ref": "#/components/schemas/AdminInvitation"}},
+          "links": {"type": "object", "required": ["invitations"], "additionalProperties": false, "properties": {"invitations": {"type": "string"}}}
+        }
+      },
+      "AdminInvitationRemovalResponse": {
+        "type": "object", "required": ["data"], "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/AdminInvitationRemovalReceipt"}}
+      },
+      "AdminInvitationRemovalReceipt": {
+        "type": "object", "required": ["invitationId", "removed", "invitations", "links"], "additionalProperties": false,
+        "properties": {
+          "invitationId": {"type": "integer", "minimum": 1}, "removed": {"type": "boolean", "const": true},
+          "invitations": {"type": "array", "items": {"$ref": "#/components/schemas/AdminInvitation"}},
+          "links": {"type": "object", "required": ["invitations"], "additionalProperties": false, "properties": {"invitations": {"type": "string"}}}
+        }
+      },
       "AdminFlagQueueResponse": {
         "type": "object",
         "required": ["data"],
