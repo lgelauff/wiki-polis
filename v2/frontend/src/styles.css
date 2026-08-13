@@ -618,6 +618,30 @@ a { color: inherit; }
 .moderation-resolve > p { margin: .5rem 0 0; color: var(--dissent); font-size: .7rem; }
 .moderation-empty { margin: 0; padding: 2rem 0; color: var(--muted); border-bottom: 1px solid var(--rule); }
 
+.invitation-shell { width: min(960px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 6rem; }
+.invitation-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 2rem; padding: clamp(3rem, 7vw, 6rem) 0 2rem; border-bottom: 1px solid var(--ink); }
+.invitation-heading h1 { margin: .3rem 0 .7rem; font-size: clamp(2.8rem, 7vw, 5.5rem); line-height: .92; letter-spacing: -.065em; }
+.invitation-heading > div > p:last-child { margin: 0; color: var(--muted); }
+.invitation-policy { display: grid; gap: .4rem; padding: .8rem 1rem; border: 1px solid var(--civic); }
+.invitation-policy span { color: var(--muted); font: .6rem var(--mono); text-transform: uppercase; }
+.invitation-policy strong { font: 650 .8rem var(--mono); text-transform: uppercase; }
+.invitation-add { display: grid; grid-template-columns: minmax(220px, .7fr) minmax(320px, 1fr); gap: 3rem; padding: 3.5rem 0; border-bottom: 1px solid var(--ink); }
+.invitation-add h2 { margin: 0 0 .8rem; font-size: 1.7rem; letter-spacing: -.035em; }
+.invitation-add > div > p:last-child { color: var(--muted); line-height: 1.5; }
+.invitation-add label { display: block; margin-bottom: .5rem; font-weight: 650; }
+.invitation-add textarea { width: 100%; padding: .8rem; resize: vertical; border: 1px solid var(--ink); font: .9rem/1.5 var(--mono); }
+.invitation-add button { margin-top: .7rem; padding: .65rem .8rem; border: 0; color: white; background: var(--ink); cursor: pointer; }
+.invitation-add button:disabled { opacity: .5; cursor: not-allowed; }
+.invitation-outcome { color: var(--consensus); font-size: .7rem; }
+.invitation-roster { margin-top: 3.5rem; }
+.invitation-roster > header { display: flex; align-items: baseline; gap: .7rem; padding-bottom: .65rem; border-bottom: 1px solid var(--ink); }
+.invitation-roster h2 { margin: 0; font-size: .78rem; letter-spacing: .07em; text-transform: uppercase; }
+.invitation-roster header span { color: var(--muted); font: .68rem var(--mono); }
+.invitation-roster ul { margin: 0; padding: 0; list-style: none; }
+.invitation-roster li { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(140px, .7fr) auto; align-items: center; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--rule); }
+.invitation-roster li span { color: var(--muted); font-size: .7rem; }
+.invitation-roster li button { padding: .4rem 0; border: 0; color: var(--dissent); background: none; cursor: pointer; font-size: .68rem; text-decoration: underline; }
+
 @keyframes ledger-in {
   from { opacity: 0; translate: 0 10px; }
 }
@@ -625,7 +649,7 @@ a { color: inherit; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
 }
 @media (max-width: 720px) {
-  .app-header__inner, .lane-shell, .record-shell, .admin-roster, .moderation-shell { width: min(100% - 24px, 1120px); }
+  .app-header__inner, .lane-shell, .record-shell, .admin-roster, .moderation-shell, .invitation-shell { width: min(100% - 24px, 1120px); }
   .brand__beta, .account-link, .account-form span { display: none; }
   .admin-mode a { display: none; }
   .app-header__inner { gap: .6rem; }
@@ -681,4 +705,7 @@ a { color: inherit; }
   .admin-roster__heading { grid-template-columns: 1fr; align-items: start; }
   .moderation-heading { grid-template-columns: 1fr; align-items: start; }
   .moderation-list > li, .moderation-section--resolved .moderation-list > li { grid-template-columns: 1fr; gap: 1rem; }
+  .invitation-heading, .invitation-add { grid-template-columns: 1fr; align-items: start; gap: 1.5rem; }
+  .invitation-roster li { grid-template-columns: 1fr auto; }
+  .invitation-roster li span { grid-column: 1 / -1; }
 }

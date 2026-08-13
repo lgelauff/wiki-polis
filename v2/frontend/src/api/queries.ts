@@ -145,6 +145,44 @@ export async function putAdminFlagResolution(
   ).data;
 }
 
+export const adminInvitationRosterQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-invitation-roster', conversationId],
+  queryFn: async () => (
+    await requireApiData(api.GET('/admin/conversations/{conversationId}/invitations', {
+      params: {path: {conversationId}},
+    }))
+  ).data,
+  staleTime: 10_000,
+});
+
+export async function putAdminInvitations(
+  conversationId: number,
+  body: components['schemas']['AdminInvitationBatchRequest'],
+  csrfToken: string,
+) {
+  return (
+    await requireApiData(api.PUT('/admin/conversations/{conversationId}/invitations', {
+      params: {path: {conversationId}}, body, headers: {'X-CSRFToken': csrfToken},
+    }))
+  ).data;
+}
+
+export async function deleteAdminInvitation(
+  conversationId: number,
+  inviteId: number,
+  csrfToken: string,
+) {
+  return (
+    await requireApiData(api.DELETE(
+      '/admin/conversations/{conversationId}/invitations/{inviteId}',
+      {
+        params: {path: {conversationId, inviteId}},
+        headers: {'X-CSRFToken': csrfToken},
+      },
+    ))
+  ).data;
+}
+
 export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
   queryKey: ['pseudonym-suggestions', slug],
   queryFn: async () => (

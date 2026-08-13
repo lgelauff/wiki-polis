@@ -2,6 +2,36 @@ import {http, HttpResponse} from 'msw';
 
 export const handlers = [
   http.get(
+    new URL('/api/v1/admin/conversations/7/invitations', globalThis.location.origin).toString(),
+    () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'invite_only'},
+      invitations: [{id: 51, username: 'Existing editor', createdAt: '2026-08-01T10:00:00Z'}],
+      capabilities: {manageInvitations: true},
+      links: {self: '/api/v1/admin/conversations/7/invitations', conversation: '/admin/conversations/7'},
+    }}),
+  ),
+  http.put(
+    new URL('/api/v1/admin/conversations/7/invitations', globalThis.location.origin).toString(),
+    async ({request}) => {
+      const body = await request.json() as {usernames: string[]};
+      return HttpResponse.json({data: {
+        outcome: {added: 1, alreadyPresent: 0, concurrentConflicts: 0, duplicateInputs: body.usernames.length - 1},
+        invitations: [
+          {id: 51, username: 'Existing editor', createdAt: '2026-08-01T10:00:00Z'},
+          {id: 52, username: body.usernames[0], createdAt: '2026-08-13T10:00:00Z'},
+        ],
+        links: {invitations: '/api/v1/admin/conversations/7/invitations'},
+      }});
+    },
+  ),
+  http.delete(
+    new URL('/api/v1/admin/conversations/7/invitations/:inviteId', globalThis.location.origin).toString(),
+    ({params}) => HttpResponse.json({data: {
+      invitationId: Number(params.inviteId), removed: true, invitations: [],
+      links: {invitations: '/api/v1/admin/conversations/7/invitations'},
+    }}),
+  ),
+  http.get(
     new URL('/api/v1/admin/conversations/7/flags', globalThis.location.origin).toString(),
     () => HttpResponse.json({
       data: {

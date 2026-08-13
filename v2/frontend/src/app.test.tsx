@@ -75,6 +75,29 @@ test('resolves a privacy-safe moderation item through the typed contract', async
   expect(screen.getByRole('heading', {name: 'Resolved'}).parentElement).toHaveTextContent('1');
 });
 
+test('adds and removes invitations through convergent admin commands', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/admin/conversations/7/invitations']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: 'Invitations'})).toBeVisible();
+  expect(screen.getByText('Existing editor')).toBeVisible();
+  fireEvent.change(screen.getByLabelText('Wikimedia usernames'), {
+    target: {value: 'New editor\nNew editor'},
+  });
+  fireEvent.click(screen.getByRole('button', {name: 'Add invitations'}));
+
+  expect(await screen.findByText('New editor')).toBeVisible();
+  expect(screen.getByRole('status')).toHaveTextContent('1 added');
+  expect(screen.getByRole('status')).toHaveTextContent('1 duplicate input');
+  fireEvent.click(screen.getByRole('button', {name: 'Remove New editor'}));
+  expect(await screen.findByText('No invitations yet.')).toBeVisible();
+});
+
 test('renders a conversation record from the generated API contract', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

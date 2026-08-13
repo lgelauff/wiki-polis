@@ -444,7 +444,7 @@
         <div class="manage-card-title">Statements</div>
         <div class="manage-card-desc">Review, approve or hide statements; add seed statements</div>
       </a>
-      <a class="manage-card" href="{{ url_for('admin.admin_conversation_invites', conv_id=conversation.id) }}">
+      <a class="manage-card" href="{{ url_for('spa_shell', spa_path='admin/conversations/' ~ conversation.id ~ '/invitations') }}">
         <div class="manage-card-top"><span class="manage-card-count">{{ invite_count }} invite{{ 's' if invite_count != 1 }}</span></div>
         <div class="manage-card-title">Invites &amp; access</div>
         <div class="manage-card-desc">Who can join this consultation</div>
