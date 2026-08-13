@@ -505,6 +505,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/phase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Advance the guided lifecycle after confirming readiness */
+        put: operations["putAdminConversationPhase"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -528,6 +547,23 @@ export interface components {
     schemas: {
         AdminLifecycleResponse: {
             data: components["schemas"]["AdminLifecycle"];
+        };
+        AdminPhaseAdvanceRequest: {
+            confirmedPreconditionIds: string[];
+        };
+        AdminPhaseAdvanceResponse: {
+            data: components["schemas"]["AdminPhaseAdvanceReceipt"];
+        };
+        AdminPhaseAdvanceReceipt: {
+            transition: {
+                sourceKey: string;
+                targetKey: string;
+                targetLabel: string;
+                phase6Created: boolean;
+                phase6SyncMessage: string | null;
+                visibilitySynced: boolean;
+            };
+            lifecycle: components["schemas"]["AdminLifecycle"];
         };
         AdminLifecycle: {
             conversation: components["schemas"]["AdminLifecycleConversation"];
@@ -2868,6 +2904,77 @@ export interface operations {
             };
             /** @description Conversation not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminConversationPhase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPhaseAdvanceRequest"];
+            };
+        };
+        responses: {
+            /** @description Transition receipt and refreshed lifecycle */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPhaseAdvanceResponse"];
+                };
+            };
+            /** @description Invalid confirmation payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Organizer permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Readiness, state, concurrency, or unknown-outcome conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The next phase could not be prepared upstream */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The phase transition could not be saved */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

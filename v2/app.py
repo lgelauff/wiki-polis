@@ -89,7 +89,12 @@ from services.admin_roles import (
     RoleParticipantNotFound, build_admin_role_roster,
     replace_conversation_roles,
 )
-from services.admin_lifecycle import build_admin_lifecycle
+from services.admin_lifecycle import (
+    PhasePreparationFailed, PhaseReadinessBlocked,
+    PhaseReadinessUnconfirmed, PhaseTransitionConflict,
+    PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
+    advance_conversation_phase, build_admin_lifecycle,
+)
 from services.idempotency import (complete_command, release_reservation,
                                   request_digest, reserve_command)
 from services.statements import (DerivativeSimilarityTooLow,
@@ -2527,6 +2532,41 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
     )
 
 
+def _advance_admin_phase_command(conv: Conversation, confirmed_ids: set[str]):
+    return advance_conversation_phase(
+        conversation=conv,
+        transition=_transition_context(conv),
+        linear=_is_linear_phase_state(conv),
+        confirmed_preconditions=confirmed_ids,
+        session=db.session,
+        init_phase6=_init_phase6,
+        sync_phase6=_sync_phase6_featured,
+        apply_transition=_apply_phase_transition,
+        sync_visibility=_sync_vis_type,
+        invalidate_results=_invalidate_phase6_results_cache,
+        audit=record_audit,
+        logger=current_app.logger,
+    )
+
+
+def _advance_admin_phase_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_organizer_for_conv(conv_id)
+    result = _advance_admin_phase_command(
+        conv, set(body['confirmedPreconditionIds']),
+    )
+    return {
+        'transition': {
+            'sourceKey': result.source_key,
+            'targetKey': result.target_key,
+            'targetLabel': result.target_label,
+            'phase6Created': result.phase6_created,
+            'phase6SyncMessage': result.sync_message,
+            'visibilitySynced': result.visibility_synced,
+        },
+        'lifecycle': _admin_lifecycle_api_payload(conv.id),
+    }
+
+
 def _replace_admin_roles_api_payload(
     conv_id: int, participant_id: int, body: dict,
 ) -> dict:
@@ -4087,74 +4127,33 @@ def admin_conversation_advance(conv_id):
     """
     conv = _require_organizer_for_conv(conv_id)
     redirect_to = redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    ctx = _transition_context(conv)
-    if ctx is None:
-        if not _is_linear_phase_state(conv):
-            flash('Phases are in a custom state — use Advanced controls to adjust.', 'error')
-        else:
-            flash('Already at the final phase (public results).', 'error')
-        return redirect_to
-
-    # Server-side enforcement of the readiness checklist (the UI disables the button
-    # until all are ticked; a stale page or direct POST must not bypass it).
-    for p in ctx['preconditions']:
-        if request.form.get(p['id']) != 'on':
-            flash('Confirm every readiness check before moving on.', 'error')
-            return redirect_to
-        if p.get('met') is False:                 # machine-checkable and currently unmet
-            flash('A readiness condition is not met yet — fix it before moving on.', 'error')
-            return redirect_to
-
-    # Run the Phase 6 Polis I/O FIRST, before mutating conv. This keeps the network
-    # round-trips out of the open write transaction: the only DB write happens at the
-    # commit below, so a slow Polis backend never holds a row lock on the conversation.
-    # First entry → initialise the round. Re-entry (the featured set may have changed
-    # in between) → re-sync round 6 to the current featured set, preserving votes (#175).
-    created_p6 = None
-    sync_msg = None
-    if ctx['runs_phase6_init']:
-        if not conv.phase6_polis_conversation_id:
-            ok, msg = _init_phase6(conv)          # assigns ids onto conv/featured; no commit
-            if not ok:
-                db.session.rollback()
-                flash(msg, 'error')
-                return redirect_to
-            created_p6 = conv.phase6_polis_conversation_id
-        else:
-            ok, sync_msg = _sync_phase6_featured(conv)
-            if not ok:
-                db.session.rollback()
-                flash(sync_msg, 'error')
-                return redirect_to
-
-    source_key, target_key = _apply_phase_transition(conv, ctx)
-
-    slug = conv.slug                              # capture before any rollback expires it
     try:
-        db.session.commit()                       # flag flip (+ phase6 ids / close) atomic
-    except IntegrityError:
-        db.session.rollback()
-        # A concurrent transition won the UNIQUE race. The winner committed cleanly, so
-        # reload-and-retry resolves it. If we created a Phase 6 Polis conversation in this
-        # request it is now orphaned — log it for manual cleanup.
-        if created_p6:
-            current_app.logger.error(
-                'Phase advance lost a concurrent race after Phase 6 init — '
-                'orphaned Polis conversation %s (conv %s)', created_p6, slug)
+        result = _advance_admin_phase_command(
+            conv,
+            {key for key, value in request.form.items() if value == 'on'},
+        )
+    except PhaseTransitionUnavailable as exc:
+        flash(
+            'Phases are in a custom state — use Advanced controls to adjust.'
+            if exc.nonlinear else 'Already at the final phase (public results).',
+            'error',
+        )
+        return redirect_to
+    except PhaseReadinessUnconfirmed:
+        flash('Confirm every readiness check before moving on.', 'error')
+        return redirect_to
+    except PhaseReadinessBlocked:
+        flash('A readiness condition is not met yet — fix it before moving on.', 'error')
+        return redirect_to
+    except PhasePreparationFailed as exc:
+        flash(exc.message, 'error')
+        return redirect_to
+    except PhaseTransitionConflict:
         flash('Could not move on — the conversation changed at the same time. '
               'Reload and try again.', 'error')
         return redirect_to
-    except SQLAlchemyError:
-        # Any other DB failure (deadlock, timeout, lost connection). Scoped to
-        # SQLAlchemyError so genuine programming errors still surface. If Phase 6 init
-        # already created a remote conversation it is orphaned — a blind retry would
-        # create a SECOND one, so warn the organizer rather than inviting a re-submit.
-        db.session.rollback()
-        if created_p6:
-            current_app.logger.error(
-                'Phase advance commit failed after Phase 6 init — '
-                'orphaned Polis conversation %s (conv %s)', created_p6, slug)
+    except PhaseTransitionSaveFailed as exc:
+        if exc.outcome_unknown:
             flash('Could not complete the move — a database error occurred, and a '
                   'linked Polis conversation may already have been created. Do not '
                   'simply retry; check with a site admin first.', 'error')
@@ -4162,14 +4161,14 @@ def admin_conversation_advance(conv_id):
             flash('Could not move on — a database error occurred. Please try again.', 'error')
         return redirect_to
 
-    record_audit('phase.advance', conv_id=conv.id, target_type='phase', target_id=target_key,
-                 from_phase=source_key, phase6_created=bool(created_p6))
-
-    if not _sync_vis_type(conv):
+    if not result.visibility_synced:
         flash('Phase moved, but updating results visibility in Polis failed.', 'error')
-    if sync_msg:                                  # re-entry re-synced round 6 (#175)
-        flash(sync_msg, 'warning' if 'check manually' in sync_msg else 'success')
-    flash(f'Moved to: {ctx["target"]["label"]}.', 'success')
+    if result.sync_message:
+        flash(
+            result.sync_message,
+            'warning' if 'check manually' in result.sync_message else 'success',
+        )
+    flash(f'Moved to: {result.target_label}.', 'success')
     return redirect_to
 
 
@@ -6017,6 +6016,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_admin_roles=_admin_role_roster_api_payload,
         replace_admin_roles=_replace_admin_roles_api_payload,
         resolve_admin_lifecycle=_admin_lifecycle_api_payload,
+        advance_admin_phase=_advance_admin_phase_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,

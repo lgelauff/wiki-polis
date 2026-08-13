@@ -30,6 +30,11 @@ from services.argument_commands import (
 from services.content_flags import InvalidFlag
 from services.identity_reveal import RevealUnavailable
 from services.invites import InviteBatchSaveError
+from services.admin_lifecycle import (
+    PhasePreparationFailed, PhaseReadinessBlocked,
+    PhaseReadinessUnconfirmed, PhaseTransitionConflict,
+    PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
+)
 
 _OPENAPI_SPEC = json.loads(
     (Path(__file__).resolve().parents[1] / 'openapi.json').read_text(encoding='utf-8')
@@ -74,6 +79,7 @@ def create_api_v1_blueprint(
     resolve_admin_roles: Callable[[int], dict],
     replace_admin_roles: Callable[[int, int, dict], dict],
     resolve_admin_lifecycle: Callable[[int], dict],
+    advance_admin_phase: Callable[[int, dict], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
@@ -361,6 +367,54 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({
             'data': resolve_admin_lifecycle(conversation_id),
         }))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/phase')
+    def put_admin_conversation_phase(conversation_id: int):
+        body = request.get_json(silent=True)
+        confirmed = body.get('confirmedPreconditionIds') if isinstance(body, dict) else None
+        if (not isinstance(body, dict)
+                or set(body) != {'confirmedPreconditionIds'}
+                or not isinstance(confirmed, list)
+                or any(not isinstance(value, str) or not value for value in confirmed)
+                or len(set(confirmed)) != len(confirmed)):
+            return error_response(
+                'validation_failed', 'Confirm the transition readiness checks.', 400,
+            )
+        try:
+            data = advance_admin_phase(conversation_id, body)
+        except PhaseTransitionUnavailable as exc:
+            return error_response(
+                'nonlinear_phase_state' if exc.nonlinear else 'final_phase',
+                'The conversation does not have a guided next phase.', 409,
+            )
+        except PhaseReadinessUnconfirmed as exc:
+            return error_response(
+                'readiness_unconfirmed', 'Confirm every readiness check.', 409,
+                details={'preconditionIds': exc.ids},
+            )
+        except PhaseReadinessBlocked as exc:
+            return error_response(
+                'readiness_blocked', 'A machine-checked condition is not met.', 409,
+                details={'preconditionIds': exc.ids},
+            )
+        except PhasePreparationFailed:
+            return error_response(
+                'phase_preparation_failed',
+                'The next phase could not be prepared safely.', 502,
+            )
+        except PhaseTransitionConflict:
+            return error_response(
+                'transition_conflict',
+                'The conversation changed concurrently. Reload before retrying.', 409,
+            )
+        except PhaseTransitionSaveFailed as exc:
+            return error_response(
+                'command_outcome_unknown' if exc.outcome_unknown else 'save_failed',
+                ('A linked voting round may have been created. Do not retry until a site admin checks it.'
+                 if exc.outcome_unknown else 'The phase change could not be saved.'),
+                409 if exc.outcome_unknown else 503,
+            )
+        return _no_store(jsonify({'data': data}))
 
     @bp.put('/admin/conversations/<int:conversation_id>/roles/<int:participant_id>')
     def put_admin_conversation_roles(conversation_id: int, participant_id: int):

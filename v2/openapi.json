@@ -751,6 +751,21 @@
         }
       }
     },
+    "/admin/conversations/{conversationId}/phase": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "put": {
+        "operationId": "putAdminConversationPhase", "summary": "Advance the guided lifecycle after confirming readiness",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPhaseAdvanceRequest"}}}},
+        "responses": {
+          "200": {"description": "Transition receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPhaseAdvanceResponse"}}}},
+          "400": {"description": "Invalid confirmation payload", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Readiness, state, concurrency, or unknown-outcome conflict", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "502": {"description": "The next phase could not be prepared upstream", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "503": {"description": "The phase transition could not be saved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -766,6 +781,23 @@
       "AdminLifecycleResponse": {
         "type": "object", "required": ["data"], "additionalProperties": false,
         "properties": {"data": {"$ref": "#/components/schemas/AdminLifecycle"}}
+      },
+      "AdminPhaseAdvanceRequest": {
+        "type": "object", "required": ["confirmedPreconditionIds"], "additionalProperties": false,
+        "properties": {"confirmedPreconditionIds": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}}
+      },
+      "AdminPhaseAdvanceResponse": {
+        "type": "object", "required": ["data"], "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/AdminPhaseAdvanceReceipt"}}
+      },
+      "AdminPhaseAdvanceReceipt": {
+        "type": "object", "required": ["transition", "lifecycle"], "additionalProperties": false,
+        "properties": {
+          "transition": {"type": "object", "required": ["sourceKey", "targetKey", "targetLabel", "phase6Created", "phase6SyncMessage", "visibilitySynced"], "additionalProperties": false, "properties": {
+            "sourceKey": {"type": "string"}, "targetKey": {"type": "string"}, "targetLabel": {"type": "string"}, "phase6Created": {"type": "boolean"}, "phase6SyncMessage": {"type": ["string", "null"]}, "visibilitySynced": {"type": "boolean"}
+          }},
+          "lifecycle": {"$ref": "#/components/schemas/AdminLifecycle"}
+        }
       },
       "AdminLifecycle": {
         "type": "object", "required": ["conversation", "operator", "phase", "schedule", "counts", "capabilities", "links"], "additionalProperties": false,
