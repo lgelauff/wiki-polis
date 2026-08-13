@@ -779,6 +779,28 @@
         "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
+    "/admin/conversations/{conversationId}/statements": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "get": {"operationId": "getAdminConversationStatements", "summary": "Return the privacy-safe statement moderation workspace", "responses": {
+        "200": {"description": "Statement workspace", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementWorkspaceResponse"}}}},
+        "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
+    "/admin/conversations/{conversationId}/statements/{statementId}/moderation": {
+      "parameters": [
+        {"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
+        {"name": "statementId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 0}}
+      ],
+      "put": {"operationId": "putAdminStatementModeration", "summary": "Replace one statement's moderation state", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementModerationRequest"}}}}, "responses": {
+        "200": {"description": "Moderation receipt and refreshed workspace", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementModerationResponse"}}}},
+        "400": {"description": "Invalid moderation state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "404": {"description": "Conversation or statement not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Last featured statement is protected during argument mapping", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "502": {"description": "Statement service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/phase": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "put": {
@@ -857,6 +879,23 @@
         "links": {"type": "object", "required": ["self", "lifecycle"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "lifecycle": {"type": "string"}}}
       }},
       "AdminDeletionResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["conversationId", "deleted", "links"], "additionalProperties": false, "properties": {"conversationId": {"type": "integer", "minimum": 1}, "deleted": {"type": "boolean", "const": true}, "links": {"type": "object", "required": ["admin"], "additionalProperties": false, "properties": {"admin": {"type": "string"}}}}}}},
+      "AdminStatementWorkspaceResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminStatementWorkspace"}}},
+      "AdminStatementModerationRequest": {"type": "object", "required": ["status"], "additionalProperties": false, "properties": {"status": {"type": "string", "enum": ["approved", "pending", "hidden"]}}},
+      "AdminStatementModerationResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "status", "links"], "additionalProperties": false, "properties": {"statementId": {"type": "integer", "minimum": 0}, "status": {"type": "string", "enum": ["approved", "pending", "hidden"]}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
+      "AdminStatementWorkspace": {"type": "object", "required": ["conversation", "statements", "moderationPolicy", "dataAvailability", "seeding", "capabilities", "links"], "additionalProperties": false, "properties": {
+        "conversation": {"type": "object", "required": ["id", "slug", "title"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}}},
+        "statements": {"type": "object", "required": ["pending", "approved", "hidden"], "additionalProperties": false, "properties": {"pending": {"type": "array", "items": {"$ref": "#/components/schemas/AdminStatement"}}, "approved": {"type": "array", "items": {"$ref": "#/components/schemas/AdminStatement"}}, "hidden": {"type": "array", "items": {"$ref": "#/components/schemas/AdminStatement"}}}},
+        "moderationPolicy": {"type": "object", "required": ["strict", "available"], "additionalProperties": false, "properties": {"strict": {"type": ["boolean", "null"]}, "available": {"type": "boolean"}}},
+        "dataAvailability": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "boolean"}}},
+        "seeding": {"type": "object", "required": ["allowed", "lockReason", "maxStatementsPerImport", "maxCharactersPerStatement"], "additionalProperties": false, "properties": {"allowed": {"type": "boolean"}, "lockReason": {"type": ["string", "null"]}, "maxStatementsPerImport": {"type": "integer", "minimum": 1}, "maxCharactersPerStatement": {"type": "integer", "minimum": 1}}},
+        "capabilities": {"type": "object", "required": ["moderate", "seed"], "additionalProperties": false, "properties": {"moderate": {"type": "boolean"}, "seed": {"type": "boolean"}}},
+        "links": {"type": "object", "required": ["self", "lifecycle"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "lifecycle": {"type": "string"}}}
+      }},
+      "AdminStatement": {"type": "object", "required": ["id", "text", "moderation", "seed", "featured", "votes", "provenance"], "additionalProperties": false, "properties": {
+        "id": {"type": "integer", "minimum": 0}, "text": {"type": "string"}, "moderation": {"type": "string", "enum": ["approved", "pending", "hidden"]}, "seed": {"type": "boolean"}, "featured": {"type": "boolean"},
+        "votes": {"type": "object", "required": ["agree", "pass", "disagree"], "additionalProperties": false, "properties": {"agree": {"type": "integer", "minimum": 0}, "pass": {"type": "integer", "minimum": 0}, "disagree": {"type": "integer", "minimum": 0}}},
+        "provenance": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["derivedFromId", "scores"], "additionalProperties": false, "properties": {"derivedFromId": {"type": "integer", "minimum": 0}, "scores": {"type": "array", "items": {"type": "object", "required": ["model", "value"], "additionalProperties": false, "properties": {"model": {"type": "string"}, "value": {"type": "number", "minimum": 0, "maximum": 1}}}}}}]}
+      }},
       "AdminSettingsResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminSettings"}}},
       "AdminSettingsRequest": {"type": "object", "required": ["title", "introHtml", "outroHtml", "accessPolicy", "recommendationTier"], "additionalProperties": false, "properties": {
         "title": {"type": "string", "minLength": 1, "maxLength": 255}, "introHtml": {"type": "string"}, "outroHtml": {"type": "string"},

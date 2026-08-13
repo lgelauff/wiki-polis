@@ -96,6 +96,10 @@ from services.admin_termination import (
     DeletionVerificationUnavailable, build_termination_state,
     delete_empty_conversation,
 )
+from services.admin_statements import (
+    LastFeaturedStatementProtected, StatementModerationUpstreamFailed,
+    build_statement_workspace, moderate_statement,
+)
 from services.admin_lifecycle import (
     PhasePreparationFailed, PhaseReadinessBlocked,
     PhaseReadinessUnconfirmed, PhaseTransitionConflict,
@@ -2602,6 +2606,102 @@ def _admin_termination_api_payload(conv_id: int) -> dict:
     )
 
 
+def _load_admin_statement_sources(conv: Conversation):
+    """Load the upstream statement buckets and policy without exposing raw rows."""
+    result = _polis_server_client().get_statements(conv.polis_id)
+    if result is None:
+        try:
+            result = PolisParticipantClient(
+                current_app.config['PARTICIAPI_BASE'],
+            ).get_statements(conv.polis_id)
+        except PolisParticipantError:
+            result = None
+    strict_moderation = None
+    try:
+        settings = PolisParticipantClient(
+            current_app.config['PARTICIAPI_BASE'],
+        ).get_settings(conv.polis_id)
+        if isinstance(settings.get('strict_moderation'), bool):
+            strict_moderation = settings['strict_moderation']
+    except PolisParticipantError:
+        pass
+    return result, strict_moderation
+
+
+def _admin_statements_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    result, strict_moderation = _load_admin_statement_sources(conv)
+    pending, approved, hidden = result or ([], [], [])
+    all_tids = [row['tid'] for row in pending + approved + hidden]
+    featured_tids = {
+        row.polis_statement_id
+        for row in FeaturedStatement.query.filter_by(conversation_id=conv.id).all()
+    }
+    return build_statement_workspace(
+        conversation=conv,
+        buckets={
+            'pending': pending, 'approved': approved, 'hidden': hidden,
+        },
+        featured_tids=featured_tids,
+        provenance_by_tid=_provenance_map(conv.id, all_tids),
+        strict_moderation=strict_moderation,
+        statements_available=result is not None,
+        seed_lock_reason=_seed_statement_lock_reason(conv),
+        max_import_rows=MAX_ROWS,
+        max_statement_characters=MAX_TEXT_CHARS,
+        self_link=url_for(
+            'api_v1.get_admin_conversation_statements', conversation_id=conv.id,
+        ),
+        lifecycle_link=url_for(
+            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
+        ),
+    )
+
+
+def _moderate_admin_statement_api_payload(
+    conv_id: int, statement_id: int, body: dict,
+) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    result, _strict = _load_admin_statement_sources(conv)
+    if result is None:
+        raise StatementModerationUpstreamFailed()
+    pending, approved, hidden = result
+    known_tids = {
+        int(row['tid']) for row in pending + approved + hidden
+    }
+    if statement_id not in known_tids:
+        abort(404, description='Statement not found in this conversation.')
+    featured_count = FeaturedStatement.query.filter_by(
+        conversation_id=conv.id,
+    ).count()
+    is_featured = FeaturedStatement.query.filter_by(
+        conversation_id=conv.id, polis_statement_id=statement_id,
+    ).first() is not None
+    outcome = moderate_statement(
+        conversation=conv,
+        statement_id=statement_id,
+        status=body['status'],
+        is_featured=is_featured,
+        featured_count=featured_count,
+        moderate_upstream=_polis_server_client().moderate,
+        audit=lambda tid, decision: record_audit(
+            'statement.moderate', conv_id=conv.id,
+            target_type='statement', target_id=tid, decision=decision,
+        ),
+        upstream_errors=(PolisServerError,),
+    )
+    return {
+        'statementId': outcome.statement_id,
+        'status': outcome.status,
+        'links': {
+            'statements': url_for(
+                'api_v1.get_admin_conversation_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
 def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
@@ -4749,34 +4849,22 @@ def admin_conversation_statements(conv_id):
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
 @login_required
 def admin_statement_moderate(conv_id, tid):
-    conv = _require_mod_for_conv(conv_id)
     mod  = request.form.get('mod', type=int)
     if mod not in (-1, 0, 1):
         abort(400)
-    if mod in (-1, 0):
-        is_featured = FeaturedStatement.query.filter_by(
-            conversation_id=conv_id, polis_statement_id=tid).first() is not None
-        if is_featured and conv.phase_argument_mapping:
-            # Best-effort check: the mutation here is a Polis API call, not a
-            # DB write, so FOR UPDATE would be released before the call anyway.
-            # The strong DB-level invariant is enforced by admin_featured_remove,
-            # which does lock correctly before db.session.commit().
-            featured_count = FeaturedStatement.query.filter_by(
-                conversation_id=conv_id).count()
-            if featured_count <= 1:
-                flash(
-                    'Cannot hide or move the last featured statement to pending while argument mapping is active. Disable the argument mapping phase first.',
-                    'error'
-                )
-                return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
     try:
-        _polis_server_client().moderate(conv.polis_id, tid, mod)
-    except PolisServerError:
+        _moderate_admin_statement_api_payload(
+            conv_id, tid,
+            {'status': {-1: 'hidden', 0: 'pending', 1: 'approved'}[mod]},
+        )
+    except LastFeaturedStatementProtected:
+        flash(
+            'Cannot hide or move the last featured statement to pending while argument mapping is active. Disable the argument mapping phase first.',
+            'error',
+        )
+    except StatementModerationUpstreamFailed:
         current_app.logger.exception('moderate failed')
         flash('Moderation action failed. Check server logs for details.', 'error')
-        return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
-    record_audit('statement.moderate', conv_id=conv_id, target_type='statement',
-                 target_id=tid, decision=mod)
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed')
@@ -6204,6 +6292,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         update_admin_settings=_update_admin_settings_api_payload,
         resolve_admin_termination=_admin_termination_api_payload,
         delete_admin_conversation=_delete_admin_conversation_api_payload,
+        resolve_admin_statements=_admin_statements_api_payload,
+        moderate_admin_statement=_moderate_admin_statement_api_payload,
         advance_admin_phase=_advance_admin_phase_api_payload,
         set_admin_pause=_set_admin_pause_api_payload,
         set_admin_archive=_set_admin_archive_api_payload,

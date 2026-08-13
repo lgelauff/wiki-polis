@@ -545,6 +545,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /** Return the privacy-safe statement moderation workspace */
+        get: operations["getAdminConversationStatements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/conversations/{conversationId}/statements/{statementId}/moderation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                statementId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace one statement's moderation state */
+        put: operations["putAdminStatementModeration"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/phase": {
         parameters: {
             query?: never;
@@ -708,6 +747,76 @@ export interface components {
                 links: {
                     admin: string;
                 };
+            };
+        };
+        AdminStatementWorkspaceResponse: {
+            data: components["schemas"]["AdminStatementWorkspace"];
+        };
+        AdminStatementModerationRequest: {
+            /** @enum {string} */
+            status: "approved" | "pending" | "hidden";
+        };
+        AdminStatementModerationResponse: {
+            data: {
+                statementId: number;
+                /** @enum {string} */
+                status: "approved" | "pending" | "hidden";
+                links: {
+                    statements: string;
+                };
+            };
+        };
+        AdminStatementWorkspace: {
+            conversation: {
+                id: number;
+                slug: string;
+                title: string;
+            };
+            statements: {
+                pending: components["schemas"]["AdminStatement"][];
+                approved: components["schemas"]["AdminStatement"][];
+                hidden: components["schemas"]["AdminStatement"][];
+            };
+            moderationPolicy: {
+                strict: boolean | null;
+                available: boolean;
+            };
+            dataAvailability: {
+                statements: boolean;
+            };
+            seeding: {
+                allowed: boolean;
+                lockReason: string | null;
+                maxStatementsPerImport: number;
+                maxCharactersPerStatement: number;
+            };
+            capabilities: {
+                moderate: boolean;
+                seed: boolean;
+            };
+            links: {
+                self: string;
+                lifecycle: string;
+            };
+        };
+        AdminStatement: {
+            id: number;
+            text: string;
+            /** @enum {string} */
+            moderation: "approved" | "pending" | "hidden";
+            seed: boolean;
+            featured: boolean;
+            votes: {
+                agree: number;
+                pass: number;
+                disagree: number;
+            };
+            provenance: null | {
+                derivedFromId: number;
+                scores: {
+                    model: string;
+                    value: number;
+                }[];
             };
         };
         AdminSettingsResponse: {
@@ -3378,6 +3487,118 @@ export interface operations {
             };
             /** @description Organizer permission required */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminConversationStatements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Statement workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStatementWorkspaceResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminStatementModeration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                statementId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStatementModerationRequest"];
+            };
+        };
+        responses: {
+            /** @description Moderation receipt and refreshed workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStatementModerationResponse"];
+                };
+            };
+            /** @description Invalid moderation state */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or statement not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Last featured statement is protected during argument mapping */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Statement service unavailable */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

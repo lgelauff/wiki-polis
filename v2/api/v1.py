@@ -43,6 +43,9 @@ from services.admin_termination import (
     DeletionBlockedByVotes, DeletionOutcomeUnknown, DeletionUpstreamFailed,
     DeletionVerificationUnavailable,
 )
+from services.admin_statements import (
+    LastFeaturedStatementProtected, StatementModerationUpstreamFailed,
+)
 
 _OPENAPI_SPEC = json.loads(
     (Path(__file__).resolve().parents[1] / 'openapi.json').read_text(encoding='utf-8')
@@ -91,6 +94,8 @@ def create_api_v1_blueprint(
     update_admin_settings: Callable[[int, dict], dict],
     resolve_admin_termination: Callable[[int], dict],
     delete_admin_conversation: Callable[[int], dict],
+    resolve_admin_statements: Callable[[int], dict],
+    moderate_admin_statement: Callable[[int, int, dict], dict],
     advance_admin_phase: Callable[[int, dict], dict],
     set_admin_pause: Callable[[int, dict], dict],
     set_admin_archive: Callable[[int, dict], dict],
@@ -454,6 +459,35 @@ def create_api_v1_blueprint(
                 'command_outcome_unknown',
                 'The voting service was hidden, but local deletion failed. Do not retry.',
                 409,
+            )
+        return _no_store(jsonify({'data': data}))
+
+    @bp.get('/admin/conversations/<int:conversation_id>/statements')
+    def get_admin_conversation_statements(conversation_id: int):
+        return _no_store(jsonify({
+            'data': resolve_admin_statements(conversation_id),
+        }))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/statements/<int:statement_id>/moderation')
+    def put_admin_statement_moderation(conversation_id: int, statement_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'status'}
+                or body['status'] not in {'approved', 'pending', 'hidden'}):
+            return error_response(
+                'validation_failed',
+                'Choose approved, pending, or hidden.', 400,
+            )
+        try:
+            data = moderate_admin_statement(conversation_id, statement_id, body)
+        except LastFeaturedStatementProtected:
+            return error_response(
+                'last_featured_statement_protected',
+                'Keep one featured statement while argument mapping is active.', 409,
+            )
+        except StatementModerationUpstreamFailed:
+            return error_response(
+                'upstream_unavailable',
+                'Statement moderation is temporarily unavailable.', 502,
             )
         return _no_store(jsonify({'data': data}))
 
