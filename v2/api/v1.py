@@ -73,6 +73,7 @@ def create_api_v1_blueprint(
     remove_admin_invite: Callable[[int, int], dict],
     resolve_admin_roles: Callable[[int], dict],
     replace_admin_roles: Callable[[int, int, dict], dict],
+    resolve_admin_lifecycle: Callable[[int], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
@@ -353,6 +354,12 @@ def create_api_v1_blueprint(
     def get_admin_conversation_roles(conversation_id: int):
         return _no_store(jsonify({
             'data': resolve_admin_roles(conversation_id),
+        }))
+
+    @bp.get('/admin/conversations/<int:conversation_id>')
+    def get_admin_conversation_lifecycle(conversation_id: int):
+        return _no_store(jsonify({
+            'data': resolve_admin_lifecycle(conversation_id),
         }))
 
     @bp.put('/admin/conversations/<int:conversation_id>/roles/<int:participant_id>')

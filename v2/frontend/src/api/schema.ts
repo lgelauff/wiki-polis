@@ -486,6 +486,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /** Return lifecycle, phase readiness, capabilities, and management links */
+        get: operations["getAdminConversationLifecycle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -507,6 +526,92 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdminLifecycleResponse: {
+            data: components["schemas"]["AdminLifecycle"];
+        };
+        AdminLifecycle: {
+            conversation: components["schemas"]["AdminLifecycleConversation"];
+            operator: {
+                roleLabel: string;
+            };
+            phase: {
+                linear: boolean;
+                currentIndex: number;
+                activeKeys: string[];
+                steps: components["schemas"]["AdminLifecycleStep"][];
+                transition: components["schemas"]["AdminLifecycleTransition"] | null;
+            };
+            schedule: {
+                canSchedule: boolean;
+                /** Format: date-time */
+                scheduledAt: string | null;
+                targetKey: string | null;
+                targetLabel: string | null;
+                frozen: boolean;
+            };
+            counts: {
+                participants: number;
+                invitations: number;
+                openFlags: number;
+                featuredStatements: number;
+            };
+            capabilities: {
+                advancePhase: boolean;
+                pause: boolean;
+                publish: boolean;
+                editSettings: boolean;
+                useAdvancedPhases: boolean;
+            };
+            links: {
+                self: string;
+                participantView: string;
+                participants: string;
+                moderation: string;
+                invitations: string;
+                roles: string;
+                statements: string;
+                featuredStatements: string;
+            };
+        };
+        AdminLifecycleConversation: {
+            id: number;
+            slug: string;
+            title: string;
+            /** @enum {string} */
+            accessPolicy: "public" | "invite_only" | "demo";
+            /** @enum {string} */
+            status: "active" | "paused" | "scheduled" | "closed";
+            /** @enum {string} */
+            publication: "not_applicable" | "pending" | "published";
+            /** Format: date-time */
+            closedAt: string | null;
+        };
+        AdminLifecycleStep: {
+            key: string;
+            label: string;
+            effect: string;
+            /** @enum {string} */
+            state: "completed" | "current" | "upcoming" | "available";
+        };
+        AdminLifecycleTransition: {
+            source: components["schemas"]["AdminLifecyclePhaseRef"];
+            target: components["schemas"]["AdminLifecyclePhaseRef"];
+            consequence: {
+                opens: string;
+                closes: string | null;
+            };
+            preconditions: {
+                id: string;
+                label: string;
+                met: boolean | null;
+                note: string | null;
+            }[];
+            requiresPhase6Initialization: boolean;
+        };
+        AdminLifecyclePhaseRef: {
+            key: string;
+            label: string;
+        };
         AdminRoleRosterResponse: {
             data: components["schemas"]["AdminRoleRoster"];
         };
@@ -2722,6 +2827,46 @@ export interface operations {
                 };
             };
             /** @description Conversation or participant not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminConversationLifecycle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin lifecycle */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminLifecycleResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
             404: {
                 headers: {
                     [name: string]: unknown;

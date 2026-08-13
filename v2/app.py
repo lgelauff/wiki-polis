@@ -89,6 +89,7 @@ from services.admin_roles import (
     RoleParticipantNotFound, build_admin_role_roster,
     replace_conversation_roles,
 )
+from services.admin_lifecycle import build_admin_lifecycle
 from services.idempotency import (complete_command, release_reservation,
                                   request_digest, reserve_command)
 from services.statements import (DerivativeSimilarityTooLow,
@@ -2488,6 +2489,41 @@ def _admin_role_roster_api_payload(conv_id: int) -> dict:
         conversation_link=url_for(
             'admin.admin_conversation_detail', conv_id=conv.id,
         ),
+    )
+
+
+def _admin_lifecycle_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    participant = _current_participant()
+    sequence = _phase_sequence_for(conv)
+    active = _active_phases(conv)
+    return build_admin_lifecycle(
+        conversation=conv,
+        role_label=_conversation_role_label(conv, participant),
+        phase_sequence=sequence,
+        current_stage_index=_current_stage_index(conv),
+        active_phase_keys=active,
+        linear=_is_linear_phase_state(conv),
+        transition=_transition_context(conv),
+        schedule=_schedule_context(conv),
+        counts={
+            'participants': Participation.query.filter_by(conversation_id=conv.id).count(),
+            'invitations': ConversationInvite.query.filter_by(conversation_id=conv.id).count(),
+            'openFlags': ContentFlag.query.filter_by(conversation_id=conv.id, status='open').count(),
+            'featuredStatements': FeaturedStatement.query.filter_by(conversation_id=conv.id, confirmed_by_admin=True).count(),
+        },
+        can_organize=_can_organize(conv, participant),
+        can_administer=_is_global_admin(participant),
+        links={
+            'self': url_for('api_v1.get_admin_conversation_lifecycle', conversation_id=conv.id),
+            'participantView': url_for('participant.conversation', slug=conv.slug),
+            'participants': url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}/participants'),
+            'moderation': url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}/moderation'),
+            'invitations': url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}/invitations'),
+            'roles': url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}/roles'),
+            'statements': url_for('admin.admin_conversation_statements', conv_id=conv.id),
+            'featuredStatements': url_for('admin.admin_conversation_featured', conv_id=conv.id),
+        },
     )
 
 
@@ -5980,6 +6016,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         remove_admin_invite=_remove_admin_invitation_api_payload,
         resolve_admin_roles=_admin_role_roster_api_payload,
         replace_admin_roles=_replace_admin_roles_api_payload,
+        resolve_admin_lifecycle=_admin_lifecycle_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,

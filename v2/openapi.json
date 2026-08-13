@@ -740,6 +740,17 @@
         }
       }
     },
+    "/admin/conversations/{conversationId}": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "get": {
+        "operationId": "getAdminConversationLifecycle", "summary": "Return lifecycle, phase readiness, capabilities, and management links",
+        "responses": {
+          "200": {"description": "Admin lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminLifecycleResponse"}}}},
+          "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -752,6 +763,52 @@
   },
   "components": {
     "schemas": {
+      "AdminLifecycleResponse": {
+        "type": "object", "required": ["data"], "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/AdminLifecycle"}}
+      },
+      "AdminLifecycle": {
+        "type": "object", "required": ["conversation", "operator", "phase", "schedule", "counts", "capabilities", "links"], "additionalProperties": false,
+        "properties": {
+          "conversation": {"$ref": "#/components/schemas/AdminLifecycleConversation"},
+          "operator": {"type": "object", "required": ["roleLabel"], "additionalProperties": false, "properties": {"roleLabel": {"type": "string"}}},
+          "phase": {"type": "object", "required": ["linear", "currentIndex", "activeKeys", "steps", "transition"], "additionalProperties": false, "properties": {
+            "linear": {"type": "boolean"}, "currentIndex": {"type": "integer", "minimum": 0}, "activeKeys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+            "steps": {"type": "array", "items": {"$ref": "#/components/schemas/AdminLifecycleStep"}},
+            "transition": {"oneOf": [{"$ref": "#/components/schemas/AdminLifecycleTransition"}, {"type": "null"}]}
+          }},
+          "schedule": {"type": "object", "required": ["canSchedule", "scheduledAt", "targetKey", "targetLabel", "frozen"], "additionalProperties": false, "properties": {
+            "canSchedule": {"type": "boolean"}, "scheduledAt": {"type": ["string", "null"], "format": "date-time"}, "targetKey": {"type": ["string", "null"]}, "targetLabel": {"type": ["string", "null"]}, "frozen": {"type": "boolean"}
+          }},
+          "counts": {"type": "object", "required": ["participants", "invitations", "openFlags", "featuredStatements"], "additionalProperties": false, "properties": {
+            "participants": {"type": "integer", "minimum": 0}, "invitations": {"type": "integer", "minimum": 0}, "openFlags": {"type": "integer", "minimum": 0}, "featuredStatements": {"type": "integer", "minimum": 0}
+          }},
+          "capabilities": {"type": "object", "required": ["advancePhase", "pause", "publish", "editSettings", "useAdvancedPhases"], "additionalProperties": false, "properties": {
+            "advancePhase": {"type": "boolean"}, "pause": {"type": "boolean"}, "publish": {"type": "boolean"}, "editSettings": {"type": "boolean"}, "useAdvancedPhases": {"type": "boolean"}
+          }},
+          "links": {"type": "object", "required": ["self", "participantView", "participants", "moderation", "invitations", "roles", "statements", "featuredStatements"], "additionalProperties": false, "properties": {
+            "self": {"type": "string"}, "participantView": {"type": "string"}, "participants": {"type": "string"}, "moderation": {"type": "string"}, "invitations": {"type": "string"}, "roles": {"type": "string"}, "statements": {"type": "string"}, "featuredStatements": {"type": "string"}
+          }}
+        }
+      },
+      "AdminLifecycleConversation": {
+        "type": "object", "required": ["id", "slug", "title", "accessPolicy", "status", "publication", "closedAt"], "additionalProperties": false,
+        "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "status": {"type": "string", "enum": ["active", "paused", "scheduled", "closed"]}, "publication": {"type": "string", "enum": ["not_applicable", "pending", "published"]}, "closedAt": {"type": ["string", "null"], "format": "date-time"}}
+      },
+      "AdminLifecycleStep": {
+        "type": "object", "required": ["key", "label", "effect", "state"], "additionalProperties": false,
+        "properties": {"key": {"type": "string"}, "label": {"type": "string"}, "effect": {"type": "string"}, "state": {"type": "string", "enum": ["completed", "current", "upcoming", "available"]}}
+      },
+      "AdminLifecycleTransition": {
+        "type": "object", "required": ["source", "target", "consequence", "preconditions", "requiresPhase6Initialization"], "additionalProperties": false,
+        "properties": {
+          "source": {"$ref": "#/components/schemas/AdminLifecyclePhaseRef"}, "target": {"$ref": "#/components/schemas/AdminLifecyclePhaseRef"},
+          "consequence": {"type": "object", "required": ["opens", "closes"], "additionalProperties": false, "properties": {"opens": {"type": "string"}, "closes": {"type": ["string", "null"]}}},
+          "preconditions": {"type": "array", "items": {"type": "object", "required": ["id", "label", "met", "note"], "additionalProperties": false, "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "met": {"type": ["boolean", "null"]}, "note": {"type": ["string", "null"]}}}},
+          "requiresPhase6Initialization": {"type": "boolean"}
+        }
+      },
+      "AdminLifecyclePhaseRef": {"type": "object", "required": ["key", "label"], "additionalProperties": false, "properties": {"key": {"type": "string"}, "label": {"type": "string"}}},
       "AdminRoleRosterResponse": {
         "type": "object", "required": ["data"], "additionalProperties": false,
         "properties": {"data": {"$ref": "#/components/schemas/AdminRoleRoster"}}
