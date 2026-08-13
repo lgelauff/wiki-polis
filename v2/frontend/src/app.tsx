@@ -27,6 +27,7 @@ import {AdminRolesPage} from './features/admin/admin-roles-page';
 import {AdminLifecyclePage} from './features/admin/admin-lifecycle-page';
 import {AdminSettingsPage} from './features/admin/admin-settings-page';
 import {AdminTerminationPage} from './features/admin/admin-termination-page';
+import {AdminStatementsPage} from './features/admin/admin-statements-page';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -740,6 +741,12 @@ function AdminTerminationRoute() {
   return <><Header admin /><AdminTerminationPage conversationId={Number(conversationId)} csrfToken={session.csrfToken} /></>;
 }
 
+function AdminStatementsRoute() {
+  const {conversationId = ''} = useParams();
+  const {data: session} = useSuspenseQuery(sessionQuery());
+  return <><Header admin /><AdminStatementsPage conversationId={Number(conversationId)} csrfToken={session.csrfToken} /></>;
+}
+
 function AdminModerationRoute() {
   const {conversationId = ''} = useParams();
   const {data: session} = useSuspenseQuery(sessionQuery());
@@ -853,6 +860,7 @@ export function App() {
           <Route path="/app/admin/conversations/:conversationId" element={<AdminLifecycleRoute />} />
           <Route path="/app/admin/conversations/:conversationId/settings" element={<AdminSettingsRoute />} />
           <Route path="/app/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
+          <Route path="/app/admin/conversations/:conversationId/statements" element={<AdminStatementsRoute />} />
           <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
           <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminModerationRoute />} />
           <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminInvitationsRoute />} />

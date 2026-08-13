@@ -113,6 +113,24 @@ test('deletes a verified empty conversation through a deliberate receipt flow', 
   expect(screen.getByRole('link', {name: 'Return to admin panel'})).toHaveAttribute('href', '/admin');
 });
 
+test('moderates statements and imports approved seeds through typed commands', async () => {
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/statements']}><App /></MemoryRouter></QueryClientProvider>);
+
+  expect(await screen.findByRole('heading', {name: 'Statements'})).toBeVisible();
+  expect(screen.getByText('A participant proposal awaiting review.')).toBeVisible();
+  expect(screen.getByText('held for review').parentElement).toHaveTextContent('New participant statements are currently');
+  fireEvent.click(screen.getByRole('button', {name: 'Approve'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Statement #11 moved to approved');
+  expect(screen.getByRole('heading', {name: 'Approved'}).parentElement).toHaveTextContent('2');
+
+  fireEvent.change(screen.getByLabelText('Seed statements'), {
+    target: {value: 'First seed\nSecond seed'},
+  });
+  expect(screen.getByText('2 / 20 statements')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Import approved seeds'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('2 imported');
+});
+
 test('manages participant access in the distinct admin workspace', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

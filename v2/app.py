@@ -2566,7 +2566,9 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
             'moderation': url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}/moderation'),
             'invitations': url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}/invitations'),
             'roles': url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}/roles'),
-            'statements': url_for('admin.admin_conversation_statements', conv_id=conv.id),
+            'statements': url_for(
+                'spa_shell', spa_path=f'admin/conversations/{conv.id}/statements',
+            ),
             'featuredStatements': url_for('admin.admin_conversation_featured', conv_id=conv.id),
             'settings': url_for('api_v1.get_admin_conversation_settings', conversation_id=conv.id),
             'termination': url_for(

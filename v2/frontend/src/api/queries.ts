@@ -317,6 +317,46 @@ export async function deleteAdminConversation(
   ))).data;
 }
 
+export const adminStatementWorkspaceQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-statement-workspace', conversationId],
+  queryFn: async () => (await requireApiData(api.GET(
+    '/admin/conversations/{conversationId}/statements',
+    {params: {path: {conversationId}}},
+  ))).data,
+  staleTime: 5_000,
+});
+
+export async function putAdminStatementModeration(
+  conversationId: number,
+  statementId: number,
+  body: components['schemas']['AdminStatementModerationRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT(
+    '/admin/conversations/{conversationId}/statements/{statementId}/moderation',
+    {
+      params: {path: {conversationId, statementId}},
+      body,
+      headers: {'X-CSRFToken': csrfToken},
+    },
+  ))).data;
+}
+
+export async function postAdminStatementImport(
+  conversationId: number,
+  body: components['schemas']['AdminStatementImportRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.POST(
+    '/admin/conversations/{conversationId}/statement-imports',
+    {
+      params: {path: {conversationId}},
+      body,
+      headers: {'X-CSRFToken': csrfToken},
+    },
+  ))).data;
+}
+
 export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
   queryKey: ['pseudonym-suggestions', slug],
   queryFn: async () => (

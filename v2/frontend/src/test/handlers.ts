@@ -21,11 +21,32 @@ function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as st
     schedule,
     publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
     counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, archive: true},
-    links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
+    links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/app/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
   };
 }
 
 export const handlers = [
+  http.get(new URL('/api/v1/admin/conversations/7/statements', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+    statements: {
+      pending: [{id: 11, text: 'A participant proposal awaiting review.', moderation: 'pending', seed: false, featured: false, votes: {agree: 2, pass: 1, disagree: 3}, provenance: null}],
+      approved: [{id: 12, text: 'An approved seed statement.', moderation: 'approved', seed: true, featured: true, votes: {agree: 8, pass: 2, disagree: 1}, provenance: null}],
+      hidden: [],
+    },
+    moderationPolicy: {strict: true, available: true},
+    dataAvailability: {statements: true},
+    seeding: {allowed: true, lockReason: null, maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
+    capabilities: {moderate: true, seed: true},
+    links: {self: '/api/v1/admin/conversations/7/statements', lifecycle: '/app/admin/conversations/7'},
+  }})),
+  http.put(new URL('/api/v1/admin/conversations/7/statements/:statementId/moderation', globalThis.location.origin).toString(), async ({params, request}) => {
+    const body = await request.json() as {status: 'approved' | 'pending' | 'hidden'};
+    return HttpResponse.json({data: {statementId: Number(params.statementId), status: body.status, links: {statements: '/api/v1/admin/conversations/7/statements'}}});
+  }),
+  http.post(new URL('/api/v1/admin/conversations/7/statement-imports', globalThis.location.origin).toString(), async ({request}) => {
+    const body = await request.json() as {statements: string[]};
+    return HttpResponse.json({data: {outcome: {imported: body.statements.length, skippedExisting: 0, skippedDuplicateInput: 0, failedUpstream: 0}, links: {statements: '/api/v1/admin/conversations/7/statements'}}});
+  }),
   http.get(new URL('/api/v1/admin/conversations/7/termination', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     deletion: {state: 'eligible', validVoteCount: 0, reason: 'No valid votes were found.'},
@@ -86,7 +107,7 @@ export const handlers = [
       publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
       counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
       capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, archive: true},
-      links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
+      links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/app/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
     },
   }})),
   http.get(new URL('/api/v1/admin/conversations/7/roles', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
