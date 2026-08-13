@@ -714,6 +714,32 @@
         }
       }
     },
+    "/admin/conversations/{conversationId}/roles": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "get": {
+        "operationId": "getAdminConversationRoles", "summary": "Return scoped role assignments and authorized candidates",
+        "responses": {
+          "200": {"description": "Role roster", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminRoleRosterResponse"}}}},
+          "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
+    "/admin/conversations/{conversationId}/roles/{participantId}": {
+      "parameters": [
+        {"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
+        {"name": "participantId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}
+      ],
+      "put": {
+        "operationId": "putAdminConversationRoles", "summary": "Replace one participant's scoped role set",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminRoleSetRequest"}}}},
+        "responses": {
+          "200": {"description": "Role replacement receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminRoleSetResponse"}}}},
+          "400": {"description": "Invalid role set", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "404": {"description": "Conversation or participant not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -726,6 +752,52 @@
   },
   "components": {
     "schemas": {
+      "AdminRoleRosterResponse": {
+        "type": "object", "required": ["data"], "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/AdminRoleRoster"}}
+      },
+      "AdminRoleRoster": {
+        "type": "object", "required": ["conversation", "assignments", "candidates", "availableRoles", "capabilities", "links"], "additionalProperties": false,
+        "properties": {
+          "conversation": {"type": "object", "required": ["id", "slug", "title"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}}},
+          "assignments": {"type": "array", "items": {"$ref": "#/components/schemas/AdminRoleAssignment"}},
+          "candidates": {"type": "array", "items": {"$ref": "#/components/schemas/AdminRoleCandidate"}},
+          "availableRoles": {"type": "array", "items": {"type": "string", "enum": ["moderator", "organizer"]}, "uniqueItems": true},
+          "capabilities": {"type": "object", "required": ["manageRoles"], "additionalProperties": false, "properties": {"manageRoles": {"type": "boolean"}}},
+          "links": {"type": "object", "required": ["self", "conversation"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "conversation": {"type": "string"}}}
+        }
+      },
+      "AdminRoleAssignment": {
+        "type": "object", "required": ["participantId", "username", "roles", "grantedAt"], "additionalProperties": false,
+        "properties": {
+          "participantId": {"type": "integer", "minimum": 1}, "username": {"type": "string"},
+          "roles": {"type": "array", "items": {"type": "string", "enum": ["moderator", "organizer"]}, "uniqueItems": true},
+          "grantedAt": {"type": "array", "items": {"type": "string", "format": "date-time"}}
+        }
+      },
+      "AdminRoleCandidate": {
+        "type": "object", "required": ["participantId", "username"], "additionalProperties": false,
+        "properties": {"participantId": {"type": "integer", "minimum": 1}, "username": {"type": "string"}}
+      },
+      "AdminRoleSetRequest": {
+        "type": "object", "required": ["roles"], "additionalProperties": false,
+        "properties": {"roles": {"type": "array", "items": {"type": "string", "enum": ["moderator", "organizer"]}, "uniqueItems": true}}
+      },
+      "AdminRoleSetResponse": {
+        "type": "object", "required": ["data"], "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/AdminRoleSetReceipt"}}
+      },
+      "AdminRoleSetReceipt": {
+        "type": "object", "required": ["participantId", "username", "roles", "changed", "added", "removed", "links"], "additionalProperties": false,
+        "properties": {
+          "participantId": {"type": "integer", "minimum": 1}, "username": {"type": "string"},
+          "roles": {"type": "array", "items": {"type": "string", "enum": ["moderator", "organizer"]}, "uniqueItems": true},
+          "changed": {"type": "boolean"},
+          "added": {"type": "array", "items": {"type": "string", "enum": ["moderator", "organizer"]}, "uniqueItems": true},
+          "removed": {"type": "array", "items": {"type": "string", "enum": ["moderator", "organizer"]}, "uniqueItems": true},
+          "links": {"type": "object", "required": ["roles"], "additionalProperties": false, "properties": {"roles": {"type": "string"}}}
+        }
+      },
       "AdminInvitationRosterResponse": {
         "type": "object", "required": ["data"], "additionalProperties": false,
         "properties": {"data": {"$ref": "#/components/schemas/AdminInvitationRoster"}}

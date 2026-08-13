@@ -447,6 +447,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /** Return scoped role assignments and authorized candidates */
+        get: operations["getAdminConversationRoles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/conversations/{conversationId}/roles/{participantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                participantId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace one participant's scoped role set */
+        put: operations["putAdminConversationRoles"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -468,6 +507,53 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdminRoleRosterResponse: {
+            data: components["schemas"]["AdminRoleRoster"];
+        };
+        AdminRoleRoster: {
+            conversation: {
+                id: number;
+                slug: string;
+                title: string;
+            };
+            assignments: components["schemas"]["AdminRoleAssignment"][];
+            candidates: components["schemas"]["AdminRoleCandidate"][];
+            availableRoles: ("moderator" | "organizer")[];
+            capabilities: {
+                manageRoles: boolean;
+            };
+            links: {
+                self: string;
+                conversation: string;
+            };
+        };
+        AdminRoleAssignment: {
+            participantId: number;
+            username: string;
+            roles: ("moderator" | "organizer")[];
+            grantedAt: string[];
+        };
+        AdminRoleCandidate: {
+            participantId: number;
+            username: string;
+        };
+        AdminRoleSetRequest: {
+            roles: ("moderator" | "organizer")[];
+        };
+        AdminRoleSetResponse: {
+            data: components["schemas"]["AdminRoleSetReceipt"];
+        };
+        AdminRoleSetReceipt: {
+            participantId: number;
+            username: string;
+            roles: ("moderator" | "organizer")[];
+            changed: boolean;
+            added: ("moderator" | "organizer")[];
+            removed: ("moderator" | "organizer")[];
+            links: {
+                roles: string;
+            };
+        };
         AdminInvitationRosterResponse: {
             data: components["schemas"]["AdminInvitationRoster"];
         };
@@ -2551,6 +2637,91 @@ export interface operations {
                 };
             };
             /** @description Conversation or invitation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminConversationRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Role roster */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRoleRosterResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminConversationRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                participantId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminRoleSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Role replacement receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRoleSetResponse"];
+                };
+            };
+            /** @description Invalid role set */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or participant not found */
             404: {
                 headers: {
                     [name: string]: unknown;

@@ -71,6 +71,8 @@ def create_api_v1_blueprint(
     resolve_admin_invites: Callable[[int], dict],
     add_admin_invites: Callable[[int, dict], dict],
     remove_admin_invite: Callable[[int, int], dict],
+    resolve_admin_roles: Callable[[int], dict],
+    replace_admin_roles: Callable[[int, int, dict], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
     set_argument_priority: Callable[[str, int, bool], dict],
@@ -345,6 +347,30 @@ def create_api_v1_blueprint(
     def delete_admin_conversation_invite(conversation_id: int, invite_id: int):
         return _no_store(jsonify({
             'data': remove_admin_invite(conversation_id, invite_id),
+        }))
+
+    @bp.get('/admin/conversations/<int:conversation_id>/roles')
+    def get_admin_conversation_roles(conversation_id: int):
+        return _no_store(jsonify({
+            'data': resolve_admin_roles(conversation_id),
+        }))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/roles/<int:participant_id>')
+    def put_admin_conversation_roles(conversation_id: int, participant_id: int):
+        body = request.get_json(silent=True)
+        roles = body.get('roles') if isinstance(body, dict) else None
+        if (not isinstance(body, dict) or set(body) != {'roles'}
+                or not isinstance(roles, list)
+                or any(role not in {'moderator', 'organizer'} for role in roles)
+                or len(set(roles)) != len(roles)):
+            return error_response(
+                'validation_failed', 'Choose a valid conversation role set.', 400,
+                details={'fields': {'roles': [
+                    'Use unique moderator and/or organizer values.',
+                ]}},
+            )
+        return _no_store(jsonify({
+            'data': replace_admin_roles(conversation_id, participant_id, body),
         }))
 
     @bp.put('/conversations/<slug>/featured-statements/<int:featured_statement_id>/informed-vote')

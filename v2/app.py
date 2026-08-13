@@ -85,6 +85,10 @@ from services.admin_participants import (
 from services.admin_moderation import (
     FlagNotInConversation, build_admin_flag_queue, resolve_content_flag,
 )
+from services.admin_roles import (
+    RoleParticipantNotFound, build_admin_role_roster,
+    replace_conversation_roles,
+)
 from services.idempotency import (complete_command, release_reservation,
                                   request_digest, reserve_command)
 from services.statements import (DerivativeSimilarityTooLow,
@@ -2471,6 +2475,51 @@ def _admin_invitation_roster_api_payload(conv_id: int) -> dict:
         self_link=self_link,
         conversation_link=conversation_link,
     )
+
+
+def _admin_role_roster_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    return build_admin_role_roster(
+        conversation=conv,
+        can_manage=_is_global_admin(),
+        self_link=url_for(
+            'api_v1.get_admin_conversation_roles', conversation_id=conv.id,
+        ),
+        conversation_link=url_for(
+            'admin.admin_conversation_detail', conv_id=conv.id,
+        ),
+    )
+
+
+def _replace_admin_roles_api_payload(
+    conv_id: int, participant_id: int, body: dict,
+) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    try:
+        result = replace_conversation_roles(
+            conversation=conv,
+            participant_id=participant_id,
+            roles=body['roles'],
+            grantor=_current_participant(),
+            audit=record_audit,
+        )
+    except RoleParticipantNotFound:
+        abort(404, description='Participant not found.')
+    return {
+        'participantId': result.participant.id,
+        'username': result.participant.mw_username,
+        'roles': result.roles,
+        'changed': bool(result.added or result.removed),
+        'added': result.added,
+        'removed': result.removed,
+        'links': {
+            'roles': url_for(
+                'api_v1.get_admin_conversation_roles', conversation_id=conv.id,
+            ),
+        },
+    }
 
 
 def _add_admin_invitations_api_payload(conv_id: int, body: dict) -> dict:
@@ -5929,6 +5978,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_admin_invites=_admin_invitation_roster_api_payload,
         add_admin_invites=_add_admin_invitations_api_payload,
         remove_admin_invite=_remove_admin_invitation_api_payload,
+        resolve_admin_roles=_admin_role_roster_api_payload,
+        replace_admin_roles=_replace_admin_roles_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,
         set_argument_priority=_set_argument_priority_api_payload,
