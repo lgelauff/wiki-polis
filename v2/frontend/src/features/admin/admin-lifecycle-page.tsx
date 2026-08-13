@@ -9,6 +9,7 @@ import {
   createAdminPublication,
   putAdminPause,
   putAdminPhase,
+  putAdminPhases,
   putAdminSchedule,
 } from '../../api/queries';
 
@@ -93,6 +94,43 @@ function ScheduleControl({conversationId, csrfToken, data, onChange, onReceipt}:
       </div>
       {error && <p role="alert">{error}</p>}
     </div>
+  );
+}
+
+function AdvancedPhaseControl({conversationId, csrfToken, data, onChange, onReceipt}: {
+  conversationId: number; csrfToken: string; data: Lifecycle;
+  onChange: (lifecycle: Lifecycle) => void; onReceipt: (message: string) => void;
+}) {
+  const [activeKeys, setActiveKeys] = useState(
+    data.phase.advancedControls.filter((row) => row.active).map((row) => row.key),
+  );
+  const mutation = useMutation({
+    mutationFn: () => putAdminPhases(conversationId, {activeKeys}, csrfToken),
+    onSuccess: (result) => {
+      onChange(result.lifecycle);
+      onReceipt(result.changed
+        ? `Advanced phases saved${result.visibilitySynced ? '.' : '; results visibility could not be synchronized.'}`
+        : 'Advanced phases already up to date.');
+    },
+  });
+  function togglePhase(key: string) {
+    setActiveKeys((keys) => keys.includes(key)
+      ? keys.filter((value) => value !== key)
+      : [...keys, key]);
+  }
+  return (
+    <details className="lifecycle-advanced">
+      <summary>Advanced phase repair</summary>
+      <div className="lifecycle-advanced__warning"><strong>Recovery control.</strong> These phases act independently, out of order, and without readiness checks.</div>
+      <ul>{data.phase.advancedControls.map((row) => (
+        <li key={row.key}>
+          <label><input type="checkbox" checked={activeKeys.includes(row.key)} onChange={() => togglePhase(row.key)} /><span><strong>{row.label}</strong>{row.effect}</span></label>
+          {row.requiresInitialization && activeKeys.includes(row.key) && !row.initialized && <p>Enabled but not initialized. Complete informed-voting setup before participants enter.</p>}
+        </li>
+      ))}</ul>
+      <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Saving…' : 'Save advanced phases'}</button>
+      {mutation.error && <p role="alert">{commandError(mutation.error)}</p>}
+    </details>
   );
 }
 
@@ -279,6 +317,14 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {
           ) : <p className="lifecycle-readonly">Only a global admin can change availability.</p>}
         </aside>
       </div>
+
+      {data.capabilities.useAdvancedPhases && (
+        <AdvancedPhaseControl
+          key={data.phase.advancedControls.map((row) => `${row.key}:${row.active}`).join('|')}
+          conversationId={conversationId} csrfToken={csrfToken} data={data}
+          onChange={replaceLifecycle} onReceipt={setReceipt}
+        />
+      )}
 
       {data.conversation.publication === 'pending' && (
         <section className="lifecycle-publication" aria-labelledby="publication-heading">

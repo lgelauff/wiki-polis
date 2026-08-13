@@ -1,8 +1,10 @@
 import {http, HttpResponse} from 'msw';
 
+import type {components} from '../api/schema';
+
 type Role = 'moderator' | 'organizer';
 
-function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as string | null, targetKey: null as string | null, targetLabel: null as string | null, frozen: false}) {
+function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as string | null, targetKey: null as string | null, targetLabel: null as string | null, frozen: false}): components['schemas']['AdminLifecycle'] {
   return {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: schedule.scheduledAt && !schedule.frozen ? 'scheduled' : 'active', publication: 'not_applicable', closedAt: null},
     operator: {roleLabel: 'Global admin'},
@@ -10,7 +12,12 @@ function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as st
       {key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'current'},
       {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'upcoming'},
       {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'},
-    ], transition: {source: {key: 'preparation', label: 'Preparation'}, target: {key: 'submission', label: 'Explore'}, consequence: {opens: 'Participant statement submission and voting', closes: 'Conversation setup'}, preconditions: [{id: 'ready', label: 'The statement set and introduction are ready', met: null, note: null}], requiresPhase6Initialization: false}},
+    ], transition: {source: {key: 'preparation', label: 'Preparation'}, target: {key: 'submission', label: 'Explore'}, consequence: {opens: 'Participant statement submission and voting', closes: 'Conversation setup'}, preconditions: [{id: 'ready', label: 'The statement set and introduction are ready', met: null, note: null}], requiresPhase6Initialization: false}, advancedControls: [
+      {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', active: false, requiresInitialization: false, initialized: true},
+      {key: 'argument_mapping', label: 'Arguments', effect: 'Participants add and rate arguments.', active: false, requiresInitialization: false, initialized: true},
+      {key: 'informed_voting', label: 'Informed vote', effect: 'Participants vote after reviewing arguments.', active: false, requiresInitialization: true, initialized: false},
+      {key: 'public_results', label: 'Report', effect: 'Prepare final results.', active: false, requiresInitialization: false, initialized: true},
+    ]},
     schedule,
     publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
     counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true},
@@ -42,12 +49,21 @@ export const handlers = [
     const body = await request.json() as {scheduledAt: string | null; frozen: boolean};
     return HttpResponse.json({data: {changed: true, lifecycle: lifecycleFixture({canSchedule: true, scheduledAt: body.scheduledAt, targetKey: body.scheduledAt ? 'submission' : null, targetLabel: body.scheduledAt ? 'Explore' : null, frozen: body.frozen})}});
   }),
+  http.put(new URL('/api/v1/admin/conversations/7/phases', globalThis.location.origin).toString(), async ({request}) => {
+    const body = await request.json() as {activeKeys: string[]};
+    const lifecycle = lifecycleFixture();
+    lifecycle.phase.linear = body.activeKeys.length <= 1;
+    lifecycle.phase.activeKeys = body.activeKeys;
+    lifecycle.phase.transition = body.activeKeys.length > 1 ? null : lifecycle.phase.transition;
+    lifecycle.phase.advancedControls = lifecycle.phase.advancedControls.map((row) => ({...row, active: body.activeKeys.includes(row.key)}));
+    return HttpResponse.json({data: {changed: true, activeKeys: body.activeKeys, visibilitySynced: true, lifecycle}});
+  }),
   http.put(new URL('/api/v1/admin/conversations/7/phase', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     transition: {sourceKey: 'preparation', targetKey: 'submission', targetLabel: 'Explore', phase6Created: false, phase6SyncMessage: null, visibilitySynced: true},
     lifecycle: {
       conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', publication: 'not_applicable', closedAt: null},
       operator: {roleLabel: 'Global admin'},
-      phase: {linear: true, currentIndex: 1, activeKeys: ['submission'], steps: [{key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'completed'}, {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'current'}, {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'}], transition: null},
+      phase: {linear: true, currentIndex: 1, activeKeys: ['submission'], steps: [{key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'completed'}, {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'current'}, {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'}], transition: null, advancedControls: [{key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', active: true, requiresInitialization: false, initialized: true}]},
       schedule: {canSchedule: true, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
       publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
       counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},

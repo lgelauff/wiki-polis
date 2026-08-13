@@ -713,6 +713,18 @@ a { color: inherit; }
 .lifecycle-scheduler button:first-child { color: white; background: var(--ink); }
 .lifecycle-scheduler button:last-child:not(:first-child) { color: var(--dissent); border-color: var(--dissent); }
 .lifecycle-scheduler > p { color: var(--dissent); font-size: .68rem; }
+.lifecycle-advanced { margin: 3rem 0 0; border: 1px solid var(--signal); background: white; }
+.lifecycle-advanced > summary { padding: 1rem 1.2rem; cursor: pointer; font-weight: 650; }
+.lifecycle-advanced[open] > summary { border-bottom: 1px solid var(--rule); }
+.lifecycle-advanced__warning { margin: 1.2rem; padding: .8rem; border-left: 4px solid var(--signal); color: var(--muted); font-size: .76rem; }
+.lifecycle-advanced ul { margin: 0 1.2rem; padding: 0; list-style: none; }
+.lifecycle-advanced li { padding: .8rem 0; border-bottom: 1px solid var(--rule); }
+.lifecycle-advanced li label { display: flex; gap: .8rem; cursor: pointer; }
+.lifecycle-advanced li label span { display: grid; gap: .25rem; color: var(--muted); font-size: .7rem; }
+.lifecycle-advanced li label strong { color: var(--ink); font-size: .8rem; }
+.lifecycle-advanced li > p { margin: .5rem 0 0 1.6rem; color: var(--dissent); font-size: .68rem; }
+.lifecycle-advanced > button { margin: 1.2rem; padding: .6rem .8rem; border: 0; color: white; background: var(--ink); cursor: pointer; }
+.lifecycle-advanced > p { margin: 0 1.2rem 1.2rem; color: var(--dissent); font-size: .7rem; }
 .lifecycle-publication { margin-top: 4rem; padding: 2rem; border: 1px solid var(--dissent); background: color-mix(in srgb, var(--dissent) 4%, white); }
 .lifecycle-publication > header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .7fr); align-items: end; gap: 3rem; }
 .lifecycle-publication > header > p { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.5; }

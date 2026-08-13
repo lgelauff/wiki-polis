@@ -57,6 +57,18 @@ test('schedules and cancels a lifecycle transition', async () => {
   expect(await screen.findByLabelText(/Move to next phase at/)).toHaveValue('');
 });
 
+test('repairs an advanced phase set through route-valid domain keys', async () => {
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
+  await screen.findByRole('heading', {name: 'Community strategy'});
+  fireEvent.click(screen.getByText('Advanced phase repair'));
+  fireEvent.click(screen.getByRole('checkbox', {name: /Arguments/}));
+  fireEvent.click(screen.getByRole('checkbox', {name: /Informed vote/}));
+  expect(screen.getByText(/Enabled but not initialized/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Save advanced phases'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Advanced phases saved');
+  expect(screen.getByText('Advanced phase state')).toBeVisible();
+});
+
 test('edits settings while keeping legacy eligibility observable and read-only', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings']}><App /></MemoryRouter></QueryClientProvider>);
   expect(await screen.findByRole('heading', {name: 'Conversation settings'})).toBeVisible();

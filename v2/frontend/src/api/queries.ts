@@ -220,6 +220,17 @@ export async function putAdminPhase(
   }))).data;
 }
 
+export async function putAdminPhases(
+  conversationId: number,
+  body: components['schemas']['AdminAdvancedPhasesRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT('/admin/conversations/{conversationId}/phases', {
+    params: {path: {conversationId}}, body,
+    headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
 export async function putAdminPause(
   conversationId: number,
   body: components['schemas']['AdminPauseRequest'],
