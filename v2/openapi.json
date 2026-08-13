@@ -801,6 +801,16 @@
         "502": {"description": "Statement service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
+    "/admin/conversations/{conversationId}/statement-imports": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "post": {"operationId": "postAdminStatementImport", "summary": "Import approved seed statements after validation and deduplication", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementImportRequest"}}}}, "responses": {
+        "200": {"description": "Import outcome", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementImportResponse"}}}},
+        "400": {"description": "Invalid import", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "503": {"description": "Existing statements could not be verified", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "502": {"description": "Statement service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/phase": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "put": {
@@ -882,6 +892,11 @@
       "AdminStatementWorkspaceResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminStatementWorkspace"}}},
       "AdminStatementModerationRequest": {"type": "object", "required": ["status"], "additionalProperties": false, "properties": {"status": {"type": "string", "enum": ["approved", "pending", "hidden"]}}},
       "AdminStatementModerationResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "status", "links"], "additionalProperties": false, "properties": {"statementId": {"type": "integer", "minimum": 0}, "status": {"type": "string", "enum": ["approved", "pending", "hidden"]}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
+      "AdminStatementImportRequest": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "maxLength": 280}}}},
+      "AdminStatementImportResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["outcome", "links"], "additionalProperties": false, "properties": {
+        "outcome": {"type": "object", "required": ["imported", "skippedExisting", "skippedDuplicateInput", "failedUpstream"], "additionalProperties": false, "properties": {"imported": {"type": "integer", "minimum": 0}, "skippedExisting": {"type": "integer", "minimum": 0}, "skippedDuplicateInput": {"type": "integer", "minimum": 0}, "failedUpstream": {"type": "integer", "minimum": 0}}},
+        "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}
+      }}}},
       "AdminStatementWorkspace": {"type": "object", "required": ["conversation", "statements", "moderationPolicy", "dataAvailability", "seeding", "capabilities", "links"], "additionalProperties": false, "properties": {
         "conversation": {"type": "object", "required": ["id", "slug", "title"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}}},
         "statements": {"type": "object", "required": ["pending", "approved", "hidden"], "additionalProperties": false, "properties": {"pending": {"type": "array", "items": {"$ref": "#/components/schemas/AdminStatement"}}, "approved": {"type": "array", "items": {"$ref": "#/components/schemas/AdminStatement"}}, "hidden": {"type": "array", "items": {"$ref": "#/components/schemas/AdminStatement"}}}},

@@ -45,6 +45,8 @@ from services.admin_termination import (
 )
 from services.admin_statements import (
     LastFeaturedStatementProtected, StatementModerationUpstreamFailed,
+    SeedImportUpstreamFailed, SeedImportValidationFailed,
+    SeedImportVerificationUnavailable,
 )
 
 _OPENAPI_SPEC = json.loads(
@@ -96,6 +98,7 @@ def create_api_v1_blueprint(
     delete_admin_conversation: Callable[[int], dict],
     resolve_admin_statements: Callable[[int], dict],
     moderate_admin_statement: Callable[[int, int, dict], dict],
+    import_admin_seed_statements: Callable[[int, dict], dict],
     advance_admin_phase: Callable[[int, dict], dict],
     set_admin_pause: Callable[[int, dict], dict],
     set_admin_archive: Callable[[int, dict], dict],
@@ -489,6 +492,28 @@ def create_api_v1_blueprint(
                 'upstream_unavailable',
                 'Statement moderation is temporarily unavailable.', 502,
             )
+        return _no_store(jsonify({'data': data}))
+
+    @bp.post('/admin/conversations/<int:conversation_id>/statement-imports')
+    def post_admin_statement_import(conversation_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'statements'}
+                or not isinstance(body['statements'], list)):
+            return error_response(
+                'validation_failed', 'Provide a statements array.', 400,
+            )
+        try:
+            data = import_admin_seed_statements(conversation_id, body)
+        except SeedImportValidationFailed as exc:
+            return error_response('validation_failed', exc.message, 400)
+        except SeedImportVerificationUnavailable:
+            return error_response(
+                'verification_unavailable',
+                'Existing statements could not be verified; nothing was imported.',
+                503,
+            )
+        except SeedImportUpstreamFailed as exc:
+            return error_response('upstream_unavailable', exc.message, 502)
         return _no_store(jsonify({'data': data}))
 
     @bp.put('/admin/conversations/<int:conversation_id>/phase')

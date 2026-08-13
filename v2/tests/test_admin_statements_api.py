@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 from db import AdminRole, AuditEvent, FeaturedStatement, db
-from polis_admin import PolisServerError
+from polis_admin import POLIS_NOT_CONFIGURED_MESSAGE, PolisServerError
 from tests.conftest import login
 
 
@@ -162,3 +162,119 @@ def test_last_featured_statement_is_protected_during_argument_mapping(
     assert response.status_code == 409
     assert response.get_json()['error']['code'] == 'last_featured_statement_protected'
     server.moderate.assert_not_called()
+
+
+def test_seed_import_sanitizes_deduplicates_and_reports_counts(
+    admin_client, conversation,
+):
+    server, participant = _upstream()
+    server.bulk_add_seeds.return_value = (2, [])
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app.PolisParticipantClient', return_value=participant),
+    ):
+        response = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/statement-imports',
+            json={'statements': [
+                '<b>New seed</b>', 'new seed', '=Formula', 'Approved seed',
+            ]},
+        )
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['outcome'] == {
+        'imported': 2,
+        'skippedExisting': 1,
+        'skippedDuplicateInput': 1,
+        'failedUpstream': 0,
+    }
+    server.bulk_add_seeds.assert_called_once_with(
+        conversation.polis_id, ['New seed', 'Formula'],
+    )
+    event = AuditEvent.query.filter_by(
+        operation='statement.seed_import', conversation_id=conversation.id,
+    ).one()
+    assert event.detail['imported'] == 2
+
+
+def test_seed_import_fails_closed_when_dedup_source_is_unavailable(
+    admin_client, conversation,
+):
+    server, participant = _upstream()
+    server.get_statements.return_value = None
+    from polis_admin import PolisParticipantError
+    participant.get_statements.side_effect = PolisParticipantError('offline')
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app.PolisParticipantClient', return_value=participant),
+    ):
+        response = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/statement-imports',
+            json={'statements': ['New seed']},
+        )
+
+    assert response.status_code == 503
+    assert response.get_json()['error']['code'] == 'verification_unavailable'
+    server.bulk_add_seeds.assert_not_called()
+
+
+def test_seed_import_surfaces_safe_polis_configuration_error(
+    admin_client, conversation,
+):
+    server, participant = _upstream()
+    server.bulk_add_seeds.side_effect = PolisServerError(
+        'internal configuration detail',
+        admin_message=POLIS_NOT_CONFIGURED_MESSAGE,
+    )
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app.PolisParticipantClient', return_value=participant),
+    ):
+        response = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/statement-imports',
+            json={'statements': ['New seed']},
+        )
+
+    assert response.status_code == 502
+    assert response.get_json()['error']['message'] == POLIS_NOT_CONFIGURED_MESSAGE
+    assert 'internal configuration detail' not in response.text
+
+
+def test_seed_import_surfaces_safe_error_when_every_statement_post_fails(
+    admin_client, conversation,
+):
+    server, participant = _upstream()
+    server.bulk_add_seeds.return_value = (0, [(
+        'New seed',
+        PolisServerError(
+            'connection refused', admin_message=POLIS_NOT_CONFIGURED_MESSAGE,
+        ),
+    )])
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app.PolisParticipantClient', return_value=participant),
+    ):
+        response = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/statement-imports',
+            json={'statements': ['New seed']},
+        )
+
+    assert response.status_code == 502
+    assert response.get_json()['error']['message'] == POLIS_NOT_CONFIGURED_MESSAGE
+
+
+def test_seed_import_rejects_invalid_batch_before_upstream_write(
+    admin_client, conversation,
+):
+    server, participant = _upstream()
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app.PolisParticipantClient', return_value=participant),
+    ):
+        response = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/statement-imports',
+            json={'statements': ['x' * 281]},
+        )
+
+    assert response.status_code == 400
+    assert '280 characters' in response.get_json()['error']['message']
+    server.bulk_add_seeds.assert_not_called()

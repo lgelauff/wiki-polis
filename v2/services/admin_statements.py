@@ -73,10 +73,116 @@ class StatementModerationUpstreamFailed(RuntimeError):
     pass
 
 
+class SeedImportValidationFailed(ValueError):
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
+class SeedImportVerificationUnavailable(RuntimeError):
+    pass
+
+
+class SeedImportUpstreamFailed(RuntimeError):
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
 @dataclass(frozen=True)
 class ModerationResult:
     statement_id: int
     status: str
+
+
+@dataclass(frozen=True)
+class SeedImportResult:
+    imported: int
+    skipped_existing: int
+    skipped_duplicate_input: int
+    failed_upstream: int
+
+
+def import_seed_statements(
+    *, conversation, candidates: list[str], existing_buckets,
+    sanitize, strip_formula_prefixes, bulk_add_seeds,
+    max_rows: int, max_characters: int,
+    upstream_errors: tuple[type[Exception], ...], audit,
+) -> SeedImportResult:
+    if not candidates:
+        raise SeedImportValidationFailed('Provide at least one statement.')
+    if len(candidates) > max_rows:
+        raise SeedImportValidationFailed(
+            f'Import at most {max_rows} statements at a time.',
+        )
+    if existing_buckets is None:
+        raise SeedImportVerificationUnavailable()
+
+    normalized = []
+    seen_input: set[str] = set()
+    skipped_duplicate_input = 0
+    for index, candidate in enumerate(candidates, start=1):
+        if not isinstance(candidate, str):
+            raise SeedImportValidationFailed(
+                f'Statement {index} must be text.',
+            )
+        raw = candidate.strip()
+        if not raw:
+            continue
+        if len(raw) > max_characters:
+            raise SeedImportValidationFailed(
+                f'Statement {index} exceeds {max_characters} characters.',
+            )
+        clean = strip_formula_prefixes(sanitize(raw)).strip()
+        if not clean:
+            raise SeedImportValidationFailed(
+                f'Statement {index} is empty after sanitization.',
+            )
+        key = clean.casefold()
+        if key in seen_input:
+            skipped_duplicate_input += 1
+            continue
+        seen_input.add(key)
+        normalized.append(clean)
+    if not normalized:
+        raise SeedImportValidationFailed('Provide at least one non-empty statement.')
+
+    existing = {
+        str(row.get('txt') or '').strip().casefold()
+        for bucket in existing_buckets for row in bucket
+    }
+    pending = [text for text in normalized if text.casefold() not in existing]
+    skipped_existing = len(normalized) - len(pending)
+    imported = failed = 0
+    if pending:
+        try:
+            imported, failures = bulk_add_seeds(conversation.polis_id, pending)
+        except upstream_errors as exc:
+            raise SeedImportUpstreamFailed(
+                getattr(exc, 'admin_message', 'The voting service is unavailable.'),
+            ) from exc
+        failed = len(failures)
+        if not imported and failures:
+            first_error = failures[0][1]
+            raise SeedImportUpstreamFailed(
+                getattr(
+                    first_error, 'admin_message',
+                    'The voting service is unavailable.',
+                ),
+            ) from first_error
+    if imported:
+        audit(
+            imported=imported,
+            skipped_existing=skipped_existing,
+            skipped_duplicate_input=skipped_duplicate_input,
+            failed_upstream=failed,
+        )
+    return SeedImportResult(
+        imported=imported,
+        skipped_existing=skipped_existing,
+        skipped_duplicate_input=skipped_duplicate_input,
+        failed_upstream=failed,
+    )
 
 
 def moderate_statement(

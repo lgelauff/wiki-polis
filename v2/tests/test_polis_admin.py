@@ -364,6 +364,30 @@ def test_add_seed_classifies_post_login_disconnect_for_admins():
     assert exc_info.value.admin_message == POLIS_UNREACHABLE_MESSAGE
 
 
+def test_bulk_seed_import_posts_explicit_approved_seed_statements():
+    client = _server_client()
+    login_patch, sess = _mock_login(client)
+    sess.post.return_value = _mock_ok({})
+
+    with login_patch:
+        successes, failures = client.bulk_add_seeds(
+            'abc123', ['First seed', 'Second seed'],
+        )
+
+    assert successes == 2
+    assert failures == []
+    assert [call.kwargs['json'] for call in sess.post.call_args_list] == [
+        {
+            'conversation_id': 'abc123', 'txt': 'First seed',
+            'is_seed': True, 'vote': 0,
+        },
+        {
+            'conversation_id': 'abc123', 'txt': 'Second seed',
+            'is_seed': True, 'vote': 0,
+        },
+    ]
+
+
 def test_close_and_hide_conversation_deactivates_and_hides_results():
     client = _server_client()
     login_patch, sess = _mock_login(client)

@@ -98,7 +98,9 @@ from services.admin_termination import (
 )
 from services.admin_statements import (
     LastFeaturedStatementProtected, StatementModerationUpstreamFailed,
-    build_statement_workspace, moderate_statement,
+    SeedImportUpstreamFailed, SeedImportValidationFailed,
+    SeedImportVerificationUnavailable, build_statement_workspace,
+    import_seed_statements, moderate_statement,
 )
 from services.admin_lifecycle import (
     PhasePreparationFailed, PhaseReadinessBlocked,
@@ -2693,6 +2695,42 @@ def _moderate_admin_statement_api_payload(
     return {
         'statementId': outcome.statement_id,
         'status': outcome.status,
+        'links': {
+            'statements': url_for(
+                'api_v1.get_admin_conversation_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _import_admin_seed_statements_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    lock_reason = _seed_statement_lock_reason(conv)
+    if lock_reason:
+        raise SeedImportValidationFailed(lock_reason)
+    existing, _strict = _load_admin_statement_sources(conv)
+    result = import_seed_statements(
+        conversation=conv,
+        candidates=body['statements'],
+        existing_buckets=existing,
+        sanitize=lambda text: nh3.clean(text, tags=_NH3_NO_TAGS),
+        strip_formula_prefixes=strip_formula_prefixes,
+        bulk_add_seeds=_polis_server_client().bulk_add_seeds,
+        max_rows=MAX_ROWS,
+        max_characters=MAX_TEXT_CHARS,
+        upstream_errors=(PolisServerError,),
+        audit=lambda **detail: record_audit(
+            'statement.seed_import', conv_id=conv.id, **detail,
+        ),
+    )
+    return {
+        'outcome': {
+            'imported': result.imported,
+            'skippedExisting': result.skipped_existing,
+            'skippedDuplicateInput': result.skipped_duplicate_input,
+            'failedUpstream': result.failed_upstream,
+        },
         'links': {
             'statements': url_for(
                 'api_v1.get_admin_conversation_statements',
@@ -6294,6 +6332,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         delete_admin_conversation=_delete_admin_conversation_api_payload,
         resolve_admin_statements=_admin_statements_api_payload,
         moderate_admin_statement=_moderate_admin_statement_api_payload,
+        import_admin_seed_statements=_import_admin_seed_statements_api_payload,
         advance_admin_phase=_advance_admin_phase_api_payload,
         set_admin_pause=_set_admin_pause_api_payload,
         set_admin_archive=_set_admin_archive_api_payload,

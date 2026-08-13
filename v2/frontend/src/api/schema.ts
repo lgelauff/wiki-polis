@@ -584,6 +584,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/statement-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import approved seed statements after validation and deduplication */
+        post: operations["postAdminStatementImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/phase": {
         parameters: {
             query?: never;
@@ -761,6 +780,22 @@ export interface components {
                 statementId: number;
                 /** @enum {string} */
                 status: "approved" | "pending" | "hidden";
+                links: {
+                    statements: string;
+                };
+            };
+        };
+        AdminStatementImportRequest: {
+            statements: string[];
+        };
+        AdminStatementImportResponse: {
+            data: {
+                outcome: {
+                    imported: number;
+                    skippedExisting: number;
+                    skippedDuplicateInput: number;
+                    failedUpstream: number;
+                };
                 links: {
                     statements: string;
                 };
@@ -3599,6 +3634,68 @@ export interface operations {
             };
             /** @description Statement service unavailable */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postAdminStatementImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStatementImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Import outcome */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStatementImportResponse"];
+                };
+            };
+            /** @description Invalid import */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Statement service unavailable */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Existing statements could not be verified */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
