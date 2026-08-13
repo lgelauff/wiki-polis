@@ -38,6 +38,7 @@ export const handlers = [
               self: '/c/community-strategy',
               about: '/c/community-strategy/about',
               explore: '/app/conversations/community-strategy/explore',
+              informedVoting: '/app/conversations/community-strategy/informed-voting',
               identityReveal: '/app/conversations/community-strategy/identity-reveal',
             },
           }],
@@ -89,6 +90,47 @@ export const handlers = [
         },
       },
     }),
+  ),
+  http.get(
+    new URL('/api/v1/conversations/community-strategy/informed-voting', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      data: {
+        slug: 'community-strategy',
+        title: 'Community strategy',
+        pseudonym: 'quiet-otter',
+        cards: [{
+          featuredStatementId: 31,
+          statement: 'Regional communities should share infrastructure funding.',
+          voted: false,
+          arguments: {
+            for: [{id: 81, body: 'Shared funding reduces duplicated maintenance.', helpfulVotes: 7}],
+            against: [{id: 82, body: 'Regional priorities may require independent budgets.', helpfulVotes: 4}],
+          },
+        }],
+        progress: {completed: 0, total: 1, remaining: 1, allDone: false},
+        capabilities: {vote: true},
+        links: {
+          self: '/api/v1/conversations/community-strategy/informed-voting',
+          about: '/app/conversations/community-strategy/about',
+          conversation: '/c/community-strategy',
+          explore: '/app/conversations/community-strategy/explore',
+          arguments: '/app/conversations/community-strategy/arguments',
+        },
+      },
+    }),
+  ),
+  http.put(
+    new URL('/api/v1/conversations/community-strategy/featured-statements/31/informed-vote', globalThis.location.origin).toString(),
+    async ({request}) => {
+      const body = await request.json() as {choice: 'agree' | 'pass' | 'disagree'};
+      return HttpResponse.json({
+        data: {
+          featuredStatementId: 31,
+          choice: body.choice,
+          links: {informedVoting: '/api/v1/conversations/community-strategy/informed-voting'},
+        },
+      });
+    },
   ),
   http.get(
     new URL('/api/v1/conversations/community-strategy/identity-reveal', globalThis.location.origin).toString(),

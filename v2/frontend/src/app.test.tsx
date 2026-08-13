@@ -123,6 +123,30 @@ test('can explain a pass as confusing without changing its vote meaning', async 
   expect(screen.getByRole('button', {name: 'Suggest clearer wording'})).toBeVisible();
 });
 
+test('completes informed voting through the typed replacement command', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/informed-voting']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {
+    name: 'Regional communities should share infrastructure funding.',
+  })).toBeVisible();
+  expect(screen.getByText(/reduces duplicated maintenance/)).toBeVisible();
+  expect(screen.getByText(/independent budgets/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Agree'}));
+
+  expect(await screen.findByRole('heading', {
+    name: 'You’ve completed informed voting.',
+  })).toBeVisible();
+  expect(screen.getByText(/recorded privately under/)).toHaveTextContent('quiet-otter');
+  fireEvent.click(screen.getByRole('button', {name: 'Review statements'}));
+  expect(await screen.findByText(/You voted/)).toHaveTextContent('agree');
+});
+
 test('submits clearer wording through the idempotent statement contract', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

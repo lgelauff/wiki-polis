@@ -51,6 +51,34 @@ export async function createIdentityReveal(slug: string, csrfToken: string) {
   ).data;
 }
 
+export const informedVotingQuery = (slug: string) => queryOptions({
+  queryKey: ['informed-voting', slug],
+  queryFn: async () => (
+    await requireApiData(api.GET('/conversations/{slug}/informed-voting', {
+      params: {path: {slug}},
+    }))
+  ).data,
+  staleTime: 0,
+});
+
+export async function putInformedVote(
+  slug: string,
+  featuredStatementId: number,
+  body: components['schemas']['InformedVoteRequest'],
+  csrfToken: string,
+) {
+  return (
+    await requireApiData(api.PUT(
+      '/conversations/{slug}/featured-statements/{featuredStatementId}/informed-vote',
+      {
+        params: {path: {slug, featuredStatementId}},
+        body,
+        headers: {'X-CSRFToken': csrfToken},
+      },
+    ))
+  ).data;
+}
+
 export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
   queryKey: ['pseudonym-suggestions', slug],
   queryFn: async () => (

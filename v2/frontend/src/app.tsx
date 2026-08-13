@@ -18,6 +18,7 @@ import {
 import {StatementComposer} from './features/explore/statement-composer';
 import {ArgumentMappingPage} from './features/arguments/argument-mapping-page';
 import {ContentFlagControl} from './features/flags/content-flag-control';
+import {InformedVotingPage} from './features/informed-voting/informed-voting-page';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -121,6 +122,9 @@ function ConversationRow({conversation, index}: {conversation: ConversationCard;
             <span><code>{conversation.outputs.filter((output) => output.ready).length}</code> outputs ready</span>
           )}
           <Link to={`/app/conversations/${conversation.slug}/about`}>About</Link>
+          {conversation.links.informedVoting && (
+            <Link to={conversation.links.informedVoting}>Informed vote</Link>
+          )}
           {conversation.links.identityReveal && (
             <Link to={conversation.links.identityReveal}>Identity reveal</Link>
           )}
@@ -665,6 +669,17 @@ function ArgumentMappingRoute() {
   );
 }
 
+function InformedVotingRoute() {
+  const {slug = ''} = useParams();
+  const {data: session} = useSuspenseQuery(sessionQuery());
+  return (
+    <>
+      <Header />
+      <InformedVotingPage slug={slug} csrfToken={session.csrfToken} />
+    </>
+  );
+}
+
 function ConversationGroup({definition, conversations, primary}: {
   definition: (typeof groupDefinitions)[number];
   conversations: ConversationCard[];
@@ -741,6 +756,7 @@ export function App() {
           <Route path="/app/conversations/:slug/join" element={<ConversationJoinPage />} />
           <Route path="/app/conversations/:slug/explore" element={<ExplorePage />} />
           <Route path="/app/conversations/:slug/arguments" element={<ArgumentMappingRoute />} />
+          <Route path="/app/conversations/:slug/informed-voting" element={<InformedVotingRoute />} />
           <Route path="/app/conversations/:slug/identity-reveal" element={<IdentityRevealPage />} />
           <Route path="*" element={<Navigate to="/app/real" replace />} />
         </Routes>
