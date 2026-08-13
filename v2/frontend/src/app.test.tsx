@@ -40,6 +40,32 @@ test('renders a conversation record from the generated API contract', async () =
     .toHaveAttribute('href', '/c/community-strategy');
 });
 
+test('requires deliberate confirmation before permanently revealing identity', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/identity-reveal']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {
+    name: 'Choose whether to link your identity',
+  })).toBeVisible();
+  const submit = screen.getByRole('button', {name: 'Permanently link my identity'});
+  expect(submit).toBeDisabled();
+
+  fireEvent.click(screen.getByRole('checkbox'));
+  expect(submit).toBeEnabled();
+  fireEvent.click(submit);
+
+  expect(await screen.findByRole('heading', {name: 'Identity linked'})).toBeVisible();
+  expect(screen.getByRole('heading', {
+    name: 'quiet-otter ↔ Example editor',
+  })).toBeVisible();
+  expect(screen.getByText(/public association is permanent/)).toBeVisible();
+});
+
 test('joins a conversation through the typed command', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

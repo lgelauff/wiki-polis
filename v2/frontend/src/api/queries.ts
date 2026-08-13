@@ -31,6 +31,26 @@ export const conversationAboutQuery = (slug: string) => queryOptions({
   staleTime: 15_000,
 });
 
+export const identityRevealQuery = (slug: string) => queryOptions({
+  queryKey: ['identity-reveal', slug],
+  queryFn: async () => (
+    await requireApiData(api.GET('/conversations/{slug}/identity-reveal', {
+      params: {path: {slug}},
+    }))
+  ).data,
+  staleTime: 0,
+});
+
+export async function createIdentityReveal(slug: string, csrfToken: string) {
+  return (
+    await requireApiData(api.POST('/conversations/{slug}/identity-reveal', {
+      params: {path: {slug}},
+      body: {confirm: true},
+      headers: {'X-CSRFToken': csrfToken},
+    }))
+  ).data;
+}
+
 export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
   queryKey: ['pseudonym-suggestions', slug],
   queryFn: async () => (

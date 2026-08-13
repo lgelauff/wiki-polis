@@ -38,6 +38,7 @@ export const handlers = [
               self: '/c/community-strategy',
               about: '/c/community-strategy/about',
               explore: '/app/conversations/community-strategy/explore',
+              identityReveal: '/app/conversations/community-strategy/identity-reveal',
             },
           }],
           caughtUp: [],
@@ -88,6 +89,58 @@ export const handlers = [
         },
       },
     }),
+  ),
+  http.get(
+    new URL('/api/v1/conversations/community-strategy/identity-reveal', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      data: {
+        slug: 'community-strategy',
+        title: 'Community strategy',
+        state: 'open',
+        pseudonym: 'quiet-otter',
+        wikimediaUsername: 'Example editor',
+        publicUsername: null,
+        timeline: {
+          closedAt: '2026-06-01T12:00:00Z',
+          opensAt: '2026-07-01T12:00:00Z',
+          closesAt: '2026-07-31T12:00:00Z',
+          nextBoundaryAt: '2026-07-31T12:00:00Z',
+          daysRemaining: 12,
+        },
+        capabilities: {revealIdentity: true},
+        links: {
+          self: '/api/v1/conversations/community-strategy/identity-reveal',
+          conversation: '/c/community-strategy',
+          about: '/app/conversations/community-strategy/about',
+        },
+      },
+    }),
+  ),
+  http.post(
+    new URL('/api/v1/conversations/community-strategy/identity-reveal', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      data: {
+        slug: 'community-strategy',
+        title: 'Community strategy',
+        state: 'revealed',
+        pseudonym: 'quiet-otter',
+        wikimediaUsername: 'Example editor',
+        publicUsername: 'Example editor',
+        timeline: {
+          closedAt: '2026-06-01T12:00:00Z',
+          opensAt: '2026-07-01T12:00:00Z',
+          closesAt: '2026-07-31T12:00:00Z',
+          nextBoundaryAt: null,
+          daysRemaining: 0,
+        },
+        capabilities: {revealIdentity: false},
+        links: {
+          self: '/api/v1/conversations/community-strategy/identity-reveal',
+          conversation: '/c/community-strategy',
+          about: '/app/conversations/community-strategy/about',
+        },
+      },
+    }, {status: 201}),
   ),
   http.get(
     new URL('/api/v1/conversations/community-strategy/pseudonym-suggestions', globalThis.location.origin).toString(),
