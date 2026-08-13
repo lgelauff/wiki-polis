@@ -81,6 +81,8 @@ def create_api_v1_blueprint(
     resolve_admin_roles: Callable[[int], dict],
     replace_admin_roles: Callable[[int, int, dict], dict],
     resolve_admin_lifecycle: Callable[[int], dict],
+    resolve_admin_settings: Callable[[int], dict],
+    update_admin_settings: Callable[[int, dict], dict],
     advance_admin_phase: Callable[[int, dict], dict],
     set_admin_pause: Callable[[int, dict], dict],
     publish_admin_report: Callable[[int, dict], dict],
@@ -370,6 +372,44 @@ def create_api_v1_blueprint(
     def get_admin_conversation_lifecycle(conversation_id: int):
         return _no_store(jsonify({
             'data': resolve_admin_lifecycle(conversation_id),
+        }))
+
+    @bp.get('/admin/conversations/<int:conversation_id>/settings')
+    def get_admin_conversation_settings(conversation_id: int):
+        return _no_store(jsonify({
+            'data': resolve_admin_settings(conversation_id),
+        }))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/settings')
+    def put_admin_conversation_settings(conversation_id: int):
+        body = request.get_json(silent=True)
+        expected = {
+            'title', 'introHtml', 'outroHtml', 'accessPolicy',
+            'recommendationTier',
+        }
+        fields = {}
+        if not isinstance(body, dict) or set(body) != expected:
+            return error_response(
+                'validation_failed', 'Provide the complete settings representation.',
+                400,
+            )
+        if (not isinstance(body['title'], str) or not body['title'].strip()
+                or len(body['title'].strip()) > 255):
+            fields['title'] = ['Write a title up to 255 characters.']
+        for key in ('introHtml', 'outroHtml'):
+            if not isinstance(body[key], str):
+                fields[key] = ['Use text.']
+        if body['accessPolicy'] not in {'public', 'invite_only', 'demo'}:
+            fields['accessPolicy'] = ['Choose public, invite_only, or demo.']
+        if body['recommendationTier'] not in {'simple', 'medium', 'complex'}:
+            fields['recommendationTier'] = ['Choose a supported scope tier.']
+        if fields:
+            return error_response(
+                'validation_failed', 'Check the highlighted settings.', 400,
+                details={'fields': fields},
+            )
+        return _no_store(jsonify({
+            'data': update_admin_settings(conversation_id, body),
         }))
 
     @bp.put('/admin/conversations/<int:conversation_id>/phase')

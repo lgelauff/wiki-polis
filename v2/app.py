@@ -89,6 +89,8 @@ from services.admin_roles import (
     RoleParticipantNotFound, build_admin_role_roster,
     replace_conversation_roles,
 )
+from services.admin_settings import (build_admin_settings,
+                                     update_conversation_settings)
 from services.admin_lifecycle import (
     PhasePreparationFailed, PhaseReadinessBlocked,
     PhaseReadinessUnconfirmed, PhaseTransitionConflict,
@@ -2551,8 +2553,41 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
             'roles': url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}/roles'),
             'statements': url_for('admin.admin_conversation_statements', conv_id=conv.id),
             'featuredStatements': url_for('admin.admin_conversation_featured', conv_id=conv.id),
+            'settings': url_for('api_v1.get_admin_conversation_settings', conversation_id=conv.id),
         },
     )
+
+
+def _admin_settings_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    return build_admin_settings(
+        conversation=conv,
+        recommendation_tiers=_RECOMMENDATION_TIERS,
+        recommendation_profile=_recommendation_profile(conv),
+        can_edit=_can_organize(conv),
+        self_link=url_for(
+            'api_v1.get_admin_conversation_settings', conversation_id=conv.id,
+        ),
+        lifecycle_link=url_for(
+            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
+        ),
+    )
+
+
+def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_organizer_for_conv(conv_id)
+    result = update_conversation_settings(
+        conversation=conv,
+        title=body['title'], intro_html=body['introHtml'],
+        outro_html=body['outroHtml'], access_policy=body['accessPolicy'],
+        tier=body['recommendationTier'], sanitise=_sanitise_text,
+        session=db.session, audit=record_audit,
+    )
+    return {
+        'changed': result.changed,
+        'changedFields': result.changed_fields,
+        'settings': _admin_settings_api_payload(conv.id),
+    }
 
 
 def _advance_admin_phase_command(conv: Conversation, confirmed_ids: set[str]):
@@ -6066,6 +6101,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_admin_roles=_admin_role_roster_api_payload,
         replace_admin_roles=_replace_admin_roles_api_payload,
         resolve_admin_lifecycle=_admin_lifecycle_api_payload,
+        resolve_admin_settings=_admin_settings_api_payload,
+        update_admin_settings=_update_admin_settings_api_payload,
         advance_admin_phase=_advance_admin_phase_api_payload,
         set_admin_pause=_set_admin_pause_api_payload,
         publish_admin_report=_publish_admin_report_api_payload,

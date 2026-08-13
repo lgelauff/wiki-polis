@@ -751,6 +751,18 @@
         }
       }
     },
+    "/admin/conversations/{conversationId}/settings": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "get": {"operationId": "getAdminConversationSettings", "summary": "Return editable conversation settings and tool-owned guidance", "responses": {
+        "200": {"description": "Conversation settings", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminSettingsResponse"}}}},
+        "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }},
+      "put": {"operationId": "putAdminConversationSettings", "summary": "Replace editable conversation settings", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminSettingsRequest"}}}}, "responses": {
+        "200": {"description": "Update receipt and refreshed settings", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminSettingsUpdateResponse"}}}},
+        "400": {"description": "Invalid settings", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/phase": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "put": {
@@ -796,6 +808,19 @@
   },
   "components": {
     "schemas": {
+      "AdminSettingsResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminSettings"}}},
+      "AdminSettingsRequest": {"type": "object", "required": ["title", "introHtml", "outroHtml", "accessPolicy", "recommendationTier"], "additionalProperties": false, "properties": {
+        "title": {"type": "string", "minLength": 1, "maxLength": 255}, "introHtml": {"type": "string"}, "outroHtml": {"type": "string"},
+        "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "recommendationTier": {"type": "string", "enum": ["simple", "medium", "complex"]}
+      }},
+      "AdminSettingsUpdateResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["changed", "changedFields", "settings"], "additionalProperties": false, "properties": {"changed": {"type": "boolean"}, "changedFields": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}, "settings": {"$ref": "#/components/schemas/AdminSettings"}}}}},
+      "AdminSettings": {"type": "object", "required": ["conversation", "recommendations", "eligibility", "capabilities", "links"], "additionalProperties": false, "properties": {
+        "conversation": {"type": "object", "required": ["id", "slug", "title", "introHtml", "outroHtml", "accessPolicy", "phaseRoute"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}, "introHtml": {"type": "string"}, "outroHtml": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "phaseRoute": {"type": "string"}}},
+        "recommendations": {"type": "object", "required": ["tier", "tiers"], "additionalProperties": false, "properties": {"tier": {"type": "string", "enum": ["simple", "medium", "complex"]}, "tiers": {"type": "array", "items": {"type": "object", "required": ["key", "label", "quantities"], "additionalProperties": false, "properties": {"key": {"type": "string", "enum": ["simple", "medium", "complex"]}, "label": {"type": "string"}, "quantities": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 1}}}}}}},
+        "eligibility": {"type": "object", "required": ["configured", "label", "configurationMode", "note"], "additionalProperties": false, "properties": {"configured": {"type": "boolean"}, "label": {"type": ["string", "null"]}, "configurationMode": {"type": "string", "const": "legacy_read_only"}, "note": {"type": "string"}}},
+        "capabilities": {"type": "object", "required": ["edit"], "additionalProperties": false, "properties": {"edit": {"type": "boolean"}}},
+        "links": {"type": "object", "required": ["self", "lifecycle"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "lifecycle": {"type": "string"}}}
+      }},
       "AdminLifecycleResponse": {
         "type": "object", "required": ["data"], "additionalProperties": false,
         "properties": {"data": {"$ref": "#/components/schemas/AdminLifecycle"}}
@@ -844,8 +869,8 @@
           "capabilities": {"type": "object", "required": ["advancePhase", "pause", "publish", "editSettings", "useAdvancedPhases"], "additionalProperties": false, "properties": {
             "advancePhase": {"type": "boolean"}, "pause": {"type": "boolean"}, "publish": {"type": "boolean"}, "editSettings": {"type": "boolean"}, "useAdvancedPhases": {"type": "boolean"}
           }},
-          "links": {"type": "object", "required": ["self", "participantView", "participants", "moderation", "invitations", "roles", "statements", "featuredStatements"], "additionalProperties": false, "properties": {
-            "self": {"type": "string"}, "participantView": {"type": "string"}, "participants": {"type": "string"}, "moderation": {"type": "string"}, "invitations": {"type": "string"}, "roles": {"type": "string"}, "statements": {"type": "string"}, "featuredStatements": {"type": "string"}
+          "links": {"type": "object", "required": ["self", "participantView", "participants", "moderation", "invitations", "roles", "statements", "featuredStatements", "settings"], "additionalProperties": false, "properties": {
+            "self": {"type": "string"}, "participantView": {"type": "string"}, "participants": {"type": "string"}, "moderation": {"type": "string"}, "invitations": {"type": "string"}, "roles": {"type": "string"}, "statements": {"type": "string"}, "featuredStatements": {"type": "string"}, "settings": {"type": "string"}
           }}
         }
       },

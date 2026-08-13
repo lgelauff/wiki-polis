@@ -505,6 +505,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        /** Return editable conversation settings and tool-owned guidance */
+        get: operations["getAdminConversationSettings"];
+        /** Replace editable conversation settings */
+        put: operations["putAdminConversationSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/phase": {
         parameters: {
             query?: never;
@@ -583,6 +603,63 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdminSettingsResponse: {
+            data: components["schemas"]["AdminSettings"];
+        };
+        AdminSettingsRequest: {
+            title: string;
+            introHtml: string;
+            outroHtml: string;
+            /** @enum {string} */
+            accessPolicy: "public" | "invite_only" | "demo";
+            /** @enum {string} */
+            recommendationTier: "simple" | "medium" | "complex";
+        };
+        AdminSettingsUpdateResponse: {
+            data: {
+                changed: boolean;
+                changedFields: string[];
+                settings: components["schemas"]["AdminSettings"];
+            };
+        };
+        AdminSettings: {
+            conversation: {
+                id: number;
+                slug: string;
+                title: string;
+                introHtml: string;
+                outroHtml: string;
+                /** @enum {string} */
+                accessPolicy: "public" | "invite_only" | "demo";
+                phaseRoute: string;
+            };
+            recommendations: {
+                /** @enum {string} */
+                tier: "simple" | "medium" | "complex";
+                tiers: {
+                    /** @enum {string} */
+                    key: "simple" | "medium" | "complex";
+                    label: string;
+                    quantities: {
+                        [key: string]: number;
+                    };
+                }[];
+            };
+            eligibility: {
+                configured: boolean;
+                label: string | null;
+                /** @constant */
+                configurationMode: "legacy_read_only";
+                note: string;
+            };
+            capabilities: {
+                edit: boolean;
+            };
+            links: {
+                self: string;
+                lifecycle: string;
+            };
+        };
         AdminLifecycleResponse: {
             data: components["schemas"]["AdminLifecycle"];
         };
@@ -672,6 +749,7 @@ export interface components {
                 roles: string;
                 statements: string;
                 featuredStatements: string;
+                settings: string;
             };
         };
         AdminLifecycleConversation: {
@@ -2969,6 +3047,81 @@ export interface operations {
             };
             /** @description Conversation not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminConversationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversation settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSettingsResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminConversationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Update receipt and refreshed settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSettingsUpdateResponse"];
+                };
+            };
+            /** @description Invalid settings */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Organizer permission required */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

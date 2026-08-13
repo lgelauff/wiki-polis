@@ -1,0 +1,74 @@
+"""Conversation settings projection and convergent update commands."""
+
+from dataclasses import dataclass
+
+
+def build_admin_settings(
+    *, conversation, recommendation_tiers: dict, recommendation_profile: dict,
+    can_edit: bool, self_link: str, lifecycle_link: str,
+) -> dict:
+    return {
+        'conversation': {
+            'id': conversation.id,
+            'slug': conversation.slug,
+            'title': conversation.title,
+            'introHtml': conversation.intro_text or '',
+            'outroHtml': conversation.outro_text or '',
+            'accessPolicy': conversation.access_policy,
+            'phaseRoute': conversation.phase_route,
+        },
+        'recommendations': {
+            'tier': recommendation_profile['tier'],
+            'tiers': [{
+                'key': key,
+                'label': values['label'],
+                'quantities': {
+                    quantity: value for quantity, value in values.items()
+                    if quantity != 'label'
+                },
+            } for key, values in recommendation_tiers.items()],
+        },
+        'eligibility': {
+            'configured': bool(conversation.eligibility_event_id),
+            'label': conversation.eligibility_label,
+            'configurationMode': 'legacy_read_only',
+            'note': (
+                'Eligibility changes are unavailable until curated criteria and wiki '
+                'mappings are configured.'
+            ),
+        },
+        'capabilities': {'edit': can_edit},
+        'links': {'self': self_link, 'lifecycle': lifecycle_link},
+    }
+
+
+@dataclass(frozen=True)
+class SettingsUpdateResult:
+    changed: bool
+    changed_fields: list[str]
+
+
+def update_conversation_settings(
+    *, conversation, title: str, intro_html: str, outro_html: str,
+    access_policy: str, tier: str, sanitise, session, audit,
+) -> SettingsUpdateResult:
+    desired = {
+        'title': title.strip(),
+        'intro_text': sanitise(intro_html),
+        'outro_text': sanitise(outro_html),
+        'access_policy': access_policy,
+        'recommended_quantities': {'tier': tier},
+    }
+    changed_fields = sorted(
+        field for field, value in desired.items()
+        if getattr(conversation, field) != value
+    )
+    for field in changed_fields:
+        setattr(conversation, field, desired[field])
+    session.commit()
+    if changed_fields:
+        audit(
+            'conversation.settings.update', conv_id=conversation.id,
+            fields=changed_fields,
+        )
+    return SettingsUpdateResult(bool(changed_fields), changed_fields)
