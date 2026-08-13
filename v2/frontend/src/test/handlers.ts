@@ -2,6 +2,45 @@ import {http, HttpResponse} from 'msw';
 
 export const handlers = [
   http.get(
+    new URL('/api/v1/admin/conversations/7/participants', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      data: {
+        conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+        participants: [{
+          participantId: 23,
+          username: 'Example editor',
+          pseudonym: 'quiet-otter',
+          statementProgress: {total: 12, voted: 8, remaining: 4},
+          arguments: {submitted: 2, prioritized: 5},
+          lastEngagementAt: '2026-08-13T09:30:00Z',
+          access: {banned: false, changedAt: null, summary: null},
+        }],
+        dataAvailability: {statementProgress: true},
+        capabilities: {setParticipantAccess: true},
+        links: {
+          self: '/api/v1/admin/conversations/7/participants',
+          conversation: '/admin/conversations/7',
+        },
+      },
+    }),
+  ),
+  http.put(
+    new URL('/api/v1/admin/conversations/7/participants/23/access', globalThis.location.origin).toString(),
+    async ({request}) => {
+      const body = await request.json() as {banned: boolean; summary?: string | null};
+      return HttpResponse.json({
+        data: {
+          participantId: 23,
+          banned: body.banned,
+          changed: true,
+          changedAt: '2026-08-13T10:00:00Z',
+          summary: body.summary ?? null,
+          links: {participants: '/api/v1/admin/conversations/7/participants'},
+        },
+      });
+    },
+  ),
+  http.get(
     new URL('/api/v1/session', globalThis.location.origin).toString(),
     () => HttpResponse.json({
       data: {

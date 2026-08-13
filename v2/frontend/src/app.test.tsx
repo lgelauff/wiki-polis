@@ -23,6 +23,35 @@ test('renders a conversation lane from the API contract', async () => {
     .toHaveAttribute('href', '/c/community-strategy');
 });
 
+test('manages participant access in the distinct admin workspace', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/admin/conversations/7/participants']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: 'Community strategy'})).toBeVisible();
+  expect(screen.getByRole('navigation', {name: 'Workspace'})).toHaveTextContent(
+    'Admin workspace',
+  );
+  expect(screen.getByRole('rowheader', {name: /Example editor/})).toHaveTextContent(
+    'quiet-otter',
+  );
+  expect(screen.getByText('8 / 12')).toBeVisible();
+  fireEvent.change(screen.getByLabelText('Reason (optional)'), {
+    target: {value: 'Repeated disruption'},
+  });
+  fireEvent.click(screen.getByRole('button', {name: 'Ban Example editor'}));
+
+  expect(await screen.findByRole('button', {
+    name: 'Unban Example editor',
+  })).toBeVisible();
+  expect(screen.getByText('Repeated disruption')).toBeVisible();
+  expect(screen.getByRole('status')).toHaveTextContent('Access updated');
+});
+
 test('renders a conversation record from the generated API contract', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

@@ -20,6 +20,7 @@ import {ArgumentMappingPage} from './features/arguments/argument-mapping-page';
 import {ContentFlagControl} from './features/flags/content-flag-control';
 import {InformedVotingPage} from './features/informed-voting/informed-voting-page';
 import {ResultsPage} from './features/results/results-page';
+import {AdminParticipantsPage} from './features/admin/admin-participants-page';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -48,7 +49,7 @@ function OrbitMark() {
   );
 }
 
-function Header({space}: {space?: ConversationSpace}) {
+function Header({space, admin = false}: {space?: ConversationSpace; admin?: boolean}) {
   const {data: session} = useSuspenseQuery(sessionQuery());
   return (
     <header className="app-header">
@@ -58,10 +59,17 @@ function Header({space}: {space?: ConversationSpace}) {
           <span>Wiki Polis</span>
           <span className="brand__beta">prototype</span>
         </a>
-        <nav className="space-switch" aria-label="Conversation space">
-          <NavLink to="/app/demo" aria-current={space === 'demo' ? 'page' : undefined}>Try it out</NavLink>
-          <NavLink to="/app/real" aria-current={space === 'real' ? 'page' : undefined}>Real</NavLink>
-        </nav>
+        {admin ? (
+          <nav className="admin-mode" aria-label="Workspace">
+            <strong>Admin workspace</strong>
+            <Link to="/app/real">Participant view</Link>
+          </nav>
+        ) : (
+          <nav className="space-switch" aria-label="Conversation space">
+            <NavLink to="/app/demo" aria-current={space === 'demo' ? 'page' : undefined}>Try it out</NavLink>
+            <NavLink to="/app/real" aria-current={space === 'real' ? 'page' : undefined}>Real</NavLink>
+          </nav>
+        )}
         {session.state === 'anonymous' ? (
           <a className="account-link" href={session.links.login}>Log in</a>
         ) : (
@@ -694,6 +702,20 @@ function ResultsRoute() {
   );
 }
 
+function AdminParticipantsRoute() {
+  const {conversationId = ''} = useParams();
+  const {data: session} = useSuspenseQuery(sessionQuery());
+  return (
+    <>
+      <Header admin />
+      <AdminParticipantsPage
+        conversationId={Number(conversationId)}
+        csrfToken={session.csrfToken}
+      />
+    </>
+  );
+}
+
 function ConversationGroup({definition, conversations, primary}: {
   definition: (typeof groupDefinitions)[number];
   conversations: ConversationCard[];
@@ -773,6 +795,7 @@ export function App() {
           <Route path="/app/conversations/:slug/informed-voting" element={<InformedVotingRoute />} />
           <Route path="/app/conversations/:slug/results" element={<ResultsRoute />} />
           <Route path="/app/conversations/:slug/identity-reveal" element={<IdentityRevealPage />} />
+          <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
           <Route path="*" element={<Navigate to="/app/real" replace />} />
         </Routes>
       </Suspense>

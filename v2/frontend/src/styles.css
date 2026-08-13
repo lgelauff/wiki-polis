@@ -93,6 +93,9 @@ a { color: inherit; }
   color: white;
   background: var(--ink);
 }
+.admin-mode { margin-left: auto; display: flex; align-items: center; gap: .8rem; }
+.admin-mode strong { padding: .45rem .65rem; color: white; background: var(--ink); font: 650 .66rem var(--mono); letter-spacing: .07em; text-transform: uppercase; }
+.admin-mode a { color: var(--muted); font-size: .76rem; text-underline-offset: .2em; }
 .account-link { font-size: .82rem; color: var(--muted); }
 .account-form { display: flex; align-items: center; gap: .65rem; color: var(--muted); font-size: .78rem; }
 .account-form button { padding: 0; border: 0; color: var(--muted); background: none; text-decoration: underline; cursor: pointer; }
@@ -540,6 +543,51 @@ a { color: inherit; }
 .flag-submit:disabled { opacity: .5; cursor: not-allowed; }
 .flag-dialog__receipt p:not(.eyebrow) { color: var(--muted); line-height: 1.5; }
 
+.admin-roster { width: min(1240px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 6rem; }
+.admin-roster__heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 3rem; padding: clamp(3rem, 7vw, 6rem) 0 2rem; border-bottom: 1px solid var(--ink); }
+.admin-roster__heading h1 { margin: .3rem 0 1rem; font-size: clamp(2.5rem, 6vw, 5rem); line-height: .94; letter-spacing: -.06em; }
+.admin-roster__heading > div > p:last-child { margin: 0; max-width: 650px; color: var(--muted); line-height: 1.5; }
+.admin-roster__heading dl { display: flex; gap: 2rem; margin: 0; }
+.admin-roster__heading dt { color: var(--muted); font: .62rem var(--mono); text-transform: uppercase; }
+.admin-roster__heading dd { margin: .3rem 0 0; font: 650 2rem var(--mono); }
+.admin-roster__notice { display: flex; gap: .8rem; margin-top: 1.5rem; padding: 1rem; border-left: 4px solid var(--signal); background: color-mix(in srgb, var(--signal) 7%, white); }
+.admin-roster__notice span { color: var(--muted); }
+.admin-roster__table-wrap { margin-top: 2rem; overflow-x: auto; }
+.admin-roster table { width: 100%; border-collapse: collapse; background: var(--surface); }
+.admin-roster caption { padding: 0 0 1rem; color: var(--muted); font-size: .76rem; line-height: 1.45; text-align: left; caption-side: top; }
+.admin-roster thead { border-block: 1px solid var(--ink); }
+.admin-roster th, .admin-roster td { padding: 1rem; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+.admin-roster thead th { color: var(--muted); font: 650 .62rem var(--mono); letter-spacing: .065em; text-transform: uppercase; }
+.admin-roster tbody th > strong, .admin-roster tbody th > code { display: block; }
+.admin-roster tbody th > code { margin-top: .35rem; color: var(--muted); font: .66rem var(--mono); }
+.admin-roster tbody td > time { color: var(--muted); font-size: .75rem; white-space: nowrap; }
+.admin-roster__progress strong, .admin-roster__progress span { display: block; }
+.admin-roster__progress strong { font: 650 .85rem var(--mono); }
+.admin-roster__progress span, .admin-roster__unavailable { margin-top: .25rem; color: var(--muted); font-size: .68rem; }
+.admin-roster__progress > div { width: 110px; height: 3px; margin-top: .55rem; background: var(--rule); }
+.admin-roster__progress i { display: block; height: 100%; background: var(--civic); }
+.admin-roster__arguments { display: flex; gap: 1.2rem; margin: 0; }
+.admin-roster__arguments dt { color: var(--muted); font-size: .62rem; }
+.admin-roster__arguments dd { margin: .25rem 0 0; font: 650 .9rem var(--mono); }
+.admin-access { min-width: 280px; }
+.admin-access__state { display: flex; align-items: center; gap: .45rem; font-size: .74rem; }
+.admin-access__state > span { width: 8px; height: 8px; border-radius: 50%; background: var(--consensus); }
+.admin-access__state[data-banned="true"] > span { background: var(--dissent); }
+.admin-access__state small { color: var(--muted); }
+.admin-access > p { margin: .45rem 0 0; color: var(--muted); font-size: .7rem; line-height: 1.4; }
+.admin-access form { margin-top: .75rem; }
+.admin-access label { display: block; margin-bottom: .3rem; font-size: .65rem; }
+.admin-access label span { color: var(--muted); }
+.admin-access form > div { display: grid; grid-template-columns: minmax(100px, 1fr) auto; }
+.admin-access input { min-width: 0; padding: .5rem; border: 1px solid var(--rule); border-right: 0; }
+.admin-access button { padding: .5rem .65rem; border: 1px solid currentColor; background: white; cursor: pointer; font-size: .68rem; }
+.admin-access__ban { color: var(--dissent); }
+.admin-access__allow { color: var(--consensus); }
+.admin-access button:disabled { opacity: .5; cursor: wait; }
+.admin-access .admin-access__error { color: var(--dissent); }
+.admin-access .admin-access__receipt { color: var(--consensus); }
+.admin-roster__empty { padding: 2rem 1rem; border-bottom: 1px solid var(--rule); color: var(--muted); background: var(--surface); }
+
 @keyframes ledger-in {
   from { opacity: 0; translate: 0 10px; }
 }
@@ -547,8 +595,9 @@ a { color: inherit; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
 }
 @media (max-width: 720px) {
-  .app-header__inner, .lane-shell, .record-shell { width: min(100% - 24px, 1120px); }
+  .app-header__inner, .lane-shell, .record-shell, .admin-roster { width: min(100% - 24px, 1120px); }
   .brand__beta, .account-link, .account-form span { display: none; }
+  .admin-mode a { display: none; }
   .app-header__inner { gap: .6rem; }
   .lane-intro { grid-template-columns: 1fr; }
   .attention-count { border-left: 0; border-top: 1px solid var(--rule); padding: 1rem 0 0; display: flex; align-items: baseline; gap: .8rem; }
@@ -599,4 +648,5 @@ a { color: inherit; }
   .argument-step__locked { margin-left: 0; }
   .argument-composer__footer { align-items: start; flex-wrap: wrap; }
   .argument-composer__footer span { width: 100%; }
+  .admin-roster__heading { grid-template-columns: 1fr; align-items: start; }
 }

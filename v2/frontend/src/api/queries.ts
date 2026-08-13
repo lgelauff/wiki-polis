@@ -89,6 +89,34 @@ export const resultsReportQuery = (slug: string) => queryOptions({
   staleTime: 30_000,
 });
 
+export const adminParticipantRosterQuery = (conversationId: number) => queryOptions({
+  queryKey: ['admin-participant-roster', conversationId],
+  queryFn: async () => (
+    await requireApiData(api.GET('/admin/conversations/{conversationId}/participants', {
+      params: {path: {conversationId}},
+    }))
+  ).data,
+  staleTime: 10_000,
+});
+
+export async function putAdminParticipantAccess(
+  conversationId: number,
+  participantId: number,
+  body: components['schemas']['AdminParticipantAccessRequest'],
+  csrfToken: string,
+) {
+  return (
+    await requireApiData(api.PUT(
+      '/admin/conversations/{conversationId}/participants/{participantId}/access',
+      {
+        params: {path: {conversationId, participantId}},
+        body,
+        headers: {'X-CSRFToken': csrfToken},
+      },
+    ))
+  ).data;
+}
+
 export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
   queryKey: ['pseudonym-suggestions', slug],
   queryFn: async () => (

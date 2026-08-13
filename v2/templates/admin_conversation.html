@@ -440,7 +440,7 @@
         <div class="manage-card-title">Featured statements</div>
         <div class="manage-card-desc">Curate the set for arguments &amp; informed voting</div>
       </a>
-      <a class="manage-card" href="{{ url_for('admin.admin_conversation_participants', conv_id=conversation.id) }}">
+      <a class="manage-card" href="{{ url_for('spa_shell', spa_path='admin/conversations/' ~ conversation.id ~ '/participants') }}">
         <div class="manage-card-top"><span class="manage-card-count">{{ participant_count }} joined</span></div>
         <div class="manage-card-title">Participants</div>
         <div class="manage-card-desc">Review per-participant engagement and drop-off signals</div>
