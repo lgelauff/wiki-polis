@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 import tinycss2
 
-STATIC = Path(__file__).resolve().parents[1] / 'static'
+ROOT = Path(__file__).resolve().parents[1]
+STATIC = ROOT / 'static'
+STYLESHEETS = [*sorted(STATIC.glob('*.css')), ROOT / 'frontend' / 'src' / 'styles.css']
 _RULE_LIST_AT_RULES = {'container', 'keyframes', '-webkit-keyframes', 'layer', 'media', 'supports'}
 
 
@@ -22,7 +24,7 @@ def _errors(nodes):
             yield from _errors(parser(node.content))
 
 
-@pytest.mark.parametrize('path', sorted(STATIC.glob('*.css')), ids=lambda p: p.name)
+@pytest.mark.parametrize('path', STYLESHEETS, ids=lambda p: p.name)
 def test_css_parses_without_errors(path):
     stylesheet = tinycss2.parse_stylesheet(
         path.read_text(encoding='utf-8'),
