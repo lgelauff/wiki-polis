@@ -160,3 +160,17 @@ export async function putArgumentPriority(
     ))
   ).data;
 }
+
+export async function createContentFlag(
+  slug: string,
+  body: components['schemas']['CreateContentFlagRequest'],
+  csrfToken: string,
+) {
+  return (
+    await requireApiData(api.POST('/conversations/{slug}/flags', {
+      params: {path: {slug}},
+      body,
+      headers: {'X-CSRFToken': csrfToken},
+    }))
+  ).data;
+}

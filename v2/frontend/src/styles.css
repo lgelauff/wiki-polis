@@ -335,6 +335,7 @@ a { color: inherit; }
 .explore-card { min-height: 470px; display: flex; flex-direction: column; padding: clamp(1.5rem, 5vw, 4rem); border: 1px solid var(--rule); background: var(--surface); box-shadow: 0 18px 55px rgba(34, 45, 65, .06); }
 .explore-card--voted { border-color: color-mix(in srgb, var(--consensus) 55%, var(--rule)); }
 .explore-card__meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font: .65rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+.explore-card__tools { display: flex; align-items: center; gap: 1rem; }
 .explore-statement { margin: auto 0; padding: 3rem 0; max-width: 800px; font-size: clamp(1.8rem, 4.8vw, 3.7rem); font-weight: 620; line-height: 1.08; letter-spacing: -.045em; }
 .explore-choices { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--rule); }
 .explore-choices button { min-height: 58px; display: flex; justify-content: center; align-items: center; gap: .55rem; border: 0; border-right: 1px solid var(--rule); background: transparent; cursor: pointer; font-weight: 620; }
@@ -377,6 +378,7 @@ a { color: inherit; }
 .arguments-heading h1 { margin: 0; font-size: clamp(1.7rem, 4vw, 3rem); letter-spacing: -.045em; }
 .argument-task { border: 1px solid var(--rule); background: var(--surface); box-shadow: 0 18px 55px rgba(34, 45, 65, .06); }
 .argument-task__statement { padding: clamp(1.6rem, 4vw, 3rem); border-bottom: 1px solid var(--ink); }
+.argument-task__meta { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
 .argument-task__statement h2 { max-width: 900px; margin: 0; font-size: clamp(1.8rem, 4.4vw, 3.5rem); line-height: 1.08; letter-spacing: -.045em; }
 .argument-step { padding: clamp(1.5rem, 4vw, 3rem); border-bottom: 1px solid var(--rule); }
 .argument-step__heading { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
@@ -410,6 +412,23 @@ a { color: inherit; }
 .argument-task-nav { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; font: .72rem var(--mono); }
 .argument-task-nav button { padding: .55rem 0; border: 0; background: none; cursor: pointer; }
 .argument-task-nav button:disabled { opacity: .35; cursor: not-allowed; }
+
+.flag-trigger { padding: .15rem 0; border: 0; color: var(--muted); background: none; cursor: pointer; font: 600 .62rem var(--mono); text-transform: uppercase; letter-spacing: .055em; text-decoration: underline; text-underline-offset: .2em; }
+.flag-dialog { width: min(520px, calc(100% - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid var(--ink); color: var(--ink); background: var(--surface); box-shadow: 0 28px 90px rgba(17, 19, 24, .28); }
+.flag-dialog::backdrop { background: rgba(17, 19, 24, .52); backdrop-filter: blur(3px); }
+.flag-dialog form, .flag-dialog__receipt { padding: clamp(1.4rem, 5vw, 2.3rem); }
+.flag-dialog__heading { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
+.flag-dialog h2 { margin: 0; font-size: clamp(1.7rem, 5vw, 2.5rem); line-height: 1; letter-spacing: -.045em; }
+.flag-close { width: 36px; height: 36px; border: 1px solid var(--rule); border-radius: 50%; color: var(--muted); background: white; cursor: pointer; font-size: 1.4rem; line-height: 1; }
+.flag-dialog blockquote { margin: 1.5rem 0; padding: .9rem 1rem; border-left: 3px solid var(--civic); color: var(--muted); background: var(--paper); font-size: .9rem; line-height: 1.45; }
+.flag-dialog label { display: block; margin: 1rem 0 .4rem; font-weight: 650; }
+.flag-dialog select, .flag-dialog textarea { width: 100%; padding: .75rem; border: 1px solid var(--ink); border-radius: 0; color: var(--ink); background: white; font: inherit; }
+.flag-dialog textarea { resize: vertical; }
+.flag-dialog__privacy { color: var(--muted); font-size: .76rem; line-height: 1.45; }
+.flag-dialog__actions { display: flex; justify-content: flex-end; align-items: center; gap: 1rem; margin-top: 1.25rem; }
+.flag-submit { min-height: 42px; padding: .65rem .85rem; border: 0; color: white; background: var(--ink); cursor: pointer; }
+.flag-submit:disabled { opacity: .5; cursor: not-allowed; }
+.flag-dialog__receipt p:not(.eyebrow) { color: var(--muted); line-height: 1.5; }
 
 @keyframes ledger-in {
   from { opacity: 0; translate: 0 10px; }

@@ -15,6 +15,7 @@ import {
 } from './api/queries';
 import {StatementComposer} from './features/explore/statement-composer';
 import {ArgumentMappingPage} from './features/arguments/argument-mapping-page';
+import {ContentFlagControl} from './features/flags/content-flag-control';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -455,7 +456,15 @@ function ExplorePage() {
           <section className={`explore-card${receipt ? ' explore-card--voted' : ''}`}>
             <div className="explore-card__meta">
               <span>{data.currentStatement.isMeta ? 'Process' : data.currentStatement.isSeed ? 'Starting statement' : 'Community statement'}</span>
-              <span>Statement {data.progress.completed + 1}</span>
+              <span className="explore-card__tools">
+                <span>Statement {data.progress.completed + 1}</span>
+                <ContentFlagControl
+                  slug={slug}
+                  csrfToken={session.csrfToken}
+                  target={{contentType: 'statement', targetId: data.currentStatement.id}}
+                  targetLabel={data.currentStatement.text}
+                />
+              </span>
             </div>
             <p className="explore-statement">{data.currentStatement.text}</p>
             {receipt ? (

@@ -243,4 +243,22 @@ export const handlers = [
       });
     },
   ),
+  http.post(
+    new URL('/api/v1/conversations/community-strategy/flags', globalThis.location.origin).toString(),
+    async ({request}) => {
+      const body = await request.json() as {
+        contentType: 'statement' | 'argument';
+        targetId: number;
+        category: 'personal_attack' | 'privacy' | 'off_topic' | 'other';
+      };
+      return HttpResponse.json({
+        data: {
+          ...body,
+          status: 'open',
+          created: true,
+          links: {conversation: '/c/community-strategy'},
+        },
+      }, {status: 201});
+    },
+  ),
 ];

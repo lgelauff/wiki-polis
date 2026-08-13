@@ -182,3 +182,30 @@ test('renders explicit argument contribution states and submits through the type
     'href', '/app/conversations/community-strategy/explore',
   );
 });
+
+test('reports a statement through an accessible modal without edge positioning', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/explore']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText(/shared technical infrastructure/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Report concern'}));
+  const dialog = screen.getByRole('dialog', {name: 'Report a concern'});
+  expect(dialog).toBeVisible();
+  fireEvent.change(screen.getByRole('combobox', {name: 'Reason'}), {
+    target: {value: 'other'},
+  });
+  expect(screen.getByRole('button', {name: 'Send for review'})).toBeDisabled();
+  fireEvent.change(screen.getByRole('textbox', {name: 'Details (required)'}), {
+    target: {value: 'The wording could be interpreted in two incompatible ways.'},
+  });
+  fireEvent.click(screen.getByRole('button', {name: 'Send for review'}));
+
+  expect(await screen.findByRole('heading', {
+    name: 'Thank you for raising this concern.',
+  })).toBeVisible();
+});

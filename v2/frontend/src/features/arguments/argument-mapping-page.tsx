@@ -9,6 +9,7 @@ import {
   skipArgumentContribution,
 } from '../../api/queries';
 import type {components} from '../../api/schema';
+import {ContentFlagControl} from '../flags/content-flag-control';
 
 type ArgumentMapping = components['schemas']['ArgumentMapping'];
 type FeaturedStatement = components['schemas']['ArgumentFeaturedStatement'];
@@ -164,6 +165,14 @@ function PriorityArguments({
             </button>
             <p>{argument.body}</p>
             {argument.own && <span className="argument-own">Your argument</span>}
+            {argument.capabilities.flag && (
+              <ContentFlagControl
+                slug={slug}
+                csrfToken={csrfToken}
+                target={{contentType: 'argument', targetId: argument.id}}
+                targetLabel={argument.body}
+              />
+            )}
           </li>
         ))}
       </ul>
@@ -181,7 +190,17 @@ function FeaturedTask({slug, csrfToken, card}: {
   return (
     <article className="argument-task">
       <header className="argument-task__statement">
-        <p className="eyebrow">Featured statement</p>
+        <div className="argument-task__meta">
+          <p className="eyebrow">Featured statement</p>
+          {card.capabilities.flagStatement && (
+            <ContentFlagControl
+              slug={slug}
+              csrfToken={csrfToken}
+              target={{contentType: 'statement', targetId: card.statement.id}}
+              targetLabel={card.statement.text}
+            />
+          )}
+        </div>
         <h2>{card.statement.text}</h2>
       </header>
       <section className="argument-step" aria-labelledby="contribute-heading">
