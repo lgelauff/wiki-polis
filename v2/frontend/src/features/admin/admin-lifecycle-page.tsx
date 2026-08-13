@@ -8,6 +8,7 @@ import {
   adminLifecycleQuery,
   createAdminPublication,
   putAdminPause,
+  putAdminArchive,
   putAdminPhase,
   putAdminPhases,
   putAdminSchedule,
@@ -175,6 +176,17 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {
         : 'Conversation already had that status.');
     },
   });
+  const archiveMutation = useMutation({
+    mutationFn: (archived: boolean) => putAdminArchive(
+      conversationId, {archived}, csrfToken,
+    ),
+    onSuccess: (result) => {
+      replaceLifecycle(result.lifecycle);
+      setReceipt(result.changed
+        ? (result.archived ? 'Conversation archived.' : 'Conversation reopened.')
+        : 'Conversation already had that archive state.');
+    },
+  });
   const publicationMutation = useMutation({
     mutationFn: () => createAdminPublication(
       conversationId,
@@ -196,7 +208,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {
     data.publicationReadiness.preconditions,
     publicationConfirmed,
   );
-  const activeError = phaseMutation.error ?? pauseMutation.error ?? publicationMutation.error;
+  const activeError = phaseMutation.error ?? pauseMutation.error ?? archiveMutation.error ?? publicationMutation.error;
 
   function submitPublication(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -324,6 +336,22 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {
           conversationId={conversationId} csrfToken={csrfToken} data={data}
           onChange={replaceLifecycle} onReceipt={setReceipt}
         />
+      )}
+
+      {data.capabilities.archive && (
+        <section className="lifecycle-archive" aria-labelledby="archive-heading">
+          <div>
+            <p className="eyebrow">Retention</p>
+            <h2 id="archive-heading">{data.conversation.status === 'archived' ? 'Reopen conversation' : 'Archive conversation'}</h2>
+            <p>{data.conversation.status === 'archived'
+              ? 'Restore participation at the retained phase. No report was published while archived.'
+              : 'Remove this conversation from active participation without publishing a report, freezing exclusions, or starting identity reveal.'}</p>
+          </div>
+          <button type="button" disabled={archiveMutation.isPending} onClick={() => {
+            const archive = data.conversation.status !== 'archived';
+            if (!archive || globalThis.confirm('Archive this conversation? It can be reopened later.')) archiveMutation.mutate(archive);
+          }}>{archiveMutation.isPending ? 'Updating…' : data.conversation.status === 'archived' ? 'Reopen conversation' : 'Archive conversation'}</button>
+        </section>
       )}
 
       {data.conversation.publication === 'pending' && (

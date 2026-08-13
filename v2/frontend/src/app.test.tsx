@@ -2,7 +2,7 @@ import {QueryClientProvider} from '@tanstack/react-query';
 import {fireEvent, render, screen} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 
 import {App} from './app';
 import {createQueryClient} from './query-client';
@@ -67,6 +67,18 @@ test('repairs an advanced phase set through route-valid domain keys', async () =
   fireEvent.click(screen.getByRole('button', {name: 'Save advanced phases'}));
   expect(await screen.findByRole('status')).toHaveTextContent('Advanced phases saved');
   expect(screen.getByText('Advanced phase state')).toBeVisible();
+});
+
+test('archives and reopens without presenting publication as the outcome', async () => {
+  vi.spyOn(globalThis, 'confirm').mockReturnValueOnce(true);
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
+  await screen.findByRole('heading', {name: 'Community strategy'});
+  fireEvent.click(screen.getByRole('button', {name: 'Archive conversation'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Conversation archived');
+  expect(screen.getByText('archived')).toBeVisible();
+  expect(screen.getByText('not applicable')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Reopen conversation'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Conversation reopened');
 });
 
 test('edits settings while keeping legacy eligibility observable and read-only', async () => {

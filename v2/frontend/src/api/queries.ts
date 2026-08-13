@@ -242,6 +242,17 @@ export async function putAdminPause(
   }))).data;
 }
 
+export async function putAdminArchive(
+  conversationId: number,
+  body: components['schemas']['AdminArchiveRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT('/admin/conversations/{conversationId}/archive', {
+    params: {path: {conversationId}}, body,
+    headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
 export async function putAdminSchedule(
   conversationId: number,
   body: components['schemas']['AdminScheduleRequest'],

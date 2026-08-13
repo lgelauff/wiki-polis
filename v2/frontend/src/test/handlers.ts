@@ -49,6 +49,16 @@ export const handlers = [
     const body = await request.json() as {scheduledAt: string | null; frozen: boolean};
     return HttpResponse.json({data: {changed: true, lifecycle: lifecycleFixture({canSchedule: true, scheduledAt: body.scheduledAt, targetKey: body.scheduledAt ? 'submission' : null, targetLabel: body.scheduledAt ? 'Explore' : null, frozen: body.frozen})}});
   }),
+  http.put(new URL('/api/v1/admin/conversations/7/archive', globalThis.location.origin).toString(), async ({request}) => {
+    const body = await request.json() as {archived: boolean};
+    const lifecycle = lifecycleFixture();
+    lifecycle.conversation.status = body.archived ? 'archived' : 'active';
+    lifecycle.phase.activeKeys = body.archived ? [] : lifecycle.phase.activeKeys;
+    lifecycle.schedule.canSchedule = !body.archived;
+    lifecycle.capabilities.advancePhase = !body.archived;
+    lifecycle.capabilities.pause = !body.archived;
+    return HttpResponse.json({data: {archived: body.archived, changed: true, lifecycle}});
+  }),
   http.put(new URL('/api/v1/admin/conversations/7/phases', globalThis.location.origin).toString(), async ({request}) => {
     const body = await request.json() as {activeKeys: string[]};
     const lifecycle = lifecycleFixture();
