@@ -103,11 +103,13 @@ from services.admin_statements import (
     import_seed_statements, moderate_statement,
 )
 from services.admin_featured import (
+    ArgumentNotInFeaturedWorkspace,
     FeaturedCommandOutcomeUnknown, FeaturedRoundSyncFailed,
     FeaturedSourceUnavailable, FeaturedStatementNotFound,
     LastFeaturedSelectionProtected,
-    build_featured_workspace, remove_featured_statement,
-    select_featured_statement,
+    build_featured_workspace, delete_featured_argument,
+    remove_featured_statement, select_featured_statement,
+    set_featured_argument_visibility,
 )
 from services.admin_lifecycle import (
     PhasePreparationFailed, PhaseReadinessBlocked,
@@ -2873,6 +2875,73 @@ def _remove_admin_featured_api_payload(conv_id: int, featured_id: int) -> dict:
     }
 
 
+def _require_admin_featured_argument(conv_id: int, argument_id: int):
+    conv = _require_mod_for_conv(conv_id)
+    argument = (
+        Argument.query.join(FeaturedStatement)
+        .filter(
+            Argument.id == argument_id,
+            FeaturedStatement.conversation_id == conv.id,
+        ).first()
+    )
+    if argument is None:
+        raise ArgumentNotInFeaturedWorkspace()
+    return conv, argument
+
+
+def _set_admin_featured_argument_api_payload(
+    conv_id: int, argument_id: int, body: dict,
+) -> dict:
+    conv, argument = _require_admin_featured_argument(conv_id, argument_id)
+    changed = set_featured_argument_visibility(
+        argument=argument,
+        hidden=body['hidden'],
+        session=db.session,
+        audit=lambda target_id, hidden: record_audit(
+            'argument.moderate', conv_id=conv.id,
+            target_type='argument', target_id=target_id, hidden=hidden,
+        ),
+    )
+    return {
+        'argumentId': argument.id,
+        'hidden': argument.hidden,
+        'changed': changed,
+        'links': {
+            'featured': url_for(
+                'api_v1.get_admin_featured_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _delete_admin_featured_argument_api_payload(
+    conv_id: int, argument_id: int,
+) -> dict:
+    conv, argument = _require_admin_featured_argument(conv_id, argument_id)
+    featured_id = argument.featured_statement_id
+    delete_featured_argument(
+        argument=argument,
+        session=db.session,
+        audit=lambda target_id, selection_id: record_audit(
+            'argument.delete', conv_id=conv.id,
+            target_type='argument', target_id=target_id,
+            featured_statement_id=selection_id,
+        ),
+    )
+    return {
+        'argumentId': argument_id,
+        'featuredId': featured_id,
+        'deleted': True,
+        'links': {
+            'featured': url_for(
+                'api_v1.get_admin_featured_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
 def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
@@ -5212,29 +5281,21 @@ def admin_featured_remove(conv_id, fs_id):
 @admin_bp.post('/admin/conversations/<int:conv_id>/arguments/<int:arg_id>/delete')
 @login_required
 def admin_argument_delete(conv_id, arg_id):
-    conv = _require_mod_for_conv(conv_id)
-    arg  = Argument.query.filter_by(id=arg_id).first_or_404()
-    FeaturedStatement.query.filter_by(
-        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-    fs_id = arg.featured_statement_id
-    db.session.delete(arg)
-    db.session.commit()
-    record_audit('argument.delete', conv_id=conv_id, target_type='argument', target_id=arg_id,
-                 featured_statement_id=fs_id)
+    try:
+        _delete_admin_featured_argument_api_payload(conv_id, arg_id)
+    except ArgumentNotInFeaturedWorkspace:
+        abort(404)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/arguments/<int:arg_id>/moderate')
 @login_required
 def admin_argument_moderate(conv_id, arg_id):
-    conv = _require_mod_for_conv(conv_id)
-    arg  = Argument.query.filter_by(id=arg_id).first_or_404()
-    FeaturedStatement.query.filter_by(
-        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-    hidden = request.form.get('hidden') == '1'
-    arg.hidden = hidden
-    db.session.commit()
-    record_audit('argument.moderate', conv_id=conv_id, target_type='argument',
-                 target_id=arg_id, hidden=hidden)
+    try:
+        _set_admin_featured_argument_api_payload(
+            conv_id, arg_id, {'hidden': request.form.get('hidden') == '1'},
+        )
+    except ArgumentNotInFeaturedWorkspace:
+        abort(404)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
 
 
@@ -6469,6 +6530,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_admin_featured=_admin_featured_api_payload,
         select_admin_featured=_select_admin_featured_api_payload,
         remove_admin_featured=_remove_admin_featured_api_payload,
+        set_admin_featured_argument=_set_admin_featured_argument_api_payload,
+        delete_admin_featured_argument=_delete_admin_featured_argument_api_payload,
         advance_admin_phase=_advance_admin_phase_api_payload,
         set_admin_pause=_set_admin_pause_api_payload,
         set_admin_archive=_set_admin_archive_api_payload,

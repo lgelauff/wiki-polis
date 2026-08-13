@@ -844,6 +844,21 @@
         "502": {"description": "Live round synchronization failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
+    "/admin/conversations/{conversationId}/featured-arguments/{argumentId}": {
+      "parameters": [
+        {"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
+        {"name": "argumentId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}
+      ],
+      "put": {"operationId": "putAdminFeaturedArgument", "summary": "Set whether an argument is hidden", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFeaturedArgumentRequest"}}}}, "responses": {
+        "200": {"description": "Argument visibility receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFeaturedArgumentResponse"}}}},
+        "400": {"description": "Invalid desired visibility", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "404": {"description": "Argument not found in conversation", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }},
+      "delete": {"operationId": "deleteAdminFeaturedArgument", "summary": "Delete an argument and its votes", "responses": {
+        "200": {"description": "Argument deletion receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminFeaturedArgumentDeletionResponse"}}}},
+        "404": {"description": "Argument not found in conversation", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/phase": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "put": {
@@ -934,6 +949,9 @@
       "AdminFeaturedSelectionRequest": {"type": "object", "required": ["source"], "additionalProperties": false, "properties": {"source": {"type": "string", "enum": ["system", "manual"]}}},
       "AdminFeaturedSelectionResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["featuredId", "statementId", "changed", "links"], "additionalProperties": false, "properties": {"featuredId": {"type": "integer", "minimum": 1}, "statementId": {"type": "integer", "minimum": 0}, "changed": {"type": "boolean"}, "links": {"type": "object", "required": ["featured"], "additionalProperties": false, "properties": {"featured": {"type": "string"}}}}}}},
       "AdminFeaturedRemovalResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["featuredId", "statementId", "removed", "links"], "additionalProperties": false, "properties": {"featuredId": {"type": "integer", "minimum": 1}, "statementId": {"type": "integer", "minimum": 0}, "removed": {"type": "boolean", "const": true}, "links": {"type": "object", "required": ["featured"], "additionalProperties": false, "properties": {"featured": {"type": "string"}}}}}}},
+      "AdminFeaturedArgumentRequest": {"type": "object", "required": ["hidden"], "additionalProperties": false, "properties": {"hidden": {"type": "boolean"}}},
+      "AdminFeaturedArgumentResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["argumentId", "hidden", "changed", "links"], "additionalProperties": false, "properties": {"argumentId": {"type": "integer", "minimum": 1}, "hidden": {"type": "boolean"}, "changed": {"type": "boolean"}, "links": {"type": "object", "required": ["featured"], "additionalProperties": false, "properties": {"featured": {"type": "string"}}}}}}},
+      "AdminFeaturedArgumentDeletionResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["argumentId", "featuredId", "deleted", "links"], "additionalProperties": false, "properties": {"argumentId": {"type": "integer", "minimum": 1}, "featuredId": {"type": "integer", "minimum": 1}, "deleted": {"type": "boolean", "const": true}, "links": {"type": "object", "required": ["featured"], "additionalProperties": false, "properties": {"featured": {"type": "string"}}}}}}},
       "AdminFeaturedWorkspace": {"type": "object", "required": ["conversation", "selected", "candidates", "dataAvailability", "guidance", "capabilities", "links"], "additionalProperties": false, "properties": {
         "conversation": {"type": "object", "required": ["id", "slug", "title"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}}},
         "selected": {"type": "array", "items": {"$ref": "#/components/schemas/AdminFeaturedSelection"}},

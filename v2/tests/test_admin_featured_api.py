@@ -158,3 +158,66 @@ def test_remove_selection_enforces_last_featured_invariant(
     assert removed.status_code == 200
     assert removed.get_json()['data']['removed'] is True
     assert db.session.get(FeaturedStatement, selected.id) is None
+
+
+def test_argument_visibility_is_idempotent_and_audited(
+    admin_client, conversation,
+):
+    selected = FeaturedStatement(
+        conversation_id=conversation.id,
+        polis_statement_id=11,
+        statement_text='Selected statement',
+        confirmed_by_admin=True,
+    )
+    db.session.add(selected)
+    db.session.flush()
+    argument = Argument(
+        featured_statement_id=selected.id,
+        body='Supporting context', side='pro', hidden=False,
+    )
+    db.session.add(argument)
+    db.session.commit()
+    endpoint = (
+        f'/api/v1/admin/conversations/{conversation.id}/featured-arguments/{argument.id}'
+    )
+
+    first = admin_client.put(endpoint, json={'hidden': True})
+    replay = admin_client.put(endpoint, json={'hidden': True})
+
+    assert first.status_code == replay.status_code == 200
+    assert first.get_json()['data']['changed'] is True
+    assert replay.get_json()['data']['changed'] is False
+    assert db.session.get(Argument, argument.id).hidden is True
+    assert AuditEvent.query.filter_by(
+        operation='argument.moderate', conversation_id=conversation.id,
+    ).count() == 1
+
+
+def test_argument_deletion_is_conversation_scoped(admin_client, conversation):
+    selected = FeaturedStatement(
+        conversation_id=conversation.id,
+        polis_statement_id=11,
+        statement_text='Selected statement',
+        confirmed_by_admin=True,
+    )
+    db.session.add(selected)
+    db.session.flush()
+    argument = Argument(
+        featured_statement_id=selected.id,
+        body='Supporting context', side='pro', hidden=False,
+    )
+    db.session.add(argument)
+    db.session.commit()
+    endpoint = (
+        f'/api/v1/admin/conversations/{conversation.id}/featured-arguments/{argument.id}'
+    )
+
+    missing = admin_client.delete(endpoint.replace(
+        f'conversations/{conversation.id}', 'conversations/999',
+    ))
+    removed = admin_client.delete(endpoint)
+
+    assert missing.status_code == 404
+    assert removed.status_code == 200
+    assert removed.get_json()['data']['deleted'] is True
+    assert db.session.get(Argument, argument.id) is None

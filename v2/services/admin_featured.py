@@ -28,6 +28,10 @@ class FeaturedCommandOutcomeUnknown(RuntimeError):
     pass
 
 
+class ArgumentNotInFeaturedWorkspace(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class FeaturedSelectionResult:
     featured_id: int
@@ -169,3 +173,23 @@ def remove_featured_statement(
             raise FeaturedCommandOutcomeUnknown() from exc
         raise
     audit(selection.id)
+
+
+def set_featured_argument_visibility(
+    *, argument, hidden: bool, session, audit,
+) -> bool:
+    changed = argument.hidden != hidden
+    if not changed:
+        return False
+    argument.hidden = hidden
+    session.commit()
+    audit(argument.id, hidden)
+    return True
+
+
+def delete_featured_argument(*, argument, session, audit) -> None:
+    argument_id = argument.id
+    featured_id = argument.featured_statement_id
+    session.delete(argument)
+    session.commit()
+    audit(argument_id, featured_id)

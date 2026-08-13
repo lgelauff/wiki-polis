@@ -49,6 +49,7 @@ from services.admin_statements import (
     SeedImportVerificationUnavailable,
 )
 from services.admin_featured import (
+    ArgumentNotInFeaturedWorkspace,
     FeaturedCommandOutcomeUnknown, FeaturedRoundSyncFailed,
     FeaturedSourceUnavailable, FeaturedStatementNotFound,
     LastFeaturedSelectionProtected,
@@ -107,6 +108,8 @@ def create_api_v1_blueprint(
     resolve_admin_featured: Callable[[int], dict],
     select_admin_featured: Callable[[int, int, dict], dict],
     remove_admin_featured: Callable[[int, int], dict],
+    set_admin_featured_argument: Callable[[int, int, dict], dict],
+    delete_admin_featured_argument: Callable[[int, int], dict],
     advance_admin_phase: Callable[[int, dict], dict],
     set_admin_pause: Callable[[int, dict], dict],
     set_admin_archive: Callable[[int, dict], dict],
@@ -576,6 +579,38 @@ def create_api_v1_blueprint(
                 'command_outcome_unknown',
                 'The informed-voting round changed, but the local save failed. Do not retry.',
                 409,
+            )
+        return _no_store(jsonify({'data': data}))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/featured-arguments/<int:argument_id>')
+    def put_admin_featured_argument(conversation_id: int, argument_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'hidden'}
+                or not isinstance(body['hidden'], bool)):
+            return error_response(
+                'validation_failed', 'Provide the desired hidden state.', 400,
+            )
+        try:
+            data = set_admin_featured_argument(
+                conversation_id, argument_id, body,
+            )
+        except ArgumentNotInFeaturedWorkspace:
+            return error_response(
+                'argument_not_found',
+                'That argument does not belong to this conversation.', 404,
+            )
+        return _no_store(jsonify({'data': data}))
+
+    @bp.delete('/admin/conversations/<int:conversation_id>/featured-arguments/<int:argument_id>')
+    def delete_admin_featured_argument_route(
+        conversation_id: int, argument_id: int,
+    ):
+        try:
+            data = delete_admin_featured_argument(conversation_id, argument_id)
+        except ArgumentNotInFeaturedWorkspace:
+            return error_response(
+                'argument_not_found',
+                'That argument does not belong to this conversation.', 404,
             )
         return _no_store(jsonify({'data': data}))
 

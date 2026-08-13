@@ -662,6 +662,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/featured-arguments/{argumentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                argumentId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Set whether an argument is hidden */
+        put: operations["putAdminFeaturedArgument"];
+        post?: never;
+        /** Delete an argument and its votes */
+        delete: operations["deleteAdminFeaturedArgument"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/phase": {
         parameters: {
             query?: never;
@@ -883,6 +904,30 @@ export interface components {
                 statementId: number;
                 /** @constant */
                 removed: true;
+                links: {
+                    featured: string;
+                };
+            };
+        };
+        AdminFeaturedArgumentRequest: {
+            hidden: boolean;
+        };
+        AdminFeaturedArgumentResponse: {
+            data: {
+                argumentId: number;
+                hidden: boolean;
+                changed: boolean;
+                links: {
+                    featured: string;
+                };
+            };
+        };
+        AdminFeaturedArgumentDeletionResponse: {
+            data: {
+                argumentId: number;
+                featuredId: number;
+                /** @constant */
+                deleted: true;
                 links: {
                     featured: string;
                 };
@@ -3996,6 +4041,83 @@ export interface operations {
             };
             /** @description Live round synchronization failed */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminFeaturedArgument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                argumentId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminFeaturedArgumentRequest"];
+            };
+        };
+        responses: {
+            /** @description Argument visibility receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFeaturedArgumentResponse"];
+                };
+            };
+            /** @description Invalid desired visibility */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Argument not found in conversation */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteAdminFeaturedArgument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+                argumentId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Argument deletion receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFeaturedArgumentDeletionResponse"];
+                };
+            };
+            /** @description Argument not found in conversation */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
