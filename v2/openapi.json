@@ -778,6 +778,14 @@
         }
       }
     },
+    "/admin/conversations/{conversationId}/phases": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "put": {"operationId": "putAdminConversationPhases", "summary": "Replace the advanced route-valid phase set", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminAdvancedPhasesRequest"}}}}, "responses": {
+        "200": {"description": "Phase-set receipt and refreshed lifecycle", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminAdvancedPhasesResponse"}}}},
+        "400": {"description": "Invalid or out-of-route phase key", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/pause": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "put": {"operationId": "putAdminConversationPause", "summary": "Set the desired pause state", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminPauseRequest"}}}}, "responses": {
@@ -838,6 +846,8 @@
         "type": "object", "required": ["confirmedPreconditionIds"], "additionalProperties": false,
         "properties": {"confirmedPreconditionIds": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}}
       },
+      "AdminAdvancedPhasesRequest": {"type": "object", "required": ["activeKeys"], "additionalProperties": false, "properties": {"activeKeys": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}}},
+      "AdminAdvancedPhasesResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["changed", "activeKeys", "visibilitySynced", "lifecycle"], "additionalProperties": false, "properties": {"changed": {"type": "boolean"}, "activeKeys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}, "visibilitySynced": {"type": "boolean"}, "lifecycle": {"$ref": "#/components/schemas/AdminLifecycle"}}}}},
       "AdminPauseRequest": {"type": "object", "required": ["paused"], "additionalProperties": false, "properties": {"paused": {"type": "boolean"}}},
       "AdminPauseResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["paused", "changed", "lifecycle"], "additionalProperties": false, "properties": {"paused": {"type": "boolean"}, "changed": {"type": "boolean"}, "lifecycle": {"$ref": "#/components/schemas/AdminLifecycle"}}}}},
       "AdminScheduleRequest": {"type": "object", "required": ["scheduledAt", "frozen"], "additionalProperties": false, "properties": {"scheduledAt": {"type": ["string", "null"], "format": "date-time"}, "frozen": {"type": "boolean"}}},
@@ -862,10 +872,11 @@
         "properties": {
           "conversation": {"$ref": "#/components/schemas/AdminLifecycleConversation"},
           "operator": {"type": "object", "required": ["roleLabel"], "additionalProperties": false, "properties": {"roleLabel": {"type": "string"}}},
-          "phase": {"type": "object", "required": ["linear", "currentIndex", "activeKeys", "steps", "transition"], "additionalProperties": false, "properties": {
+          "phase": {"type": "object", "required": ["linear", "currentIndex", "activeKeys", "steps", "transition", "advancedControls"], "additionalProperties": false, "properties": {
             "linear": {"type": "boolean"}, "currentIndex": {"type": "integer", "minimum": 0}, "activeKeys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
             "steps": {"type": "array", "items": {"$ref": "#/components/schemas/AdminLifecycleStep"}},
-            "transition": {"oneOf": [{"$ref": "#/components/schemas/AdminLifecycleTransition"}, {"type": "null"}]}
+            "transition": {"oneOf": [{"$ref": "#/components/schemas/AdminLifecycleTransition"}, {"type": "null"}]},
+            "advancedControls": {"type": "array", "items": {"type": "object", "required": ["key", "label", "effect", "active", "requiresInitialization", "initialized"], "additionalProperties": false, "properties": {"key": {"type": "string"}, "label": {"type": "string"}, "effect": {"type": "string"}, "active": {"type": "boolean"}, "requiresInitialization": {"type": "boolean"}, "initialized": {"type": "boolean"}}}}
           }},
           "schedule": {"type": "object", "required": ["canSchedule", "scheduledAt", "targetKey", "targetLabel", "frozen"], "additionalProperties": false, "properties": {
             "canSchedule": {"type": "boolean"}, "scheduledAt": {"type": ["string", "null"], "format": "date-time"}, "targetKey": {"type": ["string", "null"]}, "targetLabel": {"type": ["string", "null"]}, "frozen": {"type": "boolean"}

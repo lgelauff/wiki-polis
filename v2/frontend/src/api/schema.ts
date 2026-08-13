@@ -544,6 +544,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/phases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the advanced route-valid phase set */
+        put: operations["putAdminConversationPhases"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/pause": {
         parameters: {
             query?: never;
@@ -685,6 +704,17 @@ export interface components {
         AdminPhaseAdvanceRequest: {
             confirmedPreconditionIds: string[];
         };
+        AdminAdvancedPhasesRequest: {
+            activeKeys: string[];
+        };
+        AdminAdvancedPhasesResponse: {
+            data: {
+                changed: boolean;
+                activeKeys: string[];
+                visibilitySynced: boolean;
+                lifecycle: components["schemas"]["AdminLifecycle"];
+            };
+        };
         AdminPauseRequest: {
             paused: boolean;
         };
@@ -739,6 +769,14 @@ export interface components {
                 activeKeys: string[];
                 steps: components["schemas"]["AdminLifecycleStep"][];
                 transition: components["schemas"]["AdminLifecycleTransition"] | null;
+                advancedControls: {
+                    key: string;
+                    label: string;
+                    effect: string;
+                    active: boolean;
+                    requiresInitialization: boolean;
+                    initialized: boolean;
+                }[];
             };
             schedule: {
                 canSchedule: boolean;
@@ -3223,6 +3261,50 @@ export interface operations {
             };
             /** @description The phase transition could not be saved */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminConversationPhases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminAdvancedPhasesRequest"];
+            };
+        };
+        responses: {
+            /** @description Phase-set receipt and refreshed lifecycle */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAdvancedPhasesResponse"];
+                };
+            };
+            /** @description Invalid or out-of-route phase key */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

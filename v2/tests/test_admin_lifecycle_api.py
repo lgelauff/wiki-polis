@@ -60,6 +60,12 @@ def test_lifecycle_contract_exposes_server_evaluated_transition(
         'met': False,
         'note': 'Initialize informed voting before publishing.',
     }
+    controls = response.get_json()['data']['phase']['advancedControls']
+    assert controls[0]['key'] == 'submission'
+    assert all('phase_' not in row['key'] for row in controls)
+    informed = next(row for row in controls if row['key'] == 'informed_voting')
+    assert informed['requiresInitialization'] is True
+    assert informed['initialized'] is False
 
 
 def test_scoped_moderator_lifecycle_capabilities_are_read_only(
@@ -304,3 +310,41 @@ def test_schedule_api_rejects_unschedulable_and_past_transitions(
     assert unavailable.get_json()['error']['code'] == 'schedule_unavailable'
     assert past.status_code == 400
     assert past.get_json()['error']['code'] == 'schedule_time_invalid'
+
+
+def test_advanced_phase_api_replaces_route_keys_and_is_idempotent(
+    admin_client, conversation,
+):
+    endpoint = f'/api/v1/admin/conversations/{conversation.id}/phases'
+    body = {'activeKeys': ['argument_mapping', 'cleanup']}
+
+    first = admin_client.put(endpoint, json=body)
+    replay = admin_client.put(endpoint, json=body)
+
+    assert first.status_code == replay.status_code == 200
+    assert first.get_json()['data']['changed'] is True
+    assert replay.get_json()['data']['changed'] is False
+    assert first.get_json()['data']['activeKeys'] == ['argument_mapping', 'cleanup']
+    db.session.refresh(conversation)
+    assert conversation.phase_argument_mapping is True
+    assert conversation.phase_cleanup is True
+    assert conversation.phase_submission is False
+
+
+def test_advanced_phase_api_rejects_key_outside_locked_route(
+    admin_client, conversation,
+):
+    conversation.phase_route = 'short_results'
+    db.session.commit()
+
+    response = admin_client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/phases',
+        json={'activeKeys': ['argument_mapping']},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()['error'] == {
+        'code': 'phase_not_in_route',
+        'message': 'One or more phases are not part of this conversation route.',
+        'details': {'phaseKeys': ['argument_mapping']},
+    }

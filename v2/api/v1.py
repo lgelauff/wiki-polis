@@ -35,6 +35,7 @@ from services.admin_lifecycle import (
     PhaseReadinessUnconfirmed, PhaseTransitionConflict,
     PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
     ConversationClosed, PublicationPhase6Missing,
+    InvalidAdvancedPhaseSet,
     PublicationReadinessUnconfirmed, PublicationUnavailable,
     ScheduleInPast, ScheduleUnavailable,
 )
@@ -87,6 +88,7 @@ def create_api_v1_blueprint(
     advance_admin_phase: Callable[[int, dict], dict],
     set_admin_pause: Callable[[int, dict], dict],
     set_admin_schedule: Callable[[int, dict], dict],
+    set_admin_phases: Callable[[int, dict], dict],
     publish_admin_report: Callable[[int, dict], dict],
     submit_argument: Callable[[str, int, dict], tuple[dict, int]],
     skip_argument: Callable[[str, int, str], dict],
@@ -459,6 +461,27 @@ def create_api_v1_blueprint(
                 ('A linked voting round may have been created. Do not retry until a site admin checks it.'
                  if exc.outcome_unknown else 'The phase change could not be saved.'),
                 409 if exc.outcome_unknown else 503,
+            )
+        return _no_store(jsonify({'data': data}))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/phases')
+    def put_admin_conversation_phases(conversation_id: int):
+        body = request.get_json(silent=True)
+        active = body.get('activeKeys') if isinstance(body, dict) else None
+        if (not isinstance(body, dict) or set(body) != {'activeKeys'}
+                or not isinstance(active, list)
+                or any(not isinstance(value, str) or not value for value in active)
+                or len(set(active)) != len(active)):
+            return error_response(
+                'validation_failed', 'Provide a unique phase-key set.', 400,
+            )
+        try:
+            data = set_admin_phases(conversation_id, body)
+        except InvalidAdvancedPhaseSet as exc:
+            return error_response(
+                'phase_not_in_route',
+                'One or more phases are not part of this conversation route.', 400,
+                details={'phaseKeys': exc.args[0]},
             )
         return _no_store(jsonify({'data': data}))
 

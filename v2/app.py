@@ -96,10 +96,12 @@ from services.admin_lifecycle import (
     PhaseReadinessUnconfirmed, PhaseTransitionConflict,
     PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
     ConversationClosed, PublicationPhase6Missing,
+    InvalidAdvancedPhaseSet,
     PublicationReadinessUnconfirmed, PublicationUnavailable,
     ScheduleInPast, ScheduleUnavailable,
     advance_conversation_phase, build_admin_lifecycle,
-    publish_final_report, set_conversation_paused, set_phase_schedule,
+    publish_final_report, set_advanced_phases, set_conversation_paused,
+    set_phase_schedule,
 )
 from services.idempotency import (complete_command, release_reservation,
                                   request_digest, reserve_command)
@@ -2665,6 +2667,26 @@ def _set_admin_schedule_api_payload(conv_id: int, body: dict) -> dict:
     }
 
 
+def _set_admin_phases_api_payload(conv_id: int, body: dict) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    result = set_advanced_phases(
+        conversation=conv, phase_definitions=_phase_sequence_for(conv),
+        active_keys=set(body['activeKeys']),
+        clear_schedule=_clear_scheduled_transition,
+        session=db.session, audit=record_audit,
+        sync_visibility=_sync_vis_type,
+        invalidate_results=_invalidate_phase6_results_cache,
+    )
+    return {
+        'changed': result.changed,
+        'activeKeys': result.active_keys,
+        'visibilitySynced': result.visibility_synced,
+        'lifecycle': _admin_lifecycle_api_payload(conv.id),
+    }
+
+
 def _publish_admin_report_api_payload(conv_id: int, body: dict) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
@@ -4201,23 +4223,18 @@ def admin_conversation_phases(conv_id):
     # ≥1 featured statement before argument mapping; this route deliberately does not, so
     # a single rejected toggle never silently discards the whole save).
     conv = Conversation.query.get_or_404(conv_id)
-    conv.phase_submission       = bool(request.form.get('phase_submission'))
-    conv.phase_personal_results = bool(request.form.get('phase_personal_results'))
-    conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
-    conv.phase_cleanup          = bool(request.form.get('phase_cleanup'))
-    conv.phase_public_results   = bool(request.form.get('phase_public_results'))
-    conv.phase_informed_voting  = bool(request.form.get('phase_informed_voting'))
-    db.session.commit()
-    record_audit('phase.set', conv_id=conv.id, phases={
-        'submission': conv.phase_submission, 'personal_results': conv.phase_personal_results,
-        'argument_mapping': conv.phase_argument_mapping, 'cleanup': conv.phase_cleanup,
-        'public_results': conv.phase_public_results, 'informed_voting': conv.phase_informed_voting})
-
-    if not _sync_vis_type(conv):
+    form_to_key = {
+        stage['flag']: stage['key']
+        for stage in _phase_sequence_for(conv) if stage['flag']
+    }
+    result = _set_admin_phases_api_payload(conv_id, {
+        'activeKeys': [
+            key for field, key in form_to_key.items() if request.form.get(field)
+        ],
+    })
+    if not result['visibilitySynced']:
         flash('Phases saved, but updating results visibility in Polis failed — '
               'results may not appear until you save phases again.', 'error')
-    # A vis_type change alters what /results/ returns — drop any cached aggregate.
-    _invalidate_phase6_results_cache(conv)
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 
@@ -6131,6 +6148,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         advance_admin_phase=_advance_admin_phase_api_payload,
         set_admin_pause=_set_admin_pause_api_payload,
         set_admin_schedule=_set_admin_schedule_api_payload,
+        set_admin_phases=_set_admin_phases_api_payload,
         publish_admin_report=_publish_admin_report_api_payload,
         submit_argument=_submit_argument_api_payload,
         skip_argument=_skip_argument_api_payload,

@@ -84,6 +84,17 @@ def build_admin_lifecycle(
             'activeKeys': sorted(active_phase_keys),
             'steps': steps,
             'transition': transition_dto,
+            'advancedControls': [{
+                'key': stage['key'],
+                'label': stage['label'],
+                'effect': stage['effect'],
+                'active': bool(getattr(conversation, stage['flag'])),
+                'requiresInitialization': stage['key'] == 'informed_voting',
+                'initialized': (
+                    bool(conversation.phase6_polis_conversation_id)
+                    if stage['key'] == 'informed_voting' else True
+                ),
+            } for stage in phase_sequence if stage['flag']],
         },
         'schedule': {
             'canSchedule': schedule['can_schedule'] and can_administer,
@@ -169,6 +180,10 @@ class ScheduleInPast(ValueError):
     pass
 
 
+class InvalidAdvancedPhaseSet(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class PhaseTransitionResult:
     source_key: str
@@ -225,6 +240,47 @@ def set_phase_schedule(
     else:
         session.commit()
     return changed
+
+
+@dataclass(frozen=True)
+class AdvancedPhaseSetResult:
+    changed: bool
+    active_keys: list[str]
+    visibility_synced: bool
+
+
+def set_advanced_phases(
+    *, conversation, phase_definitions: list[dict], active_keys: set[str],
+    clear_schedule, session, audit, sync_visibility, invalidate_results,
+) -> AdvancedPhaseSetResult:
+    available = {stage['key']: stage for stage in phase_definitions if stage['flag']}
+    unknown = active_keys - set(available)
+    if unknown:
+        raise InvalidAdvancedPhaseSet(sorted(unknown))
+    current = {
+        key for key, stage in available.items()
+        if bool(getattr(conversation, stage['flag']))
+    }
+    changed = current != active_keys
+    if changed:
+        for key, stage in available.items():
+            setattr(conversation, stage['flag'], key in active_keys)
+        clear_schedule(conversation)
+        session.commit()
+        audit(
+            'phase.set', conv_id=conversation.id,
+            active_keys=sorted(active_keys),
+        )
+    else:
+        session.commit()
+    visibility_synced = sync_visibility(conversation) if changed else True
+    if changed:
+        invalidate_results(conversation)
+    return AdvancedPhaseSetResult(
+        changed=changed,
+        active_keys=sorted(active_keys),
+        visibility_synced=visibility_synced,
+    )
 
 
 def advance_conversation_phase(
