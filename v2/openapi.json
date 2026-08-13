@@ -101,6 +101,43 @@
         }
       }
     },
+    "/conversations/{slug}/identity-reveal": {
+      "parameters": [
+        {
+          "name": "slug",
+          "in": "path",
+          "required": true,
+          "schema": {"type": "string", "minLength": 1}
+        }
+      ],
+      "get": {
+        "operationId": "getIdentityReveal",
+        "summary": "Return the participant's identity-reveal timeline and capability",
+        "responses": {
+          "200": {
+            "description": "Identity-reveal state",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/IdentityRevealResponse"}}}
+          },
+          "401": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Conversation is not closed or participant has not joined", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      },
+      "post": {
+        "operationId": "createIdentityReveal",
+        "summary": "Permanently link the participant's Wikimedia username and pseudonym",
+        "description": "Irreversible and idempotent. A replay returns the existing public link with HTTP 200.",
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateIdentityRevealRequest"}}}
+        },
+        "responses": {
+          "200": {"description": "Existing reveal returned on replay", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/IdentityRevealResponse"}}}},
+          "201": {"description": "Identity permanently linked", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/IdentityRevealResponse"}}}},
+          "400": {"description": "Explicit confirmation missing", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Reveal window is not open", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/conversations/{slug}/pseudonym-suggestions": {
       "get": {
         "operationId": "getPseudonymSuggestions",
@@ -612,6 +649,66 @@
         "additionalProperties": false,
         "properties": {
           "data": {"$ref": "#/components/schemas/ConversationAbout"}
+        }
+      },
+      "IdentityRevealResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {
+          "data": {"$ref": "#/components/schemas/IdentityReveal"}
+        }
+      },
+      "CreateIdentityRevealRequest": {
+        "type": "object",
+        "required": ["confirm"],
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {"type": "boolean", "const": true}
+        }
+      },
+      "IdentityReveal": {
+        "type": "object",
+        "required": ["slug", "title", "state", "pseudonym", "wikimediaUsername", "publicUsername", "timeline", "capabilities", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "state": {"type": "string", "enum": ["pending", "open", "revealed", "expired"]},
+          "pseudonym": {"type": "string", "minLength": 1},
+          "wikimediaUsername": {"type": "string", "minLength": 1},
+          "publicUsername": {"type": ["string", "null"]},
+          "timeline": {"$ref": "#/components/schemas/IdentityRevealTimeline"},
+          "capabilities": {"$ref": "#/components/schemas/IdentityRevealCapabilities"},
+          "links": {"$ref": "#/components/schemas/IdentityRevealLinks"}
+        }
+      },
+      "IdentityRevealTimeline": {
+        "type": "object",
+        "required": ["closedAt", "opensAt", "closesAt", "nextBoundaryAt", "daysRemaining"],
+        "additionalProperties": false,
+        "properties": {
+          "closedAt": {"type": "string", "format": "date-time"},
+          "opensAt": {"type": "string", "format": "date-time"},
+          "closesAt": {"type": "string", "format": "date-time"},
+          "nextBoundaryAt": {"type": ["string", "null"], "format": "date-time"},
+          "daysRemaining": {"type": "integer", "minimum": 0}
+        }
+      },
+      "IdentityRevealCapabilities": {
+        "type": "object",
+        "required": ["revealIdentity"],
+        "additionalProperties": false,
+        "properties": {"revealIdentity": {"type": "boolean"}}
+      },
+      "IdentityRevealLinks": {
+        "type": "object",
+        "required": ["self", "conversation", "about"],
+        "additionalProperties": false,
+        "properties": {
+          "self": {"type": "string"},
+          "conversation": {"type": "string"},
+          "about": {"type": "string"}
         }
       },
       "PseudonymSuggestionsResponse": {

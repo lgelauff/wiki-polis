@@ -49,6 +49,11 @@ from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
 from logging_setup import configure_logging
 from api.v1 import create_api_v1_blueprint, register_api_error_handlers
 from services.identity import reconcile_participant_login
+from services.identity_reveal import (
+    REVEAL_COOLDOWN_DAYS, REVEAL_WINDOW_DAYS, RevealUnavailable,
+    build_reveal_context as _reveal_context,
+    reveal_identity as reveal_identity_command,
+)
 from services.invites import InviteBatchSaveError, add_conversation_invites
 from services.conversation_about import build_conversation_about
 from services.conversation_lanes import (build_conversation_lane,
@@ -140,8 +145,8 @@ def _staging_dev_login_token(username: str, secret: str) -> str:
 
 ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.strip()]
 
-_REVEAL_COOLDOWN_DAYS = 30   # days after close before reveal window opens
-_REVEAL_WINDOW_DAYS   = 30   # days participants may opt in once the window opens
+_REVEAL_COOLDOWN_DAYS = REVEAL_COOLDOWN_DAYS
+_REVEAL_WINDOW_DAYS = REVEAL_WINDOW_DAYS
 _MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
 _DEMO_MW_ID_MIN = -2_000_000_000
 _DEMO_MW_ID_MAX = -1_000_000_000
@@ -510,45 +515,6 @@ def _snapshot_report_filter(conv) -> Phase6ResultsFilter:
 
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
-
-def _reveal_context(conv, participation):
-    """Identity-reveal timeline for a closed conversation (#70): when it closed, when
-    the opt-in window opens (after the cooldown) and closes, the current state, and the
-    days left while the window is open. Returns None when the conversation is not closed.
-    """
-    if not conv.closed_at:
-        return None
-    # Normalize ONCE to a tz-aware UTC instant, then derive everything from it — so the
-    # displayed dates and the countdown target are the same correct UTC moments the
-    # state math uses. (DB may hand back a naive datetime; deriving window dates off a
-    # naive value would make the live countdown tick to the wrong instant.)
-    closed = (conv.closed_at if conv.closed_at.tzinfo
-              else conv.closed_at.replace(tzinfo=timezone.utc))
-    opens_at  = closed + timedelta(days=_REVEAL_COOLDOWN_DAYS)
-    closes_at = closed + timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS)
-    now = datetime.now(timezone.utc)
-    age = now - closed
-    if participation and participation.public_username:
-        state = 'revealed'
-    elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
-        state = 'expired'
-    elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
-        state = 'open'
-    else:
-        state = 'pending'
-    # The window's next boundary, as a UTC instant the client ticks a live countdown
-    # against (per the design): opens_at while in cooldown, closes_at while open.
-    target = opens_at if state == 'pending' else closes_at if state == 'open' else None
-    # No-JS fallback: whole days to that boundary, partial day rounded UP so the final
-    # open day never reads "0 days left" while the reveal POST is still accepted.
-    days_left = 0
-    if target is not None:
-        _d = target - now
-        days_left = max(0, _d.days + (1 if (_d.seconds or _d.microseconds) else 0))
-    return {'closed_at': closed, 'opens_at': opens_at, 'closes_at': closes_at,
-            'state': state, 'days_left': days_left,
-            'countdown_target_iso': target.isoformat() if target else None,
-            'cooldown_days': _REVEAL_COOLDOWN_DAYS, 'window_days': _REVEAL_WINDOW_DAYS}
 
 # Canonical consultation phase sequence. One flag per stage; preparation = all off.
 # Simple mode advances through this list (forward-only, exclusive). The existing
@@ -1719,6 +1685,76 @@ def _conversation_about_api_payload(slug: str) -> dict:
         moderation_log_link=url_for(
             'participant.conversation_moderation_log', slug=slug,
         ),
+    )
+
+
+def _identity_reveal_api_context(slug: str):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        abort(409, description='Join this conversation before managing identity reveal.')
+    if not conv.closed_at:
+        abort(409, description='Identity reveal is available only after closure.')
+    return conv, participant, participation
+
+
+def _identity_reveal_dto(conv, participant, participation) -> dict:
+    reveal = _reveal_context(conv, participation)
+
+    def utc_iso(value):
+        aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return aware.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+    return {
+        'slug': conv.slug,
+        'title': conv.title,
+        'state': reveal['state'],
+        'pseudonym': participation.pseudonym,
+        'wikimediaUsername': participant.mw_username,
+        'publicUsername': participation.public_username,
+        'timeline': {
+            'closedAt': utc_iso(reveal['closed_at']),
+            'opensAt': utc_iso(reveal['opens_at']),
+            'closesAt': utc_iso(reveal['closes_at']),
+            'nextBoundaryAt': (
+                utc_iso(reveal['opens_at']) if reveal['state'] == 'pending'
+                else utc_iso(reveal['closes_at']) if reveal['state'] == 'open'
+                else None
+            ),
+            'daysRemaining': reveal['days_left'],
+        },
+        'capabilities': {'revealIdentity': reveal['state'] == 'open'},
+        'links': {
+            'self': url_for('api_v1.get_identity_reveal', slug=conv.slug),
+            'conversation': url_for('participant.conversation', slug=conv.slug),
+            'about': url_for(
+                'spa_shell', spa_path=f'conversations/{conv.slug}/about',
+            ),
+        },
+    }
+
+
+def _identity_reveal_api_payload(slug: str) -> dict:
+    return _identity_reveal_dto(*_identity_reveal_api_context(slug))
+
+
+def _reveal_identity_api_payload(slug: str) -> tuple[dict, int]:
+    conv, participant, participation = _identity_reveal_api_context(slug)
+    result = reveal_identity_command(
+        conversation=conv,
+        participation=participation,
+        wikimedia_username=participant.mw_username,
+    )
+    return (
+        _identity_reveal_dto(conv, participant, result.participation),
+        201 if result.created else 200,
     )
 
 
@@ -4936,18 +4972,16 @@ def reveal_identity_post(slug):
     if not conv.closed_at:
         abort(400)
 
-    # Same source of truth as the GET page / timeline — the window is open iff
-    # _reveal_context says so. (Already-revealed → state 'revealed', also rejected.)
-    if _reveal_context(conv, participation)['state'] != 'open':
-        abort(400)
-    if participation.public_username is not None:
-        abort(400)
     if request.form.get('confirm') != '1':
         return redirect(url_for('participant.reveal_identity', slug=slug))
-
-    participation.public_username = participant.mw_username
-    participation.revealed_at     = datetime.now(timezone.utc)
-    db.session.commit()
+    try:
+        reveal_identity_command(
+            conversation=conv,
+            participation=participation,
+            wikimedia_username=participant.mw_username,
+        )
+    except RevealUnavailable:
+        abort(400)
     return redirect(url_for('participant.conversation', slug=slug))
 
 
@@ -5600,6 +5634,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_global_admin=_is_global_admin,
         resolve_conversation_lane=_conversation_lane_api_payload,
         resolve_conversation_about=_conversation_about_api_payload,
+        resolve_identity_reveal=_identity_reveal_api_payload,
+        reveal_identity=_reveal_identity_api_payload,
         join_conversation=_join_conversation_api_payload,
         resolve_pseudonym_suggestions=_pseudonym_suggestions_api_payload,
         resolve_explore_state=_explore_api_payload,

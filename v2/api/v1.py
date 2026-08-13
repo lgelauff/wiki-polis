@@ -28,6 +28,7 @@ from services.argument_commands import (
     InvalidArgument, PrioritizationUnavailable, PriorityBudgetExceeded,
 )
 from services.content_flags import InvalidFlag
+from services.identity_reveal import RevealUnavailable
 
 _OPENAPI_SPEC = json.loads(
     (Path(__file__).resolve().parents[1] / 'openapi.json').read_text(encoding='utf-8')
@@ -53,6 +54,8 @@ def create_api_v1_blueprint(
     resolve_global_admin: Callable[[Participant | None], bool],
     resolve_conversation_lane: Callable[[bool], dict],
     resolve_conversation_about: Callable[[str], dict],
+    resolve_identity_reveal: Callable[[str], dict],
+    reveal_identity: Callable[[str], tuple[dict, int]],
     join_conversation: Callable[[str, dict], tuple[dict, int]],
     resolve_pseudonym_suggestions: Callable[[str], list[str]],
     resolve_explore_state: Callable[[str], dict],
@@ -125,6 +128,35 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({
             'data': resolve_conversation_about(slug),
         }))
+
+    @bp.get('/conversations/<slug>/identity-reveal')
+    def get_identity_reveal(slug: str):
+        return _no_store(jsonify({
+            'data': resolve_identity_reveal(slug),
+        }))
+
+    @bp.post('/conversations/<slug>/identity-reveal')
+    def create_identity_reveal(slug: str):
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or body != {'confirm': True}:
+            return error_response(
+                'validation_failed',
+                'Explicitly confirm the irreversible identity link.',
+                400,
+                details={'fields': {'confirm': [
+                    'Set confirm to true after accepting the irreversible link.',
+                ]}},
+            )
+        try:
+            data, status = reveal_identity(slug)
+        except RevealUnavailable as exc:
+            return error_response(
+                'identity_reveal_unavailable',
+                'Identity reveal is not available in the current timeline state.',
+                409,
+                details={'state': exc.state},
+            )
+        return _no_store(jsonify({'data': data})), status
 
     @bp.get('/conversations/<slug>/pseudonym-suggestions')
     def get_pseudonym_suggestions(slug: str):

@@ -55,6 +55,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/identity-reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        /** Return the participant's identity-reveal timeline and capability */
+        get: operations["getIdentityReveal"];
+        put?: never;
+        /**
+         * Permanently link the participant's Wikimedia username and pseudonym
+         * @description Irreversible and idempotent. A replay returns the existing public link with HTTP 200.
+         */
+        post: operations["createIdentityReveal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{slug}/pseudonym-suggestions": {
         parameters: {
             query?: never;
@@ -327,6 +350,44 @@ export interface components {
         };
         ConversationAboutResponse: {
             data: components["schemas"]["ConversationAbout"];
+        };
+        IdentityRevealResponse: {
+            data: components["schemas"]["IdentityReveal"];
+        };
+        CreateIdentityRevealRequest: {
+            /** @constant */
+            confirm: true;
+        };
+        IdentityReveal: {
+            slug: string;
+            title: string;
+            /** @enum {string} */
+            state: "pending" | "open" | "revealed" | "expired";
+            pseudonym: string;
+            wikimediaUsername: string;
+            publicUsername: string | null;
+            timeline: components["schemas"]["IdentityRevealTimeline"];
+            capabilities: components["schemas"]["IdentityRevealCapabilities"];
+            links: components["schemas"]["IdentityRevealLinks"];
+        };
+        IdentityRevealTimeline: {
+            /** Format: date-time */
+            closedAt: string;
+            /** Format: date-time */
+            opensAt: string;
+            /** Format: date-time */
+            closesAt: string;
+            /** Format: date-time */
+            nextBoundaryAt: string | null;
+            daysRemaining: number;
+        };
+        IdentityRevealCapabilities: {
+            revealIdentity: boolean;
+        };
+        IdentityRevealLinks: {
+            self: string;
+            conversation: string;
+            about: string;
         };
         PseudonymSuggestionsResponse: {
             data: {
@@ -755,6 +816,99 @@ export interface operations {
             };
             /** @description Conversation not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getIdentityReveal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Identity-reveal state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityRevealResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation is not closed or participant has not joined */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createIdentityReveal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateIdentityRevealRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing reveal returned on replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityRevealResponse"];
+                };
+            };
+            /** @description Identity permanently linked */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityRevealResponse"];
+                };
+            };
+            /** @description Explicit confirmation missing */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Reveal window is not open */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
