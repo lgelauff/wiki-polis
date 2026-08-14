@@ -14,7 +14,7 @@
       "temporaryReactRoutes": ["/app/parity/fork"],
       "targetReactRoutes": ["/"],
       "apiOperations": ["getSession"],
-      "status": "partial",
+      "status": "parity",
       "scenarios": ["anonymous", "authenticated", "local-test-users"]
     },
     {

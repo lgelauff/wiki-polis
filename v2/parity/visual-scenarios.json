@@ -32,6 +32,50 @@
       "parityGate": true
     },
     {
+      "id": "entry-fork--authenticated--desktop",
+      "pageId": "entry-fork",
+      "state": "authenticated",
+      "legacyPath": "/",
+      "reactPath": "/app/parity/fork",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "goldenSha256": "af528dca71adbd8f8e5ad9fea16ad8b30590bd53bf43b5834a3b3ce2f9881e7b",
+      "parityGate": true
+    },
+    {
+      "id": "entry-fork--authenticated--mobile",
+      "pageId": "entry-fork",
+      "state": "authenticated",
+      "legacyPath": "/",
+      "reactPath": "/app/parity/fork",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "goldenSha256": "3469c32c159be16909a2f653e9bd74801a9611f82cb05660c583cf4d0023b821",
+      "parityGate": true
+    },
+    {
+      "id": "entry-fork--local-test-users--desktop",
+      "pageId": "entry-fork",
+      "state": "local-test-users",
+      "legacyPath": "/",
+      "reactPath": "/app/parity/fork",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "anonymous",
+      "goldenSha256": "268510e2a1c53ebab778d9d9e4bf7d25f557ea50928c4bd7437ec6b1b5f73abb",
+      "parityGate": true
+    },
+    {
+      "id": "entry-fork--local-test-users--mobile",
+      "pageId": "entry-fork",
+      "state": "local-test-users",
+      "legacyPath": "/",
+      "reactPath": "/app/parity/fork",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "anonymous",
+      "goldenSha256": "974c80d882c88b1a62fc18b315cc92899fa384f2ec1ac30483c1b600d6ff9505",
+      "parityGate": true
+    },
+    {
       "id": "demo-lane--anonymous-populated--desktop",
       "pageId": "demo-lane",
       "state": "anonymous-populated",
