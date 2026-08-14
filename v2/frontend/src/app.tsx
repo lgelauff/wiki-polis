@@ -40,6 +40,10 @@ import {
   ForkPage,
   StatementGuidancePage,
 } from './features/legacy/public-pages';
+import {
+  ConversationOutputPage,
+  ModerationLogPage,
+} from './features/legacy/conversation-read-pages';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -878,6 +882,8 @@ export function App() {
           <Route path="/app/parity/fork" element={<ForkPage />} />
           <Route path="/app/parity/help/statements" element={<StatementGuidancePage />} />
           <Route path="/app/parity/help/arguments" element={<ArgumentGuidancePage />} />
+          <Route path="/app/parity/conversations/:slug/moderation-log" element={<ModerationLogPage />} />
+          <Route path="/app/parity/conversations/:slug/outputs/:outputKey" element={<ConversationOutputPage />} />
           <Route path="/app/demo" element={<ConversationLanePage space="demo" />} />
           <Route path="/app/real" element={<ConversationLanePage space="real" />} />
           <Route path="/app/conversations/:slug/about" element={<ConversationAboutPage />} />

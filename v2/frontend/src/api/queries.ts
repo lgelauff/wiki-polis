@@ -31,6 +31,26 @@ export const conversationAboutQuery = (slug: string) => queryOptions({
   staleTime: 15_000,
 });
 
+export const moderationLogQuery = (slug: string) => queryOptions({
+  queryKey: ['moderation-log', slug],
+  queryFn: async () => (
+    await requireApiData(api.GET('/conversations/{slug}/moderation-log', {
+      params: {path: {slug}},
+    }))
+  ).data,
+  staleTime: 15_000,
+});
+
+export const conversationOutputQuery = (slug: string, outputKey: components['schemas']['ConversationOutputDetail']['key']) => queryOptions({
+  queryKey: ['conversation-output', slug, outputKey],
+  queryFn: async () => (
+    await requireApiData(api.GET('/conversations/{slug}/outputs/{outputKey}', {
+      params: {path: {slug, outputKey}},
+    }))
+  ).data,
+  staleTime: 15_000,
+});
+
 export const identityRevealQuery = (slug: string) => queryOptions({
   queryKey: ['identity-reveal', slug],
   queryFn: async () => (

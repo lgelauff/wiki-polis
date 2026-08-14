@@ -29,18 +29,27 @@ function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
   useEffect(() => {
     const previousTitle = document.title;
     const previousDemo = document.body.getAttribute('data-demo');
+    const root = document.documentElement;
+    const previousFontSynthesis = root.style.getPropertyValue('font-synthesis');
+    const previousTextRendering = root.style.getPropertyValue('text-rendering');
     const stylesheet = document.createElement('link');
     stylesheet.rel = 'stylesheet';
     stylesheet.href = '/static/style.css';
     stylesheet.dataset.reactLegacyStyles = 'true';
     document.head.appendChild(stylesheet);
     document.title = title;
+    root.style.setProperty('font-synthesis', 'weight style small-caps');
+    root.style.setProperty('text-rendering', 'auto');
     if (demo) document.body.dataset.demo = 'true';
     else document.body.removeAttribute('data-demo');
 
     return () => {
       stylesheet.remove();
       document.title = previousTitle;
+      if (previousFontSynthesis) root.style.setProperty('font-synthesis', previousFontSynthesis);
+      else root.style.removeProperty('font-synthesis');
+      if (previousTextRendering) root.style.setProperty('text-rendering', previousTextRendering);
+      else root.style.removeProperty('text-rendering');
       if (previousDemo === null) document.body.removeAttribute('data-demo');
       else document.body.setAttribute('data-demo', previousDemo);
     };
@@ -50,11 +59,13 @@ function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
 export function LegacyShell({
   children,
   crumb,
+  headerCrumb,
   headerMode = 'plain',
   title = 'ProtoWiki',
 }: {
   children: ReactNode;
   crumb?: string;
+  headerCrumb?: ReactNode;
   headerMode?: HeaderMode;
   title?: string;
 }) {
@@ -71,7 +82,8 @@ export function LegacyShell({
               <OrbitMark />
               <span className="header-title">ProtoWiki</span>
             </a>
-            {crumb && (
+            {headerCrumb}
+            {!headerCrumb && crumb && (
               <span className="header-crumb">
                 <span className="header-crumb-sep">/</span>
                 <span>{crumb}</span>

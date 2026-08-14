@@ -305,6 +305,40 @@ export const handlers = [
     }),
   ),
   http.get(
+    new URL('/api/v1/conversations/:slug/moderation-log', globalThis.location.origin).toString(),
+    ({params}) => HttpResponse.json({data: {
+      slug: String(params.slug),
+      title: 'Community strategy',
+      events: [
+        {occurredAt: '2026-08-14T09:30:00Z', action: 'Banned', pseudonym: 'quiet-otter', scope: 'conversation', actor: 'adminuser'},
+        {occurredAt: '2026-08-13T08:15:00Z', action: 'Unbanned', pseudonym: 'patient-fox', scope: 'conversation', actor: 'moderator'},
+      ],
+      links: {self: `/api/v1/conversations/${String(params.slug)}/moderation-log`, conversation: `/c/${String(params.slug)}`, about: `/app/conversations/${String(params.slug)}/about`},
+    }}),
+  ),
+  http.get(
+    new URL('/api/v1/conversations/:slug/outputs/:outputKey', globalThis.location.origin).toString(),
+    ({params}) => {
+      const key = String(params.outputKey) as components['schemas']['ConversationOutputDetail']['key'];
+      const labels = {dataset: 'Dataset', 'argument-map': 'Argument map', 'preliminary-results': 'Preliminary results', report: 'Report', 'initial-clustering': 'Initial clustering'};
+      const phases = {dataset: 'Opt-in identity window', 'argument-map': 'Arguments', 'preliminary-results': 'Informed vote', report: 'Publish', 'initial-clustering': 'Explore'};
+      return HttpResponse.json({data: {
+        slug: String(params.slug),
+        title: 'Community strategy',
+        output: {
+          key,
+          label: labels[key],
+          phase: phases[key],
+          status: key === 'report' ? 'final' : 'provisional',
+          ready: key !== 'initial-clustering',
+          method: 'A stable, participant-safe method description.',
+          pending: 'This output is pending.',
+        },
+        links: {self: `/api/v1/conversations/${String(params.slug)}/outputs/${key}`, conversation: `/c/${String(params.slug)}`, about: `/app/conversations/${String(params.slug)}/about`},
+      }});
+    },
+  ),
+  http.get(
     new URL('/api/v1/conversations', globalThis.location.origin).toString(),
     ({request}) => {
     const space = new URL(request.url).searchParams.get('space') ?? 'real';
