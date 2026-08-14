@@ -262,11 +262,11 @@ test('renders a conversation record from the generated API contract', async () =
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {name: 'Community strategy'})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'About Community strategy'})).toBeVisible();
   expect(screen.getByText('Shape the next chapter together.')).toBeVisible();
   expect(screen.getByText('quiet-otter')).toBeVisible();
-  expect(screen.getByRole('heading', {name: 'Your contribution'})).toBeVisible();
-  expect(screen.getByRole('link', {name: 'Continue participating'}))
+  expect(screen.getByRole('heading', {name: 'Your contributions'})).toBeVisible();
+  expect(screen.getByRole('link', {name: 'Return to conversation'}))
     .toHaveAttribute('href', '/c/community-strategy');
 });
 

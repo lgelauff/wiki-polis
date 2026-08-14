@@ -3,7 +3,7 @@ import {useSuspenseQuery} from '@tanstack/react-query';
 
 import {sessionQuery} from '../../api/queries';
 
-type HeaderMode = 'fork' | 'demo' | 'real' | 'plain';
+type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'plain';
 
 function OrbitMark() {
   return (
@@ -75,7 +75,7 @@ export function LegacyShell({
 }) {
   const {data: session} = useSuspenseQuery(sessionQuery());
   const authenticated = session.state === 'authenticated';
-  useLegacyDocument({demo: headerMode === 'demo', title});
+  useLegacyDocument({demo: headerMode === 'demo' || headerMode === 'conversation-demo', title});
 
   return (
     <>
@@ -97,7 +97,18 @@ export function LegacyShell({
 
           <div className="header-right">
             {headerMode !== 'plain' && (
-              <div className="mode-switch" role="group" aria-label="Choose demo or real mode">
+              headerMode === 'conversation-demo' ? (
+                <span className="mode-lock mode-lock--demo">
+                  <span className="mode-lock-dot" aria-hidden="true" />Demo
+                </span>
+              ) : headerMode === 'conversation-real' ? (
+                <span className="mode-lock mode-lock--real">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <rect x="5" y="11" width="14" height="10" rx="2" />
+                    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                  </svg>Real consultation
+                </span>
+              ) : <div className="mode-switch" role="group" aria-label="Choose demo or real mode">
                 <a
                   href="/app/demo"
                   className={`mode-switch-opt mode-switch-opt--demo${headerMode === 'demo' ? ' is-active' : ''}`}

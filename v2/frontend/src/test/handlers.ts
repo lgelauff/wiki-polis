@@ -384,6 +384,7 @@ export const handlers = [
       data: {
         slug: 'community-strategy',
         title: 'Community strategy',
+        space: 'real',
         descriptionHtml: '<p>Shape the next chapter together.</p>',
         outroHtml: null,
         status: 'open',

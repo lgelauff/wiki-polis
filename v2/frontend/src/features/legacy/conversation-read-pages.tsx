@@ -2,7 +2,11 @@ import {useSuspenseQuery} from '@tanstack/react-query';
 import {useParams} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
-import {conversationOutputQuery, moderationLogQuery} from '../../api/queries';
+import {
+  conversationAboutQuery,
+  conversationOutputQuery,
+  moderationLogQuery,
+} from '../../api/queries';
 import {LegacyShell} from './legacy-shell';
 
 type OutputKey = components['schemas']['ConversationOutputDetail']['key'];
@@ -22,6 +26,103 @@ function outputKey(value: string | undefined): OutputKey {
 
 function capitalize(value: string) {
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+function truncated(value: string, length: number) {
+  return value.length > length ? `${value.slice(0, length - 1)}…` : value;
+}
+
+function countLabel(count: number, singular: string) {
+  return `${count} ${singular}${count === 1 ? '' : 's'}`;
+}
+
+export function ConversationAboutLegacyPage() {
+  const slug = requiredParam('slug', useParams().slug);
+  const {data} = useSuspenseQuery(conversationAboutQuery(slug));
+  const transition = data.scheduledTransition;
+
+  return (
+    <LegacyShell
+      headerMode={data.space === 'demo' ? 'conversation-demo' : 'conversation-real'}
+      title={`About — ${data.title} — ProtoWiki`}
+      headerCrumb={(
+        <nav className="header-crumb" aria-label="Conversation context">
+          <span className="header-crumb-sep">/</span>
+          <a href={`/c/${data.slug}`}>{truncated(data.title, 32)}</a>
+          <span className="header-crumb-sep">/</span>
+          <span>About</span>
+        </nav>
+      )}
+    >
+      <div className="container">
+        <p className="muted" style={{fontFamily: 'var(--mono)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '.5rem'}}>Conversation record</p>
+        <h1>{`About ${data.title}`}</h1>
+
+        {data.descriptionHtml && <div className="intro-text" style={{marginTop: '1rem'}} dangerouslySetInnerHTML={{__html: data.descriptionHtml}} />}
+        {data.outroHtml && <div className="outro-text" style={{marginTop: '1rem'}} dangerouslySetInnerHTML={{__html: data.outroHtml}} />}
+
+        <div className="landing-section" style={{marginTop: '1.5rem'}}>
+          <h2 className="section-heading">Where it stands</h2>
+          <p><strong>Status:</strong> {data.status === 'archived' ? 'Closed' : data.status === 'paused' ? 'Paused' : 'Open'}</p>
+          <p><strong>Current phase:</strong> {data.phases.map((phase) => phase.label).join(', ')}</p>
+          {transition && (
+            <p><strong>Next:</strong> {`${transition.targetLabel} on `}
+              <time dateTime={transition.at} title="Shown in your local timezone">
+                {new Intl.DateTimeFormat(undefined, {dateStyle: 'medium', timeStyle: 'short'}).format(new Date(transition.at))}
+              </time>
+            </p>
+          )}
+          {data.pseudonym && <p><strong>Your pseudonym:</strong> <code>{data.pseudonym}</code></p>}
+        </div>
+
+        <div className="landing-section" style={{marginTop: '1rem'}}>
+          <h2 className="section-heading">Conversation statistics</h2>
+          <div className="stat-row" style={{display: 'flex', gap: '2rem', flexWrap: 'wrap'}}>
+            <AboutStatistic value={data.statistics.participants} label="participants" />
+            <AboutStatistic value={data.statistics.statementVotes} label="statement votes" />
+            <AboutStatistic value={data.statistics.statements} label="statements" />
+            <AboutStatistic value={data.statistics.arguments} label="arguments" />
+            <AboutStatistic value={data.statistics.argumentContributors} label="argument contributors" />
+          </div>
+          {data.statistics.participants === null && <p className="muted" style={{fontSize: 12, marginTop: '.8rem'}}>Polis vote statistics are unavailable right now; local argument totals remain current.</p>}
+        </div>
+
+        {data.personal && (
+          <div className="landing-section" style={{marginTop: '1rem'}}>
+            <h2 className="section-heading">Your contributions</h2>
+            <ul>
+              <li>{`${countLabel(data.personal.statementsSuggested, 'new statement')} suggested`}</li>
+              <li>{data.personal.statementVotesAvailable
+                ? countLabel(data.personal.statementVotes ?? 0, 'statement vote')
+                : 'Vote count unavailable'}</li>
+              <li>{`${countLabel(data.personal.argumentsAdded, 'argument')} added`}</li>
+              <li>{`${countLabel(data.personal.argumentsRated, 'argument')} rated`}</li>
+            </ul>
+          </div>
+        )}
+
+        <div className="landing-section" style={{marginTop: '1rem'}}>
+          <h2 className="section-heading">Outputs</h2>
+          <ul>
+            {data.outputs.map((output) => <li key={output.key}>
+              {output.ready && output.href
+                ? <a href={output.href}>{output.label}</a>
+                : <>{output.label} <span className="muted">— pending</span></>}
+            </li>)}
+          </ul>
+        </div>
+
+        <p style={{marginTop: '1.25rem'}}>
+          <a href={`/c/${data.slug}/moderation-log`}>Moderation log{data.moderation.eventCount > 0 ? ` (${data.moderation.eventCount})` : ''}</a>
+          {' · '}<a href={`/c/${data.slug}`}>Return to conversation</a>
+        </p>
+      </div>
+    </LegacyShell>
+  );
+}
+
+function AboutStatistic({value, label}: {value: number | null; label: string}) {
+  return <span><strong>{value ?? '—'}</strong><br /><span className="muted">{label}</span></span>;
 }
 
 export function ModerationLogPage() {

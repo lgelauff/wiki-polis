@@ -41,13 +41,13 @@ import {
   StatementGuidancePage,
 } from './features/legacy/public-pages';
 import {
+  ConversationAboutLegacyPage,
   ConversationOutputPage,
   ModerationLogPage,
 } from './features/legacy/conversation-read-pages';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
-type ConversationAbout = components['schemas']['ConversationAbout'];
 
 const groupDefinitions: ReadonlyArray<{
   key: keyof ConversationGroups;
@@ -176,124 +176,9 @@ function ConversationRow({conversation, index}: {conversation: ConversationCard;
   );
 }
 
-function Metric({value, label}: {value: number | null; label: string}) {
-  return (
-    <div className="record-metric">
-      <strong>{value ?? '—'}</strong>
-      <span>{label}</span>
-    </div>
-  );
-}
-
 function RichText({html, className}: {html: string | null; className?: string}) {
   if (!html) return null;
   return <div className={className} dangerouslySetInnerHTML={{__html: html}} />;
-}
-
-function PersonalRecord({personal}: {personal: NonNullable<ConversationAbout['personal']>}) {
-  return (
-    <section className="record-section" aria-labelledby="personal-record-heading">
-      <div className="record-section__number">03</div>
-      <div>
-        <h2 id="personal-record-heading">Your contribution</h2>
-        <dl className="contribution-list">
-          <div><dt>Statements suggested</dt><dd>{personal.statementsSuggested}</dd></div>
-          <div><dt>Statement votes</dt><dd>{personal.statementVotesAvailable ? personal.statementVotes : '—'}</dd></div>
-          <div><dt>Arguments added</dt><dd>{personal.argumentsAdded}</dd></div>
-          <div><dt>Arguments rated</dt><dd>{personal.argumentsRated}</dd></div>
-        </dl>
-        {!personal.statementVotesAvailable && (
-          <p className="record-note">Your statement-vote count is temporarily unavailable.</p>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function ConversationAboutPage() {
-  const {slug = ''} = useParams();
-  const {data} = useSuspenseQuery(conversationAboutQuery(slug));
-  const transition = deadlineLabel(data.scheduledTransition);
-
-  return (
-    <>
-      <Header />
-      <main className="record-shell" id="main">
-        <nav className="record-breadcrumb" aria-label="Breadcrumb">
-          <Link to="/app/real">Conversations</Link><span>/</span><span>About</span>
-        </nav>
-        <header className="record-title">
-          <div>
-            <p className="eyebrow">Conversation record</p>
-            <h1>{data.title}</h1>
-          </div>
-          <div className="record-stamp" data-status={data.status}>
-            <span>{data.status}</span>
-            <strong>{data.phases.map((phase) => phase.label).join(' + ')}</strong>
-          </div>
-        </header>
-
-        <RichText html={data.descriptionHtml} className="record-prose record-prose--lead" />
-
-        <section className="record-section" aria-labelledby="standing-heading">
-          <div className="record-section__number">01</div>
-          <div>
-            <h2 id="standing-heading">Where it stands</h2>
-            <dl className="record-facts">
-              <div><dt>Status</dt><dd>{data.status}</dd></div>
-              <div><dt>Current phase</dt><dd>{data.phases.map((phase) => phase.label).join(', ')}</dd></div>
-              {transition && <div><dt>Next transition</dt><dd>{transition}</dd></div>}
-              {data.pseudonym && <div><dt>Your pseudonym</dt><dd><code>{data.pseudonym}</code></dd></div>}
-            </dl>
-          </div>
-        </section>
-
-        <section className="record-section" aria-labelledby="statistics-heading">
-          <div className="record-section__number">02</div>
-          <div>
-            <h2 id="statistics-heading">Conversation statistics</h2>
-            <div className="record-metrics">
-              <Metric value={data.statistics.participants} label="participants" />
-              <Metric value={data.statistics.statementVotes} label="statement votes" />
-              <Metric value={data.statistics.statements} label="statements" />
-              <Metric value={data.statistics.arguments} label="arguments" />
-              <Metric value={data.statistics.argumentContributors} label="argument contributors" />
-            </div>
-            {data.statistics.participants === null && (
-              <p className="record-note">Live Polis totals are temporarily unavailable. Local argument totals remain current.</p>
-            )}
-          </div>
-        </section>
-
-        {data.personal && <PersonalRecord personal={data.personal} />}
-
-        <section className="record-section" aria-labelledby="outputs-heading">
-          <div className="record-section__number">{data.personal ? '04' : '03'}</div>
-          <div>
-            <h2 id="outputs-heading">Published outputs</h2>
-            <ul className="output-ledger">
-              {data.outputs.map((output) => (
-                <li key={output.key}>
-                  <span>{output.label}</span>
-                  {output.ready && output.href
-                    ? <a href={output.href}>Open <span aria-hidden="true">↗</span></a>
-                    : <span className="output-ledger__pending">Pending</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        <RichText html={data.outroHtml} className="record-prose record-prose--outro" />
-        <footer className="record-actions">
-          <a className="record-actions__primary" href={data.links.conversation}>
-            {data.capabilities.participate ? 'Continue participating' : 'View conversation'}
-          </a>
-          <a href={data.moderation.href}>Moderation log ({data.moderation.eventCount})</a>
-        </footer>
-      </main>
-    </>
-  );
 }
 
 function revealDate(value: string): string {
@@ -886,7 +771,7 @@ export function App() {
           <Route path="/app/parity/conversations/:slug/outputs/:outputKey" element={<ConversationOutputPage />} />
           <Route path="/app/demo" element={<ConversationLanePage space="demo" />} />
           <Route path="/app/real" element={<ConversationLanePage space="real" />} />
-          <Route path="/app/conversations/:slug/about" element={<ConversationAboutPage />} />
+          <Route path="/app/conversations/:slug/about" element={<ConversationAboutLegacyPage />} />
           <Route path="/app/conversations/:slug/join" element={<ConversationJoinPage />} />
           <Route path="/app/conversations/:slug/explore" element={<ExplorePage />} />
           <Route path="/app/conversations/:slug/arguments" element={<ArgumentMappingRoute />} />

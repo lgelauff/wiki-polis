@@ -14,6 +14,19 @@ function renderRoute(route: string) {
   );
 }
 
+test('renders the legacy conversation record from the typed about contract', async () => {
+  renderRoute('/app/conversations/community-strategy/about');
+
+  expect(await screen.findByRole('heading', {name: 'About Community strategy'})).toBeVisible();
+  expect(screen.getByText('Shape the next chapter together.')).toBeVisible();
+  expect(screen.getByText('quiet-otter')).toBeVisible();
+  expect(screen.getByText('2 new statements suggested')).toBeVisible();
+  expect(screen.getByText('Final report')).toHaveTextContent('pending');
+  expect(screen.getByRole('link', {name: 'Moderation log (1)'})).toHaveAttribute(
+    'href', '/c/community-strategy/moderation-log',
+  );
+});
+
 test('renders the public moderation accountability table', async () => {
   renderRoute('/app/parity/conversations/community-strategy/moderation-log');
 
