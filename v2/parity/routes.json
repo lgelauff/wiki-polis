@@ -91,7 +91,7 @@
       "temporaryReactRoutes": ["/app/conversations/:slug/about"],
       "targetReactRoutes": ["/c/:slug/about"],
       "apiOperations": ["getConversationAbout"],
-      "status": "partial",
+      "status": "parity",
       "scenarios": ["anonymous-public", "participant", "moderator", "scheduled-transition", "outputs-mixed"]
     },
     {

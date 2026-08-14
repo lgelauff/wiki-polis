@@ -26,14 +26,16 @@ def _fixture_database_path() -> Path:
 DATABASE_PATH = _fixture_database_path()
 os.environ['FLASK_DEBUG'] = '1'
 os.environ['DEV_LOGIN_USER'] = 'ParityAdmin'
-os.environ['DEV_FAKE_LOGIN'] = ''
+os.environ['DEV_FAKE_LOGIN'] = '1'
 os.environ['DEV_DATABASE_URL'] = f'sqlite:///{DATABASE_PATH}'
 os.environ.setdefault('SECRET_KEY', 'parity-fixture-only-secret')
 os.environ.setdefault('TOOL_TOOLFORGE_API_URL', '')
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app as app_module  # noqa: E402  (environment must precede app configuration)
-from db import AuditEvent, Conversation, Participant, Participation, db  # noqa: E402
+from db import (  # noqa: E402
+    AdminRole, AuditEvent, Conversation, Participant, Participation, db,
+)
 
 
 application = app_module.app
@@ -65,6 +67,16 @@ def _seed() -> None:
         mw_username='ParityTarget',
         xid=app_module._derive_xid('parity-target'),
     )
+    participant = Participant(
+        mw_user_id=-1,
+        mw_username='dev-user-1',
+        xid=app_module._derive_xid('dev-fake:-1:dev-user-1'),
+    )
+    moderator = Participant(
+        mw_user_id=-2,
+        mw_username='dev-user-2',
+        xid=app_module._derive_xid('dev-fake:-2:dev-user-2'),
+    )
     moderation = Conversation(
         slug='parity-moderation',
         polis_id='parity-moderation-polis',
@@ -82,7 +94,39 @@ def _seed() -> None:
         phase_public_results=True,
         closed_at=datetime(2020, 1, 1, 12, 0, tzinfo=timezone.utc),
     )
-    db.session.add_all([admin, target, moderation, closed])
+    about_public = Conversation(
+        slug='parity-about-public', polis_id='parity-about-public-polis',
+        title='Public conversation record', active=True, access_policy='public',
+        phase_submission=True,
+        intro_text='<p>A public introduction with <strong>trusted HTML</strong>.</p>',
+    )
+    about_participant = Conversation(
+        slug='parity-about-participant', polis_id='parity-about-participant-polis',
+        title='Participant conversation record', active=True, access_policy='public',
+        phase_submission=True,
+        outro_text='<p>A closing note for participants.</p>',
+    )
+    about_moderator = Conversation(
+        slug='parity-about-moderator', polis_id='parity-about-moderator-polis',
+        title='Moderator conversation record', active=True, access_policy='public',
+        phase_argument_mapping=True,
+    )
+    about_scheduled = Conversation(
+        slug='parity-about-scheduled', polis_id='parity-about-scheduled-polis',
+        title='Scheduled conversation record', active=True, access_policy='public',
+        scheduled_transition_at=datetime(2030, 2, 3, 14, 30, tzinfo=timezone.utc),
+        scheduled_transition_target='submission',
+    )
+    about_mixed = Conversation(
+        slug='parity-about-mixed', polis_id='parity-about-mixed-polis',
+        title='Mixed output conversation record', active=True, access_policy='public',
+        phase_submission=True,
+        phase_argument_mapping=True,
+    )
+    db.session.add_all([
+        admin, target, participant, moderator, moderation, closed,
+        about_public, about_participant, about_moderator, about_scheduled, about_mixed,
+    ])
     db.session.flush()
     db.session.add_all([
         Participation(
@@ -99,6 +143,33 @@ def _seed() -> None:
             participant_id=admin.id,
             conversation_id=closed.id,
             pseudonym='patient-fox',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=about_participant.id,
+            pseudonym='curious-lynx',
+            new_stmt_ids=[101, 102],
+        ),
+        Participation(
+            participant_id=moderator.id,
+            conversation_id=about_moderator.id,
+            pseudonym='careful-raven',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=about_scheduled.id,
+            pseudonym='patient-badger',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=about_mixed.id,
+            pseudonym='steady-wolf',
+        ),
+        AdminRole(
+            participant_id=moderator.id,
+            conversation_id=about_moderator.id,
+            role='moderator',
+            granted_by=admin.id,
         ),
     ])
     db.session.add_all([

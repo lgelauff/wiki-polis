@@ -322,6 +322,126 @@
       "serverFixture": "isolated",
       "goldenSha256": "b72dfc99c160b4add201119d1bb8a9f5d12c95550e0b3cb0a7c11c71108ab30a",
       "parityGate": true
+    },
+    {
+      "id": "conversation-about--anonymous-public--desktop",
+      "pageId": "conversation-about",
+      "state": "anonymous-public",
+      "legacyPath": "/c/parity-about-public/about",
+      "reactPath": "/app/conversations/parity-about-public/about",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "anonymous",
+      "serverFixture": "isolated",
+      "goldenSha256": "165260a8e5dc73e2fe83fd76f73c1289b8fdd0ff71034ace730eb00471fd3dff",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-about--anonymous-public--mobile",
+      "pageId": "conversation-about",
+      "state": "anonymous-public",
+      "legacyPath": "/c/parity-about-public/about",
+      "reactPath": "/app/conversations/parity-about-public/about",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "anonymous",
+      "serverFixture": "isolated",
+      "goldenSha256": "ae016fc628759444b5a369d6a805376cec038ce84270a92957543c0e20aceab5",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-about--participant--desktop",
+      "pageId": "conversation-about",
+      "state": "participant",
+      "legacyPath": "/c/parity-about-participant/about",
+      "reactPath": "/app/conversations/parity-about-participant/about",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "30153938987e14714491c64da1796bc3a3c1161cd9fcfec0f7254d9f27aa32c4",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-about--participant--mobile",
+      "pageId": "conversation-about",
+      "state": "participant",
+      "legacyPath": "/c/parity-about-participant/about",
+      "reactPath": "/app/conversations/parity-about-participant/about",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "7161dc9e999a247ef237257d568a68cca798098724b763187ee9502de6d5a08b",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-about--moderator--desktop",
+      "pageId": "conversation-about",
+      "state": "moderator",
+      "legacyPath": "/c/parity-about-moderator/about",
+      "reactPath": "/app/conversations/parity-about-moderator/about",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "b3704a3d017b628aa6a361bc4582282a847295eae17d3a70822205dad9417ee5",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-about--moderator--mobile",
+      "pageId": "conversation-about",
+      "state": "moderator",
+      "legacyPath": "/c/parity-about-moderator/about",
+      "reactPath": "/app/conversations/parity-about-moderator/about",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "3323e3b1d9d59ff8399bc697c2e7e424d7b86b1cdf263f5235c636f9c20c5187",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-about--scheduled-transition--desktop",
+      "pageId": "conversation-about",
+      "state": "scheduled-transition",
+      "legacyPath": "/c/parity-about-scheduled/about",
+      "reactPath": "/app/conversations/parity-about-scheduled/about",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "03a35ae5f47ec6fd30036b84e99dde9294b076bcc03eae0a8341eb924228db46",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-about--scheduled-transition--mobile",
+      "pageId": "conversation-about",
+      "state": "scheduled-transition",
+      "legacyPath": "/c/parity-about-scheduled/about",
+      "reactPath": "/app/conversations/parity-about-scheduled/about",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "e4f20a960bfeb9bc5fa482e7d48496d6e23682a79687bcdea1087dc77b4507e3",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-about--outputs-mixed--desktop",
+      "pageId": "conversation-about",
+      "state": "outputs-mixed",
+      "legacyPath": "/c/parity-about-mixed/about",
+      "reactPath": "/app/conversations/parity-about-mixed/about",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "501e99894ea17c95feb94fbd4093b4c14ac12fd4cf24be73d62d24e44a558629",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-about--outputs-mixed--mobile",
+      "pageId": "conversation-about",
+      "state": "outputs-mixed",
+      "legacyPath": "/c/parity-about-mixed/about",
+      "reactPath": "/app/conversations/parity-about-mixed/about",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "ee55876b6f72e126961ca5c6afdd7dbf05b58d5d8c7ae69b5ade4a26845cbda9",
+      "parityGate": true
     }
   ]
 }
