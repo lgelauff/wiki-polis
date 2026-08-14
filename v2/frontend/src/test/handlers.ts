@@ -132,6 +132,12 @@ export const handlers = [
     const body = await request.json() as {scheduledAt: string | null; frozen: boolean};
     return HttpResponse.json({data: {changed: true, lifecycle: lifecycleFixture({canSchedule: true, scheduledAt: body.scheduledAt, targetKey: body.scheduledAt ? 'submission' : null, targetLabel: body.scheduledAt ? 'Explore' : null, frozen: body.frozen})}});
   }),
+  http.put(new URL('/api/v1/admin/conversations/7/pause', globalThis.location.origin).toString(), async ({request}) => {
+    const body = await request.json() as {paused: boolean};
+    const lifecycle = lifecycleFixture();
+    lifecycle.conversation.status = body.paused ? 'paused' : 'active';
+    return HttpResponse.json({data: {paused: body.paused, changed: true, lifecycle}});
+  }),
   http.put(new URL('/api/v1/admin/conversations/7/archive', globalThis.location.origin).toString(), async ({request}) => {
     const body = await request.json() as {archived: boolean};
     const lifecycle = lifecycleFixture();

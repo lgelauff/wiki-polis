@@ -122,61 +122,52 @@ test('advances a conversation from the server-described lifecycle console', asyn
   );
 
   expect(await screen.findByRole('heading', {name: 'Community strategy'})).toBeVisible();
-  expect(screen.getByText('not applicable')).toBeVisible();
-  expect(screen.getByRole('heading', {name: 'Preparation → Explore'})).toBeVisible();
-  const advance = screen.getByRole('button', {name: 'Move to Explore'});
+  expect(screen.getByText('You are in phase 1 of 3')).toBeVisible();
+  const advance = screen.getByRole('button', {name: 'Move on to Explore →'});
   expect(advance).toBeDisabled();
   fireEvent.click(screen.getByRole('checkbox', {name: /statement set and introduction/}));
   expect(advance).toBeEnabled();
   fireEvent.click(advance);
 
-  expect(await screen.findByRole('status')).toHaveTextContent('Moved to Explore');
-  expect(screen.getByRole('heading', {name: 'No guided transition'})).toBeVisible();
+  expect(await screen.findByText('You are in phase 2 of 3')).toBeVisible();
+  expect(screen.getByText('Report phase reached — not yet published.')).toBeVisible();
   expect(screen.getByRole('link', {name: /Participants/})).toHaveAttribute(
     'href', '/app/admin/conversations/7/participants',
-  );
-  expect(screen.getByRole('link', {name: /Delete/})).toHaveAttribute(
-    'href', '/app/admin/conversations/7/termination',
   );
 });
 
 test('schedules and cancels a lifecycle transition', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
   await screen.findByRole('heading', {name: 'Community strategy'});
-  fireEvent.change(screen.getByLabelText(/Move to next phase at/), {target: {value: '2030-01-02T12:30'}});
-  fireEvent.click(screen.getByRole('button', {name: 'Schedule'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Schedule updated');
+  fireEvent.change(screen.getByLabelText('Scheduled transition time in UTC'), {target: {value: '2030-01-02T12:30'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Set'}));
+  expect(await screen.findByRole('button', {name: 'Edit'})).toBeVisible();
   expect(screen.getByRole('button', {name: 'Freeze'})).toBeVisible();
   fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
-  expect(await screen.findByLabelText(/Move to next phase at/)).toHaveValue('');
+  expect(await screen.findByRole('button', {name: 'Set'})).toBeVisible();
 });
 
 test('repairs an advanced phase set through route-valid domain keys', async () => {
   vi.spyOn(globalThis, 'confirm').mockReturnValueOnce(true);
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
   await screen.findByRole('heading', {name: 'Community strategy'});
-  fireEvent.click(screen.getByText('Advanced phase repair'));
+  fireEvent.click(screen.getByRole('button', {name: 'Advanced'}));
   fireEvent.click(screen.getByRole('checkbox', {name: /Arguments/}));
   fireEvent.click(screen.getByRole('checkbox', {name: /Informed vote/}));
-  expect(screen.getByText(/Enabled but not initialized/)).toBeVisible();
-  fireEvent.click(screen.getByRole('button', {name: 'Save advanced phases'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Advanced phases saved');
-  expect(screen.getByText('Advanced phase state')).toBeVisible();
-  fireEvent.click(screen.getByRole('button', {name: 'Initialize informed voting'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Informed-voting round initialized');
-  expect(screen.getByText('Initialized')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Save phases'}));
+  expect(await screen.findByText(/Enabled but not initialised/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Initialise Phase 6'}));
+  expect(await screen.findByText(/Informed voting is initialised/)).toBeVisible();
 });
 
-test('archives and reopens without presenting publication as the outcome', async () => {
-  vi.spyOn(globalThis, 'confirm').mockReturnValueOnce(true);
+test('pauses and resumes from the legacy lifecycle control', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
   await screen.findByRole('heading', {name: 'Community strategy'});
-  fireEvent.click(screen.getByRole('button', {name: 'Archive conversation'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Conversation archived');
-  expect(screen.getByText('archived')).toBeVisible();
-  expect(screen.getByText('not applicable')).toBeVisible();
-  fireEvent.click(screen.getByRole('button', {name: 'Reopen conversation'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Conversation reopened');
+  fireEvent.click(screen.getByRole('button', {name: 'Pause'}));
+  expect(await screen.findByRole('button', {name: 'Resume'})).toBeVisible();
+  expect(screen.getByText(/identity-reveal clock has/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Resume'}));
+  expect(await screen.findByRole('button', {name: 'Pause'})).toBeVisible();
 });
 
 test('edits settings and legacy eligibility through one typed command', async () => {

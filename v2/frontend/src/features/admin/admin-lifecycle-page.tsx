@@ -1,4 +1,4 @@
-import {useState, type FormEvent} from 'react';
+import {Fragment, useCallback, useEffect, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 
@@ -6,429 +6,246 @@ import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
 import {
   adminLifecycleQuery,
+  adminRoleRosterQuery,
+  adminSettingsQuery,
+  adminTerminationQuery,
   createAdminPhase6Initialization,
   createAdminPublication,
+  deleteAdminConversation,
   putAdminPause,
-  putAdminArchive,
   putAdminPhase,
   putAdminPhases,
+  putAdminRoles,
   putAdminSchedule,
+  putAdminSettings,
 } from '../../api/queries';
+import {LegacyShell} from '../legacy/legacy-shell';
+import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 
 type Lifecycle = components['schemas']['AdminLifecycle'];
-type Readiness = Lifecycle['publicationReadiness']['preconditions'][number];
+type Settings = components['schemas']['AdminSettings'];
+type RoleRoster = components['schemas']['AdminRoleRoster'];
+type Role = 'moderator' | 'organizer';
 
-function formatStatus(value: string) {
-  return value.replaceAll('_', ' ');
+function legacyTruncate(value: string, length = 34, leeway = 5): string {
+  return value.length <= length + leeway ? value : `${value.slice(0, length - 1)}…`;
 }
 
-function commandError(error: Error | null) {
-  if (!error) return null;
-  return error instanceof ApiContractError ? error.message : 'The command could not be completed.';
+function message(error: Error, fallback = 'The command could not be completed.'): string {
+  return error instanceof ApiContractError ? error.message : fallback;
 }
 
-function ReadinessList({rows, confirmed, onToggle}: {
-  rows: Readiness[];
-  confirmed: string[];
-  onToggle: (id: string) => void;
-}) {
-  return (
-    <ul className="lifecycle-readiness">
-      {rows.map((row) => {
-        const machineChecked = row.met !== null;
-        return (
-          <li key={row.id} data-state={row.met === false ? 'blocked' : row.met === true ? 'met' : 'confirm'}>
-            <label>
-              <input
-                type="checkbox"
-                checked={machineChecked ? row.met === true : confirmed.includes(row.id)}
-                disabled={machineChecked}
-                onChange={() => onToggle(row.id)}
-              />
-              <span>{row.label}</span>
-            </label>
-            {machineChecked && <strong>{row.met ? 'Verified' : 'Blocked'}</strong>}
-            {row.note && <p>{row.note}</p>}
-          </li>
-        );
-      })}
-    </ul>
-  );
+function useRedesignStyles() {
+  useEffect(() => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/static/redesign.css';
+    link.dataset.reactLegacyRedesign = 'true';
+    document.head.appendChild(link);
+    return () => link.remove();
+  }, []);
 }
 
-function allHumanChecksConfirmed(rows: Readiness[], confirmed: string[]) {
-  return rows.every((row) => row.met === true || (row.met === null && confirmed.includes(row.id)));
+function countdown(value: string): string {
+  let seconds = Math.max(0, Math.floor((new Date(value).getTime() - Date.now()) / 1000));
+  if (!seconds) return 'due now';
+  const days = Math.floor(seconds / 86400); seconds -= days * 86400;
+  const hours = Math.floor(seconds / 3600); seconds -= hours * 3600;
+  const minutes = Math.floor(seconds / 60);
+  return [days && `${days}d`, hours && `${hours}h`, minutes && `${minutes}m`].filter(Boolean).join(' ') || '<1m';
 }
 
-function localDateTime(value: string | null) {
-  if (!value) return '';
-  const date = new Date(value);
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
+function utcInput(value: string | null): string {
+  return value ? new Date(value).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16);
 }
 
-function ScheduleControl({conversationId, csrfToken, data, onChange, onReceipt}: {
-  conversationId: number; csrfToken: string; data: Lifecycle;
-  onChange: (lifecycle: Lifecycle) => void; onReceipt: (message: string) => void;
-}) {
-  const [scheduledAt, setScheduledAt] = useState(localDateTime(data.schedule.scheduledAt));
-  const mutation = useMutation({
-    mutationFn: (body: components['schemas']['AdminScheduleRequest']) => (
-      putAdminSchedule(conversationId, body, csrfToken)
-    ),
-    onSuccess: (result) => {
-      onChange(result.lifecycle);
-      onReceipt(result.changed ? 'Schedule updated.' : 'Schedule already up to date.');
-    },
-  });
-  const error = commandError(mutation.error);
-  if (!data.schedule.canSchedule && !data.schedule.scheduledAt) return null;
-  return (
-    <div className="lifecycle-scheduler">
-      <label htmlFor="phase-scheduled-at">Move to {data.schedule.targetLabel ?? 'next phase'} at</label>
-      <input id="phase-scheduled-at" type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} />
-      <div>
-        <button type="button" disabled={!scheduledAt || mutation.isPending} onClick={() => mutation.mutate({scheduledAt: new Date(scheduledAt).toISOString(), frozen: false})}>Schedule</button>
-        {data.schedule.scheduledAt && <>
-          <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate({scheduledAt: data.schedule.scheduledAt, frozen: !data.schedule.frozen})}>{data.schedule.frozen ? 'Unfreeze' : 'Freeze'}</button>
-          <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate({scheduledAt: null, frozen: false})}>Cancel</button>
-        </>}
+function PhaseStatistics({data}: {data: Lifecycle}) {
+  const shown = data.statistics.groups.filter((group) => group.tiles.length);
+  const summary = data.statistics.informedVoting;
+  return <>
+    {data.statistics.upstreamUnavailable && <div className="phase-stats-warning" role="status">
+      <span aria-hidden="true">⚠️</span>
+      <span><strong>Live statistics unavailable.</strong> Vote and participant counts may be
+        {' '}missing or stale — the Polis statistics database may be unreachable, or this
+        {' '}conversation may not yet be registered in Polis. Check the server logs.</span>
+    </div>}
+    {shown.map((group, groupIndex) => <Fragment key={group.key}>
+      {!data.phase.linear && <div id={`psg-${groupIndex + 1}`} className="phase-stats-group-label">{group.label}</div>}
+      <dl className={`phase-stats${data.phase.linear ? '' : ' phase-stats--grouped'}`} aria-labelledby={data.phase.linear ? undefined : `psg-${groupIndex + 1}`}>
+        {group.tiles.map((tile) => <div key={`${tile.label}-${String(tile.value)}`}>
+          <dt className="phase-stat-value">{tile.value}{tile.unit && <span className="unit">{tile.unit}</span>}</dt>
+          <dd className="phase-stat-label">{tile.label}{tile.note && <div className="phase-stat-note">{tile.note}</div>}</dd>
+        </div>)}
+      </dl>
+    </Fragment>)}
+    {summary && <div className="phase-stats phase-stats--p6" style={{marginTop: '.75rem', paddingTop: '.75rem', borderTop: '1px solid var(--hairline)'}}>
+      <div><div className="phase-stat-label" style={{marginBottom: 3}}>Informed voting</div>
+        {summary.participants !== null ? <div><div className="phase-stat-value">{summary.participants}</div><div className="phase-stat-label">participants in round 6</div></div> : <div className="muted" style={{fontSize: 12}}>participant count unavailable</div>}
       </div>
-      {error && <p role="alert">{error}</p>}
-    </div>
-  );
+      {summary.statementCount > 0 && <><div><div className="phase-stat-value">{summary.statementCount}</div><div className="phase-stat-label">statements voted on</div></div>
+        {summary.largestShift && <div style={{gridColumn: '1/-1', marginTop: '.25rem'}}><div className="phase-stat-label" style={{marginBottom: 3}}>Largest shift</div><span style={{fontSize: 13}}>“{summary.largestShift.text.length > 65 ? `${summary.largestShift.text.slice(0, 59)}…` : summary.largestShift.text}”</span><span className={`p6-shift ${summary.largestShift.shift > 0 ? 'p6-shift--up' : summary.largestShift.shift < 0 ? 'p6-shift--down' : ''}`} style={{marginLeft: '.4rem'}}>{summary.largestShift.shift > 0 && '+'}{summary.largestShift.shift}%</span></div>}
+      </>}
+      {(summary.excludedStatementCount > 0 || summary.excludedParticipantCount > 0) && <div style={{gridColumn: '1/-1', fontSize: 11, color: 'var(--muted)'}}>Moderation: {summary.excludedStatementCount > 0 && `${summary.excludedStatementCount} stmt excluded`} {summary.excludedParticipantCount > 0 && `· ${summary.excludedParticipantCount} participant excluded`}</div>}
+    </div>}
+  </>;
 }
 
-function AdvancedPhaseControl({conversationId, csrfToken, data, onChange, onReceipt}: {
-  conversationId: number; csrfToken: string; data: Lifecycle;
-  onChange: (lifecycle: Lifecycle) => void; onReceipt: (message: string) => void;
+function RoleSection({conversationId, csrfToken, roster, refresh, fail}: {
+  conversationId: number; csrfToken: string; roster: RoleRoster;
+  refresh: () => void; fail: (error: Error) => void;
 }) {
-  const [activeKeys, setActiveKeys] = useState(
-    data.phase.advancedControls.filter((row) => row.active).map((row) => row.key),
-  );
+  const [participantId, setParticipantId] = useState('');
+  const [role, setRole] = useState<Role>('moderator');
   const mutation = useMutation({
-    mutationFn: () => putAdminPhases(conversationId, {activeKeys}, csrfToken),
-    onSuccess: (result) => {
-      onChange(result.lifecycle);
-      onReceipt(result.changed
-        ? `Advanced phases saved${result.visibilitySynced ? '.' : '; results visibility could not be synchronized.'}`
-        : 'Advanced phases already up to date.');
-    },
+    mutationFn: ({id, roles}: {id: number; roles: Role[]}) => putAdminRoles(conversationId, id, {roles}, csrfToken),
+    onSuccess: refresh,
+    onError: fail,
   });
-  function togglePhase(key: string) {
-    setActiveKeys((keys) => keys.includes(key)
-      ? keys.filter((value) => value !== key)
-      : [...keys, key]);
-  }
-  return (
-    <details className="lifecycle-advanced">
-      <summary>Advanced phase repair</summary>
-      <div className="lifecycle-advanced__warning"><strong>Recovery control.</strong> These phases act independently, out of order, and without readiness checks.</div>
-      <ul>{data.phase.advancedControls.map((row) => (
-        <li key={row.key}>
-          <label><input type="checkbox" checked={activeKeys.includes(row.key)} onChange={() => togglePhase(row.key)} /><span><strong>{row.label}</strong>{row.effect}</span></label>
-          {row.requiresInitialization && activeKeys.includes(row.key) && !row.initialized && <p>Enabled but not initialized. Complete informed-voting setup before participants enter.</p>}
-        </li>
-      ))}</ul>
-      <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Saving…' : 'Save advanced phases'}</button>
-      {mutation.error && <p role="alert">{commandError(mutation.error)}</p>}
+  const roleCount = roster.assignments.reduce((total, row) => total + row.roles.length, 0);
+  return <div className="console-section">
+    <div className="console-section-label">Conversation roles</div>
+    <details className="phase-advanced">
+      <summary>Roles{roleCount > 0 && ` (${roleCount})`}</summary>
+      {roleCount > 0 ? <table className="admin-table" style={{marginTop: '.75rem'}}><thead><tr><th>Participant</th><th>Role</th><th /></tr></thead><tbody>
+        {roster.assignments.flatMap((assignment) => assignment.roles.map((assignedRole) => <tr key={`${assignment.participantId}-${assignedRole}`}>
+          <td>{assignment.username}</td><td>{assignedRole}</td><td>{roster.capabilities.manageRoles && <form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); mutation.mutate({id: assignment.participantId, roles: assignment.roles.filter((item) => item !== assignedRole) as Role[]});}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className="btn-small btn-danger">remove</button></form>}</td>
+        </tr>))}
+      </tbody></table> : <p className="muted" style={{margin: '.75rem 0', fontSize: 14}}>No conversation roles assigned.</p>}
+      {roster.capabilities.manageRoles && <form style={{marginTop: '.5rem'}} onSubmit={(event) => {event.preventDefault(); const id = Number(participantId); if (!id) return; const current = roster.assignments.find((item) => item.participantId === id)?.roles ?? []; mutation.mutate({id, roles: [...new Set([...current, role])] as Role[]});}}>
+        <input type="hidden" name="csrf_token" value={csrfToken} />
+        <div className="edit-row-fields"><label>Participant<select required value={participantId} onChange={(event) => setParticipantId(event.target.value)}><option value="">— select —</option>{roster.candidates.map((candidate) => <option key={candidate.participantId} value={candidate.participantId}>{candidate.username}</option>)}</select></label><label>Role<select value={role} onChange={(event) => setRole(event.target.value as Role)}>{roster.availableRoles.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></div>
+        <button type="submit">Add role</button>
+      </form>}
     </details>
-  );
+  </div>;
 }
 
-function Phase6InitializationControl({conversationId, csrfToken, data, onChange, onReceipt}: {
-  conversationId: number; csrfToken: string; data: Lifecycle;
-  onChange: (lifecycle: Lifecycle) => void; onReceipt: (message: string) => void;
+function ConfigurationSection({conversationId, csrfToken, settings, refresh, fail}: {
+  conversationId: number; csrfToken: string; settings: Settings;
+  refresh: () => void; fail: (error: Error) => void;
 }) {
-  const informed = data.phase.advancedControls.find(
-    (row) => row.key === 'informed_voting',
-  );
+  const [title, setTitle] = useState(settings.conversation.title);
+  const [introHtml, setIntroHtml] = useState(settings.conversation.introHtml);
+  const [outroHtml, setOutroHtml] = useState(settings.conversation.outroHtml);
+  const [accessPolicy, setAccessPolicy] = useState(settings.conversation.accessPolicy);
+  const [eventId, setEventId] = useState(settings.eligibility.eventId);
+  const [eligibilityLabel, setEligibilityLabel] = useState(settings.eligibility.label ?? '');
+  const [tier, setTier] = useState(settings.recommendations.tier);
   const mutation = useMutation({
-    mutationFn: () => createAdminPhase6Initialization(conversationId, csrfToken),
-    onSuccess: (result) => {
-      onChange(result.lifecycle);
-      onReceipt('Informed-voting round initialized.');
-    },
+    mutationFn: (recommendationTier: typeof tier) => putAdminSettings(conversationId, {title, introHtml, outroHtml, accessPolicy, eligibilityEventId: eventId, eligibilityLabel, recommendationTier}, csrfToken),
+    onSuccess: refresh,
+    onError: fail,
   });
-  if (!informed?.active) return null;
-  return (
-    <section className="lifecycle-initialization" aria-labelledby="phase6-initialization-heading">
-      <div>
-        <p className="eyebrow">Dedicated voting round</p>
-        <h2 id="phase6-initialization-heading">Informed voting setup</h2>
-        <p>{informed.initialized
-          ? 'Initialized. Featured statements are linked to the informed-voting round.'
-          : 'Create the dedicated round and seed the currently featured statements before participants enter.'}</p>
-      </div>
-      {informed.initialized ? <strong>Initialized</strong> : data.capabilities.initializePhase6 ? (
-        <button type="button" disabled={mutation.isPending} onClick={() => {
-          if (globalThis.confirm('Initialize informed voting with the current featured statements?')) mutation.mutate();
-        }}>{mutation.isPending ? 'Initializing…' : 'Initialize informed voting'}</button>
-      ) : <span>Complete the prerequisites first</span>}
-      {mutation.error && <p role="alert">{commandError(mutation.error)}</p>}
-    </section>
-  );
+  return <div className="console-section">
+    <div className="console-section-label">Configuration</div>
+    <details className="phase-advanced"><summary>Settings — title, intro/outro, access policy</summary>
+      <form className="panel" style={{marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); mutation.mutate(settings.recommendations.tier);}}><input type="hidden" name="csrf_token" value={csrfToken} />
+        <div className="edit-row-fields">
+          <label>Title<input type="text" required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+          <label>Route (locked after launch)<input type="text" readOnly value={settings.conversation.phaseRouteLabel} style={{background: '#f5f5f5', color: '#666'}} /></label>
+          <label>Polis ID (zinvite, read-only)<input type="text" readOnly value={settings.conversation.polisId} style={{background: '#f5f5f5', color: '#666'}} /></label>
+          <label>Access policy<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as typeof accessPolicy)}><option value="public">public</option><option value="invite_only">invite_only</option><option value="demo">demo</option></select></label>
+          <label>Eligibility event ID<input type="text" maxLength={80} value={eventId} onChange={(event) => setEventId(event.target.value)} /></label>
+          <label>Eligibility label<input type="text" maxLength={255} value={eligibilityLabel} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
+        </div>
+        <div className="edit-row-texts"><label>Intro text (HTML, optional)<textarea rows={4} value={introHtml} onChange={(event) => setIntroHtml(event.target.value)} /></label><label>Outro text (HTML, optional)<textarea rows={4} value={outroHtml} onChange={(event) => setOutroHtml(event.target.value)} /></label></div>
+        <button type="submit">Save settings</button>
+      </form>
+    </details>
+    <details className="phase-advanced"><summary>Recommended quantities</summary>
+      <form className="panel" style={{marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); mutation.mutate(tier);}}><input type="hidden" name="csrf_token" value={csrfToken} /><p className="section-help">These numbers are advisory. They appear in readiness checks and stats so organizers can judge whether the consultation has enough material to move on.</p>
+        <div className="edit-row-fields"><label>Complexity tier<select value={tier} onChange={(event) => setTier(event.target.value as typeof tier)}>{settings.recommendations.tiers.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>{Object.entries(settings.recommendations.tiers.find((item) => item.key === tier)?.quantities ?? {}).map(([key, value]) => <div className="recommendation-value" key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}</strong></div>)}</div>
+        <button type="submit">Save recommendations</button>
+      </form>
+    </details>
+  </div>;
 }
 
-export function AdminLifecyclePage({conversationId, csrfToken}: {
-  conversationId: number;
-  csrfToken: string;
+function DangerSection({conversationId, csrfToken, lifecycle, fail}: {
+  conversationId: number; csrfToken: string; lifecycle: Lifecycle; fail: (error: Error) => void;
 }) {
+  const {data} = useSuspenseQuery(adminTerminationQuery(conversationId));
+  const deletion = useMutation({mutationFn: () => deleteAdminConversation(conversationId, csrfToken), onError: fail});
+  const publication = useMutation({
+    mutationFn: (confirmedPreconditionIds: string[]) => createAdminPublication(conversationId, {confirmedPreconditionIds}, csrfToken),
+    onError: fail,
+  });
+  const [confirmed, setConfirmed] = useState<string[]>([]);
+  const closed = lifecycle.conversation.status === 'closed';
+  const cleanup = lifecycle.publicationReadiness.windowOpen;
+  return <div className="console-section"><div className="console-section-label" style={{color: 'var(--disagree)'}}>Ending the consultation</div><div className="danger-zone">
+    {closed ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">Permanently closed · <a href={`/c/${lifecycle.conversation.slug}/report`} style={{fontWeight: 400, fontSize: 13}}>View final report <span aria-hidden="true">→</span></a></div><div className="danger-row-desc">Closed{lifecycle.conversation.closedAt && ` ${new Date(lifecycle.conversation.closedAt).toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'})}`}. Cannot be reopened.</div></div></div> : <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">Publish final report</div><div className="danger-row-desc">{cleanup ? <>Irreversible. Publishes <code>/c/{lifecycle.conversation.slug}/report</code>, freezes moderation exclusions, and starts the identity-reveal window.</> : 'Available after informed voting has ended and the consultation is in the cleanup window.'}</div></div>{cleanup ? <form className="cleanup-publish-form" onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm('Publish the final report?\n\nThis freezes report exclusions, closes the consultation, and starts the identity reveal timeline.')) publication.mutate(confirmed);}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness cleanup-readiness">{lifecycle.publicationReadiness.preconditions.map((row) => <li key={row.id}>{row.met === null ? <label><input type="checkbox" checked={confirmed.includes(row.id)} onChange={() => setConfirmed((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /> <span className="readiness-label">{row.label}</span></label> : <span className="readiness-label">{row.label} {row.met ? <span className="readiness-note">(met)</span> : <span className="phase-check-unmet">not met yet</span>}</span>}</li>)}</ul><button type="submit" className="btn-small btn-danger">Publish final report</button></form> : <button type="button" className="btn-small btn-danger" disabled>Publish final report</button>}</div>}
+    <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">Delete empty consultation</div><div className="danger-row-desc">Deletes the local consultation after deactivating and hiding it in Polis. {data.deletion.state === 'unavailable' ? 'Disabled because Polis vote data could not be verified.' : data.deletion.validVoteCount === 0 ? 'Available because Polis has no valid votes for this consultation.' : `Disabled because Polis has ${data.deletion.validVoteCount} valid vote${data.deletion.validVoteCount === 1 ? '' : 's'}.`}</div></div><form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm('Delete this consultation?\n\nThis removes local ProtoWiki records after hiding the Polis conversation. This cannot be undone.')) deletion.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className="btn-small btn-danger" disabled={data.deletion.state !== 'eligible'} aria-disabled={data.deletion.state !== 'eligible'}>Delete consultation</button></form></div>
+  </div></div>;
+}
+
+export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId: number; csrfToken: string}) {
+  useRedesignStyles();
   const queryClient = useQueryClient();
-  const options = adminLifecycleQuery(conversationId);
-  const {data} = useSuspenseQuery(options);
-  const [phaseConfirmed, setPhaseConfirmed] = useState<string[]>([]);
-  const [publicationConfirmed, setPublicationConfirmed] = useState<string[]>([]);
-  const [receipt, setReceipt] = useState<string | null>(null);
+  const lifecycleOptions = adminLifecycleQuery(conversationId);
+  const settingsOptions = adminSettingsQuery(conversationId);
+  const rolesOptions = adminRoleRosterQuery(conversationId);
+  const {data} = useSuspenseQuery(lifecycleOptions);
+  const {data: settings} = useSuspenseQuery(settingsOptions);
+  const {data: roles} = useSuspenseQuery(rolesOptions);
+  const [advanced, setAdvanced] = useState(false);
+  const [phaseChecks, setPhaseChecks] = useState<string[]>([]);
+  const [scheduleAt, setScheduleAt] = useState(utcInput(data.schedule.scheduledAt));
+  const [advancedKeys, setAdvancedKeys] = useState(data.phase.advancedControls.filter((row) => row.active).map((row) => row.key));
+  const [toast, setToast] = useState<LegacyToastMessage | null>(null);
+  const dismissToast = useCallback(() => setToast(null), []);
+  function notify(category: LegacyToastMessage['category'], text: string) {setToast({id: Date.now(), category, message: text});}
+  function fail(error: Error) {notify('error', message(error));}
+  function setLifecycle(lifecycle: Lifecycle) {queryClient.setQueryData(lifecycleOptions.queryKey, lifecycle);}
+  function refreshSupporting() {void queryClient.invalidateQueries({queryKey: settingsOptions.queryKey}); void queryClient.invalidateQueries({queryKey: rolesOptions.queryKey}); void queryClient.invalidateQueries({queryKey: lifecycleOptions.queryKey});}
 
-  function replaceLifecycle(lifecycle: Lifecycle) {
-    queryClient.setQueryData<Lifecycle>(options.queryKey, lifecycle);
-  }
-  function toggle(setter: React.Dispatch<React.SetStateAction<string[]>>, id: string) {
-    setter((values) => values.includes(id)
-      ? values.filter((value) => value !== id)
-      : [...values, id]);
-  }
+  const phaseMutation = useMutation({mutationFn: () => putAdminPhase(conversationId, {confirmedPreconditionIds: phaseChecks}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); setPhaseChecks([]);}, onError: fail});
+  const pauseMutation = useMutation({mutationFn: () => putAdminPause(conversationId, {paused: data.conversation.status !== 'paused'}, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
+  const scheduleMutation = useMutation({mutationFn: (body: components['schemas']['AdminScheduleRequest']) => putAdminSchedule(conversationId, body, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
+  const phasesMutation = useMutation({mutationFn: () => putAdminPhases(conversationId, {activeKeys: advancedKeys}, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
+  const initialization = useMutation({mutationFn: () => createAdminPhase6Initialization(conversationId, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
 
-  const phaseMutation = useMutation({
-    mutationFn: () => putAdminPhase(
-      conversationId,
-      {confirmedPreconditionIds: phaseConfirmed},
-      csrfToken,
-    ),
-    onSuccess: (result) => {
-      replaceLifecycle(result.lifecycle);
-      setPhaseConfirmed([]);
-      setReceipt(`Moved to ${result.transition.targetLabel}.`);
-    },
-  });
-  const pauseMutation = useMutation({
-    mutationFn: (paused: boolean) => putAdminPause(conversationId, {paused}, csrfToken),
-    onSuccess: (result) => {
-      replaceLifecycle(result.lifecycle);
-      setReceipt(result.changed
-        ? (result.paused ? 'Conversation paused.' : 'Conversation resumed.')
-        : 'Conversation already had that status.');
-    },
-  });
-  const archiveMutation = useMutation({
-    mutationFn: (archived: boolean) => putAdminArchive(
-      conversationId, {archived}, csrfToken,
-    ),
-    onSuccess: (result) => {
-      replaceLifecycle(result.lifecycle);
-      setReceipt(result.changed
-        ? (result.archived ? 'Conversation archived.' : 'Conversation reopened.')
-        : 'Conversation already had that archive state.');
-    },
-  });
-  const publicationMutation = useMutation({
-    mutationFn: () => createAdminPublication(
-      conversationId,
-      {confirmedPreconditionIds: publicationConfirmed},
-      csrfToken,
-    ),
-    onSuccess: (result) => {
-      replaceLifecycle(result.lifecycle);
-      setPublicationConfirmed([]);
-      setReceipt('Final report published.');
-    },
-  });
-
+  const isAdmin = data.capabilities.useAdvancedPhases;
+  const canOrganize = data.capabilities.editSettings;
+  const isActive = data.conversation.status !== 'archived' && data.conversation.status !== 'closed';
+  const current = data.phase.steps[data.phase.currentIndex]!;
   const transition = data.phase.transition;
-  const transitionReady = transition
-    ? allHumanChecksConfirmed(transition.preconditions, phaseConfirmed)
-    : false;
-  const publicationReady = allHumanChecksConfirmed(
-    data.publicationReadiness.preconditions,
-    publicationConfirmed,
-  );
-  const activeError = phaseMutation.error ?? pauseMutation.error ?? archiveMutation.error ?? publicationMutation.error;
+  const unmet = transition?.preconditions.filter((row) => row.met === false).length ?? 0;
+  const allChecked = Boolean(transition) && transition!.preconditions.every((row) => phaseChecks.includes(row.id));
+  const roleCount = roles.assignments.reduce((total, row) => total + row.roles.length, 0);
 
-  function submitPublication(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (globalThis.confirm(
-      'Publish the final report? This freezes exclusions, closes participation, and starts identity reveal.',
-    )) publicationMutation.mutate();
-  }
+  return <LegacyShell headerMode="admin" title={`Manage ${data.conversation.title} — ProtoWiki`} headerCrumb={<nav className="header-crumb" aria-label="Admin breadcrumb"><span className="header-crumb-sep">/</span><Link to="/app/admin">Admin panel</Link><span className="header-crumb-sep">/</span><span>{legacyTruncate(data.conversation.title)}</span></nav>} toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}>
+    <div className="role-bar"><div className="role-bar-inner"><span className={`role-chip${isAdmin ? ' role-chip--admin' : ''}`} title="Your assigned role on this platform"><span className="role-chip-dot" />{data.operator.roleLabel}</span><span className="role-bar-context">managing&nbsp;<strong>{data.conversation.title}</strong></span><span className="role-bar-spacer" /><a className="view-as-btn" href={data.links.participantView}>View as participant →</a></div></div>
+    <div className="console">
+      <div className="console-head"><h1 className="console-title">{data.conversation.title}</h1><span className={`status-pill status-pill--${!isActive ? 'closed' : data.conversation.status === 'paused' ? 'paused' : data.conversation.status === 'scheduled' ? 'scheduled' : 'active'}`}><span className="status-pill-dot" />{!isActive ? 'Closed' : data.conversation.status === 'paused' ? 'Paused' : data.conversation.status === 'scheduled' ? 'Scheduled' : 'Active'}</span></div>
+      <p className="console-sub"><code>/c/{data.conversation.slug}</code> &nbsp;·&nbsp; {data.conversation.accessPolicy} &nbsp;·&nbsp; {data.counts.participants} joined</p>
 
-  const management = [
-    {label: 'Settings', count: null, href: data.links.settings, detail: 'Description, access, guidance'},
-    {label: 'Participants', count: data.counts.participants, href: data.links.participants, detail: 'Participation and access'},
-    {label: 'Moderation', count: data.counts.openFlags, href: data.links.moderation, detail: 'Open content flags'},
-    {label: 'Invitations', count: data.counts.invitations, href: data.links.invitations, detail: 'Pending invitations'},
-    {label: 'Roles', count: null, href: data.links.roles, detail: 'Moderators and organizers'},
-    {label: 'Statements', count: null, href: data.links.statements, detail: 'Review and import'},
-    {label: 'Featured', count: data.counts.featuredStatements, href: data.links.featuredStatements, detail: 'Confirmed statements'},
-    ...(data.capabilities.archive ? [{
-      label: 'Delete', count: null, href: data.links.termination,
-      detail: 'Permanent empty-record removal',
-    }] : []),
-  ];
-
-  return (
-    <main className="lifecycle-shell" id="main">
-      <nav className="record-breadcrumb" aria-label="Breadcrumb">
-        <Link to="/app/admin">Admin panel</Link><span>/</span><span>{data.conversation.title}</span>
-      </nav>
-
-      <header className="lifecycle-heading">
-        <div>
-          <p className="eyebrow">{data.operator.roleLabel} · {data.conversation.accessPolicy}</p>
-          <h1>{data.conversation.title}</h1>
-          <p>Guide the conversation through its phases and keep operational work in one place.</p>
-        </div>
-        <div className="lifecycle-heading__state">
-          <span data-tone={data.conversation.status}>{formatStatus(data.conversation.status)}</span>
-          <span data-tone={data.conversation.publication}>{formatStatus(data.conversation.publication)}</span>
-          <a href={data.links.participantView}>Participant view ↗</a>
-        </div>
-      </header>
-
-      {(receipt || activeError) && (
-        <p className="lifecycle-receipt" data-error={Boolean(activeError)} role="status">
-          {commandError(activeError) ?? receipt}
-        </p>
-      )}
-
-      <section className="lifecycle-phases" aria-labelledby="phase-heading">
-        <div className="lifecycle-section-heading">
-          <div><p className="eyebrow">Conversation route</p><h2 id="phase-heading">Phase progression</h2></div>
-          {!data.phase.linear && <span>Advanced phase state</span>}
-        </div>
-        <ol>
-          {data.phase.steps.map((step, index) => (
-            <li key={step.key} data-state={step.state}>
-              <span>{String(index + 1).padStart(2, '0')}</span>
-              <strong>{step.label}</strong>
-              <p>{step.effect}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <div className="lifecycle-command-grid">
-        <section className="lifecycle-transition" aria-labelledby="transition-heading">
-          {transition ? (
-            <>
-              <header>
-                <p className="eyebrow">Guided change</p>
-                <h2 id="transition-heading">{transition.source.label} → {transition.target.label}</h2>
-                <p><strong>Opens:</strong> {transition.consequence.opens}</p>
-                {transition.consequence.closes && <p><strong>Closes:</strong> {transition.consequence.closes}</p>}
-              </header>
-              <ReadinessList
-                rows={transition.preconditions}
-                confirmed={phaseConfirmed}
-                onToggle={(id) => toggle(setPhaseConfirmed, id)}
-              />
-              {data.capabilities.advancePhase ? (
-                <button
-                  type="button"
-                  disabled={!transitionReady || phaseMutation.isPending}
-                  onClick={() => phaseMutation.mutate()}
-                >
-                  {phaseMutation.isPending ? 'Moving…' : `Move to ${transition.target.label}`}
-                </button>
-              ) : <p className="lifecycle-readonly">Your role can inspect this transition but cannot execute it.</p>}
-            </>
-          ) : (
-            <div className="lifecycle-no-transition">
-              <p className="eyebrow">Phase control</p>
-              <h2 id="transition-heading">No guided transition</h2>
-              <p>{data.phase.linear
-                ? 'This route has reached its final guided phase.'
-                : 'This conversation uses an advanced phase combination.'}</p>
-            </div>
-          )}
-        </section>
-
-        <aside className="lifecycle-operations" aria-labelledby="operations-heading">
-          <p className="eyebrow">Live operation</p><h2 id="operations-heading">Availability</h2>
-          <p>Pause temporarily stops participant activity without changing the current phase.</p>
-          {data.schedule.scheduledAt && (
-            <p className="lifecycle-schedule">
-              Scheduled: <strong>{data.schedule.targetLabel}</strong>{' '}
-              <time dateTime={data.schedule.scheduledAt}>{new Date(data.schedule.scheduledAt).toLocaleString()}</time>
-            </p>
-          )}
-          <ScheduleControl
-            key={`${data.schedule.scheduledAt}-${data.schedule.frozen}-${data.schedule.targetKey}`}
-            conversationId={conversationId} csrfToken={csrfToken} data={data}
-            onChange={replaceLifecycle} onReceipt={setReceipt}
-          />
-          {data.capabilities.pause ? (
-            <button
-              type="button"
-              disabled={pauseMutation.isPending}
-              onClick={() => pauseMutation.mutate(data.conversation.status !== 'paused')}
-            >
-              {pauseMutation.isPending ? 'Updating…' : data.conversation.status === 'paused' ? 'Resume conversation' : 'Pause conversation'}
-            </button>
-          ) : <p className="lifecycle-readonly">Only a global admin can change availability.</p>}
-        </aside>
+      <div className="console-section" id="phaseControl" data-mode={advanced ? 'advanced' : 'simple'}><div className="phase-hero"><div className="phase-hero-top"><span className="phase-now-kicker">Phase control</span></div>
+        <ol className="journey phase-stepper" aria-label="Consultation phase progress">{data.phase.steps.map((step, index) => {const active = step.state === 'current'; const done = data.phase.linear && step.state === 'completed'; return <li key={step.key} className={`journey-step${active ? ' journey-step--current' : done ? ' journey-step--done' : ''}`} aria-current={active ? 'step' : undefined}><span className="journey-dot">{done ? '✓' : index + 1}</span><span className="journey-label">{step.label}</span><span className="sr-only">({active ? 'current phase' : done ? 'completed' : 'upcoming'})</span></li>;})}</ol>
+        {isAdmin && <div className="mode-switch-row"><span className="mode-switch" role="group" aria-label="Phase control mode"><button type="button" className="pc-guided" aria-pressed={!advanced} aria-controls="phaseControl" onClick={() => setAdvanced(false)}>Simple</button><button type="button" className="pc-advanced mode-adv" aria-pressed={advanced} aria-controls="phaseControl" onClick={() => setAdvanced(true)}>Advanced</button></span></div>}
+        <div className="phase-hero-body">{data.phase.linear ? <><div className="phase-now-head"><span className="phase-now-kicker">You are in phase {data.phase.currentIndex + 1} of {data.phase.steps.length}</span></div><div className="phase-now-head" style={{marginTop: 2}}><span className="phase-now-name">{current.label}</span>{current.key === 'public_results' && <span className={`status-pill status-pill--${data.conversation.closedAt ? 'closed' : 'paused'}`}><span className="status-pill-dot" />{data.conversation.closedAt ? 'Published' : 'Not yet published'}</span>}</div><p className="phase-now-desc">{current.key === 'public_results' && data.conversation.closedAt ? 'The final aggregate report is published and participant activity is closed.' : current.effect}</p></> : <><div className="phase-now-head"><span className="phase-now-kicker">Multiple phases active</span></div><div className="phase-now-head" style={{marginTop: 2}}><span className="phase-now-name">{data.statistics.groups.map((group) => group.label).join(' + ')}</span></div><p className="phase-now-desc">Several phases are open at once (advanced mode).{data.statistics.groups.some((group) => group.tiles.length) && ' Statistics for the phases with available data are shown below.'}</p></>}<PhaseStatistics data={data} /></div>
+        {isAdmin && isActive && <div className="phase-foot phase-pause-row"><form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); pauseMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className={`btn-small ${data.conversation.status === 'paused' ? 'btn-approve' : 'btn-pause'}`}>{data.conversation.status === 'paused' ? 'Resume' : 'Pause'}</button></form><span className="muted" style={{fontSize: 13}}>{data.conversation.status === 'paused' ? <>Paused — participants cannot vote. The identity-reveal clock has <strong>not</strong> started; resuming is possible.</> : 'Pause temporarily disables voting without starting the reveal timeline.'}</span></div>}
       </div>
 
-      {data.capabilities.useAdvancedPhases && (
-        <AdvancedPhaseControl
-          key={data.phase.advancedControls.map((row) => `${row.key}:${row.active}`).join('|')}
-          conversationId={conversationId} csrfToken={csrfToken} data={data}
-          onChange={replaceLifecycle} onReceipt={setReceipt}
-        />
-      )}
+      <div className="mode-guided-part">{transition ? canOrganize ? <><div className="phase-foot"><div className={`phase-foot-ready ${unmet ? 'phase-foot-ready--wait' : 'phase-foot-ready--go'}`}><span className="phase-foot-ready-icon" aria-hidden="true">{unmet ? '!' : '✓'}</span><span>{unmet ? `${unmet} readiness check${unmet === 1 ? '' : 's'} still need resolving before ${transition.target.label}` : `No blocking checks — confirm each item below to move on to ${transition.target.label}`}</span></div></div><div className="moveon phase-move-box"><div className="moveon-head"><span className="moveon-from">{transition.source.label}</span><span className="moveon-arrow" aria-hidden="true">→</span><span>{transition.target.label}</span></div><div className="moveon-body"><ul className="consequence"><li><span className="consequence-tag consequence-tag--opens">Opens</span><span>{transition.consequence.opens}</span></li>{transition.consequence.closes && <li><span className="consequence-tag consequence-tag--closes">Closes</span><span>{transition.consequence.closes}</span></li>}<li><span className="consequence-tag" style={{background: 'var(--surface2)', color: 'var(--muted)'}}>Undo</span><span>Reversible only by a site admin via advanced controls.</span></li></ul><div className="console-section-label" style={{marginBottom: 8}}>Readiness</div><form className="phase-move-form" onSubmit={(event) => {event.preventDefault(); phaseMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness">{transition.preconditions.map((row) => <li key={row.id}><label><input type="checkbox" className="phase-move-check moveon-check" checked={phaseChecks.includes(row.id)} onChange={() => setPhaseChecks((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /><span className="readiness-label">{row.label} {row.met === true && <span className="readiness-note">({row.note || 'met'})</span>}{row.met === false && <><span className="phase-check-unmet"><span aria-hidden="true">✗</span> not met yet</span>{row.note && <span className="readiness-note">({row.note})</span>}</>}</span></label></li>)}</ul><p className="phase-move-hint moveon-hint muted">Confirm every item above to enable “Move on”. Anything marked “not met yet” must be resolved first.</p><button type="submit" className="rd-btn-primary phase-move-submit" disabled={unmet > 0 || !allChecked}>Move on to {transition.target.label} →</button></form></div></div></> : <><p className="muted" style={{fontSize: 13, marginTop: 14}}>Only an organizer or site admin can change phases.</p><button type="button" className="btn-small" disabled title="Only an organizer or site admin can change phases">Move on to {transition.target.label} →</button></> : !data.phase.linear ? <p className="muted" style={{marginTop: 14, fontSize: 13}}><span aria-hidden="true">⚠️</span> Phases are in a custom state (more than one active). {isAdmin ? 'Use Advanced below to adjust.' : 'A site admin can adjust this.'}</p> : <p className="muted" style={{marginTop: 14, fontSize: 13}}>{data.conversation.closedAt ? <><strong>Final report published.</strong> The frozen aggregate results are open.</> : <><strong>Report phase reached — not yet published.</strong> Complete cleanup and use “Publish final report” below to open the frozen results.</>}</p>}
+        {isAdmin && data.schedule.canSchedule && <div className="schedule-card" style={{marginTop: 14}}><div className="schedule-main"><div className="schedule-title">Schedule wind-down to {data.schedule.targetLabel}</div><div className="schedule-when">{data.schedule.scheduledAt ? <>{new Date(data.schedule.scheduledAt).toISOString().slice(0, 16).replace('T', ' ')} <span className="schedule-utc">UTC</span> · <span className="countdown-mini">{countdown(data.schedule.scheduledAt)}</span>{data.schedule.frozen && ' · frozen'}</> : 'No scheduled transition set.'}</div></div><form className="schedule-actions" onSubmit={(event) => {event.preventDefault(); scheduleMutation.mutate({scheduledAt: new Date(`${scheduleAt}:00Z`).toISOString(), frozen: false});}}><input type="hidden" name="csrf_token" value={csrfToken} /><label className="sr-only" htmlFor="scheduled-at">UTC timestamp</label><input id="scheduled-at" type="datetime-local" aria-label="Scheduled transition time in UTC" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} /><span className="schedule-utc" aria-hidden="true">UTC</span><button type="submit" className="btn-ghost">{data.schedule.scheduledAt ? 'Edit' : 'Set'}</button></form>{data.schedule.scheduledAt && <><form className="schedule-actions" onSubmit={(event) => {event.preventDefault(); scheduleMutation.mutate({scheduledAt: data.schedule.scheduledAt, frozen: !data.schedule.frozen});}}><button type="submit" className="btn-ghost">{data.schedule.frozen ? 'Unfreeze' : 'Freeze'}</button></form><form className="schedule-actions" onSubmit={(event) => {event.preventDefault(); scheduleMutation.mutate({scheduledAt: null, frozen: false});}}><button type="submit" className="btn-ghost">Cancel</button></form></>}</div>}
+        {isAdmin && transition && !data.schedule.canSchedule && <div className="locked-control" style={{marginTop: 14}}><strong>Scheduling unavailable.</strong><span className="locked-why">Opening an active participant phase still requires the full manual checklist.</span></div>}
+      </div>
 
-      <Phase6InitializationControl
-        conversationId={conversationId} csrfToken={csrfToken} data={data}
-        onChange={replaceLifecycle} onReceipt={setReceipt}
-      />
+      {isAdmin && <div className="mode-advanced-part"><div className="box-adv-note"><span aria-hidden="true">⚠️</span><span><strong>Advanced.</strong> These toggles act independently and out of order, with no readiness checks — for demos and recovery, not routine runs.</span></div><form className="phases-form" style={{flexWrap: 'wrap', gap: '.75rem', marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); phasesMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} />{data.phase.advancedControls.map((row) => <label key={row.key}><input type="checkbox" checked={advancedKeys.includes(row.key)} onChange={() => setAdvancedKeys((items) => items.includes(row.key) ? items.filter((item) => item !== row.key) : [...items, row.key])} /> {row.key === 'submission' ? 'Statement submission (Explore)' : row.label}</label>)}<button type="submit" className="btn-small phases-save">Save phases</button></form>{data.phase.activeKeys.includes('informed_voting') && <div style={{marginTop: '1rem'}}><div className="console-section-label">Informed voting — setup</div>{data.phase.advancedControls.find((row) => row.key === 'informed_voting')?.initialized ? <p style={{fontSize: 13}}>Informed voting is initialised · {data.counts.featuredStatements} statements selected.</p> : <><p style={{fontSize: 13, marginBottom: '.5rem'}}>Enabled but not initialised. Initialising creates a dedicated Polis conversation and seeds all confirmed featured statements.</p><form onSubmit={(event) => {event.preventDefault(); initialization.mutate();}}><button type="submit" className="btn-small">Initialise Phase 6</button></form></>}</div>}</div>}
+      </div>
 
-      {data.capabilities.archive && (
-        <section className="lifecycle-archive" aria-labelledby="archive-heading">
-          <div>
-            <p className="eyebrow">Retention</p>
-            <h2 id="archive-heading">{data.conversation.status === 'archived' ? 'Reopen conversation' : 'Archive conversation'}</h2>
-            <p>{data.conversation.status === 'archived'
-              ? 'Restore participation at the retained phase. No report was published while archived.'
-              : 'Remove this conversation from active participation without publishing a report, freezing exclusions, or starting identity reveal.'}</p>
-          </div>
-          <button type="button" disabled={archiveMutation.isPending} onClick={() => {
-            const archive = data.conversation.status !== 'archived';
-            if (!archive || globalThis.confirm('Archive this conversation? It can be reopened later.')) archiveMutation.mutate(archive);
-          }}>{archiveMutation.isPending ? 'Updating…' : data.conversation.status === 'archived' ? 'Reopen conversation' : 'Archive conversation'}</button>
-        </section>
-      )}
-
-      {data.conversation.publication === 'pending' && (
-        <section className="lifecycle-publication" aria-labelledby="publication-heading">
-          <header>
-            <div><p className="eyebrow">Irreversible publication</p><h2 id="publication-heading">Publish the final report</h2></div>
-            <p>Freezes report exclusions, closes participation, and starts the identity-reveal window.</p>
-          </header>
-          {data.publicationReadiness.windowOpen ? (
-            <form onSubmit={submitPublication}>
-              <ReadinessList
-                rows={data.publicationReadiness.preconditions}
-                confirmed={publicationConfirmed}
-                onToggle={(id) => toggle(setPublicationConfirmed, id)}
-              />
-              <button type="submit" disabled={!data.capabilities.publish || !publicationReady || publicationMutation.isPending}>
-                {publicationMutation.isPending ? 'Publishing…' : 'Publish final report'}
-              </button>
-            </form>
-          ) : <p className="lifecycle-readonly">Available after informed voting ends and cleanup begins.</p>}
-        </section>
-      )}
-
-      <section className="lifecycle-management" aria-labelledby="management-heading">
-        <div className="lifecycle-section-heading"><div><p className="eyebrow">Workspace</p><h2 id="management-heading">Manage the record</h2></div></div>
-        <ul>{management.map((item) => (
-          <li key={item.label}>
-            {item.href.startsWith('/app/')
-              ? <Link to={item.href}><strong>{item.label}</strong><span>{item.detail}</span>{item.count !== null && <b>{item.count}</b>}</Link>
-              : <a href={item.href}><strong>{item.label}</strong><span>{item.detail}</span>{item.count !== null && <b>{item.count}</b>}</a>}
-          </li>
-        ))}</ul>
-      </section>
-    </main>
-  );
+      <div className="console-section"><div className="console-section-label">Content &amp; access</div><div className="manage-grid">
+        <Link className="manage-card" to={data.links.statements}><div className="manage-card-title">Statements</div><div className="manage-card-desc">Review, approve or hide statements; add seed statements</div></Link>
+        <Link className="manage-card" to={data.links.invitations}><div className="manage-card-top"><span className="manage-card-count">{data.counts.invitations} invite{data.counts.invitations === 1 ? '' : 's'}</span></div><div className="manage-card-title">Invites &amp; access</div><div className="manage-card-desc">Who can join this consultation</div></Link>
+        <Link className="manage-card" to={data.links.featuredStatements}><div className="manage-card-top"><span className="manage-card-count">{data.counts.featuredStatements} featured</span></div><div className="manage-card-title">Featured statements</div><div className="manage-card-desc">Curate the set for arguments &amp; informed voting</div></Link>
+        <Link className="manage-card" to={data.links.participants}><div className="manage-card-top"><span className="manage-card-count">{data.counts.participants} joined</span></div><div className="manage-card-title">Participants</div><div className="manage-card-desc">Review per-participant engagement and drop-off signals</div></Link>
+        <Link className="manage-card" to={data.links.moderation}><div className="manage-card-top"><span className="manage-card-count">{data.counts.openFlags} open</span></div><div className="manage-card-title">Moderation queue</div><div className="manage-card-desc">Review participant flags for statements and arguments</div></Link>
+        <Link className="manage-card" to={data.links.roles}><div className="manage-card-top"><span className="manage-card-count">{roleCount} assigned</span></div><div className="manage-card-title">Conversation roles</div><div className="manage-card-desc">Review moderator and organizer access</div></Link>
+      </div></div>
+      <RoleSection conversationId={conversationId} csrfToken={csrfToken} roster={roles} refresh={refreshSupporting} fail={fail} />
+      {canOrganize && <ConfigurationSection conversationId={conversationId} csrfToken={csrfToken} settings={settings} refresh={refreshSupporting} fail={fail} />}
+      {isAdmin && <DangerSection conversationId={conversationId} csrfToken={csrfToken} lifecycle={data} fail={fail} />}
+    </div>
+  </LegacyShell>;
 }

@@ -102,7 +102,7 @@ function AdminParticipantsRoute() {
 function AdminLifecycleRoute() {
   const {conversationId = ''} = useParams();
   const {data: session} = useSuspenseQuery(sessionQuery());
-  return <><Header admin /><AdminLifecyclePage conversationId={Number(conversationId)} csrfToken={session.csrfToken} /></>;
+  return <AdminLifecyclePage conversationId={Number(conversationId)} csrfToken={session.csrfToken} />;
 }
 
 function AdminSettingsRoute() {
