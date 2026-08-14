@@ -1,13 +1,11 @@
-import {Suspense, useState, type CSSProperties, type FormEvent} from 'react';
+import {Suspense, useState, type CSSProperties} from 'react';
 import {useMutation, useSuspenseQuery} from '@tanstack/react-query';
 import {Link, Navigate, NavLink, Route, Routes, useParams} from 'react-router-dom';
 
 import type {components} from './api/schema';
 import {
-  createIdentityReveal,
   conversationLaneQuery,
   exploreStateQuery,
-  identityRevealQuery,
   putExploreVote,
   sessionQuery,
   type ConversationSpace,
@@ -43,6 +41,7 @@ import {
   ModerationLogPage,
 } from './features/legacy/conversation-read-pages';
 import {ParticipationEntryLegacyPage} from './features/legacy/participation-entry-page';
+import {IdentityRevealLegacyPage} from './features/legacy/identity-reveal-page';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -171,102 +170,6 @@ function ConversationRow({conversation, index}: {conversation: ConversationCard;
         <a className="conversation-row__action" href={conversation.links.self}>{action}</a>
       )}
     </li>
-  );
-}
-
-function revealDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {dateStyle: 'long'}).format(
-    new Date(value),
-  );
-}
-
-function IdentityRevealPage() {
-  const {slug = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  const {data: initialData} = useSuspenseQuery(identityRevealQuery(slug));
-  const [confirmed, setConfirmed] = useState(false);
-  const mutation = useMutation({
-    mutationFn: () => createIdentityReveal(slug, session.csrfToken),
-  });
-  const data = mutation.data ?? initialData;
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (confirmed) mutation.mutate();
-  }
-
-  return (
-    <>
-      <Header />
-      <main className="reveal-shell" id="main">
-        <nav className="record-breadcrumb" aria-label="Breadcrumb">
-          <Link to="/app/real">Conversations</Link><span>/</span>
-          <Link to={data.links.about}>{data.title}</Link><span>/</span>
-          <span>Identity reveal</span>
-        </nav>
-        <header className="reveal-title">
-          <p className="eyebrow">Optional public identity link</p>
-          <h1>
-            {data.state === 'revealed' ? 'Identity linked' :
-              data.state === 'expired' ? 'Reveal window closed' :
-                data.state === 'pending' ? 'Reveal window not yet open' :
-                  'Choose whether to link your identity'}
-          </h1>
-          <p>This choice affects only your participation in <strong>{data.title}</strong>.</p>
-        </header>
-
-        <ol className="reveal-timeline" aria-label="Identity reveal timeline">
-          <li><time dateTime={data.timeline.closedAt}>{revealDate(data.timeline.closedAt)}</time><span>Conversation closed</span></li>
-          <li><time dateTime={data.timeline.opensAt}>{revealDate(data.timeline.opensAt)}</time><span>Optional link opens</span></li>
-          <li><time dateTime={data.timeline.closesAt}>{revealDate(data.timeline.closesAt)}</time><span>Link window closes</span></li>
-        </ol>
-
-        <section className="reveal-decision" aria-live="polite">
-          {data.state === 'revealed' ? (
-            <>
-              <p className="eyebrow">Permanent public link</p>
-              <h2><code>{data.pseudonym}</code> ↔ <strong>{data.publicUsername}</strong></h2>
-              <p>This public association is permanent and is not removed by the platform.</p>
-            </>
-          ) : data.state === 'expired' ? (
-            <>
-              <h2>Your participation remains pseudonymous.</h2>
-              <p>The optional window has closed. Your Wikimedia username can no longer be linked through this workflow.</p>
-            </>
-          ) : data.state === 'pending' ? (
-            <>
-              <h2>Nothing to decide yet.</h2>
-              <p>The optional window opens on <strong>{revealDate(data.timeline.opensAt)}</strong>. Your participation remains under <code>{data.pseudonym}</code>.</p>
-            </>
-          ) : (
-            <form onSubmit={submit}>
-              <h2>Link <code>{data.pseudonym}</code> to {data.wikimediaUsername}?</h2>
-              <p>Publishing this link identifies which pseudonym you used in this conversation. Other conversation pseudonyms are unaffected.</p>
-              <div className="reveal-warning">
-                <strong>Irreversible</strong>
-                <p>You cannot undo this link or re-anonymise this participation after confirming.</p>
-              </div>
-              <label className="reveal-confirm">
-                <input
-                  type="checkbox"
-                  checked={confirmed}
-                  onChange={(event) => setConfirmed(event.target.checked)}
-                />
-                <span>I understand that <strong>{data.wikimediaUsername}</strong> will be permanently associated with <code>{data.pseudonym}</code>.</span>
-              </label>
-              {mutation.error && <p className="command-error" role="alert">{mutation.error.message}</p>}
-              <button className="reveal-submit" type="submit" disabled={!confirmed || mutation.isPending}>
-                {mutation.isPending ? 'Linking…' : 'Permanently link my identity'}
-              </button>
-            </form>
-          )}
-        </section>
-        <footer className="reveal-footer">
-          <Link to={data.links.about}>Back to conversation record</Link>
-          <a href={data.links.conversation}>Open legacy conversation view</a>
-        </footer>
-      </main>
-    </>
   );
 }
 
@@ -659,7 +562,7 @@ export function App() {
           <Route path="/app/conversations/:slug/arguments" element={<ArgumentMappingRoute />} />
           <Route path="/app/conversations/:slug/informed-voting" element={<InformedVotingRoute />} />
           <Route path="/app/conversations/:slug/results" element={<ResultsRoute />} />
-          <Route path="/app/conversations/:slug/identity-reveal" element={<IdentityRevealPage />} />
+          <Route path="/app/conversations/:slug/identity-reveal" element={<IdentityRevealLegacyPage />} />
           <Route path="/app/admin" element={<AdminCatalogRoute />} />
           <Route path="/app/admin/conversations/:conversationId" element={<AdminLifecycleRoute />} />
           <Route path="/app/admin/conversations/:conversationId/settings" element={<AdminSettingsRoute />} />

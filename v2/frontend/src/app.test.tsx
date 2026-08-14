@@ -271,6 +271,22 @@ test('renders a conversation record from the generated API contract', async () =
 });
 
 test('requires deliberate confirmation before permanently revealing identity', async () => {
+  const revealed = vi.fn();
+  server.use(http.post(
+    new URL('/api/v1/conversations/community-strategy/identity-reveal', globalThis.location.origin).toString(),
+    async ({request}) => {
+      revealed(await request.json());
+      return HttpResponse.json({
+        data: {
+          slug: 'community-strategy', title: 'Community strategy', state: 'revealed',
+          pseudonym: 'quiet-otter', wikimediaUsername: 'Example editor', publicUsername: 'Example editor',
+          timeline: {closedAt: '2026-06-01T12:00:00Z', opensAt: '2026-07-01T12:00:00Z', closesAt: '2026-07-31T12:00:00Z', nextBoundaryAt: null, daysRemaining: 0},
+          capabilities: {revealIdentity: false},
+          links: {self: '/api/v1/conversations/community-strategy/identity-reveal', conversation: '/c/community-strategy', about: '/app/conversations/community-strategy/about'},
+        },
+      }, {status: 201});
+    },
+  ));
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/app/conversations/community-strategy/identity-reveal']}>
@@ -280,20 +296,16 @@ test('requires deliberate confirmation before permanently revealing identity', a
   );
 
   expect(await screen.findByRole('heading', {
-    name: 'Choose whether to link your identity',
+    name: 'Permanently link quiet-otter to your wiki name?',
   })).toBeVisible();
-  const submit = screen.getByRole('button', {name: 'Permanently link my identity'});
-  expect(submit).toBeDisabled();
+  const submit = screen.getByRole('button', {name: 'Yes, link my identity'});
+  fireEvent.click(submit);
+  expect(revealed).not.toHaveBeenCalled();
 
   fireEvent.click(screen.getByRole('checkbox'));
-  expect(submit).toBeEnabled();
   fireEvent.click(submit);
 
-  expect(await screen.findByRole('heading', {name: 'Identity linked'})).toBeVisible();
-  expect(screen.getByRole('heading', {
-    name: 'quiet-otter ↔ Example editor',
-  })).toBeVisible();
-  expect(screen.getByText(/public association is permanent/)).toBeVisible();
+  await waitFor(() => expect(revealed).toHaveBeenCalledWith({confirm: true}));
 });
 
 test('joins a conversation through the typed command', async () => {

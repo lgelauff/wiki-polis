@@ -1,4 +1,4 @@
-import {useEffect, useState, type FormEvent} from 'react';
+import {useState, type FormEvent} from 'react';
 import {useMutation, useSuspenseQuery} from '@tanstack/react-query';
 import {useParams} from 'react-router-dom';
 
@@ -10,18 +10,12 @@ import {
   participationEntryQuery,
   sessionQuery,
 } from '../../api/queries';
+import {ExternalRedirect} from './external-redirect';
 import {LegacyShell} from './legacy-shell';
 
 function requiredSlug(value: string | undefined) {
   if (!value) throw new Error('Missing route parameter: slug');
   return value;
-}
-
-function ExternalRedirect({href}: {href: string}) {
-  useEffect(() => {
-    globalThis.location.assign(href);
-  }, [href]);
-  return null;
 }
 
 export function ParticipationEntryLegacyPage() {
