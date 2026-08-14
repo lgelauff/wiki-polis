@@ -1727,7 +1727,12 @@ export interface components {
             user: components["schemas"]["SessionUser"] | null;
             capabilities: components["schemas"]["SiteCapabilities"];
             csrfToken: string;
+            developerLogins: components["schemas"]["DeveloperLogin"][];
             links: components["schemas"]["SessionLinks"];
+        };
+        DeveloperLogin: {
+            username: string;
+            href: string;
         };
         SessionUser: {
             username: string;

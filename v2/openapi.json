@@ -1470,7 +1470,7 @@
       },
       "Session": {
         "type": "object",
-        "required": ["state", "user", "capabilities", "csrfToken", "links"],
+        "required": ["state", "user", "capabilities", "csrfToken", "developerLogins", "links"],
         "additionalProperties": false,
         "properties": {
           "state": {"type": "string", "enum": ["anonymous", "authenticated", "demo"]},
@@ -1482,7 +1482,20 @@
           },
           "capabilities": {"$ref": "#/components/schemas/SiteCapabilities"},
           "csrfToken": {"type": "string", "minLength": 1},
+          "developerLogins": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/DeveloperLogin"}
+          },
           "links": {"$ref": "#/components/schemas/SessionLinks"}
+        }
+      },
+      "DeveloperLogin": {
+        "type": "object",
+        "required": ["username", "href"],
+        "additionalProperties": false,
+        "properties": {
+          "username": {"type": "string", "minLength": 1},
+          "href": {"type": "string", "minLength": 1}
         }
       },
       "SessionUser": {

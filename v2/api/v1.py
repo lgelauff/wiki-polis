@@ -85,6 +85,7 @@ def create_api_v1_blueprint(
     *,
     resolve_participant: Callable[[], Participant | None],
     resolve_global_admin: Callable[[Participant | None], bool],
+    resolve_developer_logins: Callable[[], list[dict]],
     resolve_conversation_lane: Callable[[bool], dict],
     resolve_conversation_about: Callable[[str], dict],
     resolve_identity_reveal: Callable[[str], dict],
@@ -167,6 +168,7 @@ def create_api_v1_blueprint(
                     'administerSite': bool(resolve_global_admin(participant)),
                 },
                 'csrfToken': generate_csrf(),
+                'developerLogins': resolve_developer_logins(),
                 'links': {
                     'login': url_for('login'),
                     'logout': url_for('logout'),

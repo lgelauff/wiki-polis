@@ -83,6 +83,16 @@ def test_dev_fake_login_unknown_user_404(fake_login_app):
     assert fake_login_app.test_client().get('/dev/login/not-a-dev-user').status_code == 404
 
 
+def test_dev_login_options_are_projected_through_the_session_contract(fake_login_app):
+    data = fake_login_app.test_client().get('/api/v1/session').get_json()['data']
+
+    assert data['developerLogins'] == [
+        {'username': 'dev-user-1', 'href': '/dev/login/dev-user-1'},
+        {'username': 'dev-user-2', 'href': '/dev/login/dev-user-2'},
+        {'username': 'dev-user-3', 'href': '/dev/login/dev-user-3'},
+    ]
+
+
 def _staging_app(tmp_path, tool_name='wiki-polis-dev', trusted_hosts='wiki-polis-dev.toolforge.org'):
     session_dir = tmp_path / f'sessions-{tool_name}'
     session_dir.mkdir()

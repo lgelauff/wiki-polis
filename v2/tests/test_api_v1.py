@@ -18,6 +18,7 @@ def test_session_contract_for_anonymous_browser(client):
     assert data['user'] is None
     assert data['capabilities'] == {'administerSite': False}
     assert data['csrfToken']
+    assert data['developerLogins'] == []
     assert data['links'] == {'login': '/login', 'logout': '/logout'}
 
 

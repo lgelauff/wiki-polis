@@ -6752,6 +6752,13 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(create_api_v1_blueprint(
         resolve_participant=_current_participant,
         resolve_global_admin=_is_global_admin,
+        resolve_developer_logins=lambda: [
+            {
+                'username': user['username'],
+                'href': url_for('dev_fake_login', username=user['username']),
+            }
+            for user in current_app.config.get('DEV_TEST_USERS', [])
+        ],
         resolve_conversation_lane=_conversation_lane_api_payload,
         resolve_conversation_about=_conversation_about_api_payload,
         resolve_identity_reveal=_identity_reveal_api_payload,
