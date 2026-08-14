@@ -106,6 +106,13 @@ def build_featured_workspace(
         'selected': selected,
         'candidates': projected_candidates,
         'dataAvailability': {'candidates': candidates is not None},
+        'phase': {
+            'argumentMappingActive': bool(conversation.phase_argument_mapping),
+            'informedVotingLive': bool(
+                conversation.phase_informed_voting
+                and conversation.phase6_polis_conversation_id
+            ),
+        },
         'guidance': {
             'recommendedCount': recommendation,
             'note': 'Preserve meaningful viewpoints; agreement percentage is descriptive, not a selection score.',

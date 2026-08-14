@@ -36,6 +36,10 @@ def test_featured_workspace_reports_transparent_candidate_metrics(
         side='pro',
     ))
     db.session.commit()
+    conversation.phase_argument_mapping = True
+    conversation.phase_informed_voting = True
+    conversation.phase6_polis_conversation_id = 'live-featured-round'
+    db.session.commit()
     server = MagicMock()
     server.get_featured_candidates.return_value = [_candidate()]
     with patch('app._polis_server_client', return_value=server):
@@ -46,6 +50,10 @@ def test_featured_workspace_reports_transparent_candidate_metrics(
     assert response.status_code == 200
     data = response.get_json()['data']
     assert data['dataAvailability'] == {'candidates': True}
+    assert data['phase'] == {
+        'argumentMappingActive': True,
+        'informedVotingLive': True,
+    }
     assert data['guidance']['recommendedCount'] == 15
     assert data['candidates'][0]['votes'] == {
         'agree': 3, 'pass': 2, 'disagree': 1, 'total': 6,

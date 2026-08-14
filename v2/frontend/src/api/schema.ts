@@ -1243,6 +1243,10 @@ export interface components {
             dataAvailability: {
                 candidates: boolean;
             };
+            phase: {
+                argumentMappingActive: boolean;
+                informedVotingLive: boolean;
+            };
             guidance: {
                 recommendedCount: number;
                 note: string;
