@@ -30,6 +30,7 @@ function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
     const previousTitle = document.title;
     const previousDemo = document.body.getAttribute('data-demo');
     const root = document.documentElement;
+    const previousBackground = root.style.getPropertyValue('background');
     const previousFontSynthesis = root.style.getPropertyValue('font-synthesis');
     const previousTextRendering = root.style.getPropertyValue('text-rendering');
     const stylesheet = document.createElement('link');
@@ -40,12 +41,15 @@ function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
     document.title = title;
     root.style.setProperty('font-synthesis', 'weight style small-caps');
     root.style.setProperty('text-rendering', 'auto');
+    root.style.setProperty('background', 'var(--bg)');
     if (demo) document.body.dataset.demo = 'true';
     else document.body.removeAttribute('data-demo');
 
     return () => {
       stylesheet.remove();
       document.title = previousTitle;
+      if (previousBackground) root.style.setProperty('background', previousBackground);
+      else root.style.removeProperty('background');
       if (previousFontSynthesis) root.style.setProperty('font-synthesis', previousFontSynthesis);
       else root.style.removeProperty('font-synthesis');
       if (previousTextRendering) root.style.setProperty('text-rendering', previousTextRendering);
