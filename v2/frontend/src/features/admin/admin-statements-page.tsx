@@ -1,4 +1,4 @@
-import {useCallback, useState, type FormEvent} from 'react';
+import {Fragment, useCallback, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 
@@ -67,8 +67,8 @@ function StatementIdentity({statement}: {statement: Statement}) {
 function VoteCounts({statement}: {statement: Statement}) {
   return (
     <td className="stmt-votes">
-      <span className="vcount vcount--agree" title="Agree votes"><span className="vlabel">A</span> {statement.votes.agree}</span>
-      <span className="vcount vcount--pass" title="Pass votes"><span className="vlabel">P</span> {statement.votes.pass}</span>
+      <span className="vcount vcount--agree" title="Agree votes"><span className="vlabel">A</span> {statement.votes.agree}</span>{' '}
+      <span className="vcount vcount--pass" title="Pass votes"><span className="vlabel">P</span> {statement.votes.pass}</span>{' '}
       <span className="vcount vcount--disagree" title="Disagree votes"><span className="vlabel">D</span> {statement.votes.disagree}</span>
     </td>
   );
@@ -114,23 +114,25 @@ function StatementActions({
   });
   return (
     <td className="stmt-actions">
-      {actions[statement.moderation].map((action) => (
-        <form
-          key={action.status}
-          style={{display: 'inline'}}
-          onSubmit={(event) => {
-            event.preventDefault();
-            mutation.mutate(action.status);
-          }}
-        >
-          <input type="hidden" name="csrf_token" value={csrfToken} />
-          <input type="hidden" name="mod" value={{approved: 1, pending: 0, hidden: -1}[action.status]} />
-          <button
-            type="submit"
-            className={`btn-small${action.className ? ` ${action.className}` : ''}`}
-            disabled={mutation.isPending}
-          >{action.label}</button>
-        </form>
+      {actions[statement.moderation].map((action, index) => (
+        <Fragment key={action.status}>
+          {index > 0 && ' '}
+          <form
+            style={{display: 'inline'}}
+            onSubmit={(event) => {
+              event.preventDefault();
+              mutation.mutate(action.status);
+            }}
+          >
+            <input type="hidden" name="csrf_token" value={csrfToken} />
+            <input type="hidden" name="mod" value={{approved: 1, pending: 0, hidden: -1}[action.status]} />
+            <button
+              type="submit"
+              className={`btn-small${action.className ? ` ${action.className}` : ''}`}
+              disabled={mutation.isPending}
+            >{action.label}</button>
+          </form>
+        </Fragment>
       ))}
     </td>
   );
@@ -158,7 +160,7 @@ function StatementTable({
     <>
       <h3 className="section-heading">
         {labels[status]}
-        {!!statements.length && <span className="stmt-count">{statements.length}</span>}
+        {!!statements.length && <>{' '}<span className="stmt-count">{statements.length}</span></>}
       </h3>
       {!statements.length ? (
         <p className="muted" style={{marginBottom: '1.5rem'}}>{empty[status]}</p>
@@ -197,7 +199,13 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   const options = adminStatementWorkspaceQuery(conversationId);
   const {data} = useSuspenseQuery(options);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
-  const [toast, setToast] = useState<LegacyToastMessage | null>(null);
+  const [toast, setToast] = useState<LegacyToastMessage | null>(() => (
+    data.dataAvailability.statements ? null : {
+      id: 0,
+      category: 'error',
+      message: 'Could not load statements. Check server logs.',
+    }
+  ));
   const [seedText, setSeedText] = useState('');
   const [derivedFrom, setDerivedFrom] = useState('');
   const [importText, setImportText] = useState('');
