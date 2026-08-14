@@ -168,7 +168,7 @@
       "temporaryReactRoutes": ["/app/admin/conversations/:conversationId/participants"],
       "targetReactRoutes": ["/admin/conversations/:conversationId/participants"],
       "apiOperations": ["getAdminConversationParticipants", "putAdminParticipantAccess"],
-      "status": "partial",
+      "status": "parity",
       "scenarios": ["empty", "active", "banned", "progress-unavailable", "moderator"]
     },
     {

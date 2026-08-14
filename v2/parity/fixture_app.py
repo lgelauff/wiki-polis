@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 import json
 import os
@@ -75,6 +76,7 @@ _original_add_conversation_invites = app_module.add_conversation_invites
 _original_admin_invitation_view = application.view_functions[
     'admin.admin_conversation_invites'
 ]
+_original_admin_participant_roster_model = app_module._admin_participant_roster_model
 
 
 def _parity_state():
@@ -298,6 +300,19 @@ app_module.add_conversation_invites = _fixture_add_conversation_invites
 application.view_functions[
     'admin.admin_conversation_invites'
 ] = _fixture_admin_invitation_view
+
+
+def _fixture_admin_participant_roster(conversation):
+    roster = _original_admin_participant_roster_model(conversation)
+    state = _parity_state()
+    if state == 'admin-participants-empty':
+        return replace(roster, rows=[])
+    if state == 'admin-participants-progress-unavailable':
+        return replace(roster, statement_progress_unavailable=True)
+    return roster
+
+
+app_module._admin_participant_roster_model = _fixture_admin_participant_roster
 
 
 class _FixtureParticiapiResponse:

@@ -1994,6 +1994,126 @@
       "serverFixture": "isolated",
       "goldenSha256": "792298559294dd26531a9049956cbd15b03c37570cb587ec6144f1e8f292dac9",
       "parityGate": true
+    },
+    {
+      "id": "admin-participants--empty--desktop",
+      "pageId": "admin-participants",
+      "state": "empty",
+      "legacyPath": "/admin/conversations/1/participants?parity-state=admin-participants-empty",
+      "reactPath": "/app/admin/conversations/1/participants?parity-state=admin-participants-empty",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "7efe86198f39ae70bb6602b0011e9dd15cd43e4bdeb4b325f576d646e8369fcb",
+      "parityGate": true
+    },
+    {
+      "id": "admin-participants--empty--mobile",
+      "pageId": "admin-participants",
+      "state": "empty",
+      "legacyPath": "/admin/conversations/1/participants?parity-state=admin-participants-empty",
+      "reactPath": "/app/admin/conversations/1/participants?parity-state=admin-participants-empty",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "ae08326eac12d7bccdae2523d7e019385f721e00b6ea55aef27a519ba0b2fbfe",
+      "parityGate": true
+    },
+    {
+      "id": "admin-participants--active--desktop",
+      "pageId": "admin-participants",
+      "state": "active",
+      "legacyPath": "/admin/conversations/1/participants",
+      "reactPath": "/app/admin/conversations/1/participants",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "cdd760245a65b5613541f08214543ec227b2eafb9d5ad205ef34d656dc5add5c",
+      "parityGate": true
+    },
+    {
+      "id": "admin-participants--active--mobile",
+      "pageId": "admin-participants",
+      "state": "active",
+      "legacyPath": "/admin/conversations/1/participants",
+      "reactPath": "/app/admin/conversations/1/participants",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "fd27388eafb1ef21fc24bea1f051fb88a071aaa6e12983e9d43cbc7125112e3c",
+      "parityGate": true
+    },
+    {
+      "id": "admin-participants--banned--desktop",
+      "pageId": "admin-participants",
+      "state": "banned",
+      "legacyPath": "/admin/conversations/5/participants",
+      "reactPath": "/app/admin/conversations/5/participants",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "13018236519249eb480c2622a0077eaacf7fa1743affdcf6ba9c8a4473e9b169",
+      "parityGate": true
+    },
+    {
+      "id": "admin-participants--banned--mobile",
+      "pageId": "admin-participants",
+      "state": "banned",
+      "legacyPath": "/admin/conversations/5/participants",
+      "reactPath": "/app/admin/conversations/5/participants",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "4f56e103ead9cfe35b390edf4b42fb4e3362ab274afee8792a5195179a45913d",
+      "parityGate": true
+    },
+    {
+      "id": "admin-participants--progress-unavailable--desktop",
+      "pageId": "admin-participants",
+      "state": "progress-unavailable",
+      "legacyPath": "/admin/conversations/1/participants?parity-state=admin-participants-progress-unavailable",
+      "reactPath": "/app/admin/conversations/1/participants?parity-state=admin-participants-progress-unavailable",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "feb01f0c2bfbdc0e56bfb7d84c63139017beb74ddb493eeab14432b0e5dee538",
+      "parityGate": true
+    },
+    {
+      "id": "admin-participants--progress-unavailable--mobile",
+      "pageId": "admin-participants",
+      "state": "progress-unavailable",
+      "legacyPath": "/admin/conversations/1/participants?parity-state=admin-participants-progress-unavailable",
+      "reactPath": "/app/admin/conversations/1/participants?parity-state=admin-participants-progress-unavailable",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "5f2a09660c0bcf132b82d5545bf985f9378b350de5358b323dbd526a68bd2d5e",
+      "parityGate": true
+    },
+    {
+      "id": "admin-participants--moderator--desktop",
+      "pageId": "admin-participants",
+      "state": "moderator",
+      "legacyPath": "/admin/conversations/6/participants",
+      "reactPath": "/app/admin/conversations/6/participants",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "440b65129002a38424fe805653738656dcd739334c7283dec96d7a3e0ec6a3eb",
+      "parityGate": true
+    },
+    {
+      "id": "admin-participants--moderator--mobile",
+      "pageId": "admin-participants",
+      "state": "moderator",
+      "legacyPath": "/admin/conversations/6/participants",
+      "reactPath": "/app/admin/conversations/6/participants",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "613c9d2dc3432bb10b03ab17ef232f7b109c11a9a23c0f5453fbe77e065417ae",
+      "parityGate": true
     }
   ]
 }
