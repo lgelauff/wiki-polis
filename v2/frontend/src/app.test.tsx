@@ -100,6 +100,20 @@ test('matches the legacy catalog error for an unknown global admin', async () =>
   expect(username).toHaveValue('');
 });
 
+test('matches the legacy forbidden document for denied admin access', async () => {
+  server.use(http.get(
+    new URL('/api/v1/admin', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      error: {code: 'forbidden', message: 'You do not have access to this resource.'},
+    }, {status: 403}),
+  ));
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin']}><App /></MemoryRouter></QueryClientProvider>);
+
+  expect(await screen.findByRole('heading', {name: 'Forbidden'})).toBeVisible();
+  expect(screen.getByText(/read-protected or not readable by the server/)).toBeVisible();
+  expect(document.title).toBe('403 Forbidden');
+});
+
 test('advances a conversation from the server-described lifecycle console', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>
