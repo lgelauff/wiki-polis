@@ -65,6 +65,7 @@ def test_about_api_combines_public_record_and_personal_contributions(
     assert response.status_code == 200
     assert response.headers['Cache-Control'] == 'no-store'
     data = response.get_json()['data']
+    assert data['space'] == 'real'
     assert data['descriptionHtml'] == '<p>A <strong>shared</strong> description.</p>'
     assert data['phases'] == [{'key': 'submission', 'label': 'Explore'}]
     assert data['pseudonym'] == 'about-otter'

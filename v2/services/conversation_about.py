@@ -75,6 +75,7 @@ class ConversationAbout:
         return {
             'slug': self.conversation.slug,
             'title': self.conversation.title,
+            'space': 'demo' if self.conversation.access_policy == 'demo' else 'real',
             'descriptionHtml': self.conversation.intro_text,
             'outroHtml': self.conversation.outro_text,
             'status': ('archived' if not self.conversation.active else

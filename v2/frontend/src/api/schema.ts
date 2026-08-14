@@ -2279,6 +2279,8 @@ export interface components {
         ConversationAbout: {
             slug: string;
             title: string;
+            /** @enum {string} */
+            space: "demo" | "real";
             descriptionHtml: string | null;
             outroHtml: string | null;
             /** @enum {string} */
