@@ -56,7 +56,9 @@ def test_workspace_contract_owns_legacy_tab_composition(
     assert data['tabs'][0]['dataHref'] == (
         '/api/v1/conversations/test-conv/explore'
     )
-    assert data['tabs'][1]['dataHref'] is None
+    assert data['tabs'][1]['dataHref'] == (
+        '/api/v1/conversations/test-conv/intermediate-results'
+    )
     assert data['statementContribution'] == {
         'unlockAfter': 7, 'quota': 4, 'used': 0,
     }

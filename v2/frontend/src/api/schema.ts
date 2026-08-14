@@ -346,6 +346,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/intermediate-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return privacy-safe initial-round consensus and opinion groups */
+        get: operations["getIntermediateResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{slug}/featured-statements/{featuredStatementId}/informed-vote": {
         parameters: {
             query?: never;
@@ -1958,6 +1975,7 @@ export interface components {
             explore?: string;
             arguments?: string;
             informedVoting?: string;
+            intermediateResults?: string;
             results?: string;
         };
         ConversationAboutResponse: {
@@ -2187,6 +2205,35 @@ export interface components {
             links: {
                 informedVoting: string;
             };
+        };
+        IntermediateResultsResponse: {
+            data: components["schemas"]["IntermediateResults"];
+        };
+        IntermediateResults: {
+            slug: string;
+            title: string;
+            /** @enum {string} */
+            state: "ready" | "recomputing" | "pending";
+            participantCount: number | null;
+            smallSample: boolean;
+            consensus: components["schemas"]["IntermediateResultPosition"][];
+            groups: components["schemas"]["IntermediateResultGroup"][];
+            links: components["schemas"]["IntermediateResultsLinks"];
+        };
+        IntermediateResultPosition: {
+            /** @enum {string} */
+            choice: "agree" | "disagree";
+            statement: string;
+            percentage: number;
+        };
+        IntermediateResultGroup: {
+            label: string;
+            positions: components["schemas"]["IntermediateResultPosition"][];
+        };
+        IntermediateResultsLinks: {
+            self: string;
+            conversation: string;
+            about: string;
         };
         ResultsReportResponse: {
             data: components["schemas"]["ResultsReport"];
@@ -3477,6 +3524,55 @@ export interface operations {
                 };
             };
             /** @description Results are not published */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getIntermediateResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current intermediate-results state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntermediateResultsResponse"];
+                };
+            };
+            /** @description Authentication required for personal-only results */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Intermediate results are not published */
             409: {
                 headers: {
                     [name: string]: unknown;

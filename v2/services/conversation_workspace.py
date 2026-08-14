@@ -66,6 +66,7 @@ def build_conversation_workspace(
 
     phases = {
         'vote': 'explore',
+        'results': 'intermediateResults',
         'arguments': 'arguments',
         'informed-voting': 'informedVoting',
         'p6-results': 'results',

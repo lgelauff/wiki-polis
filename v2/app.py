@@ -56,6 +56,7 @@ from services.identity_reveal import (
 )
 from services.informed_voting import build_informed_voting_state
 from services.results_report import build_results_report
+from services.intermediate_results import build_intermediate_results
 from services.invites import (
     InvitationNotInConversation, InviteBatchSaveError,
     add_conversation_invites, build_invitation_roster,
@@ -579,6 +580,33 @@ def _snapshot_report_filter(conv) -> Phase6ResultsFilter:
 
 
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
+
+
+def _load_intermediate_results(conv) -> tuple[dict | None, dict | None, bool]:
+    """Load the Phase 2 result surfaces with the legacy recompute throttle."""
+    if not (conv.phase_public_results or conv.phase_personal_results):
+        return None, None, False
+    raw = PolisParticipantClient(
+        current_app.config['PARTICIAPI_BASE'],
+    ).get_results(conv.polis_id)
+    results = raw if (
+        raw and (
+            raw.get('groups')
+            or raw.get('majority', {}).get('agree')
+            or raw.get('majority', {}).get('disagree')
+        )
+    ) else None
+    polis_stats = _polis_server_client().get_polis_stats(conv.polis_id)
+    recomputing = False
+    if results is None:
+        import time
+        now = time.monotonic()
+        last = _math_recompute_last.get(conv.id, 0)
+        if now - last > _MATH_RECOMPUTE_COOLDOWN:
+            if _polis_server_client().queue_math_recompute(conv.polis_id):
+                _math_recompute_last[conv.id] = now
+                recomputing = True
+    return results, polis_stats, recomputing
 
 
 # Canonical consultation phase sequence. One flag per stage; preparation = all off.
@@ -1789,6 +1817,9 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
             'api_v1.get_informed_voting', slug=slug,
         )
     if conv.phase_public_results or conv.phase_personal_results:
+        links['intermediateResults'] = url_for(
+            'api_v1.get_intermediate_results', slug=slug,
+        )
         links['results'] = url_for('api_v1.get_results_report', slug=slug)
     if can_moderate:
         links['manage'] = url_for(
@@ -2329,6 +2360,28 @@ def _results_report_api_payload(slug: str) -> dict:
         identity_reveal_link=(
             url_for('spa_shell', spa_path=f'conversations/{slug}/identity-reveal')
             if reveal else None
+        ),
+    )
+
+
+def _intermediate_results_api_payload(slug: str) -> dict:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    _check_conversation_access(conv, participant)
+    if not (conv.phase_public_results or conv.phase_personal_results):
+        abort(409, description='Intermediate results are not published.')
+    if conv.phase_personal_results and not conv.phase_public_results and participant is None:
+        abort(401)
+    results, polis_stats, recomputing = _load_intermediate_results(conv)
+    return build_intermediate_results(
+        conversation=conv,
+        results=results,
+        polis_stats=polis_stats,
+        recomputing=recomputing,
+        self_link=url_for('api_v1.get_intermediate_results', slug=slug),
+        conversation_link=url_for('participant.conversation', slug=slug),
+        about_link=url_for(
+            'spa_shell', spa_path=f'conversations/{slug}/about',
         ),
     )
 
@@ -5865,26 +5918,8 @@ def conversation(slug):
         not has_admin_access and session.get('space') != conv_space) else None
     session['space'] = conv_space
 
-    results     = None
-    polis_stats = None
-    # Fetch clustering results for either results phase. Personal results (Phase 3,
-    # logged-in only) and public results (Phase 4, everyone) currently render the same
-    # aggregate data; #81 part 2 will scope personal results to the participant's voted
-    # statements (anti-anchoring).
-    recomputing = False
-    if conv.phase_public_results or conv.phase_personal_results:
-        _r = PolisParticipantClient(
-            current_app.config['PARTICIAPI_BASE']).get_results(conv.polis_id)
-        results = _r if (_r and (_r.get('groups') or _r.get('majority', {}).get('agree') or _r.get('majority', {}).get('disagree'))) else None
-        polis_stats = _polis_server_client().get_polis_stats(conv.polis_id)
-        if results is None:
-            import time
-            _now = time.monotonic()
-            _last = _math_recompute_last.get(conv.id, 0)
-            if _now - _last > _MATH_RECOMPUTE_COOLDOWN:
-                if _polis_server_client().queue_math_recompute(conv.polis_id):
-                    _math_recompute_last[conv.id] = _now
-                    recomputing = True
+    # Phase 2 clustering shared with the typed intermediate-results endpoint.
+    results, polis_stats, recomputing = _load_intermediate_results(conv)
 
     # Reveal-window timeline for closed conversations (#70).
     reveal          = _reveal_context(conv, participation)
@@ -6965,6 +7000,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_argument_mapping=_argument_mapping_api_payload,
         resolve_informed_voting=_informed_voting_api_payload,
         submit_informed_vote=_informed_vote_api_payload,
+        resolve_intermediate_results=_intermediate_results_api_payload,
         resolve_results_report=_results_report_api_payload,
         resolve_admin_catalog=_admin_catalog_api_payload,
         create_admin_conversation=_create_admin_conversation_api_payload,

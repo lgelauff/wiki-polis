@@ -479,6 +479,19 @@
         }
       }
     },
+    "/conversations/{slug}/intermediate-results": {
+      "get": {
+        "operationId": "getIntermediateResults",
+        "summary": "Return privacy-safe initial-round consensus and opinion groups",
+        "parameters": [{"name": "slug", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}],
+        "responses": {
+          "200": {"description": "Current intermediate-results state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/IntermediateResultsResponse"}}}},
+          "401": {"description": "Authentication required for personal-only results", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Conversation access denied", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Intermediate results are not published", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/conversations/{slug}/featured-statements/{featuredStatementId}/informed-vote": {
       "put": {
         "operationId": "putInformedVote",
@@ -1857,6 +1870,7 @@
           "explore": {"type": "string"},
           "arguments": {"type": "string"},
           "informedVoting": {"type": "string"},
+          "intermediateResults": {"type": "string"},
           "results": {"type": "string"}
         }
       },
@@ -2299,6 +2313,56 @@
             "additionalProperties": false,
             "properties": {"informedVoting": {"type": "string"}}
           }
+        }
+      },
+      "IntermediateResultsResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/IntermediateResults"}}
+      },
+      "IntermediateResults": {
+        "type": "object",
+        "required": ["slug", "title", "state", "participantCount", "smallSample", "consensus", "groups", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {"type": "string"},
+          "title": {"type": "string"},
+          "state": {"type": "string", "enum": ["ready", "recomputing", "pending"]},
+          "participantCount": {"type": ["integer", "null"], "minimum": 0},
+          "smallSample": {"type": "boolean"},
+          "consensus": {"type": "array", "items": {"$ref": "#/components/schemas/IntermediateResultPosition"}},
+          "groups": {"type": "array", "items": {"$ref": "#/components/schemas/IntermediateResultGroup"}},
+          "links": {"$ref": "#/components/schemas/IntermediateResultsLinks"}
+        }
+      },
+      "IntermediateResultPosition": {
+        "type": "object",
+        "required": ["choice", "statement", "percentage"],
+        "additionalProperties": false,
+        "properties": {
+          "choice": {"type": "string", "enum": ["agree", "disagree"]},
+          "statement": {"type": "string"},
+          "percentage": {"type": "integer", "minimum": 0, "maximum": 100}
+        }
+      },
+      "IntermediateResultGroup": {
+        "type": "object",
+        "required": ["label", "positions"],
+        "additionalProperties": false,
+        "properties": {
+          "label": {"type": "string"},
+          "positions": {"type": "array", "items": {"$ref": "#/components/schemas/IntermediateResultPosition"}}
+        }
+      },
+      "IntermediateResultsLinks": {
+        "type": "object",
+        "required": ["self", "conversation", "about"],
+        "additionalProperties": false,
+        "properties": {
+          "self": {"type": "string"},
+          "conversation": {"type": "string"},
+          "about": {"type": "string"}
         }
       },
       "ResultsReportResponse": {

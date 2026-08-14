@@ -100,6 +100,7 @@ def create_api_v1_blueprint(
     resolve_argument_mapping: Callable[[str], dict],
     resolve_informed_voting: Callable[[str], dict],
     submit_informed_vote: Callable[[str, int, str], dict],
+    resolve_intermediate_results: Callable[[str], dict],
     resolve_results_report: Callable[[str], dict],
     resolve_admin_catalog: Callable[[], dict],
     create_admin_conversation: Callable[[dict], dict],
@@ -435,6 +436,12 @@ def create_api_v1_blueprint(
     def get_results_report(slug: str):
         return _no_store(jsonify({
             'data': resolve_results_report(slug),
+        }))
+
+    @bp.get('/conversations/<slug>/intermediate-results')
+    def get_intermediate_results(slug: str):
+        return _no_store(jsonify({
+            'data': resolve_intermediate_results(slug),
         }))
 
     @bp.get('/admin/conversations/<int:conversation_id>/participants')
