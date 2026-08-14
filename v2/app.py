@@ -6968,7 +6968,7 @@ def conversation_report(slug):
         return redirect(url_for('participant.conversation', slug=slug))
 
     if conv.phase_personal_results and not conv.phase_public_results and not participant:
-        return redirect(url_for('participant.login') + f'?next={request.path}')
+        return redirect(url_for('login') + f'?next={request.path}')
 
     report_filter = Phase6ResultsFilter.from_snapshot(conv.report_filter_snapshot)
     phase6_results = _build_phase6_results(

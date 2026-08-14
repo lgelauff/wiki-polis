@@ -678,6 +678,18 @@ def test_report_route_uses_filter_snapshot(client, conv):
     )
 
 
+def test_personal_report_redirects_anonymous_viewer_to_login(client, conv):
+    conv.active = False
+    conv.phase_personal_results = True
+    conv.closed_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    response = client.get('/c/test-conv/report')
+
+    assert response.status_code == 302
+    assert response.headers['Location'] == '/login?next=/c/test-conv/report'
+
+
 # ── Access control ────────────────────────────────────────────────────────────
 
 def test_invite_only_blocks_uninvited(client, app, participant):
