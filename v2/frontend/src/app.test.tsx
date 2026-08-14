@@ -20,7 +20,7 @@ test('renders a conversation lane from the API contract', async () => {
   expect(screen.getByRole('status')).toHaveTextContent('Loading conversations');
   expect(await screen.findByRole('heading', {name: 'Needs attention'})).toBeVisible();
   expect(await screen.findByRole('link', {name: /Community strategy.*continue/}))
-    .toHaveAttribute('href', '/c/community-strategy');
+    .toHaveAttribute('href', '/app/conversations/community-strategy/explore');
   expect(screen.getByRole('button', {name: 'Your conversations'})).toHaveAttribute('aria-pressed', 'true');
   fireEvent.click(screen.getByRole('button', {name: 'Browse'}));
   expect(screen.getByText('No consultations open to you right now.')).toBeVisible();
@@ -47,7 +47,7 @@ test('matches the legacy pending-output dialog and restores focus', async () => 
             ready: false, href: '/c/community-strategy/outputs/initial-clustering',
           }],
           capabilities: {join: false, participate: true, moderate: false},
-          links: {self: '/c/community-strategy', about: '/c/community-strategy/about'},
+          links: {self: '/app/conversations/community-strategy/explore', about: '/c/community-strategy/about'},
         }],
         caughtUp: [], inactive: [], archived: [], available: [], moderating: [],
       },
@@ -69,14 +69,13 @@ test('runs site-wide administration without falling back to Jinja forms', async 
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin']}><App /></MemoryRouter></QueryClientProvider>);
 
   expect(await screen.findByRole('heading', {name: 'Admin panel'})).toBeVisible();
-  expect(screen.getByRole('link', {name: 'Manage'})).toHaveAttribute('href', '/app/admin/conversations/7');
-  expect(screen.getByLabelText('Polis conversation ID')).toBeVisible();
-  expect(screen.getByText(/New participant statements start pending review/)).toBeVisible();
+  expect(screen.getByRole('link', {name: 'manage'})).toHaveAttribute('href', '/app/admin/conversations/7');
+  expect(screen.getByText('Admin')).toHaveClass('header-mode-badge');
+  expect(screen.getByRole('heading', {name: 'New conversation'})).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Example editor'}});
-  fireEvent.click(screen.getByRole('button', {name: 'Grant access'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Grant'}));
   expect(await screen.findByRole('status')).toHaveTextContent('Example editor granted site-wide administration');
   expect(screen.getAllByText('Example editor')).toHaveLength(2);
-  expect(screen.getByRole('link', {name: 'Admin workspace'})).toHaveAttribute('href', '/app/admin');
 });
 
 test('advances a conversation from the server-described lifecycle console', async () => {

@@ -1,6 +1,5 @@
 import {useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
-import {Link, useNavigate} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
@@ -10,25 +9,27 @@ import {
   postGlobalAdminGrant,
   putGlobalAdmin,
 } from '../../api/queries';
+import {LegacyShell} from '../legacy/legacy-shell';
 
 type Catalog = components['schemas']['AdminCatalog'];
 type CreateRequest = components['schemas']['AdminConversationCreateRequest'];
-
-function errorMessage(error: Error | null, fallback: string) {
-  if (!error) return null;
-  return error instanceof ApiContractError ? error.message : fallback;
-}
 
 const emptyConversation: CreateRequest = {
   slug: '', title: '', introHtml: '', outroHtml: '', accessPolicy: 'public',
   phaseRoute: '', eligibilityEventId: '', eligibilityLabel: '', polisId: null,
 };
 
+function errorMessage(error: Error | null) {
+  if (!error) return null;
+  return error instanceof ApiContractError
+    ? error.message
+    : 'The site operation could not be completed.';
+}
+
 export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
   const options = adminCatalogQuery();
   const {data} = useSuspenseQuery(options);
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const [draft, setDraft] = useState<CreateRequest>({
     ...emptyConversation,
     phaseRoute: data.phaseRoutes[0]?.key ?? '',
@@ -42,7 +43,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
 
   const creation = useMutation({
     mutationFn: () => postAdminConversation(draft, csrfToken),
-    onSuccess: (result) => navigate(result.links.manage),
+    onSuccess: (result) => { globalThis.location.assign(result.links.manage); },
   });
   const grant = useMutation({
     mutationFn: () => postGlobalAdminGrant({username}, csrfToken),
@@ -60,69 +61,86 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
     ),
     onSuccess: (result) => {
       replaceCatalog(result.catalog);
-      setReceipt(result.granted
-        ? `${result.username} granted site-wide administration.`
-        : `${result.username} removed from site-wide administration.`);
+      setReceipt(`${result.username} removed from site-wide administration.`);
     },
   });
+  const activeError = creation.error ?? grant.error ?? membership.error;
 
   function submitConversation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     creation.mutate();
   }
+
   function submitGrant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     grant.mutate();
   }
-  const activeError = creation.error ?? grant.error ?? membership.error;
 
   return (
-    <main className="admin-catalog" id="main">
-      <header className="admin-catalog__heading">
-        <div><p className="eyebrow">Site operations</p><h1>Admin panel</h1><p>Create conversations, enter their workspaces, and manage platform-wide access.</p></div>
-        <strong>{data.conversations.length}<span>conversation{data.conversations.length === 1 ? '' : 's'}</span></strong>
-      </header>
-      {(receipt || activeError) && <p className="lifecycle-receipt" data-error={Boolean(activeError)} role="status">{errorMessage(activeError, 'The site operation could not be completed.') ?? receipt}</p>}
+    <LegacyShell
+      headerMode="admin"
+      title="Admin panel — ProtoWiki"
+      headerCrumb={<nav className="header-crumb" aria-label="Admin breadcrumb"><span className="header-crumb-sep">/</span><span>Admin panel</span></nav>}
+    >
+      <div className="container">
+        <h2>Admin panel</h2>
 
-      <section className="admin-catalog__conversations" aria-labelledby="catalog-conversations-heading">
-        <div className="lifecycle-section-heading"><div><p className="eyebrow">Portfolio</p><h2 id="catalog-conversations-heading">Conversations</h2></div></div>
-        {data.conversations.length ? <ol>{data.conversations.map((conversation, index) => (
-          <li key={conversation.id}>
-            <span>{String(index + 1).padStart(2, '0')}</span>
-            <div><h3>{conversation.title}</h3><p><code>{conversation.slug}</code> · {conversation.accessPolicy.replace('_', ' ')}</p></div>
-            <strong data-state={conversation.status}>{conversation.status}</strong>
-            <div><a href={conversation.links.participant}>Participant view ↗</a><Link to={conversation.links.manage}>Manage</Link></div>
-          </li>
-        ))}</ol> : <p className="featured-empty">No conversations have been created.</p>}
-      </section>
+        {(receipt || activeError) && <p className="muted" role="status">{errorMessage(activeError) ?? receipt}</p>}
 
-      <section className="admin-catalog__create" aria-labelledby="create-conversation-heading">
-        <header><p className="eyebrow">New record</p><h2 id="create-conversation-heading">Create conversation</h2><p>{data.creation.mode === 'managed' ? 'The linked Polis conversation will be created automatically.' : 'This environment requires an existing Polis conversation ID.'} New participant statements start pending review.</p></header>
-        <form onSubmit={submitConversation}>
-          <label>Title<input required maxLength={255} value={draft.title} onChange={(event) => setDraft({...draft, title: event.target.value})} /></label>
-          <label>Slug<input required pattern="[a-z0-9]+(-[a-z0-9]+)*" value={draft.slug} onChange={(event) => setDraft({...draft, slug: event.target.value})} /></label>
-          <label>Access policy<select value={draft.accessPolicy} onChange={(event) => setDraft({...draft, accessPolicy: event.target.value as CreateRequest['accessPolicy']})}><option value="public">Public</option><option value="invite_only">Invite only</option><option value="demo">Demo</option></select></label>
-          <label>Route<select value={draft.phaseRoute} onChange={(event) => setDraft({...draft, phaseRoute: event.target.value})}>{data.phaseRoutes.map((route) => <option key={route.key} value={route.key}>{route.label}</option>)}</select></label>
-          {data.creation.mode === 'manual_polis_id' && <label>Polis conversation ID<input required value={draft.polisId ?? ''} onChange={(event) => setDraft({...draft, polisId: event.target.value})} /></label>}
-          <label className="admin-catalog__wide">Introduction <span>optional HTML</span><textarea rows={4} value={draft.introHtml} onChange={(event) => setDraft({...draft, introHtml: event.target.value})} /></label>
-          <details className="admin-catalog__wide"><summary>Eligibility and closing text</summary><div>
-            <label>Eligibility event ID<input maxLength={80} value={draft.eligibilityEventId} onChange={(event) => setDraft({...draft, eligibilityEventId: event.target.value})} /></label>
-            <label>Eligibility label<input maxLength={255} value={draft.eligibilityLabel} onChange={(event) => setDraft({...draft, eligibilityLabel: event.target.value})} /></label>
-            <label>Closing text<textarea rows={3} value={draft.outroHtml} onChange={(event) => setDraft({...draft, outroHtml: event.target.value})} /></label>
-          </div></details>
-          <button className="admin-catalog__wide" type="submit" disabled={creation.isPending}>{creation.isPending ? 'Creating…' : 'Create conversation'}</button>
-        </form>
-      </section>
+        <h3 className="section-heading">Conversations</h3>
+        <table className="admin-table">
+          <thead><tr><th>Title</th><th>Slug</th><th>Policy</th><th>Status</th><th /></tr></thead>
+          <tbody>{data.conversations.map((conversation) => (
+            <tr key={conversation.id}>
+              <td><a href={conversation.links.participant}>{conversation.title}</a></td>
+              <td><code>{conversation.slug}</code></td>
+              <td>{conversation.accessPolicy}</td>
+              <td>{conversation.status === 'active'
+                ? <span className="badge-active-inline">active</span>
+                : conversation.status === 'paused'
+                  ? <span className="badge-paused-inline">paused</span>
+                  : <span className="badge-inactive">closed</span>}</td>
+              <td><a href={conversation.links.manage} className="btn-small">manage</a></td>
+            </tr>
+          ))}</tbody>
+        </table>
 
-      <section className="admin-catalog__admins" aria-labelledby="global-admins-heading">
-        <header><p className="eyebrow">Platform access</p><h2 id="global-admins-heading">Global admins</h2><p>Global admins can manage every conversation. Conversation-specific roles remain inside each workspace.</p></header>
-        <div>
-          <ul>{data.globalAdmins.map((admin) => <li key={admin.participantId}><span>{admin.username}</span><button type="button" disabled={membership.isPending} onClick={() => {
-            if (globalThis.confirm(`Remove site-wide administration from ${admin.username}?`)) membership.mutate({participantId: admin.participantId, granted: false});
-          }}>Remove</button></li>)}</ul>
-          <form onSubmit={submitGrant}><label htmlFor="global-admin-username">Wikimedia username</label><input id="global-admin-username" required value={username} onChange={(event) => setUsername(event.target.value)} /><button type="submit" disabled={!username.trim() || grant.isPending}>Grant access</button></form>
+        <div className="edit-form">
+          <h3>New conversation</h3>
+          <form onSubmit={submitConversation}>
+            <div className="edit-row-fields">
+              <label>Slug (URL-safe, immutable)<input type="text" placeholder="e.g. rfc-2024-adminship" required pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Lowercase letters, numbers, and hyphens only — no spaces or special characters (e.g. climate-2026)" value={draft.slug} onChange={(event) => setDraft({...draft, slug: event.target.value})} /></label>
+              <label>Title<input type="text" required value={draft.title} onChange={(event) => setDraft({...draft, title: event.target.value})} /></label>
+              <label>Access policy<select value={draft.accessPolicy} onChange={(event) => setDraft({...draft, accessPolicy: event.target.value as CreateRequest['accessPolicy']})}><option value="public">public</option><option value="invite_only">invite_only</option><option value="demo">demo</option></select></label>
+              <label>Route<select value={draft.phaseRoute} onChange={(event) => setDraft({...draft, phaseRoute: event.target.value})}>{data.phaseRoutes.map((route) => <option key={route.key} value={route.key}>{route.label}</option>)}</select></label>
+              <label>Eligibility event ID<input type="text" maxLength={80} placeholder="optional AccountEligibility event" value={draft.eligibilityEventId} onChange={(event) => setDraft({...draft, eligibilityEventId: event.target.value})} /></label>
+              <label>Eligibility label<input type="text" maxLength={255} placeholder="optional criteria summary" value={draft.eligibilityLabel} onChange={(event) => setDraft({...draft, eligibilityLabel: event.target.value})} /></label>
+            </div>
+            <div className="edit-row-texts">
+              <label>Intro text (HTML, optional)<textarea rows={4} value={draft.introHtml} onChange={(event) => setDraft({...draft, introHtml: event.target.value})} /></label>
+              <label>Outro text (HTML, optional)<textarea rows={4} value={draft.outroHtml} onChange={(event) => setDraft({...draft, outroHtml: event.target.value})} /></label>
+            </div>
+            <button type="submit" disabled={creation.isPending}>Create conversation</button>
+          </form>
         </div>
-      </section>
-    </main>
+
+        <h3 className="section-heading">Global admins</h3>
+        <p className="muted" style={{fontSize: 13, marginBottom: '.75rem'}}>Global admins have platform-wide access to all conversations and settings. To assign a moderator or organizer to a specific conversation, use <strong>manage → conversation roles</strong> on that conversation.</p>
+        {data.globalAdmins.length ? <table className="admin-table">
+          <thead><tr><th>Participant</th><th /></tr></thead>
+          <tbody>{data.globalAdmins.map((admin) => <tr key={admin.participantId}>
+            <td>{admin.username}</td>
+            <td><button type="button" className="btn-small btn-danger" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>remove</button></td>
+          </tr>)}</tbody>
+        </table> : <p className="muted" style={{fontSize: 14, marginBottom: '1rem'}}>No global admins assigned.</p>}
+        <div className="edit-form">
+          <h3>Grant global admin</h3>
+          <form onSubmit={submitGrant}>
+            <div className="edit-row-fields"><label>Wikimedia username<input type="text" required autoComplete="off" placeholder="Type a username…" style={{width: 260}} value={username} onChange={(event) => setUsername(event.target.value)} /></label></div>
+            <button type="submit" disabled={grant.isPending}>Grant</button>
+          </form>
+        </div>
+      </div>
+    </LegacyShell>
   );
 }

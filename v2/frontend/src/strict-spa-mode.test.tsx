@@ -18,10 +18,10 @@ function renderApp(entry: string) {
 
 test('blocks a Jinja navigation and identifies the missing React coverage', async () => {
   const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-  renderApp('/app/real?spa_only=1');
+  renderApp('/app/admin?spa_only=1');
 
   expect(await screen.findByLabelText('SPA-only testing mode')).toBeVisible();
-  fireEvent.click(await screen.findByRole('link', {name: /^Community strategy —/}));
+  fireEvent.click(await screen.findByRole('link', {name: 'Community strategy'}));
 
   const gap = screen.getByRole('alertdialog', {name: 'Not implemented in the React SPA'});
   expect(gap).toHaveTextContent('/c/community-strategy');

@@ -3,7 +3,7 @@ import {useSuspenseQuery} from '@tanstack/react-query';
 
 import {sessionQuery} from '../../api/queries';
 
-type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'plain';
+type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'admin' | 'plain';
 
 function OrbitMark() {
   return (
@@ -83,13 +83,14 @@ export function LegacyShell({
 
   return (
     <>
-      <header className="site-header site-header--participant">
+      <header className={`site-header ${headerMode === 'admin' ? 'site-header--admin' : 'site-header--participant'}`}>
         <div className="header-inner">
           <div className="header-left">
             <a href="/app/parity/fork" className="header-logo">
               <OrbitMark />
               <span className="header-title">ProtoWiki</span>
             </a>
+            {headerMode === 'admin' && <span className="header-mode-badge">Admin</span>}
             {headerCrumb}
             {!headerCrumb && crumb && (
               <span className="header-crumb">
@@ -100,7 +101,7 @@ export function LegacyShell({
           </div>
 
           <div className="header-right">
-            {headerMode !== 'plain' && (
+            {headerMode !== 'plain' && headerMode !== 'admin' && (
               headerMode === 'conversation-demo' ? (
                 <span className="mode-lock mode-lock--demo">
                   <span className="mode-lock-dot" aria-hidden="true" />Demo

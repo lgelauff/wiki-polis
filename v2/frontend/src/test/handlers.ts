@@ -362,7 +362,7 @@ export const handlers = [
             outputs: [],
             capabilities: {join: false, participate: true, moderate: false},
             links: {
-              self: '/c/community-strategy',
+              self: '/app/conversations/community-strategy/explore',
               about: '/c/community-strategy/about',
               explore: '/app/conversations/community-strategy/explore',
               informedVoting: '/app/conversations/community-strategy/informed-voting',

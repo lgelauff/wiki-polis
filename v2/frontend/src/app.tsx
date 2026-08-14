@@ -129,7 +129,7 @@ function AdminStatementsRoute() {
 
 function AdminCatalogRoute() {
   const {data: session} = useSuspenseQuery(sessionQuery());
-  return <><Header admin /><AdminCatalogPage csrfToken={session.csrfToken} /></>;
+  return <AdminCatalogPage csrfToken={session.csrfToken} />;
 }
 
 function AdminFeaturedRoute() {
