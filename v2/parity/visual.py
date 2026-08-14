@@ -29,7 +29,10 @@ footer code { visibility: hidden !important; }
 """
 
 
-def load_scenarios(selected: set[str] | None = None) -> tuple[dict, list[dict]]:
+def load_scenarios(
+    selected: set[str] | None = None,
+    fixture: str | None = None,
+) -> tuple[dict, list[dict]]:
     manifest = json.loads(SCENARIO_PATH.read_text(encoding='utf-8'))
     scenarios = manifest['scenarios']
     if selected:
@@ -37,6 +40,16 @@ def load_scenarios(selected: set[str] | None = None) -> tuple[dict, list[dict]]:
         if unknown:
             raise ValueError(f"Unknown scenario(s): {', '.join(sorted(unknown))}")
         scenarios = [scenario for scenario in scenarios if scenario['id'] in selected]
+    if fixture:
+        scenarios = [
+            scenario for scenario in scenarios
+            if scenario.get('serverFixture', 'dev') == fixture
+        ]
+    elif not selected:
+        scenarios = [
+            scenario for scenario in scenarios
+            if scenario.get('serverFixture', 'dev') == 'dev'
+        ]
     return manifest, scenarios
 
 
@@ -97,7 +110,7 @@ def digest(path: Path) -> str:
 
 
 def run_capture(args: argparse.Namespace) -> int:
-    manifest, scenarios = load_scenarios(set(args.scenario) or None)
+    manifest, scenarios = load_scenarios(set(args.scenario) or None, args.fixture)
     output = Path(args.output).resolve()
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -119,7 +132,7 @@ def run_capture(args: argparse.Namespace) -> int:
 
 
 def run_compare(args: argparse.Namespace) -> int:
-    manifest, scenarios = load_scenarios(set(args.scenario) or None)
+    manifest, scenarios = load_scenarios(set(args.scenario) or None, args.fixture)
     output = Path(args.output).resolve()
     failures = 0
     with sync_playwright() as playwright:
@@ -171,6 +184,7 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument('--output', default=str(DEFAULT_OUTPUT))
     result.add_argument('--scenario', action='append', default=[])
+    result.add_argument('--fixture', choices=('dev', 'isolated'))
     result.add_argument('--require-parity', action='store_true')
     return result
 

@@ -36,3 +36,20 @@ changing commit fingerprint. A visual match is byte-for-byte PNG equality. Durin
 migration, missing/different screens are reported but only scenarios marked `parityGate`
 fail. `--require-parity` turns every missing or different scenario into a failure for the
 final cutover audit. Browser artifacts live under `output/playwright/`.
+
+Scenarios tagged `serverFixture: "isolated"` use a disposable SQLite corpus for mutually
+exclusive lifecycle states. Start it separately, then gate that corpus explicitly:
+
+```sh
+PARITY_FIXTURE_DATABASE=/tmp/wiki-polis-parity-fixture.db \
+  PARITY_FIXTURE_PORT=5002 \
+  .venv/bin/python parity/fixture_app.py
+
+.venv/bin/python parity/visual.py compare \
+  --base-url http://127.0.0.1:5002 \
+  --fixture isolated \
+  --require-parity
+```
+
+The fixture app refuses database paths outside a temporary directory. With no `--fixture`
+or `--scenario` filter, the runner operates only on the normal `dev` corpus.

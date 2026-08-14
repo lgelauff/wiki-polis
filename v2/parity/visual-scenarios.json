@@ -175,6 +175,28 @@
       "parityGate": true
     },
     {
+      "id": "conversation-output--initial-clustering-ready--desktop",
+      "pageId": "conversation-output",
+      "state": "initial-clustering-ready",
+      "legacyPath": "/c/cats-vs-dogs-48mlke/outputs/initial-clustering",
+      "reactPath": "/app/parity/conversations/cats-vs-dogs-48mlke/outputs/initial-clustering",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "goldenSha256": "477eac24e7e9f20feff43ef9fbfb93d7ac1293ec1ab101f0f3fbe72ca18241ee",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-output--initial-clustering-ready--mobile",
+      "pageId": "conversation-output",
+      "state": "initial-clustering-ready",
+      "legacyPath": "/c/cats-vs-dogs-48mlke/outputs/initial-clustering",
+      "reactPath": "/app/parity/conversations/cats-vs-dogs-48mlke/outputs/initial-clustering",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "goldenSha256": "76cc83a122bf5002843fff834e5d5ea456af1624cca547aa831a183533fc238e",
+      "parityGate": true
+    },
+    {
       "id": "conversation-output--argument-map-ready--mobile",
       "pageId": "conversation-output",
       "state": "argument-map-ready",
@@ -227,6 +249,78 @@
       "viewport": {"width": 390, "height": 844},
       "auth": "dev-admin",
       "goldenSha256": "200b7fb47583f54a43423cee98c1441b23060c917bc3fdd76001f3f1ded68b36",
+      "parityGate": true
+    },
+    {
+      "id": "moderation-log--ban-and-unban-history--desktop",
+      "pageId": "moderation-log",
+      "state": "ban-and-unban-history",
+      "legacyPath": "/c/parity-moderation/moderation-log",
+      "reactPath": "/app/parity/conversations/parity-moderation/moderation-log",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "anonymous",
+      "serverFixture": "isolated",
+      "goldenSha256": "313e442bc121fa26acc8a692af2559358c1dd5e7d5b5f6dda8423e4144e98150",
+      "parityGate": true
+    },
+    {
+      "id": "moderation-log--ban-and-unban-history--mobile",
+      "pageId": "moderation-log",
+      "state": "ban-and-unban-history",
+      "legacyPath": "/c/parity-moderation/moderation-log",
+      "reactPath": "/app/parity/conversations/parity-moderation/moderation-log",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "anonymous",
+      "serverFixture": "isolated",
+      "goldenSha256": "eed9bfc6ac41d167e19e51090937a54e106ad402acf6052840643e776fcfa96c",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-output--dataset-ready--desktop",
+      "pageId": "conversation-output",
+      "state": "dataset-ready",
+      "legacyPath": "/c/parity-closed-output/outputs/dataset",
+      "reactPath": "/app/parity/conversations/parity-closed-output/outputs/dataset",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "452e7ecebcf26b5abaa4952a2a7a93b33a7a857d7fb92ac7c5aae1bbad31c153",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-output--dataset-ready--mobile",
+      "pageId": "conversation-output",
+      "state": "dataset-ready",
+      "legacyPath": "/c/parity-closed-output/outputs/dataset",
+      "reactPath": "/app/parity/conversations/parity-closed-output/outputs/dataset",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "a38ba5396e296719deecfc73672d220eb4cc94661bfd6a6ed2ffe80922356814",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-output--report-ready--desktop",
+      "pageId": "conversation-output",
+      "state": "report-ready",
+      "legacyPath": "/c/parity-closed-output/outputs/report",
+      "reactPath": "/app/parity/conversations/parity-closed-output/outputs/report",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "3822e45b32af8ef943d0f72b4ee2ca61e91aec4c3f37670f76edc74a4c8bfabe",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-output--report-ready--mobile",
+      "pageId": "conversation-output",
+      "state": "report-ready",
+      "legacyPath": "/c/parity-closed-output/outputs/report",
+      "reactPath": "/app/parity/conversations/parity-closed-output/outputs/report",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "b72dfc99c160b4add201119d1bb8a9f5d12c95550e0b3cb0a7c11c71108ab30a",
       "parityGate": true
     }
   ]

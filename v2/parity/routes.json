@@ -102,7 +102,7 @@
       "temporaryReactRoutes": ["/app/parity/conversations/:slug/moderation-log"],
       "targetReactRoutes": ["/c/:slug/moderation-log"],
       "apiOperations": ["getModerationLog"],
-      "status": "partial",
+      "status": "parity",
       "scenarios": ["empty", "ban-and-unban-history"]
     },
     {
@@ -113,8 +113,8 @@
       "temporaryReactRoutes": ["/app/parity/conversations/:slug/outputs/:outputKey"],
       "targetReactRoutes": ["/c/:slug/outputs/:outputKey"],
       "apiOperations": ["getConversationOutput"],
-      "status": "partial",
-      "scenarios": ["dataset-ready", "argument-map-ready", "preliminary-results-ready", "report-ready", "not-ready"]
+      "status": "parity",
+      "scenarios": ["initial-clustering-ready", "dataset-ready", "argument-map-ready", "preliminary-results-ready", "report-ready", "not-ready"]
     },
     {
       "id": "final-report",

@@ -99,6 +99,7 @@ def test_visual_scenarios_reference_declared_pages_and_states():
         assert scenario['auth'] in {
             'anonymous', 'dev-admin', 'dev-user-1', 'dev-user-2', 'dev-user-3'
         }
+        assert scenario.get('serverFixture', 'dev') in {'dev', 'isolated'}
         assert scenario['viewport']['width'] > 0
         assert scenario['viewport']['height'] > 0
 
