@@ -2,6 +2,7 @@ import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
 import {useMutation, useQuery, useSuspenseQuery} from '@tanstack/react-query';
 import {useLocation, useParams} from 'react-router-dom';
 
+import {ApiContractError} from '../../api/client';
 import type {components} from '../../api/schema';
 import {
   conversationWorkspaceQuery,
@@ -23,10 +24,45 @@ type WorkspaceTab = components['schemas']['ConversationWorkspaceTab']['key'];
 type Explore = components['schemas']['ExploreState'];
 type VoteChoice = components['schemas']['ExploreVoteRequest']['choice'];
 type ComposerMode = 'suggest' | 'new' | null;
+type InviteOnlyDetails = {
+  title: string;
+  canModerate: boolean;
+  links: {home: string; invitations?: string};
+};
 
 function requiredSlug(value: string | undefined) {
   if (!value) throw new Error('Missing route parameter: slug');
   return value;
+}
+
+function inviteOnlyDetails(error: unknown): InviteOnlyDetails | null {
+  if (!(error instanceof ApiContractError) || error.code !== 'invite_only') return null;
+  const details = error.details as Partial<InviteOnlyDetails> | undefined;
+  if (!details || typeof details.title !== 'string'
+      || typeof details.canModerate !== 'boolean'
+      || !details.links || typeof details.links.home !== 'string') return null;
+  return details as InviteOnlyDetails;
+}
+
+function InviteOnlyPage({details}: {details: InviteOnlyDetails}) {
+  return (
+    <LegacyShell title="Access restricted — ProtoWiki">
+      <div className="container" style={{maxWidth: 700, paddingTop: '3rem'}}>
+        <h1 style={{fontSize: 24, fontWeight: 600, color: 'var(--ink)', margin: '0 0 .75rem'}}>This consultation is invite-only</h1>
+        <p style={{color: 'var(--body)', fontSize: 15, lineHeight: 1.6, margin: '0 0 1.5rem'}}>
+          <strong>{details.title}</strong> is restricted to invited participants. You have not been added to the invite list for this consultation.
+        </p>
+        {details.canModerate && details.links.invitations && (
+          <div style={{background: '#f0f4ff', border: '1px solid #c7d3f5', borderRadius: 8, padding: '1rem 1.25rem', fontSize: 14, color: 'var(--ink)', lineHeight: 1.6, marginBottom: '1.5rem'}}>
+            <strong>You can moderate this consultation.</strong>{' '}
+            To participate as a voter, add yourself to the invite list first:{' '}
+            <a href={details.links.invitations} style={{color: 'var(--accent)'}}>Manage invites →</a>
+          </div>
+        )}
+        <a href={details.links.home} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>← back to home</a>
+      </div>
+    </LegacyShell>
+  );
 }
 
 function shortTitle(value: string) {
@@ -391,7 +427,14 @@ export function ConversationWorkspacePage() {
     return () => meta.remove();
   }, [workspace.data?.space]);
   if (workspace.isPending) return <p className="loading-state" role="status">Loading conversation…</p>;
-  if (workspace.error) return <ExternalRedirect href={session.links.login} />;
+  if (workspace.error instanceof ApiContractError && workspace.error.code === 'unauthorized') {
+    return <ExternalRedirect href={session.links.login} />;
+  }
+  const restricted = inviteOnlyDetails(workspace.error);
+  if (restricted) return <InviteOnlyPage details={restricted} />;
+  if (workspace.error) {
+    return <LegacyShell title="Conversation unavailable — ProtoWiki"><div className="container"><div className="landing-section"><h1>Conversation unavailable</h1><p className="muted">{workspace.error.message}</p></div></div></LegacyShell>;
+  }
   const data = workspace.data;
   if (data.viewer.state === 'join_required') return <ExternalRedirect href={data.links.join} />;
   return (

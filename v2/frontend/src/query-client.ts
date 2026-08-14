@@ -6,7 +6,7 @@ export function createQueryClient(): QueryClient {
       queries: {
         retry: (failureCount, error) => {
           if ('code' in error && typeof error.code === 'string') {
-            return !['unauthorized', 'forbidden', 'not_found'].includes(error.code)
+            return !['unauthorized', 'forbidden', 'invite_only', 'not_found'].includes(error.code)
               && failureCount < 2;
           }
           return failureCount < 2;
