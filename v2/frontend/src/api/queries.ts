@@ -457,6 +457,21 @@ export async function postAdminStatementImport(
   ))).data;
 }
 
+export async function postAdminSeedStatement(
+  conversationId: number,
+  body: components['schemas']['AdminSeedStatementRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.POST(
+    '/admin/conversations/{conversationId}/statements',
+    {
+      params: {path: {conversationId}},
+      body,
+      headers: {'X-CSRFToken': csrfToken},
+    },
+  ))).data;
+}
+
 export const adminFeaturedWorkspaceQuery = (conversationId: number) => queryOptions({
   queryKey: ['admin-featured-workspace', conversationId],
   queryFn: async () => (await requireApiData(api.GET(

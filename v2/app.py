@@ -106,9 +106,10 @@ from services.admin_statements import (
     ModerationPolicySaveFailed, ModerationPolicyUpstreamFailed,
     ModerationPolicyVerificationUnavailable,
     SeedImportUpstreamFailed, SeedImportValidationFailed,
-    SeedImportVerificationUnavailable, build_statement_workspace,
-    import_seed_statements, moderate_statement, resolved_moderation_policy,
-    set_statement_moderation_policy,
+    SeedImportVerificationUnavailable, SeedStatementParentNotFound,
+    SeedStatementUpstreamFailed, SeedStatementValidationFailed,
+    add_seed_statement, build_statement_workspace, import_seed_statements,
+    moderate_statement, resolved_moderation_policy, set_statement_moderation_policy,
 )
 from services.admin_featured import (
     ArgumentNotInFeaturedWorkspace,
@@ -3224,6 +3225,42 @@ def _import_admin_seed_statements_api_payload(conv_id: int, body: dict) -> dict:
     }
 
 
+def _add_admin_seed_statement_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    lock_reason = _seed_statement_lock_reason(conv)
+    if lock_reason:
+        raise SeedStatementValidationFailed(lock_reason)
+    result = add_seed_statement(
+        conversation=conv,
+        text=body['text'],
+        derived_from_id=body['derivedFromId'],
+        sanitize=lambda text: nh3.clean(text, tags=_NH3_NO_TAGS),
+        statement_text_map=_statement_text_map,
+        add_seed=_polis_server_client().add_seed,
+        add_seed_return_id=_polis_server_client().add_seed_return_id,
+        record_provenance=record_statement_provenance,
+        audit=lambda statement_id, derived_from_id: record_audit(
+            'statement.seed', conv_id=conv.id,
+            **({'target_type': 'statement', 'target_id': statement_id,
+                'derived_from': derived_from_id}
+               if statement_id is not None else {}),
+        ),
+        max_characters=MAX_TEXT_CHARS,
+        upstream_errors=(PolisServerError, PolisParticipantError),
+    )
+    return {
+        'statementId': result.statement_id,
+        'derivedFromId': result.derived_from_id,
+        'provenanceRecorded': result.provenance_recorded,
+        'links': {
+            'statements': url_for(
+                'api_v1.get_admin_conversation_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
 def _admin_featured_api_payload(conv_id: int) -> dict:
     conv = _require_mod_for_conv(conv_id)
     confirmed = (
@@ -5638,43 +5675,29 @@ def admin_statement_moderate(conv_id, tid):
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed')
 @login_required
 def admin_statement_seed(conv_id):
-    conv = _require_mod_for_conv(conv_id)
-    lock_reason = _seed_statement_lock_reason(conv)
-    if lock_reason:
-        flash(lock_reason, 'error')
-        return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
-    text = request.form.get('txt', '').strip()
-    text = nh3.clean(text, tags=frozenset())
-    if not text or len(text) > 280:
-        abort(400)
-    # Optional provenance (#143): the tid this statement corrects/derives from. When set,
-    # we need the NEW statement's tid back, so seed via add_seed_return_id and record the link.
     derived_from = request.form.get('derived_from', type=int)
     try:
-        if derived_from is not None:
-            # Validate the parent is a real statement in THIS conversation before recording a
-            # link — a typo'd / cross-conversation tid would otherwise store a bogus link.
-            text_map = _statement_text_map(conv.polis_id)
-            if derived_from not in text_map:
-                flash(f'Statement #{derived_from} was not found in this conversation — '
-                      'fix the "corrects" number and try again. Nothing was added.', 'error')
-                return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
-            new_tid = _polis_server_client().add_seed_return_id(conv.polis_id, text)
-            prov = record_statement_provenance(conv_id, new_tid, derived_from,
-                                               parent_text=text_map.get(derived_from), new_text=text)
-            if prov is None:
-                flash('Seed statement added, but the correction link could not be recorded.', 'warning')
-            else:
-                flash(f'Seed statement added (recorded as a correction of #{derived_from}).', 'success')
-            record_audit('statement.seed', conv_id=conv_id, target_type='statement',
-                         target_id=new_tid, derived_from=derived_from)
+        result = _add_admin_seed_statement_api_payload(conv_id, {
+            'text': request.form.get('txt', ''),
+            'derivedFromId': derived_from,
+        })
+        if result['provenanceRecorded'] is False:
+            flash('Seed statement added, but the correction link could not be recorded.', 'warning')
+        elif derived_from is not None:
+            flash(f'Seed statement added (recorded as a correction of #{derived_from}).', 'success')
         else:
-            _polis_server_client().add_seed(conv.polis_id, text)
             flash('Seed statement added.', 'success')
-            record_audit('statement.seed', conv_id=conv_id)   # no text (statement content)
-    except PolisServerError as exc:
+    except SeedStatementValidationFailed as exc:
+        if str(exc):
+            flash(str(exc), 'error')
+        else:
+            abort(400)
+    except SeedStatementParentNotFound as exc:
+        flash(f'Statement #{exc.statement_id} was not found in this conversation — '
+              'fix the "corrects" number and try again. Nothing was added.', 'error')
+    except SeedStatementUpstreamFailed as exc:
         current_app.logger.exception('add_seed failed')
-        flash(exc.admin_message, 'error')
+        flash(exc.message, 'error')
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed/import-text')
@@ -7062,6 +7085,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_admin_statements=_admin_statements_api_payload,
         set_admin_statement_policy=_set_admin_statement_policy_api_payload,
         moderate_admin_statement=_moderate_admin_statement_api_payload,
+        add_admin_seed_statement=_add_admin_seed_statement_api_payload,
         import_admin_seed_statements=_import_admin_seed_statements_api_payload,
         resolve_admin_featured=_admin_featured_api_payload,
         select_admin_featured=_select_admin_featured_api_payload,

@@ -51,7 +51,8 @@ from services.admin_statements import (
     ModerationPolicySaveFailed, ModerationPolicyUpstreamFailed,
     ModerationPolicyVerificationUnavailable,
     SeedImportUpstreamFailed, SeedImportValidationFailed,
-    SeedImportVerificationUnavailable,
+    SeedImportVerificationUnavailable, SeedStatementParentNotFound,
+    SeedStatementUpstreamFailed, SeedStatementValidationFailed,
 )
 from services.admin_featured import (
     ArgumentNotInFeaturedWorkspace,
@@ -124,6 +125,7 @@ def create_api_v1_blueprint(
     resolve_admin_statements: Callable[[int], dict],
     set_admin_statement_policy: Callable[[int, dict], dict],
     moderate_admin_statement: Callable[[int, int, dict], dict],
+    add_admin_seed_statement: Callable[[int, dict], dict],
     import_admin_seed_statements: Callable[[int, dict], dict],
     resolve_admin_featured: Callable[[int], dict],
     select_admin_featured: Callable[[int, int, dict], dict],
@@ -705,6 +707,35 @@ def create_api_v1_blueprint(
         except SeedImportUpstreamFailed as exc:
             return error_response('upstream_unavailable', exc.message, 502)
         return _no_store(jsonify({'data': data}))
+
+    @bp.post('/admin/conversations/<int:conversation_id>/statements')
+    def post_admin_seed_statement(conversation_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict)
+                or set(body) != {'text', 'derivedFromId'}
+                or not isinstance(body['text'], str)
+                or (body['derivedFromId'] is not None
+                    and (not isinstance(body['derivedFromId'], int)
+                         or isinstance(body['derivedFromId'], bool)
+                         or body['derivedFromId'] < 0))):
+            return error_response(
+                'validation_failed',
+                'Provide statement text and an optional statement ID it corrects.', 400,
+            )
+        try:
+            data = add_admin_seed_statement(conversation_id, body)
+        except SeedStatementValidationFailed as exc:
+            return error_response(
+                'validation_failed', str(exc) or 'Provide 1 to 280 characters.', 400,
+            )
+        except SeedStatementParentNotFound as exc:
+            return error_response(
+                'derived_statement_not_found',
+                f'Statement #{exc.statement_id} was not found in this conversation.', 404,
+            )
+        except SeedStatementUpstreamFailed as exc:
+            return error_response('upstream_unavailable', exc.message, 502)
+        return _no_store(jsonify({'data': data})), 201
 
     @bp.get('/admin/conversations/<int:conversation_id>/featured-statements')
     def get_admin_featured_statements(conversation_id: int):

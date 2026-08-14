@@ -268,6 +268,80 @@ def test_seed_import_sanitizes_deduplicates_and_reports_counts(
     assert event.detail['imported'] == 2
 
 
+def test_single_seed_supports_plain_and_correction_provenance(
+    admin_client, conversation,
+):
+    server, _participant = _upstream()
+    server.add_seed_return_id.return_value = 42
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app._statement_text_map', return_value={12: 'Approved seed'}),
+        patch('app.record_statement_provenance', return_value=object()) as provenance,
+    ):
+        corrected = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/statements',
+            json={'text': '<b>Corrected seed</b>', 'derivedFromId': 12},
+        )
+        plain = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/statements',
+            json={'text': 'Plain seed', 'derivedFromId': None},
+        )
+
+    assert corrected.status_code == 201
+    assert corrected.get_json()['data'] == {
+        'statementId': 42,
+        'derivedFromId': 12,
+        'provenanceRecorded': True,
+        'links': {'statements': f'/api/v1/admin/conversations/{conversation.id}/statements'},
+    }
+    server.add_seed_return_id.assert_called_once_with(
+        conversation.polis_id, 'Corrected seed',
+    )
+    provenance.assert_called_once_with(
+        conversation.id, 42, 12,
+        parent_text='Approved seed', new_text='Corrected seed',
+    )
+    assert plain.status_code == 201
+    assert plain.get_json()['data']['provenanceRecorded'] is None
+    server.add_seed.assert_called_once_with(conversation.polis_id, 'Plain seed')
+    assert AuditEvent.query.filter_by(
+        operation='statement.seed', conversation_id=conversation.id,
+    ).count() == 2
+
+
+def test_single_seed_rejects_unknown_parent_before_upstream_write(
+    admin_client, conversation,
+):
+    server, _participant = _upstream()
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app._statement_text_map', return_value={12: 'Approved seed'}),
+    ):
+        response = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/statements',
+            json={'text': 'Correction', 'derivedFromId': 999},
+        )
+
+    assert response.status_code == 404
+    assert response.get_json()['error']['code'] == 'derived_statement_not_found'
+    server.add_seed_return_id.assert_not_called()
+
+
+def test_single_seed_surfaces_safe_upstream_failure(admin_client, conversation):
+    server, _participant = _upstream()
+    server.add_seed.side_effect = PolisServerError(
+        'connection refused', admin_message=POLIS_NOT_CONFIGURED_MESSAGE,
+    )
+    with patch('app._polis_server_client', return_value=server):
+        response = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/statements',
+            json={'text': 'Seed', 'derivedFromId': None},
+        )
+
+    assert response.status_code == 502
+    assert response.get_json()['error']['message'] == POLIS_NOT_CONFIGURED_MESSAGE
+
+
 def test_seed_import_fails_closed_when_dedup_source_is_unavailable(
     admin_client, conversation,
 ):

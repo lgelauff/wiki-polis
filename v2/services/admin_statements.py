@@ -109,6 +109,21 @@ class SeedImportUpstreamFailed(RuntimeError):
         self.message = message
 
 
+class SeedStatementValidationFailed(ValueError):
+    pass
+
+
+class SeedStatementParentNotFound(LookupError):
+    def __init__(self, statement_id: int):
+        self.statement_id = statement_id
+
+
+class SeedStatementUpstreamFailed(RuntimeError):
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
 @dataclass(frozen=True)
 class ModerationResult:
     statement_id: int
@@ -184,6 +199,59 @@ class SeedImportResult:
     skipped_existing: int
     skipped_duplicate_input: int
     failed_upstream: int
+
+
+@dataclass(frozen=True)
+class SeedStatementResult:
+    statement_id: int | None
+    derived_from_id: int | None
+    provenance_recorded: bool | None
+
+
+def add_seed_statement(
+    *, conversation, text: str, derived_from_id: int | None,
+    sanitize, statement_text_map, add_seed, add_seed_return_id,
+    record_provenance, audit, max_characters: int,
+    upstream_errors: tuple[type[Exception], ...],
+) -> SeedStatementResult:
+    clean = sanitize(text.strip())
+    if not clean or len(clean) > max_characters:
+        raise SeedStatementValidationFailed()
+
+    try:
+        if derived_from_id is None:
+            add_seed(conversation.polis_id, clean)
+            audit(statement_id=None, derived_from_id=None)
+            return SeedStatementResult(
+                statement_id=None,
+                derived_from_id=None,
+                provenance_recorded=None,
+            )
+
+        text_by_id = statement_text_map(conversation.polis_id)
+        if derived_from_id not in text_by_id:
+            raise SeedStatementParentNotFound(derived_from_id)
+        statement_id = add_seed_return_id(conversation.polis_id, clean)
+    except SeedStatementParentNotFound:
+        raise
+    except upstream_errors as exc:
+        raise SeedStatementUpstreamFailed(
+            getattr(exc, 'admin_message', 'The voting service is unavailable.'),
+        ) from exc
+
+    provenance = record_provenance(
+        conversation.id,
+        statement_id,
+        derived_from_id,
+        parent_text=text_by_id[derived_from_id],
+        new_text=clean,
+    )
+    audit(statement_id=statement_id, derived_from_id=derived_from_id)
+    return SeedStatementResult(
+        statement_id=statement_id,
+        derived_from_id=derived_from_id,
+        provenance_recorded=provenance is not None,
+    )
 
 
 def import_seed_statements(

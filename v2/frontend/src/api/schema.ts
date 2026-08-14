@@ -712,7 +712,8 @@ export interface paths {
         /** Return the privacy-safe statement moderation workspace */
         get: operations["getAdminConversationStatements"];
         put?: never;
-        post?: never;
+        /** Add one approved seed statement with optional correction provenance */
+        post: operations["postAdminSeedStatement"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1144,6 +1145,20 @@ export interface components {
                 statementId: number;
                 /** @enum {string} */
                 status: "approved" | "pending" | "hidden";
+                links: {
+                    statements: string;
+                };
+            };
+        };
+        AdminSeedStatementRequest: {
+            text: string;
+            derivedFromId: number | null;
+        };
+        AdminSeedStatementResponse: {
+            data: {
+                statementId: number | null;
+                derivedFromId: number | null;
+                provenanceRecorded: boolean | null;
                 links: {
                     statements: string;
                 };
@@ -4717,6 +4732,68 @@ export interface operations {
             };
             /** @description Conversation not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postAdminSeedStatement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminSeedStatementRequest"];
+            };
+        };
+        responses: {
+            /** @description Seed statement receipt */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSeedStatementResponse"];
+                };
+            };
+            /** @description Invalid or locked seed statement */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or corrected statement not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Statement service unavailable */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

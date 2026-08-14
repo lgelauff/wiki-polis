@@ -200,7 +200,7 @@
       "templates": ["admin_statements.html"],
       "temporaryReactRoutes": ["/app/admin/conversations/:conversationId/statements"],
       "targetReactRoutes": ["/admin/conversations/:conversationId/statements"],
-      "apiOperations": ["getAdminConversationStatements", "putAdminStatementModerationPolicy", "putAdminStatementModeration", "postAdminStatementImport"],
+      "apiOperations": ["getAdminConversationStatements", "postAdminSeedStatement", "putAdminStatementModerationPolicy", "putAdminStatementModeration", "postAdminStatementImport"],
       "status": "partial",
       "scenarios": ["empty", "pending-approved-hidden", "strict-moderation", "seed-import-open", "seed-import-locked", "provenance", "upstream-unavailable"]
     },
