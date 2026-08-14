@@ -1824,6 +1824,30 @@
       "parityGate": true
     },
     {
+      "id": "admin-catalog--empty--desktop",
+      "pageId": "admin-catalog",
+      "state": "empty",
+      "legacyPath": "/admin?parity-state=admin-empty",
+      "reactPath": "/app/admin?parity-state=admin-empty",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "0f74684e4596dc70515d3c33161f992bea374c071299b6bf01d72eae3582164d",
+      "parityGate": true
+    },
+    {
+      "id": "admin-catalog--empty--mobile",
+      "pageId": "admin-catalog",
+      "state": "empty",
+      "legacyPath": "/admin?parity-state=admin-empty",
+      "reactPath": "/app/admin?parity-state=admin-empty",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "af8555fdacbae6f8243441916ea5e42715208f1148fc0c1ce26d9e10faea16ee",
+      "parityGate": true
+    },
+    {
       "id": "admin-catalog--populated--mobile",
       "pageId": "admin-catalog",
       "state": "populated",

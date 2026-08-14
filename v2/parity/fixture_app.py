@@ -67,6 +67,17 @@ _original_reveal_context = app_module._reveal_context
 _original_build_phase6_results = app_module._build_phase6_results
 _original_build_conversation_lane = app_module.build_conversation_lane
 _original_load_intermediate_results = app_module._load_intermediate_results
+_original_build_admin_catalog = app_module.build_admin_catalog
+_original_admin_view = application.view_functions['admin.admin']
+
+
+def _parity_state():
+    state = app_module.request.args.get('parity-state')
+    if state is None and app_module.request.referrer:
+        state = parse_qs(urlparse(app_module.request.referrer).query).get(
+            'parity-state', [None],
+        )[0]
+    return state
 
 
 def _fixture_eligibility_check(conversation, participant):
@@ -207,11 +218,7 @@ app_module.PolisServerClient.get_statements_remaining_bulk = (
 
 def _fixture_lane(*args, **kwargs):
     lane = _original_build_conversation_lane(*args, **kwargs)
-    state = app_module.request.args.get('parity-state')
-    if state is None and app_module.request.referrer:
-        state = parse_qs(urlparse(app_module.request.referrer).query).get(
-            'parity-state', [None],
-        )[0]
+    state = _parity_state()
     if state == 'empty':
         lane.public_conversations = []
         lane.attention_joined = []
@@ -226,6 +233,28 @@ def _fixture_lane(*args, **kwargs):
 
 
 app_module.build_conversation_lane = _fixture_lane
+
+
+def _fixture_admin_catalog(**kwargs):
+    if _parity_state() == 'admin-empty':
+        kwargs = {**kwargs, 'conversations': [], 'global_admins': []}
+    return _original_build_admin_catalog(**kwargs)
+
+
+def _fixture_admin_view():
+    if _parity_state() != 'admin-empty':
+        return _original_admin_view()
+    return app_module.render_template(
+        'admin.html',
+        conversations=[],
+        participants=[],
+        global_admins=[],
+        phase_routes=app_module.PHASE_ROUTES,
+    )
+
+
+app_module.build_admin_catalog = _fixture_admin_catalog
+application.view_functions['admin.admin'] = _fixture_admin_view
 
 
 class _FixtureParticiapiResponse:
