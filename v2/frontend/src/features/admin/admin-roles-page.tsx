@@ -55,7 +55,7 @@ export function AdminRolesPage({conversationId, csrfToken}: {
     <main className="roles-shell" id="main">
       <nav className="record-breadcrumb" aria-label="Breadcrumb">
         <Link to="/app/admin">Admin panel</Link><span>/</span>
-        <a href={data.links.conversation}>{data.conversation.title}</a><span>/</span><span>Roles</span>
+        <Link to={data.links.conversation}>{data.conversation.title}</Link><span>/</span><span>Roles</span>
       </nav>
       <header className="roles-heading">
         <p className="eyebrow">Scoped access</p><h1>Conversation roles</h1>

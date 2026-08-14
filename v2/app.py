@@ -2490,7 +2490,7 @@ def _admin_participant_roster_api_payload(conv_id: int) -> dict:
             conversation_id=conv.id,
         ),
         conversation_link=url_for(
-            'admin.admin_conversation_detail', conv_id=conv.id,
+            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
         ),
     )
 
@@ -2535,7 +2535,7 @@ def _set_admin_participant_access_api_payload(
 def _admin_invitation_links(conv: Conversation) -> tuple[str, str]:
     return (
         url_for('api_v1.get_admin_conversation_invites', conversation_id=conv.id),
-        url_for('admin.admin_conversation_detail', conv_id=conv.id),
+        url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}'),
     )
 
 
@@ -2669,7 +2669,7 @@ def _admin_role_roster_api_payload(conv_id: int) -> dict:
             'api_v1.get_admin_conversation_roles', conversation_id=conv.id,
         ),
         conversation_link=url_for(
-            'admin.admin_conversation_detail', conv_id=conv.id,
+            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
         ),
     )
 
@@ -4372,13 +4372,13 @@ def _admin_flag_queue_api_payload(conv_id: int) -> dict:
             'api_v1.get_admin_conversation_flags', conversation_id=conv.id,
         ),
         conversation_link=url_for(
-            'admin.admin_conversation_detail', conv_id=conv.id,
+            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
         ),
         statement_review_link=url_for(
-            'admin.admin_conversation_statements', conv_id=conv.id,
+            'spa_shell', spa_path=f'admin/conversations/{conv.id}/statements',
         ),
         argument_review_link=url_for(
-            'admin.admin_conversation_featured', conv_id=conv.id,
+            'spa_shell', spa_path=f'admin/conversations/{conv.id}/featured',
         ),
     )
 

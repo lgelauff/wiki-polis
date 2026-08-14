@@ -133,7 +133,7 @@ export function AdminParticipantsPage({
     <main className="admin-roster" id="main">
       <nav className="record-breadcrumb" aria-label="Breadcrumb">
         <Link to="/app/admin">Admin panel</Link><span>/</span>
-        <a href={data.links.conversation}>{data.conversation.title}</a><span>/</span>
+        <Link to={data.links.conversation}>{data.conversation.title}</Link><span>/</span>
         <span>Participants</span>
       </nav>
       <header className="admin-roster__heading">

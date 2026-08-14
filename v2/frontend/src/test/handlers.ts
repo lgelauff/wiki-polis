@@ -177,7 +177,7 @@ export const handlers = [
     assignments: [{participantId: 23, username: 'Example editor', roles: ['moderator'], grantedAt: ['2026-08-01T10:00:00Z']}],
     candidates: [{participantId: 23, username: 'Example editor'}],
     availableRoles: ['moderator', 'organizer'], capabilities: {manageRoles: true},
-    links: {self: '/api/v1/admin/conversations/7/roles', conversation: '/admin/conversations/7'},
+    links: {self: '/api/v1/admin/conversations/7/roles', conversation: '/app/admin/conversations/7'},
   }})),
   http.put(new URL('/api/v1/admin/conversations/7/roles/23', globalThis.location.origin).toString(), async ({request}) => {
     const body = await request.json() as {roles: Role[]};
@@ -189,7 +189,7 @@ export const handlers = [
       conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'invite_only'},
       invitations: [{id: 51, username: 'Existing editor', createdAt: '2026-08-01T10:00:00Z'}],
       capabilities: {manageInvitations: true},
-      links: {self: '/api/v1/admin/conversations/7/invitations', conversation: '/admin/conversations/7'},
+      links: {self: '/api/v1/admin/conversations/7/invitations', conversation: '/app/admin/conversations/7'},
     }}),
   ),
   http.put(
@@ -228,14 +228,14 @@ export const handlers = [
           target: {
             type: 'statement', id: 12, label: 'Statement #12',
             text: 'A statement containing private information.',
-            reviewHref: '/admin/conversations/7/statements',
+            reviewHref: '/app/admin/conversations/7/statements',
           },
           resolution: null,
         }],
         resolved: [],
         dataAvailability: {statementText: true},
         capabilities: {resolveFlags: true},
-        links: {self: '/api/v1/admin/conversations/7/flags', conversation: '/admin/conversations/7'},
+        links: {self: '/api/v1/admin/conversations/7/flags', conversation: '/app/admin/conversations/7'},
       },
     }),
   ),
@@ -270,7 +270,7 @@ export const handlers = [
         capabilities: {setParticipantAccess: true},
         links: {
           self: '/api/v1/admin/conversations/7/participants',
-          conversation: '/admin/conversations/7',
+          conversation: '/app/admin/conversations/7',
         },
       },
     }),

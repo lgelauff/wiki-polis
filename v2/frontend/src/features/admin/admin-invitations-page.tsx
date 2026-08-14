@@ -60,7 +60,7 @@ export function AdminInvitationsPage({
     <main className="invitation-shell" id="main">
       <nav className="record-breadcrumb" aria-label="Breadcrumb">
         <Link to="/app/admin">Admin panel</Link><span>/</span>
-        <a href={data.links.conversation}>{data.conversation.title}</a><span>/</span>
+        <Link to={data.links.conversation}>{data.conversation.title}</Link><span>/</span>
         <span>Invitations</span>
       </nav>
       <header className="invitation-heading">

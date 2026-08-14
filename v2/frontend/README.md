@@ -1,8 +1,8 @@
 # Wiki Polis frontend
 
 React/TypeScript SPA developed against the versioned Flask browser API. This is an
-additive strangler application: Jinja routes remain available until an SPA route has
-behavior, accessibility, and end-to-end parity.
+additive strangler application: migrated participant and admin workflows live under
+`/app`, while Jinja routes remain temporary compatibility adapters.
 
 ## Commands
 
@@ -22,6 +22,10 @@ CSRF behavior is preserved without CORS.
 `npm run api:generate` after changing the API contract. Production output is written to
 `../static/spa` and is intentionally ignored by Git. Flask serves that shell for every
 `/app/*` path; `deploy.sh` runs the locked production build before restarting the service.
+
+Feature code must use the typed adapters in `src/api/queries.ts`. Direct `fetch` calls,
+legacy `/admin` form actions, and browser calls to Polis or Particiapi are contract
+violations. API links between migrated screens must point to `/app/...` routes.
 
 ## State ownership
 
