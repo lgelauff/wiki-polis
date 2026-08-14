@@ -235,19 +235,22 @@ test('moderates statements and imports approved seeds through typed commands', a
   expect((await screen.findAllByText('Seed statement added (recorded as a correction of #12).'))[0]).toBeVisible();
 });
 
-test('manages featured statements with transparent vote metrics and argument review', async () => {
+test('matches legacy featured-statement administration and commands', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/featured']}><App /></MemoryRouter></QueryClientProvider>);
 
-  expect(await screen.findByRole('heading', {name: 'Featured statements'})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Featured statements — Community strategy'})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Confirmed (1)'})).toBeVisible();
+  expect(screen.getByText('An approved seed statement.')).toBeVisible();
   expect(screen.getByText('A candidate preserving another viewpoint.')).toBeVisible();
-  expect(screen.getByText('Pass').parentElement).toHaveTextContent('2');
-  expect(screen.getByText('Agreement').parentElement).toHaveTextContent('75%');
+  const candidates = screen.getAllByRole('table')[1]!;
+  expect(within(candidates).getByText('2')).toBeVisible();
+  expect(within(candidates).getByText('6')).toBeVisible();
   expect(screen.queryByText(/divisiv/i)).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', {name: 'Select'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Statement #13 selected');
+  fireEvent.click(screen.getByRole('button', {name: 'confirm'}));
+  await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-  fireEvent.click(screen.getByRole('button', {name: 'Hide'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Argument hidden');
+  fireEvent.click(screen.getByRole('button', {name: 'hide'}));
+  await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 });
 
 test('manages participant access in the distinct admin workspace', async () => {

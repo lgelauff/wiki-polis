@@ -131,7 +131,7 @@ function AdminCatalogRoute() {
 function AdminFeaturedRoute() {
   const {conversationId = ''} = useParams();
   const {data: session} = useSuspenseQuery(sessionQuery());
-  return <><Header admin /><AdminFeaturedPage conversationId={Number(conversationId)} csrfToken={session.csrfToken} /></>;
+  return <AdminFeaturedPage conversationId={Number(conversationId)} csrfToken={session.csrfToken} />;
 }
 
 function AdminModerationRoute() {
