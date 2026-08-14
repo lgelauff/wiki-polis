@@ -721,6 +721,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/phase6-initialization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Initialize the dedicated informed-voting round */
+        post: operations["createAdminPhase6Initialization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/pause": {
         parameters: {
             query?: never;
@@ -1120,6 +1139,13 @@ export interface components {
                 lifecycle: components["schemas"]["AdminLifecycle"];
             };
         };
+        AdminPhase6InitializationResponse: {
+            data: {
+                /** @constant */
+                initialized: true;
+                lifecycle: components["schemas"]["AdminLifecycle"];
+            };
+        };
         AdminPauseRequest: {
             paused: boolean;
         };
@@ -1222,6 +1248,7 @@ export interface components {
                 publish: boolean;
                 editSettings: boolean;
                 useAdvancedPhases: boolean;
+                initializePhase6: boolean;
                 archive: boolean;
             };
             links: {
@@ -4233,6 +4260,55 @@ export interface operations {
             };
             /** @description Global admin permission required */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createAdminPhase6Initialization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Initialization receipt and refreshed lifecycle */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPhase6InitializationResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State, concurrency, or unknown-outcome conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The informed-voting round could not be prepared upstream */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

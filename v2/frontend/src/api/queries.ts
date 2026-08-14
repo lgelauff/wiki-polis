@@ -231,6 +231,18 @@ export async function putAdminPhases(
   }))).data;
 }
 
+export async function createAdminPhase6Initialization(
+  conversationId: number, csrfToken: string,
+) {
+  return (await requireApiData(api.POST(
+    '/admin/conversations/{conversationId}/phase6-initialization',
+    {
+      params: {path: {conversationId}},
+      headers: {'X-CSRFToken': csrfToken},
+    },
+  ))).data;
+}
+
 export async function putAdminPause(
   conversationId: number,
   body: components['schemas']['AdminPauseRequest'],

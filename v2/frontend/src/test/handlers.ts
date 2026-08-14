@@ -20,7 +20,7 @@ function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as st
     ]},
     schedule,
     publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
-    counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, archive: true},
+    counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
     links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/app/admin/conversations/7/statements', featuredStatements: '/app/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
   };
 }
@@ -109,7 +109,20 @@ export const handlers = [
     lifecycle.phase.activeKeys = body.activeKeys;
     lifecycle.phase.transition = body.activeKeys.length > 1 ? null : lifecycle.phase.transition;
     lifecycle.phase.advancedControls = lifecycle.phase.advancedControls.map((row) => ({...row, active: body.activeKeys.includes(row.key)}));
+    lifecycle.capabilities.initializePhase6 = body.activeKeys.includes('informed_voting');
     return HttpResponse.json({data: {changed: true, activeKeys: body.activeKeys, visibilitySynced: true, lifecycle}});
+  }),
+  http.post(new URL('/api/v1/admin/conversations/7/phase6-initialization', globalThis.location.origin).toString(), () => {
+    const lifecycle = lifecycleFixture();
+    lifecycle.phase.linear = false;
+    lifecycle.phase.activeKeys = ['argument_mapping', 'informed_voting'];
+    lifecycle.phase.advancedControls = lifecycle.phase.advancedControls.map((row) => ({
+      ...row,
+      active: lifecycle.phase.activeKeys.includes(row.key),
+      initialized: row.key === 'informed_voting' ? true : row.initialized,
+    }));
+    lifecycle.capabilities.initializePhase6 = false;
+    return HttpResponse.json({data: {initialized: true, lifecycle}}, {status: 201});
   }),
   http.put(new URL('/api/v1/admin/conversations/7/phase', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     transition: {sourceKey: 'preparation', targetKey: 'submission', targetLabel: 'Explore', phase6Created: false, phase6SyncMessage: null, visibilitySynced: true},
@@ -120,7 +133,7 @@ export const handlers = [
       schedule: {canSchedule: true, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
       publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
       counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
-      capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, archive: true},
+      capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
       links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/app/admin/conversations/7/statements', featuredStatements: '/app/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
     },
   }})),

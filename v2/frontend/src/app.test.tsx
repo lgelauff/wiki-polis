@@ -61,6 +61,7 @@ test('schedules and cancels a lifecycle transition', async () => {
 });
 
 test('repairs an advanced phase set through route-valid domain keys', async () => {
+  vi.spyOn(globalThis, 'confirm').mockReturnValueOnce(true);
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
   await screen.findByRole('heading', {name: 'Community strategy'});
   fireEvent.click(screen.getByText('Advanced phase repair'));
@@ -70,6 +71,9 @@ test('repairs an advanced phase set through route-valid domain keys', async () =
   fireEvent.click(screen.getByRole('button', {name: 'Save advanced phases'}));
   expect(await screen.findByRole('status')).toHaveTextContent('Advanced phases saved');
   expect(screen.getByText('Advanced phase state')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Initialize informed voting'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Informed-voting round initialized');
+  expect(screen.getByText('Initialized')).toBeVisible();
 });
 
 test('archives and reopens without presenting publication as the outcome', async () => {

@@ -6,6 +6,7 @@ import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
 import {
   adminLifecycleQuery,
+  createAdminPhase6Initialization,
   createAdminPublication,
   putAdminPause,
   putAdminArchive,
@@ -132,6 +133,40 @@ function AdvancedPhaseControl({conversationId, csrfToken, data, onChange, onRece
       <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Saving…' : 'Save advanced phases'}</button>
       {mutation.error && <p role="alert">{commandError(mutation.error)}</p>}
     </details>
+  );
+}
+
+function Phase6InitializationControl({conversationId, csrfToken, data, onChange, onReceipt}: {
+  conversationId: number; csrfToken: string; data: Lifecycle;
+  onChange: (lifecycle: Lifecycle) => void; onReceipt: (message: string) => void;
+}) {
+  const informed = data.phase.advancedControls.find(
+    (row) => row.key === 'informed_voting',
+  );
+  const mutation = useMutation({
+    mutationFn: () => createAdminPhase6Initialization(conversationId, csrfToken),
+    onSuccess: (result) => {
+      onChange(result.lifecycle);
+      onReceipt('Informed-voting round initialized.');
+    },
+  });
+  if (!informed?.active) return null;
+  return (
+    <section className="lifecycle-initialization" aria-labelledby="phase6-initialization-heading">
+      <div>
+        <p className="eyebrow">Dedicated voting round</p>
+        <h2 id="phase6-initialization-heading">Informed voting setup</h2>
+        <p>{informed.initialized
+          ? 'Initialized. Featured statements are linked to the informed-voting round.'
+          : 'Create the dedicated round and seed the currently featured statements before participants enter.'}</p>
+      </div>
+      {informed.initialized ? <strong>Initialized</strong> : data.capabilities.initializePhase6 ? (
+        <button type="button" disabled={mutation.isPending} onClick={() => {
+          if (globalThis.confirm('Initialize informed voting with the current featured statements?')) mutation.mutate();
+        }}>{mutation.isPending ? 'Initializing…' : 'Initialize informed voting'}</button>
+      ) : <span>Complete the prerequisites first</span>}
+      {mutation.error && <p role="alert">{commandError(mutation.error)}</p>}
+    </section>
   );
 }
 
@@ -341,6 +376,11 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {
           onChange={replaceLifecycle} onReceipt={setReceipt}
         />
       )}
+
+      <Phase6InitializationControl
+        conversationId={conversationId} csrfToken={csrfToken} data={data}
+        onChange={replaceLifecycle} onReceipt={setReceipt}
+      />
 
       {data.capabilities.archive && (
         <section className="lifecycle-archive" aria-labelledby="archive-heading">

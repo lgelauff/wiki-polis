@@ -729,6 +729,12 @@ a { color: inherit; }
 .lifecycle-archive h2 { margin: .25rem 0 .7rem; font-size: 1.8rem; letter-spacing: -.04em; }
 .lifecycle-archive > div > p:last-child { max-width: 680px; margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.5; }
 .lifecycle-archive > button { padding: .65rem .8rem; border: 1px solid var(--signal); color: var(--signal); background: white; cursor: pointer; }
+.lifecycle-initialization { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3rem; margin-top: 3rem; padding: 2rem; border: 1px solid var(--civic); background: white; }
+.lifecycle-initialization h2 { margin: .3rem 0 .7rem; }
+.lifecycle-initialization p:last-child { max-width: 680px; margin-bottom: 0; color: var(--muted); line-height: 1.5; }
+.lifecycle-initialization button { padding: .7rem .9rem; border: 0; color: white; background: var(--civic); cursor: pointer; }
+.lifecycle-initialization > strong, .lifecycle-initialization > span { color: var(--consensus); font: 650 .72rem var(--mono); text-transform: uppercase; }
+.lifecycle-initialization > p[role="alert"] { grid-column: 1 / -1; color: var(--dissent); }
 .lifecycle-publication { margin-top: 4rem; padding: 2rem; border: 1px solid var(--dissent); background: color-mix(in srgb, var(--dissent) 4%, white); }
 .lifecycle-publication > header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .7fr); align-items: end; gap: 3rem; }
 .lifecycle-publication > header > p { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.5; }
@@ -951,7 +957,7 @@ a { color: inherit; }
   .lifecycle-transition { padding-right: 0; border-right: 0; border-bottom: 1px solid var(--ink); }
   .lifecycle-operations { padding-left: 0; }
   .lifecycle-publication { padding: 1.2rem; }
-  .lifecycle-archive { grid-template-columns: 1fr; align-items: start; gap: 1.5rem; }
+  .lifecycle-archive, .lifecycle-initialization { grid-template-columns: 1fr; align-items: start; gap: 1.5rem; }
   .lifecycle-management ul { grid-template-columns: 1fr; }
   .lifecycle-management li, .lifecycle-management li:nth-child(3n), .lifecycle-management li:nth-last-child(-n + 3) { border-right: 0; border-bottom: 1px solid var(--rule); }
   .lifecycle-management li:last-child { border-bottom: 0; }
