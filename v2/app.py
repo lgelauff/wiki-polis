@@ -2310,7 +2310,7 @@ def _results_report_api_payload(slug: str) -> dict:
         if conv.closed_at else _current_phase6_results_filter(conv)
     )
     results = _build_phase6_results(
-        conv, participation=None, results_filter=result_filter,
+        conv, participation=participation, results_filter=result_filter,
     )
     output_key = 'report' if conv.closed_at else 'preliminary-results'
     output_context = next(

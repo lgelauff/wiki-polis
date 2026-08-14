@@ -2236,6 +2236,8 @@ export interface components {
             initial: components["schemas"]["VoteTally"] | null;
             informed: components["schemas"]["VoteTally"] | null;
             agreementShift: number | null;
+            /** @enum {string|null} */
+            viewerChoice: "agree" | "pass" | "disagree" | null;
         };
         VoteTally: {
             counts: {

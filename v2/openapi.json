@@ -2373,14 +2373,15 @@
       },
       "ResultsStatement": {
         "type": "object",
-        "required": ["featuredStatementId", "statement", "initial", "informed", "agreementShift"],
+        "required": ["featuredStatementId", "statement", "initial", "informed", "agreementShift", "viewerChoice"],
         "additionalProperties": false,
         "properties": {
           "featuredStatementId": {"type": "integer", "minimum": 1},
           "statement": {"type": "string"},
           "initial": {"oneOf": [{"$ref": "#/components/schemas/VoteTally"}, {"type": "null"}]},
           "informed": {"oneOf": [{"$ref": "#/components/schemas/VoteTally"}, {"type": "null"}]},
-          "agreementShift": {"type": ["number", "null"]}
+          "agreementShift": {"type": ["number", "null"]},
+          "viewerChoice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null]}
         }
       },
       "VoteTally": {

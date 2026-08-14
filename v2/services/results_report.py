@@ -28,6 +28,11 @@ def _tally(value: dict | None) -> dict | None:
     }
 
 
+def _choice(value: str | None) -> str | None:
+    normalized = str(value or '').strip().lower()
+    return normalized if normalized in {'agree', 'pass', 'disagree'} else None
+
+
 def _opinion_groups(groups: list | None) -> list[dict]:
     projected = []
     for index, group in enumerate(groups or [], start=1):
@@ -73,6 +78,9 @@ def build_results_report(
             'initial': _tally(row.get('p2')) if detailed else None,
             'informed': _tally(row.get('p6')) if detailed else None,
             'agreementShift': row.get('shift') if detailed else None,
+            'viewerChoice': (
+                _choice(row.get('my_p6_label')) if participation else None
+            ),
         })
     result_filter = results.get('filter')
     links = {

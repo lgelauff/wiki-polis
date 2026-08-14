@@ -22,6 +22,7 @@ def _results(*, pg_available=True):
                 'pct_agree': 70.0, 'pct_pass': 20.0, 'pct_disagree': 10.0,
             },
             'shift': 10.0,
+            'my_p6_label': 'Agree',
         }],
         'p2_participants': 25,
         'p6_participants': 22,
@@ -74,6 +75,7 @@ def test_final_results_api_uses_snapshot_and_preserves_pass_tallies(
         'agree': 70.0, 'pass': 20.0, 'disagree': 10.0,
     }
     assert data['statements'][0]['agreementShift'] == 10.0
+    assert data['statements'][0]['viewerChoice'] is None
     assert data['opinionGroups'][0] == {
         'label': 'Group 1',
         'memberCount': 11,
@@ -150,6 +152,34 @@ def test_results_api_exposes_privacy_safe_viewer_report_state(
         'revealState': 'open',
     }
     assert data['links']['identityReveal'].endswith('/identity-reveal')
+
+
+def test_preliminary_results_passes_participation_for_private_vote_overlay(
+    auth_client, conversation, participant,
+):
+    conversation.phase_public_results = True
+    conversation.phase_informed_voting = True
+    conversation.phase6_polis_conversation_id = 'private-phase6-id'
+    participation = Participation(
+        participant_id=participant.id,
+        conversation_id=conversation.id,
+        pseudonym='reflective-fox',
+    )
+    db.session.add(participation)
+    db.session.commit()
+    seen = {}
+
+    def build(_conversation, participation=None, results_filter=None):
+        seen['participation'] = participation
+        return _results()
+
+    with patch('app._build_phase6_results', side_effect=build):
+        data = auth_client.get(
+            '/api/v1/conversations/test-conv/results',
+        ).get_json()['data']
+
+    assert seen['participation'].id == participation.id
+    assert data['statements'][0]['viewerChoice'] == 'agree'
 
 
 def test_openapi_documents_results_report_and_pass_counts(client):
