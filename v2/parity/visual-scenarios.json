@@ -1282,6 +1282,112 @@
       "actions": [{"type": "click", "role": "tab", "name": "Arguments"}],
       "goldenSha256": "0b1927fe9626d315fe7c652ff193f2126ce15732b9250da8c0e71eedb3d2d487",
       "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--informed-voting--desktop",
+      "pageId": "conversation-workflow",
+      "state": "informed-voting",
+      "legacyPath": "/c/parity-informed-voting",
+      "reactPath": "/app/conversations/parity-informed-voting/informed-voting",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "tab", "name": "Informed vote"}],
+      "goldenSha256": "7a6b0eac02ecf4fde1ed7dac23300642cf1bad5676c040b4b54ec22be6b08ab5",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--informed-voting--mobile",
+      "pageId": "conversation-workflow",
+      "state": "informed-voting",
+      "legacyPath": "/c/parity-informed-voting",
+      "reactPath": "/app/conversations/parity-informed-voting/informed-voting",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "tab", "name": "Informed vote"}],
+      "goldenSha256": "73b5a14e44d805c203e68c018f0ce8ecbe520e2144ea5f821c6c4ae67a56569d",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--informed-pending--desktop",
+      "pageId": "conversation-workflow",
+      "state": "informed-voting-pending",
+      "legacyPath": "/c/parity-informed-pending",
+      "reactPath": "/app/conversations/parity-informed-pending/informed-voting",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "dfbebe791a6309811d0aedd805ac8040437d86ee472d7f7dfea133bfb4ec82e4",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--informed-pending--mobile",
+      "pageId": "conversation-workflow",
+      "state": "informed-voting-pending",
+      "legacyPath": "/c/parity-informed-pending",
+      "reactPath": "/app/conversations/parity-informed-pending/informed-voting",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "59c7ceb0850c54d26ab47cbf97e77398503b2bdc737a5f88f599cec54bfbb616",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--informed-empty--desktop",
+      "pageId": "conversation-workflow",
+      "state": "informed-voting-empty",
+      "legacyPath": "/c/parity-informed-empty",
+      "reactPath": "/app/conversations/parity-informed-empty/informed-voting",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "bdd352f17c4ec9da43176b4a1eac4767a8313245941707cc99cfe45f2842621f",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--informed-empty--mobile",
+      "pageId": "conversation-workflow",
+      "state": "informed-voting-empty",
+      "legacyPath": "/c/parity-informed-empty",
+      "reactPath": "/app/conversations/parity-informed-empty/informed-voting",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "3691e2c82a86e6406ae4f95238ac8d7b40473073b7688325fbc423ef48eae0a3",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--informed-complete--desktop",
+      "pageId": "conversation-workflow",
+      "state": "informed-voting-complete",
+      "legacyPath": "/c/parity-informed-voting",
+      "reactPath": "/app/conversations/parity-informed-voting/informed-voting",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [
+        {"type": "click", "role": "tab", "name": "Informed vote"},
+        {"type": "click", "role": "button", "name": "Agree"}
+      ],
+      "goldenSha256": "8a7c445f6819c0028e448399864cf58022da006411237094efaff661a50a67a2",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--informed-complete--mobile",
+      "pageId": "conversation-workflow",
+      "state": "informed-voting-complete",
+      "legacyPath": "/c/parity-informed-voting",
+      "reactPath": "/app/conversations/parity-informed-voting/informed-voting",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [
+        {"type": "click", "role": "tab", "name": "Informed vote"},
+        {"type": "click", "role": "button", "name": "Agree"}
+      ],
+      "goldenSha256": "8318422464a3186e8debc129688f1385b3c2f90bdafb6f8b261dfe6dabfd5817",
+      "parityGate": true
     }
   ]
 }

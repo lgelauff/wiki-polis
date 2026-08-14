@@ -315,6 +315,25 @@ def _seed() -> None:
         access_policy='public', phase_submission=True,
         phase_argument_mapping=True, argument_vote_data={'K': 2},
     )
+    informed_voting = Conversation(
+        slug='parity-informed-voting', polis_id='parity-informed-voting-polis',
+        title='Community infrastructure priorities', active=True,
+        access_policy='public', phase_submission=True,
+        phase_argument_mapping=True, phase_informed_voting=True,
+        phase6_polis_conversation_id='parity-informed-voting-phase6',
+    )
+    informed_pending = Conversation(
+        slug='parity-informed-pending', polis_id='parity-informed-pending-polis',
+        title='Informed round initialization', active=True,
+        access_policy='public', phase_informed_voting=True,
+        phase6_polis_conversation_id='parity-informed-pending-phase6',
+    )
+    informed_empty = Conversation(
+        slug='parity-informed-empty', polis_id='parity-informed-empty-polis',
+        title='Informed round awaiting statements', active=True,
+        access_policy='public', phase_informed_voting=True,
+        phase6_polis_conversation_id='parity-informed-empty-phase6',
+    )
     join_public = Conversation(
         slug='parity-join-public', polis_id='parity-join-public-polis',
         title='Public consultation invitation', active=True, access_policy='public',
@@ -458,6 +477,7 @@ def _seed() -> None:
         admin, target, participant, moderator, moderation, closed,
         about_public, about_participant, about_moderator, about_scheduled, about_mixed,
         arguments_mapping, arguments_gates, arguments_moderator,
+        informed_voting, informed_pending, informed_empty,
         join_public, join_email, join_invite, join_eligibility, join_conflict,
         pseudonym_owner, reveal_pending, reveal_open, reveal_revealed, reveal_expired,
         report_public, report_personal, report_empty,
@@ -516,6 +536,21 @@ def _seed() -> None:
             participant_id=moderator.id,
             conversation_id=arguments_moderator.id,
             pseudonym='watchful-hawk',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=informed_voting.id,
+            pseudonym='reflective-albatross',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=informed_pending.id,
+            pseudonym='patient-puffin',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=informed_empty.id,
+            pseudonym='waiting-wren',
         ),
         Participation(
             participant_id=admin.id,
@@ -671,6 +706,38 @@ def _seed() -> None:
         ArgumentSideState(participant_id=moderator_participation.participant_id, featured_statement_id=moderator_fs.id, side='con', skipped=True, argument_order=[item.id for item in moderator_arguments if item.side == 'con']),
         ArgumentVote(argument_id=gates_arguments[0].id, participant_id=participant.id),
         ArgumentVote(argument_id=moderator_arguments[0].id, participant_id=moderator.id),
+    ])
+    informed_fs = FeaturedStatement(
+        conversation_id=informed_voting.id, polis_statement_id=301,
+        phase6_polis_statement_id=401,
+        statement_text='Regional communities should share infrastructure funding.',
+        confirmed_by_admin=True,
+    )
+    pending_fs = FeaturedStatement(
+        conversation_id=informed_pending.id, polis_statement_id=302,
+        phase6_polis_statement_id=None,
+        statement_text='Featured statements should remain visible while initialization completes.',
+        confirmed_by_admin=True,
+    )
+    db.session.add_all([informed_fs, pending_fs])
+    db.session.flush()
+    informed_participation = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=informed_voting.id,
+    ).one()
+    pending_participation = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=informed_pending.id,
+    ).one()
+    informed_participation.phase6_card_order = [informed_fs.id]
+    pending_participation.phase6_card_order = [pending_fs.id]
+    db.session.add_all([
+        Argument(featured_statement_id=informed_fs.id, side='pro', body='Shared funding reduces duplicated maintenance work.'),
+        Argument(featured_statement_id=informed_fs.id, side='pro', body='Smaller communities gain access to specialist support.'),
+        Argument(featured_statement_id=informed_fs.id, side='pro', body='Joint investment makes long-term upgrades affordable.'),
+        Argument(featured_statement_id=informed_fs.id, side='pro', body='Common infrastructure improves interoperability.'),
+        Argument(featured_statement_id=informed_fs.id, side='con', body='Shared budgets can blur local accountability.'),
+        Argument(featured_statement_id=informed_fs.id, side='con', body='Regional priorities may require independent timelines.'),
+        Argument(featured_statement_id=informed_fs.id, side='con', body='Central coordination can slow urgent local decisions.'),
+        Argument(featured_statement_id=informed_fs.id, side='con', body='Funding formulas may disadvantage smaller affiliates.'),
     ])
     db.session.add_all([
         AuditEvent(

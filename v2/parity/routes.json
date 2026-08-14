@@ -81,7 +81,7 @@
       "targetReactRoutes": ["/c/:slug"],
       "apiOperations": ["getExploreState", "getArgumentMapping", "getInformedVoting", "getResultsReport", "createStatement", "putExploreVote", "createArgument", "putArgumentContributionSkip", "putArgumentPriority", "putInformedVote", "createContentFlag"],
       "status": "partial",
-      "scenarios": ["submission-empty", "submission-populated", "submission-voted", "statement-composer", "paused", "argument-mapping", "argument-gates", "argument-moderator", "informed-voting", "informed-voting-complete", "preliminary-results", "closed", "reveal-callout", "demo-session", "banned"]
+      "scenarios": ["submission-empty", "submission-populated", "submission-voted", "statement-composer", "paused", "argument-mapping", "argument-gates", "argument-moderator", "informed-voting", "informed-voting-pending", "informed-voting-empty", "informed-voting-complete", "preliminary-results", "closed", "reveal-callout", "demo-session", "banned"]
     },
     {
       "id": "conversation-about",
