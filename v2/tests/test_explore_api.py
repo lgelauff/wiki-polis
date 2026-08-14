@@ -5,8 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from db import (CommandReceipt, Participation, StatementPassSignal,
+from db import (AuditEvent, CommandReceipt, Participation, StatementPassSignal,
                 StatementProvenance, StatementSimilarityScore, db)
+from polis_admin import PolisServerError
 from services.explore import build_explore_state
 
 
@@ -347,6 +348,64 @@ def test_statement_command_creates_once_and_replays_completed_receipt(
     receipt = CommandReceipt.query.one()
     assert receipt.state == 'completed'
     assert receipt.response['statementId'] == 41
+    decision = AuditEvent.query.filter_by(
+        operation='statement.creation_moderation',
+    ).one()
+    assert decision.target_id == '41'
+    assert decision.detail == {'decision': 0, 'policy': 'moderate'}
+
+
+def test_auto_approve_policy_explicitly_moderates_new_statement(
+    auth_client, participant, conversation,
+):
+    conversation.statement_moderation_policy = 'auto_approve'
+    db.session.commit()
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    server = MagicMock()
+
+    with (
+        patch('app.polis_http.post', return_value=_response({'id': 46}, status=201)),
+        patch('app._polis_server_client', return_value=server),
+    ):
+        response = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'An explicitly approved claim.'},
+            headers={'Idempotency-Key': 'statement-key-46'},
+        )
+
+    assert response.status_code == 201
+    server.moderate.assert_called_once_with(conversation.polis_id, 46, 1)
+    decision = AuditEvent.query.filter_by(
+        operation='statement.creation_moderation',
+    ).one()
+    assert decision.detail == {'decision': 1, 'policy': 'auto_approve'}
+
+
+def test_auto_approve_failure_blocks_retry_after_statement_creation(
+    auth_client, participant, conversation,
+):
+    conversation.statement_moderation_policy = 'auto_approve'
+    db.session.commit()
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    server = MagicMock()
+    server.moderate.side_effect = PolisServerError('offline')
+
+    with (
+        patch('app.polis_http.post', return_value=_response({'id': 47}, status=201)),
+        patch('app._polis_server_client', return_value=server),
+    ):
+        response = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'A partially completed claim.'},
+            headers={'Idempotency-Key': 'statement-key-47'},
+        )
+
+    assert response.status_code == 502
+    assert response.get_json()['error']['code'] == 'command_outcome_unknown'
+    assert CommandReceipt.query.one().state == 'pending'
+    assert AuditEvent.query.count() == 0
 
 
 def test_statement_command_rejects_key_reuse_with_changed_body(
@@ -421,8 +480,10 @@ def test_derivative_statement_records_provenance_without_consuming_quota(
 ):
     participation = _join(participant, conversation)
     participation.new_stmt_ids = [5]
+    conversation.statement_moderation_policy = 'auto_approve'
     db.session.commit()
     _store_upstream_session(auth_client, conversation)
+    server = MagicMock()
 
     with (
         patch('app._statement_text_map', return_value={7: 'Original claim'}),
@@ -432,6 +493,7 @@ def test_derivative_statement_records_provenance_without_consuming_quota(
         patch(
             'app.polis_http.post', return_value=_response({'id': 45}, status=201),
         ),
+        patch('app._polis_server_client', return_value=server),
     ):
         response = auth_client.post(
             '/api/v1/conversations/test-conv/statements',
@@ -452,6 +514,7 @@ def test_derivative_statement_records_provenance_without_consuming_quota(
     } == {'char': 0.88, 'semantic-v1': 0.91}
     db.session.refresh(participation)
     assert participation.new_stmt_ids == [5]
+    server.moderate.assert_called_once_with(conversation.polis_id, 45, 1)
 
 
 def test_openapi_documents_idempotent_statement_command(client):

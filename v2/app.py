@@ -2332,6 +2332,25 @@ def _statement_api_payload(
                 model=model, similarity=score, threshold=threshold,
             )
 
+    policy = conv.statement_moderation_policy
+    if policy is None:
+        try:
+            current_rows, upstream_strict = _load_admin_statement_sources(conv)
+            policy = resolved_moderation_policy(
+                conversation=conv, upstream_strict=upstream_strict,
+            )
+            if current_rows is None or policy is None:
+                raise ModerationPolicyVerificationUnavailable()
+            policy = _set_statement_moderation_policy_command(
+                conv, policy, sources=(current_rows, upstream_strict),
+            ).policy
+        except (
+            ModerationPolicyVerificationUnavailable,
+            ModerationPolicyUpstreamFailed,
+            ModerationPolicySaveFailed,
+        ) as exc:
+            raise StatementPreparationUnavailable() from exc
+
     canonical_request = {
         'text': text_value,
         'derivedFromStatementId': derived_from,
@@ -2367,6 +2386,14 @@ def _statement_api_payload(
             raise StatementQuotaExceeded()
 
         statement_id = gateway.submit_statement(conv.polis_id, text_value)
+        decision = 1 if policy == 'auto_approve' else 0
+        if decision == 1:
+            try:
+                _polis_server_client().moderate(conv.polis_id, statement_id, decision)
+            except PolisServerError as exc:
+                raise ExploreUpstreamError(
+                    'The statement was created but its moderation decision is unknown.',
+                ) from exc
         if derived_from is None:
             ids = list(participation.new_stmt_ids or [])
             ids.append(statement_id)
@@ -2404,6 +2431,11 @@ def _statement_api_payload(
         _touch_last_engagement(participation)
         complete_command(reservation.receipt, response)
         db.session.commit()
+        record_audit(
+            'statement.creation_moderation', conv_id=conv.id,
+            target_type='statement', target_id=statement_id,
+            decision=decision, policy=policy,
+        )
         return response, 201
     except ExploreUpstreamError:
         db.session.rollback()
@@ -2680,14 +2712,15 @@ def _admin_statements_api_payload(conv_id: int) -> dict:
     )
 
 
-def _set_admin_statement_policy_api_payload(conv_id: int, body: dict) -> dict:
-    conv = _require_mod_for_conv(conv_id)
-    result, upstream_strict = _load_admin_statement_sources(conv)
+def _set_statement_moderation_policy_command(
+    conv: Conversation, policy: str, *, sources=None,
+):
+    result, upstream_strict = sources or _load_admin_statement_sources(conv)
     pending = None if result is None else result[0]
     server = _polis_server_client()
-    outcome = set_statement_moderation_policy(
+    return set_statement_moderation_policy(
         conversation=conv,
-        policy=body['mode'],
+        policy=policy,
         upstream_strict=upstream_strict,
         pending_statements=pending,
         moderate_upstream=server.moderate,
@@ -2703,6 +2736,11 @@ def _set_admin_statement_policy_api_payload(conv_id: int, body: dict) -> dict:
         ),
         upstream_errors=(PolisServerError,),
     )
+
+
+def _set_admin_statement_policy_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    outcome = _set_statement_moderation_policy_command(conv, body['mode'])
     return {
         'mode': outcome.policy,
         'changed': outcome.changed,
@@ -3824,6 +3862,26 @@ def conversation_statement_new(slug):
                 'threshold': threshold,
             }), 409
 
+    policy = conv.statement_moderation_policy
+    if policy is None:
+        try:
+            current_rows, upstream_strict = _load_admin_statement_sources(conv)
+            policy = resolved_moderation_policy(
+                conversation=conv, upstream_strict=upstream_strict,
+            )
+            if current_rows is None or policy is None:
+                raise ModerationPolicyVerificationUnavailable()
+            policy = _set_statement_moderation_policy_command(
+                conv, policy, sources=(current_rows, upstream_strict),
+            ).policy
+        except (
+            ModerationPolicyVerificationUnavailable,
+            ModerationPolicyUpstreamFailed,
+            ModerationPolicySaveFailed,
+        ):
+            current_app.logger.exception('statement moderation baseline unavailable')
+            return jsonify({'error': 'moderation_policy_unavailable'}), 502
+
     # Establish the Particiapi session + CSRF token BEFORE taking the row lock, so the
     # ~5s session-create round-trip does not run while holding the FOR UPDATE lock (#275
     # M3) — that keeps the lock's held time down to just the submit + append. Only the
@@ -3880,6 +3938,7 @@ def conversation_statement_new(slug):
 
     if stmt_resp.status_code == 201:
         stmt_id = stmt_resp.json().get('id')
+        moderation_failed = False
         if stmt_id is not None:
             if derived_from is None:
                 ids = list(part.new_stmt_ids or [])
@@ -3889,9 +3948,29 @@ def conversation_statement_new(slug):
                 record_statement_provenance(conv.id, stmt_id, derived_from,
                                             parent_text=parent_text, new_text=text,
                                             scores=scores)
+            if policy == 'auto_approve':
+                try:
+                    _polis_server_client().moderate(conv.polis_id, stmt_id, 1)
+                except PolisServerError:
+                    moderation_failed = True
+                    current_app.logger.exception(
+                        'statement %s was created but auto-approval failed', stmt_id,
+                    )
         _touch_last_engagement(part)
         db.session.commit()
-        flask_resp = make_response(stmt_resp.content, 201)
+        if stmt_id is not None:
+            record_audit(
+                'statement.creation_moderation', conv_id=conv.id,
+                target_type='statement', target_id=stmt_id,
+                decision=1 if policy == 'auto_approve' else 0,
+                policy=policy,
+                outcome='upstream_failed' if moderation_failed else 'ok',
+            )
+        flask_resp = make_response(
+            jsonify({'error': 'command_outcome_unknown'}) if moderation_failed
+            else stmt_resp.content,
+            502 if moderation_failed else 201,
+        )
         flask_resp.headers['Content-Type'] = 'application/json'
     else:
         current_app.logger.error('Particiapi statement error: %s', stmt_resp.status_code)
@@ -4485,7 +4564,11 @@ def admin_conversation_new():
         'POLIS_SERVER_URL', 'POLIS_ADMIN_EMAIL', 'POLIS_ADMIN_PASSWORD'))
     if polis_configured:
         try:
-            polis_id = _polis_server_client().create_conversation(fields['title'], strict_moderation=True)
+            # Polis stays strict permanently; wiki-polis records the desired decision
+            # on each new statement instead of relying on retroactive read semantics.
+            polis_id = _polis_server_client().create_conversation(
+                fields['title'], strict_moderation=True,
+            )
         except PolisServerError:
             current_app.logger.exception('Polis conversation creation failed')
             flash('Could not create the Polis conversation. Check server logs for details.', 'error')
@@ -4500,6 +4583,7 @@ def admin_conversation_new():
             )))
 
     conv = Conversation(slug=slug, active=True, polis_id=polis_id,
+                        statement_moderation_policy='moderate',
                         phase_route=phase_route, **fields)
     db.session.add(conv)
     db.session.commit()
