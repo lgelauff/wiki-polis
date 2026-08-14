@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 1,
+  "goal": "100% route, feature, behavior, permission-state, accessibility, and visual parity with the Jinja frontend",
+  "statusValues": ["missing", "partial", "implemented-unverified", "parity"],
+  "sharedTemplates": ["_reveal_timeline.html", "base.html", "forbidden_eligibility.html", "forbidden_invite_only.html"],
+  "conditionalEndpoints": ["dev_login", "dev_fake_login"],
+  "serverSupportEndpoints": ["login", "logout", "oauth_callback", "dev_login", "dev_fake_login"],
+  "pages": [
+    {
+      "id": "entry-fork",
+      "legacyEndpoints": ["index"],
+      "legacyRoutes": ["/"],
+      "templates": ["fork.html"],
+      "temporaryReactRoutes": [],
+      "targetReactRoutes": ["/"],
+      "apiOperations": ["getSession"],
+      "status": "missing",
+      "scenarios": ["anonymous", "authenticated", "local-test-users"]
+    },
+    {
+      "id": "demo-lane",
+      "legacyEndpoints": ["demo_lane"],
+      "legacyRoutes": ["/demo"],
+      "templates": ["home.html"],
+      "temporaryReactRoutes": ["/app/demo"],
+      "targetReactRoutes": ["/demo"],
+      "apiOperations": ["getSession", "getConversationLane"],
+      "status": "partial",
+      "scenarios": ["anonymous-empty", "anonymous-populated", "authenticated-populated", "test-user-switcher"]
+    },
+    {
+      "id": "consultation-lane",
+      "legacyEndpoints": ["consultations"],
+      "legacyRoutes": ["/consultations"],
+      "templates": ["home.html"],
+      "temporaryReactRoutes": ["/app/real"],
+      "targetReactRoutes": ["/consultations"],
+      "apiOperations": ["getSession", "getConversationLane"],
+      "status": "partial",
+      "scenarios": ["anonymous-empty", "anonymous-public", "participant-all-groups", "global-admin", "output-ready", "scheduled-transition"]
+    },
+    {
+      "id": "statement-guidance",
+      "legacyEndpoints": ["participant.statement_guidance"],
+      "legacyRoutes": ["/help/statements"],
+      "templates": ["guidance_statement.html"],
+      "temporaryReactRoutes": [],
+      "targetReactRoutes": ["/help/statements"],
+      "apiOperations": [],
+      "status": "missing",
+      "scenarios": ["public"]
+    },
+    {
+      "id": "argument-guidance",
+      "legacyEndpoints": ["participant.argument_guidance"],
+      "legacyRoutes": ["/help/arguments"],
+      "templates": ["guidance_argument.html"],
+      "temporaryReactRoutes": [],
+      "targetReactRoutes": ["/help/arguments"],
+      "apiOperations": [],
+      "status": "missing",
+      "scenarios": ["public"]
+    },
+    {
+      "id": "accept-conversation",
+      "legacyEndpoints": ["participant.accept"],
+      "legacyRoutes": ["/accept/:slug"],
+      "templates": ["accept.html"],
+      "temporaryReactRoutes": ["/app/conversations/:slug/join"],
+      "targetReactRoutes": ["/accept/:slug"],
+      "apiOperations": ["getConversationAbout", "getPseudonymSuggestions", "createParticipation"],
+      "status": "partial",
+      "scenarios": ["public", "invite-required", "invite-authorized", "eligibility-denied", "already-participating", "suggestions-loading", "validation-error"]
+    },
+    {
+      "id": "conversation-workflow",
+      "legacyEndpoints": ["participant.conversation"],
+      "legacyRoutes": ["/c/:slug"],
+      "templates": ["conversation.html"],
+      "temporaryReactRoutes": ["/app/conversations/:slug/explore", "/app/conversations/:slug/arguments", "/app/conversations/:slug/informed-voting", "/app/conversations/:slug/results"],
+      "targetReactRoutes": ["/c/:slug"],
+      "apiOperations": ["getExploreState", "getArgumentMapping", "getInformedVoting", "getResultsReport", "createStatement", "putExploreVote", "createArgument", "putArgumentContributionSkip", "putArgumentPriority", "putInformedVote", "createContentFlag"],
+      "status": "partial",
+      "scenarios": ["submission-empty", "submission-populated", "statement-composer", "paused", "argument-mapping", "argument-gates", "argument-moderator", "informed-voting", "informed-voting-complete", "preliminary-results", "closed", "reveal-callout", "demo-session", "banned"]
+    },
+    {
+      "id": "conversation-about",
+      "legacyEndpoints": ["participant.conversation_about"],
+      "legacyRoutes": ["/c/:slug/about"],
+      "templates": ["conversation_about.html"],
+      "temporaryReactRoutes": ["/app/conversations/:slug/about"],
+      "targetReactRoutes": ["/c/:slug/about"],
+      "apiOperations": ["getConversationAbout"],
+      "status": "partial",
+      "scenarios": ["anonymous-public", "participant", "moderator", "scheduled-transition", "outputs-mixed"]
+    },
+    {
+      "id": "moderation-log",
+      "legacyEndpoints": ["participant.conversation_moderation_log"],
+      "legacyRoutes": ["/c/:slug/moderation-log"],
+      "templates": ["moderation_log.html"],
+      "temporaryReactRoutes": [],
+      "targetReactRoutes": ["/c/:slug/moderation-log"],
+      "apiOperations": [],
+      "status": "missing",
+      "scenarios": ["empty", "ban-and-unban-history"]
+    },
+    {
+      "id": "conversation-output",
+      "legacyEndpoints": ["participant.conversation_output"],
+      "legacyRoutes": ["/c/:slug/outputs/:outputKey"],
+      "templates": ["output.html"],
+      "temporaryReactRoutes": [],
+      "targetReactRoutes": ["/c/:slug/outputs/:outputKey"],
+      "apiOperations": [],
+      "status": "missing",
+      "scenarios": ["dataset-ready", "argument-map-ready", "preliminary-results-ready", "report-ready", "not-ready"]
+    },
+    {
+      "id": "final-report",
+      "legacyEndpoints": ["participant.conversation_report"],
+      "legacyRoutes": ["/c/:slug/report"],
+      "templates": ["report.html"],
+      "temporaryReactRoutes": ["/app/conversations/:slug/results"],
+      "targetReactRoutes": ["/c/:slug/report"],
+      "apiOperations": ["getResultsReport"],
+      "status": "partial",
+      "scenarios": ["public-results", "personal-results-authenticated", "personal-results-anonymous", "no-results", "reveal-pending", "reveal-open", "reveal-expired"]
+    },
+    {
+      "id": "identity-reveal",
+      "legacyEndpoints": ["participant.reveal_identity"],
+      "legacyRoutes": ["/c/:slug/reveal"],
+      "templates": ["reveal.html"],
+      "temporaryReactRoutes": ["/app/conversations/:slug/identity-reveal"],
+      "targetReactRoutes": ["/c/:slug/reveal"],
+      "apiOperations": ["getIdentityReveal", "createIdentityReveal"],
+      "status": "partial",
+      "scenarios": ["pending", "open", "revealed", "expired", "not-participant", "not-closed"]
+    },
+    {
+      "id": "admin-catalog",
+      "legacyEndpoints": ["admin.admin"],
+      "legacyRoutes": ["/admin"],
+      "templates": ["admin.html"],
+      "temporaryReactRoutes": ["/app/admin"],
+      "targetReactRoutes": ["/admin"],
+      "apiOperations": ["getSession", "getAdminCatalog", "postAdminConversation", "postGlobalAdminGrant", "putGlobalAdmin"],
+      "status": "partial",
+      "scenarios": ["empty", "populated", "global-admin-roster", "validation-error", "forbidden"]
+    },
+    {
+      "id": "admin-lifecycle",
+      "legacyEndpoints": ["admin.admin_conversation_detail"],
+      "legacyRoutes": ["/admin/conversations/:conversationId"],
+      "templates": ["admin_conversation.html"],
+      "temporaryReactRoutes": ["/app/admin/conversations/:conversationId", "/app/admin/conversations/:conversationId/settings", "/app/admin/conversations/:conversationId/termination", "/app/admin/conversations/:conversationId/roles"],
+      "targetReactRoutes": ["/admin/conversations/:conversationId"],
+      "apiOperations": ["getAdminConversationLifecycle", "getAdminConversationSettings", "getAdminConversationTermination", "getAdminConversationRoles", "putAdminConversationPause", "putAdminConversationPhase", "putAdminConversationPhases", "putAdminConversationSchedule", "putAdminConversationArchive", "putAdminConversationSettings", "putAdminConversationRoles", "createAdminPhase6Initialization", "createAdminConversationPublication", "deleteAdminConversation"],
+      "status": "partial",
+      "scenarios": ["preparation", "submission", "argument-mapping", "informed-voting", "cleanup", "closed", "paused", "scheduled", "advanced-phases", "upstream-unavailable", "moderator", "organizer", "global-admin", "deletion-eligible", "deletion-blocked"]
+    },
+    {
+      "id": "admin-participants",
+      "legacyEndpoints": ["admin.admin_conversation_participants"],
+      "legacyRoutes": ["/admin/conversations/:conversationId/participants"],
+      "templates": ["admin_participants.html"],
+      "temporaryReactRoutes": ["/app/admin/conversations/:conversationId/participants"],
+      "targetReactRoutes": ["/admin/conversations/:conversationId/participants"],
+      "apiOperations": ["getAdminConversationParticipants", "putAdminParticipantAccess"],
+      "status": "partial",
+      "scenarios": ["empty", "active", "banned", "progress-unavailable", "moderator"]
+    },
+    {
+      "id": "admin-flags",
+      "legacyEndpoints": ["admin.admin_conversation_flags"],
+      "legacyRoutes": ["/admin/conversations/:conversationId/flags"],
+      "templates": ["admin_flags.html"],
+      "temporaryReactRoutes": ["/app/admin/conversations/:conversationId/moderation"],
+      "targetReactRoutes": ["/admin/conversations/:conversationId/flags"],
+      "apiOperations": ["getAdminConversationFlags", "putAdminFlagResolution"],
+      "status": "partial",
+      "scenarios": ["empty", "open-statement", "open-argument", "resolved", "moderator"]
+    },
+    {
+      "id": "admin-invitations",
+      "legacyEndpoints": ["admin.admin_conversation_invites"],
+      "legacyRoutes": ["/admin/conversations/:conversationId/invites"],
+      "templates": ["admin_invites.html"],
+      "temporaryReactRoutes": ["/app/admin/conversations/:conversationId/invitations"],
+      "targetReactRoutes": ["/admin/conversations/:conversationId/invites"],
+      "apiOperations": ["getAdminConversationInvitations", "putAdminConversationInvitations", "deleteAdminConversationInvitation"],
+      "status": "partial",
+      "scenarios": ["empty", "populated", "batch-deduplication", "save-error", "moderator"]
+    },
+    {
+      "id": "admin-statements",
+      "legacyEndpoints": ["admin.admin_conversation_statements"],
+      "legacyRoutes": ["/admin/conversations/:conversationId/statements"],
+      "templates": ["admin_statements.html"],
+      "temporaryReactRoutes": ["/app/admin/conversations/:conversationId/statements"],
+      "targetReactRoutes": ["/admin/conversations/:conversationId/statements"],
+      "apiOperations": ["getAdminConversationStatements", "putAdminStatementModerationPolicy", "putAdminStatementModeration", "postAdminStatementImport"],
+      "status": "partial",
+      "scenarios": ["empty", "pending-approved-hidden", "strict-moderation", "seed-import-open", "seed-import-locked", "provenance", "upstream-unavailable"]
+    },
+    {
+      "id": "admin-featured",
+      "legacyEndpoints": ["admin.admin_conversation_featured"],
+      "legacyRoutes": ["/admin/conversations/:conversationId/featured"],
+      "templates": ["admin_featured.html"],
+      "temporaryReactRoutes": ["/app/admin/conversations/:conversationId/featured"],
+      "targetReactRoutes": ["/admin/conversations/:conversationId/featured"],
+      "apiOperations": ["getAdminFeaturedStatements", "putAdminFeaturedStatement", "deleteAdminFeaturedSelection", "putAdminFeaturedArgument", "deleteAdminFeaturedArgument"],
+      "status": "partial",
+      "scenarios": ["empty", "candidates", "selected", "arguments", "hidden-argument", "phase-locked"]
+    }
+  ],
+  "features": [
+    {
+      "id": "authentication",
+      "legacyEndpoints": ["login", "logout", "oauth_callback", "dev_login", "dev_fake_login"],
+      "apiOperations": ["getSession"],
+      "status": "implemented-unverified"
+    },
+    {
+      "id": "participation-acceptance",
+      "legacyEndpoints": ["participant.accept_post", "participant.accept_pseudonyms"],
+      "apiOperations": ["getPseudonymSuggestions", "createParticipation"],
+      "status": "implemented-unverified"
+    },
+    {
+      "id": "statement-contribution",
+      "legacyEndpoints": ["participant.conversation_statement_new", "participant.statement_flag"],
+      "apiOperations": ["createStatement", "createContentFlag"],
+      "status": "implemented-unverified"
+    },
+    {
+      "id": "argument-contribution",
+      "legacyEndpoints": ["participant.argument_flag", "participant.argument_hide", "participant.argument_skip", "participant.argument_skip_legacy", "participant.argument_submit", "participant.argument_submit_legacy", "participant.argument_unhide", "participant.argument_unvote", "participant.argument_vote"],
+      "apiOperations": ["createArgument", "putArgumentContributionSkip", "putArgumentPriority", "createContentFlag", "putAdminFeaturedArgument"],
+      "status": "implemented-unverified"
+    },
+    {
+      "id": "informed-vote",
+      "legacyEndpoints": ["participant.phase6_vote"],
+      "apiOperations": ["putInformedVote"],
+      "status": "implemented-unverified"
+    },
+    {
+      "id": "identity-reveal-command",
+      "legacyEndpoints": ["participant.reveal_identity_post"],
+      "apiOperations": ["createIdentityReveal"],
+      "status": "implemented-unverified"
+    },
+    {
+      "id": "admin-catalog-commands",
+      "legacyEndpoints": ["admin.admin_conversation_new", "admin.admin_global_admin_add", "admin.admin_global_admin_remove"],
+      "apiOperations": ["postAdminConversation", "postGlobalAdminGrant", "putGlobalAdmin"],
+      "status": "implemented-unverified"
+    },
+    {
+      "id": "admin-lifecycle-commands",
+      "legacyEndpoints": ["admin.admin_conversation_advance", "admin.admin_conversation_close", "admin.admin_conversation_delete", "admin.admin_conversation_edit", "admin.admin_conversation_pause", "admin.admin_conversation_phase_schedule", "admin.admin_conversation_phases", "admin.admin_conversation_recommendations", "admin.admin_phase6_init", "admin.admin_role_add", "admin.admin_role_remove"],
+      "apiOperations": ["putAdminConversationPhase", "createAdminConversationPublication", "deleteAdminConversation", "putAdminConversationSettings", "putAdminConversationPause", "putAdminConversationSchedule", "putAdminConversationPhases", "createAdminPhase6Initialization", "putAdminConversationRoles"],
+      "status": "partial"
+    },
+    {
+      "id": "admin-statement-commands",
+      "legacyEndpoints": ["admin.admin_conversation_strict_moderation", "admin.admin_statement_moderate", "admin.admin_statement_seed", "admin.admin_statement_seed_import_text"],
+      "apiOperations": ["putAdminStatementModerationPolicy", "putAdminStatementModeration", "postAdminStatementImport"],
+      "status": "implemented-unverified"
+    },
+    {
+      "id": "admin-featured-commands",
+      "legacyEndpoints": ["admin.admin_argument_delete", "admin.admin_argument_moderate", "admin.admin_featured_add", "admin.admin_featured_confirm", "admin.admin_featured_remove"],
+      "apiOperations": ["putAdminFeaturedStatement", "deleteAdminFeaturedSelection", "putAdminFeaturedArgument", "deleteAdminFeaturedArgument"],
+      "status": "implemented-unverified"
+    },
+    {
+      "id": "admin-flag-resolution",
+      "legacyEndpoints": ["admin.admin_flag_resolve"],
+      "apiOperations": ["putAdminFlagResolution"],
+      "status": "implemented-unverified"
+    },
+    {
+      "id": "admin-invitation-commands",
+      "legacyEndpoints": ["admin.admin_invite_add", "admin.admin_invite_remove"],
+      "apiOperations": ["putAdminConversationInvitations", "deleteAdminConversationInvitation"],
+      "status": "implemented-unverified"
+    },
+    {
+      "id": "admin-participant-access",
+      "legacyEndpoints": ["admin.admin_participant_ban", "admin.admin_participant_unban"],
+      "apiOperations": ["putAdminParticipantAccess"],
+      "status": "implemented-unverified"
+    }
+  ],
+  "knownApiGaps": [
+    {
+      "id": "moderation-log-read",
+      "requiredBy": ["moderation-log"],
+      "description": "Expose the public conversation ban/unban history as a typed aggregate read."
+    },
+    {
+      "id": "conversation-output-read",
+      "requiredBy": ["conversation-output"],
+      "description": "Expose each legacy output key, readiness state, metadata, and content as a typed read."
+    },
+    {
+      "id": "recommendation-tier-command",
+      "requiredBy": ["admin-lifecycle"],
+      "description": "Expose the recommended-quantities tier command used by the Jinja lifecycle page."
+    }
+  ]
+}
