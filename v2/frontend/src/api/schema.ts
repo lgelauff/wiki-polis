@@ -1383,6 +1383,8 @@ export interface components {
                 /** @enum {string} */
                 accessPolicy: "public" | "invite_only" | "demo";
                 phaseRoute: string;
+                phaseRouteLabel: string;
+                polisId: string;
             };
             recommendations: {
                 /** @enum {string} */

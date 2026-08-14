@@ -21,6 +21,8 @@ def test_settings_contract_exposes_editable_eligibility_configuration(
     assert response.status_code == 200
     data = response.get_json()['data']
     assert data['recommendations']['tier'] == 'simple'
+    assert data['conversation']['phaseRouteLabel'] == 'Default 7-step path'
+    assert data['conversation']['polisId'] == conversation.polis_id
     assert data['recommendations']['tiers'][0]['quantities']['featured_statements'] == 8
     assert data['eligibility']['configured'] is True
     assert data['eligibility']['configurationMode'] == 'editable'

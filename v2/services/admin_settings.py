@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 def build_admin_settings(
     *, conversation, recommendation_tiers: dict, recommendation_profile: dict,
-    can_edit: bool, self_link: str, lifecycle_link: str,
+    phase_route_label: str, can_edit: bool, self_link: str, lifecycle_link: str,
 ) -> dict:
     return {
         'conversation': {
@@ -16,6 +16,8 @@ def build_admin_settings(
             'outroHtml': conversation.outro_text or '',
             'accessPolicy': conversation.access_policy,
             'phaseRoute': conversation.phase_route,
+            'phaseRouteLabel': phase_route_label,
+            'polisId': conversation.polis_id,
         },
         'recommendations': {
             'tier': recommendation_profile['tier'],

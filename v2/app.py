@@ -3079,6 +3079,9 @@ def _admin_settings_api_payload(conv_id: int) -> dict:
         conversation=conv,
         recommendation_tiers=_RECOMMENDATION_TIERS,
         recommendation_profile=_recommendation_profile(conv),
+        phase_route_label=PHASE_ROUTES.get(
+            conv.phase_route, PHASE_ROUTES['default_7'],
+        )['label'],
         can_edit=_can_organize(conv),
         self_link=url_for(
             'api_v1.get_admin_conversation_settings', conversation_id=conv.id,
