@@ -425,6 +425,7 @@ export const handlers = [
         slug: 'community-strategy',
         title: 'Community strategy',
         publication: 'final',
+        resultsAvailable: true,
         openedAt: '2026-05-01T12:00:00Z',
         closedAt: '2026-07-01T12:00:00Z',
         context: {
@@ -457,6 +458,7 @@ export const handlers = [
             percentage: 82,
           }],
         }],
+        viewer: {participating: true, pseudonym: 'quiet-otter', revealState: 'open'},
         links: {
           self: '/api/v1/conversations/community-strategy/results',
           conversation: '/c/community-strategy',

@@ -1,10 +1,33 @@
 import {useSuspenseQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
+import {Component, type ReactNode} from 'react';
 
 import type {components} from '../../api/schema';
+import {ApiContractError} from '../../api/client';
 import {resultsReportQuery} from '../../api/queries';
+import {ExternalRedirect} from '../legacy/external-redirect';
+import {FinalReportLegacyPage} from '../legacy/final-report-page';
 
 type Tally = components['schemas']['VoteTally'];
+
+export class ResultsAccessBoundary extends Component<
+  {children: ReactNode; slug: string},
+  {error: unknown | null}
+> {
+  state: {error: unknown | null} = {error: null};
+
+  static getDerivedStateFromError(error: unknown) {
+    return {error};
+  }
+
+  render() {
+    if (this.state.error instanceof ApiContractError && this.state.error.code === 'unauthorized') {
+      return <ExternalRedirect href={`/login?next=${encodeURIComponent(`/c/${this.props.slug}/report`)}`} />;
+    }
+    if (this.state.error) throw this.state.error;
+    return this.props.children;
+  }
+}
 
 function VoteBar({tally, label}: {tally: Tally; label: string}) {
   const {percentages, counts} = tally;
@@ -57,11 +80,13 @@ function ResultStatement({item}: {
   );
 }
 
-export function ResultsPage({slug}: {slug: string}) {
+export function ResultsPage({slug, preliminaryHeader}: {slug: string; preliminaryHeader?: ReactNode}) {
   const {data} = useSuspenseQuery(resultsReportQuery(slug));
+  if (data.publication === 'final') return <FinalReportLegacyPage report={data} />;
   const excluded = data.moderation.excludedStatements + data.moderation.excludedParticipants;
 
-  return (
+  return (<>
+    {preliminaryHeader}
     <main className="results-shell" id="main">
       <nav className="record-breadcrumb" aria-label="Breadcrumb">
         <Link to="/app/real">Conversations</Link><span>/</span>
@@ -81,9 +106,7 @@ export function ResultsPage({slug}: {slug: string}) {
       <section className="results-provenance" aria-labelledby="results-context-heading">
         <div>
           <h2 id="results-context-heading">How to read this output</h2>
-          <p>Produced from <strong>{data.context.phase}</strong>. {data.publication === 'final'
-            ? 'The moderation filter was frozen at publication.'
-            : 'These results can still change while participation remains open.'}</p>
+          <p>Produced from <strong>{data.context.phase}</strong>. These results can still change while participation remains open.</p>
         </div>
         <dl>
           <div><dt>Initial round</dt><dd>{data.participation.initialRound ?? '—'}</dd></div>
@@ -140,5 +163,5 @@ export function ResultsPage({slug}: {slug: string}) {
         <a href={data.links.conversation}>Open legacy conversation view</a>
       </footer>
     </main>
-  );
+  </>);
 }

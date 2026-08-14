@@ -14,7 +14,7 @@ import {StatementComposer} from './features/explore/statement-composer';
 import {ArgumentMappingPage} from './features/arguments/argument-mapping-page';
 import {ContentFlagControl} from './features/flags/content-flag-control';
 import {InformedVotingPage} from './features/informed-voting/informed-voting-page';
-import {ResultsPage} from './features/results/results-page';
+import {ResultsAccessBoundary, ResultsPage} from './features/results/results-page';
 import {AdminParticipantsPage} from './features/admin/admin-participants-page';
 import {AdminModerationPage} from './features/admin/admin-moderation-page';
 import {AdminInvitationsPage} from './features/admin/admin-invitations-page';
@@ -387,12 +387,9 @@ function InformedVotingRoute() {
 
 function ResultsRoute() {
   const {slug = ''} = useParams();
-  return (
-    <>
-      <Header />
-      <ResultsPage slug={slug} />
-    </>
-  );
+  return <ResultsAccessBoundary slug={slug}>
+    <ResultsPage slug={slug} preliminaryHeader={<Header />} />
+  </ResultsAccessBoundary>;
 }
 
 function AdminParticipantsRoute() {

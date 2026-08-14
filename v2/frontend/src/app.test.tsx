@@ -407,7 +407,7 @@ test('completes informed voting through the typed replacement command', async ()
   expect(await screen.findByText(/You voted/)).toHaveTextContent('agree');
 });
 
-test('renders final results with pass tallies and publication provenance', async () => {
+test('renders the legacy final report from the typed results contract', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/app/conversations/community-strategy/results']}>
@@ -417,17 +417,13 @@ test('renders final results with pass tallies and publication provenance', async
   );
 
   expect(await screen.findByRole('heading', {name: 'Community strategy'})).toBeVisible();
-  expect(screen.getByText('final')).toBeVisible();
-  expect(screen.getByText(/filter was frozen at publication/)).toBeVisible();
-  expect(screen.getByText('+10% agreement')).toBeVisible();
-  expect(screen.getByRole('img', {
-    name: 'Initial vote: 60% agree, 15% pass, 25% disagree',
-  })).toBeVisible();
-  expect(screen.getByRole('img', {
-    name: 'Informed vote: 70% agree, 20% pass, 10% disagree',
-  })).toBeVisible();
-  expect(screen.getAllByText('Pass')).toHaveLength(2);
-  expect(screen.getByRole('heading', {name: 'Opinion groups'})).toBeVisible();
+  expect(screen.getByText('Final')).toBeVisible();
+  expect(screen.getByText('Final · frozen at publication')).toBeVisible();
+  expect(screen.getByText('+10.0%')).toBeVisible();
+  expect(screen.getAllByTitle('Agree 60.0% · Disagree 25.0% · Pass 15.0%')).toHaveLength(3);
+  expect(screen.getByTitle('Agree 70.0% · Disagree 10.0% · Pass 20.0%')).toBeVisible();
+  expect(screen.getByRole('heading', {name: /^Opinion groups/})).toBeVisible();
+  expect(screen.getByText(/recorded under pseudonym/)).toHaveTextContent('quiet-otter');
 });
 
 test('submits clearer wording through the idempotent statement contract', async () => {
