@@ -9,5 +9,6 @@ server.listen({onUnhandledRequest: 'error'});
 afterEach(() => {
   cleanup();
   server.resetHandlers();
+  globalThis.sessionStorage.clear();
 });
 afterAll(() => server.close());

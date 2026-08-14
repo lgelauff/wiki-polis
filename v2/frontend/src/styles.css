@@ -35,6 +35,48 @@ a { color: inherit; }
 }
 .skip-link:focus { translate: 0 .75rem; }
 
+.spa-only-banner {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  min-height: 38px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: .7rem;
+  padding: .45rem 1rem;
+  color: #3d2200;
+  background: #ffd88a;
+  border-bottom: 1px solid #b56d00;
+  font-size: .72rem;
+}
+.spa-only-banner strong { font: 700 .68rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+.spa-only-banner button { padding: .25rem .45rem; border: 1px solid currentColor; color: inherit; background: transparent; cursor: pointer; }
+.spa-only-banner + .skip-link { top: 38px; }
+
+.spa-coverage-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: color-mix(in srgb, var(--ink) 74%, transparent);
+}
+.spa-coverage-gap, .spa-missing-route {
+  width: min(620px, 100%);
+  padding: clamp(1.5rem, 5vw, 3rem);
+  border: 1px solid var(--ink);
+  background: var(--surface);
+  box-shadow: 10px 10px 0 var(--civic);
+}
+.spa-coverage-gap h1, .spa-missing-route h1 { margin: .4rem 0 1rem; font-size: clamp(2rem, 6vw, 3.4rem); line-height: .95; letter-spacing: -.05em; }
+.spa-coverage-gap > code, .spa-missing-route > code { display: block; overflow-wrap: anywhere; margin: 1rem 0 1.5rem; padding: .8rem; color: var(--dissent); background: var(--paper); }
+.spa-coverage-gap > div, .spa-missing-route > div { display: flex; flex-wrap: wrap; gap: .7rem; }
+.spa-coverage-gap button, .spa-missing-route button, .spa-missing-route a { padding: .65rem .8rem; border: 1px solid var(--ink); color: var(--ink); background: white; cursor: pointer; text-decoration: none; }
+.spa-coverage-gap button:first-child, .spa-missing-route a { color: white; background: var(--ink); }
+.spa-missing-route { margin: clamp(3rem, 10vw, 8rem) auto; }
+
 .app-header {
   border-bottom: 1px solid var(--rule);
   background: color-mix(in srgb, var(--paper) 92%, transparent);

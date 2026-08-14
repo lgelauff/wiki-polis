@@ -30,6 +30,11 @@ import {AdminTerminationPage} from './features/admin/admin-termination-page';
 import {AdminStatementsPage} from './features/admin/admin-statements-page';
 import {AdminFeaturedPage} from './features/admin/admin-featured-page';
 import {AdminCatalogPage} from './features/admin/admin-catalog-page';
+import {
+  MissingSpaRoute,
+  StrictSpaBoundary,
+  useStrictSpaMode,
+} from './strict-spa-mode';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -813,9 +818,7 @@ function ConversationGroup({definition, conversations, primary}: {
   );
 }
 
-function ConversationLanePage() {
-  const {space: rawSpace} = useParams();
-  const space: ConversationSpace = rawSpace === 'demo' ? 'demo' : 'real';
+function ConversationLanePage({space}: {space: ConversationSpace}) {
   const {data} = useSuspenseQuery(conversationLaneQuery(space));
   const attentionCount = data.groups.needsAttention.length;
   const isEmpty = groupDefinitions.every(({key}) => data.groups[key].length === 0);
@@ -856,13 +859,19 @@ function ConversationLanePage() {
   );
 }
 
+function UnmatchedRoute() {
+  const {enabled} = useStrictSpaMode();
+  return enabled ? <MissingSpaRoute /> : <Navigate to="/app/real" replace />;
+}
+
 export function App() {
   return (
-    <>
+    <StrictSpaBoundary>
       <a className="skip-link" href="#main">Skip to main content</a>
       <Suspense fallback={<p className="loading-state" role="status">Loading conversations…</p>}>
         <Routes>
-          <Route path="/app/:space" element={<ConversationLanePage />} />
+          <Route path="/app/demo" element={<ConversationLanePage space="demo" />} />
+          <Route path="/app/real" element={<ConversationLanePage space="real" />} />
           <Route path="/app/conversations/:slug/about" element={<ConversationAboutPage />} />
           <Route path="/app/conversations/:slug/join" element={<ConversationJoinPage />} />
           <Route path="/app/conversations/:slug/explore" element={<ExplorePage />} />
@@ -880,9 +889,9 @@ export function App() {
           <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminModerationRoute />} />
           <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminInvitationsRoute />} />
           <Route path="/app/admin/conversations/:conversationId/roles" element={<AdminRolesRoute />} />
-          <Route path="*" element={<Navigate to="/app/real" replace />} />
+          <Route path="*" element={<UnmatchedRoute />} />
         </Routes>
       </Suspense>
-    </>
+    </StrictSpaBoundary>
   );
 }

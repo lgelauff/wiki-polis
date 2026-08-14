@@ -27,6 +27,13 @@ Feature code must use the typed adapters in `src/api/queries.ts`. Direct `fetch`
 legacy `/admin` form actions, and browser calls to Polis or Particiapi are contract
 violations. API links between migrated screens must point to `/app/...` routes.
 
+## Strict SPA testing
+
+Open `/app/real?spa_only=1` to persist SPA-only mode for the current browser tab.
+Same-origin navigation to a Jinja route is then blocked and shown as a React coverage
+gap. Use the amber banner to allow Jinja fallbacks again, or open any SPA URL with
+`?spa_only=0`.
+
 ## State ownership
 
 - TanStack Query owns server state and request lifecycle.
