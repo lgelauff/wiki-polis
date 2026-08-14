@@ -215,6 +215,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
     void queryClient.invalidateQueries({queryKey: options.queryKey});
   }
   function showError(message: string) {
+    globalThis.scrollTo(0, 0);
     setFeedback(message);
     setToast({id: Date.now(), category: 'error', message});
   }
