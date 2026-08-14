@@ -46,7 +46,7 @@
       "templates": ["guidance_statement.html"],
       "temporaryReactRoutes": ["/app/parity/help/statements"],
       "targetReactRoutes": ["/help/statements"],
-      "apiOperations": ["getModerationLog"],
+      "apiOperations": [],
       "status": "parity",
       "scenarios": ["public"]
     },
@@ -57,7 +57,7 @@
       "templates": ["guidance_argument.html"],
       "temporaryReactRoutes": ["/app/parity/help/arguments"],
       "targetReactRoutes": ["/help/arguments"],
-      "apiOperations": ["getConversationOutput"],
+      "apiOperations": [],
       "status": "parity",
       "scenarios": ["public"]
     },
@@ -99,10 +99,10 @@
       "legacyEndpoints": ["participant.conversation_moderation_log"],
       "legacyRoutes": ["/c/:slug/moderation-log"],
       "templates": ["moderation_log.html"],
-      "temporaryReactRoutes": [],
+      "temporaryReactRoutes": ["/app/parity/conversations/:slug/moderation-log"],
       "targetReactRoutes": ["/c/:slug/moderation-log"],
-      "apiOperations": [],
-      "status": "missing",
+      "apiOperations": ["getModerationLog"],
+      "status": "partial",
       "scenarios": ["empty", "ban-and-unban-history"]
     },
     {
@@ -110,10 +110,10 @@
       "legacyEndpoints": ["participant.conversation_output"],
       "legacyRoutes": ["/c/:slug/outputs/:outputKey"],
       "templates": ["output.html"],
-      "temporaryReactRoutes": [],
+      "temporaryReactRoutes": ["/app/parity/conversations/:slug/outputs/:outputKey"],
       "targetReactRoutes": ["/c/:slug/outputs/:outputKey"],
-      "apiOperations": [],
-      "status": "missing",
+      "apiOperations": ["getConversationOutput"],
+      "status": "partial",
       "scenarios": ["dataset-ready", "argument-map-ready", "preliminary-results-ready", "report-ready", "not-ready"]
     },
     {

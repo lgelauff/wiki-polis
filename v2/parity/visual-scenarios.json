@@ -140,6 +140,94 @@
       "auth": "anonymous",
       "goldenSha256": "2710fb6fdc104f15d83eeb75f7e4c68092e80090e78dce5d1872d983855b93bd",
       "parityGate": true
+    },
+    {
+      "id": "moderation-log--empty--desktop",
+      "pageId": "moderation-log",
+      "state": "empty",
+      "legacyPath": "/c/cats-vs-dogs-48mlke/moderation-log",
+      "reactPath": "/app/parity/conversations/cats-vs-dogs-48mlke/moderation-log",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "anonymous",
+      "goldenSha256": "f05792b6cfb2ba73c9f9ee50e0c275bd332690751b6717c0e13f0533cd16f894",
+      "parityGate": true
+    },
+    {
+      "id": "moderation-log--empty--mobile",
+      "pageId": "moderation-log",
+      "state": "empty",
+      "legacyPath": "/c/cats-vs-dogs-48mlke/moderation-log",
+      "reactPath": "/app/parity/conversations/cats-vs-dogs-48mlke/moderation-log",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "anonymous",
+      "goldenSha256": "453fa9e8ed86f146d12397284c1ef27928b7909ee2eba6d31a2f01b005bb5a86",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-output--argument-map-ready--desktop",
+      "pageId": "conversation-output",
+      "state": "argument-map-ready",
+      "legacyPath": "/c/cats-vs-dogs-48mlke/outputs/argument-map",
+      "reactPath": "/app/parity/conversations/cats-vs-dogs-48mlke/outputs/argument-map",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "goldenSha256": "39b374ef17ca2aa841d75e77b5e1178b1ce1210f975e20130e46607716765d41",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-output--argument-map-ready--mobile",
+      "pageId": "conversation-output",
+      "state": "argument-map-ready",
+      "legacyPath": "/c/cats-vs-dogs-48mlke/outputs/argument-map",
+      "reactPath": "/app/parity/conversations/cats-vs-dogs-48mlke/outputs/argument-map",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "goldenSha256": "2e7ce966a9b573b7ba0b375789bef82970751149a37eabd24cefafbb98c7e974",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-output--preliminary-results-ready--desktop",
+      "pageId": "conversation-output",
+      "state": "preliminary-results-ready",
+      "legacyPath": "/c/cats-vs-dogs-48mlke/outputs/preliminary-results",
+      "reactPath": "/app/parity/conversations/cats-vs-dogs-48mlke/outputs/preliminary-results",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "goldenSha256": "94cd8db643a3e79372ab4ec8033dccf1274271af4ecdbd7d14173acd8911fa8e",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-output--preliminary-results-ready--mobile",
+      "pageId": "conversation-output",
+      "state": "preliminary-results-ready",
+      "legacyPath": "/c/cats-vs-dogs-48mlke/outputs/preliminary-results",
+      "reactPath": "/app/parity/conversations/cats-vs-dogs-48mlke/outputs/preliminary-results",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "goldenSha256": "eef540f1e705f7c6c6d4f7af3ebe312dfb371095f0cf0963450ce28fde7f87f9",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-output--not-ready--desktop",
+      "pageId": "conversation-output",
+      "state": "not-ready",
+      "legacyPath": "/c/cats-vs-dogs-48mlke/outputs/dataset",
+      "reactPath": "/app/parity/conversations/cats-vs-dogs-48mlke/outputs/dataset",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "goldenSha256": "99dd49e3b6d413532e75faeb93ea8003eb5de5d74b59185ea82d288e26ba87c1",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-output--not-ready--mobile",
+      "pageId": "conversation-output",
+      "state": "not-ready",
+      "legacyPath": "/c/cats-vs-dogs-48mlke/outputs/dataset",
+      "reactPath": "/app/parity/conversations/cats-vs-dogs-48mlke/outputs/dataset",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "goldenSha256": "200b7fb47583f54a43423cee98c1441b23060c917bc3fdd76001f3f1ded68b36",
+      "parityGate": true
     }
   ]
 }
