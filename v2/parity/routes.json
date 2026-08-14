@@ -79,8 +79,8 @@
       "templates": ["conversation.html"],
       "temporaryReactRoutes": ["/app/conversations/:slug/explore", "/app/conversations/:slug/arguments", "/app/conversations/:slug/informed-voting", "/app/conversations/:slug/results"],
       "targetReactRoutes": ["/c/:slug"],
-      "apiOperations": ["getExploreState", "getArgumentMapping", "getInformedVoting", "getResultsReport", "createStatement", "putExploreVote", "createArgument", "putArgumentContributionSkip", "putArgumentPriority", "putInformedVote", "createContentFlag"],
-      "status": "partial",
+      "apiOperations": ["getConversationWorkspace", "getExploreState", "getArgumentMapping", "getInformedVoting", "getIntermediateResults", "getResultsReport", "createStatement", "putExploreVote", "createArgument", "putArgumentContributionSkip", "putArgumentPriority", "putInformedVote", "createContentFlag"],
+      "status": "parity",
       "scenarios": ["submission-empty", "submission-populated", "submission-voted", "statement-composer", "paused", "no-active-phase", "argument-mapping", "argument-gates", "argument-moderator", "informed-voting", "informed-voting-pending", "informed-voting-empty", "informed-voting-complete", "intermediate-results-ready", "intermediate-results-large-sample", "intermediate-results-pending", "intermediate-results-recomputing", "preliminary-results", "preliminary-results-unavailable", "closed-reveal-pending", "closed-reveal-open", "closed-reveal-revealed", "closed-reveal-expired", "demo-direct", "demo-chosen", "banned", "invite-restricted", "invite-restricted-moderator"]
     },
     {
