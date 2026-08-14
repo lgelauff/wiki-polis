@@ -107,6 +107,7 @@ function ResolveFlag({
         placeholder="Resolution note (optional)"
         style={{width: 210, marginBottom: '.35rem'}}
       />
+      {' '}
       <button type="submit" className="btn-small">resolve</button>
     </form>
   );
