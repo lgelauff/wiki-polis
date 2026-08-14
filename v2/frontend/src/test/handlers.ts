@@ -394,6 +394,7 @@ export const handlers = [
       scheduledTransition: null,
       tabs: [
         {key: 'vote', label: 'Vote', dataHref: '/api/v1/conversations/community-strategy/explore'},
+        {key: 'results', label: 'Intermediate results', dataHref: '/api/v1/conversations/community-strategy/intermediate-results'},
         {key: 'arguments', label: 'Arguments', dataHref: '/api/v1/conversations/community-strategy/arguments'},
         {key: 'informed-voting', label: 'Informed vote', dataHref: '/api/v1/conversations/community-strategy/informed-voting'},
       ],
@@ -407,6 +408,7 @@ export const handlers = [
         about: '/app/conversations/community-strategy/about',
         join: '/app/conversations/community-strategy/join',
         explore: '/api/v1/conversations/community-strategy/explore',
+        intermediateResults: '/api/v1/conversations/community-strategy/intermediate-results',
         arguments: '/api/v1/conversations/community-strategy/arguments',
         informedVoting: '/api/v1/conversations/community-strategy/informed-voting',
       },
@@ -452,6 +454,29 @@ export const handlers = [
         },
       },
     }),
+  ),
+  http.get(
+    new URL('/api/v1/conversations/community-strategy/intermediate-results', globalThis.location.origin).toString(),
+    () => HttpResponse.json({data: {
+      slug: 'community-strategy',
+      title: 'Community strategy',
+      state: 'ready',
+      participantCount: 12,
+      smallSample: true,
+      consensus: [
+        {choice: 'agree', statement: 'Shared maintenance matters.', percentage: 82},
+        {choice: 'disagree', statement: 'Centralize every budget.', percentage: 64},
+      ],
+      groups: [{
+        label: 'Group 1',
+        positions: [{choice: 'agree', statement: 'Local autonomy matters.', percentage: 76}],
+      }],
+      links: {
+        self: '/api/v1/conversations/community-strategy/intermediate-results',
+        conversation: '/c/community-strategy',
+        about: '/app/conversations/community-strategy/about',
+      },
+    }}),
   ),
   http.get(
     new URL('/api/v1/conversations/community-strategy/results', globalThis.location.origin).toString(),

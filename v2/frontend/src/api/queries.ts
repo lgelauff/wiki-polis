@@ -91,6 +91,16 @@ export const informedVotingQuery = (slug: string) => queryOptions({
   staleTime: 0,
 });
 
+export const intermediateResultsQuery = (slug: string) => queryOptions({
+  queryKey: ['intermediate-results', slug],
+  queryFn: async () => (
+    await requireApiData(api.GET('/conversations/{slug}/intermediate-results', {
+      params: {path: {slug}},
+    }))
+  ).data,
+  staleTime: 0,
+});
+
 export async function putInformedVote(
   slug: string,
   featuredStatementId: number,

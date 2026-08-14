@@ -416,6 +416,24 @@ test('records a pass and opens the legacy post-vote choices', async () => {
   expect(screen.getByRole('button', {name: /Suggest different wording/})).toBeVisible();
 });
 
+test('renders intermediate results through the typed workspace contract', async () => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/explore']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  fireEvent.click(await screen.findByRole('tab', {name: 'Intermediate results'}));
+
+  expect(await screen.findByRole('heading', {name: /Results.*12 participants/})).toBeVisible();
+  expect(screen.getByText(/Small sample:/)).toBeVisible();
+  expect(screen.getByText('Areas of broad consensus')).toBeVisible();
+  expect(screen.getByText('1 opinion group found')).toBeVisible();
+  expect(screen.getByText('82%')).toBeVisible();
+});
+
 test('completes informed voting through the legacy workspace panel', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>
