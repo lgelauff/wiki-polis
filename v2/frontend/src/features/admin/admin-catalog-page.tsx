@@ -61,6 +61,8 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
     onError: (error) => {
       const attemptedUsername = username;
       setUsername('');
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
       setToast({
         id: Date.now(),
         category: 'error',

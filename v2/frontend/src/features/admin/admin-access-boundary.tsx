@@ -8,14 +8,23 @@ function LegacyForbiddenPage() {
     const previousTitle = document.title;
     const root = document.documentElement;
     const previousBackground = root.style.background;
+    const previousFontSynthesis = root.style.fontSynthesis;
+    const previousTextRendering = root.style.textRendering;
     const previousBodyMargin = document.body.style.margin;
+    const previousBodyMinHeight = document.body.style.minHeight;
     document.title = '403 Forbidden';
     root.style.background = 'white';
+    root.style.fontSynthesis = 'weight style small-caps';
+    root.style.textRendering = 'auto';
     document.body.style.margin = '8px';
+    document.body.style.minHeight = '0';
     return () => {
       document.title = previousTitle;
       root.style.background = previousBackground;
+      root.style.fontSynthesis = previousFontSynthesis;
+      root.style.textRendering = previousTextRendering;
       document.body.style.margin = previousBodyMargin;
+      document.body.style.minHeight = previousBodyMinHeight;
     };
   }, []);
 
