@@ -1810,6 +1810,30 @@
       "clock": "2026-08-14T12:00:00Z",
       "goldenSha256": "4bb0520f555798fe9fc608c0b10dc06d304f9e76478b20fad641b94cd2eebafd",
       "parityGate": true
+    },
+    {
+      "id": "admin-catalog--populated--desktop",
+      "pageId": "admin-catalog",
+      "state": "populated",
+      "legacyPath": "/admin",
+      "reactPath": "/app/admin",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "85697ccdf37cd30ac7b9b9e7a4384073c8a13f57c9997f65f66393de2843d73d",
+      "parityGate": true
+    },
+    {
+      "id": "admin-catalog--populated--mobile",
+      "pageId": "admin-catalog",
+      "state": "populated",
+      "legacyPath": "/admin",
+      "reactPath": "/app/admin",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "a266ae1e028c4e463b3081925b95d4f51a1e8657455d87ca4256baeb7b5e4fdd",
+      "parityGate": true
     }
   ]
 }
