@@ -29,6 +29,7 @@ function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
   useEffect(() => {
     const previousTitle = document.title;
     const previousDemo = document.body.getAttribute('data-demo');
+    const initialDemo = document.body.dataset.spaInitialDemo === 'true';
     const root = document.documentElement;
     const previousBackground = root.style.getPropertyValue('background');
     const previousFontSynthesis = root.style.getPropertyValue('font-synthesis');
@@ -41,7 +42,7 @@ function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
     document.title = title;
     root.style.setProperty('font-synthesis', 'weight style small-caps');
     root.style.setProperty('text-rendering', 'auto');
-    root.style.setProperty('background', 'var(--bg)');
+    root.style.setProperty('background', demo ? 'transparent' : 'var(--bg)');
     if (demo) document.body.dataset.demo = 'true';
     else document.body.removeAttribute('data-demo');
 
@@ -54,7 +55,10 @@ function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
       else root.style.removeProperty('font-synthesis');
       if (previousTextRendering) root.style.setProperty('text-rendering', previousTextRendering);
       else root.style.removeProperty('text-rendering');
-      if (previousDemo === null) document.body.removeAttribute('data-demo');
+      if (initialDemo) {
+        document.body.removeAttribute('data-demo');
+        document.body.removeAttribute('data-spa-initial-demo');
+      } else if (previousDemo === null) document.body.removeAttribute('data-demo');
       else document.body.setAttribute('data-demo', previousDemo);
     };
   }, [demo, title]);

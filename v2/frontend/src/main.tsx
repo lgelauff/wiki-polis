@@ -10,6 +10,11 @@ import './styles.css';
 const root = document.getElementById('root');
 if (!root) throw new Error('SPA root element is missing.');
 
+if (window.location.pathname === '/app/demo') {
+  document.body.dataset.demo = 'true';
+  document.body.dataset.spaInitialDemo = 'true';
+}
+
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={createQueryClient()}>

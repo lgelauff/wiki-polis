@@ -18,9 +18,51 @@ test('renders a conversation lane from the API contract', async () => {
   );
 
   expect(screen.getByRole('status')).toHaveTextContent('Loading conversations');
-  expect(await screen.findByRole('heading', {name: 'See where you stand.'})).toBeVisible();
-  expect(await screen.findByRole('link', {name: 'Community strategy'}))
+  expect(await screen.findByRole('heading', {name: 'Needs attention'})).toBeVisible();
+  expect(await screen.findByRole('link', {name: /Community strategy.*continue/}))
     .toHaveAttribute('href', '/c/community-strategy');
+  expect(screen.getByRole('button', {name: 'Your conversations'})).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', {name: 'Browse'}));
+  expect(screen.getByText('No consultations open to you right now.')).toBeVisible();
+});
+
+test('matches the legacy pending-output dialog and restores focus', async () => {
+  server.use(http.get(
+    new URL('/api/v1/conversations', globalThis.location.origin).toString(),
+    () => HttpResponse.json({data: {
+      space: 'real',
+      authenticated: true,
+      groups: {
+        needsAttention: [{
+          slug: 'community-strategy', title: 'Community strategy',
+          relationship: 'joined', participantState: 'needs_attention',
+          pseudonym: 'quiet-otter', status: 'open', closedAt: null,
+          phases: ['submission'], statementsRemaining: 4,
+          scheduledTransition: null, reveal: null,
+          outputs: [{
+            key: 'initial-clustering', label: 'Initial clustering',
+            status: 'provisional', symbol: 'initial-clustering',
+            tooltip: 'After Explore phase: topic and participant clustering',
+            pending: 'Initial clustering becomes available after Explore closes.',
+            ready: false, href: '/c/community-strategy/outputs/initial-clustering',
+          }],
+          capabilities: {join: false, participate: true, moderate: false},
+          links: {self: '/c/community-strategy', about: '/c/community-strategy/about'},
+        }],
+        caughtUp: [], inactive: [], archived: [], available: [], moderating: [],
+      },
+    }}),
+  ));
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/real']}><App /></MemoryRouter></QueryClientProvider>);
+
+  const trigger = await screen.findByRole('button', {name: 'After Explore phase: topic and participant clustering'});
+  fireEvent.click(trigger);
+  const dialog = screen.getByRole('dialog', {name: 'Initial clustering'});
+  expect(dialog).toBeVisible();
+  expect(screen.getByRole('button', {name: 'Close output details'})).toHaveFocus();
+  fireEvent.keyDown(document, {key: 'Escape'});
+  expect(dialog).not.toBeVisible();
+  expect(trigger).toHaveFocus();
 });
 
 test('runs site-wide administration without falling back to Jinja forms', async () => {

@@ -354,9 +354,11 @@ export const handlers = [
             participantState: 'needs_attention',
             pseudonym: 'quiet-otter',
             status: 'open',
+            closedAt: null,
             phases: ['submission'],
             statementsRemaining: 4,
             scheduledTransition: null,
+            reveal: null,
             outputs: [],
             capabilities: {join: false, participate: true, moderate: false},
             links: {

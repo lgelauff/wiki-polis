@@ -544,6 +544,8 @@ h3.conv-card-title-wrap {
 }
 
 .conv-card {
+  isolation: isolate;
+  transform: translateZ(0);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3919,6 +3921,8 @@ a { color: var(--pass); }
 /* ── Homepage: phase journey legend ───────────────────────────────────────── */
 
 .phase-legend {
+  isolation: isolate;
+  transform: translateZ(0);
   display: flex;
   align-items: center;
   gap: 0;
@@ -4147,6 +4151,8 @@ a { color: var(--pass); }
   padding: 10px 12px;
 }
 .conv-output-symbol {
+  isolation: isolate;
+  transform: translateZ(0);
   width: 32px;
   height: 32px;
   border-radius: 8px;
@@ -4210,6 +4216,11 @@ button.conv-output-symbol {
   background: var(--surface2);
   color: var(--body);
   cursor: pointer;
+  font-size: 0;
+}
+.output-dialog-close::before {
+  content: "×";
+  font: 13.3333px Arial, sans-serif;
 }
 
 .output-page-header {

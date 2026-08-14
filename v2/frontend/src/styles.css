@@ -1,5 +1,3 @@
-@import url('../../static/fonts/fonts.css');
-
 :root {
   font-family: "Inter Tight", "Inter", system-ui, sans-serif;
   color: #111318;
@@ -23,8 +21,7 @@ body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, a { font: inherit; }
 a { color: inherit; }
 :focus-visible { outline: 3px solid #315c9b; outline-offset: 3px; }
-.legacy-main button { line-height: normal; }
-
+.legacy-main button { font-family: Arial; line-height: normal; }
 .skip-link {
   position: fixed;
   inset: 0 auto auto 1rem;
