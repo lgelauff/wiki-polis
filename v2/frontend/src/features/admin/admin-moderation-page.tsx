@@ -1,5 +1,6 @@
 import {useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
+import {Link} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {adminFlagQueueQuery, putAdminFlagResolution} from '../../api/queries';
@@ -152,7 +153,7 @@ export function AdminModerationPage({
   return (
     <main className="moderation-shell" id="main">
       <nav className="record-breadcrumb" aria-label="Breadcrumb">
-        <a href="/admin">Admin panel</a><span>/</span>
+        <Link to="/app/admin">Admin panel</Link><span>/</span>
         <a href={data.links.conversation}>{data.conversation.title}</a><span>/</span>
         <span>Moderation queue</span>
       </nav>

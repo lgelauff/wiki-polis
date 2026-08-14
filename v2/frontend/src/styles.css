@@ -543,6 +543,40 @@ a { color: inherit; }
 .flag-submit:disabled { opacity: .5; cursor: not-allowed; }
 .flag-dialog__receipt p:not(.eyebrow) { color: var(--muted); line-height: 1.5; }
 
+.admin-catalog { width: min(1180px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 7rem; }
+.admin-catalog__heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 3rem; padding: clamp(3rem, 8vw, 7rem) 0 2rem; border-bottom: 1px solid var(--ink); }
+.admin-catalog__heading h1 { margin: .3rem 0 1rem; font-size: clamp(3.5rem, 9vw, 7rem); line-height: .86; letter-spacing: -.075em; }
+.admin-catalog__heading p:last-child { max-width: 650px; color: var(--muted); line-height: 1.5; }
+.admin-catalog__heading > strong { display: grid; justify-items: end; font: 650 3rem var(--mono); }
+.admin-catalog__heading > strong span { color: var(--muted); font-size: .65rem; }
+.admin-catalog__conversations, .admin-catalog__create, .admin-catalog__admins { padding-top: 4rem; }
+.admin-catalog__conversations ol { margin: 0; padding: 0; border-top: 1px solid var(--ink); list-style: none; }
+.admin-catalog__conversations li { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto auto; align-items: center; gap: 1.5rem; padding: 1rem 0; border-bottom: 1px solid var(--rule); }
+.admin-catalog__conversations li > span { color: var(--civic); font: .65rem var(--mono); }
+.admin-catalog__conversations h3 { margin: 0; font-size: 1.1rem; }
+.admin-catalog__conversations p { margin: .3rem 0 0; color: var(--muted); font-size: .68rem; }
+.admin-catalog__conversations li > strong { color: var(--consensus); font: .62rem var(--mono); text-transform: uppercase; }
+.admin-catalog__conversations li > div:last-child { display: flex; gap: .8rem; }
+.admin-catalog__conversations li a { color: var(--ink); font-size: .7rem; }
+.admin-catalog__create { display: grid; grid-template-columns: minmax(240px, .55fr) minmax(0, 1fr); gap: 4rem; }
+.admin-catalog__create header { padding-right: 2rem; border-right: 1px solid var(--ink); }
+.admin-catalog__create h2, .admin-catalog__admins h2 { margin: .3rem 0 .8rem; font-size: 2rem; }
+.admin-catalog__create header p:last-child, .admin-catalog__admins header p:last-child { color: var(--muted); font-size: .76rem; line-height: 1.5; }
+.admin-catalog__create form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.admin-catalog__create label, .admin-catalog__admins label { display: grid; gap: .35rem; color: var(--muted); font-size: .66rem; }
+.admin-catalog__create input, .admin-catalog__create select, .admin-catalog__create textarea, .admin-catalog__admins input { width: 100%; padding: .65rem; border: 1px solid var(--ink); background: white; color: var(--ink); }
+.admin-catalog__wide { grid-column: 1 / -1; }
+.admin-catalog__create details { border-top: 1px solid var(--rule); padding-top: .8rem; }
+.admin-catalog__create details summary { cursor: pointer; font-size: .72rem; }
+.admin-catalog__create details div { display: grid; gap: .8rem; padding-top: 1rem; }
+.admin-catalog__create form > button { padding: .8rem; border: 0; color: white; background: var(--ink); cursor: pointer; }
+.admin-catalog__admins { display: grid; grid-template-columns: minmax(240px, .55fr) minmax(0, 1fr); gap: 4rem; }
+.admin-catalog__admins > div { display: grid; gap: 1rem; }
+.admin-catalog__admins ul { margin: 0; padding: 0; border-top: 1px solid var(--ink); list-style: none; }
+.admin-catalog__admins li { display: flex; justify-content: space-between; align-items: center; padding: .8rem 0; border-bottom: 1px solid var(--rule); }
+.admin-catalog__admins li button { border: 0; color: var(--dissent); background: none; cursor: pointer; text-decoration: underline; }
+.admin-catalog__admins form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: .6rem; padding: 1rem; background: white; }
+.admin-catalog__admins form button { padding: .65rem .8rem; border: 0; color: white; background: var(--civic); cursor: pointer; }
 .admin-roster { width: min(1240px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 6rem; }
 .admin-roster__heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 3rem; padding: clamp(3rem, 7vw, 6rem) 0 2rem; border-bottom: 1px solid var(--ink); }
 .admin-roster__heading h1 { margin: .3rem 0 1rem; font-size: clamp(2.5rem, 6vw, 5rem); line-height: .94; letter-spacing: -.06em; }
@@ -895,7 +929,7 @@ a { color: inherit; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
 }
 @media (max-width: 720px) {
-  .app-header__inner, .lane-shell, .record-shell, .admin-roster, .moderation-shell, .invitation-shell, .roles-shell, .lifecycle-shell, .settings-shell, .termination-shell, .statements-shell, .featured-shell { width: min(100% - 24px, 1120px); }
+  .app-header__inner, .lane-shell, .record-shell, .admin-catalog, .admin-roster, .moderation-shell, .invitation-shell, .roles-shell, .lifecycle-shell, .settings-shell, .termination-shell, .statements-shell, .featured-shell { width: min(100% - 24px, 1120px); }
   .brand__beta, .account-link, .account-form span { display: none; }
   .admin-mode a { display: none; }
   .app-header__inner { gap: .6rem; }
@@ -949,6 +983,14 @@ a { color: inherit; }
   .argument-composer__footer { align-items: start; flex-wrap: wrap; }
   .argument-composer__footer span { width: 100%; }
   .admin-roster__heading { grid-template-columns: 1fr; align-items: start; }
+  .admin-catalog__heading, .admin-catalog__create, .admin-catalog__admins { grid-template-columns: 1fr; align-items: start; gap: 1.5rem; }
+  .admin-catalog__heading > strong { justify-items: start; }
+  .admin-catalog__conversations li { grid-template-columns: 30px minmax(0, 1fr); gap: .8rem; }
+  .admin-catalog__conversations li > strong, .admin-catalog__conversations li > div:last-child { grid-column: 2; }
+  .admin-catalog__create header { padding-right: 0; padding-bottom: 1.5rem; border-right: 0; border-bottom: 1px solid var(--ink); }
+  .admin-catalog__create form { grid-template-columns: 1fr; }
+  .admin-catalog__wide { grid-column: auto; }
+  .admin-catalog__admins form { grid-template-columns: 1fr; }
   .moderation-heading { grid-template-columns: 1fr; align-items: start; }
   .moderation-list > li, .moderation-section--resolved .moderation-list > li { grid-template-columns: 1fr; gap: 1rem; }
   .invitation-heading, .invitation-add { grid-template-columns: 1fr; align-items: start; gap: 1.5rem; }

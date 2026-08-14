@@ -1,5 +1,6 @@
 import {useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
+import {Link} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {
@@ -131,7 +132,7 @@ export function AdminParticipantsPage({
   return (
     <main className="admin-roster" id="main">
       <nav className="record-breadcrumb" aria-label="Breadcrumb">
-        <a href="/admin">Admin panel</a><span>/</span>
+        <Link to="/app/admin">Admin panel</Link><span>/</span>
         <a href={data.links.conversation}>{data.conversation.title}</a><span>/</span>
         <span>Participants</span>
       </nav>

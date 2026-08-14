@@ -3157,7 +3157,7 @@ def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
     return {
         'conversationId': result.conversation_id,
         'deleted': True,
-        'links': {'admin': url_for('admin.admin')},
+        'links': {'admin': url_for('spa_shell', spa_path='admin')},
     }
 
 

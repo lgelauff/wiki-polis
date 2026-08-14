@@ -45,7 +45,7 @@ def test_delete_api_rechecks_then_hides_and_deletes_empty_conversation(
     assert response.get_json()['data'] == {
         'conversationId': conversation_id,
         'deleted': True,
-        'links': {'admin': '/admin'},
+        'links': {'admin': '/app/admin'},
     }
     assert db.session.get(Conversation, conversation_id) is None
     server.close_and_hide_conversation.assert_called_once()

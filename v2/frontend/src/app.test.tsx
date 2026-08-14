@@ -23,6 +23,20 @@ test('renders a conversation lane from the API contract', async () => {
     .toHaveAttribute('href', '/c/community-strategy');
 });
 
+test('runs site-wide administration without falling back to Jinja forms', async () => {
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin']}><App /></MemoryRouter></QueryClientProvider>);
+
+  expect(await screen.findByRole('heading', {name: 'Admin panel'})).toBeVisible();
+  expect(screen.getByRole('link', {name: 'Manage'})).toHaveAttribute('href', '/app/admin/conversations/7');
+  expect(screen.getByLabelText('Polis conversation ID')).toBeVisible();
+  expect(screen.getByText(/New participant statements start pending review/)).toBeVisible();
+  fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Example editor'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Grant access'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Example editor granted site-wide administration');
+  expect(screen.getAllByText('Example editor')).toHaveLength(2);
+  expect(screen.getByRole('link', {name: 'Admin workspace'})).toHaveAttribute('href', '/app/admin');
+});
+
 test('advances a conversation from the server-described lifecycle console', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>
@@ -114,7 +128,7 @@ test('deletes a verified empty conversation through a deliberate receipt flow', 
   fireEvent.click(deletion);
 
   expect(await screen.findByRole('heading', {name: 'Conversation deleted'})).toBeVisible();
-  expect(screen.getByRole('link', {name: 'Return to admin panel'})).toHaveAttribute('href', '/admin');
+  expect(screen.getByRole('link', {name: 'Return to admin panel'})).toHaveAttribute('href', '/app/admin');
 });
 
 test('moderates statements and imports approved seeds through typed commands', async () => {

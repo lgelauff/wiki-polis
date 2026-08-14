@@ -21,6 +21,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return site-wide conversation and administrator operations */
+        get: operations["getAdminCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a local conversation and its managed voting conversation */
+        post: operations["postAdminConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/global-admin-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Grant site-wide administration by known Wikimedia username */
+        post: operations["postGlobalAdminGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/global-admins/{participantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                participantId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Set desired site-wide administrator membership */
+        put: operations["putGlobalAdmin"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/termination": {
         parameters: {
             query?: never;
@@ -856,6 +926,84 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdminCatalogResponse: {
+            data: components["schemas"]["AdminCatalog"];
+        };
+        AdminCatalog: {
+            conversations: {
+                id: number;
+                slug: string;
+                title: string;
+                /** @enum {string} */
+                accessPolicy: "public" | "invite_only" | "demo";
+                /** @enum {string} */
+                status: "active" | "paused" | "archived" | "closed";
+                /** Format: date-time */
+                createdAt: string | null;
+                links: {
+                    participant: string;
+                    manage: string;
+                };
+            }[];
+            globalAdmins: {
+                participantId: number;
+                username: string;
+            }[];
+            phaseRoutes: {
+                key: string;
+                label: string;
+                description: string;
+            }[];
+            creation: {
+                /** @enum {string} */
+                mode: "managed" | "manual_polis_id";
+                /** @constant */
+                defaultModerationPolicy: "moderate";
+            };
+            links: {
+                self: string;
+            };
+        };
+        AdminConversationCreateRequest: {
+            slug: string;
+            title: string;
+            introHtml: string;
+            outroHtml: string;
+            /** @enum {string} */
+            accessPolicy: "public" | "invite_only" | "demo";
+            phaseRoute: string;
+            eligibilityEventId: string;
+            eligibilityLabel: string;
+            polisId: string | null;
+        };
+        AdminConversationCreateResponse: {
+            data: {
+                conversation: {
+                    id: number;
+                    slug: string;
+                    title: string;
+                };
+                links: {
+                    manage: string;
+                    catalog: string;
+                };
+            };
+        };
+        GlobalAdminGrantRequest: {
+            username: string;
+        };
+        GlobalAdminSetRequest: {
+            granted: boolean;
+        };
+        GlobalAdminGrantResponse: {
+            data: {
+                participantId: number;
+                username: string;
+                granted: boolean;
+                changed: boolean;
+                catalog: components["schemas"]["AdminCatalog"];
+            };
+        };
         AdminTerminationResponse: {
             data: components["schemas"]["AdminTermination"];
         };
@@ -2153,6 +2301,217 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+        };
+    };
+    getAdminCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin catalog */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCatalogResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postAdminConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminConversationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Conversation creation receipt */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminConversationCreateResponse"];
+                };
+            };
+            /** @description Invalid conversation fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Slug conflict or unknown creation outcome */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Voting service creation failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Local save failed */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postGlobalAdminGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GlobalAdminGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing grant receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalAdminGrantResponse"];
+                };
+            };
+            /** @description New grant receipt */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalAdminGrantResponse"];
+                };
+            };
+            /** @description Invalid username */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Participant has not signed in */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putGlobalAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                participantId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GlobalAdminSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Membership receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalAdminGrantResponse"];
+                };
+            };
+            /** @description Invalid desired state */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Participant not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

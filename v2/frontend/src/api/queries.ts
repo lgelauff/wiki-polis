@@ -199,6 +199,40 @@ export async function putAdminRoles(
   }))).data;
 }
 
+export const adminCatalogQuery = () => queryOptions({
+  queryKey: ['admin-catalog'],
+  queryFn: async () => (await requireApiData(api.GET('/admin'))).data,
+  staleTime: 5_000,
+});
+
+export async function postAdminConversation(
+  body: components['schemas']['AdminConversationCreateRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.POST('/admin/conversations', {
+    body, headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
+export async function postGlobalAdminGrant(
+  body: components['schemas']['GlobalAdminGrantRequest'], csrfToken: string,
+) {
+  return (await requireApiData(api.POST('/admin/global-admin-grants', {
+    body, headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
+export async function putGlobalAdmin(
+  participantId: number,
+  body: components['schemas']['GlobalAdminSetRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT('/admin/global-admins/{participantId}', {
+    params: {path: {participantId}}, body,
+    headers: {'X-CSRFToken': csrfToken},
+  }))).data;
+}
+
 export const adminLifecycleQuery = (conversationId: number) => queryOptions({
   queryKey: ['admin-lifecycle', conversationId],
   queryFn: async () => (

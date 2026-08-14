@@ -269,7 +269,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {
   return (
     <main className="lifecycle-shell" id="main">
       <nav className="record-breadcrumb" aria-label="Breadcrumb">
-        <a href="/admin">Admin panel</a><span>/</span><span>{data.conversation.title}</span>
+        <Link to="/app/admin">Admin panel</Link><span>/</span><span>{data.conversation.title}</span>
       </nav>
 
       <header className="lifecycle-heading">

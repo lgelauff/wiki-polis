@@ -47,7 +47,7 @@ export function AdminTerminationPage({conversationId, csrfToken}: {
   return (
     <main className="termination-shell" id="main">
       <nav className="record-breadcrumb" aria-label="Breadcrumb">
-        <a href="/admin">Admin panel</a><span>/</span>
+        <Link to="/app/admin">Admin panel</Link><span>/</span>
         <Link to={data.links.lifecycle}>{data.conversation.title}</Link><span>/</span>
         <span>Delete</span>
       </nav>

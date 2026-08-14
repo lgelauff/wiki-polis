@@ -43,7 +43,32 @@ function statementWorkspaceFixture(
   };
 }
 
+function adminCatalogFixture(
+  includeNewAdmin = false,
+): components['schemas']['AdminCatalog'] {
+  return {
+    conversations: [{id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', createdAt: '2026-08-01T10:00:00Z', links: {participant: '/c/community-strategy', manage: '/app/admin/conversations/7'}}],
+    globalAdmins: [
+      {participantId: 1, username: 'adminuser'},
+      ...(includeNewAdmin ? [{participantId: 23, username: 'Example editor'}] : []),
+    ],
+    phaseRoutes: [{key: 'default_7', label: 'Full consultation', description: 'Explore through informed voting and report.'}],
+    creation: {mode: 'manual_polis_id', defaultModerationPolicy: 'moderate'},
+    links: {self: '/api/v1/admin'},
+  };
+}
+
 export const handlers = [
+  http.get(new URL('/api/v1/admin', globalThis.location.origin).toString(), () => HttpResponse.json({data: adminCatalogFixture()})),
+  http.post(new URL('/api/v1/admin/conversations', globalThis.location.origin).toString(), () => HttpResponse.json({data: {conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'}, links: {manage: '/app/admin/conversations/7', catalog: '/api/v1/admin'}}}, {status: 201})),
+  http.post(new URL('/api/v1/admin/global-admin-grants', globalThis.location.origin).toString(), async ({request}) => {
+    const body = await request.json() as {username: string};
+    return HttpResponse.json({data: {participantId: 23, username: body.username, granted: true, changed: true, catalog: adminCatalogFixture(true)}}, {status: 201});
+  }),
+  http.put(new URL('/api/v1/admin/global-admins/:participantId', globalThis.location.origin).toString(), async ({params, request}) => {
+    const body = await request.json() as {granted: boolean};
+    return HttpResponse.json({data: {participantId: Number(params.participantId), username: 'Example editor', granted: body.granted, changed: true, catalog: adminCatalogFixture(body.granted)}});
+  }),
   http.get(new URL('/api/v1/admin/conversations/7/featured-statements', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     selected: [{featuredId: 61, statementId: 12, text: 'An approved seed statement.', systemSuggested: true, provenance: null, arguments: [{id: 71, side: 'pro', body: 'A useful supporting argument.', proposerPseudonym: 'quiet-otter', hidden: false, createdAt: '2026-08-13T10:00:00Z'}]}],
@@ -77,7 +102,7 @@ export const handlers = [
     links: {self: '/api/v1/admin/conversations/7/termination', lifecycle: '/app/admin/conversations/7'},
   }})),
   http.delete(new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
-    conversationId: 7, deleted: true, links: {admin: '/admin'},
+    conversationId: 7, deleted: true, links: {admin: '/app/admin'},
   }})),
   http.get(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', introHtml: '<p>Shape the future.</p>', outroHtml: '', accessPolicy: 'public', phaseRoute: 'default_7'},
