@@ -1550,6 +1550,56 @@
       "parityGate": true
     },
     {
+      "id": "conversation-workflow--demo-direct--desktop",
+      "pageId": "conversation-workflow",
+      "state": "demo-direct",
+      "legacyPath": "/c/parity-demo-available",
+      "reactPath": "/app/conversations/parity-demo-available/explore",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "anonymous",
+      "serverFixture": "isolated",
+      "goldenSha256": "c3503028dc0c3158201b9ec02c33c9c46163c4870deb466ff0dd8a38d9b2dac4",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--demo-direct--mobile",
+      "pageId": "conversation-workflow",
+      "state": "demo-direct",
+      "legacyPath": "/c/parity-demo-available",
+      "reactPath": "/app/conversations/parity-demo-available/explore",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "anonymous",
+      "serverFixture": "isolated",
+      "goldenSha256": "1ad18a3c521b673c511f2d409fe35151c6462d688a9321ce6f595b3beccd8d8d",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--demo-chosen--desktop",
+      "pageId": "conversation-workflow",
+      "state": "demo-chosen",
+      "legacyPath": "/demo",
+      "reactPath": "/app/demo",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "anonymous",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "link", "name": "Try a demonstration consultation — open consultation"}],
+      "goldenSha256": "8523bffa612c1cd36660944db525a80c2f87c498b1d6e82391a90c5000bd4a0b",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--demo-chosen--mobile",
+      "pageId": "conversation-workflow",
+      "state": "demo-chosen",
+      "legacyPath": "/demo",
+      "reactPath": "/app/demo",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "anonymous",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "link", "name": "Try a demonstration consultation — open consultation"}],
+      "goldenSha256": "ecab0787a3d1aed97456c545672719d9bacbb85776c1d3a378aecf3504cfa233",
+      "parityGate": true
+    },
+    {
       "id": "conversation-workflow--banned--desktop",
       "pageId": "conversation-workflow",
       "state": "banned",
