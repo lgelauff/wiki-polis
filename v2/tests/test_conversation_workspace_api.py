@@ -22,6 +22,7 @@ def test_workspace_contract_owns_legacy_tab_composition(
 ):
     _join(participant, conversation)
     conversation.intro_text = '<p>A <strong>shared</strong> question.</p>'
+    conversation.outro_text = '<p>A closing note.</p>'
     conversation.phase_submission = True
     conversation.phase_personal_results = True
     conversation.phase_argument_mapping = True
@@ -40,6 +41,7 @@ def test_workspace_contract_owns_legacy_tab_composition(
     data = response.get_json()['data']
     assert data['status'] == 'open'
     assert data['descriptionHtml'] == '<p>A <strong>shared</strong> question.</p>'
+    assert data['outroHtml'] == '<p>A closing note.</p>'
     assert data['viewer'] == {
         'state': 'participant', 'pseudonym': 'workspace-otter',
     }

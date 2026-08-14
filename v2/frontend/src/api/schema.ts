@@ -1904,6 +1904,7 @@ export interface components {
             /** @enum {string} */
             status: "open" | "paused" | "closed";
             descriptionHtml: string | null;
+            outroHtml: string | null;
             viewer: components["schemas"]["ConversationWorkspaceViewer"];
             /** @enum {string|null} */
             spaceWarning: "real" | "demo" | null;

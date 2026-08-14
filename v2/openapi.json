@@ -1760,7 +1760,7 @@
       },
       "ConversationWorkspace": {
         "type": "object",
-        "required": ["slug", "title", "space", "status", "descriptionHtml", "viewer", "spaceWarning", "scheduledTransition", "tabs", "defaultTab", "reveal", "statementContribution", "capabilities", "links"],
+        "required": ["slug", "title", "space", "status", "descriptionHtml", "outroHtml", "viewer", "spaceWarning", "scheduledTransition", "tabs", "defaultTab", "reveal", "statementContribution", "capabilities", "links"],
         "additionalProperties": false,
         "properties": {
           "slug": {"type": "string", "minLength": 1},
@@ -1768,6 +1768,7 @@
           "space": {"type": "string", "enum": ["real", "demo"]},
           "status": {"type": "string", "enum": ["open", "paused", "closed"]},
           "descriptionHtml": {"type": ["string", "null"]},
+          "outroHtml": {"type": ["string", "null"]},
           "viewer": {"$ref": "#/components/schemas/ConversationWorkspaceViewer"},
           "spaceWarning": {"type": ["string", "null"], "enum": ["real", "demo", null]},
           "scheduledTransition": {

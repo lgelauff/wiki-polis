@@ -93,6 +93,7 @@ def build_conversation_workspace(
         'space': 'demo' if conversation.access_policy == 'demo' else 'real',
         'status': status,
         'descriptionHtml': conversation.intro_text,
+        'outroHtml': conversation.outro_text,
         'viewer': {
             'state': 'participant' if joined else 'join_required',
             'pseudonym': participation.pseudonym if joined else None,
