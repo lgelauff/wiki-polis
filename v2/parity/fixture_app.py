@@ -37,8 +37,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import app as app_module  # noqa: E402  (environment must precede app configuration)
 from db import (  # noqa: E402
     AdminRole, Argument, ArgumentSideState, ArgumentVote, AuditEvent,
-    Conversation, ConversationInvite, FeaturedStatement, Participant,
-    Participation, db,
+    Conversation, ConversationBan, ConversationInvite, FeaturedStatement,
+    Participant, Participation, db,
 )
 
 
@@ -340,6 +340,12 @@ def _seed() -> None:
         phase_submission=True,
         outro_text='<p>A closing note for participants.</p>',
     )
+    banned_submission = Conversation(
+        slug='parity-banned-submission', polis_id='parity-banned-submission-polis',
+        title='Readable suspended consultation', active=True,
+        access_policy='public', phase_submission=True,
+        intro_text='<p>Participation is moderated independently of visibility.</p>',
+    )
     about_moderator = Conversation(
         slug='parity-about-moderator', polis_id='parity-about-moderator-polis',
         title='Moderator conversation record', active=True, access_policy='public',
@@ -570,7 +576,8 @@ def _seed() -> None:
         }
     db.session.add_all([
         admin, target, participant, moderator, moderation, closed,
-        about_public, about_participant, about_moderator, about_scheduled, about_mixed,
+        about_public, about_participant, banned_submission, about_moderator,
+        about_scheduled, about_mixed,
         arguments_mapping, arguments_gates, arguments_moderator,
         informed_voting, informed_pending, informed_empty,
         preliminary_results, preliminary_unavailable,
@@ -604,6 +611,16 @@ def _seed() -> None:
             conversation_id=about_participant.id,
             pseudonym='curious-lynx',
             new_stmt_ids=[101, 102],
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=banned_submission.id,
+            pseudonym='suspended-ibis',
+        ),
+        ConversationBan(
+            conversation_id=banned_submission.id,
+            participant_id=participant.id,
+            summary='Participation suspended for parity coverage.',
         ),
         Participation(
             participant_id=moderator.id,

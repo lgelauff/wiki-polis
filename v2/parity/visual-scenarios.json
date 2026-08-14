@@ -1550,6 +1550,30 @@
       "parityGate": true
     },
     {
+      "id": "conversation-workflow--banned--desktop",
+      "pageId": "conversation-workflow",
+      "state": "banned",
+      "legacyPath": "/c/parity-banned-submission",
+      "reactPath": "/app/conversations/parity-banned-submission/explore",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "f5869bb65c8d62ed31661eab39814f1c96ad48b9060f04d9e4b3a0fd65a772a7",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--banned--mobile",
+      "pageId": "conversation-workflow",
+      "state": "banned",
+      "legacyPath": "/c/parity-banned-submission",
+      "reactPath": "/app/conversations/parity-banned-submission/explore",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "a082bc4893418aae2450b44d83d6959b86f4a5af9764d57c8d952b86eaf9b4db",
+      "parityGate": true
+    },
+    {
       "id": "conversation-workflow--paused--mobile",
       "pageId": "conversation-workflow",
       "state": "paused",
