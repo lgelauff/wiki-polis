@@ -2153,6 +2153,7 @@ export interface components {
         InformedVotingCard: {
             featuredStatementId: number;
             statement: string;
+            canVote: boolean;
             voted: boolean;
             arguments: {
                 for: components["schemas"]["InformedVotingArgument"][];

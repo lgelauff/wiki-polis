@@ -18,10 +18,7 @@ def build_informed_voting_state(
         .options(joinedload(FeaturedStatement.arguments).joinedload(Argument.votes))
         .all()
     )
-    eligible = [
-        item for item in featured
-        if item.statement_text and item.phase6_polis_statement_id is not None
-    ]
+    eligible = [item for item in featured if item.statement_text]
     by_id = {item.id: item for item in eligible}
     stored_order = list(participation.phase6_card_order or [])
     if participation.phase6_card_order is None:
@@ -55,7 +52,11 @@ def build_informed_voting_state(
         cards.append({
             'featuredStatementId': item.id,
             'statement': item.statement_text,
-            'voted': item.phase6_polis_statement_id in voted_tids,
+            'canVote': item.phase6_polis_statement_id is not None,
+            'voted': (
+                item.phase6_polis_statement_id is not None
+                and item.phase6_polis_statement_id in voted_tids
+            ),
             'arguments': {'for': arguments('pro'), 'against': arguments('con')},
         })
 

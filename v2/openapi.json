@@ -2233,11 +2233,12 @@
       },
       "InformedVotingCard": {
         "type": "object",
-        "required": ["featuredStatementId", "statement", "voted", "arguments"],
+        "required": ["featuredStatementId", "statement", "canVote", "voted", "arguments"],
         "additionalProperties": false,
         "properties": {
           "featuredStatementId": {"type": "integer", "minimum": 1},
           "statement": {"type": "string", "minLength": 1},
+          "canVote": {"type": "boolean"},
           "voted": {"type": "boolean"},
           "arguments": {
             "type": "object",

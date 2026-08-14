@@ -82,7 +82,9 @@ def test_informed_voting_api_returns_private_progress_and_persists_new_cards(
         first.id, second.id,
     ]
     assert data['cards'][0]['voted'] is True
+    assert data['cards'][0]['canVote'] is True
     assert data['cards'][1]['voted'] is False
+    assert data['cards'][1]['canVote'] is True
     assert data['cards'][0]['arguments'] == {
         'for': [{'id': 1, 'body': 'Useful context', 'helpfulVotes': 0}],
         'against': [{'id': 2, 'body': 'Important caveat', 'helpfulVotes': 0}],
@@ -163,6 +165,46 @@ def test_informed_voting_empty_round_is_not_reported_complete(participant):
 
     assert data['progress'] == {
         'completed': 0, 'total': 0, 'remaining': 0, 'allDone': False,
+    }
+
+
+def test_informed_voting_keeps_renderable_card_while_initialization_is_pending(
+    participant,
+):
+    conversation = Conversation(
+        slug='pending-informed', polis_id='pending-p2', title='Pending',
+        active=True, access_policy='public', phase_informed_voting=True,
+        phase6_polis_conversation_id='pending-p6',
+    )
+    db.session.add(conversation)
+    db.session.flush()
+    participation = Participation(
+        participant_id=participant.id, conversation_id=conversation.id,
+        pseudonym='patient-otter',
+    )
+    statement = FeaturedStatement(
+        conversation_id=conversation.id, polis_statement_id=71,
+        phase6_polis_statement_id=None, statement_text='Awaiting initialization',
+        confirmed_by_admin=True,
+    )
+    db.session.add_all([participation, statement])
+    db.session.commit()
+
+    data = build_informed_voting_state(
+        conversation_id=conversation.id,
+        participation=participation,
+        participant_payload={'votes': []},
+    )
+
+    assert data['cards'] == [{
+        'featuredStatementId': statement.id,
+        'statement': 'Awaiting initialization',
+        'canVote': False,
+        'voted': False,
+        'arguments': {'for': [], 'against': []},
+    }]
+    assert data['progress'] == {
+        'completed': 0, 'total': 1, 'remaining': 1, 'allDone': False,
     }
 
 
