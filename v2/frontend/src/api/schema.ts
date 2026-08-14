@@ -127,6 +127,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the participant workspace composition contract */
+        get: operations["getConversationWorkspace"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{slug}/about": {
         parameters: {
             query?: never;
@@ -1876,6 +1893,72 @@ export interface components {
             conversation: string;
             about: string;
         };
+        ConversationWorkspaceResponse: {
+            data: components["schemas"]["ConversationWorkspace"];
+        };
+        ConversationWorkspace: {
+            slug: string;
+            title: string;
+            /** @enum {string} */
+            space: "real" | "demo";
+            /** @enum {string} */
+            status: "open" | "paused" | "closed";
+            descriptionHtml: string | null;
+            viewer: components["schemas"]["ConversationWorkspaceViewer"];
+            /** @enum {string|null} */
+            spaceWarning: "real" | "demo" | null;
+            scheduledTransition: components["schemas"]["ScheduledTransition"] | null;
+            tabs: components["schemas"]["ConversationWorkspaceTab"][];
+            /** @enum {string|null} */
+            defaultTab: "vote" | "results" | "arguments" | "informed-voting" | "p6-results" | null;
+            reveal: components["schemas"]["ConversationWorkspaceReveal"] | null;
+            statementContribution: components["schemas"]["ConversationWorkspaceStatementContribution"];
+            capabilities: components["schemas"]["ConversationWorkspaceCapabilities"];
+            links: components["schemas"]["ConversationWorkspaceLinks"];
+        };
+        ConversationWorkspaceViewer: {
+            /** @enum {string} */
+            state: "participant" | "join_required";
+            pseudonym: string | null;
+        };
+        ConversationWorkspaceTab: {
+            /** @enum {string} */
+            key: "vote" | "results" | "arguments" | "informed-voting" | "p6-results";
+            label: string;
+            dataHref: string | null;
+        };
+        ConversationWorkspaceReveal: {
+            /** @enum {string} */
+            state: "pending" | "open" | "revealed" | "expired";
+            pseudonym: string | null;
+            /** Format: date-time */
+            closedAt: string;
+            /** Format: date-time */
+            opensAt: string;
+            /** Format: date-time */
+            closesAt: string;
+            daysRemaining: number;
+        };
+        ConversationWorkspaceStatementContribution: {
+            unlockAfter: number;
+            quota: number;
+            used: number;
+        };
+        ConversationWorkspaceCapabilities: {
+            participate: boolean;
+            moderate: boolean;
+        };
+        ConversationWorkspaceLinks: {
+            self: string;
+            conversation: string;
+            about: string;
+            join: string;
+            manage?: string;
+            explore?: string;
+            arguments?: string;
+            informedVoting?: string;
+            results?: string;
+        };
         ConversationAboutResponse: {
             data: components["schemas"]["ConversationAbout"];
         };
@@ -2740,6 +2823,55 @@ export interface operations {
             };
             /** @description Invalid space */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getConversationWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversation workspace composition */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationWorkspaceResponse"];
+                };
+            };
+            /** @description Authentication required for a real conversation */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The current browser cannot access this conversation */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

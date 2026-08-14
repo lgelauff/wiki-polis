@@ -64,6 +64,7 @@ from services.invites import (
 from services.conversation_about import build_conversation_about
 from services.conversation_lanes import (build_conversation_lane,
                                          scheduled_transition)
+from services.conversation_workspace import build_conversation_workspace
 from services.participations import (EligibilityDenied, InvalidPseudonym,
                                      PseudonymUnavailable, join_conversation)
 from services.participation_entry import build_participation_entry
@@ -1717,6 +1718,92 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
         admin_link=lambda conv_id: url_for(
             'admin.admin_conversation_detail', conv_id=conv_id,
         ),
+    )
+
+
+def _conversation_workspace_api_payload(slug: str) -> dict:
+    """Return the page-composition state previously owned by the Jinja route."""
+    conv = Conversation.query.filter_by(slug=slug).first()
+    if conv is None:
+        if 'username' not in session and not _is_demo_session():
+            abort(401)
+        abort(404)
+
+    if conv.access_policy == 'demo':
+        participation = _ensure_demo_participation(conv)
+        participant = participation.participant
+    else:
+        if _is_demo_session():
+            _exit_demo_session()
+        if 'username' not in session:
+            abort(401)
+        participant = _current_participant()
+        participation = None
+
+    _check_conversation_access(conv, participant)
+    if participation is None and participant is not None:
+        participation = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+        ).first()
+
+    can_moderate = _can_moderate(conv, participant)
+    conv_space = 'demo' if conv.access_policy == 'demo' else 'real'
+    has_admin_access = _is_global_admin(participant) or bool(
+        participant and AdminRole.query.filter_by(
+            participant_id=participant.id,
+        ).first()
+    )
+    space_warning = conv_space if (
+        participation is not None
+        and not has_admin_access
+        and session.get('space') != conv_space
+    ) else None
+    if participation is not None:
+        session['space'] = conv_space
+
+    phase6_results_available = False
+    if (conv.phase_public_results and conv.phase6_polis_conversation_id
+            and participation is not None):
+        phase6_results = _build_phase6_results(conv, participation)
+        phase6_results_available = bool(
+            phase6_results and phase6_results.get('statements')
+        )
+
+    links = {
+        'self': url_for('api_v1.get_conversation_workspace', slug=slug),
+        'conversation': url_for('participant.conversation', slug=slug),
+        'about': url_for(
+            'spa_shell', spa_path=f'conversations/{slug}/about',
+        ),
+        'join': url_for(
+            'spa_shell', spa_path=f'conversations/{slug}/join',
+        ),
+    }
+    if conv.phase_submission:
+        links['explore'] = url_for('api_v1.get_explore_state', slug=slug)
+    if conv.phase_argument_mapping:
+        links['arguments'] = url_for('api_v1.get_argument_mapping', slug=slug)
+    if conv.phase_informed_voting and conv.phase6_polis_conversation_id:
+        links['informedVoting'] = url_for(
+            'api_v1.get_informed_voting', slug=slug,
+        )
+    if conv.phase_public_results or conv.phase_personal_results:
+        links['results'] = url_for('api_v1.get_results_report', slug=slug)
+    if can_moderate:
+        links['manage'] = url_for(
+            'admin.admin_conversation_detail', conv_id=conv.id,
+        )
+
+    reveal = _reveal_context(conv, participation) if participation else None
+    return build_conversation_workspace(
+        conversation=conv,
+        participation=participation,
+        can_moderate=can_moderate,
+        space_warning=space_warning,
+        reveal=reveal,
+        phase6_results_available=phase6_results_available,
+        links=links,
     )
 
 
@@ -6860,6 +6947,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             for user in current_app.config.get('DEV_TEST_USERS', [])
         ],
         resolve_conversation_lane=_conversation_lane_api_payload,
+        resolve_conversation_workspace=_conversation_workspace_api_payload,
         resolve_conversation_about=_conversation_about_api_payload,
         resolve_moderation_log=_moderation_log_api_payload,
         resolve_conversation_output=_conversation_output_api_payload,

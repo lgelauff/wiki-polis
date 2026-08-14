@@ -103,6 +103,42 @@
         }
       }
     },
+    "/conversations/{slug}/workspace": {
+      "get": {
+        "operationId": "getConversationWorkspace",
+        "summary": "Return the participant workspace composition contract",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "minLength": 1}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation workspace composition",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ConversationWorkspaceResponse"}
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required for a real conversation",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "403": {
+            "description": "The current browser cannot access this conversation",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          },
+          "404": {
+            "description": "Conversation not found",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+          }
+        }
+      }
+    },
     "/conversations/{slug}/about": {
       "get": {
         "operationId": "getConversationAbout",
@@ -1712,6 +1748,115 @@
           "self": {"type": "string"},
           "conversation": {"type": "string"},
           "about": {"type": "string"}
+        }
+      },
+      "ConversationWorkspaceResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {
+          "data": {"$ref": "#/components/schemas/ConversationWorkspace"}
+        }
+      },
+      "ConversationWorkspace": {
+        "type": "object",
+        "required": ["slug", "title", "space", "status", "descriptionHtml", "viewer", "spaceWarning", "scheduledTransition", "tabs", "defaultTab", "reveal", "statementContribution", "capabilities", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "space": {"type": "string", "enum": ["real", "demo"]},
+          "status": {"type": "string", "enum": ["open", "paused", "closed"]},
+          "descriptionHtml": {"type": ["string", "null"]},
+          "viewer": {"$ref": "#/components/schemas/ConversationWorkspaceViewer"},
+          "spaceWarning": {"type": ["string", "null"], "enum": ["real", "demo", null]},
+          "scheduledTransition": {
+            "oneOf": [
+              {"$ref": "#/components/schemas/ScheduledTransition"},
+              {"type": "null"}
+            ]
+          },
+          "tabs": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationWorkspaceTab"}},
+          "defaultTab": {
+            "type": ["string", "null"],
+            "enum": ["vote", "results", "arguments", "informed-voting", "p6-results", null]
+          },
+          "reveal": {
+            "oneOf": [
+              {"$ref": "#/components/schemas/ConversationWorkspaceReveal"},
+              {"type": "null"}
+            ]
+          },
+          "statementContribution": {"$ref": "#/components/schemas/ConversationWorkspaceStatementContribution"},
+          "capabilities": {"$ref": "#/components/schemas/ConversationWorkspaceCapabilities"},
+          "links": {"$ref": "#/components/schemas/ConversationWorkspaceLinks"}
+        }
+      },
+      "ConversationWorkspaceViewer": {
+        "type": "object",
+        "required": ["state", "pseudonym"],
+        "additionalProperties": false,
+        "properties": {
+          "state": {"type": "string", "enum": ["participant", "join_required"]},
+          "pseudonym": {"type": ["string", "null"]}
+        }
+      },
+      "ConversationWorkspaceTab": {
+        "type": "object",
+        "required": ["key", "label", "dataHref"],
+        "additionalProperties": false,
+        "properties": {
+          "key": {"type": "string", "enum": ["vote", "results", "arguments", "informed-voting", "p6-results"]},
+          "label": {"type": "string", "minLength": 1},
+          "dataHref": {"type": ["string", "null"]}
+        }
+      },
+      "ConversationWorkspaceReveal": {
+        "type": "object",
+        "required": ["state", "pseudonym", "closedAt", "opensAt", "closesAt", "daysRemaining"],
+        "additionalProperties": false,
+        "properties": {
+          "state": {"type": "string", "enum": ["pending", "open", "revealed", "expired"]},
+          "pseudonym": {"type": ["string", "null"]},
+          "closedAt": {"type": "string", "format": "date-time"},
+          "opensAt": {"type": "string", "format": "date-time"},
+          "closesAt": {"type": "string", "format": "date-time"},
+          "daysRemaining": {"type": "integer", "minimum": 0}
+        }
+      },
+      "ConversationWorkspaceStatementContribution": {
+        "type": "object",
+        "required": ["unlockAfter", "quota", "used"],
+        "additionalProperties": false,
+        "properties": {
+          "unlockAfter": {"type": "integer", "minimum": 0},
+          "quota": {"type": "integer", "minimum": 0},
+          "used": {"type": "integer", "minimum": 0}
+        }
+      },
+      "ConversationWorkspaceCapabilities": {
+        "type": "object",
+        "required": ["participate", "moderate"],
+        "additionalProperties": false,
+        "properties": {
+          "participate": {"type": "boolean"},
+          "moderate": {"type": "boolean"}
+        }
+      },
+      "ConversationWorkspaceLinks": {
+        "type": "object",
+        "required": ["self", "conversation", "about", "join"],
+        "additionalProperties": false,
+        "properties": {
+          "self": {"type": "string"},
+          "conversation": {"type": "string"},
+          "about": {"type": "string"},
+          "join": {"type": "string"},
+          "manage": {"type": "string"},
+          "explore": {"type": "string"},
+          "arguments": {"type": "string"},
+          "informedVoting": {"type": "string"},
+          "results": {"type": "string"}
         }
       },
       "ConversationAboutResponse": {

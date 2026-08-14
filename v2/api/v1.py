@@ -87,6 +87,7 @@ def create_api_v1_blueprint(
     resolve_global_admin: Callable[[Participant | None], bool],
     resolve_developer_logins: Callable[[], list[dict]],
     resolve_conversation_lane: Callable[[bool], dict],
+    resolve_conversation_workspace: Callable[[str], dict],
     resolve_conversation_about: Callable[[str], dict],
     resolve_moderation_log: Callable[[str], dict],
     resolve_conversation_output: Callable[[str, str], dict],
@@ -283,6 +284,12 @@ def create_api_v1_blueprint(
     def get_conversation_about(slug: str):
         return _no_store(jsonify({
             'data': resolve_conversation_about(slug),
+        }))
+
+    @bp.get('/conversations/<slug>/workspace')
+    def get_conversation_workspace(slug: str):
+        return _no_store(jsonify({
+            'data': resolve_conversation_workspace(slug),
         }))
 
     @bp.get('/conversations/<slug>/moderation-log')
