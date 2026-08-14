@@ -1098,6 +1098,112 @@
       "serverFixture": "isolated",
       "goldenSha256": "511fc93001335ccf72b851fa7cdcbd31aa1fd473c64d6b8edfd9bba095e2347f",
       "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--submission-populated--desktop",
+      "pageId": "conversation-workflow",
+      "state": "submission-populated",
+      "legacyPath": "/c/parity-about-participant",
+      "reactPath": "/app/conversations/parity-about-participant/explore",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "e0eff3918957cb230421ca38658da7e97f267f3936584a084cafb92d69cc4f40",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--submission-populated--mobile",
+      "pageId": "conversation-workflow",
+      "state": "submission-populated",
+      "legacyPath": "/c/parity-about-participant",
+      "reactPath": "/app/conversations/parity-about-participant/explore",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "473feef0659bdbdac35f6a3090646c56fd73412365e4a6d3e45058d3d9ace850",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--submission-empty--desktop",
+      "pageId": "conversation-workflow",
+      "state": "submission-empty",
+      "legacyPath": "/c/parity-about-participant?parity-state=empty",
+      "reactPath": "/app/conversations/parity-about-participant/explore?parity-state=empty",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "6e5668a552cc89be5b20a933a85f246c2c842120f5d6ff0580df7167cf08a31a",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--submission-empty--mobile",
+      "pageId": "conversation-workflow",
+      "state": "submission-empty",
+      "legacyPath": "/c/parity-about-participant?parity-state=empty",
+      "reactPath": "/app/conversations/parity-about-participant/explore?parity-state=empty",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "96059a5fab191dd791f130337e9afaba7660ee4cd7bb455fad68a5868d0c0c6d",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--submission-voted--desktop",
+      "pageId": "conversation-workflow",
+      "state": "submission-voted",
+      "legacyPath": "/c/parity-about-participant",
+      "reactPath": "/app/conversations/parity-about-participant/explore",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "button", "name": "Agree"}],
+      "goldenSha256": "9de022402eb7ccb8790553559d4585bee9a2aee1a279748484431c06973671a9",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--submission-voted--mobile",
+      "pageId": "conversation-workflow",
+      "state": "submission-voted",
+      "legacyPath": "/c/parity-about-participant",
+      "reactPath": "/app/conversations/parity-about-participant/explore",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "button", "name": "Agree"}],
+      "goldenSha256": "2bc6a705abe659392e7f7f327e9d049551e3381918da98083b7cd74c14a668aa",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--statement-composer--desktop",
+      "pageId": "conversation-workflow",
+      "state": "statement-composer",
+      "legacyPath": "/c/parity-about-participant",
+      "reactPath": "/app/conversations/parity-about-participant/explore",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [
+        {"type": "click", "role": "button", "name": "Agree"},
+        {"type": "click", "role": "button", "name": "Suggest different wording Same idea, clearer phrasing Write yours →"}
+      ],
+      "goldenSha256": "31061c6694f4acfb5c1df6ab70f7ad16ac7837bc27a94ec467fe4c3817028603",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--statement-composer--mobile",
+      "pageId": "conversation-workflow",
+      "state": "statement-composer",
+      "legacyPath": "/c/parity-about-participant",
+      "reactPath": "/app/conversations/parity-about-participant/explore",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [
+        {"type": "click", "role": "button", "name": "Agree"},
+        {"type": "click", "role": "button", "name": "Suggest different wording Same idea, clearer phrasing Write yours →"}
+      ],
+      "goldenSha256": "63270ebce1ceb3ee155b82c28480ad6f802c87e14777093d8ee3140b16ee2ec4",
+      "parityGate": true
     }
   ]
 }

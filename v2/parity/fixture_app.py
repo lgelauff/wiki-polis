@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 import os
 from pathlib import Path
 import sys
@@ -167,6 +168,59 @@ def _fixture_lane(*args, **kwargs):
 
 
 app_module.build_conversation_lane = _fixture_lane
+
+
+class _FixtureParticiapiResponse:
+    def __init__(self, payload: dict, status: int = 200, *, cookies=None):
+        self.status_code = status
+        self.ok = status < 400
+        self._payload = payload
+        self.content = json.dumps(payload).encode('utf-8')
+        self.cookies = cookies or {}
+        self.headers = {'Content-Type': 'application/json'}
+
+    def json(self):
+        return self._payload
+
+
+def _fixture_particiapi(method='GET', url='', **_kwargs):
+    path = urlparse(url).path.rstrip('/')
+    if path.endswith('/api/session'):
+        return _FixtureParticiapiResponse(
+            {'csrf_token': 'parity-particiapi-csrf'},
+            cookies={'session': 'parity-particiapi-session'},
+        )
+    if path.endswith('/statements'):
+        if method.upper() == 'POST':
+            return _FixtureParticiapiResponse({'id': 44}, status=201)
+        return _FixtureParticiapiResponse({
+            '12': {
+                'id': 12,
+                'text': 'Regional communities should share infrastructure funding.',
+                'is_seed': True,
+            },
+        })
+    if path.endswith('/participant'):
+        referrer_query = parse_qs(urlparse(app_module.request.referrer or '').query)
+        empty = referrer_query.get('parity-state') == ['empty']
+        return _FixtureParticiapiResponse({
+            'votes': [12] if empty else [], 'statements': [],
+        })
+    if '/votes/' in path:
+        return _FixtureParticiapiResponse({})
+    return _FixtureParticiapiResponse({}, status=404)
+
+
+app_module.polis_http.request = _fixture_particiapi
+app_module.polis_http.get = lambda url, **kwargs: _fixture_particiapi(
+    'GET', url, **kwargs,
+)
+app_module.polis_http.post = lambda url, **kwargs: _fixture_particiapi(
+    'POST', url, **kwargs,
+)
+app_module.polis_http.put = lambda url, **kwargs: _fixture_particiapi(
+    'PUT', url, **kwargs,
+)
 
 
 def _seed() -> None:
