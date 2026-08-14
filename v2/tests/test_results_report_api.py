@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 from app import Phase6ResultsFilter
-from db import db
+from db import Participation, db
 
 
 def _results(*, pg_available=True):
@@ -62,6 +62,7 @@ def test_final_results_api_uses_snapshot_and_preserves_pass_tallies(
     assert response.status_code == 200
     data = response.get_json()['data']
     assert data['publication'] == 'final'
+    assert data['resultsAvailable'] is True
     assert data['context']['status'] == 'final'
     assert data['moderation'] == {
         'excludedStatements': 1, 'excludedParticipants': 2,
@@ -82,6 +83,9 @@ def test_final_results_api_uses_snapshot_and_preserves_pass_tallies(
             {'choice': 'disagree', 'statement': 'Centralize every budget',
              'percentage': 64.0},
         ],
+    }
+    assert data['viewer'] == {
+        'participating': False, 'pseudonym': None, 'revealState': 'pending',
     }
     assert seen['participation'] is None
     assert seen['filter'] == Phase6ResultsFilter(
@@ -115,6 +119,37 @@ def test_results_api_rejects_unpublished_results(client, conversation):
 
     assert response.status_code == 409
     assert response.get_json()['error']['code'] == 'conflict'
+
+
+def test_results_api_exposes_privacy_safe_viewer_report_state(
+    auth_client, conversation, participant,
+):
+    conversation.active = False
+    conversation.phase_public_results = True
+    conversation.closed_at = datetime.now(timezone.utc)
+    conversation.phase6_polis_conversation_id = 'private-phase6-id'
+    db.session.add(Participation(
+        participant_id=participant.id,
+        conversation_id=conversation.id,
+        pseudonym='curious-fox',
+    ))
+    db.session.commit()
+
+    with (
+        patch('app._build_phase6_results', return_value=None),
+        patch('app._reveal_context', return_value={'state': 'open'}),
+    ):
+        data = auth_client.get(
+            '/api/v1/conversations/test-conv/results',
+        ).get_json()['data']
+
+    assert data['resultsAvailable'] is False
+    assert data['viewer'] == {
+        'participating': True,
+        'pseudonym': 'curious-fox',
+        'revealState': 'open',
+    }
+    assert data['links']['identityReveal'].endswith('/identity-reveal')
 
 
 def test_openapi_documents_results_report_and_pass_counts(client):

@@ -2155,12 +2155,13 @@
       },
       "ResultsReport": {
         "type": "object",
-        "required": ["slug", "title", "publication", "openedAt", "closedAt", "context", "participation", "dataAvailability", "moderation", "statements", "opinionGroups", "links"],
+        "required": ["slug", "title", "publication", "resultsAvailable", "openedAt", "closedAt", "context", "participation", "dataAvailability", "moderation", "statements", "opinionGroups", "viewer", "links"],
         "additionalProperties": false,
         "properties": {
           "slug": {"type": "string"},
           "title": {"type": "string"},
           "publication": {"type": "string", "enum": ["preliminary", "final"]},
+          "resultsAvailable": {"type": "boolean"},
           "openedAt": {"type": "string", "format": "date-time"},
           "closedAt": {"type": ["string", "null"], "format": "date-time"},
           "context": {
@@ -2203,6 +2204,16 @@
           },
           "statements": {"type": "array", "items": {"$ref": "#/components/schemas/ResultsStatement"}},
           "opinionGroups": {"type": "array", "items": {"$ref": "#/components/schemas/ResultsOpinionGroup"}},
+          "viewer": {
+            "type": "object",
+            "required": ["participating", "pseudonym", "revealState"],
+            "additionalProperties": false,
+            "properties": {
+              "participating": {"type": "boolean"},
+              "pseudonym": {"type": ["string", "null"]},
+              "revealState": {"type": ["string", "null"], "enum": ["pending", "open", "revealed", "expired", null]}
+            }
+          },
           "links": {"$ref": "#/components/schemas/ResultsLinks"}
         }
       },

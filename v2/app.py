@@ -2234,6 +2234,8 @@ def _results_report_api_payload(slug: str) -> dict:
         conversation=conv,
         phase6_results=results,
         output_context=output_context,
+        participation=participation,
+        reveal_state=reveal['state'] if reveal else None,
         self_link=url_for('api_v1.get_results_report', slug=slug),
         conversation_link=url_for('participant.conversation', slug=slug),
         about_link=url_for('spa_shell', spa_path=f'conversations/{slug}/about'),

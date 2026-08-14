@@ -59,6 +59,7 @@ def _opinion_groups(groups: list | None) -> list[dict]:
 
 def build_results_report(
     *, conversation, phase6_results: dict | None, output_context: dict,
+    participation, reveal_state: str | None,
     self_link: str, conversation_link: str, about_link: str,
     identity_reveal_link: str | None,
 ) -> dict:
@@ -85,6 +86,7 @@ def build_results_report(
         'slug': conversation.slug,
         'title': conversation.title,
         'publication': 'final' if conversation.closed_at else 'preliminary',
+        'resultsAvailable': phase6_results is not None,
         'openedAt': _utc_iso(conversation.created_at),
         'closedAt': _utc_iso(conversation.closed_at),
         'context': {
@@ -107,5 +109,10 @@ def build_results_report(
         },
         'statements': statements,
         'opinionGroups': _opinion_groups(results.get('clusters')),
+        'viewer': {
+            'participating': participation is not None,
+            'pseudonym': participation.pseudonym if participation else None,
+            'revealState': reveal_state,
+        },
         'links': links,
     }

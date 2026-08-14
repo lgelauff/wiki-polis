@@ -2108,6 +2108,7 @@ export interface components {
             title: string;
             /** @enum {string} */
             publication: "preliminary" | "final";
+            resultsAvailable: boolean;
             /** Format: date-time */
             openedAt: string;
             /** Format: date-time */
@@ -2133,6 +2134,12 @@ export interface components {
             };
             statements: components["schemas"]["ResultsStatement"][];
             opinionGroups: components["schemas"]["ResultsOpinionGroup"][];
+            viewer: {
+                participating: boolean;
+                pseudonym: string | null;
+                /** @enum {string|null} */
+                revealState: "pending" | "open" | "revealed" | "expired" | null;
+            };
             links: components["schemas"]["ResultsLinks"];
         };
         ResultsStatement: {
