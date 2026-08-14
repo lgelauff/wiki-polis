@@ -179,11 +179,12 @@ test('archives and reopens without presenting publication as the outcome', async
   expect(await screen.findByRole('status')).toHaveTextContent('Conversation reopened');
 });
 
-test('edits settings while keeping legacy eligibility observable and read-only', async () => {
+test('edits settings and legacy eligibility through one typed command', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings']}><App /></MemoryRouter></QueryClientProvider>);
   expect(await screen.findByRole('heading', {name: 'Conversation settings'})).toBeVisible();
   expect(screen.getByText('Extended-confirmed editors')).toBeVisible();
-  expect(screen.getByText(/Eligibility changes are unavailable/)).toBeVisible();
+  fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'experienced-editors'}});
+  fireEvent.change(screen.getByLabelText('Eligibility label'), {target: {value: 'Experienced editors'}});
   fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Updated strategy'}});
   fireEvent.click(screen.getByRole('radio', {name: /Complex topic/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));

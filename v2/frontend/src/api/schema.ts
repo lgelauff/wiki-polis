@@ -1361,6 +1361,8 @@ export interface components {
             outroHtml: string;
             /** @enum {string} */
             accessPolicy: "public" | "invite_only" | "demo";
+            eligibilityEventId: string;
+            eligibilityLabel: string;
             /** @enum {string} */
             recommendationTier: "simple" | "medium" | "complex";
         };
@@ -1396,9 +1398,10 @@ export interface components {
             };
             eligibility: {
                 configured: boolean;
+                eventId: string;
                 label: string | null;
                 /** @constant */
-                configurationMode: "legacy_read_only";
+                configurationMode: "editable";
                 note: string;
             };
             capabilities: {

@@ -3533,6 +3533,8 @@ def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
         conversation=conv,
         title=body['title'], intro_html=body['introHtml'],
         outro_html=body['outroHtml'], access_policy=body['accessPolicy'],
+        eligibility_event_id=body['eligibilityEventId'],
+        eligibility_label=body['eligibilityLabel'],
         tier=body['recommendationTier'], sanitise=_sanitise_text,
         session=db.session, audit=record_audit,
     )

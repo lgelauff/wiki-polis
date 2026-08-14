@@ -30,12 +30,10 @@ def build_admin_settings(
         },
         'eligibility': {
             'configured': bool(conversation.eligibility_event_id),
+            'eventId': conversation.eligibility_event_id or '',
             'label': conversation.eligibility_label,
-            'configurationMode': 'legacy_read_only',
-            'note': (
-                'Eligibility changes are unavailable until curated criteria and wiki '
-                'mappings are configured.'
-            ),
+            'configurationMode': 'editable',
+            'note': 'Leave the event ID blank when no external eligibility check applies.',
         },
         'capabilities': {'edit': can_edit},
         'links': {'self': self_link, 'lifecycle': lifecycle_link},
@@ -50,13 +48,16 @@ class SettingsUpdateResult:
 
 def update_conversation_settings(
     *, conversation, title: str, intro_html: str, outro_html: str,
-    access_policy: str, tier: str, sanitise, session, audit,
+    access_policy: str, eligibility_event_id: str, eligibility_label: str,
+    tier: str, sanitise, session, audit,
 ) -> SettingsUpdateResult:
     desired = {
         'title': title.strip(),
         'intro_text': sanitise(intro_html),
         'outro_text': sanitise(outro_html),
         'access_policy': access_policy,
+        'eligibility_event_id': eligibility_event_id.strip() or None,
+        'eligibility_label': eligibility_label.strip() or None,
         'recommended_quantities': {'tier': tier},
     }
     changed_fields = sorted(

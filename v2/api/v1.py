@@ -567,7 +567,7 @@ def create_api_v1_blueprint(
         body = request.get_json(silent=True)
         expected = {
             'title', 'introHtml', 'outroHtml', 'accessPolicy',
-            'recommendationTier',
+            'eligibilityEventId', 'eligibilityLabel', 'recommendationTier',
         }
         fields = {}
         if not isinstance(body, dict) or set(body) != expected:
@@ -578,9 +578,13 @@ def create_api_v1_blueprint(
         if (not isinstance(body['title'], str) or not body['title'].strip()
                 or len(body['title'].strip()) > 255):
             fields['title'] = ['Write a title up to 255 characters.']
-        for key in ('introHtml', 'outroHtml'):
+        for key in ('introHtml', 'outroHtml', 'eligibilityEventId', 'eligibilityLabel'):
             if not isinstance(body[key], str):
                 fields[key] = ['Use text.']
+        if isinstance(body['eligibilityEventId'], str) and len(body['eligibilityEventId']) > 80:
+            fields['eligibilityEventId'] = ['Use at most 80 characters.']
+        if isinstance(body['eligibilityLabel'], str) and len(body['eligibilityLabel']) > 255:
+            fields['eligibilityLabel'] = ['Use at most 255 characters.']
         if body['accessPolicy'] not in {'public', 'invite_only', 'demo'}:
             fields['accessPolicy'] = ['Choose public, invite_only, or demo.']
         if body['recommendationTier'] not in {'simple', 'medium', 'complex'}:

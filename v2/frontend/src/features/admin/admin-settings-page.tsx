@@ -20,10 +20,13 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   const [introHtml, setIntroHtml] = useState(data.conversation.introHtml);
   const [outroHtml, setOutroHtml] = useState(data.conversation.outroHtml);
   const [accessPolicy, setAccessPolicy] = useState<Policy>(data.conversation.accessPolicy);
+  const [eligibilityEventId, setEligibilityEventId] = useState(data.eligibility.eventId);
+  const [eligibilityLabel, setEligibilityLabel] = useState(data.eligibility.label ?? '');
   const [tier, setTier] = useState<Tier>(data.recommendations.tier);
   const mutation = useMutation({
     mutationFn: () => putAdminSettings(conversationId, {
-      title, introHtml, outroHtml, accessPolicy, recommendationTier: tier,
+      title, introHtml, outroHtml, accessPolicy, eligibilityEventId,
+      eligibilityLabel, recommendationTier: tier,
     }, csrfToken),
     onSuccess: (receipt) => queryClient.setQueryData<Settings>(
       options.queryKey, receipt.settings,
@@ -60,6 +63,8 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
           <label>Access policy<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
             <option value="public">Public</option><option value="invite_only">Invite only</option><option value="demo">Demo</option>
           </select></label>
+          <label>Eligibility event ID<input value={eligibilityEventId} maxLength={80} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
+          <label>Eligibility label<input value={eligibilityLabel} maxLength={255} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
           <div className="settings-eligibility" data-configured={data.eligibility.configured}>
             <strong>Eligibility {data.eligibility.configured ? 'configured' : 'not configured'}</strong>
             {data.eligibility.label && <span>{data.eligibility.label}</span>}
