@@ -15,6 +15,7 @@ ARGUMENT_SIDES  = ('pro', 'con')
 FLAG_CONTENT_TYPES = ('statement', 'argument')
 FLAG_CATEGORIES = ('personal_attack', 'privacy', 'off_topic', 'other')
 FLAG_STATUSES = ('open', 'resolved')
+STATEMENT_MODERATION_POLICIES = ('moderate', 'auto_approve')
 
 
 class Participant(db.Model):
@@ -51,6 +52,10 @@ class Conversation(db.Model):
         # IntegrityError rather than a silent overwrite.
         db.UniqueConstraint('phase6_polis_conversation_id',
                             name='uq_conversations_phase6_polis_conversation_id'),
+        db.CheckConstraint(
+            "statement_moderation_policy IN ('moderate', 'auto_approve')",
+            name='ck_conversation_statement_moderation_policy',
+        ),
     )
 
     id           = db.Column(db.Integer, primary_key=True)
@@ -63,6 +68,11 @@ class Conversation(db.Model):
     active       = db.Column(db.Boolean, default=True, nullable=False)
     paused       = db.Column(db.Boolean, default=False, nullable=False)  # reversible; does NOT start reveal clock
     access_policy = db.Column(db.String(20), nullable=False, default='public')
+    # Local default for future participant statements. Nullable only for legacy rows:
+    # their current upstream strict_moderation value is adopted on first reconciliation.
+    statement_moderation_policy = db.Column(
+        db.String(20), nullable=True, default='moderate',
+    )
     # Optional join-time AccountEligibility event gate (#146). Empty event id = open
     # to any logged-in user allowed by access_policy.
     eligibility_event_id = db.Column(db.String(80), nullable=True)

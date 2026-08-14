@@ -47,6 +47,8 @@ from services.admin_termination import (
 )
 from services.admin_statements import (
     LastFeaturedStatementProtected, StatementModerationUpstreamFailed,
+    ModerationPolicySaveFailed, ModerationPolicyUpstreamFailed,
+    ModerationPolicyVerificationUnavailable,
     SeedImportUpstreamFailed, SeedImportValidationFailed,
     SeedImportVerificationUnavailable,
 )
@@ -105,6 +107,7 @@ def create_api_v1_blueprint(
     resolve_admin_termination: Callable[[int], dict],
     delete_admin_conversation: Callable[[int], dict],
     resolve_admin_statements: Callable[[int], dict],
+    set_admin_statement_policy: Callable[[int, dict], dict],
     moderate_admin_statement: Callable[[int, int, dict], dict],
     import_admin_seed_statements: Callable[[int, dict], dict],
     resolve_admin_featured: Callable[[int], dict],
@@ -484,6 +487,35 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({
             'data': resolve_admin_statements(conversation_id),
         }))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/statement-moderation-policy')
+    def put_admin_statement_moderation_policy(conversation_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'mode'}
+                or body['mode'] not in {'moderate', 'auto_approve'}):
+            return error_response(
+                'validation_failed', 'Choose moderate or auto_approve.', 400,
+            )
+        try:
+            data = set_admin_statement_policy(conversation_id, body)
+        except ModerationPolicyVerificationUnavailable:
+            return error_response(
+                'verification_unavailable',
+                'The current moderation state could not be verified; nothing was changed.', 503,
+            )
+        except ModerationPolicyUpstreamFailed:
+            return error_response(
+                'upstream_unavailable',
+                'The moderation baseline could not be reconciled safely.', 502,
+            )
+        except ModerationPolicySaveFailed as exc:
+            return error_response(
+                'command_outcome_unknown' if exc.outcome_unknown else 'save_failed',
+                ('The voting service may have changed. Do not retry until a site admin checks it.'
+                 if exc.outcome_unknown else 'The moderation policy could not be saved.'),
+                409 if exc.outcome_unknown else 503,
+            )
+        return _no_store(jsonify({'data': data}))
 
     @bp.put('/admin/conversations/<int:conversation_id>/statements/<int:statement_id>/moderation')
     def put_admin_statement_moderation(conversation_id: int, statement_id: int):

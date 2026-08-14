@@ -2,13 +2,15 @@
 
 from dataclasses import dataclass
 
+from sqlalchemy.exc import SQLAlchemyError
+
 
 _MOD_BY_STATUS = {'hidden': -1, 'pending': 0, 'approved': 1}
 
 
 def build_statement_workspace(
     *, conversation, buckets: dict[str, list[dict]], featured_tids: set[int],
-    provenance_by_tid: dict, strict_moderation: bool | None,
+    provenance_by_tid: dict, moderation_policy: str | None,
     statements_available: bool, seed_lock_reason: str | None,
     max_import_rows: int, max_statement_characters: int,
     self_link: str, lifecycle_link: str,
@@ -47,8 +49,13 @@ def build_statement_workspace(
             for status in ('pending', 'approved', 'hidden')
         },
         'moderationPolicy': {
-            'strict': strict_moderation,
-            'available': strict_moderation is not None,
+            'mode': moderation_policy,
+            'newStatements': (
+                None if moderation_policy is None
+                else 'pending' if moderation_policy == 'moderate'
+                else 'approved'
+            ),
+            'available': moderation_policy is not None,
         },
         'dataAvailability': {'statements': statements_available},
         'seeding': {
@@ -73,6 +80,19 @@ class StatementModerationUpstreamFailed(RuntimeError):
     pass
 
 
+class ModerationPolicyVerificationUnavailable(RuntimeError):
+    pass
+
+
+class ModerationPolicyUpstreamFailed(RuntimeError):
+    pass
+
+
+class ModerationPolicySaveFailed(RuntimeError):
+    def __init__(self, *, outcome_unknown: bool):
+        self.outcome_unknown = outcome_unknown
+
+
 class SeedImportValidationFailed(ValueError):
     def __init__(self, message: str):
         super().__init__(message)
@@ -93,6 +113,69 @@ class SeedImportUpstreamFailed(RuntimeError):
 class ModerationResult:
     statement_id: int
     status: str
+
+
+@dataclass(frozen=True)
+class ModerationPolicyResult:
+    policy: str
+    changed: bool
+    reconciled_statement_ids: tuple[int, ...]
+
+
+def resolved_moderation_policy(
+    *, conversation, upstream_strict: bool | None,
+) -> str | None:
+    if conversation.statement_moderation_policy is not None:
+        return conversation.statement_moderation_policy
+    if upstream_strict is None:
+        return None
+    return 'moderate' if upstream_strict else 'auto_approve'
+
+
+def set_statement_moderation_policy(
+    *, conversation, policy: str, upstream_strict: bool | None,
+    pending_statements: list[dict] | None, moderate_upstream,
+    set_upstream_strict, session, audit_policy, audit_reconciled,
+    upstream_errors: tuple[type[Exception], ...],
+) -> ModerationPolicyResult:
+    """Converge Polis on explicit per-statement decisions, then store the default."""
+    if policy not in {'moderate', 'auto_approve'}:
+        raise ValueError('Unknown statement moderation policy.')
+    if upstream_strict is None or pending_statements is None:
+        raise ModerationPolicyVerificationUnavailable()
+
+    reconciled: list[int] = []
+    upstream_changed = False
+    if not upstream_strict:
+        try:
+            for row in pending_statements:
+                statement_id = int(row['tid'])
+                moderate_upstream(conversation.polis_id, statement_id, 1)
+                reconciled.append(statement_id)
+            set_upstream_strict(conversation.polis_id, True)
+            upstream_changed = True
+        except upstream_errors as exc:
+            raise ModerationPolicyUpstreamFailed() from exc
+
+    changed = conversation.statement_moderation_policy != policy
+    conversation.statement_moderation_policy = policy
+    try:
+        session.commit()
+    except SQLAlchemyError as exc:
+        session.rollback()
+        raise ModerationPolicySaveFailed(
+            outcome_unknown=upstream_changed,
+        ) from exc
+
+    for statement_id in reconciled:
+        audit_reconciled(statement_id)
+    if changed or upstream_changed:
+        audit_policy(policy, len(reconciled))
+    return ModerationPolicyResult(
+        policy=policy,
+        changed=changed or upstream_changed,
+        reconciled_statement_ids=tuple(reconciled),
+    )
 
 
 @dataclass(frozen=True)

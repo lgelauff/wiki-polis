@@ -787,6 +787,17 @@
         "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
+    "/admin/conversations/{conversationId}/statement-moderation-policy": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "put": {"operationId": "putAdminStatementModerationPolicy", "summary": "Set the default decision for future statements without reinterpreting existing statements", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementModerationPolicyRequest"}}}}, "responses": {
+        "200": {"description": "Policy receipt and refreshed statement workspace", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminStatementModerationPolicyResponse"}}}},
+        "400": {"description": "Invalid policy", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Conversation moderation permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Upstream outcome may be unknown", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "502": {"description": "Moderation baseline reconciliation failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "503": {"description": "Current state could not be verified or saved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/statements/{statementId}/moderation": {
       "parameters": [
         {"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
@@ -947,6 +958,8 @@
       }},
       "AdminDeletionResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["conversationId", "deleted", "links"], "additionalProperties": false, "properties": {"conversationId": {"type": "integer", "minimum": 1}, "deleted": {"type": "boolean", "const": true}, "links": {"type": "object", "required": ["admin"], "additionalProperties": false, "properties": {"admin": {"type": "string"}}}}}}},
       "AdminStatementWorkspaceResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminStatementWorkspace"}}},
+      "AdminStatementModerationPolicyRequest": {"type": "object", "required": ["mode"], "additionalProperties": false, "properties": {"mode": {"type": "string", "enum": ["moderate", "auto_approve"]}}},
+      "AdminStatementModerationPolicyResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["mode", "changed", "reconciledStatements", "workspace"], "additionalProperties": false, "properties": {"mode": {"type": "string", "enum": ["moderate", "auto_approve"]}, "changed": {"type": "boolean"}, "reconciledStatements": {"type": "integer", "minimum": 0}, "workspace": {"$ref": "#/components/schemas/AdminStatementWorkspace"}}}}},
       "AdminStatementModerationRequest": {"type": "object", "required": ["status"], "additionalProperties": false, "properties": {"status": {"type": "string", "enum": ["approved", "pending", "hidden"]}}},
       "AdminStatementModerationResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["statementId", "status", "links"], "additionalProperties": false, "properties": {"statementId": {"type": "integer", "minimum": 0}, "status": {"type": "string", "enum": ["approved", "pending", "hidden"]}, "links": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "string"}}}}}}},
       "AdminStatementImportRequest": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "maxLength": 280}}}},
@@ -982,7 +995,7 @@
       "AdminStatementWorkspace": {"type": "object", "required": ["conversation", "statements", "moderationPolicy", "dataAvailability", "seeding", "capabilities", "links"], "additionalProperties": false, "properties": {
         "conversation": {"type": "object", "required": ["id", "slug", "title"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}}},
         "statements": {"type": "object", "required": ["pending", "approved", "hidden"], "additionalProperties": false, "properties": {"pending": {"type": "array", "items": {"$ref": "#/components/schemas/AdminStatement"}}, "approved": {"type": "array", "items": {"$ref": "#/components/schemas/AdminStatement"}}, "hidden": {"type": "array", "items": {"$ref": "#/components/schemas/AdminStatement"}}}},
-        "moderationPolicy": {"type": "object", "required": ["strict", "available"], "additionalProperties": false, "properties": {"strict": {"type": ["boolean", "null"]}, "available": {"type": "boolean"}}},
+        "moderationPolicy": {"type": "object", "required": ["mode", "newStatements", "available"], "additionalProperties": false, "properties": {"mode": {"type": ["string", "null"], "enum": ["moderate", "auto_approve", null]}, "newStatements": {"type": ["string", "null"], "enum": ["pending", "approved", null]}, "available": {"type": "boolean"}}},
         "dataAvailability": {"type": "object", "required": ["statements"], "additionalProperties": false, "properties": {"statements": {"type": "boolean"}}},
         "seeding": {"type": "object", "required": ["allowed", "lockReason", "maxStatementsPerImport", "maxCharactersPerStatement"], "additionalProperties": false, "properties": {"allowed": {"type": "boolean"}, "lockReason": {"type": ["string", "null"]}, "maxStatementsPerImport": {"type": "integer", "minimum": 1}, "maxCharactersPerStatement": {"type": "integer", "minimum": 1}}},
         "capabilities": {"type": "object", "required": ["moderate", "seed"], "additionalProperties": false, "properties": {"moderate": {"type": "boolean"}, "seed": {"type": "boolean"}}},

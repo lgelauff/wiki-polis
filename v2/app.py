@@ -98,9 +98,12 @@ from services.admin_termination import (
 )
 from services.admin_statements import (
     LastFeaturedStatementProtected, StatementModerationUpstreamFailed,
+    ModerationPolicySaveFailed, ModerationPolicyUpstreamFailed,
+    ModerationPolicyVerificationUnavailable,
     SeedImportUpstreamFailed, SeedImportValidationFailed,
     SeedImportVerificationUnavailable, build_statement_workspace,
-    import_seed_statements, moderate_statement,
+    import_seed_statements, moderate_statement, resolved_moderation_policy,
+    set_statement_moderation_policy,
 )
 from services.admin_featured import (
     ArgumentNotInFeaturedWorkspace,
@@ -2661,7 +2664,9 @@ def _admin_statements_api_payload(conv_id: int) -> dict:
         },
         featured_tids=featured_tids,
         provenance_by_tid=_provenance_map(conv.id, all_tids),
-        strict_moderation=strict_moderation,
+        moderation_policy=resolved_moderation_policy(
+            conversation=conv, upstream_strict=strict_moderation,
+        ),
         statements_available=result is not None,
         seed_lock_reason=_seed_statement_lock_reason(conv),
         max_import_rows=MAX_ROWS,
@@ -2673,6 +2678,37 @@ def _admin_statements_api_payload(conv_id: int) -> dict:
             'spa_shell', spa_path=f'admin/conversations/{conv.id}',
         ),
     )
+
+
+def _set_admin_statement_policy_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    result, upstream_strict = _load_admin_statement_sources(conv)
+    pending = None if result is None else result[0]
+    server = _polis_server_client()
+    outcome = set_statement_moderation_policy(
+        conversation=conv,
+        policy=body['mode'],
+        upstream_strict=upstream_strict,
+        pending_statements=pending,
+        moderate_upstream=server.moderate,
+        set_upstream_strict=server.set_strict_moderation,
+        session=db.session,
+        audit_reconciled=lambda statement_id: record_audit(
+            'statement.moderation.baseline', conv_id=conv.id,
+            target_type='statement', target_id=statement_id, decision=1,
+        ),
+        audit_policy=lambda policy, reconciled: record_audit(
+            'statement.moderation_policy.set', conv_id=conv.id,
+            policy=policy, reconciled_statements=reconciled,
+        ),
+        upstream_errors=(PolisServerError,),
+    )
+    return {
+        'mode': outcome.policy,
+        'changed': outcome.changed,
+        'reconciledStatements': len(outcome.reconciled_statement_ids),
+        'workspace': _admin_statements_api_payload(conv.id),
+    }
 
 
 def _moderate_admin_statement_api_payload(
@@ -5186,14 +5222,24 @@ def admin_statement_seed_import_text(conv_id):
 @admin_bp.post('/admin/conversations/<int:conv_id>/strict-moderation')
 @login_required
 def admin_conversation_strict_moderation(conv_id):
-    conv    = _require_mod_for_conv(conv_id)
+    _require_mod_for_conv(conv_id)
     enabled = request.form.get('strict_moderation') == '1'
     try:
-        _polis_server_client().set_strict_moderation(conv.polis_id, enabled)
-        record_audit('strict_moderation.set', conv_id=conv_id, enabled=enabled)
-    except PolisServerError:
-        current_app.logger.exception('set_strict_moderation failed')
+        _set_admin_statement_policy_api_payload(
+            conv_id, {'mode': 'moderate' if enabled else 'auto_approve'},
+        )
+    except ModerationPolicyVerificationUnavailable:
+        flash('Could not verify the current moderation state. Try again later.', 'error')
+    except ModerationPolicyUpstreamFailed:
+        current_app.logger.exception('statement moderation policy update failed')
         flash('Could not update moderation settings. Check server logs for details.', 'error')
+    except ModerationPolicySaveFailed as exc:
+        flash(
+            'The voting service may have been updated, but the local policy could not be saved. '
+            'Do not retry until a site admin checks it.' if exc.outcome_unknown else
+            'Could not save the moderation policy. Try again later.',
+            'error',
+        )
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
 
 # ── Featured statements ───────────────────────────────────────────────────
@@ -6531,6 +6577,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_admin_termination=_admin_termination_api_payload,
         delete_admin_conversation=_delete_admin_conversation_api_payload,
         resolve_admin_statements=_admin_statements_api_payload,
+        set_admin_statement_policy=_set_admin_statement_policy_api_payload,
         moderate_admin_statement=_moderate_admin_statement_api_payload,
         import_admin_seed_statements=_import_admin_seed_statements_api_payload,
         resolve_admin_featured=_admin_featured_api_payload,

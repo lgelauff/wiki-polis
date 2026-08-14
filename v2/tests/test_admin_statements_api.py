@@ -43,7 +43,9 @@ def test_statement_workspace_is_typed_and_privacy_safe(admin_client, conversatio
 
     assert response.status_code == 200
     data = response.get_json()['data']
-    assert data['moderationPolicy'] == {'strict': True, 'available': True}
+    assert data['moderationPolicy'] == {
+        'mode': 'moderate', 'newStatements': 'pending', 'available': True,
+    }
     assert data['dataAvailability'] == {'statements': True}
     assert data['seeding']['maxStatementsPerImport'] == 20
     assert data['statements']['pending'][0] == {
@@ -57,6 +59,76 @@ def test_statement_workspace_is_typed_and_privacy_safe(admin_client, conversatio
     }
     assert 'must-not-leak' not in response.text
     assert 'pid' not in response.text
+
+
+def test_legacy_policy_is_adopted_from_live_upstream_state(
+    admin_client, conversation,
+):
+    conversation.statement_moderation_policy = None
+    db.session.commit()
+    server, participant = _upstream(strict=False)
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app.PolisParticipantClient', return_value=participant),
+    ):
+        response = admin_client.get(
+            f'/api/v1/admin/conversations/{conversation.id}/statements',
+        )
+
+    assert response.get_json()['data']['moderationPolicy'] == {
+        'mode': 'auto_approve',
+        'newStatements': 'approved',
+        'available': True,
+    }
+
+
+def test_policy_change_explicitly_approves_visible_pending_before_strict_baseline(
+    admin_client, conversation,
+):
+    conversation.statement_moderation_policy = None
+    db.session.commit()
+    server, participant = _upstream(strict=False)
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app.PolisParticipantClient', return_value=participant),
+    ):
+        response = admin_client.put(
+            f'/api/v1/admin/conversations/{conversation.id}/statement-moderation-policy',
+            json={'mode': 'auto_approve'},
+        )
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['reconciledStatements'] == 1
+    server.moderate.assert_called_once_with(conversation.polis_id, 11, 1)
+    server.set_strict_moderation.assert_called_once_with(conversation.polis_id, True)
+    db.session.refresh(conversation)
+    assert conversation.statement_moderation_policy == 'auto_approve'
+    events = AuditEvent.query.order_by(AuditEvent.id).all()
+    assert [event.operation for event in events] == [
+        'statement.moderation.baseline',
+        'statement.moderation_policy.set',
+    ]
+
+
+def test_policy_change_fails_closed_when_live_state_is_unavailable(
+    admin_client, conversation,
+):
+    server, participant = _upstream()
+    from polis_admin import PolisParticipantError
+    participant.get_settings.side_effect = PolisParticipantError('offline')
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app.PolisParticipantClient', return_value=participant),
+    ):
+        response = admin_client.put(
+            f'/api/v1/admin/conversations/{conversation.id}/statement-moderation-policy',
+            json={'mode': 'auto_approve'},
+        )
+
+    assert response.status_code == 503
+    assert response.get_json()['error']['code'] == 'verification_unavailable'
+    server.moderate.assert_not_called()
+    server.set_strict_moderation.assert_not_called()
 
 
 def test_statement_workspace_distinguishes_unavailable_from_empty(
