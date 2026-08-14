@@ -179,7 +179,7 @@
       "temporaryReactRoutes": ["/app/admin/conversations/:conversationId/moderation"],
       "targetReactRoutes": ["/admin/conversations/:conversationId/flags"],
       "apiOperations": ["getAdminConversationFlags", "putAdminFlagResolution"],
-      "status": "partial",
+      "status": "parity",
       "scenarios": ["empty", "open-statement", "open-argument", "resolved", "moderator"]
     },
     {

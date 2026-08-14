@@ -2114,6 +2114,126 @@
       "serverFixture": "isolated",
       "goldenSha256": "613c9d2dc3432bb10b03ab17ef232f7b109c11a9a23c0f5453fbe77e065417ae",
       "parityGate": true
+    },
+    {
+      "id": "admin-flags--empty--desktop",
+      "pageId": "admin-flags",
+      "state": "empty",
+      "legacyPath": "/admin/conversations/1/flags?parity-state=admin-flags-empty",
+      "reactPath": "/app/admin/conversations/1/moderation?parity-state=admin-flags-empty",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "67585b7f33a153ee4c9422d8f84869837571e16e3165fedf1be20845c3a6ae67",
+      "parityGate": true
+    },
+    {
+      "id": "admin-flags--empty--mobile",
+      "pageId": "admin-flags",
+      "state": "empty",
+      "legacyPath": "/admin/conversations/1/flags?parity-state=admin-flags-empty",
+      "reactPath": "/app/admin/conversations/1/moderation?parity-state=admin-flags-empty",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "19a8db9869233c866c02239caf69ddd8e83cd5d2450723c153472d344a71c4b5",
+      "parityGate": true
+    },
+    {
+      "id": "admin-flags--open-statement--desktop",
+      "pageId": "admin-flags",
+      "state": "open-statement",
+      "legacyPath": "/admin/conversations/1/flags?parity-state=admin-flags-open-statement",
+      "reactPath": "/app/admin/conversations/1/moderation?parity-state=admin-flags-open-statement",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "66d3c27317131dc1c1cee325a5dfd21d2b669f6eb539448a136a97389ae5e17a",
+      "parityGate": true
+    },
+    {
+      "id": "admin-flags--open-statement--mobile",
+      "pageId": "admin-flags",
+      "state": "open-statement",
+      "legacyPath": "/admin/conversations/1/flags?parity-state=admin-flags-open-statement",
+      "reactPath": "/app/admin/conversations/1/moderation?parity-state=admin-flags-open-statement",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "4ac568b1f54d2be07fc0aca55f38c2bb59bd0063f5018c009f4efdee49dd586c",
+      "parityGate": true
+    },
+    {
+      "id": "admin-flags--open-argument--desktop",
+      "pageId": "admin-flags",
+      "state": "open-argument",
+      "legacyPath": "/admin/conversations/1/flags?parity-state=admin-flags-open-argument",
+      "reactPath": "/app/admin/conversations/1/moderation?parity-state=admin-flags-open-argument",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "92979f60adc247433fc7a92fb5b4e90c351af9148f8838dadcdc0190a7790ec8",
+      "parityGate": true
+    },
+    {
+      "id": "admin-flags--open-argument--mobile",
+      "pageId": "admin-flags",
+      "state": "open-argument",
+      "legacyPath": "/admin/conversations/1/flags?parity-state=admin-flags-open-argument",
+      "reactPath": "/app/admin/conversations/1/moderation?parity-state=admin-flags-open-argument",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "271c8965ac6ccace7bae456d44fd1c7d6146d3dea737554b25864f2f1512a8ee",
+      "parityGate": true
+    },
+    {
+      "id": "admin-flags--resolved--desktop",
+      "pageId": "admin-flags",
+      "state": "resolved",
+      "legacyPath": "/admin/conversations/1/flags?parity-state=admin-flags-resolved",
+      "reactPath": "/app/admin/conversations/1/moderation?parity-state=admin-flags-resolved",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "155f5a1c954621bbcd54427f13e50b79c6b764b1f213945debaecf1d88b6f1b8",
+      "parityGate": true
+    },
+    {
+      "id": "admin-flags--resolved--mobile",
+      "pageId": "admin-flags",
+      "state": "resolved",
+      "legacyPath": "/admin/conversations/1/flags?parity-state=admin-flags-resolved",
+      "reactPath": "/app/admin/conversations/1/moderation?parity-state=admin-flags-resolved",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "ef4245c35e912739d8066917084c704c2235a4c05dd242ef89f825d4c2b63977",
+      "parityGate": true
+    },
+    {
+      "id": "admin-flags--moderator--desktop",
+      "pageId": "admin-flags",
+      "state": "moderator",
+      "legacyPath": "/admin/conversations/6/flags?parity-state=admin-flags-moderator",
+      "reactPath": "/app/admin/conversations/6/moderation?parity-state=admin-flags-moderator",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "feb4cb3d8401aa60e225c2c7c593aceb2f3f9a93d41a307271bd7fff62e21e66",
+      "parityGate": true
+    },
+    {
+      "id": "admin-flags--moderator--mobile",
+      "pageId": "admin-flags",
+      "state": "moderator",
+      "legacyPath": "/admin/conversations/6/flags?parity-state=admin-flags-moderator",
+      "reactPath": "/app/admin/conversations/6/moderation?parity-state=admin-flags-moderator",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "57273fd2410adb4a5364cb65cce071023c46f5321d5ea99aa7ffde98e01a0107",
+      "parityGate": true
     }
   ]
 }

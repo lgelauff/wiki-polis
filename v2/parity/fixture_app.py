@@ -38,9 +38,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import app as app_module  # noqa: E402  (environment must precede app configuration)
 from db import (  # noqa: E402
     AdminRole, Argument, ArgumentSideState, ArgumentVote, AuditEvent,
-    Conversation, ConversationBan, ConversationInvite, FeaturedStatement,
+    ContentFlag, Conversation, ConversationBan, ConversationInvite, FeaturedStatement,
     Participant, Participation, db,
 )
+from services.admin_moderation import AdminFlagQueue, AdminFlagRow  # noqa: E402
 from services.invites import InviteBatchResult, InviteBatchSaveError  # noqa: E402
 
 
@@ -77,6 +78,7 @@ _original_admin_invitation_view = application.view_functions[
     'admin.admin_conversation_invites'
 ]
 _original_admin_participant_roster_model = app_module._admin_participant_roster_model
+_original_admin_flag_queue_model = app_module._admin_flag_queue_model
 
 
 def _parity_state():
@@ -313,6 +315,74 @@ def _fixture_admin_participant_roster(conversation):
 
 
 app_module._admin_participant_roster_model = _fixture_admin_participant_roster
+
+
+def _fixture_admin_flag_queue(conversation):
+    state = _parity_state()
+    if not state or not state.startswith('admin-flags-'):
+        return _original_admin_flag_queue_model(conversation)
+    rows = []
+    if state in ('admin-flags-open-statement', 'admin-flags-moderator'):
+        flag = ContentFlag(
+            id=9101,
+            conversation_id=conversation.id,
+            content_type='statement',
+            statement_tid=12,
+            category='privacy',
+            detail='Contains identifying details.',
+            status='open',
+            created_at=_PARITY_NOW,
+        )
+        rows.append(AdminFlagRow(
+            flag=flag,
+            category_label='Privacy violation',
+            target_label='Statement #12',
+            target_text='A statement containing private information.',
+        ))
+    elif state == 'admin-flags-open-argument':
+        flag = ContentFlag(
+            id=9102,
+            conversation_id=conversation.id,
+            content_type='argument',
+            argument_id=42,
+            category='off_topic',
+            detail=None,
+            status='open',
+            created_at=_PARITY_NOW,
+        )
+        rows.append(AdminFlagRow(
+            flag=flag,
+            category_label='Off-topic',
+            target_label='Argument #42',
+            target_text='This argument needs moderator review.',
+        ))
+    elif state == 'admin-flags-resolved':
+        flag = ContentFlag(
+            id=9103,
+            conversation_id=conversation.id,
+            content_type='statement',
+            statement_tid=13,
+            category='other',
+            detail=None,
+            status='resolved',
+            created_at=_PARITY_NOW,
+            resolved_at=_PARITY_NOW,
+            resolution_note='Reviewed by the moderation team.',
+        )
+        rows.append(AdminFlagRow(
+            flag=flag,
+            category_label='Other',
+            target_label='Statement #13',
+            target_text='A previously reviewed statement.',
+        ))
+    return AdminFlagQueue(
+        conversation=conversation,
+        rows=rows,
+        statement_texts_available=True,
+    )
+
+
+app_module._admin_flag_queue_model = _fixture_admin_flag_queue
 
 
 class _FixtureParticiapiResponse:
