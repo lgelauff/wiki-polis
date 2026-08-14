@@ -381,6 +381,17 @@ export async function putAdminSettings(
   ))).data;
 }
 
+export async function putAdminRecommendationTier(
+  conversationId: number,
+  body: components['schemas']['AdminRecommendationTierRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT(
+    '/admin/conversations/{conversationId}/recommendation-tier',
+    {params: {path: {conversationId}}, body, headers: {'X-CSRFToken': csrfToken}},
+  ))).data;
+}
+
 export const adminTerminationQuery = (conversationId: number) => queryOptions({
   queryKey: ['admin-termination', conversationId],
   queryFn: async () => (await requireApiData(api.GET(

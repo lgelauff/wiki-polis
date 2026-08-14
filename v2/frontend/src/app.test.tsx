@@ -136,6 +136,46 @@ test('advances a conversation from the server-described lifecycle console', asyn
   );
 });
 
+test('saves lifecycle recommendations without submitting unsaved settings', async () => {
+  let recommendationBody: unknown;
+  let settingsWrites = 0;
+  server.use(
+    http.put(
+      new URL('/api/v1/admin/conversations/7/recommendation-tier', globalThis.location.origin).toString(),
+      async ({request}) => {
+        recommendationBody = await request.json();
+        return HttpResponse.json({data: {
+          changed: true,
+          recommendations: {
+            tier: 'complex',
+            tiers: [
+              {key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5}},
+              {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8}},
+              {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}},
+            ],
+          },
+        }});
+      },
+    ),
+    http.put(
+      new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(),
+      () => {
+        settingsWrites += 1;
+        return HttpResponse.error();
+      },
+    ),
+  );
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
+
+  await screen.findByRole('heading', {name: 'Community strategy'});
+  fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Unsaved title'} });
+  fireEvent.change(screen.getByLabelText('Complexity tier'), {target: {value: 'complex'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Save recommendations'}));
+
+  await waitFor(() => expect(recommendationBody).toEqual({tier: 'complex'}));
+  expect(settingsWrites).toBe(0);
+});
+
 test('schedules and cancels a lifecycle transition', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
   await screen.findByRole('heading', {name: 'Community strategy'});
@@ -152,12 +192,12 @@ test('repairs an advanced phase set through route-valid domain keys', async () =
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
   await screen.findByRole('heading', {name: 'Community strategy'});
   fireEvent.click(screen.getByRole('button', {name: 'Advanced'}));
-  fireEvent.click(screen.getByRole('checkbox', {name: /Arguments/}));
-  fireEvent.click(screen.getByRole('checkbox', {name: /Informed vote/}));
+  fireEvent.click(screen.getByRole('checkbox', {name: /Argument mapping/}));
+  fireEvent.click(screen.getByRole('checkbox', {name: /Informed voting/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save phases'}));
   expect(await screen.findByText(/Enabled but not initialised/)).toBeVisible();
   fireEvent.click(screen.getByRole('button', {name: 'Initialise Phase 6'}));
-  expect(await screen.findByText(/Informed voting is initialised/)).toBeVisible();
+  expect(await screen.findByText(/Phase 6 Polis conversation:/)).toBeVisible();
 });
 
 test('pauses and resumes from the legacy lifecycle control', async () => {

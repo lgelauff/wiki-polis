@@ -6,13 +6,13 @@ type Role = 'moderator' | 'organizer';
 
 function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as string | null, targetKey: null as string | null, targetLabel: null as string | null, frozen: false}): components['schemas']['AdminLifecycle'] {
   return {
-    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: schedule.scheduledAt && !schedule.frozen ? 'scheduled' : 'active', publication: 'not_applicable', closedAt: null},
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: schedule.scheduledAt && !schedule.frozen ? 'scheduled' : 'active', publication: 'not_applicable', closedAt: null, identityReveal: null},
     operator: {roleLabel: 'Global admin'},
     phase: {linear: true, currentIndex: 0, activeKeys: ['preparation'], steps: [
       {key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'current'},
       {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'upcoming'},
       {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'},
-    ], transition: {source: {key: 'preparation', label: 'Preparation'}, target: {key: 'submission', label: 'Explore'}, consequence: {opens: 'Participant statement submission and voting', closes: 'Conversation setup'}, preconditions: [{id: 'ready', label: 'The statement set and introduction are ready', met: null, note: null}], requiresPhase6Initialization: false}, advancedControls: [
+    ], transition: {source: {key: 'preparation', label: 'Preparation'}, target: {key: 'submission', label: 'Explore'}, consequence: {opens: 'Participant statement submission and voting', closes: 'Conversation setup'}, preconditions: [{id: 'ready', label: 'The statement set and introduction are ready', met: null, note: null}], requiresPhase6Initialization: false, showPauseGuidance: false}, phase6Setup: null, advancedControls: [
       {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', active: false, requiresInitialization: false, initialized: true},
       {key: 'argument_mapping', label: 'Arguments', effect: 'Participants add and rate arguments.', active: false, requiresInitialization: false, initialized: true},
       {key: 'informed_voting', label: 'Informed vote', effect: 'Participants vote after reviewing arguments.', active: false, requiresInitialization: true, initialized: false},
@@ -127,6 +127,13 @@ export const handlers = [
       eligibility: {configured: Boolean(body.eligibilityEventId), eventId: body.eligibilityEventId, label: body.eligibilityLabel || null, configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'}, capabilities: {edit: true}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/app/admin/conversations/7'},
     }}});
   }),
+  http.put(new URL('/api/v1/admin/conversations/7/recommendation-tier', globalThis.location.origin).toString(), async ({request}) => {
+    const body = await request.json() as {tier: 'simple' | 'medium' | 'complex'};
+    return HttpResponse.json({data: {changed: true, recommendations: {
+      tier: body.tier,
+      tiers: [{key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5}}, {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8}}, {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}}],
+    }}});
+  }),
   http.get(new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString(), () => HttpResponse.json({data: lifecycleFixture()})),
   http.put(new URL('/api/v1/admin/conversations/7/schedule', globalThis.location.origin).toString(), async ({request}) => {
     const body = await request.json() as {scheduledAt: string | null; frozen: boolean};
@@ -167,15 +174,20 @@ export const handlers = [
       active: lifecycle.phase.activeKeys.includes(row.key),
       initialized: row.key === 'informed_voting' ? true : row.initialized,
     }));
+    lifecycle.phase.phase6Setup = {
+      polisConversationId: 'polis-community-strategy-phase6',
+      seededStatementCount: 4,
+      confirmedStatementCount: 4,
+    };
     lifecycle.capabilities.initializePhase6 = false;
     return HttpResponse.json({data: {initialized: true, lifecycle}}, {status: 201});
   }),
   http.put(new URL('/api/v1/admin/conversations/7/phase', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     transition: {sourceKey: 'preparation', targetKey: 'submission', targetLabel: 'Explore', phase6Created: false, phase6SyncMessage: null, visibilitySynced: true},
     lifecycle: {
-      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', publication: 'not_applicable', closedAt: null},
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', publication: 'not_applicable', closedAt: null, identityReveal: null},
       operator: {roleLabel: 'Global admin'},
-      phase: {linear: true, currentIndex: 1, activeKeys: ['submission'], steps: [{key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'completed'}, {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'current'}, {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'}], transition: null, advancedControls: [{key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', active: true, requiresInitialization: false, initialized: true}]},
+      phase: {linear: true, currentIndex: 1, activeKeys: ['submission'], steps: [{key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'completed'}, {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'current'}, {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'}], transition: null, phase6Setup: null, advancedControls: [{key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', active: true, requiresInitialization: false, initialized: true}]},
       schedule: {canSchedule: true, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
       publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
       statistics: {upstreamUnavailable: false, groups: [{key: 'submission', label: 'Explore', tiles: []}], informedVoting: null},
