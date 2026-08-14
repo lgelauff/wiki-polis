@@ -414,6 +414,7 @@ export const handlers = [
     new URL('/api/v1/conversations/community-strategy/about', globalThis.location.origin).toString(),
     () => HttpResponse.json({
       data: {
+        conversationId: 7,
         slug: 'community-strategy',
         title: 'Community strategy',
         space: 'real',
@@ -696,6 +697,7 @@ export const handlers = [
     new URL('/api/v1/conversations/community-strategy/arguments', globalThis.location.origin).toString(),
     () => HttpResponse.json({
       data: {
+        conversationId: 7,
         slug: 'community-strategy',
         title: 'Community strategy',
         pseudonym: 'quiet-otter',
@@ -719,7 +721,7 @@ export const handlers = [
           },
           capabilities: {flagStatement: true},
         }],
-        capabilities: {contribute: true, prioritize: true, flag: true},
+        capabilities: {contribute: true, prioritize: true, flag: true, moderate: false},
         links: {
           self: '/api/v1/conversations/community-strategy/arguments',
           about: '/app/conversations/community-strategy/about',
@@ -738,7 +740,7 @@ export const handlers = [
           featuredStatementId: 8,
           side: body.side,
           status: 'submitted',
-          argument: {id: 91, body: body.body, own: true, selected: false, capabilities: {prioritize: false, flag: false}},
+          argument: {id: 91, body: body.body, own: true, selected: false, hidden: false, importanceVoteCount: 0, capabilities: {prioritize: false, flag: false, moderate: false}},
           links: {arguments: '/api/v1/conversations/community-strategy/arguments'},
         },
       }, {status: 201});

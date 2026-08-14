@@ -1,18 +1,19 @@
-import {useEffect, useRef, useState, type FormEvent, type KeyboardEvent} from 'react';
+import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
 import {useMutation, useQuery, useSuspenseQuery} from '@tanstack/react-query';
-import {useParams} from 'react-router-dom';
+import {useLocation, useParams} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {
   conversationWorkspaceQuery,
-  createContentFlag,
   createStatement,
   exploreStateQuery,
   putExploreVote,
   sessionQuery,
 } from '../../api/queries';
 import {ExternalRedirect} from './external-redirect';
+import {LegacyArgumentMappingPanel} from './argument-mapping-panel';
 import {LegacyShell} from './legacy-shell';
+import {LegacyContentFlag} from './legacy-content-flag';
 
 type Workspace = components['schemas']['ConversationWorkspace'];
 type WorkspaceTab = components['schemas']['ConversationWorkspaceTab']['key'];
@@ -62,43 +63,6 @@ function SpaceWarning({space}: {space: 'real' | 'demo'}) {
       </span>
       <button type="button" className="space-warn-ok" id="space-warn-x" onClick={() => setVisible(false)}>I understand</button>
     </div>
-  );
-}
-
-function LegacyFlag({slug, statementId, csrfToken}: {slug: string; statementId: number; csrfToken: string}) {
-  const detailsRef = useRef<HTMLDetailsElement>(null);
-  const [category, setCategory] = useState<'personal_attack' | 'privacy' | 'off_topic' | 'other'>('personal_attack');
-  const [detail, setDetail] = useState('');
-  const mutation = useMutation({
-    mutationFn: () => createContentFlag(slug, {
-      contentType: 'statement', targetId: statementId, category,
-      ...(detail.trim() ? {detail: detail.trim()} : {}),
-    }, csrfToken),
-    onSuccess: () => {
-      if (detailsRef.current) detailsRef.current.open = false;
-      setDetail('');
-    },
-  });
-  return (
-    <details ref={detailsRef} className="content-flag content-flag--corner" id="stmt-flag">
-      <summary className="content-flag-trigger" aria-label="Flag this statement for moderator review">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M4 21V4a1 1 0 0 1 1-1h11.5a1 1 0 0 1 .8 1.6L14 9l3.3 4.4a1 1 0 0 1-.8 1.6H5" />
-        </svg>
-      </summary>
-      <form onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
-        <label className="sr-only" htmlFor="stmt-flag-category">Reason</label>
-        <select id="stmt-flag-category" name="category" required value={category} onChange={(event) => setCategory(event.target.value as typeof category)}>
-          <option value="personal_attack">Personal attack</option>
-          <option value="privacy">Privacy violation</option>
-          <option value="off_topic">Off-topic</option>
-          <option value="other">Other</option>
-        </select>
-        <label className="sr-only" htmlFor="stmt-flag-detail">Details</label>
-        <textarea id="stmt-flag-detail" name="detail" rows={2} maxLength={1000} required={category === 'other'} placeholder="Optional details" value={detail} onChange={(event) => setDetail(event.target.value)} />
-        <button type="submit" className="btn-small" disabled={mutation.isPending}>Send</button>
-      </form>
-    </details>
   );
 }
 
@@ -264,7 +228,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
         <p className="sr-only" id="statement-live" role="status" aria-live="polite">{data.currentStatement?.text}</p>
         {!allDone && data.currentStatement && (
           <div className={`statement-card${receipt ? ' statement-card--voted' : ''}`} id="statement-card">
-            <LegacyFlag slug={slug} statementId={data.currentStatement.id} csrfToken={csrfToken} />
+            <LegacyContentFlag slug={slug} target={{contentType: 'statement', targetId: data.currentStatement.id}} label="this statement" csrfToken={csrfToken} corner />
             <div className="statement-card-header">
               <span className="stmt-meta-left"><span className="stmt-dot" /><span className="stmt-meta-label">STATEMENT</span></span>
               <span className="stmt-meta-right" id="stmt-right-label">private vote</span>
@@ -319,9 +283,10 @@ function ClosedWorkspace({data}: {data: Workspace}) {
   );
 }
 
-function WorkspaceBody({data, csrfToken}: {data: Workspace; csrfToken: string}) {
+function WorkspaceBody({data, csrfToken, routeTab}: {data: Workspace; csrfToken: string; routeTab?: WorkspaceTab}) {
   const hashTab = globalThis.location.hash.replace(/^#tab-/, '') as WorkspaceTab;
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>(data.tabs.some((tab) => tab.key === hashTab) ? hashTab : data.defaultTab ?? 'vote');
+  const requestedTab = routeTab ?? hashTab;
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(data.tabs.some((tab) => tab.key === requestedTab) ? requestedTab : data.defaultTab ?? 'vote');
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   function keyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -349,7 +314,7 @@ function WorkspaceBody({data, csrfToken}: {data: Workspace; csrfToken: string}) 
       {data.status === 'closed' ? <ClosedWorkspace data={data} /> : data.status === 'paused' ? <div className="landing-section"><p className="muted">This consultation is temporarily paused. Check back soon.</p></div> : data.tabs.length === 0 ? <div className="landing-section"><p className="muted">Nothing is available yet. Check back soon.</p></div> : (
         <>
           {data.tabs.length > 1 && <div className="tab-bar" role="tablist" onKeyDown={keyDown}>{data.tabs.map((tab, index) => <button key={tab.key} ref={(element) => { tabRefs.current[index] = element; }} id={`tab-btn-${tab.key}`} className={`tab-btn${activeTab === tab.key ? ' tab-btn--active' : ''}`} role="tab" data-tab={`tab-${tab.key}`} aria-controls={`tab-${tab.key}`} aria-selected={activeTab === tab.key} tabIndex={activeTab === tab.key ? 0 : -1} onClick={() => setActiveTab(tab.key)}>{tab.label}</button>)}</div>}
-          {data.tabs.map((tab) => <div key={tab.key} id={`tab-${tab.key}`} className={`tab-panel${activeTab === tab.key ? ' tab-panel--active' : ' tab-panel--hidden'}`} role="tabpanel" aria-labelledby={`tab-btn-${tab.key}`}>{activeTab === tab.key && (tab.key === 'vote' ? <ExplorePanel slug={data.slug} csrfToken={csrfToken} /> : <div className="landing-section"><p className="muted">{tab.label}</p></div>)}</div>)}
+          {data.tabs.map((tab) => <div key={tab.key} id={`tab-${tab.key}`} className={`tab-panel${tab.key === 'arguments' ? ' arguments-tab' : ''}${activeTab === tab.key ? ' tab-panel--active' : ' tab-panel--hidden'}`} role="tabpanel" aria-labelledby={`tab-btn-${tab.key}`}>{activeTab === tab.key && (tab.key === 'vote' ? <ExplorePanel slug={data.slug} csrfToken={csrfToken} /> : tab.key === 'arguments' ? <LegacyArgumentMappingPanel slug={data.slug} csrfToken={csrfToken} /> : <div className="landing-section"><p className="muted">{tab.label}</p></div>)}</div>)}
         </>
       )}
       {data.outroHtml && <div className="outro-text" dangerouslySetInnerHTML={{__html: data.outroHtml}} />}
@@ -359,6 +324,7 @@ function WorkspaceBody({data, csrfToken}: {data: Workspace; csrfToken: string}) 
 
 export function ConversationWorkspacePage() {
   const slug = requiredSlug(useParams().slug);
+  const location = useLocation();
   const {data: session} = useSuspenseQuery(sessionQuery());
   const workspace = useQuery(conversationWorkspaceQuery(slug));
   useEffect(() => {
@@ -375,7 +341,7 @@ export function ConversationWorkspacePage() {
   if (data.viewer.state === 'join_required') return <ExternalRedirect href={data.links.join} />;
   return (
     <LegacyShell headerMode={data.space === 'demo' ? 'conversation-demo' : 'conversation-real'} headerCrumb={<ConversationCrumb data={data} />} title={`${data.title} — ProtoWiki`}>
-      <WorkspaceBody data={data} csrfToken={session.csrfToken} />
+      <WorkspaceBody data={data} csrfToken={session.csrfToken} {...(location.pathname.endsWith('/arguments') ? {routeTab: 'arguments' as const} : {})} />
     </LegacyShell>
   );
 }

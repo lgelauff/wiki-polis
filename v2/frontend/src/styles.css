@@ -26,7 +26,12 @@ a { color: inherit; }
 .legacy-main .v2-option-card,
 .legacy-main .change-vote-btn,
 .legacy-main .btn-small,
-.legacy-main .propose-submit-btn { font-family: var(--sans); }
+.legacy-main .propose-submit-btn,
+.legacy-main .tab-btn,
+.legacy-main .at-contribute--idle,
+.legacy-main .at-direct-skip,
+.legacy-main .at-navbtn { font-family: var(--sans); }
+.legacy-main .at-orient-toggle { font-family: var(--mono); }
 .legacy-main .propose-submit-btn { line-height: 1.8; }
 .skip-link {
   position: fixed;

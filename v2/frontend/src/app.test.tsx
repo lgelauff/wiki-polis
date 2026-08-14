@@ -1,5 +1,5 @@
 import {QueryClientProvider} from '@tanstack/react-query';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test, vi} from 'vitest';
@@ -541,23 +541,21 @@ test('renders explicit argument contribution states and submits through the type
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {
-    name: 'Our movement should invest more in shared technical infrastructure.',
-  })).toBeVisible();
-  expect(screen.getByText(/For:/).parentElement).toHaveTextContent('response needed');
-  expect(screen.getByText(/Against:/).parentElement).toHaveTextContent('nothing to add');
-  expect(screen.getByText(/Complete both responses/)).toBeVisible();
+  expect(await screen.findByText(
+    'Our movement should invest more in shared technical infrastructure.',
+  )).toBeVisible();
+  expect(screen.getByText('for · against ✓')).toBeVisible();
+  expect(screen.getByText('Unlocks after step 1')).toBeVisible();
 
-  fireEvent.click(screen.getByRole('button', {name: 'Add a for argument'}));
-  fireEvent.change(screen.getByRole('textbox', {name: 'Your for argument'}), {
+  fireEvent.click(screen.getByRole('button', {name: 'Add one for-argument'}));
+  const forArgument = screen.getByRole('textbox', {name: 'Your for-argument · one sentence, one claim'});
+  fireEvent.change(forArgument, {
     target: {value: 'Shared maintenance reduces duplicated work.'},
   });
-  fireEvent.click(screen.getByRole('button', {name: 'Submit argument'}));
+  fireEvent.click(within(forArgument.closest('form')!).getByRole('button', {name: 'Submit argument'}));
 
-  expect(await screen.findByText('Your for argument was saved.')).toBeVisible();
-  expect(screen.getByRole('link', {name: 'Explore'})).toHaveAttribute(
-    'href', '/app/conversations/community-strategy/explore',
-  );
+  expect(await screen.findByText('You added one argument for')).toBeVisible();
+  expect(screen.getByRole('tab', {name: 'Vote'})).toBeVisible();
 });
 
 test('reports a statement through the legacy inline disclosure', async () => {
@@ -579,5 +577,5 @@ test('reports a statement through the legacy inline disclosure', async () => {
   });
   fireEvent.click(screen.getByRole('button', {name: 'Send'}));
 
-  await waitFor(() => expect(flagTrigger.parentElement).not.toHaveAttribute('open'));
+  expect(await screen.findByText("Thanks for reporting — we'll take a look.")).toBeVisible();
 });

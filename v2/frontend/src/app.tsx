@@ -6,7 +6,6 @@ import {
   sessionQuery,
   type ConversationSpace,
 } from './api/queries';
-import {ArgumentMappingPage} from './features/arguments/argument-mapping-page';
 import {InformedVotingPage} from './features/informed-voting/informed-voting-page';
 import {ResultsAccessBoundary, ResultsPage} from './features/results/results-page';
 import {AdminParticipantsPage} from './features/admin/admin-participants-page';
@@ -81,17 +80,6 @@ function Header({space, admin = false}: {space?: ConversationSpace; admin?: bool
         )}
       </div>
     </header>
-  );
-}
-
-function ArgumentMappingRoute() {
-  const {slug = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  return (
-    <>
-      <Header />
-      <ArgumentMappingPage slug={slug} csrfToken={session.csrfToken} />
-    </>
   );
 }
 
@@ -214,7 +202,7 @@ export function App() {
           <Route path="/app/conversations/:slug/about" element={<ConversationAboutLegacyPage />} />
           <Route path="/app/conversations/:slug/join" element={<ParticipationEntryLegacyPage />} />
           <Route path="/app/conversations/:slug/explore" element={<ConversationWorkspacePage />} />
-          <Route path="/app/conversations/:slug/arguments" element={<ArgumentMappingRoute />} />
+          <Route path="/app/conversations/:slug/arguments" element={<ConversationWorkspacePage />} />
           <Route path="/app/conversations/:slug/informed-voting" element={<InformedVotingRoute />} />
           <Route path="/app/conversations/:slug/results" element={<ResultsRoute />} />
           <Route path="/app/conversations/:slug/identity-reveal" element={<IdentityRevealLegacyPage />} />
