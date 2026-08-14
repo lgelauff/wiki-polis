@@ -1440,6 +1440,102 @@
       "actions": [{"type": "click", "role": "tab", "name": "Preliminary results"}],
       "goldenSha256": "f3b97a801ed55e2d83b2e83e3c17127123e8fed0add6ed869264deacf270fb14",
       "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--intermediate-ready--desktop",
+      "pageId": "conversation-workflow",
+      "state": "intermediate-results-ready",
+      "legacyPath": "/c/parity-intermediate-ready",
+      "reactPath": "/app/conversations/parity-intermediate-ready/explore",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "b7f6801fa36d2a7af2aee94dd82fd5864fc8d518d34ac359d36d8724f1b64a54",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--intermediate-ready--mobile",
+      "pageId": "conversation-workflow",
+      "state": "intermediate-results-ready",
+      "legacyPath": "/c/parity-intermediate-ready",
+      "reactPath": "/app/conversations/parity-intermediate-ready/explore",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "12f01a766da6156c3edc45b85e23afe68f0c969e70a3e2cc53c70c917efed1ba",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--intermediate-large--desktop",
+      "pageId": "conversation-workflow",
+      "state": "intermediate-results-large-sample",
+      "legacyPath": "/c/parity-intermediate-large",
+      "reactPath": "/app/conversations/parity-intermediate-large/explore",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "87484a694c83a214c421defcfe71432f0d3df5ae09e1e07aee3cde8a364c93d3",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--intermediate-large--mobile",
+      "pageId": "conversation-workflow",
+      "state": "intermediate-results-large-sample",
+      "legacyPath": "/c/parity-intermediate-large",
+      "reactPath": "/app/conversations/parity-intermediate-large/explore",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "cdc38970e522ec6bda182b307218b65bcfaceef53a98925b57c542301cbd49bd",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--intermediate-pending--desktop",
+      "pageId": "conversation-workflow",
+      "state": "intermediate-results-pending",
+      "legacyPath": "/c/parity-intermediate-pending",
+      "reactPath": "/app/conversations/parity-intermediate-pending/explore",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "2ca8315ad11347e9feeaa8e93a1455507e2e03afb9b3772864174f169ee76d51",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--intermediate-pending--mobile",
+      "pageId": "conversation-workflow",
+      "state": "intermediate-results-pending",
+      "legacyPath": "/c/parity-intermediate-pending",
+      "reactPath": "/app/conversations/parity-intermediate-pending/explore",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "0bca04b0b4fb4ab03f00d577fc0f9af79b123c6d5c395b604ed2c66c2a5c18a3",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--intermediate-recomputing--desktop",
+      "pageId": "conversation-workflow",
+      "state": "intermediate-results-recomputing",
+      "legacyPath": "/c/parity-intermediate-recomputing",
+      "reactPath": "/app/conversations/parity-intermediate-recomputing/explore",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "93217367fec19f8c65f0f4f4589bc8f739f1fef4a52469f58a48903b4515c1a0",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--intermediate-recomputing--mobile",
+      "pageId": "conversation-workflow",
+      "state": "intermediate-results-recomputing",
+      "legacyPath": "/c/parity-intermediate-recomputing",
+      "reactPath": "/app/conversations/parity-intermediate-recomputing/explore",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "a054446f4e0baf509bffab4d74ad9d05f915abb56a937f585550d8e94d24ab66",
+      "parityGate": true
     }
   ]
 }

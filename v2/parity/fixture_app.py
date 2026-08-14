@@ -66,6 +66,7 @@ _original_eligibility_check = app_module._check_join_eligibility
 _original_reveal_context = app_module._reveal_context
 _original_build_phase6_results = app_module._build_phase6_results
 _original_build_conversation_lane = app_module.build_conversation_lane
+_original_load_intermediate_results = app_module._load_intermediate_results
 
 
 def _fixture_eligibility_check(conversation, participant):
@@ -157,6 +158,38 @@ def _fixture_results(conversation, participation, results_filter=None):
 
 
 app_module._build_phase6_results = _fixture_results
+
+
+def _fixture_intermediate_results(conversation):
+    if not conversation.slug.startswith('parity-intermediate-'):
+        return _original_load_intermediate_results(conversation)
+    if conversation.slug == 'parity-intermediate-recomputing':
+        return None, None, True
+    if conversation.slug == 'parity-intermediate-pending':
+        return None, None, False
+    results = {
+        'majority': {
+            'agree': [
+                {'statement_text': 'Shared maintenance should be funded collectively.', 'value': .82},
+            ],
+            'disagree': [
+                {'statement_text': 'Every platform should use one central budget.', 'value': .64},
+            ],
+        },
+        'groups': [{
+            'agree': [
+                {'statement_text': 'Local communities should retain operational autonomy.', 'value': .76},
+            ],
+            'disagree': [
+                {'statement_text': 'Standards should be imposed without consultation.', 'value': .61},
+            ],
+        }],
+    }
+    participant_count = 30 if conversation.slug.endswith('-large') else 12
+    return results, {'n_participants': participant_count}, False
+
+
+app_module._load_intermediate_results = _fixture_intermediate_results
 
 
 def _fixture_statements_remaining(self, zinvites, xid):
@@ -375,6 +408,27 @@ def _seed() -> None:
         access_policy='public', phase_public_results=True,
         phase6_polis_conversation_id='parity-preliminary-results-unavailable-phase6',
     )
+    intermediate_ready = Conversation(
+        slug='parity-intermediate-ready', polis_id='parity-intermediate-ready-polis',
+        title='Initial community priorities', active=True,
+        access_policy='public', phase_public_results=True,
+    )
+    intermediate_large = Conversation(
+        slug='parity-intermediate-large', polis_id='parity-intermediate-large-polis',
+        title='Broad community priorities', active=True,
+        access_policy='public', phase_public_results=True,
+    )
+    intermediate_pending = Conversation(
+        slug='parity-intermediate-pending', polis_id='parity-intermediate-pending-polis',
+        title='Results awaiting enough votes', active=True,
+        access_policy='public', phase_public_results=True,
+    )
+    intermediate_recomputing = Conversation(
+        slug='parity-intermediate-recomputing',
+        polis_id='parity-intermediate-recomputing-polis',
+        title='Results computation in progress', active=True,
+        access_policy='public', phase_public_results=True,
+    )
     join_public = Conversation(
         slug='parity-join-public', polis_id='parity-join-public-polis',
         title='Public consultation invitation', active=True, access_policy='public',
@@ -520,6 +574,8 @@ def _seed() -> None:
         arguments_mapping, arguments_gates, arguments_moderator,
         informed_voting, informed_pending, informed_empty,
         preliminary_results, preliminary_unavailable,
+        intermediate_ready, intermediate_large,
+        intermediate_pending, intermediate_recomputing,
         join_public, join_email, join_invite, join_eligibility, join_conflict,
         pseudonym_owner, reveal_pending, reveal_open, reveal_revealed, reveal_expired,
         report_public, report_personal, report_empty,
@@ -603,6 +659,26 @@ def _seed() -> None:
             participant_id=participant.id,
             conversation_id=preliminary_unavailable.id,
             pseudonym='patient-tern',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=intermediate_ready.id,
+            pseudonym='careful-egret',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=intermediate_large.id,
+            pseudonym='broad-falcon',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=intermediate_pending.id,
+            pseudonym='waiting-stork',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=intermediate_recomputing.id,
+            pseudonym='calculating-owl',
         ),
         Participation(
             participant_id=admin.id,
