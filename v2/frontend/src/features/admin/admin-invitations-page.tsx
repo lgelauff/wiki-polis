@@ -60,11 +60,14 @@ export function AdminInvitationsPage({
       });
       setInput('');
     },
-    onError: () => setToast({
-      id: Date.now(),
-      category: 'error',
-      message: "Couldn't save invites — please review the list and retry.",
-    }),
+    onError: () => {
+      setInput('');
+      setToast({
+        id: Date.now(),
+        category: 'error',
+        message: "Couldn't save invites — please review the list and retry.",
+      });
+    },
   });
   const removeMutation = useMutation({
     mutationFn: (invitationId: number) => deleteAdminInvitation(

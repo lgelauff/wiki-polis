@@ -284,6 +284,34 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(await screen.findByText('No invites yet.')).toBeVisible();
 });
 
+test('restores the legacy cleared form and toast after an invitation save error', async () => {
+  server.use(http.put(
+    new URL(
+      '/api/v1/admin/conversations/7/invitations',
+      globalThis.location.origin,
+    ).toString(),
+    () => HttpResponse.json({
+      error: {code: 'save_failed', message: 'The invitations could not be saved safely.'},
+    }, {status: 503}),
+  ));
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/admin/conversations/7/invitations']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  const input = await screen.findByLabelText('Wikimedia usernames (one per line)');
+  fireEvent.change(input, {target: {value: 'New editor'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Add'}));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    "Couldn't save invites — please review the list and retry.",
+  );
+  expect(input).toHaveValue('');
+});
+
 test('replaces a conversation role set from the admin workspace', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/roles']}><App /></MemoryRouter></QueryClientProvider>);
   expect(await screen.findByRole('heading', {name: 'Conversation roles'})).toBeVisible();
