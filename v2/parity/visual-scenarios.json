@@ -2234,6 +2234,88 @@
       "serverFixture": "isolated",
       "goldenSha256": "57273fd2410adb4a5364cb65cce071023c46f5321d5ea99aa7ffde98e01a0107",
       "parityGate": true
+    },
+    {
+      "id": "admin-catalog--global-admin-roster--desktop",
+      "pageId": "admin-catalog",
+      "state": "global-admin-roster",
+      "legacyPath": "/admin?parity-state=admin-global-admin-roster",
+      "reactPath": "/app/admin?parity-state=admin-global-admin-roster",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "9fe139e0c794b24bce5f9602241a8fac5b115e44ffb17789e58d1140e1ffc780",
+      "parityGate": true
+    },
+    {
+      "id": "admin-catalog--global-admin-roster--mobile",
+      "pageId": "admin-catalog",
+      "state": "global-admin-roster",
+      "legacyPath": "/admin?parity-state=admin-global-admin-roster",
+      "reactPath": "/app/admin?parity-state=admin-global-admin-roster",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "9d4916c5070449f945c42e905bba773adf1d44fd0510ec2d5de1ab82e8eefe0d",
+      "parityGate": true
+    },
+    {
+      "id": "admin-catalog--validation-error--desktop",
+      "pageId": "admin-catalog",
+      "state": "validation-error",
+      "legacyPath": "/admin",
+      "reactPath": "/app/admin",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "actions": [
+        {"type": "fill", "label": "Wikimedia username", "value": "MissingEditor"},
+        {"type": "click", "role": "button", "name": "Grant"}
+      ],
+      "serverFixture": "isolated",
+      "goldenSha256": "b39e1045071d0a1e9734f008fb64e054f185e8fecd7d63568ea48e54654ca95c",
+      "parityGate": true
+    },
+    {
+      "id": "admin-catalog--validation-error--mobile",
+      "pageId": "admin-catalog",
+      "state": "validation-error",
+      "legacyPath": "/admin",
+      "reactPath": "/app/admin",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "actions": [
+        {"type": "fill", "label": "Wikimedia username", "value": "MissingEditor"},
+        {"type": "click", "role": "button", "name": "Grant"}
+      ],
+      "serverFixture": "isolated",
+      "goldenSha256": "1e1a2d0ab73aebec9f982233c63f08dcdcbbd5db54629983af9acd29c57e27c7",
+      "parityGate": true
+    },
+    {
+      "id": "admin-catalog--forbidden--desktop",
+      "pageId": "admin-catalog",
+      "state": "forbidden",
+      "legacyPath": "/admin",
+      "reactPath": "/app/admin",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "legacyStylesheet": false,
+      "goldenSha256": "afac13ba8b20ac3f686da326a1e989ea8eb8d9a9eb58b6b00b96a700f5b5abdc",
+      "parityGate": true
+    },
+    {
+      "id": "admin-catalog--forbidden--mobile",
+      "pageId": "admin-catalog",
+      "state": "forbidden",
+      "legacyPath": "/admin",
+      "reactPath": "/app/admin",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "legacyStylesheet": false,
+      "goldenSha256": "9840acdf6286555a3d15f8a5f8f8bf438d9424a3b13481eaf9ddeb1fde28ab52",
+      "parityGate": true
     }
   ]
 }

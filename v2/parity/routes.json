@@ -146,7 +146,7 @@
       "temporaryReactRoutes": ["/app/admin"],
       "targetReactRoutes": ["/admin"],
       "apiOperations": ["getSession", "getAdminCatalog", "postAdminConversation", "postGlobalAdminGrant", "putGlobalAdmin"],
-      "status": "partial",
+      "status": "parity",
       "scenarios": ["empty", "populated", "global-admin-roster", "validation-error", "forbidden"]
     },
     {

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -246,19 +246,34 @@ app_module.build_conversation_lane = _fixture_lane
 
 
 def _fixture_admin_catalog(**kwargs):
-    if _parity_state() == 'admin-empty':
+    state = _parity_state()
+    if state == 'admin-empty':
         kwargs = {**kwargs, 'conversations': [], 'global_admins': []}
+    elif state == 'admin-global-admin-roster':
+        kwargs = {
+            **kwargs,
+            'conversations': [],
+            'global_admins': Participant.query.filter(
+                Participant.mw_username.in_(['ParityAdmin', 'ParityTarget']),
+            ).order_by(Participant.mw_username).all(),
+        }
     return _original_build_admin_catalog(**kwargs)
 
 
 def _fixture_admin_view():
-    if _parity_state() != 'admin-empty':
+    state = _parity_state()
+    if state not in ('admin-empty', 'admin-global-admin-roster'):
         return _original_admin_view()
+    global_admins = []
+    if state == 'admin-global-admin-roster':
+        global_admins = Participant.query.filter(
+            Participant.mw_username.in_(['ParityAdmin', 'ParityTarget']),
+        ).order_by(Participant.mw_username).all()
     return app_module.render_template(
         'admin.html',
         conversations=[],
         participants=[],
-        global_admins=[],
+        global_admins=global_admins,
         phase_routes=app_module.PHASE_ROUTES,
     )
 
@@ -737,7 +752,7 @@ def _seed() -> None:
         reveal_conversation.report_filter_snapshot = {
             'excluded_tids': [], 'excluded_pids': [],
         }
-    db.session.add_all([
+    seed_conversations = [
         admin, target, participant, moderator, moderation, closed,
         about_public, about_participant, banned_submission, about_moderator,
         about_scheduled, about_mixed,
@@ -752,7 +767,11 @@ def _seed() -> None:
         report_public, report_personal, report_empty,
         lane_attention, lane_caught, lane_paused, lane_waiting, lane_closed,
         lane_available, lane_moderated, demo_available, demo_joined,
-    ])
+    ]
+    for index, conversation in enumerate(seed_conversations):
+        if isinstance(conversation, Conversation) and conversation.created_at is None:
+            conversation.created_at = _PARITY_NOW + timedelta(minutes=index)
+    db.session.add_all(seed_conversations)
     db.session.flush()
     db.session.add_all([
         Participation(
