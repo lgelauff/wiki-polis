@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+from urllib.parse import parse_qs, urlparse
 
 
 def _fixture_database_path() -> Path:
@@ -62,6 +63,7 @@ app_module._is_emailable = lambda username: username == 'dev-user-2'
 _original_eligibility_check = app_module._check_join_eligibility
 _original_reveal_context = app_module._reveal_context
 _original_build_phase6_results = app_module._build_phase6_results
+_original_build_conversation_lane = app_module.build_conversation_lane
 
 
 def _fixture_eligibility_check(conversation, participant):
@@ -129,6 +131,42 @@ def _fixture_results(conversation, participation, results_filter=None):
 
 
 app_module._build_phase6_results = _fixture_results
+
+
+def _fixture_statements_remaining(self, zinvites, xid):
+    del self, xid
+    return {
+        zinvite: (0 if zinvite == 'parity-lane-caught-polis' else 3)
+        for zinvite in zinvites
+    }
+
+
+app_module.PolisServerClient.get_statements_remaining_bulk = (
+    _fixture_statements_remaining
+)
+
+
+def _fixture_lane(*args, **kwargs):
+    lane = _original_build_conversation_lane(*args, **kwargs)
+    state = app_module.request.args.get('parity-state')
+    if state is None and app_module.request.referrer:
+        state = parse_qs(urlparse(app_module.request.referrer).query).get(
+            'parity-state', [None],
+        )[0]
+    if state == 'empty':
+        lane.public_conversations = []
+        lane.attention_joined = []
+        lane.caught_up_joined = []
+        lane.inactive_joined = []
+        lane.archived_joined = []
+        lane.available = []
+        lane.moderating = []
+        lane.pseudonym_map = {}
+        lane.signals_map = {}
+    return lane
+
+
+app_module.build_conversation_lane = _fixture_lane
 
 
 def _seed() -> None:
@@ -278,6 +316,63 @@ def _seed() -> None:
         closed_at=datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc),
         report_filter_snapshot={'excluded_tids': [], 'excluded_pids': []},
     )
+    lane_attention = Conversation(
+        slug='parity-lane-attention', polis_id='parity-lane-attention-polis',
+        title='Community priorities', active=True, access_policy='public',
+        phase_submission=True,
+        scheduled_transition_at=datetime(2026, 8, 20, 15, 30, tzinfo=timezone.utc),
+        scheduled_transition_target='argument_mapping',
+        created_at=datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc),
+    )
+    lane_caught = Conversation(
+        slug='parity-lane-caught', polis_id='parity-lane-caught-polis',
+        title='Documentation improvements', active=True, access_policy='public',
+        phase_submission=True,
+        created_at=datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc),
+    )
+    lane_paused = Conversation(
+        slug='parity-lane-paused', polis_id='parity-lane-paused-polis',
+        title='Paused governance review', active=True, paused=True,
+        access_policy='public', phase_argument_mapping=True,
+        created_at=datetime(2026, 8, 8, 12, 0, tzinfo=timezone.utc),
+    )
+    lane_waiting = Conversation(
+        slug='parity-lane-waiting', polis_id='parity-lane-waiting-polis',
+        title='Awaiting informed vote', active=True, access_policy='public',
+        phase_cleanup=True,
+        created_at=datetime(2026, 8, 7, 12, 0, tzinfo=timezone.utc),
+    )
+    lane_closed = Conversation(
+        slug='parity-lane-closed', polis_id='parity-lane-closed-polis',
+        title='Completed community review', active=False, paused=False,
+        access_policy='public', phase_public_results=True,
+        closed_at=datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc),
+        created_at=datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc),
+    )
+    lane_available = Conversation(
+        slug='parity-lane-available', polis_id='parity-lane-available-polis',
+        title='Open movement consultation', active=True, access_policy='public',
+        phase_argument_mapping=True,
+        created_at=datetime(2026, 8, 11, 12, 0, tzinfo=timezone.utc),
+    )
+    lane_moderated = Conversation(
+        slug='parity-lane-moderated', polis_id='parity-lane-moderated-polis',
+        title='Facilitated policy discussion', active=True, access_policy='public',
+        phase_submission=True,
+        created_at=datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc),
+    )
+    demo_available = Conversation(
+        slug='parity-demo-available', polis_id='parity-demo-available-polis',
+        title='Try a demonstration consultation', active=True,
+        access_policy='demo', phase_submission=True,
+        created_at=datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc),
+    )
+    demo_joined = Conversation(
+        slug='parity-demo-joined', polis_id='parity-demo-joined-polis',
+        title='Your demonstration conversation', active=True,
+        access_policy='demo', phase_submission=True,
+        created_at=datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc),
+    )
     for reveal_conversation in (
         reveal_pending, reveal_open, reveal_revealed, reveal_expired,
     ):
@@ -292,6 +387,8 @@ def _seed() -> None:
         join_public, join_email, join_invite, join_eligibility, join_conflict,
         pseudonym_owner, reveal_pending, reveal_open, reveal_revealed, reveal_expired,
         report_public, report_personal, report_empty,
+        lane_attention, lane_caught, lane_paused, lane_waiting, lane_closed,
+        lane_available, lane_moderated, demo_available, demo_joined,
     ])
     db.session.flush()
     db.session.add_all([
@@ -363,6 +460,36 @@ def _seed() -> None:
             conversation_id=report_personal.id,
             pseudonym='report-wren',
         ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=lane_attention.id,
+            pseudonym='alert-falcon',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=lane_caught.id,
+            pseudonym='ready-lark',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=lane_paused.id,
+            pseudonym='patient-seal',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=lane_waiting.id,
+            pseudonym='waiting-tern',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=lane_closed.id,
+            pseudonym='archive-wolf',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=demo_joined.id,
+            pseudonym='demo-kite',
+        ),
         ConversationInvite(
             conversation_id=join_invite.id,
             mw_username=participant.mw_username,
@@ -376,6 +503,12 @@ def _seed() -> None:
         AdminRole(
             participant_id=moderator.id,
             conversation_id=join_invite.id,
+            role='moderator',
+            granted_by=admin.id,
+        ),
+        AdminRole(
+            participant_id=participant.id,
+            conversation_id=lane_moderated.id,
             role='moderator',
             granted_by=admin.id,
         ),

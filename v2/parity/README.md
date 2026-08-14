@@ -32,7 +32,10 @@ cd v2
 
 The runner fixes Chromium, locale, timezone, color scheme, reduced motion, device scale,
 and viewport; waits for the network and fonts; disables residual animation; and masks the
-changing commit fingerprint. A visual match is byte-for-byte PNG equality. During the
+changing commit fingerprint. Each scenario gets a fresh browser process. Comparison first verifies
+the committed golden against a live Jinja render, then compares React in the same process. Exact
+PNG equality is preferred; Chromium-only anti-alias noise is accepted only under either a 0.1%
+edge/20-channel cap or a 0.5% glyph-edge/0.25-total-error cap. During the
 migration, missing/different screens are reported but only scenarios marked `parityGate`
 fail. `--require-parity` turns every missing or different scenario into a failure for the
 final cutover audit. Browser artifacts live under `output/playwright/`.

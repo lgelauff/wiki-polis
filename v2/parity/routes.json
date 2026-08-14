@@ -25,7 +25,7 @@
       "temporaryReactRoutes": ["/app/demo"],
       "targetReactRoutes": ["/demo"],
       "apiOperations": ["getSession", "getConversationLane"],
-      "status": "partial",
+      "status": "parity",
       "scenarios": ["anonymous-empty", "anonymous-populated", "authenticated-populated", "test-user-switcher"]
     },
     {
@@ -36,8 +36,8 @@
       "temporaryReactRoutes": ["/app/real"],
       "targetReactRoutes": ["/consultations"],
       "apiOperations": ["getSession", "getConversationLane"],
-      "status": "partial",
-      "scenarios": ["anonymous-empty", "anonymous-public", "participant-all-groups", "global-admin", "output-ready", "scheduled-transition"]
+      "status": "parity",
+      "scenarios": ["anonymous-empty", "anonymous-public", "participant-all-groups", "participant-browse", "pending-output", "global-admin", "output-ready", "scheduled-transition"]
     },
     {
       "id": "statement-guidance",
