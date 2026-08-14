@@ -700,6 +700,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/recommendation-tier": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the advisory recommendation tier */
+        put: operations["putAdminConversationRecommendationTier"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/statements": {
         parameters: {
             query?: never;
@@ -1373,6 +1392,16 @@ export interface components {
                 settings: components["schemas"]["AdminSettings"];
             };
         };
+        AdminRecommendationTierRequest: {
+            /** @enum {string} */
+            tier: "simple" | "medium" | "complex";
+        };
+        AdminRecommendationTierResponse: {
+            data: {
+                changed: boolean;
+                recommendations: components["schemas"]["AdminRecommendations"];
+            };
+        };
         AdminSettings: {
             conversation: {
                 id: number;
@@ -1386,18 +1415,7 @@ export interface components {
                 phaseRouteLabel: string;
                 polisId: string;
             };
-            recommendations: {
-                /** @enum {string} */
-                tier: "simple" | "medium" | "complex";
-                tiers: {
-                    /** @enum {string} */
-                    key: "simple" | "medium" | "complex";
-                    label: string;
-                    quantities: {
-                        [key: string]: number;
-                    };
-                }[];
-            };
+            recommendations: components["schemas"]["AdminRecommendations"];
             eligibility: {
                 configured: boolean;
                 eventId: string;
@@ -1413,6 +1431,18 @@ export interface components {
                 self: string;
                 lifecycle: string;
             };
+        };
+        AdminRecommendations: {
+            /** @enum {string} */
+            tier: "simple" | "medium" | "complex";
+            tiers: {
+                /** @enum {string} */
+                key: "simple" | "medium" | "complex";
+                label: string;
+                quantities: {
+                    [key: string]: number;
+                };
+            }[];
         };
         AdminLifecycleResponse: {
             data: components["schemas"]["AdminLifecycle"];
@@ -1502,6 +1532,11 @@ export interface components {
                 activeKeys: string[];
                 steps: components["schemas"]["AdminLifecycleStep"][];
                 transition: components["schemas"]["AdminLifecycleTransition"] | null;
+                phase6Setup: null | {
+                    polisConversationId: string | null;
+                    seededStatementCount: number;
+                    confirmedStatementCount: number;
+                };
                 advancedControls: {
                     key: string;
                     label: string;
@@ -1591,6 +1626,15 @@ export interface components {
             publication: "not_applicable" | "pending" | "published";
             /** Format: date-time */
             closedAt: string | null;
+            identityReveal: null | {
+                /** @enum {string} */
+                state: "pending" | "open" | "expired";
+                /** Format: date-time */
+                opensAt: string | null;
+                /** Format: date-time */
+                closesAt: string | null;
+                daysLeft: number | null;
+            };
         };
         AdminLifecycleStep: {
             key: string;
@@ -1613,6 +1657,7 @@ export interface components {
                 note: string | null;
             }[];
             requiresPhase6Initialization: boolean;
+            showPauseGuidance: boolean;
         };
         AdminLifecyclePhaseRef: {
             key: string;
@@ -4714,6 +4759,50 @@ export interface operations {
                 };
             };
             /** @description Invalid settings */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Organizer permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminConversationRecommendationTier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminRecommendationTierRequest"];
+            };
+        };
+        responses: {
+            /** @description Update receipt and refreshed recommendations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRecommendationTierResponse"];
+                };
+            };
+            /** @description Invalid recommendation tier */
             400: {
                 headers: {
                     [name: string]: unknown;

@@ -915,6 +915,14 @@
         "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
+    "/admin/conversations/{conversationId}/recommendation-tier": {
+      "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "put": {"operationId": "putAdminConversationRecommendationTier", "summary": "Set the advisory recommendation tier", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminRecommendationTierRequest"}}}}, "responses": {
+        "200": {"description": "Update receipt and refreshed recommendations", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminRecommendationTierResponse"}}}},
+        "400": {"description": "Invalid recommendation tier", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Organizer permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/statements": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "get": {"operationId": "getAdminConversationStatements", "summary": "Return the privacy-safe statement moderation workspace", "responses": {
@@ -1171,13 +1179,16 @@
         "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "eligibilityEventId": {"type": "string", "maxLength": 80}, "eligibilityLabel": {"type": "string", "maxLength": 255}, "recommendationTier": {"type": "string", "enum": ["simple", "medium", "complex"]}
       }},
       "AdminSettingsUpdateResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["changed", "changedFields", "settings"], "additionalProperties": false, "properties": {"changed": {"type": "boolean"}, "changedFields": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}, "settings": {"$ref": "#/components/schemas/AdminSettings"}}}}},
+      "AdminRecommendationTierRequest": {"type": "object", "required": ["tier"], "additionalProperties": false, "properties": {"tier": {"type": "string", "enum": ["simple", "medium", "complex"]}}},
+      "AdminRecommendationTierResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["changed", "recommendations"], "additionalProperties": false, "properties": {"changed": {"type": "boolean"}, "recommendations": {"$ref": "#/components/schemas/AdminRecommendations"}}}}},
       "AdminSettings": {"type": "object", "required": ["conversation", "recommendations", "eligibility", "capabilities", "links"], "additionalProperties": false, "properties": {
         "conversation": {"type": "object", "required": ["id", "slug", "title", "introHtml", "outroHtml", "accessPolicy", "phaseRoute", "phaseRouteLabel", "polisId"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}, "introHtml": {"type": "string"}, "outroHtml": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "phaseRoute": {"type": "string"}, "phaseRouteLabel": {"type": "string"}, "polisId": {"type": "string"}}},
-        "recommendations": {"type": "object", "required": ["tier", "tiers"], "additionalProperties": false, "properties": {"tier": {"type": "string", "enum": ["simple", "medium", "complex"]}, "tiers": {"type": "array", "items": {"type": "object", "required": ["key", "label", "quantities"], "additionalProperties": false, "properties": {"key": {"type": "string", "enum": ["simple", "medium", "complex"]}, "label": {"type": "string"}, "quantities": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 1}}}}}}},
+        "recommendations": {"$ref": "#/components/schemas/AdminRecommendations"},
         "eligibility": {"type": "object", "required": ["configured", "eventId", "label", "configurationMode", "note"], "additionalProperties": false, "properties": {"configured": {"type": "boolean"}, "eventId": {"type": "string"}, "label": {"type": ["string", "null"]}, "configurationMode": {"type": "string", "const": "editable"}, "note": {"type": "string"}}},
         "capabilities": {"type": "object", "required": ["edit"], "additionalProperties": false, "properties": {"edit": {"type": "boolean"}}},
         "links": {"type": "object", "required": ["self", "lifecycle"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "lifecycle": {"type": "string"}}}
       }},
+      "AdminRecommendations": {"type": "object", "required": ["tier", "tiers"], "additionalProperties": false, "properties": {"tier": {"type": "string", "enum": ["simple", "medium", "complex"]}, "tiers": {"type": "array", "items": {"type": "object", "required": ["key", "label", "quantities"], "additionalProperties": false, "properties": {"key": {"type": "string", "enum": ["simple", "medium", "complex"]}, "label": {"type": "string"}, "quantities": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 1}}}}}}},
       "AdminLifecycleResponse": {
         "type": "object", "required": ["data"], "additionalProperties": false,
         "properties": {"data": {"$ref": "#/components/schemas/AdminLifecycle"}}
@@ -1215,10 +1226,11 @@
         "properties": {
           "conversation": {"$ref": "#/components/schemas/AdminLifecycleConversation"},
           "operator": {"type": "object", "required": ["roleLabel"], "additionalProperties": false, "properties": {"roleLabel": {"type": "string"}}},
-          "phase": {"type": "object", "required": ["linear", "currentIndex", "activeKeys", "steps", "transition", "advancedControls"], "additionalProperties": false, "properties": {
+          "phase": {"type": "object", "required": ["linear", "currentIndex", "activeKeys", "steps", "transition", "phase6Setup", "advancedControls"], "additionalProperties": false, "properties": {
             "linear": {"type": "boolean"}, "currentIndex": {"type": "integer", "minimum": 0}, "activeKeys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
             "steps": {"type": "array", "items": {"$ref": "#/components/schemas/AdminLifecycleStep"}},
             "transition": {"oneOf": [{"$ref": "#/components/schemas/AdminLifecycleTransition"}, {"type": "null"}]},
+            "phase6Setup": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["polisConversationId", "seededStatementCount", "confirmedStatementCount"], "additionalProperties": false, "properties": {"polisConversationId": {"type": ["string", "null"]}, "seededStatementCount": {"type": "integer", "minimum": 0}, "confirmedStatementCount": {"type": "integer", "minimum": 0}}}]},
             "advancedControls": {"type": "array", "items": {"type": "object", "required": ["key", "label", "effect", "active", "requiresInitialization", "initialized"], "additionalProperties": false, "properties": {"key": {"type": "string"}, "label": {"type": "string"}, "effect": {"type": "string"}, "active": {"type": "boolean"}, "requiresInitialization": {"type": "boolean"}, "initialized": {"type": "boolean"}}}}
           }},
           "schedule": {"type": "object", "required": ["canSchedule", "scheduledAt", "targetKey", "targetLabel", "frozen"], "additionalProperties": false, "properties": {
@@ -1254,20 +1266,21 @@
         }
       },
       "AdminLifecycleConversation": {
-        "type": "object", "required": ["id", "slug", "title", "accessPolicy", "status", "publication", "closedAt"], "additionalProperties": false,
-        "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "status": {"type": "string", "enum": ["active", "paused", "scheduled", "archived", "closed"]}, "publication": {"type": "string", "enum": ["not_applicable", "pending", "published"]}, "closedAt": {"type": ["string", "null"], "format": "date-time"}}
+        "type": "object", "required": ["id", "slug", "title", "accessPolicy", "status", "publication", "closedAt", "identityReveal"], "additionalProperties": false,
+        "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "status": {"type": "string", "enum": ["active", "paused", "scheduled", "archived", "closed"]}, "publication": {"type": "string", "enum": ["not_applicable", "pending", "published"]}, "closedAt": {"type": ["string", "null"], "format": "date-time"}, "identityReveal": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["state", "opensAt", "closesAt", "daysLeft"], "additionalProperties": false, "properties": {"state": {"type": "string", "enum": ["pending", "open", "expired"]}, "opensAt": {"type": ["string", "null"], "format": "date-time"}, "closesAt": {"type": ["string", "null"], "format": "date-time"}, "daysLeft": {"type": ["integer", "null"]}}}]}}
       },
       "AdminLifecycleStep": {
         "type": "object", "required": ["key", "label", "effect", "state"], "additionalProperties": false,
         "properties": {"key": {"type": "string"}, "label": {"type": "string"}, "effect": {"type": "string"}, "state": {"type": "string", "enum": ["completed", "current", "upcoming", "available"]}}
       },
       "AdminLifecycleTransition": {
-        "type": "object", "required": ["source", "target", "consequence", "preconditions", "requiresPhase6Initialization"], "additionalProperties": false,
+        "type": "object", "required": ["source", "target", "consequence", "preconditions", "requiresPhase6Initialization", "showPauseGuidance"], "additionalProperties": false,
         "properties": {
           "source": {"$ref": "#/components/schemas/AdminLifecyclePhaseRef"}, "target": {"$ref": "#/components/schemas/AdminLifecyclePhaseRef"},
           "consequence": {"type": "object", "required": ["opens", "closes"], "additionalProperties": false, "properties": {"opens": {"type": "string"}, "closes": {"type": ["string", "null"]}}},
           "preconditions": {"type": "array", "items": {"type": "object", "required": ["id", "label", "met", "note"], "additionalProperties": false, "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "met": {"type": ["boolean", "null"]}, "note": {"type": ["string", "null"]}}}},
-          "requiresPhase6Initialization": {"type": "boolean"}
+          "requiresPhase6Initialization": {"type": "boolean"},
+          "showPauseGuidance": {"type": "boolean"}
         }
       },
       "AdminLifecyclePhaseRef": {"type": "object", "required": ["key", "label"], "additionalProperties": false, "properties": {"key": {"type": "string"}, "label": {"type": "string"}}},

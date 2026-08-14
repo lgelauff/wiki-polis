@@ -53,6 +53,7 @@ def test_lifecycle_contract_exposes_server_evaluated_transition(
     transition = data['phase']['transition']
     assert transition['source'] == {'key': 'preparation', 'label': 'Preparation'}
     assert transition['target'] == {'key': 'submission', 'label': 'Explore'}
+    assert transition['showPauseGuidance'] is False
     assert len(transition['preconditions']) == 6
     assert all({'id', 'label', 'met', 'note'} == set(row) for row in transition['preconditions'])
     publication = data['publicationReadiness']
@@ -134,9 +135,10 @@ def test_scoped_moderator_lifecycle_capabilities_are_read_only(
     }
 
 
-def test_lifecycle_contract_omits_upstream_identifiers(
+def test_lifecycle_contract_exposes_admin_phase6_setup(
     admin_client, conversation,
 ):
+    conversation.phase_informed_voting = True
     conversation.phase6_polis_conversation_id = 'private-round-six'
     db.session.add(FeaturedStatement(
         conversation_id=conversation.id,
@@ -152,7 +154,11 @@ def test_lifecycle_contract_omits_upstream_identifiers(
     )
 
     assert conversation.polis_id not in response.text
-    assert 'private-round-six' not in response.text
+    assert response.get_json()['data']['phase']['phase6Setup'] == {
+        'polisConversationId': 'private-round-six',
+        'seededStatementCount': 1,
+        'confirmedStatementCount': 1,
+    }
 
 
 def test_lifecycle_contract_requires_moderation_access(
@@ -199,7 +205,7 @@ def test_phase6_initialization_api_returns_refreshed_lifecycle(
     )
     assert informed['initialized'] is True
     assert data['lifecycle']['capabilities']['initializePhase6'] is False
-    assert 'p6-private' not in response.text
+    assert data['lifecycle']['phase']['phase6Setup']['polisConversationId'] == 'p6-private'
     assert AuditEvent.query.order_by(AuditEvent.id.desc()).first().operation == 'phase6.init'
 
 
@@ -467,9 +473,10 @@ def test_archive_api_is_reversible_without_publication_side_effects(
         'title': conversation.title,
         'accessPolicy': conversation.access_policy,
         'status': 'archived',
-        'publication': 'not_applicable',
-        'closedAt': None,
-    }
+            'publication': 'not_applicable',
+            'closedAt': None,
+            'identityReveal': None,
+        }
     assert archived.get_json()['data']['changed'] is True
     assert archived.get_json()['data']['lifecycle']['capabilities']['advancePhase'] is False
     assert archived.get_json()['data']['lifecycle']['schedule']['canSchedule'] is False

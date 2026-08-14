@@ -95,7 +95,8 @@ from services.admin_roles import (
     replace_conversation_roles,
 )
 from services.admin_settings import (build_admin_settings,
-                                     update_conversation_settings)
+                                     update_conversation_settings,
+                                     update_recommendation_tier)
 from services.admin_termination import (
     DeletionBlockedByVotes, DeletionOutcomeUnknown, DeletionUpstreamFailed,
     DeletionVerificationUnavailable, build_termination_state,
@@ -2987,6 +2988,15 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
         if phase6_visible else None
     )
     phase_groups = _phase_stat_groups(conv, polis_stats, phase6_stats)
+    confirmed_featured_count = FeaturedStatement.query.filter_by(
+        conversation_id=conv.id, confirmed_by_admin=True,
+    ).count()
+    phase6_seeded_count = FeaturedStatement.query.filter(
+        FeaturedStatement.conversation_id == conv.id,
+        FeaturedStatement.confirmed_by_admin.is_(True),
+        FeaturedStatement.phase6_polis_statement_id.isnot(None),
+    ).count()
+    reveal = _reveal_context(conv, participation=None)
     biggest_shift = None
     if phase6_results:
         biggest = next((
@@ -3030,6 +3040,29 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
                 ),
             }],
         },
+        identity_reveal=(
+            {
+                'state': reveal['state'],
+                'opensAt': (
+                    reveal['opens_at'].isoformat()
+                    if reveal.get('opens_at') else None
+                ),
+                'closesAt': (
+                    reveal['closes_at'].isoformat()
+                    if reveal.get('closes_at') else None
+                ),
+                'daysLeft': reveal.get('days_left'),
+            }
+            if reveal else None
+        ),
+        phase6_setup=(
+            {
+                'polisConversationId': conv.phase6_polis_conversation_id,
+                'seededStatementCount': phase6_seeded_count,
+                'confirmedStatementCount': confirmed_featured_count,
+            }
+            if conv.phase_informed_voting else None
+        ),
         statistics={
             'upstreamUnavailable': stats_unavailable,
             'groups': [{
@@ -3048,7 +3081,7 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
             'participants': Participation.query.filter_by(conversation_id=conv.id).count(),
             'invitations': ConversationInvite.query.filter_by(conversation_id=conv.id).count(),
             'openFlags': ContentFlag.query.filter_by(conversation_id=conv.id, status='open').count(),
-            'featuredStatements': FeaturedStatement.query.filter_by(conversation_id=conv.id, confirmed_by_admin=True).count(),
+            'featuredStatements': confirmed_featured_count,
         },
         can_organize=_can_organize(conv, participant),
         can_administer=_is_global_admin(participant),
@@ -3545,6 +3578,20 @@ def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
         'changed': result.changed,
         'changedFields': result.changed_fields,
         'settings': _admin_settings_api_payload(conv.id),
+    }
+
+
+def _update_admin_recommendation_tier_api_payload(
+    conv_id: int, body: dict,
+) -> dict:
+    conv = _require_organizer_for_conv(conv_id)
+    changed = update_recommendation_tier(
+        conversation=conv, tier=body['tier'], session=db.session,
+        audit=record_audit,
+    )
+    return {
+        'changed': changed,
+        'recommendations': _admin_settings_api_payload(conv.id)['recommendations'],
     }
 
 
@@ -7136,6 +7183,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_admin_lifecycle=_admin_lifecycle_api_payload,
         resolve_admin_settings=_admin_settings_api_payload,
         update_admin_settings=_update_admin_settings_api_payload,
+        update_admin_recommendation_tier=_update_admin_recommendation_tier_api_payload,
         resolve_admin_termination=_admin_termination_api_payload,
         delete_admin_conversation=_delete_admin_conversation_api_payload,
         resolve_admin_statements=_admin_statements_api_payload,

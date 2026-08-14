@@ -108,3 +108,23 @@ def test_moderator_can_read_but_not_change_settings(
     assert readable.status_code == 200
     assert readable.get_json()['data']['capabilities']['edit'] is False
     assert denied.status_code == 403
+
+
+def test_organizer_updates_recommendation_tier_independently(
+    admin_client, conversation,
+):
+    endpoint = (
+        f'/api/v1/admin/conversations/{conversation.id}/recommendation-tier'
+    )
+
+    first = admin_client.put(endpoint, json={'tier': 'complex'})
+    replay = admin_client.put(endpoint, json={'tier': 'complex'})
+
+    assert first.status_code == replay.status_code == 200
+    assert first.get_json()['data']['changed'] is True
+    assert replay.get_json()['data']['changed'] is False
+    assert replay.get_json()['data']['recommendations']['tier'] == 'complex'
+    assert conversation.title == 'Test Conversation'
+    assert AuditEvent.query.filter_by(
+        operation='recommendations.set', conversation_id=conversation.id,
+    ).count() == 1

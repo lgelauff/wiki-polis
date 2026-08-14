@@ -48,6 +48,19 @@ class SettingsUpdateResult:
     changed_fields: list[str]
 
 
+def update_recommendation_tier(
+    *, conversation, tier: str, session, audit,
+) -> bool:
+    desired = {'tier': tier}
+    changed = conversation.recommended_quantities != desired
+    if changed:
+        conversation.recommended_quantities = desired
+    session.commit()
+    if changed:
+        audit('recommendations.set', conv_id=conversation.id, tier=tier)
+    return changed
+
+
 def update_conversation_settings(
     *, conversation, title: str, intro_html: str, outro_html: str,
     access_policy: str, eligibility_event_id: str, eligibility_label: str,

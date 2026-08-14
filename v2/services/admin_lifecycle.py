@@ -18,6 +18,7 @@ def build_admin_lifecycle(
     current_stage_index: int, active_phase_keys: set[str], linear: bool,
     transition: dict | None, schedule: dict, counts: dict,
     publication_readiness: dict, statistics: dict,
+    identity_reveal: dict | None, phase6_setup: dict | None,
     can_organize: bool, can_administer: bool, links: dict,
 ) -> dict:
     if conversation.closed_at:
@@ -69,6 +70,7 @@ def build_admin_lifecycle(
                 'met': row['met'], 'note': row['note'],
             } for row in transition['preconditions']],
             'requiresPhase6Initialization': transition['runs_phase6_init'],
+            'showPauseGuidance': transition['show_pause'],
         }
 
     return {
@@ -80,6 +82,7 @@ def build_admin_lifecycle(
             'status': status,
             'publication': publication,
             'closedAt': _utc_iso(conversation.closed_at),
+            'identityReveal': identity_reveal,
         },
         'operator': {'roleLabel': role_label},
         'phase': {
@@ -88,6 +91,7 @@ def build_admin_lifecycle(
             'activeKeys': sorted(active_phase_keys),
             'steps': steps,
             'transition': transition_dto,
+            'phase6Setup': phase6_setup,
             'advancedControls': [{
                 'key': stage['key'],
                 'label': stage['label'],

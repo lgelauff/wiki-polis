@@ -120,6 +120,7 @@ def create_api_v1_blueprint(
     resolve_admin_lifecycle: Callable[[int], dict],
     resolve_admin_settings: Callable[[int], dict],
     update_admin_settings: Callable[[int, dict], dict],
+    update_admin_recommendation_tier: Callable[[int, dict], dict],
     resolve_admin_termination: Callable[[int], dict],
     delete_admin_conversation: Callable[[int], dict],
     resolve_admin_statements: Callable[[int], dict],
@@ -596,6 +597,19 @@ def create_api_v1_blueprint(
             )
         return _no_store(jsonify({
             'data': update_admin_settings(conversation_id, body),
+        }))
+
+    @bp.put('/admin/conversations/<int:conversation_id>/recommendation-tier')
+    def put_admin_conversation_recommendation_tier(conversation_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'tier'}
+                or body['tier'] not in {'simple', 'medium', 'complex'}):
+            return error_response(
+                'validation_failed', 'Choose a supported scope tier.', 400,
+                details={'fields': {'tier': ['Choose simple, medium, or complex.']}},
+            )
+        return _no_store(jsonify({
+            'data': update_admin_recommendation_tier(conversation_id, body),
         }))
 
     @bp.get('/admin/conversations/<int:conversation_id>/termination')
