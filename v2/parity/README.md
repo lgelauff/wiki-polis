@@ -30,6 +30,26 @@ cd v2
 .venv/bin/python parity/visual.py compare
 ```
 
+To verify the canonical URLs with Jinja fallback blocked, run the final gate in
+SPA-only mode. The runner renders Jinja at each canonical path, then renders React
+at that same path with `spa_only=1` in a fresh browser context:
+
+```sh
+.venv/bin/python parity/visual.py compare --spa-only --require-parity
+```
+
+The `/app/...` routes remain temporary compatibility entry points. Application
+links and API page-link contracts use canonical `/`, `/c/...`, and `/admin/...`
+paths. OAuth login, logout, downloads, API requests, static assets, and external
+sites remain intentional full-document boundaries.
+
+The browser navigation gate proves an internal click emits no document request
+and that a canonical hard refresh remains in React while SPA-only mode is active:
+
+```sh
+.venv/bin/python parity/navigation.py --base-url http://127.0.0.1:5002
+```
+
 The runner fixes Chromium, locale, timezone, color scheme, reduced motion, device scale,
 and viewport; waits for the network and fonts; disables residual animation; and masks the
 changing commit fingerprint. Each scenario gets a fresh browser process. Comparison first verifies
@@ -51,6 +71,7 @@ PARITY_FIXTURE_DATABASE=/tmp/wiki-polis-parity-fixture.db \
 .venv/bin/python parity/visual.py compare \
   --base-url http://127.0.0.1:5002 \
   --fixture isolated \
+  --spa-only \
   --require-parity
 ```
 

@@ -140,3 +140,10 @@ def test_completed_parity_program_stays_fully_gated():
     assert MANIFEST['knownApiGaps'] == []
     assert all(group['status'] == 'parity' for group in groups)
     assert all(scenario['parityGate'] is True for scenario in visual['scenarios'])
+
+
+def test_every_target_route_is_registered_in_react_router():
+    app_source = (V2_ROOT / 'frontend' / 'src' / 'app.tsx').read_text(encoding='utf-8')
+    for page in MANIFEST['pages']:
+        for route in page['targetReactRoutes']:
+            assert f'path="{route}"' in app_source, f'Missing canonical React route: {route}'
