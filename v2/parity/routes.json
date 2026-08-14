@@ -46,7 +46,7 @@
       "templates": ["guidance_statement.html"],
       "temporaryReactRoutes": ["/app/parity/help/statements"],
       "targetReactRoutes": ["/help/statements"],
-      "apiOperations": [],
+      "apiOperations": ["getModerationLog"],
       "status": "parity",
       "scenarios": ["public"]
     },
@@ -57,7 +57,7 @@
       "templates": ["guidance_argument.html"],
       "temporaryReactRoutes": ["/app/parity/help/arguments"],
       "targetReactRoutes": ["/help/arguments"],
-      "apiOperations": [],
+      "apiOperations": ["getConversationOutput"],
       "status": "parity",
       "scenarios": ["public"]
     },
@@ -297,16 +297,6 @@
     }
   ],
   "knownApiGaps": [
-    {
-      "id": "moderation-log-read",
-      "requiredBy": ["moderation-log"],
-      "description": "Expose the public conversation ban/unban history as a typed aggregate read."
-    },
-    {
-      "id": "conversation-output-read",
-      "requiredBy": ["conversation-output"],
-      "description": "Expose each legacy output key, readiness state, metadata, and content as a typed read."
-    },
     {
       "id": "recommendation-tier-command",
       "requiredBy": ["admin-lifecycle"],

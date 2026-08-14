@@ -88,6 +88,8 @@ def create_api_v1_blueprint(
     resolve_developer_logins: Callable[[], list[dict]],
     resolve_conversation_lane: Callable[[bool], dict],
     resolve_conversation_about: Callable[[str], dict],
+    resolve_moderation_log: Callable[[str], dict],
+    resolve_conversation_output: Callable[[str, str], dict],
     resolve_identity_reveal: Callable[[str], dict],
     reveal_identity: Callable[[str], tuple[dict, int]],
     join_conversation: Callable[[str, dict], tuple[dict, int]],
@@ -280,6 +282,18 @@ def create_api_v1_blueprint(
     def get_conversation_about(slug: str):
         return _no_store(jsonify({
             'data': resolve_conversation_about(slug),
+        }))
+
+    @bp.get('/conversations/<slug>/moderation-log')
+    def get_moderation_log(slug: str):
+        return _no_store(jsonify({
+            'data': resolve_moderation_log(slug),
+        }))
+
+    @bp.get('/conversations/<slug>/outputs/<output_key>')
+    def get_conversation_output(slug: str, output_key: str):
+        return _no_store(jsonify({
+            'data': resolve_conversation_output(slug, output_key),
         }))
 
     @bp.get('/conversations/<slug>/identity-reveal')

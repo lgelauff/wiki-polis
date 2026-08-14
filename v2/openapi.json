@@ -143,6 +143,37 @@
         }
       }
     },
+    "/conversations/{slug}/moderation-log": {
+      "get": {
+        "operationId": "getModerationLog",
+        "summary": "Return the public conversation ban and unban history",
+        "parameters": [
+          {"name": "slug", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}
+        ],
+        "responses": {
+          "200": {"description": "Public moderation history", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ModerationLogResponse"}}}},
+          "403": {"description": "Conversation access denied", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
+    "/conversations/{slug}/outputs/{outputKey}": {
+      "get": {
+        "operationId": "getConversationOutput",
+        "summary": "Return one participant-visible conversation output",
+        "parameters": [
+          {"name": "slug", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}},
+          {"name": "outputKey", "in": "path", "required": true, "schema": {"type": "string", "enum": ["initial-clustering", "argument-map", "preliminary-results", "report", "dataset"]}}
+        ],
+        "responses": {
+          "200": {"description": "Conversation output context", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ConversationOutputPageResponse"}}}},
+          "401": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "403": {"description": "Conversation access denied", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "404": {"description": "Conversation or output not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "409": {"description": "Participation required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/conversations/{slug}/identity-reveal": {
       "parameters": [
         {
@@ -1582,6 +1613,76 @@
           "outputs": {"type": "array", "items": {"$ref": "#/components/schemas/ConversationOutput"}},
           "capabilities": {"$ref": "#/components/schemas/ConversationCapabilities"},
           "links": {"$ref": "#/components/schemas/ConversationLinks"}
+        }
+      },
+      "ModerationLogResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/ModerationLog"}}
+      },
+      "ModerationLog": {
+        "type": "object",
+        "required": ["slug", "title", "events", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "events": {"type": "array", "items": {"$ref": "#/components/schemas/ModerationLogEvent"}},
+          "links": {"$ref": "#/components/schemas/ParticipantPageLinks"}
+        }
+      },
+      "ModerationLogEvent": {
+        "type": "object",
+        "required": ["occurredAt", "action", "pseudonym", "scope", "actor"],
+        "additionalProperties": false,
+        "properties": {
+          "occurredAt": {"type": ["string", "null"], "format": "date-time"},
+          "action": {"type": "string", "enum": ["Banned", "Unbanned"]},
+          "pseudonym": {"type": "string"},
+          "scope": {"type": "string", "enum": ["conversation"]},
+          "actor": {"type": "string"}
+        }
+      },
+      "ConversationOutputPageResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {"data": {"$ref": "#/components/schemas/ConversationOutputPage"}}
+      },
+      "ConversationOutputPage": {
+        "type": "object",
+        "required": ["slug", "title", "output", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "output": {"$ref": "#/components/schemas/ConversationOutputDetail"},
+          "links": {"$ref": "#/components/schemas/ParticipantPageLinks"}
+        }
+      },
+      "ConversationOutputDetail": {
+        "type": "object",
+        "required": ["key", "label", "phase", "status", "ready", "method", "pending"],
+        "additionalProperties": false,
+        "properties": {
+          "key": {"type": "string", "enum": ["initial-clustering", "argument-map", "preliminary-results", "report", "dataset"]},
+          "label": {"type": "string", "minLength": 1},
+          "phase": {"type": "string", "minLength": 1},
+          "status": {"type": "string", "enum": ["provisional", "final"]},
+          "ready": {"type": "boolean"},
+          "method": {"type": "string", "minLength": 1},
+          "pending": {"type": "string", "minLength": 1}
+        }
+      },
+      "ParticipantPageLinks": {
+        "type": "object",
+        "required": ["self", "conversation", "about"],
+        "additionalProperties": false,
+        "properties": {
+          "self": {"type": "string"},
+          "conversation": {"type": "string"},
+          "about": {"type": "string"}
         }
       },
       "ConversationAboutResponse": {

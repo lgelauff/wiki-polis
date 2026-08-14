@@ -1754,6 +1754,71 @@ def _conversation_about_api_payload(slug: str) -> dict:
     )
 
 
+def _moderation_log_api_payload(slug: str) -> dict:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    _check_conversation_access(conv, _current_participant())
+
+    def utc_iso(value):
+        if value is None:
+            return None
+        aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return aware.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+    return {
+        'slug': conv.slug,
+        'title': conv.title,
+        'events': [
+            {
+                'occurredAt': utc_iso(row['ts']),
+                'action': row['action'],
+                'pseudonym': row['pseudonym'],
+                'scope': row['scope'],
+                'actor': row['actor'],
+            }
+            for row in _conversation_ban_log_rows(conv)
+        ],
+        'links': {
+            'self': url_for('api_v1.get_moderation_log', slug=slug),
+            'conversation': url_for('participant.conversation', slug=slug),
+            'about': url_for('spa_shell', spa_path=f'conversations/{slug}/about'),
+        },
+    }
+
+
+def _conversation_output_api_payload(slug: str, output_key: str) -> dict:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        abort(409, description='Join this conversation before viewing its outputs.')
+    if _output_definition(output_key) is None:
+        abort(404)
+    output = next(
+        item for item in _output_items(conv) if item['key'] == output_key
+    )
+    return {
+        'slug': conv.slug,
+        'title': conv.title,
+        'output': {
+            key: output[key]
+            for key in ('key', 'label', 'phase', 'status', 'ready', 'method', 'pending')
+        },
+        'links': {
+            'self': url_for(
+                'api_v1.get_conversation_output', slug=slug, output_key=output_key,
+            ),
+            'conversation': url_for('participant.conversation', slug=slug),
+            'about': url_for('spa_shell', spa_path=f'conversations/{slug}/about'),
+        },
+    }
+
+
 def _identity_reveal_api_context(slug: str):
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
@@ -6761,6 +6826,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         ],
         resolve_conversation_lane=_conversation_lane_api_payload,
         resolve_conversation_about=_conversation_about_api_payload,
+        resolve_moderation_log=_moderation_log_api_payload,
+        resolve_conversation_output=_conversation_output_api_payload,
         resolve_identity_reveal=_identity_reveal_api_payload,
         reveal_identity=_reveal_identity_api_payload,
         join_conversation=_join_conversation_api_payload,

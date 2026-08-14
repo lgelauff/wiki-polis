@@ -144,6 +144,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/moderation-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the public conversation ban and unban history */
+        get: operations["getModerationLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{slug}/outputs/{outputKey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return one participant-visible conversation output */
+        get: operations["getConversationOutput"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{slug}/identity-reveal": {
         parameters: {
             query?: never;
@@ -1778,6 +1812,50 @@ export interface components {
             capabilities: components["schemas"]["ConversationCapabilities"];
             links: components["schemas"]["ConversationLinks"];
         };
+        ModerationLogResponse: {
+            data: components["schemas"]["ModerationLog"];
+        };
+        ModerationLog: {
+            slug: string;
+            title: string;
+            events: components["schemas"]["ModerationLogEvent"][];
+            links: components["schemas"]["ParticipantPageLinks"];
+        };
+        ModerationLogEvent: {
+            /** Format: date-time */
+            occurredAt: string | null;
+            /** @enum {string} */
+            action: "Banned" | "Unbanned";
+            pseudonym: string;
+            /** @enum {string} */
+            scope: "conversation";
+            actor: string;
+        };
+        ConversationOutputPageResponse: {
+            data: components["schemas"]["ConversationOutputPage"];
+        };
+        ConversationOutputPage: {
+            slug: string;
+            title: string;
+            output: components["schemas"]["ConversationOutputDetail"];
+            links: components["schemas"]["ParticipantPageLinks"];
+        };
+        ConversationOutputDetail: {
+            /** @enum {string} */
+            key: "initial-clustering" | "argument-map" | "preliminary-results" | "report" | "dataset";
+            label: string;
+            phase: string;
+            /** @enum {string} */
+            status: "provisional" | "final";
+            ready: boolean;
+            method: string;
+            pending: string;
+        };
+        ParticipantPageLinks: {
+            self: string;
+            conversation: string;
+            about: string;
+        };
         ConversationAboutResponse: {
             data: components["schemas"]["ConversationAbout"];
         };
@@ -2623,6 +2701,105 @@ export interface operations {
             };
             /** @description Conversation not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getModerationLog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Public moderation history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModerationLogResponse"];
+                };
+            };
+            /** @description Conversation access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getConversationOutput: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                outputKey: "initial-clustering" | "argument-map" | "preliminary-results" | "report" | "dataset";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversation output context */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationOutputPageResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation or output not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Participation required */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
