@@ -269,18 +269,19 @@ test('adds and removes invitations through convergent admin commands', async () 
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {name: 'Invitations'})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Invites — Community strategy'})).toBeVisible();
   expect(screen.getByText('Existing editor')).toBeVisible();
-  fireEvent.change(screen.getByLabelText('Wikimedia usernames'), {
+  fireEvent.change(screen.getByLabelText('Wikimedia usernames (one per line)'), {
     target: {value: 'New editor\nNew editor'},
   });
-  fireEvent.click(screen.getByRole('button', {name: 'Add invitations'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Add'}));
 
   expect(await screen.findByText('New editor')).toBeVisible();
-  expect(screen.getByRole('status')).toHaveTextContent('1 added');
-  expect(screen.getByRole('status')).toHaveTextContent('1 duplicate input');
-  fireEvent.click(screen.getByRole('button', {name: 'Remove New editor'}));
-  expect(await screen.findByText('No invitations yet.')).toBeVisible();
+  expect(screen.getByRole('status')).toHaveTextContent('Invites: 1 added; 1 duplicate input.');
+  const newEditorRow = screen.getByText('New editor').closest('tr');
+  expect(newEditorRow).not.toBeNull();
+  fireEvent.click(within(newEditorRow!).getByRole('button', {name: 'remove'}));
+  expect(await screen.findByText('No invites yet.')).toBeVisible();
 });
 
 test('replaces a conversation role set from the admin workspace', async () => {

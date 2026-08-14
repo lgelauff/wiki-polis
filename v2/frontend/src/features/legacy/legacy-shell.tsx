@@ -69,12 +69,14 @@ export function LegacyShell({
   crumb,
   headerCrumb,
   headerMode = 'plain',
+  toast,
   title = 'ProtoWiki',
 }: {
   children: ReactNode;
   crumb?: string;
   headerCrumb?: ReactNode;
   headerMode?: HeaderMode;
+  toast?: ReactNode;
   title?: string;
 }) {
   const {data: session} = useSuspenseQuery(sessionQuery());
@@ -148,7 +150,7 @@ export function LegacyShell({
       </header>
 
       <main className="legacy-main" id="main" tabIndex={-1}>{children}</main>
-      <div id="toast-container" />
+      <div id="toast-container">{toast}</div>
       <footer style={{textAlign: 'right', padding: '.5rem 1rem', fontSize: 11, color: 'var(--muted)'}}>
         <code>react</code>
       </footer>

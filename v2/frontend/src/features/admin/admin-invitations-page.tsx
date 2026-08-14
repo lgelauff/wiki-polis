@@ -1,4 +1,4 @@
-import {useState, type FormEvent} from 'react';
+import {useCallback, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 
@@ -8,11 +8,29 @@ import {
   deleteAdminInvitation,
   putAdminInvitations,
 } from '../../api/queries';
+import {LegacyShell} from '../legacy/legacy-shell';
+import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 
 type Roster = components['schemas']['AdminInvitationRoster'];
 
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {dateStyle: 'medium'}).format(new Date(value));
+function legacyTruncate(value: string, length = 28, leeway = 5): string {
+  return value.length <= length + leeway ? value : `${value.slice(0, length - 1)}…`;
+}
+
+function formatLegacyDate(value: string): string {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function invitationOutcomeMessage(
+  outcome: components['schemas']['AdminInvitationBatchReceipt']['outcome'],
+): string {
+  const summary = [`${outcome.added} added`];
+  if (outcome.alreadyPresent) summary.push(`${outcome.alreadyPresent} already present`);
+  if (outcome.duplicateInputs) summary.push(`${outcome.duplicateInputs} duplicate input`);
+  if (outcome.concurrentConflicts) {
+    summary.push(`${outcome.concurrentConflicts} added concurrently by another moderator`);
+  }
+  return `Invites: ${summary.join('; ')}.`;
 }
 
 export function AdminInvitationsPage({
@@ -24,7 +42,8 @@ export function AdminInvitationsPage({
   const queryClient = useQueryClient();
   const {data} = useSuspenseQuery(adminInvitationRosterQuery(conversationId));
   const [input, setInput] = useState('');
-  const [lastOutcome, setLastOutcome] = useState<components['schemas']['AdminInvitationBatchReceipt']['outcome'] | null>(null);
+  const [toast, setToast] = useState<LegacyToastMessage | null>(null);
+  const dismissToast = useCallback(() => setToast(null), []);
   const addMutation = useMutation({
     mutationFn: (usernames: string[]) => putAdminInvitations(
       conversationId, {usernames}, csrfToken,
@@ -34,9 +53,18 @@ export function AdminInvitationsPage({
         adminInvitationRosterQuery(conversationId).queryKey,
         (roster) => roster ? {...roster, invitations: receipt.invitations} : roster,
       );
-      setLastOutcome(receipt.outcome);
+      setToast({
+        id: Date.now(),
+        category: receipt.outcome.concurrentConflicts ? 'info' : 'success',
+        message: invitationOutcomeMessage(receipt.outcome),
+      });
       setInput('');
     },
+    onError: () => setToast({
+      id: Date.now(),
+      category: 'error',
+      message: "Couldn't save invites — please review the list and retry.",
+    }),
   });
   const removeMutation = useMutation({
     mutationFn: (invitationId: number) => deleteAdminInvitation(
@@ -56,75 +84,85 @@ export function AdminInvitationsPage({
     if (usernames.length) addMutation.mutate(usernames);
   }
 
+  const title = data.conversation.title;
   return (
-    <main className="invitation-shell" id="main">
-      <nav className="record-breadcrumb" aria-label="Breadcrumb">
-        <Link to="/app/admin">Admin panel</Link><span>/</span>
-        <Link to={data.links.conversation}>{data.conversation.title}</Link><span>/</span>
-        <span>Invitations</span>
-      </nav>
-      <header className="invitation-heading">
-        <div>
-          <p className="eyebrow">Conversation access</p>
-          <h1>Invitations</h1>
-          <p>{data.conversation.title}</p>
-        </div>
-        <div className="invitation-policy">
-          <span>Access policy</span><strong>{data.conversation.accessPolicy.replace('_', ' ')}</strong>
-        </div>
-      </header>
-      {data.conversation.accessPolicy !== 'invite_only' && (
-        <div className="admin-roster__notice" role="status">
-          <strong>Invitations are inactive</strong>
-          <span>They take effect only when the conversation policy is invite only.</span>
-        </div>
+    <LegacyShell
+      headerMode="admin"
+      title={`Invites — ${title} — ProtoWiki`}
+      headerCrumb={(
+        <nav className="header-crumb" aria-label="Admin breadcrumb">
+          <span className="header-crumb-sep">/</span>
+          <Link to="/app/admin">Admin panel</Link>
+          <span className="header-crumb-sep">/</span>
+          <Link to={data.links.conversation}>{legacyTruncate(title)}</Link>
+          <span className="header-crumb-sep">/</span>
+          <span>Invites</span>
+        </nav>
       )}
-      <section className="invitation-add" aria-labelledby="add-invitations-heading">
-        <div>
-          <p className="eyebrow">Bulk entry</p>
-          <h2 id="add-invitations-heading">Add Wikimedia usernames</h2>
-          <p>Enter one username per line. Existing and duplicate entries are safe to submit again.</p>
-        </div>
-        <form onSubmit={submit}>
-          <label htmlFor="invitation-usernames">Wikimedia usernames</label>
-          <textarea
-            id="invitation-usernames"
-            rows={7}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder={'Username1\nUsername2\nUsername3'}
-            disabled={addMutation.isPending}
-          />
-          <button type="submit" disabled={!input.trim() || addMutation.isPending}>
-            {addMutation.isPending ? 'Adding…' : 'Add invitations'}
-          </button>
-          {addMutation.isError && <p className="command-error" role="alert">{addMutation.error.message}</p>}
-          {lastOutcome && (
-            <p className="invitation-outcome" role="status">
-              {lastOutcome.added} added · {lastOutcome.alreadyPresent} already present · {lastOutcome.duplicateInputs} duplicate input · {lastOutcome.concurrentConflicts} concurrent
+      toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
+    >
+      <div className="container">
+        <h2>
+          Invites — <Link to={`/app/conversations/${data.conversation.slug}/about`}>{title}</Link>
+        </h2>
+        <p className="muted" style={{marginBottom: '1.25rem'}}>
+          Access policy: <strong>{data.conversation.accessPolicy}</strong>
+        </p>
+
+        {data.conversation.accessPolicy !== 'invite_only' && (
+          <div className="landing-section">
+            <p className="muted">
+              This conversation uses <strong>{data.conversation.accessPolicy}</strong> access.
+              {' '}Invites only take effect when the policy is set to <strong>invite_only</strong>.
             </p>
-          )}
-        </form>
-      </section>
-      <section className="invitation-roster" aria-labelledby="invitation-roster-heading">
-        <header><h2 id="invitation-roster-heading">Invited accounts</h2><span>{data.invitations.length}</span></header>
-        {data.invitations.length ? (
-          <ul>
+          </div>
+        )}
+
+        <div className="edit-form">
+          <h3>Add invites</h3>
+          <form onSubmit={submit}>
+            <label>
+              Wikimedia usernames (one per line)
+              <textarea
+                name="mw_usernames"
+                rows={6}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder={'Username1\nUsername2\nUsername3'}
+              />
+            </label>
+            <button type="submit">Add</button>
+          </form>
+        </div>
+
+        <table className="admin-table">
+          <thead>
+            <tr><th>Username</th><th>Added</th><th /></tr>
+          </thead>
+          <tbody>
             {data.invitations.map((invitation) => (
-              <li key={invitation.id}>
-                <strong>{invitation.username}</strong>
-                <span>Added {formatDate(invitation.createdAt)}</span>
-                <button
-                  type="button"
-                  onClick={() => removeMutation.mutate(invitation.id)}
-                  disabled={removeMutation.isPending}
-                >Remove {invitation.username}</button>
-              </li>
+              <tr key={invitation.id}>
+                <td>{invitation.username}</td>
+                <td className="muted">{formatLegacyDate(invitation.createdAt)}</td>
+                <td>
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      removeMutation.mutate(invitation.id);
+                    }}
+                    style={{display: 'inline'}}
+                  >
+                    <button type="submit" className="btn-small btn-danger">remove</button>
+                  </form>
+                </td>
+              </tr>
             ))}
-          </ul>
-        ) : <p className="moderation-empty">No invitations yet.</p>}
-        {removeMutation.isError && <p className="command-error" role="alert">{removeMutation.error.message}</p>}
-      </section>
-    </main>
+            {!data.invitations.length && (
+              <tr><td colSpan={3} className="muted">No invites yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </LegacyShell>
   );
 }
