@@ -67,7 +67,7 @@ def stabilize_page(page: Page, *, require_legacy_stylesheet: bool = True) -> Non
                 sheet.href && new URL(sheet.href).pathname === '/static/style.css'
             )"""
         )
-    page.wait_for_function("document.fonts.status === 'loaded'")
+    page.wait_for_function("() => document.fonts.status === 'loaded'")
     page.add_style_tag(content=STABILIZING_CSS)
     page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
 

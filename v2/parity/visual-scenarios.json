@@ -1562,6 +1562,54 @@
       "parityGate": true
     },
     {
+      "id": "conversation-workflow--invite-restricted--desktop",
+      "pageId": "conversation-workflow",
+      "state": "invite-restricted",
+      "legacyPath": "/c/parity-workspace-restricted",
+      "reactPath": "/app/conversations/parity-workspace-restricted/explore",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "a0bf6670d3d94e76eba69ac04f905e01435548af924ff1a37b4433b4a81c43ee",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--invite-restricted--mobile",
+      "pageId": "conversation-workflow",
+      "state": "invite-restricted",
+      "legacyPath": "/c/parity-workspace-restricted",
+      "reactPath": "/app/conversations/parity-workspace-restricted/explore",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "b305056ad3c628edf76e5e84d478acef3950cc999bb36c4a433ff84a1bf1cb26",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--invite-restricted-moderator--desktop",
+      "pageId": "conversation-workflow",
+      "state": "invite-restricted-moderator",
+      "legacyPath": "/c/parity-join-invite",
+      "reactPath": "/app/conversations/parity-join-invite/explore",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "72c19e7e8e1c2d2f99dedf20a491d6bd2f44c5e4932d0515fd29b7ba2cef5ba5",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--invite-restricted-moderator--mobile",
+      "pageId": "conversation-workflow",
+      "state": "invite-restricted-moderator",
+      "legacyPath": "/c/parity-join-invite",
+      "reactPath": "/app/conversations/parity-join-invite/explore",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "fbac72712ac93fd80f083a82a67b46754e4ee0cee4ed6f3c3ffd766e38af8e03",
+      "parityGate": true
+    },
+    {
       "id": "conversation-workflow--banned--mobile",
       "pageId": "conversation-workflow",
       "state": "banned",

@@ -448,6 +448,12 @@ def _seed() -> None:
         slug='parity-join-invite', polis_id='parity-join-invite-polis',
         title='Invited contributors only', active=True, access_policy='invite_only',
     )
+    workspace_restricted = Conversation(
+        slug='parity-workspace-restricted',
+        polis_id='parity-workspace-restricted-polis',
+        title='Restricted community planning', active=True,
+        access_policy='invite_only', phase_submission=True,
+    )
     join_eligibility = Conversation(
         slug='parity-join-eligibility', polis_id='parity-join-eligibility-polis',
         title='Experienced editor consultation', active=True, access_policy='public',
@@ -583,7 +589,8 @@ def _seed() -> None:
         preliminary_results, preliminary_unavailable,
         intermediate_ready, intermediate_large,
         intermediate_pending, intermediate_recomputing,
-        join_public, join_email, join_invite, join_eligibility, join_conflict,
+        join_public, join_email, join_invite, workspace_restricted,
+        join_eligibility, join_conflict,
         pseudonym_owner, reveal_pending, reveal_open, reveal_revealed, reveal_expired,
         report_public, report_personal, report_empty,
         lane_attention, lane_caught, lane_paused, lane_waiting, lane_closed,
