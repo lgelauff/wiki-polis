@@ -2630,6 +2630,30 @@
       "actions": [{"type": "click", "role": "button", "name": "remove"}],
       "goldenSha256": "db15f203d453734c241479c39e7356e45abfdcb526cc352f70411512206ccb79",
       "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--preparation--desktop",
+      "pageId": "admin-lifecycle",
+      "state": "preparation",
+      "legacyPath": "/admin/conversations/80?parity-state=admin-lifecycle-preparation",
+      "reactPath": "/app/admin/conversations/80?parity-state=admin-lifecycle-preparation",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "b3d7bbd3cbb8654d6d2edeb87129e7c3488884f0af21661a8e8965f0562c00b5",
+      "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--preparation--mobile",
+      "pageId": "admin-lifecycle",
+      "state": "preparation",
+      "legacyPath": "/admin/conversations/80?parity-state=admin-lifecycle-preparation",
+      "reactPath": "/app/admin/conversations/80?parity-state=admin-lifecycle-preparation",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "f6079e410223b9d85538f4a63981b9f18f95cfae85b2f051b6a3b2310c0bee88",
+      "parityGate": true
     }
   ]
 }

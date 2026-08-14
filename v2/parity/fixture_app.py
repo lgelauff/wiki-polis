@@ -101,6 +101,15 @@ def _parity_state():
     return state
 
 
+@application.before_request
+def _fixture_polis_database_availability():
+    application.config['POLIS_DATABASE_URL'] = (
+        'postgresql://parity-unreachable'
+        if _parity_state() == 'admin-lifecycle-upstream-unavailable'
+        else ''
+    )
+
+
 def _fixture_eligibility_check(conversation, participant):
     if conversation.eligibility_event_id == 'parity-denied':
         return False, 'ineligible', {'reason': 'This fixture account needs more edits.'}
@@ -140,8 +149,14 @@ def _fixture_results(conversation, participation, results_filter=None):
             'clusters': None,
             'pg_available': detailed,
         }
+    lifecycle_results = conversation.slug in {
+        'parity-lifecycle-informed-voting',
+        'parity-lifecycle-cleanup',
+        'parity-lifecycle-advanced-phases',
+    }
     if not (conversation.slug.startswith('parity-report-')
-            or conversation.slug.startswith('parity-reveal-')):
+            or conversation.slug.startswith('parity-reveal-')
+            or lifecycle_results):
         return _original_build_phase6_results(
             conversation, participation, results_filter=results_filter,
         )
@@ -235,6 +250,38 @@ def _fixture_statements_remaining(self, zinvites, xid):
 app_module.PolisServerClient.get_statements_remaining_bulk = (
     _fixture_statements_remaining
 )
+
+
+def _fixture_polis_stats(self, zinvite):
+    del self
+    if zinvite == 'parity-lifecycle-upstream-unavailable-polis':
+        return None
+    if zinvite.startswith('parity-lifecycle-'):
+        informed = zinvite.endswith('-phase6')
+        return {
+            'n_participants': 18 if informed else 24,
+            'n_votes': 93 if informed else 146,
+            'n_statements': 6 if informed else 14,
+            'n_seed': 5,
+            'avg_votes': 6.1,
+            'median_votes': 6,
+        }
+    return None
+
+
+def _fixture_valid_vote_count(self, zinvite):
+    del self
+    if zinvite == 'parity-lifecycle-deletion-eligible-polis':
+        return 0
+    if zinvite == 'parity-lifecycle-upstream-unavailable-polis':
+        return None
+    if zinvite.startswith('parity-lifecycle-'):
+        return 5
+    return None
+
+
+app_module.PolisServerClient.get_polis_stats = _fixture_polis_stats
+app_module.PolisServerClient.get_valid_vote_count = _fixture_valid_vote_count
 
 
 def _fixture_lane(*args, **kwargs):
@@ -970,6 +1017,105 @@ def _seed() -> None:
         title='Locked community infrastructure priorities', active=True,
         access_policy='public', phase_argument_mapping=True,
     )
+    lifecycle_preparation = Conversation(
+        id=80, slug='parity-lifecycle-preparation',
+        polis_id='parity-lifecycle-preparation-polis',
+        title='Lifecycle parity — preparation', active=True,
+        access_policy='public',
+    )
+    lifecycle_submission = Conversation(
+        id=81, slug='parity-lifecycle-submission',
+        polis_id='parity-lifecycle-submission-polis',
+        title='Lifecycle parity — explore', active=True,
+        access_policy='public', phase_submission=True,
+    )
+    lifecycle_arguments = Conversation(
+        id=82, slug='parity-lifecycle-argument-mapping',
+        polis_id='parity-lifecycle-argument-mapping-polis',
+        title='Lifecycle parity — arguments', active=True,
+        access_policy='public', phase_argument_mapping=True,
+    )
+    lifecycle_informed = Conversation(
+        id=83, slug='parity-lifecycle-informed-voting',
+        polis_id='parity-lifecycle-informed-voting-polis',
+        title='Lifecycle parity — informed vote', active=True,
+        access_policy='public', phase_informed_voting=True,
+        phase6_polis_conversation_id='parity-lifecycle-informed-voting-phase6',
+    )
+    lifecycle_cleanup = Conversation(
+        id=84, slug='parity-lifecycle-cleanup',
+        polis_id='parity-lifecycle-cleanup-polis',
+        title='Lifecycle parity — cleanup', active=True,
+        access_policy='public', phase_cleanup=True,
+        phase6_polis_conversation_id='parity-lifecycle-cleanup-phase6',
+    )
+    lifecycle_closed = Conversation(
+        id=85, slug='parity-lifecycle-closed',
+        polis_id='parity-lifecycle-closed-polis',
+        title='Lifecycle parity — closed', active=False, paused=False,
+        access_policy='public', phase_public_results=True,
+        phase6_polis_conversation_id='parity-lifecycle-closed-phase6',
+        closed_at=datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc),
+    )
+    lifecycle_paused = Conversation(
+        id=86, slug='parity-lifecycle-paused',
+        polis_id='parity-lifecycle-paused-polis',
+        title='Lifecycle parity — paused', active=True, paused=True,
+        access_policy='public', phase_submission=True,
+    )
+    lifecycle_scheduled = Conversation(
+        id=87, slug='parity-lifecycle-scheduled',
+        polis_id='parity-lifecycle-scheduled-polis',
+        title='Lifecycle parity — scheduled', active=True,
+        access_policy='public', phase_submission=True,
+        scheduled_transition_at=datetime(2030, 2, 3, 14, 30, tzinfo=timezone.utc),
+        scheduled_transition_target='featured_selection',
+    )
+    lifecycle_advanced = Conversation(
+        id=88, slug='parity-lifecycle-advanced-phases',
+        polis_id='parity-lifecycle-advanced-phases-polis',
+        title='Lifecycle parity — advanced phases', active=True,
+        access_policy='public', phase_submission=True,
+        phase_argument_mapping=True, phase_informed_voting=True,
+        phase6_polis_conversation_id='parity-lifecycle-advanced-phases-phase6',
+    )
+    lifecycle_unavailable = Conversation(
+        id=89, slug='parity-lifecycle-upstream-unavailable',
+        polis_id='parity-lifecycle-upstream-unavailable-polis',
+        title='Lifecycle parity — upstream unavailable', active=True,
+        access_policy='public', phase_submission=True,
+    )
+    lifecycle_moderator = Conversation(
+        id=90, slug='parity-lifecycle-moderator',
+        polis_id='parity-lifecycle-moderator-polis',
+        title='Lifecycle parity — moderator', active=True,
+        access_policy='public', phase_argument_mapping=True,
+    )
+    lifecycle_organizer = Conversation(
+        id=91, slug='parity-lifecycle-organizer',
+        polis_id='parity-lifecycle-organizer-polis',
+        title='Lifecycle parity — organizer', active=True,
+        access_policy='public', phase_submission=True,
+    )
+    lifecycle_global_admin = Conversation(
+        id=92, slug='parity-lifecycle-global-admin',
+        polis_id='parity-lifecycle-global-admin-polis',
+        title='Lifecycle parity — global admin', active=True,
+        access_policy='invite_only', eligibility_event_id='experienced-editors',
+        eligibility_label='Experienced editors',
+    )
+    lifecycle_deletion_eligible = Conversation(
+        id=93, slug='parity-lifecycle-deletion-eligible',
+        polis_id='parity-lifecycle-deletion-eligible-polis',
+        title='Lifecycle parity — empty consultation', active=True,
+        access_policy='public',
+    )
+    lifecycle_deletion_blocked = Conversation(
+        id=94, slug='parity-lifecycle-deletion-blocked',
+        polis_id='parity-lifecycle-deletion-blocked-polis',
+        title='Lifecycle parity — retained votes', active=True,
+        access_policy='public', phase_submission=True,
+    )
     for reveal_conversation in (
         reveal_pending, reveal_open, reveal_revealed, reveal_expired,
     ):
@@ -994,6 +1140,12 @@ def _seed() -> None:
         lane_attention, lane_caught, lane_paused, lane_waiting, lane_closed,
         lane_available, lane_moderated, demo_available, demo_joined,
         featured, featured_locked,
+        lifecycle_preparation, lifecycle_submission, lifecycle_arguments,
+        lifecycle_informed, lifecycle_cleanup, lifecycle_closed,
+        lifecycle_paused, lifecycle_scheduled, lifecycle_advanced,
+        lifecycle_unavailable, lifecycle_moderator, lifecycle_organizer,
+        lifecycle_global_admin, lifecycle_deletion_eligible,
+        lifecycle_deletion_blocked,
     ]
     for index, conversation in enumerate(seed_conversations):
         if isinstance(conversation, Conversation) and conversation.created_at is None:
@@ -1197,6 +1349,30 @@ def _seed() -> None:
             role='moderator',
             granted_by=admin.id,
         ),
+        AdminRole(
+            participant_id=moderator.id,
+            conversation_id=lifecycle_moderator.id,
+            role='moderator',
+            granted_by=admin.id,
+        ),
+        AdminRole(
+            participant_id=participant.id,
+            conversation_id=lifecycle_organizer.id,
+            role='organizer',
+            granted_by=admin.id,
+        ),
+        AdminRole(
+            participant_id=moderator.id,
+            conversation_id=lifecycle_global_admin.id,
+            role='moderator',
+            granted_by=admin.id,
+        ),
+        AdminRole(
+            participant_id=participant.id,
+            conversation_id=lifecycle_global_admin.id,
+            role='organizer',
+            granted_by=admin.id,
+        ),
     ])
     db.session.flush()
 
@@ -1280,6 +1456,33 @@ def _seed() -> None:
     ]
     db.session.add_all(featured_selections)
     db.session.flush()
+    lifecycle_featured = [
+        FeaturedStatement(
+            conversation_id=conversation.id,
+            polis_statement_id=800 + index,
+            phase6_polis_statement_id=(900 + index if conversation.phase6_polis_conversation_id else None),
+            statement_text='Regional communities should share infrastructure funding.',
+            confirmed_by_admin=True,
+        )
+        for index, conversation in enumerate((
+            lifecycle_arguments, lifecycle_informed, lifecycle_cleanup,
+            lifecycle_advanced, lifecycle_moderator,
+        ))
+    ]
+    db.session.add_all(lifecycle_featured)
+    db.session.flush()
+    db.session.add_all([
+        Argument(
+            featured_statement_id=lifecycle_featured[0].id,
+            side='pro', body='Shared funding reduces duplicated work.',
+            proposer_pseudonym='steady-heron', hidden=False,
+        ),
+        Argument(
+            featured_statement_id=lifecycle_featured[0].id,
+            side='con', body='Shared budgets can blur accountability.',
+            proposer_pseudonym='quiet-otter', hidden=False,
+        ),
+    ])
     _, arguments_selection, hidden_selection, _ = featured_selections
     db.session.add_all([
         Argument(
