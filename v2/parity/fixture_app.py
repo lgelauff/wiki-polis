@@ -49,6 +49,9 @@ application.config.update(
     POLIS_ADMIN_EMAIL='',
     POLIS_ADMIN_PASSWORD='',
 )
+for _login_endpoint in ('dev_login', 'dev_fake_login'):
+    if _login_endpoint in application.view_functions:
+        app_module.limiter.exempt(application.view_functions[_login_endpoint])
 
 _PARITY_PSEUDONYMS = [
     'calm-otter', 'bright-fox', 'steady-heron', 'gentle-raven', 'quiet-badger',
@@ -58,6 +61,7 @@ app_module._generate_pseudonyms = lambda count=5: _PARITY_PSEUDONYMS[:count]
 app_module._is_emailable = lambda username: username == 'dev-user-2'
 _original_eligibility_check = app_module._check_join_eligibility
 _original_reveal_context = app_module._reveal_context
+_original_build_phase6_results = app_module._build_phase6_results
 
 
 def _fixture_eligibility_check(conversation, participant):
@@ -70,6 +74,61 @@ app_module._check_join_eligibility = _fixture_eligibility_check
 app_module._reveal_context = lambda conversation, participation: _original_reveal_context(
     conversation, participation, now=_PARITY_NOW,
 )
+
+
+def _fixture_results(conversation, participation, results_filter=None):
+    if conversation.slug == 'parity-report-empty':
+        return None
+    if not (conversation.slug.startswith('parity-report-')
+            or conversation.slug.startswith('parity-reveal-')):
+        return _original_build_phase6_results(
+            conversation, participation, results_filter=results_filter,
+        )
+    statements = [
+            {
+                'fs_id': 101,
+                'text': 'Regional communities should share infrastructure funding.',
+                'p2': {'n_agree': 12, 'n_pass': 3, 'n_disagree': 5, 'n_voters': 20,
+                       'pct_agree': 60.0, 'pct_pass': 15.0, 'pct_disagree': 25.0},
+                'p6': {'n_agree': 14, 'n_pass': 4, 'n_disagree': 2, 'n_voters': 20,
+                       'pct_agree': 70.0, 'pct_pass': 20.0, 'pct_disagree': 10.0},
+                'shift': 10.0,
+            },
+            {
+                'fs_id': 102,
+                'text': 'Local affiliates should retain independent programme budgets.',
+                'p2': {'n_agree': 8, 'n_pass': 2, 'n_disagree': 10, 'n_voters': 20,
+                       'pct_agree': 40.0, 'pct_pass': 10.0, 'pct_disagree': 50.0},
+                'p6': {'n_agree': 7, 'n_pass': 2, 'n_disagree': 11, 'n_voters': 20,
+                       'pct_agree': 35.0, 'pct_pass': 10.0, 'pct_disagree': 55.0},
+                'shift': -5.0,
+            },
+        ]
+    return {
+        'statements': statements,
+        'p2_participants': 25,
+        'p6_participants': 22,
+        'matched_participants': None,
+        'p2_consensus': statements,
+        'p2_divisive': list(reversed(statements)),
+        'filter': results_filter or app_module.Phase6ResultsFilter.empty(),
+        'clusters': [
+            {
+                'n_members': 11,
+                'agree': [{'statement_text': 'Shared maintenance matters', 'value': .82}],
+                'disagree': [{'statement_text': 'Centralize every budget', 'value': .64}],
+            },
+            {
+                'n_members': 9,
+                'agree': [{'statement_text': 'Local autonomy matters', 'value': .76}],
+                'disagree': [],
+            },
+        ],
+        'pg_available': True,
+    }
+
+
+app_module._build_phase6_results = _fixture_results
 
 
 def _seed() -> None:
@@ -192,11 +251,47 @@ def _seed() -> None:
         title='Expired identity consultation', active=False, access_policy='public',
         closed_at=datetime(2026, 6, 5, 12, 0, tzinfo=timezone.utc),
     )
+    report_public = Conversation(
+        slug='parity-report-public', polis_id='parity-report-public-polis',
+        title='Public final report', active=False, access_policy='public',
+        phase_public_results=True,
+        phase6_polis_conversation_id='parity-report-public-phase6',
+        created_at=datetime(2026, 1, 2, 12, 0, tzinfo=timezone.utc),
+        closed_at=datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc),
+        report_filter_snapshot={'excluded_tids': [42], 'excluded_pids': [7, 9]},
+    )
+    report_personal = Conversation(
+        slug='parity-report-personal', polis_id='parity-report-personal-polis',
+        title='Participant-only final report', active=False, access_policy='public',
+        phase_personal_results=True,
+        phase6_polis_conversation_id='parity-report-personal-phase6',
+        created_at=datetime(2026, 2, 3, 12, 0, tzinfo=timezone.utc),
+        closed_at=datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc),
+        report_filter_snapshot={'excluded_tids': [], 'excluded_pids': []},
+    )
+    report_empty = Conversation(
+        slug='parity-report-empty', polis_id='parity-report-empty-polis',
+        title='Final report awaiting results', active=False, access_policy='public',
+        phase_public_results=True,
+        phase6_polis_conversation_id='parity-report-empty-phase6',
+        created_at=datetime(2026, 3, 4, 12, 0, tzinfo=timezone.utc),
+        closed_at=datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc),
+        report_filter_snapshot={'excluded_tids': [], 'excluded_pids': []},
+    )
+    for reveal_conversation in (
+        reveal_pending, reveal_open, reveal_revealed, reveal_expired,
+    ):
+        reveal_conversation.phase_public_results = True
+        reveal_conversation.phase6_polis_conversation_id = f'{reveal_conversation.slug}-phase6'
+        reveal_conversation.report_filter_snapshot = {
+            'excluded_tids': [], 'excluded_pids': [],
+        }
     db.session.add_all([
         admin, target, participant, moderator, moderation, closed,
         about_public, about_participant, about_moderator, about_scheduled, about_mixed,
         join_public, join_email, join_invite, join_eligibility, join_conflict,
         pseudonym_owner, reveal_pending, reveal_open, reveal_revealed, reveal_expired,
+        report_public, report_personal, report_empty,
     ])
     db.session.flush()
     db.session.add_all([
@@ -262,6 +357,11 @@ def _seed() -> None:
             participant_id=participant.id,
             conversation_id=reveal_expired.id,
             pseudonym='private-heron',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=report_personal.id,
+            pseudonym='report-wren',
         ),
         ConversationInvite(
             conversation_id=join_invite.id,

@@ -124,7 +124,7 @@
       "temporaryReactRoutes": ["/app/conversations/:slug/results"],
       "targetReactRoutes": ["/c/:slug/report"],
       "apiOperations": ["getResultsReport"],
-      "status": "partial",
+      "status": "parity",
       "scenarios": ["public-results", "personal-results-authenticated", "personal-results-anonymous", "no-results", "reveal-pending", "reveal-open", "reveal-expired"]
     },
     {

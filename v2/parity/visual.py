@@ -53,17 +53,18 @@ def load_scenarios(
     return manifest, scenarios
 
 
-def prepare_page(page: Page, url: str) -> None:
+def prepare_page(page: Page, url: str, *, require_legacy_stylesheet: bool = True) -> None:
     page.goto(url, wait_until='networkidle')
-    stabilize_page(page)
+    stabilize_page(page, require_legacy_stylesheet=require_legacy_stylesheet)
 
 
-def stabilize_page(page: Page) -> None:
-    page.wait_for_function(
-        """() => [...document.styleSheets].some(sheet =>
-            sheet.href && new URL(sheet.href).pathname === '/static/style.css'
-        )"""
-    )
+def stabilize_page(page: Page, *, require_legacy_stylesheet: bool = True) -> None:
+    if require_legacy_stylesheet:
+        page.wait_for_function(
+            """() => [...document.styleSheets].some(sheet =>
+                sheet.href && new URL(sheet.href).pathname === '/static/style.css'
+            )"""
+        )
     page.wait_for_function("document.fonts.status === 'loaded'")
     page.add_style_tag(content=STABILIZING_CSS)
     page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
@@ -123,7 +124,12 @@ def capture(
     try:
         page = context.new_page()
         authenticate(page, base_url, scenario['auth'])
-        prepare_page(page, f"{base_url}{scenario[path_key]}")
+        require_legacy_stylesheet = scenario.get('legacyStylesheet', True)
+        prepare_page(
+            page,
+            f"{base_url}{scenario[path_key]}",
+            require_legacy_stylesheet=require_legacy_stylesheet,
+        )
         run_actions(page, scenario.get('actions', []))
         destination.parent.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=destination, full_page=defaults['fullPage'])
