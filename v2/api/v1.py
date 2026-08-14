@@ -31,6 +31,8 @@ from services.content_flags import InvalidFlag
 from services.identity_reveal import RevealUnavailable
 from services.invites import InviteBatchSaveError
 from services.admin_lifecycle import (
+    Phase6InitializationConflict, Phase6InitializationSaveFailed,
+    Phase6InitializationUnavailable,
     PhasePreparationFailed, PhaseReadinessBlocked,
     PhaseReadinessUnconfirmed, PhaseTransitionConflict,
     PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
@@ -111,6 +113,7 @@ def create_api_v1_blueprint(
     set_admin_featured_argument: Callable[[int, int, dict], dict],
     delete_admin_featured_argument: Callable[[int, int], dict],
     advance_admin_phase: Callable[[int, dict], dict],
+    initialize_admin_phase6: Callable[[int], dict],
     set_admin_pause: Callable[[int, dict], dict],
     set_admin_archive: Callable[[int, dict], dict],
     set_admin_schedule: Callable[[int, dict], dict],
@@ -682,6 +685,36 @@ def create_api_v1_blueprint(
                 details={'phaseKeys': exc.args[0]},
             )
         return _no_store(jsonify({'data': data}))
+
+    @bp.post('/admin/conversations/<int:conversation_id>/phase6-initialization')
+    def create_admin_phase6_initialization(conversation_id: int):
+        try:
+            data = initialize_admin_phase6(conversation_id)
+        except Phase6InitializationUnavailable as exc:
+            messages = {
+                'inactive': ('conversation_inactive', 'A closed or paused conversation cannot initialize informed voting.'),
+                'phase_disabled': ('phase_disabled', 'Enable informed voting before initializing its voting round.'),
+                'already_initialized': ('already_initialized', 'The informed-voting round is already initialized.'),
+            }
+            code, message = messages[exc.reason]
+            return error_response(code, message, 409)
+        except PhasePreparationFailed:
+            return error_response(
+                'phase_preparation_failed',
+                'The informed-voting round could not be prepared safely.', 502,
+            )
+        except Phase6InitializationConflict:
+            return error_response(
+                'initialization_conflict',
+                'The round was initialized concurrently. Reload before retrying.', 409,
+            )
+        except Phase6InitializationSaveFailed:
+            return error_response(
+                'command_outcome_unknown',
+                'A linked voting round may have been created. Do not retry until a site admin checks it.',
+                409,
+            )
+        return _no_store(jsonify({'data': data})), 201
 
     @bp.put('/admin/conversations/<int:conversation_id>/pause')
     def put_admin_conversation_pause(conversation_id: int):

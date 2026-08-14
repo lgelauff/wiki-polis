@@ -131,6 +131,13 @@ def build_admin_lifecycle(
             ),
             'editSettings': can_organize,
             'useAdvancedPhases': can_administer,
+            'initializePhase6': (
+                bool(conversation.active)
+                and not bool(conversation.paused)
+                and bool(conversation.phase_informed_voting)
+                and not bool(conversation.phase6_polis_conversation_id)
+                and counts['featuredStatements'] > 0
+            ),
             'archive': can_administer and conversation.closed_at is None,
         },
         'links': links,
@@ -165,6 +172,20 @@ class PhaseTransitionConflict(RuntimeError):
 class PhaseTransitionSaveFailed(RuntimeError):
     def __init__(self, *, outcome_unknown: bool, orphaned_phase6_id: str | None):
         self.outcome_unknown = outcome_unknown
+        self.orphaned_phase6_id = orphaned_phase6_id
+
+
+class Phase6InitializationUnavailable(RuntimeError):
+    def __init__(self, reason: str):
+        self.reason = reason
+
+
+class Phase6InitializationConflict(RuntimeError):
+    pass
+
+
+class Phase6InitializationSaveFailed(RuntimeError):
+    def __init__(self, *, orphaned_phase6_id: str):
         self.orphaned_phase6_id = orphaned_phase6_id
 
 
@@ -205,6 +226,49 @@ class PhaseTransitionResult:
     phase6_created: bool
     sync_message: str | None
     visibility_synced: bool
+
+
+@dataclass(frozen=True)
+class Phase6InitializationResult:
+    message: str
+
+
+def initialize_phase6(
+    *, conversation, session, initialize_upstream, audit, logger,
+) -> Phase6InitializationResult:
+    """Create and persist the informed-voting round behind one command boundary."""
+    if not conversation.active or conversation.paused:
+        raise Phase6InitializationUnavailable('inactive')
+    if not conversation.phase_informed_voting:
+        raise Phase6InitializationUnavailable('phase_disabled')
+    if conversation.phase6_polis_conversation_id:
+        raise Phase6InitializationUnavailable('already_initialized')
+
+    ok, message = initialize_upstream(conversation)
+    if not ok:
+        session.rollback()
+        raise PhasePreparationFailed(message)
+
+    orphaned_phase6_id = conversation.phase6_polis_conversation_id
+    slug = conversation.slug
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise Phase6InitializationConflict() from exc
+    except SQLAlchemyError as exc:
+        session.rollback()
+        logger.error(
+            'Phase 6 standalone init: DB error after Polis I/O — '
+            'orphaned Polis conversation %s (conv %s)',
+            orphaned_phase6_id, slug,
+        )
+        raise Phase6InitializationSaveFailed(
+            orphaned_phase6_id=orphaned_phase6_id,
+        ) from exc
+
+    audit('phase6.init', conv_id=conversation.id)
+    return Phase6InitializationResult(message=message)
 
 
 def set_phase_schedule(

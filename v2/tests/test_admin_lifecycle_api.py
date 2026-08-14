@@ -4,7 +4,9 @@ from datetime import datetime, timedelta, timezone
 
 from db import AdminRole, AuditEvent, FeaturedStatement, db
 from tests.conftest import login
-from services.admin_lifecycle import PhaseTransitionSaveFailed
+from services.admin_lifecycle import (
+    Phase6InitializationSaveFailed, PhaseTransitionSaveFailed,
+)
 from unittest.mock import patch
 
 
@@ -90,6 +92,7 @@ def test_scoped_moderator_lifecycle_capabilities_are_read_only(
         'publish': False,
         'editSettings': False,
         'useAdvancedPhases': False,
+        'initializePhase6': False,
         'archive': False,
     }
 
@@ -129,6 +132,61 @@ def test_openapi_documents_admin_lifecycle(client):
     publication = spec['components']['schemas']['AdminLifecycleConversation']['properties']['publication']
     assert operation['operationId'] == 'getAdminConversationLifecycle'
     assert publication['enum'] == ['not_applicable', 'pending', 'published']
+    assert spec['paths']['/admin/conversations/{conversationId}/phase6-initialization']['post']['operationId'] == 'createAdminPhase6Initialization'
+
+
+def test_phase6_initialization_api_returns_refreshed_lifecycle(
+    admin_client, conversation,
+):
+    conversation.phase_informed_voting = True
+    db.session.add(FeaturedStatement(
+        conversation_id=conversation.id,
+        polis_statement_id=42,
+        statement_text='Featured viewpoint',
+        confirmed_by_admin=True,
+    ))
+    db.session.commit()
+
+    with patch('app.PolisServerClient.create_conversation', return_value='p6-private'), \
+         patch('app.PolisServerClient.add_seed_return_id', return_value=84):
+        response = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/phase6-initialization',
+        )
+
+    assert response.status_code == 201
+    data = response.get_json()['data']
+    assert data['initialized'] is True
+    informed = next(
+        row for row in data['lifecycle']['phase']['advancedControls']
+        if row['key'] == 'informed_voting'
+    )
+    assert informed['initialized'] is True
+    assert data['lifecycle']['capabilities']['initializePhase6'] is False
+    assert 'p6-private' not in response.text
+    assert AuditEvent.query.order_by(AuditEvent.id.desc()).first().operation == 'phase6.init'
+
+
+def test_phase6_initialization_api_reports_state_and_unknown_outcome(
+    admin_client, conversation,
+):
+    disabled = admin_client.post(
+        f'/api/v1/admin/conversations/{conversation.id}/phase6-initialization',
+    )
+    assert disabled.status_code == 409
+    assert disabled.get_json()['error']['code'] == 'phase_disabled'
+
+    with patch(
+        'app._initialize_admin_phase6_command',
+        side_effect=Phase6InitializationSaveFailed(
+            orphaned_phase6_id='private-id',
+        ),
+    ):
+        unknown = admin_client.post(
+            f'/api/v1/admin/conversations/{conversation.id}/phase6-initialization',
+        )
+    assert unknown.status_code == 409
+    assert unknown.get_json()['error']['code'] == 'command_outcome_unknown'
+    assert 'private-id' not in unknown.text
 
 
 def test_phase_advance_api_returns_receipt_and_refreshed_lifecycle(

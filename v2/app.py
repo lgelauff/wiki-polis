@@ -112,6 +112,8 @@ from services.admin_featured import (
     set_featured_argument_visibility,
 )
 from services.admin_lifecycle import (
+    Phase6InitializationConflict, Phase6InitializationSaveFailed,
+    Phase6InitializationUnavailable,
     PhasePreparationFailed, PhaseReadinessBlocked,
     PhaseReadinessUnconfirmed, PhaseTransitionConflict,
     PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
@@ -119,7 +121,7 @@ from services.admin_lifecycle import (
     InvalidAdvancedPhaseSet,
     PublicationReadinessUnconfirmed, PublicationUnavailable,
     ScheduleInPast, ScheduleUnavailable,
-    advance_conversation_phase, build_admin_lifecycle,
+    advance_conversation_phase, build_admin_lifecycle, initialize_phase6,
     publish_final_report, set_advanced_phases, set_conversation_archived,
     set_conversation_paused,
     set_phase_schedule,
@@ -3019,6 +3021,25 @@ def _advance_admin_phase_api_payload(conv_id: int, body: dict) -> dict:
     }
 
 
+def _initialize_admin_phase6_command(conv: Conversation):
+    return initialize_phase6(
+        conversation=conv,
+        session=db.session,
+        initialize_upstream=_init_phase6,
+        audit=record_audit,
+        logger=current_app.logger,
+    )
+
+
+def _initialize_admin_phase6_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    _initialize_admin_phase6_command(conv)
+    return {
+        'initialized': True,
+        'lifecycle': _admin_lifecycle_api_payload(conv.id),
+    }
+
+
 def _set_admin_pause_api_payload(conv_id: int, body: dict) -> dict:
     conv = Conversation.query.get_or_404(conv_id)
     if not _is_global_admin():
@@ -4714,44 +4735,27 @@ def admin_phase6_init(conv_id):
     # Allows conversation moderators (not just global admins) to initialise Phase 6.
     conv = _require_mod_for_conv(conv_id)
 
-    if not conv.active or conv.paused:
-        flash('Cannot initialise Phase 6 on a closed or paused conversation.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    if not conv.phase_informed_voting:
-        flash('Enable the Informed voting toggle first, then initialise.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    if conv.phase6_polis_conversation_id:
-        flash('Phase 6 already initialised.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    ok, msg = _init_phase6(conv)
-    if not ok:
-        flash(msg, 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    orphan_id = conv.phase6_polis_conversation_id  # capture before any rollback expires it
-    slug = conv.slug
     try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
+        result = _initialize_admin_phase6_command(conv)
+    except Phase6InitializationUnavailable as exc:
+        messages = {
+            'inactive': 'Cannot initialise Phase 6 on a closed or paused conversation.',
+            'phase_disabled': 'Enable the Informed voting toggle first, then initialise.',
+            'already_initialized': 'Phase 6 already initialised.',
+        }
+        flash(messages[exc.reason], 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    except PhasePreparationFailed as exc:
+        flash(exc.message, 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    except Phase6InitializationConflict:
         flash('Phase 6 was already initialised by a concurrent request.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    except SQLAlchemyError:
-        db.session.rollback()
-        # Logged unconditionally (unlike the guided route's `if created_p6:`
-        # guard): this route early-returns when an id already exists and has no
-        # re-sync path, so reaching the commit means _init_phase6 just created a
-        # fresh Polis conversation, now orphaned by the rollback.
-        current_app.logger.error(
-            'Phase 6 standalone init: DB error after Polis I/O — '
-            'orphaned Polis conversation %s (conv %s)', orphan_id, slug)
+    except Phase6InitializationSaveFailed:
         flash('Phase 6 initialisation failed due to a database error. '
               'Contact a site admin — the Polis conversation id has been logged.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    record_audit('phase6.init', conv_id=conv.id)
-    flash(msg, 'success')
+    flash(result.message, 'success')
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 
@@ -6535,6 +6539,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         set_admin_featured_argument=_set_admin_featured_argument_api_payload,
         delete_admin_featured_argument=_delete_admin_featured_argument_api_payload,
         advance_admin_phase=_advance_admin_phase_api_payload,
+        initialize_admin_phase6=_initialize_admin_phase6_api_payload,
         set_admin_pause=_set_admin_pause_api_payload,
         set_admin_archive=_set_admin_archive_api_payload,
         set_admin_schedule=_set_admin_schedule_api_payload,
