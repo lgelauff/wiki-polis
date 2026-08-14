@@ -65,7 +65,9 @@ from services.invites import (
 from services.conversation_about import build_conversation_about
 from services.conversation_lanes import (build_conversation_lane,
                                          scheduled_transition)
-from services.conversation_workspace import build_conversation_workspace
+from services.conversation_workspace import (
+    InviteOnlyWorkspaceAccess, build_conversation_workspace,
+)
 from services.participations import (EligibilityDenied, InvalidPseudonym,
                                      PseudonymUnavailable, join_conversation)
 from services.participation_entry import build_participation_entry
@@ -1768,7 +1770,24 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
         participant = _current_participant()
         participation = None
 
-    _check_conversation_access(conv, participant)
+    access_denial = _conversation_access_denial(conv, participant)
+    if access_denial == 'invite_only':
+        can_moderate = _can_moderate(conv, participant)
+        access_links = {
+            'home': url_for('spa_shell', spa_path='parity/fork'),
+        }
+        if can_moderate:
+            access_links['invitations'] = url_for(
+                'spa_shell',
+                spa_path=f'admin/conversations/{conv.id}/invitations',
+            )
+        raise InviteOnlyWorkspaceAccess(
+            title=conv.title,
+            can_moderate=can_moderate,
+            links=access_links,
+        )
+    if access_denial is not None:
+        abort(403)
     if participation is None and participant is not None:
         participation = Participation.query.filter_by(
             participant_id=participant.id,
@@ -3668,40 +3687,46 @@ def _abort_if_banned(conversation, participant: 'Participant | None') -> None:
         abort(403)
 
 
-def _check_conversation_access(conversation, participant) -> None:
+def _conversation_access_denial(conversation, participant) -> str | None:
     # NOTE (#293): for a demo session this expects the session to be ALREADY bound
     # to `conversation` — the conversation view calls _ensure_demo_participation
     # (which rebinds) before this. Don't reorder those calls, or demo roaming
     # (visiting a demo the session isn't yet bound to) would 403 here.
     if _is_demo_session():
         if conversation.access_policy == 'demo' and _demo_bound_conversation_id() == conversation.id:
-            return
-        abort(403)
+            return None
+        return 'forbidden'
     if conversation.access_policy == 'demo':
-        return
+        return None
     if conversation.access_policy != 'invite_only':
-        return
+        return None
     if participant:
         existing = Participation.query.filter_by(
             participant_id=participant.id,
             conversation_id=conversation.id,
         ).first()
         if existing:
-            return
+            return None
     username = session.get('username')
     invited = ConversationInvite.query.filter_by(
         conversation_id=conversation.id,
         mw_username=username,
     ).first()
-    if not invited:
-        if request.path.startswith('/api/v1/'):
-            abort(403)
+    return None if invited else 'invite_only'
+
+
+def _check_conversation_access(conversation, participant) -> None:
+    denial = _conversation_access_denial(conversation, participant)
+    if denial is None:
+        return
+    if denial == 'invite_only' and not request.path.startswith('/api/v1/'):
         can_mod = _can_moderate(conversation, participant)
         abort(make_response(render_template(
             'forbidden_invite_only.html',
             conversation=conversation,
             can_moderate=can_mod,
         ), 403))
+    abort(403)
 
 
 # ── Particiapi proxy ──────────────────────────────────────────────────────────

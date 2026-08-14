@@ -14,6 +14,18 @@ TAB_LABELS = {
 }
 
 
+class InviteOnlyWorkspaceAccess(Exception):
+    """Structured denial data needed to reproduce the legacy access page."""
+
+    def __init__(
+        self, *, title: str, can_moderate: bool, links: dict[str, str],
+    ) -> None:
+        super().__init__('This consultation is invite-only.')
+        self.title = title
+        self.can_moderate = can_moderate
+        self.links = links
+
+
 def _utc_iso(value) -> str | None:
     if value is None:
         return None

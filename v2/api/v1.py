@@ -29,6 +29,7 @@ from services.argument_commands import (
 )
 from services.content_flags import InvalidFlag
 from services.identity_reveal import RevealUnavailable
+from services.conversation_workspace import InviteOnlyWorkspaceAccess
 from services.invites import InviteBatchSaveError
 from services.admin_lifecycle import (
     Phase6InitializationConflict, Phase6InitializationSaveFailed,
@@ -289,9 +290,20 @@ def create_api_v1_blueprint(
 
     @bp.get('/conversations/<slug>/workspace')
     def get_conversation_workspace(slug: str):
-        return _no_store(jsonify({
-            'data': resolve_conversation_workspace(slug),
-        }))
+        try:
+            data = resolve_conversation_workspace(slug)
+        except InviteOnlyWorkspaceAccess as exc:
+            return error_response(
+                'invite_only',
+                'You have not been invited to this consultation.',
+                403,
+                details={
+                    'title': exc.title,
+                    'canModerate': exc.can_moderate,
+                    'links': exc.links,
+                },
+            )
+        return _no_store(jsonify({'data': data}))
 
     @bp.get('/conversations/<slug>/moderation-log')
     def get_moderation_log(slug: str):

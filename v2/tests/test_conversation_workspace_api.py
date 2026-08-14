@@ -3,7 +3,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 
-from db import Participation, db
+from db import AdminRole, ConversationInvite, Participation, db
 
 
 def _join(participant, conversation, pseudonym='workspace-otter'):
@@ -119,6 +119,64 @@ def test_workspace_requires_real_authentication(client, conversation):
 
     assert response.status_code == 401
     assert response.get_json()['error']['code'] == 'unauthorized'
+
+
+def test_workspace_returns_structured_invite_only_denial(
+    auth_client, participant, conversation,
+):
+    conversation.access_policy = 'invite_only'
+    db.session.commit()
+
+    response = auth_client.get('/api/v1/conversations/test-conv/workspace')
+
+    assert response.status_code == 403
+    error = response.get_json()['error']
+    assert error['code'] == 'invite_only'
+    assert error['details'] == {
+        'title': conversation.title,
+        'canModerate': False,
+        'links': {'home': '/app/parity/fork'},
+    }
+
+
+def test_workspace_invite_only_denial_exposes_moderator_recovery_link(
+    auth_client, participant, conversation,
+):
+    conversation.access_policy = 'invite_only'
+    db.session.add(AdminRole(
+        participant_id=participant.id,
+        conversation_id=conversation.id,
+        role='moderator',
+    ))
+    db.session.commit()
+
+    response = auth_client.get('/api/v1/conversations/test-conv/workspace')
+
+    assert response.status_code == 403
+    assert response.get_json()['error']['details'] == {
+        'title': conversation.title,
+        'canModerate': True,
+        'links': {
+            'home': '/app/parity/fork',
+            'invitations': f'/app/admin/conversations/{conversation.id}/invitations',
+        },
+    }
+
+
+def test_workspace_allows_invited_nonparticipant_to_join(
+    auth_client, participant, conversation,
+):
+    conversation.access_policy = 'invite_only'
+    db.session.add(ConversationInvite(
+        conversation_id=conversation.id,
+        mw_username=participant.mw_username,
+    ))
+    db.session.commit()
+
+    response = auth_client.get('/api/v1/conversations/test-conv/workspace')
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['viewer']['state'] == 'join_required'
 
 
 def test_openapi_describes_conversation_workspace(client):
