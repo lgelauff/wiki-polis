@@ -39,7 +39,7 @@ import app as app_module  # noqa: E402  (environment must precede app configurat
 from db import (  # noqa: E402
     AdminRole, Argument, ArgumentSideState, ArgumentVote, AuditEvent,
     ContentFlag, Conversation, ConversationBan, ConversationInvite, FeaturedStatement,
-    Participant, Participation, db,
+    Participant, Participation, StatementProvenance, StatementSimilarityScore, db,
 )
 from services.admin_moderation import AdminFlagQueue, AdminFlagRow  # noqa: E402
 from services.invites import InviteBatchResult, InviteBatchSaveError  # noqa: E402
@@ -79,6 +79,11 @@ _original_admin_invitation_view = application.view_functions[
 ]
 _original_admin_participant_roster_model = app_module._admin_participant_roster_model
 _original_admin_flag_queue_model = app_module._admin_flag_queue_model
+_original_load_admin_statement_sources = app_module._load_admin_statement_sources
+_original_seed_statement_lock_reason = app_module._seed_statement_lock_reason
+_original_admin_statements_view = application.view_functions[
+    'admin.admin_conversation_statements'
+]
 
 
 def _parity_state():
@@ -400,6 +405,114 @@ def _fixture_admin_flag_queue(conversation):
 app_module._admin_flag_queue_model = _fixture_admin_flag_queue
 
 
+def _fixture_statement_rows():
+    state = _parity_state()
+    if not state or not state.startswith('admin-statements-'):
+        return None
+    if state in {'admin-statements-empty', 'admin-statements-seed-import-open'}:
+        return ([], [], [])
+    if state == 'admin-statements-upstream-unavailable':
+        return None
+    pending = [{
+        'tid': 11,
+        'txt': 'A participant proposal awaiting moderator review.',
+        'mod': 0,
+        'is_seed': False,
+        'agree_count': 2,
+        'pass_count': 1,
+        'disagree_count': 3,
+    }]
+    approved = [{
+        'tid': 12,
+        'txt': 'Regional communities should share infrastructure funding.',
+        'mod': 1,
+        'is_seed': True,
+        'agree_count': 14,
+        'pass_count': 4,
+        'disagree_count': 2,
+    }]
+    hidden = [{
+        'tid': 14,
+        'txt': 'A hidden statement retained for moderator review.',
+        'mod': -1,
+        'is_seed': False,
+        'agree_count': 1,
+        'pass_count': 2,
+        'disagree_count': 7,
+    }]
+    if state == 'admin-statements-provenance':
+        pending = []
+        approved = [{
+            'tid': 13,
+            'txt': 'Regional communities should jointly fund shared infrastructure.',
+            'mod': 1,
+            'is_seed': True,
+            'agree_count': 11,
+            'pass_count': 3,
+            'disagree_count': 2,
+        }]
+        hidden = []
+    return pending, approved, hidden
+
+
+def _fixture_admin_statement_sources(conversation):
+    rows = _fixture_statement_rows()
+    if rows is None and _parity_state() != 'admin-statements-upstream-unavailable':
+        return _original_load_admin_statement_sources(conversation)
+    conversation.statement_moderation_policy = None
+    strict = _parity_state() == 'admin-statements-strict-moderation'
+    return rows, None if rows is None else strict
+
+
+def _fixture_seed_statement_lock_reason(conversation):
+    if _parity_state() == 'admin-statements-seed-import-locked':
+        return 'Seed statements are locked because statement submission has ended.'
+    return _original_seed_statement_lock_reason(conversation)
+
+
+def _fixture_admin_statements_view(conv_id):
+    state = _parity_state()
+    if not state or not state.startswith('admin-statements-'):
+        return _original_admin_statements_view(conv_id)
+    conversation = app_module._require_mod_for_conv(conv_id)
+    rows, strict = _fixture_admin_statement_sources(conversation)
+    if rows is None:
+        pending = approved = hidden = []
+        app_module.flash('Could not load statements. Check server logs.', 'error')
+    else:
+        pending, approved, hidden = rows
+    tids = [row['tid'] for row in pending + approved + hidden]
+    lock_reason = _fixture_seed_statement_lock_reason(conversation)
+    return app_module.render_template(
+        'admin_statements.html',
+        conversation=conversation,
+        pending=pending,
+        approved=approved,
+        hidden=hidden,
+        settings={'strict_moderation': strict} if strict is not None else {},
+        featured_tids={
+            row.polis_statement_id
+            for row in FeaturedStatement.query.filter_by(
+                conversation_id=conversation.id,
+            ).all()
+        },
+        provenance_map=app_module._provenance_map(conversation.id, tids),
+        phase_active=conversation.phase_argument_mapping,
+        seed_import_allowed=lock_reason is None,
+        seed_import_lock_reason=lock_reason,
+        polis_public_url='https://pol.is',
+        max_import_rows=app_module.MAX_ROWS,
+        max_import_chars=app_module.MAX_TEXT_CHARS,
+    )
+
+
+app_module._load_admin_statement_sources = _fixture_admin_statement_sources
+app_module._seed_statement_lock_reason = _fixture_seed_statement_lock_reason
+application.view_functions[
+    'admin.admin_conversation_statements'
+] = _fixture_admin_statements_view
+
+
 class _FixtureParticiapiResponse:
     def __init__(self, payload: dict, status: int = 200, *, cookies=None):
         self.status_code = status
@@ -489,6 +602,7 @@ def _seed() -> None:
         title='Parity moderation history',
         active=True,
         access_policy='public',
+        statement_moderation_policy=None,
     )
     closed = Conversation(
         slug='parity-closed-output',
@@ -1002,6 +1116,28 @@ def _seed() -> None:
     db.session.add_all(featured_rows)
     db.session.flush()
     mapping_fs, gates_fs, moderator_fs = featured_rows
+    statement_featured = FeaturedStatement(
+        conversation_id=moderation.id,
+        polis_statement_id=12,
+        statement_text='Regional communities should share infrastructure funding.',
+        confirmed_by_admin=True,
+    )
+    provenance = StatementProvenance(
+        conversation_id=moderation.id,
+        polis_statement_id=13,
+        derived_from_tid=12,
+        provenance_type='derivative',
+        link_method='declared',
+        created_at=_PARITY_NOW,
+    )
+    db.session.add_all([statement_featured, provenance])
+    db.session.flush()
+    db.session.add(StatementSimilarityScore(
+        provenance_id=provenance.id,
+        model='char',
+        value=0.88,
+        scored_at=_PARITY_NOW,
+    ))
 
     mapping_arguments = [
         Argument(featured_statement_id=mapping_fs.id, side='pro', body='Shared funding reduces duplicated maintenance work.'),
