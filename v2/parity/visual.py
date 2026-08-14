@@ -77,6 +77,8 @@ def run_actions(page: Page, actions: list[dict]) -> None:
         action_type = action.get('type')
         if action_type == 'check':
             page.get_by_label(action['label'], exact=True).check()
+        elif action_type == 'fill':
+            page.get_by_label(action['label'], exact=True).fill(action['value'])
         elif action_type == 'click':
             target = page.get_by_role(
                 action['role'], name=action['name'], exact=True,

@@ -190,7 +190,7 @@
       "temporaryReactRoutes": ["/app/admin/conversations/:conversationId/invitations"],
       "targetReactRoutes": ["/admin/conversations/:conversationId/invites"],
       "apiOperations": ["getAdminConversationInvitations", "putAdminConversationInvitations", "deleteAdminConversationInvitation"],
-      "status": "partial",
+      "status": "parity",
       "scenarios": ["empty", "populated", "batch-deduplication", "save-error", "moderator"]
     },
     {

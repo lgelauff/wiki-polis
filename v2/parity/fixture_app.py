@@ -40,6 +40,7 @@ from db import (  # noqa: E402
     Conversation, ConversationBan, ConversationInvite, FeaturedStatement,
     Participant, Participation, db,
 )
+from services.invites import InviteBatchResult, InviteBatchSaveError  # noqa: E402
 
 
 application = app_module.app
@@ -69,6 +70,11 @@ _original_build_conversation_lane = app_module.build_conversation_lane
 _original_load_intermediate_results = app_module._load_intermediate_results
 _original_build_admin_catalog = app_module.build_admin_catalog
 _original_admin_view = application.view_functions['admin.admin']
+_original_build_invitation_roster = app_module.build_invitation_roster
+_original_add_conversation_invites = app_module.add_conversation_invites
+_original_admin_invitation_view = application.view_functions[
+    'admin.admin_conversation_invites'
+]
 
 
 def _parity_state():
@@ -255,6 +261,43 @@ def _fixture_admin_view():
 
 app_module.build_admin_catalog = _fixture_admin_catalog
 application.view_functions['admin.admin'] = _fixture_admin_view
+
+
+def _fixture_invitation_roster(**kwargs):
+    roster = _original_build_invitation_roster(**kwargs)
+    if _parity_state() == 'admin-invitations-empty':
+        roster['invitations'] = []
+    return roster
+
+
+def _fixture_add_conversation_invites(*args, **kwargs):
+    state = _parity_state()
+    if state == 'admin-invitations-batch':
+        return InviteBatchResult(
+            added=1,
+            already_present=1,
+            concurrent_conflicts=0,
+            duplicate_inputs=1,
+        )
+    if state == 'admin-invitations-save-error':
+        raise InviteBatchSaveError('parity fixture save failure')
+    return _original_add_conversation_invites(*args, **kwargs)
+
+
+def _fixture_admin_invitation_view(**kwargs):
+    if _parity_state() != 'admin-invitations-empty':
+        return _original_admin_invitation_view(**kwargs)
+    conversation = app_module._require_mod_for_conv(kwargs['conv_id'])
+    return app_module.render_template(
+        'admin_invites.html', conversation=conversation, invites=[],
+    )
+
+
+app_module.build_invitation_roster = _fixture_invitation_roster
+app_module.add_conversation_invites = _fixture_add_conversation_invites
+application.view_functions[
+    'admin.admin_conversation_invites'
+] = _fixture_admin_invitation_view
 
 
 class _FixtureParticiapiResponse:

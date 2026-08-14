@@ -1858,6 +1858,142 @@
       "serverFixture": "isolated",
       "goldenSha256": "a266ae1e028c4e463b3081925b95d4f51a1e8657455d87ca4256baeb7b5e4fdd",
       "parityGate": true
+    },
+    {
+      "id": "admin-invitations--empty--desktop",
+      "pageId": "admin-invitations",
+      "state": "empty",
+      "legacyPath": "/admin/conversations/23/invites?parity-state=admin-invitations-empty",
+      "reactPath": "/app/admin/conversations/23/invitations?parity-state=admin-invitations-empty",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "da341bf1d30ec622e0beead90a9def1c69402ec0d07e7d74442768adeda4c222",
+      "parityGate": true
+    },
+    {
+      "id": "admin-invitations--empty--mobile",
+      "pageId": "admin-invitations",
+      "state": "empty",
+      "legacyPath": "/admin/conversations/23/invites?parity-state=admin-invitations-empty",
+      "reactPath": "/app/admin/conversations/23/invitations?parity-state=admin-invitations-empty",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "7ac71930b5767846e1e511d2e696ca4fd3501785af31a70319ee9cb3cfaf83ac",
+      "parityGate": true
+    },
+    {
+      "id": "admin-invitations--populated--desktop",
+      "pageId": "admin-invitations",
+      "state": "populated",
+      "legacyPath": "/admin/conversations/23/invites",
+      "reactPath": "/app/admin/conversations/23/invitations",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "ef0b6a94a17f865c2c1528b5eeeb5026f06fb5c4df0322d3a0eee390b9bd9c04",
+      "parityGate": true
+    },
+    {
+      "id": "admin-invitations--populated--mobile",
+      "pageId": "admin-invitations",
+      "state": "populated",
+      "legacyPath": "/admin/conversations/23/invites",
+      "reactPath": "/app/admin/conversations/23/invitations",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "serverFixture": "isolated",
+      "goldenSha256": "72e9d2d918a73f9ee30dd0865ef05df95a669fa98c57a6a1cb0fb165a99106c3",
+      "parityGate": true
+    },
+    {
+      "id": "admin-invitations--batch-deduplication--desktop",
+      "pageId": "admin-invitations",
+      "state": "batch-deduplication",
+      "legacyPath": "/admin/conversations/23/invites?parity-state=admin-invitations-batch",
+      "reactPath": "/app/admin/conversations/23/invitations?parity-state=admin-invitations-batch",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "actions": [
+        {"type": "fill", "label": "Wikimedia usernames (one per line)", "value": "dev-user-1\nParityNew\nParityNew"},
+        {"type": "click", "role": "button", "name": "Add"}
+      ],
+      "serverFixture": "isolated",
+      "goldenSha256": "b444242188f16fba134d4cded8123d3a7fdfeeeb9f2a6b7bdf89feed8062b357",
+      "parityGate": true
+    },
+    {
+      "id": "admin-invitations--batch-deduplication--mobile",
+      "pageId": "admin-invitations",
+      "state": "batch-deduplication",
+      "legacyPath": "/admin/conversations/23/invites?parity-state=admin-invitations-batch",
+      "reactPath": "/app/admin/conversations/23/invitations?parity-state=admin-invitations-batch",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "actions": [
+        {"type": "fill", "label": "Wikimedia usernames (one per line)", "value": "dev-user-1\nParityNew\nParityNew"},
+        {"type": "click", "role": "button", "name": "Add"}
+      ],
+      "serverFixture": "isolated",
+      "goldenSha256": "1ae7d3e42e2ffe48a42f7abfc453c8978cbe5b2ef1b8d75cfd33fe7a83df6498",
+      "parityGate": true
+    },
+    {
+      "id": "admin-invitations--save-error--desktop",
+      "pageId": "admin-invitations",
+      "state": "save-error",
+      "legacyPath": "/admin/conversations/23/invites?parity-state=admin-invitations-save-error",
+      "reactPath": "/app/admin/conversations/23/invitations?parity-state=admin-invitations-save-error",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin",
+      "actions": [
+        {"type": "fill", "label": "Wikimedia usernames (one per line)", "value": "ParityNew"},
+        {"type": "click", "role": "button", "name": "Add"}
+      ],
+      "serverFixture": "isolated",
+      "goldenSha256": "6785c0c47710929f14afe48e50cb7a01efc90914ee232a8eada7374b5b188623",
+      "parityGate": true
+    },
+    {
+      "id": "admin-invitations--save-error--mobile",
+      "pageId": "admin-invitations",
+      "state": "save-error",
+      "legacyPath": "/admin/conversations/23/invites?parity-state=admin-invitations-save-error",
+      "reactPath": "/app/admin/conversations/23/invitations?parity-state=admin-invitations-save-error",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin",
+      "actions": [
+        {"type": "fill", "label": "Wikimedia usernames (one per line)", "value": "ParityNew"},
+        {"type": "click", "role": "button", "name": "Add"}
+      ],
+      "serverFixture": "isolated",
+      "goldenSha256": "78fd91f6b8e51af910f28d93459204468e079ce031baba0d0ec64e3d04d75019",
+      "parityGate": true
+    },
+    {
+      "id": "admin-invitations--moderator--desktop",
+      "pageId": "admin-invitations",
+      "state": "moderator",
+      "legacyPath": "/admin/conversations/23/invites",
+      "reactPath": "/app/admin/conversations/23/invitations",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "424ebeb462e080f74d1606337e50abeb5cef25b63ff1cfa66241c6706e3f4881",
+      "parityGate": true
+    },
+    {
+      "id": "admin-invitations--moderator--mobile",
+      "pageId": "admin-invitations",
+      "state": "moderator",
+      "legacyPath": "/admin/conversations/23/invites",
+      "reactPath": "/app/admin/conversations/23/invitations",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "792298559294dd26531a9049956cbd15b03c37570cb587ec6144f1e8f292dac9",
+      "parityGate": true
     }
   ]
 }
