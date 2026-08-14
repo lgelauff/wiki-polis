@@ -1,5 +1,5 @@
 import {QueryClientProvider} from '@tanstack/react-query';
-import {fireEvent, render, screen} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test, vi} from 'vitest';
@@ -297,6 +297,21 @@ test('requires deliberate confirmation before permanently revealing identity', a
 });
 
 test('joins a conversation through the typed command', async () => {
+  const joined = vi.fn();
+  server.use(http.post(
+    new URL('/api/v1/conversations/community-strategy/participation', globalThis.location.origin).toString(),
+    async ({request}) => {
+      joined(await request.json());
+      return HttpResponse.json({
+        data: {
+          pseudonym: 'quiet-otter',
+          notifications: {email: false, talkPage: false},
+          eligibilityStatus: 'not_required',
+          links: {conversation: '/c/community-strategy', about: '/c/community-strategy/about'},
+        },
+      }, {status: 201});
+    },
+  ));
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/app/conversations/community-strategy/join']}>
@@ -306,11 +321,14 @@ test('joins a conversation through the typed command', async () => {
   );
 
   expect(await screen.findByRole('heading', {name: 'Community strategy'})).toBeVisible();
-  fireEvent.click(await screen.findByRole('button', {name: 'Join conversation'}));
+  fireEvent.click(screen.getByRole('checkbox', {name: /I understand my votes/}));
+  fireEvent.click(screen.getByRole('button', {name: 'Join consultation as quiet-otter →'}));
 
-  expect(await screen.findByText(/You’ll participate as/)).toBeVisible();
-  expect(screen.getByRole('link', {name: 'Enter the conversation'}))
-    .toHaveAttribute('href', '/c/community-strategy');
+  await waitFor(() => expect(joined).toHaveBeenCalledWith({
+    pseudonym: 'quiet-otter',
+    notifyEmail: false,
+    notifyTalkPage: false,
+  }));
 });
 
 test('votes in Explore through the wiki-polis API contract', async () => {

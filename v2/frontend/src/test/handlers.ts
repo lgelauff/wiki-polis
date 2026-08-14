@@ -560,6 +560,25 @@ export const handlers = [
     }, {status: 201}),
   ),
   http.get(
+    new URL('/api/v1/conversations/community-strategy/participation-entry', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      data: {
+        state: 'join',
+        conversation: {
+          id: 7,
+          slug: 'community-strategy',
+          title: 'Community strategy',
+          descriptionHtml: '<p>Shape the next chapter together.</p>',
+          eligibilityLabel: null,
+        },
+        pseudonyms: ['quiet-otter', 'bright-fox', 'steady-heron'],
+        emailable: true,
+        reveal: {cooldownDays: 30, windowEndDays: 60},
+        links: {home: '/', conversation: '/c/community-strategy'},
+      },
+    }),
+  ),
+  http.get(
     new URL('/api/v1/conversations/community-strategy/pseudonym-suggestions', globalThis.location.origin).toString(),
     () => HttpResponse.json({
       data: {pseudonyms: ['quiet-otter', 'bright-fox', 'steady-heron']},

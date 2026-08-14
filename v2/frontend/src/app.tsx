@@ -4,13 +4,10 @@ import {Link, Navigate, NavLink, Route, Routes, useParams} from 'react-router-do
 
 import type {components} from './api/schema';
 import {
-  createParticipation,
   createIdentityReveal,
-  conversationAboutQuery,
   conversationLaneQuery,
   exploreStateQuery,
   identityRevealQuery,
-  pseudonymSuggestionsQuery,
   putExploreVote,
   sessionQuery,
   type ConversationSpace,
@@ -45,6 +42,7 @@ import {
   ConversationOutputPage,
   ModerationLogPage,
 } from './features/legacy/conversation-read-pages';
+import {ParticipationEntryLegacyPage} from './features/legacy/participation-entry-page';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -176,11 +174,6 @@ function ConversationRow({conversation, index}: {conversation: ConversationCard;
   );
 }
 
-function RichText({html, className}: {html: string | null; className?: string}) {
-  if (!html) return null;
-  return <div className={className} dangerouslySetInnerHTML={{__html: html}} />;
-}
-
 function revealDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, {dateStyle: 'long'}).format(
     new Date(value),
@@ -272,117 +265,6 @@ function IdentityRevealPage() {
           <Link to={data.links.about}>Back to conversation record</Link>
           <a href={data.links.conversation}>Open legacy conversation view</a>
         </footer>
-      </main>
-    </>
-  );
-}
-
-function JoinForm({slug, csrfToken, emailable}: {
-  slug: string;
-  csrfToken: string;
-  emailable: boolean;
-}) {
-  const {data} = useSuspenseQuery(pseudonymSuggestionsQuery(slug));
-  const [pseudonym, setPseudonym] = useState(data.pseudonyms[0] ?? '');
-  const [notifyEmail, setNotifyEmail] = useState(false);
-  const [notifyTalkPage, setNotifyTalkPage] = useState(false);
-  const mutation = useMutation({
-    mutationFn: () => createParticipation(slug, {
-      pseudonym,
-      notifyEmail,
-      notifyTalkPage,
-    }, csrfToken),
-  });
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    mutation.mutate();
-  }
-
-  if (mutation.data) {
-    return (
-      <div className="join-success" role="status">
-        <p className="eyebrow">You're in</p>
-        <h2>You’ll participate as <code>{mutation.data.pseudonym}</code>.</h2>
-        <a className="record-actions__primary" href={mutation.data.links.conversation}>Enter the conversation</a>
-      </div>
-    );
-  }
-
-  return (
-    <form className="join-form" onSubmit={submit}>
-      <fieldset>
-        <legend>Choose your pseudonym</legend>
-        <p>Your contributions use this name throughout the conversation.</p>
-        <div className="pseudonym-options">
-          {data.pseudonyms.map((suggestion) => (
-            <label key={suggestion}>
-              <input
-                type="radio"
-                name="pseudonym"
-                value={suggestion}
-                checked={pseudonym === suggestion}
-                onChange={() => setPseudonym(suggestion)}
-              />
-              <code>{suggestion}</code>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <fieldset>
-        <legend>Updates</legend>
-        {emailable && (
-          <label className="join-check">
-            <input type="checkbox" checked={notifyEmail} onChange={(event) => setNotifyEmail(event.target.checked)} />
-            Email me when this conversation needs my attention
-          </label>
-        )}
-        <label className="join-check">
-          <input type="checkbox" checked={notifyTalkPage} onChange={(event) => setNotifyTalkPage(event.target.checked)} />
-          Notify me on my Wikimedia talk page
-        </label>
-      </fieldset>
-      {mutation.error && (
-        <p className="command-error" role="alert">{mutation.error.message}</p>
-      )}
-      <button className="join-submit" type="submit" disabled={mutation.isPending || !pseudonym}>
-        {mutation.isPending ? 'Joining…' : 'Join conversation'}
-      </button>
-      <p className="record-note">Joining records your chosen pseudonym and notification preferences. Your private identity is not shown to other participants.</p>
-    </form>
-  );
-}
-
-function ConversationJoinPage() {
-  const {slug = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  const {data: conversation} = useSuspenseQuery(conversationAboutQuery(slug));
-
-  return (
-    <>
-      <Header />
-      <main className="join-shell" id="main">
-        <nav className="record-breadcrumb" aria-label="Breadcrumb">
-          <Link to="/app/real">Conversations</Link><span>/</span><span>Join</span>
-        </nav>
-        <header className="join-title">
-          <p className="eyebrow">Join a conversation</p>
-          <h1>{conversation.title}</h1>
-          <RichText html={conversation.descriptionHtml} className="record-prose" />
-        </header>
-        {session.state === 'authenticated' ? (
-          <JoinForm
-            slug={slug}
-            csrfToken={session.csrfToken}
-            emailable={Boolean(session.user?.emailable)}
-          />
-        ) : (
-          <div className="join-login">
-            <h2>Log in to participate</h2>
-            <p>A Wikimedia account is required for real conversations.</p>
-            <a className="record-actions__primary" href={session.links.login}>Log in</a>
-          </div>
-        )}
       </main>
     </>
   );
@@ -772,7 +654,7 @@ export function App() {
           <Route path="/app/demo" element={<ConversationLanePage space="demo" />} />
           <Route path="/app/real" element={<ConversationLanePage space="real" />} />
           <Route path="/app/conversations/:slug/about" element={<ConversationAboutLegacyPage />} />
-          <Route path="/app/conversations/:slug/join" element={<ConversationJoinPage />} />
+          <Route path="/app/conversations/:slug/join" element={<ParticipationEntryLegacyPage />} />
           <Route path="/app/conversations/:slug/explore" element={<ExplorePage />} />
           <Route path="/app/conversations/:slug/arguments" element={<ArgumentMappingRoute />} />
           <Route path="/app/conversations/:slug/informed-voting" element={<InformedVotingRoute />} />

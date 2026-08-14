@@ -500,13 +500,27 @@ export async function deleteAdminFeaturedArgument(
   ))).data;
 }
 
-export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
-  queryKey: ['pseudonym-suggestions', slug],
+export const participationEntryQuery = (slug: string) => queryOptions({
+  queryKey: ['participation-entry', slug],
   queryFn: async () => (
-    await requireApiData(api.GET('/conversations/{slug}/pseudonym-suggestions', {
+    await requireApiData(api.GET('/conversations/{slug}/participation-entry', {
       params: {path: {slug}},
     }))
   ).data,
+  staleTime: 0,
+});
+
+export async function getPseudonymSuggestions(slug: string) {
+  return (
+    await requireApiData(api.GET('/conversations/{slug}/pseudonym-suggestions', {
+      params: {path: {slug}},
+    }))
+  ).data;
+}
+
+export const pseudonymSuggestionsQuery = (slug: string) => queryOptions({
+  queryKey: ['pseudonym-suggestions', slug],
+  queryFn: () => getPseudonymSuggestions(slug),
   staleTime: 0,
 });
 

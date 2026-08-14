@@ -23,6 +23,7 @@ body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, a { font: inherit; }
 a { color: inherit; }
 :focus-visible { outline: 3px solid #315c9b; outline-offset: 3px; }
+.legacy-main button { line-height: normal; }
 
 .skip-link {
   position: fixed;
@@ -350,24 +351,7 @@ a { color: inherit; }
 .record-actions a { font-size: .78rem; }
 .record-actions__primary { padding: .8rem 1rem; color: white; background: var(--ink); text-decoration: none; }
 
-.join-shell { width: min(760px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 6rem; }
-.join-title { padding: clamp(3rem, 8vw, 6rem) 0 2.5rem; border-bottom: 1px solid var(--ink); }
-.join-title h1 { margin: 0 0 1.5rem; font-size: clamp(2.6rem, 7vw, 5.2rem); line-height: .95; letter-spacing: -.06em; }
-.join-form { padding-top: 2rem; }
-.join-form fieldset { margin: 0; padding: 2rem 0; border: 0; border-bottom: 1px solid var(--rule); }
-.join-form legend { padding: 0; font-size: 1.35rem; font-weight: 650; letter-spacing: -.025em; }
-.join-form fieldset > p { color: var(--muted); font-size: .82rem; }
-.pseudonym-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: .65rem; margin-top: 1.25rem; }
-.pseudonym-options label { display: flex; gap: .6rem; align-items: center; padding: .9rem; border: 1px solid var(--rule); cursor: pointer; }
-.pseudonym-options label:has(input:checked) { border-color: var(--civic); background: color-mix(in srgb, var(--civic) 7%, white); }
-.pseudonym-options code { font: .75rem var(--mono); }
-.join-check { display: flex; align-items: flex-start; gap: .65rem; margin-top: .9rem; font-size: .88rem; }
-.join-submit { margin-top: 1.5rem; padding: .9rem 1.15rem; border: 0; color: white; background: var(--ink); cursor: pointer; }
-.join-submit:disabled { opacity: .55; cursor: wait; }
 .command-error { padding: .8rem; color: var(--dissent); border-left: 3px solid var(--dissent); background: color-mix(in srgb, var(--dissent) 6%, white); }
-.join-success, .join-login { padding: 2.5rem 0; }
-.join-success h2 { margin: 0 0 2rem; font-size: clamp(1.6rem, 4vw, 2.4rem); }
-.join-success code { font: .8em var(--mono); }
 
 .reveal-shell { width: min(780px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 6rem; }
 .reveal-title { padding: clamp(3rem, 8vw, 6rem) 0 2rem; border-bottom: 1px solid var(--ink); }
@@ -987,13 +971,11 @@ a { color: inherit; }
   .record-section__number { padding-bottom: .7rem; border-bottom: 1px solid var(--civic); }
   .record-metrics { grid-template-columns: repeat(2, 1fr); }
   .record-facts > div, .contribution-list > div { grid-template-columns: 1fr; gap: .3rem; }
-  .join-shell { width: min(100% - 24px, 760px); }
   .reveal-shell { width: min(100% - 24px, 780px); }
   .reveal-timeline { grid-template-columns: 1fr; }
   .reveal-timeline li { border-right: 0; border-bottom: 1px solid var(--rule); }
   .reveal-timeline li:last-child { border-bottom: 0; }
   .reveal-footer { flex-direction: column; }
-  .pseudonym-options { grid-template-columns: 1fr; }
   .explore-shell { width: min(100% - 24px, 980px); }
   .explore-heading { align-items: start; flex-direction: column; }
   .explore-progress { grid-template-columns: 1fr; gap: .7rem; }
