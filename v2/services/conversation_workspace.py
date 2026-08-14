@@ -31,6 +31,9 @@ def _reveal_projection(reveal: dict | None, pseudonym: str | None) -> dict | Non
         'opensAt': _utc_iso(reveal['opens_at']),
         'closesAt': _utc_iso(reveal['closes_at']),
         'daysRemaining': int(reveal['days_left']),
+        'cooldownDays': int(reveal['cooldown_days']),
+        'windowDays': int(reveal['window_days']),
+        'countdownTargetAt': reveal['countdown_target_iso'],
     }
 
 

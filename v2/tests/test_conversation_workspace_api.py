@@ -108,6 +108,9 @@ def test_workspace_closed_state_projects_reveal_timeline(
     assert data['reveal']['state'] == 'open'
     assert data['reveal']['pseudonym'] == participation.pseudonym
     assert data['reveal']['closedAt'].endswith('Z')
+    assert data['reveal']['cooldownDays'] == 30
+    assert data['reveal']['windowDays'] == 30
+    assert data['reveal']['countdownTargetAt'] is not None
     assert data['capabilities']['participate'] is False
 
 

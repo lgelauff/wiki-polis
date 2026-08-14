@@ -1956,6 +1956,10 @@ export interface components {
             /** Format: date-time */
             closesAt: string;
             daysRemaining: number;
+            cooldownDays: number;
+            windowDays: number;
+            /** Format: date-time */
+            countdownTargetAt: string | null;
         };
         ConversationWorkspaceStatementContribution: {
             unlockAfter: number;

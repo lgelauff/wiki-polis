@@ -1827,7 +1827,7 @@
       },
       "ConversationWorkspaceReveal": {
         "type": "object",
-        "required": ["state", "pseudonym", "closedAt", "opensAt", "closesAt", "daysRemaining"],
+        "required": ["state", "pseudonym", "closedAt", "opensAt", "closesAt", "daysRemaining", "cooldownDays", "windowDays", "countdownTargetAt"],
         "additionalProperties": false,
         "properties": {
           "state": {"type": "string", "enum": ["pending", "open", "revealed", "expired"]},
@@ -1835,7 +1835,10 @@
           "closedAt": {"type": "string", "format": "date-time"},
           "opensAt": {"type": "string", "format": "date-time"},
           "closesAt": {"type": "string", "format": "date-time"},
-          "daysRemaining": {"type": "integer", "minimum": 0}
+          "daysRemaining": {"type": "integer", "minimum": 0},
+          "cooldownDays": {"type": "integer", "minimum": 0},
+          "windowDays": {"type": "integer", "minimum": 0},
+          "countdownTargetAt": {"type": ["string", "null"], "format": "date-time"}
         }
       },
       "ConversationWorkspaceStatementContribution": {
