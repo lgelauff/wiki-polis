@@ -1716,6 +1716,7 @@ def _polis_server_client() -> PolisServerClient:
 
 def _conversation_lane_api_payload(demo: bool) -> dict:
     """Build the privacy-safe browser projection for one conversation space."""
+    session['space'] = 'demo' if demo else 'real'
     participant = _current_participant()
     lane = build_conversation_lane(
         demo=demo,
@@ -1728,7 +1729,9 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
         polis_client=_polis_server_client(),
     )
     return lane.to_api(
-        conversation_link=lambda slug: url_for('participant.conversation', slug=slug),
+        conversation_link=lambda slug: url_for(
+            'spa_shell', spa_path=f'conversations/{slug}/explore',
+        ),
         about_link=lambda slug: url_for('participant.conversation_about', slug=slug),
         explore_link=lambda slug: url_for(
             'spa_shell', spa_path=f'conversations/{slug}/explore',

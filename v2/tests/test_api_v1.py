@@ -105,6 +105,16 @@ def test_anonymous_conversation_lane_exposes_public_contract_without_internal_id
     assert 'conversation_id' not in serialized
 
 
+def test_conversation_lane_records_the_explicit_space_choice(client, conversation):
+    client.get('/api/v1/conversations?space=demo')
+    with client.session_transaction() as browser_session:
+        assert browser_session['space'] == 'demo'
+
+    client.get('/api/v1/conversations?space=real')
+    with client.session_transaction() as browser_session:
+        assert browser_session['space'] == 'real'
+
+
 def test_authenticated_lane_uses_participant_workload_projection(
     auth_client, participant, conversation,
 ):
@@ -127,7 +137,7 @@ def test_authenticated_lane_uses_participant_workload_projection(
     assert card['pseudonym'] == 'api-otter'
     assert card['statementsRemaining'] == 0
     assert card['capabilities']['participate'] is True
-    assert card['links']['self'] == '/c/test-conv'
+    assert card['links']['self'] == '/app/conversations/test-conv/explore'
     assert card['links']['about'] == '/c/test-conv/about'
     assert card['links']['explore'] == '/app/conversations/test-conv/explore'
     serialized = json.dumps(data)
