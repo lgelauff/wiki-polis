@@ -27,6 +27,10 @@ def _fixture_database_path() -> Path:
 
 
 DATABASE_PATH = _fixture_database_path()
+if DATABASE_PATH.exists():
+    raise RuntimeError(
+        'Parity fixture database already exists; choose a fresh disposable path.',
+    )
 os.environ['FLASK_DEBUG'] = '1'
 os.environ['DEV_LOGIN_USER'] = 'ParityAdmin'
 os.environ['DEV_FAKE_LOGIN'] = '1'
@@ -90,6 +94,7 @@ _original_admin_featured_view = application.view_functions[
 _original_admin_featured_api_view = application.view_functions[
     'api_v1.get_admin_featured_statements'
 ]
+_fixture_dev_test_users = list(application.config.get('DEV_TEST_USERS', []))
 
 
 def _parity_state():
@@ -103,6 +108,11 @@ def _parity_state():
 
 @application.before_request
 def _fixture_polis_database_availability():
+    application.config['DEV_TEST_USERS'] = (
+        _fixture_dev_test_users
+        if _parity_state() == 'entry-local-test-users'
+        else []
+    )
     application.config['POLIS_DATABASE_URL'] = (
         'postgresql://parity-unreachable'
         if _parity_state() == 'admin-lifecycle-upstream-unavailable'
@@ -1618,6 +1628,17 @@ def _seed() -> None:
         ),
     ])
     db.session.commit()
+
+
+@application.post('/__parity__/reset')
+def _reset_fixture():
+    db.session.remove()
+    db.drop_all()
+    _seed()
+    return {'ok': True}
+
+
+app_module.csrf.exempt(_reset_fixture)
 
 
 with application.app_context():

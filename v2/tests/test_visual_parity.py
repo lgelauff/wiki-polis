@@ -56,3 +56,37 @@ def test_raster_equivalence_rejects_changed_geometry(tmp_path):
     equivalent, _, max_delta = raster_equivalent(expected, actual)
     assert equivalent is False
     assert max_delta == 255
+
+
+def test_raster_equivalence_accepts_dense_low_energy_glyph_noise(tmp_path):
+    expected = tmp_path / 'expected.png'
+    actual = tmp_path / 'actual.png'
+    changes = {
+        (index % 400, index // 400): (230, 235, 240)
+        for index in range(1000)
+    }
+    _write_rgb_png(expected, width=400, height=400)
+    _write_rgb_png(actual, width=400, height=400, changes=changes)
+
+    equivalent, changed, max_delta = raster_equivalent(expected, actual)
+
+    assert equivalent is True
+    assert changed == 1000
+    assert max_delta == 10
+
+
+def test_raster_equivalence_rejects_widespread_low_energy_change(tmp_path):
+    expected = tmp_path / 'expected.png'
+    actual = tmp_path / 'actual.png'
+    changes = {
+        (index % 400, index // 400): (230, 235, 240)
+        for index in range(2000)
+    }
+    _write_rgb_png(expected, width=400, height=400)
+    _write_rgb_png(actual, width=400, height=400, changes=changes)
+
+    equivalent, changed, max_delta = raster_equivalent(expected, actual)
+
+    assert equivalent is False
+    assert changed == 2000
+    assert max_delta == 10

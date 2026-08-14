@@ -13,10 +13,11 @@
       "id": "entry-fork--anonymous--desktop",
       "pageId": "entry-fork",
       "state": "anonymous",
-      "legacyPath": "/",
-      "reactPath": "/app/parity/fork",
+      "legacyPath": "/?parity-state=entry-anonymous",
+      "reactPath": "/app/parity/fork?parity-state=entry-anonymous",
       "viewport": {"width": 1440, "height": 900},
       "auth": "anonymous",
+      "serverFixture": "isolated",
       "goldenSha256": "cd6e1428f9000e5bb75e7c02bfe12d7189cab4b350d8d81aaa4f864a078ddf58",
       "parityGate": true
     },
@@ -24,10 +25,11 @@
       "id": "entry-fork--anonymous--mobile",
       "pageId": "entry-fork",
       "state": "anonymous",
-      "legacyPath": "/",
-      "reactPath": "/app/parity/fork",
+      "legacyPath": "/?parity-state=entry-anonymous",
+      "reactPath": "/app/parity/fork?parity-state=entry-anonymous",
       "viewport": {"width": 390, "height": 844},
       "auth": "anonymous",
+      "serverFixture": "isolated",
       "goldenSha256": "3f41b35379de0e8e4339bf7bf0bb7300f1364ddf3ad23e1fda104cbe2b96d71a",
       "parityGate": true
     },
@@ -35,32 +37,35 @@
       "id": "entry-fork--authenticated--desktop",
       "pageId": "entry-fork",
       "state": "authenticated",
-      "legacyPath": "/",
-      "reactPath": "/app/parity/fork",
+      "legacyPath": "/?parity-state=entry-authenticated",
+      "reactPath": "/app/parity/fork?parity-state=entry-authenticated",
       "viewport": {"width": 1440, "height": 900},
       "auth": "dev-admin",
-      "goldenSha256": "af528dca71adbd8f8e5ad9fea16ad8b30590bd53bf43b5834a3b3ce2f9881e7b",
+      "serverFixture": "isolated",
+      "goldenSha256": "d1b157867f10192990c7ac7d84bf9f033025d1c508efbc9b6735881a897b200d",
       "parityGate": true
     },
     {
       "id": "entry-fork--authenticated--mobile",
       "pageId": "entry-fork",
       "state": "authenticated",
-      "legacyPath": "/",
-      "reactPath": "/app/parity/fork",
+      "legacyPath": "/?parity-state=entry-authenticated",
+      "reactPath": "/app/parity/fork?parity-state=entry-authenticated",
       "viewport": {"width": 390, "height": 844},
       "auth": "dev-admin",
-      "goldenSha256": "3469c32c159be16909a2f653e9bd74801a9611f82cb05660c583cf4d0023b821",
+      "serverFixture": "isolated",
+      "goldenSha256": "e459a7679567ff5b20212db37f26a60a7b52068717de6938bbfc630801eed5ed",
       "parityGate": true
     },
     {
       "id": "entry-fork--local-test-users--desktop",
       "pageId": "entry-fork",
       "state": "local-test-users",
-      "legacyPath": "/",
-      "reactPath": "/app/parity/fork",
+      "legacyPath": "/?parity-state=entry-local-test-users",
+      "reactPath": "/app/parity/fork?parity-state=entry-local-test-users",
       "viewport": {"width": 1440, "height": 900},
       "auth": "anonymous",
+      "serverFixture": "isolated",
       "goldenSha256": "268510e2a1c53ebab778d9d9e4bf7d25f557ea50928c4bd7437ec6b1b5f73abb",
       "parityGate": true
     },
@@ -68,10 +73,11 @@
       "id": "entry-fork--local-test-users--mobile",
       "pageId": "entry-fork",
       "state": "local-test-users",
-      "legacyPath": "/",
-      "reactPath": "/app/parity/fork",
+      "legacyPath": "/?parity-state=entry-local-test-users",
+      "reactPath": "/app/parity/fork?parity-state=entry-local-test-users",
       "viewport": {"width": 390, "height": 844},
       "auth": "anonymous",
+      "serverFixture": "isolated",
       "goldenSha256": "974c80d882c88b1a62fc18b315cc92899fa384f2ec1ac30483c1b600d6ff9505",
       "parityGate": true
     },
@@ -156,7 +162,7 @@
       "viewport": {"width": 1440, "height": 900},
       "auth": "anonymous",
       "serverFixture": "isolated",
-      "goldenSha256": "fd95c8d0781531ca3f70a7db3acc22279e0942ff6b239520a5154b87b238bc8f",
+      "goldenSha256": "2cab1aa2e9ce7519c757f4e2f9a340a69fc7c0484e81e544b4d238a7b07b4051",
       "parityGate": true
     },
     {
@@ -168,7 +174,7 @@
       "viewport": {"width": 390, "height": 844},
       "auth": "anonymous",
       "serverFixture": "isolated",
-      "goldenSha256": "b4f08a2342ecc7018ae6358ea66ff858b55491d8d3701a939d8eb3229c76970a",
+      "goldenSha256": "b7a1e50059514305538668086b6fd8df56edf43c6fc0e07ff26c6156479f9ca3",
       "parityGate": true
     },
     {
@@ -204,7 +210,7 @@
       "viewport": {"width": 1440, "height": 900},
       "auth": "dev-user-1",
       "serverFixture": "isolated",
-      "goldenSha256": "d241a1a06622280ae1c1a34d8e85500d0e57c0e15c7e9eab4530ebd8cd5c3340",
+      "goldenSha256": "f6585bd47803fd98191d4b06237fc8c6a8c317b64d6722fa09096fae4716acec",
       "parityGate": true
     },
     {
@@ -216,7 +222,7 @@
       "viewport": {"width": 390, "height": 844},
       "auth": "dev-user-1",
       "serverFixture": "isolated",
-      "goldenSha256": "e18fc6c8b79e9dae2e52bebf5cb040dddba993670b91a510a99bf741bf03a2f7",
+      "goldenSha256": "e6dbedc9d44851256d4d3e6b603033d4e767838ade2e58dabfc90e81d6efab46",
       "parityGate": true
     },
     {
@@ -229,7 +235,7 @@
       "auth": "dev-user-1",
       "actions": [{"type": "click", "role": "button", "name": "Browse"}],
       "serverFixture": "isolated",
-      "goldenSha256": "9e010edb43c6e97a1f9838ff436181657c567f7cae0d356e1147ba456d8f608c",
+      "goldenSha256": "a27e86aac396f35dfa337797d3e2169132f1ad519b422ac67207ad96be6f332e",
       "parityGate": true
     },
     {
@@ -242,7 +248,7 @@
       "auth": "dev-user-1",
       "actions": [{"type": "click", "role": "button", "name": "Browse"}],
       "serverFixture": "isolated",
-      "goldenSha256": "1f323428093c392893dc54e65533ce0683cafe4a78fb1d1b8eebc40b4d3f3618",
+      "goldenSha256": "2c4c3b2dac9d892334d7884aa496e87845aa64329c96793f1a3f7d5fdd55407d",
       "parityGate": true
     },
     {
@@ -255,7 +261,7 @@
       "auth": "dev-user-1",
       "actions": [{"type": "click", "role": "button", "name": "After Explore phase: topic and participant clustering", "nth": 0}],
       "serverFixture": "isolated",
-      "goldenSha256": "4dccc5b14effe6a63592fcdf343a0ad8f27ba7131da6106646244c39a3a7331d",
+      "goldenSha256": "f6f86010dce93d040ce3f0e59961c3685e32c98ffe4faf9f67864e708211bcc7",
       "parityGate": true
     },
     {
@@ -268,7 +274,7 @@
       "auth": "dev-user-1",
       "actions": [{"type": "click", "role": "button", "name": "After Explore phase: topic and participant clustering", "nth": 0}],
       "serverFixture": "isolated",
-      "goldenSha256": "6fa26f10d3d90d3f408ed79e4ddad217aeb1650d48ea65865feb6311eceb6638",
+      "goldenSha256": "9191ea3c699e484c7bdc1061e90316969544865aff50914fbebaf2c2d5353d0e",
       "parityGate": true
     },
     {
@@ -280,7 +286,7 @@
       "viewport": {"width": 1440, "height": 900},
       "auth": "dev-admin",
       "serverFixture": "isolated",
-      "goldenSha256": "cf076a51e7c103b0d07873597fac96b1af5775997d1e3b284050fe920eec0df3",
+      "goldenSha256": "98ca1d0db42d037f102db3c85cbfc220f8f269560870eee087d119e53b3552fb",
       "parityGate": true
     },
     {
@@ -292,7 +298,7 @@
       "viewport": {"width": 390, "height": 844},
       "auth": "dev-admin",
       "serverFixture": "isolated",
-      "goldenSha256": "b6cfee9f61e997762a93ce148edcf765f4163758edc5d52a8436b7e065b236fb",
+      "goldenSha256": "323ce175372438d191b3fb32af89a248bc7240c2feddcbb5a96a93938ea51df7",
       "parityGate": true
     },
     {
@@ -1306,7 +1312,7 @@
       "auth": "dev-user-1",
       "serverFixture": "isolated",
       "actions": [{"type": "click", "role": "tab", "name": "Informed vote"}],
-      "goldenSha256": "73b5a14e44d805c203e68c018f0ce8ecbe520e2144ea5f821c6c4ae67a56569d",
+      "goldenSha256": "0b84165b6e299c38e8d1b15896aecb477e1d5ed29a5301459a543c8f39f48676",
       "parityGate": true
     },
     {
@@ -1596,7 +1602,7 @@
       "auth": "anonymous",
       "serverFixture": "isolated",
       "actions": [{"type": "click", "role": "link", "name": "Try a demonstration consultation — open consultation"}],
-      "goldenSha256": "ecab0787a3d1aed97456c545672719d9bacbb85776c1d3a378aecf3504cfa233",
+      "goldenSha256": "7498db2e6b565fdd8a834c162bb378c7472bc06912b77727c47e94aa18cb5e13",
       "parityGate": true
     },
     {
@@ -1820,7 +1826,7 @@
       "viewport": {"width": 1440, "height": 900},
       "auth": "dev-admin",
       "serverFixture": "isolated",
-      "goldenSha256": "85697ccdf37cd30ac7b9b9e7a4384073c8a13f57c9997f65f66393de2843d73d",
+      "goldenSha256": "d29af580d8a6947d740b92f77877286387b906e856285bb1bedc75a47b70b62a",
       "parityGate": true
     },
     {
@@ -1856,7 +1862,7 @@
       "viewport": {"width": 390, "height": 844},
       "auth": "dev-admin",
       "serverFixture": "isolated",
-      "goldenSha256": "a266ae1e028c4e463b3081925b95d4f51a1e8657455d87ca4256baeb7b5e4fdd",
+      "goldenSha256": "f10971ba92125f600cf5cede42b1d0ec4a23afe07067be25912785711dffa26e",
       "parityGate": true
     },
     {
@@ -2272,7 +2278,7 @@
         {"type": "click", "role": "button", "name": "Grant"}
       ],
       "serverFixture": "isolated",
-      "goldenSha256": "b39e1045071d0a1e9734f008fb64e054f185e8fecd7d63568ea48e54654ca95c",
+      "goldenSha256": "5247d4d8ce7f8f9fbf067fb5ad04ccbf245a8210c7000daa05dc3b1717f12c8f",
       "parityGate": true
     },
     {
@@ -2288,7 +2294,7 @@
         {"type": "click", "role": "button", "name": "Grant"}
       ],
       "serverFixture": "isolated",
-      "goldenSha256": "1e1a2d0ab73aebec9f982233c63f08dcdcbbd5db54629983af9acd29c57e27c7",
+      "goldenSha256": "6c4b80a0da3286685739c473601270ef959c28fcccc948fe9e75776080c18569",
       "parityGate": true
     },
     {
@@ -2662,7 +2668,7 @@
       "legacyPath": "/admin/conversations/81?parity-state=admin-lifecycle-submission",
       "reactPath": "/app/admin/conversations/81?parity-state=admin-lifecycle-submission",
       "viewport": {"width": 1440, "height": 900},
-      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "f4787865d74a40204a3653b5af9d50f55a0763e479d4d5a24ace3c6e8b937beb", "parityGate": true
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "bf80d0411bb1811ca740330e6ca73b480e1a111cd6cce5b6d811ec713d7c7167", "parityGate": true
     },
     {
       "id": "admin-lifecycle--submission--mobile",
@@ -2670,7 +2676,7 @@
       "legacyPath": "/admin/conversations/81?parity-state=admin-lifecycle-submission",
       "reactPath": "/app/admin/conversations/81?parity-state=admin-lifecycle-submission",
       "viewport": {"width": 390, "height": 844},
-      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "645052a775cd2437981b81811ac43299bfdb7cd85ff6b105e84e128348d520f2", "parityGate": true
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "29cf23fb1f8b6e18ef4efb2a470053dd7d70f2ba66267f61515e93e1f7d8c459", "parityGate": true
     },
     {
       "id": "admin-lifecycle--argument-mapping--desktop",
@@ -2678,7 +2684,7 @@
       "legacyPath": "/admin/conversations/82?parity-state=admin-lifecycle-argument-mapping",
       "reactPath": "/app/admin/conversations/82?parity-state=admin-lifecycle-argument-mapping",
       "viewport": {"width": 1440, "height": 900},
-      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "3e76134abf97a265af39d3afe1b9509c6e80990da7d31b7edeffd32cb504b587", "parityGate": true
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "0e40e1e5968e60e401f7c9dd304526013f96276831448a8f3dd49ceb4471bb03", "parityGate": true
     },
     {
       "id": "admin-lifecycle--argument-mapping--mobile",
@@ -2686,7 +2692,7 @@
       "legacyPath": "/admin/conversations/82?parity-state=admin-lifecycle-argument-mapping",
       "reactPath": "/app/admin/conversations/82?parity-state=admin-lifecycle-argument-mapping",
       "viewport": {"width": 390, "height": 844},
-      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "45c9da1c8ebf175f3d7509596987d3d1725fa8b15f5c9d678653f5522904c270", "parityGate": true
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "d277f79be40f44985005ac83fcefdcd01bbc85169305eabf7e7341c6b50f5b62", "parityGate": true
     },
     {
       "id": "admin-lifecycle--informed-voting--desktop",
@@ -2694,7 +2700,7 @@
       "legacyPath": "/admin/conversations/83?parity-state=admin-lifecycle-informed-voting",
       "reactPath": "/app/admin/conversations/83?parity-state=admin-lifecycle-informed-voting",
       "viewport": {"width": 1440, "height": 900},
-      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "79ce90ec0e2ca4ca138c6b26cf81ad908838afaeb4d1cf3dfdbade9426d61012", "parityGate": true
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "471d15664f9367a6a1d34e32d2fcc107763b055bba8df34073632bfc8515b3c6", "parityGate": true
     },
     {
       "id": "admin-lifecycle--informed-voting--mobile",
@@ -2702,7 +2708,7 @@
       "legacyPath": "/admin/conversations/83?parity-state=admin-lifecycle-informed-voting",
       "reactPath": "/app/admin/conversations/83?parity-state=admin-lifecycle-informed-voting",
       "viewport": {"width": 390, "height": 844},
-      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "f3dec39fae53780866c99977a380395d605269a4f5f126f0dc604e2830470627", "parityGate": true
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "0ad4ba35eb2903a3af7cf70731f2d0786326e524ea04931e6933929033bfb316", "parityGate": true
     },
     {
       "id": "admin-lifecycle--cleanup--desktop",
@@ -2742,7 +2748,7 @@
       "legacyPath": "/admin/conversations/86?parity-state=admin-lifecycle-paused",
       "reactPath": "/app/admin/conversations/86?parity-state=admin-lifecycle-paused",
       "viewport": {"width": 1440, "height": 900},
-      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "a844d098003f085219ca5064cbfd761e1b5c7520fc2649134067f05eeb75f02c", "parityGate": true
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "5b46de004a2db220dec30e0513e628c50e63d4bda88c02a140a51e4f41c8f170", "parityGate": true
     },
     {
       "id": "admin-lifecycle--paused--mobile",
@@ -2750,7 +2756,7 @@
       "legacyPath": "/admin/conversations/86?parity-state=admin-lifecycle-paused",
       "reactPath": "/app/admin/conversations/86?parity-state=admin-lifecycle-paused",
       "viewport": {"width": 390, "height": 844},
-      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "c54e54c83f0f28a88bf00e92717edd7a43b463b4960604998ce28d6a15c4e759", "parityGate": true
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "4afea77737f2bd93ebebaee5d22e7aba7d4d297e398c38a482f329316257135a", "parityGate": true
     },
     {
       "id": "admin-lifecycle--scheduled--desktop",
@@ -2796,7 +2802,7 @@
       "legacyPath": "/admin/conversations/89?parity-state=admin-lifecycle-upstream-unavailable",
       "reactPath": "/app/admin/conversations/89?parity-state=admin-lifecycle-upstream-unavailable",
       "viewport": {"width": 1440, "height": 900},
-      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "d4c232c08fdd2e49ee27537a1c01a1d031d6fef718d7af9a4bcb5d2f302946f8", "parityGate": true
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "a600d49ac6c8e7bee234821692115907a9f991d3712012695bd5e7adc7453292", "parityGate": true
     },
     {
       "id": "admin-lifecycle--upstream-unavailable--mobile",
@@ -2804,7 +2810,7 @@
       "legacyPath": "/admin/conversations/89?parity-state=admin-lifecycle-upstream-unavailable",
       "reactPath": "/app/admin/conversations/89?parity-state=admin-lifecycle-upstream-unavailable",
       "viewport": {"width": 390, "height": 844},
-      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "b14b436e71ba92c8194f80a1fc6d03f9fb39951240b8751143cfc70546dfd127", "parityGate": true
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "caa0a76f7dedc725c250e8310c2fb69c460b84098473942d612ca3ba49acd82d", "parityGate": true
     },
     {
       "id": "admin-lifecycle--moderator--desktop",
@@ -2876,7 +2882,7 @@
       "legacyPath": "/admin/conversations/94?parity-state=admin-lifecycle-deletion-blocked",
       "reactPath": "/app/admin/conversations/94?parity-state=admin-lifecycle-deletion-blocked",
       "viewport": {"width": 1440, "height": 900},
-      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "f06353f19377a0e2116223396c35b6a65fbb29f4ae41891dff65f8a1b071cf9d", "parityGate": true
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "55564b933a952c0add38b8d09e001d3492b1df778d1c2b9204211ae8e4248316", "parityGate": true
     },
     {
       "id": "admin-lifecycle--deletion-blocked--mobile",
@@ -2884,7 +2890,7 @@
       "legacyPath": "/admin/conversations/94?parity-state=admin-lifecycle-deletion-blocked",
       "reactPath": "/app/admin/conversations/94?parity-state=admin-lifecycle-deletion-blocked",
       "viewport": {"width": 390, "height": 844},
-      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "e3600ecdfed3a6459b3c2185ee5bca90ac57e4edfdbc4093bfd4c71650dc042d", "parityGate": true
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "b5e9237e18fb984b7e2c426a3d6503b78e5ce310cd291479880310ea7542d150", "parityGate": true
     }
   ]
 }

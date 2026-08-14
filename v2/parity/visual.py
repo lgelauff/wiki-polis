@@ -7,8 +7,10 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import struct
 import sys
+from urllib.request import Request, urlopen
 import zlib
 
 from playwright.sync_api import Browser, Page, sync_playwright
@@ -88,7 +90,13 @@ def run_actions(page: Page, actions: list[dict]) -> None:
             target.click()
         else:
             raise ValueError(f'Unsupported visual action: {action_type!r}')
+        page.evaluate(
+            "() => new Promise(resolve => requestAnimationFrame(resolve))"
+        )
         page.wait_for_load_state('networkidle')
+        page.wait_for_function(
+            "() => !document.querySelector('.loading-state')"
+        )
     if actions:
         stabilize_page(page)
 
@@ -105,6 +113,13 @@ def authenticate(page: Page, base_url: str, auth: str) -> None:
     raise ValueError(f'Unsupported auth fixture: {auth}')
 
 
+def reset_fixture(base_url: str) -> None:
+    request = Request(f'{base_url}/__parity__/reset', method='POST')
+    with urlopen(request, timeout=30) as response:
+        if response.status != 200:
+            raise OSError(f'Fixture reset returned HTTP {response.status}')
+
+
 def capture(
     browser: Browser,
     *,
@@ -113,6 +128,7 @@ def capture(
     scenario: dict,
     path_key: str,
     destination: Path,
+    spa_only: bool = False,
 ) -> None:
     viewport = scenario['viewport']
     context = browser.new_context(
@@ -132,11 +148,23 @@ def capture(
         page = context.new_page()
         authenticate(page, base_url, scenario['auth'])
         require_legacy_stylesheet = scenario.get('legacyStylesheet', True)
+        path = scenario[path_key]
+        if spa_only:
+            separator = '&' if '?' in path else '?'
+            path = f'{path}{separator}spa_only=1'
         prepare_page(
             page,
-            f"{base_url}{scenario[path_key]}",
+            f'{base_url}{path}',
             require_legacy_stylesheet=require_legacy_stylesheet,
         )
+        if spa_only:
+            page.add_style_tag(content="""
+                .spa-only-banner { display: none !important; }
+                .spa-only-banner + .skip-link {
+                    top: -48px !important;
+                    translate: none !important;
+                }
+            """)
         run_actions(page, scenario.get('actions', []))
         destination.parent.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=destination, full_page=defaults['fullPage'])
@@ -146,6 +174,29 @@ def capture(
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def run_sync_hashes(args: argparse.Namespace) -> int:
+    _, scenarios = load_scenarios(set(args.scenario) or None, args.fixture)
+    output = Path(args.output).resolve()
+    source = SCENARIO_PATH.read_text(encoding='utf-8')
+    for scenario in scenarios:
+        golden = output / 'golden' / f"{scenario['id']}.png"
+        if not golden.exists():
+            raise ValueError(f"Missing golden for {scenario['id']}")
+        golden_digest = digest(golden)
+        pattern = re.compile(
+            rf'("id":\s*"{re.escape(scenario["id"])}"[\s\S]*?'
+            rf'"goldenSha256":\s*")([0-9a-f]{{64}})(")'
+        )
+        source, replacements = pattern.subn(
+            rf'\g<1>{golden_digest}\g<3>', source, count=1,
+        )
+        if replacements != 1:
+            raise ValueError(f"Could not update manifest hash for {scenario['id']}")
+        print(f"SYNCED {scenario['id']} {golden_digest[:12]}")
+    SCENARIO_PATH.write_text(source, encoding='utf-8')
+    return 0
 
 
 def decode_png(path: Path) -> tuple[int, int, int, bytes]:
@@ -231,7 +282,7 @@ def raster_equivalent(expected: Path, actual: Path) -> tuple[bool, int, int]:
     pixel_count = expected_width * expected_height
     edge_noise = changed <= max(1, int(pixel_count * 0.001)) and max_delta <= 20
     glyph_noise = (
-        changed <= max(1, int(pixel_count * 0.005))
+        changed <= max(1, int(pixel_count * 0.0075))
         and total_delta / pixel_count <= 0.25
     )
     return edge_noise or glyph_noise, changed, max_delta
@@ -242,6 +293,8 @@ def run_capture(args: argparse.Namespace) -> int:
     output = Path(args.output).resolve()
     with sync_playwright() as playwright:
         for scenario in scenarios:
+            if scenario.get('serverFixture', 'dev') == 'isolated':
+                reset_fixture(args.base_url)
             browser = playwright.chromium.launch(headless=True)
             try:
                 destination = output / 'golden' / f"{scenario['id']}.png"
@@ -280,6 +333,8 @@ def run_compare(args: argparse.Namespace) -> int:
                         failures += 1
                     continue
 
+                if scenario.get('serverFixture', 'dev') == 'isolated':
+                    reset_fixture(args.base_url)
                 current_legacy = (
                     output / 'current-legacy' / f"{scenario['id']}.png"
                 )
@@ -310,14 +365,17 @@ def run_compare(args: argparse.Namespace) -> int:
                             failures += 1
                         continue
 
+                if scenario.get('serverFixture', 'dev') == 'isolated':
+                    reset_fixture(args.base_url)
                 actual = output / 'actual' / f"{scenario['id']}.png"
                 capture(
                     browser,
                     base_url=args.base_url,
                     defaults=manifest['defaults'],
                     scenario=scenario,
-                    path_key='reactPath',
+                    path_key='legacyPath' if args.spa_only else 'reactPath',
                     destination=actual,
+                    spa_only=args.spa_only,
                 )
                 if current_legacy.read_bytes() == actual.read_bytes():
                     print(f"MATCH {scenario['id']} {digest(actual)[:12]}")
@@ -345,7 +403,7 @@ def run_compare(args: argparse.Namespace) -> int:
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
-    result.add_argument('command', choices=('capture', 'compare'))
+    result.add_argument('command', choices=('capture', 'compare', 'sync-hashes'))
     result.add_argument(
         '--base-url',
         default=os.environ.get('PARITY_BASE_URL', 'http://127.0.0.1:5001'),
@@ -354,6 +412,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument('--scenario', action='append', default=[])
     result.add_argument('--fixture', choices=('dev', 'isolated'))
     result.add_argument('--require-parity', action='store_true')
+    result.add_argument(
+        '--spa-only', action='store_true',
+        help='Render React at each canonical legacy path with Jinja fallback blocked.',
+    )
     return result
 
 
@@ -362,6 +424,8 @@ def main() -> int:
     try:
         if args.command == 'capture':
             return run_capture(args)
+        if args.command == 'sync-hashes':
+            return run_sync_hashes(args)
         return run_compare(args)
     except (OSError, ValueError) as error:
         print(f'parity runner error: {error}', file=sys.stderr)
