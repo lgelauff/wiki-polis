@@ -439,6 +439,58 @@ test('completes informed voting through the legacy workspace panel', async () =>
   expect(screen.getByRole('alert')).toHaveTextContent('Agreed');
 });
 
+test('routes preliminary results through the legacy workspace tab', async () => {
+  server.use(
+    http.get(
+      new URL('/api/v1/conversations/community-strategy/results', globalThis.location.origin).toString(),
+      () => HttpResponse.json({data: {
+        slug: 'community-strategy', title: 'Community strategy',
+        publication: 'preliminary', resultsAvailable: true,
+        openedAt: '2026-05-01T12:00:00Z', closedAt: null,
+        context: {phase: 'Informed voting', status: 'provisional', method: 'Live comparison.'},
+        participation: {initialRound: 25, informedRound: 22, matchedRounds: null},
+        dataAvailability: {detailedCounts: true, opinionGroups: false},
+        moderation: {excludedStatements: 0, excludedParticipants: 0},
+        statements: [{
+          featuredStatementId: 31,
+          statement: 'Regional communities should share infrastructure funding.',
+          initial: {counts: {agree: 12, pass: 3, disagree: 5, voters: 20}, percentages: {agree: 60, pass: 15, disagree: 25}},
+          informed: {counts: {agree: 14, pass: 4, disagree: 2, voters: 20}, percentages: {agree: 70, pass: 20, disagree: 10}},
+          agreementShift: 10,
+          viewerChoice: 'agree',
+        }],
+        opinionGroups: [],
+        viewer: {participating: true, pseudonym: 'quiet-otter', revealState: null},
+        links: {self: '/api/v1/conversations/community-strategy/results', conversation: '/c/community-strategy', about: '/app/conversations/community-strategy/about'},
+      }}),
+    ),
+    http.get(
+      new URL('/api/v1/conversations/community-strategy/workspace', globalThis.location.origin).toString(),
+      () => HttpResponse.json({data: {
+        slug: 'community-strategy', title: 'Community strategy', space: 'real', status: 'open',
+        descriptionHtml: null, outroHtml: null,
+        viewer: {state: 'participant', pseudonym: 'quiet-otter'},
+        spaceWarning: null, scheduledTransition: null,
+        tabs: [
+          {key: 'informed-voting', label: 'Informed vote', dataHref: '/api/v1/conversations/community-strategy/informed-voting'},
+          {key: 'p6-results', label: 'Preliminary results', dataHref: '/api/v1/conversations/community-strategy/results'},
+        ],
+        defaultTab: 'informed-voting', reveal: null,
+        statementContribution: {unlockAfter: 10, quota: 3, used: 0},
+        capabilities: {participate: true, moderate: false},
+        links: {self: '/api/v1/conversations/community-strategy/workspace', conversation: '/c/community-strategy', about: '/app/conversations/community-strategy/about', join: '/app/conversations/community-strategy/join', informedVoting: '/api/v1/conversations/community-strategy/informed-voting', results: '/api/v1/conversations/community-strategy/results'},
+      }}),
+    ),
+  );
+
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/conversations/community-strategy/results']}><App /></MemoryRouter></QueryClientProvider>);
+
+  expect(await screen.findByRole('tab', {name: 'Preliminary results'})).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('table', {name: 'Preliminary informed voting results by statement'})).toBeVisible();
+  expect(screen.getByText('70.0% agree · 20.0% pass')).toBeVisible();
+  expect(screen.getByText('Agree', {selector: '.p6-my-vote'})).toBeVisible();
+});
+
 test('renders the legacy final report from the typed results contract', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

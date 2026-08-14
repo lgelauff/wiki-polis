@@ -483,6 +483,7 @@ export const handlers = [
             percentages: {agree: 70, pass: 20, disagree: 10},
           },
           agreementShift: 10,
+          viewerChoice: null,
         }],
         opinionGroups: [{
           label: 'Group 1',

@@ -85,7 +85,7 @@ function Header({space, admin = false}: {space?: ConversationSpace; admin?: bool
 function ResultsRoute() {
   const {slug = ''} = useParams();
   return <ResultsAccessBoundary slug={slug}>
-    <ResultsPage slug={slug} preliminaryHeader={<Header />} />
+    <ResultsPage slug={slug} />
   </ResultsAccessBoundary>;
 }
 

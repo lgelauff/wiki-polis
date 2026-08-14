@@ -34,14 +34,17 @@ function ArgumentSide({side, items}: {
   );
 }
 
-function Completion({workspace}: {workspace: Workspace}) {
+function Completion({workspace, onSelectPreliminary}: {
+  workspace: Workspace;
+  onSelectPreliminary: () => void;
+}) {
   const hasPreliminaryResults = workspace.tabs.some((tab) => tab.key === 'p6-results');
   const deliberationOpen = workspace.tabs.some((tab) => tab.key === 'vote' || tab.key === 'arguments');
   return (
     <div className="p6-done">
       <h2 className="p6-done-heading">You've completed informed voting.</h2>
       {hasPreliminaryResults ? (
-        <p className="p6-done-text">See the <a href="#tab-p6-results">Preliminary results</a> tab for the full comparison.</p>
+        <p className="p6-done-text">See the <a href="#" onClick={(event) => { event.preventDefault(); onSelectPreliminary(); }}>Preliminary results</a> tab for the full comparison.</p>
       ) : deliberationOpen ? (
         <p className="p6-done-text">The deliberation is still open — come back if new arguments are added.</p>
       ) : workspace.status === 'open' ? (
@@ -58,9 +61,10 @@ function Completion({workspace}: {workspace: Workspace}) {
   );
 }
 
-export function LegacyInformedVotingPanel({workspace, csrfToken}: {
+export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPreliminary}: {
   workspace: Workspace;
   csrfToken: string;
+  onSelectPreliminary: () => void;
 }) {
   const {data} = useSuspenseQuery(informedVotingQuery(workspace.slug));
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -138,6 +142,6 @@ export function LegacyInformedVotingPanel({workspace, csrfToken}: {
         </div>
       </div>;
     })}
-    {done && <Completion workspace={workspace} />}
+    {done && <Completion workspace={workspace} onSelectPreliminary={onSelectPreliminary} />}
   </>;
 }

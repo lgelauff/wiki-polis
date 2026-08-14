@@ -13,6 +13,7 @@ import {
 import {ExternalRedirect} from './external-redirect';
 import {LegacyArgumentMappingPanel} from './argument-mapping-panel';
 import {LegacyInformedVotingPanel} from './informed-voting-panel';
+import {LegacyPreliminaryResultsPanel} from './preliminary-results-panel';
 import {LegacyShell} from './legacy-shell';
 import {LegacyContentFlag} from './legacy-content-flag';
 
@@ -315,7 +316,7 @@ function WorkspaceBody({data, csrfToken, routeTab}: {data: Workspace; csrfToken:
       {data.status === 'closed' ? <ClosedWorkspace data={data} /> : data.status === 'paused' ? <div className="landing-section"><p className="muted">This consultation is temporarily paused. Check back soon.</p></div> : data.tabs.length === 0 ? <div className="landing-section"><p className="muted">Nothing is available yet. Check back soon.</p></div> : (
         <>
           {data.tabs.length > 1 && <div className="tab-bar" role="tablist" onKeyDown={keyDown}>{data.tabs.map((tab, index) => <button key={tab.key} ref={(element) => { tabRefs.current[index] = element; }} id={`tab-btn-${tab.key}`} className={`tab-btn${activeTab === tab.key ? ' tab-btn--active' : ''}`} role="tab" data-tab={`tab-${tab.key}`} aria-controls={`tab-${tab.key}`} aria-selected={activeTab === tab.key} tabIndex={activeTab === tab.key ? 0 : -1} onClick={() => setActiveTab(tab.key)}>{tab.label}</button>)}</div>}
-          {data.tabs.map((tab) => <div key={tab.key} id={`tab-${tab.key}`} className={`tab-panel${tab.key === 'arguments' ? ' arguments-tab' : ''}${activeTab === tab.key ? ' tab-panel--active' : ' tab-panel--hidden'}`} role="tabpanel" aria-labelledby={`tab-btn-${tab.key}`}>{activeTab === tab.key && (tab.key === 'vote' ? <ExplorePanel slug={data.slug} csrfToken={csrfToken} /> : tab.key === 'arguments' ? <LegacyArgumentMappingPanel slug={data.slug} csrfToken={csrfToken} /> : tab.key === 'informed-voting' ? <LegacyInformedVotingPanel workspace={data} csrfToken={csrfToken} /> : <div className="landing-section"><p className="muted">{tab.label}</p></div>)}</div>)}
+          {data.tabs.map((tab) => <div key={tab.key} id={`tab-${tab.key}`} className={`tab-panel${tab.key === 'arguments' ? ' arguments-tab' : ''}${activeTab === tab.key ? ' tab-panel--active' : ' tab-panel--hidden'}`} role="tabpanel" aria-labelledby={`tab-btn-${tab.key}`}>{activeTab === tab.key && (tab.key === 'vote' ? <ExplorePanel slug={data.slug} csrfToken={csrfToken} /> : tab.key === 'arguments' ? <LegacyArgumentMappingPanel slug={data.slug} csrfToken={csrfToken} /> : tab.key === 'informed-voting' ? <LegacyInformedVotingPanel workspace={data} csrfToken={csrfToken} onSelectPreliminary={() => setActiveTab('p6-results')} /> : tab.key === 'p6-results' ? <LegacyPreliminaryResultsPanel slug={data.slug} /> : <div className="landing-section"><p className="muted">{tab.label}</p></div>)}</div>)}
         </>
       )}
       {data.outroHtml && <div className="outro-text" dangerouslySetInnerHTML={{__html: data.outroHtml}} />}
@@ -342,7 +343,7 @@ export function ConversationWorkspacePage() {
   if (data.viewer.state === 'join_required') return <ExternalRedirect href={data.links.join} />;
   return (
     <LegacyShell headerMode={data.space === 'demo' ? 'conversation-demo' : 'conversation-real'} headerCrumb={<ConversationCrumb data={data} />} title={`${data.title} — ProtoWiki`}>
-      <WorkspaceBody data={data} csrfToken={session.csrfToken} {...(location.pathname.endsWith('/arguments') ? {routeTab: 'arguments' as const} : location.pathname.endsWith('/informed-voting') ? {routeTab: 'informed-voting' as const} : {})} />
+      <WorkspaceBody data={data} csrfToken={session.csrfToken} {...(location.pathname.endsWith('/arguments') ? {routeTab: 'arguments' as const} : location.pathname.endsWith('/informed-voting') ? {routeTab: 'informed-voting' as const} : location.pathname.endsWith('/results') ? {routeTab: 'p6-results' as const} : {})} />
     </LegacyShell>
   );
 }
