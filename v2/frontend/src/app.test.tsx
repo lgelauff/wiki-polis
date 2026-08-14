@@ -416,7 +416,7 @@ test('records a pass and opens the legacy post-vote choices', async () => {
   expect(screen.getByRole('button', {name: /Suggest different wording/})).toBeVisible();
 });
 
-test('completes informed voting through the typed replacement command', async () => {
+test('completes informed voting through the legacy workspace panel', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/app/conversations/community-strategy/informed-voting']}>
@@ -425,19 +425,18 @@ test('completes informed voting through the typed replacement command', async ()
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {
-    name: 'Regional communities should share infrastructure funding.',
-  })).toBeVisible();
+  expect(await screen.findByText(
+    'Regional communities should share infrastructure funding.',
+  )).toHaveClass('p6-statement-text');
   expect(screen.getByText(/reduces duplicated maintenance/)).toBeVisible();
   expect(screen.getByText(/independent budgets/)).toBeVisible();
   fireEvent.click(screen.getByRole('button', {name: 'Agree'}));
 
   expect(await screen.findByRole('heading', {
-    name: 'You’ve completed informed voting.',
+    name: "You've completed informed voting.",
   })).toBeVisible();
-  expect(screen.getByText(/recorded privately under/)).toHaveTextContent('quiet-otter');
-  fireEvent.click(screen.getByRole('button', {name: 'Review statements'}));
-  expect(await screen.findByText(/You voted/)).toHaveTextContent('agree');
+  expect(screen.getByText(/votes are recorded under pseudonym/)).toHaveTextContent('quiet-otter');
+  expect(screen.getByRole('alert')).toHaveTextContent('Agreed');
 });
 
 test('renders the legacy final report from the typed results contract', async () => {

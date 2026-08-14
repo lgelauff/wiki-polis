@@ -395,6 +395,7 @@ export const handlers = [
       tabs: [
         {key: 'vote', label: 'Vote', dataHref: '/api/v1/conversations/community-strategy/explore'},
         {key: 'arguments', label: 'Arguments', dataHref: '/api/v1/conversations/community-strategy/arguments'},
+        {key: 'informed-voting', label: 'Informed vote', dataHref: '/api/v1/conversations/community-strategy/informed-voting'},
       ],
       defaultTab: 'vote',
       reveal: null,
@@ -407,6 +408,7 @@ export const handlers = [
         join: '/app/conversations/community-strategy/join',
         explore: '/api/v1/conversations/community-strategy/explore',
         arguments: '/api/v1/conversations/community-strategy/arguments',
+        informedVoting: '/api/v1/conversations/community-strategy/informed-voting',
       },
     }}),
   ),
@@ -511,6 +513,7 @@ export const handlers = [
         cards: [{
           featuredStatementId: 31,
           statement: 'Regional communities should share infrastructure funding.',
+          canVote: true,
           voted: false,
           arguments: {
             for: [{id: 81, body: 'Shared funding reduces duplicated maintenance.', helpfulVotes: 7}],
