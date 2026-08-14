@@ -270,20 +270,72 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
 }
 
 function ClosedWorkspace({data}: {data: Workspace}) {
+  const reveal = data.reveal;
   return (
     <div className="landing-section">
-      {data.reveal ? (
+      {reveal ? (
         <>
-          <p className="muted">This consultation closed on <strong>{new Date(data.reveal.closedAt).toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric'})}</strong>. Your votes were recorded under your pseudonym; for a limited time you may optionally and permanently link your Wikimedia username to it.</p>
-          {data.reveal.state === 'revealed' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>You linked your identity — your username is associated with pseudonym <strong>{data.viewer.pseudonym}</strong> in this consultation's records.</p>}
-          {data.reveal.state === 'open' && <div className="reveal-callout"><p className="reveal-callout-text">The identity reveal window is open. Your participation is recorded under pseudonym <strong>{data.viewer.pseudonym}</strong>.</p><a className="reveal-callout-link" href={`/app/conversations/${data.slug}/identity-reveal`}>Optionally link your Wikimedia username <span aria-hidden="true">→</span></a></div>}
-          {data.reveal.state === 'pending' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>The window opens on {new Date(data.reveal.opensAt).toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric'})} — nothing to do until then.</p>}
-          {data.reveal.state === 'expired' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>The reveal window has closed. Records stay pseudonymous — identities can no longer be linked.</p>}
+          <p className="muted">This consultation closed on <strong>{legacyDate(reveal.closedAt)}</strong>. Your votes were recorded under your pseudonym; for a limited time you may optionally and permanently link your Wikimedia username to it.</p>
+          <RevealTimeline reveal={reveal} />
+          {reveal.state === 'revealed' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>You linked your identity — your username is associated with pseudonym <strong>{data.viewer.pseudonym}</strong> in this consultation's records.</p>}
+          {reveal.state === 'open' && <div className="reveal-callout"><p className="reveal-callout-text">The identity reveal window is open. Your participation is recorded under pseudonym <strong>{data.viewer.pseudonym}</strong>.</p><a className="reveal-callout-link" href={`/app/conversations/${data.slug}/identity-reveal`}>Optionally link your Wikimedia username <span aria-hidden="true">→</span></a></div>}
+          {reveal.state === 'pending' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>The window opens on {legacyDate(reveal.opensAt)} — nothing to do until then.</p>}
+          {reveal.state === 'expired' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>The reveal window has closed. Records stay pseudonymous — identities can no longer be linked.</p>}
         </>
       ) : <p className="muted">This consultation is closed.</p>}
       {data.links.results && <p style={{marginTop: '1rem', fontSize: 14}}><a href={`/app/conversations/${data.slug}/results`}>Read the final report <span aria-hidden="true">→</span></a></p>}
     </div>
   );
+}
+
+function legacyDate(value: string) {
+  const date = new Date(value);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${date.getUTCDate()} ${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+
+function countdown(value: string) {
+  const milliseconds = Date.parse(value) - Date.now();
+  if (milliseconds <= 0) return 'now';
+  const seconds = Math.floor(milliseconds / 1000);
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${Math.floor(seconds / 86400)}d ${pad(Math.floor(seconds % 86400 / 3600))}:${pad(Math.floor(seconds % 3600 / 60))}:${pad(seconds % 60)}`;
+}
+
+function RevealTimeline({reveal}: {reveal: NonNullable<Workspace['reveal']>}) {
+  const [remaining, setRemaining] = useState(
+    reveal.countdownTargetAt ? countdown(reveal.countdownTargetAt) : null,
+  );
+  useEffect(() => {
+    if (!reveal.countdownTargetAt) return;
+    const update = () => setRemaining(countdown(reveal.countdownTargetAt!));
+    update();
+    const timer = globalThis.setInterval(update, 1000);
+    return () => globalThis.clearInterval(timer);
+  }, [reveal.countdownTargetAt]);
+  const firstNow = reveal.state === 'pending';
+  const secondNow = reveal.state === 'open' || reveal.state === 'revealed';
+  const expired = reveal.state === 'expired';
+  return <div className="reveal-timeline">
+    <ol className="reveal-track" aria-label="Identity reveal timeline">
+      <li className={`reveal-node reveal-node--done${firstNow ? ' reveal-node--now' : ''}`} {...(firstNow ? {'aria-current': 'step' as const} : {})}>
+        <span className="reveal-pip" aria-hidden="true" />
+        <div className="reveal-when">{legacyDate(reveal.closedAt)}</div>
+        <div className="reveal-what">Closed — linking stays sealed for {reveal.cooldownDays} days <span className="sr-only">{firstNow ? '(in progress — cooldown)' : '(completed)'}</span></div>
+      </li>
+      <li className={`reveal-node${secondNow ? ' reveal-node--now' : expired ? ' reveal-node--done' : ''}`} {...(secondNow ? {'aria-current': 'step' as const} : {})}>
+        <span className="reveal-pip" aria-hidden="true" />
+        <div className="reveal-when">{legacyDate(reveal.opensAt)}</div>
+        <div className="reveal-what">Window opens — {reveal.windowDays} days to optionally link your Wikimedia username <span className="sr-only">{secondNow ? '(current)' : expired ? '(completed)' : '(upcoming)'}</span></div>
+      </li>
+      <li className={`reveal-node${expired ? ' reveal-node--now' : ''}`} {...(expired ? {'aria-current': 'step' as const} : {})}>
+        <span className="reveal-pip" aria-hidden="true" />
+        <div className="reveal-when">{legacyDate(reveal.closesAt)}</div>
+        <div className="reveal-what">Window closes — records stay pseudonymous permanently <span className="sr-only">{expired ? '(current)' : '(upcoming)'}</span></div>
+      </li>
+    </ol>
+    {remaining && <p className="reveal-deadline">{reveal.state === 'pending' ? 'Reveal window opens in ' : <><strong>Window closes in</strong>{' '}</>}<strong className="reveal-countdown">{remaining}</strong>{reveal.state === 'open' && <> — linking is <strong>permanent and cannot be undone</strong></>}.</p>}
+  </div>;
 }
 
 function WorkspaceBody({data, csrfToken, routeTab}: {data: Workspace; csrfToken: string; routeTab?: WorkspaceTab}) {
