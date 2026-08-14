@@ -115,6 +115,11 @@ def capture(
         reduced_motion='reduce',
         device_scale_factor=defaults['deviceScaleFactor'],
     )
+    if scenario.get('clock'):
+        timestamp = scenario['clock']
+        context.add_init_script(
+            f"Date.now = () => new Date({json.dumps(timestamp)}).getTime();"
+        )
     try:
         page = context.new_page()
         authenticate(page, base_url, scenario['auth'])

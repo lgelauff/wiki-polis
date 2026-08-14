@@ -135,7 +135,7 @@
       "temporaryReactRoutes": ["/app/conversations/:slug/identity-reveal"],
       "targetReactRoutes": ["/c/:slug/reveal"],
       "apiOperations": ["getIdentityReveal", "createIdentityReveal"],
-      "status": "partial",
+      "status": "parity",
       "scenarios": ["pending", "open", "revealed", "expired", "not-participant", "not-closed"]
     },
     {
@@ -227,7 +227,7 @@
       "id": "participation-acceptance",
       "legacyEndpoints": ["participant.accept_post", "participant.accept_pseudonyms"],
       "apiOperations": ["getPseudonymSuggestions", "createParticipation"],
-      "status": "implemented-unverified"
+      "status": "parity"
     },
     {
       "id": "statement-contribution",
@@ -251,7 +251,7 @@
       "id": "identity-reveal-command",
       "legacyEndpoints": ["participant.reveal_identity_post"],
       "apiOperations": ["createIdentityReveal"],
-      "status": "implemented-unverified"
+      "status": "parity"
     },
     {
       "id": "admin-catalog-commands",

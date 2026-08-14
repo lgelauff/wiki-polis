@@ -53,9 +53,11 @@ application.config.update(
 _PARITY_PSEUDONYMS = [
     'calm-otter', 'bright-fox', 'steady-heron', 'gentle-raven', 'quiet-badger',
 ]
+_PARITY_NOW = datetime(2026, 8, 14, 12, 0, tzinfo=timezone.utc)
 app_module._generate_pseudonyms = lambda count=5: _PARITY_PSEUDONYMS[:count]
 app_module._is_emailable = lambda username: username == 'dev-user-2'
 _original_eligibility_check = app_module._check_join_eligibility
+_original_reveal_context = app_module._reveal_context
 
 
 def _fixture_eligibility_check(conversation, participant):
@@ -65,6 +67,9 @@ def _fixture_eligibility_check(conversation, participant):
 
 
 app_module._check_join_eligibility = _fixture_eligibility_check
+app_module._reveal_context = lambda conversation, participation: _original_reveal_context(
+    conversation, participation, now=_PARITY_NOW,
+)
 
 
 def _seed() -> None:
@@ -167,11 +172,31 @@ def _seed() -> None:
         slug='parity-pseudonym-owner', polis_id='parity-pseudonym-owner-polis',
         title='Pseudonym owner fixture', active=False, access_policy='public',
     )
+    reveal_pending = Conversation(
+        slug='parity-reveal-pending', polis_id='parity-reveal-pending-polis',
+        title='Pending identity consultation', active=False, access_policy='public',
+        closed_at=datetime(2026, 8, 4, 12, 0, tzinfo=timezone.utc),
+    )
+    reveal_open = Conversation(
+        slug='parity-reveal-open', polis_id='parity-reveal-open-polis',
+        title='Open identity consultation', active=False, access_policy='public',
+        closed_at=datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc),
+    )
+    reveal_revealed = Conversation(
+        slug='parity-reveal-linked', polis_id='parity-reveal-linked-polis',
+        title='Linked identity consultation', active=False, access_policy='public',
+        closed_at=datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc),
+    )
+    reveal_expired = Conversation(
+        slug='parity-reveal-expired', polis_id='parity-reveal-expired-polis',
+        title='Expired identity consultation', active=False, access_policy='public',
+        closed_at=datetime(2026, 6, 5, 12, 0, tzinfo=timezone.utc),
+    )
     db.session.add_all([
         admin, target, participant, moderator, moderation, closed,
         about_public, about_participant, about_moderator, about_scheduled, about_mixed,
         join_public, join_email, join_invite, join_eligibility, join_conflict,
-        pseudonym_owner,
+        pseudonym_owner, reveal_pending, reveal_open, reveal_revealed, reveal_expired,
     ])
     db.session.flush()
     db.session.add_all([
@@ -215,6 +240,28 @@ def _seed() -> None:
             participant_id=admin.id,
             conversation_id=pseudonym_owner.id,
             pseudonym='calm-otter',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=reveal_pending.id,
+            pseudonym='waiting-orca',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=reveal_open.id,
+            pseudonym='open-penguin',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=reveal_revealed.id,
+            pseudonym='linked-marten',
+            public_username=participant.mw_username,
+            revealed_at=datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc),
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=reveal_expired.id,
+            pseudonym='private-heron',
         ),
         ConversationInvite(
             conversation_id=join_invite.id,
