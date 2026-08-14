@@ -5,7 +5,9 @@ services:
     volumes: !override
       - "polis-schemas:/docker-entrypoint-initdb.d/"
       - "${PARTICIAPI_DIR}/particiapi/schema.sql:/docker-entrypoint-initdb.d/particiapi_schema.sql"
-      - "${WIKI_POLIS_DIR:?set WIKI_POLIS_DIR to the wiki-polis checkout}/v2/tmp/postgresql:/var/lib/postgresql"
+      # A named volume lets Postgres initialize ownership itself. Docker Desktop
+      # on macOS cannot chown a fresh host bind mount here.
+      - "polis-pgdata:/var/lib/postgresql"
       - "${WIKI_POLIS_DIR:?set WIKI_POLIS_DIR to the wiki-polis checkout}/v2/tmp/postgres-backups:/backups"
 
   particiapi:
@@ -18,3 +20,6 @@ services:
   polis-server:
     ports: !override
       - "127.0.0.1:${POLIS_HOST_PORT:-8003}:5000"
+
+volumes:
+  polis-pgdata:

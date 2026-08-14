@@ -93,8 +93,9 @@ That override:
 - exposes Postgres to the host;
 - exposes Particiapi and Polis server on configurable host ports;
 - disables Particiapi authentication for local Flask-driven dev;
-- mounts Postgres data under `v2/tmp/postgresql`, using the Postgres 18
-  compatible `/var/lib/postgresql` mount point.
+- persists Postgres data in the Compose-managed `polis-pgdata` volume, using the
+  Postgres 18 compatible `/var/lib/postgresql` mount point. A named volume avoids
+  fresh-database ownership failures with Docker Desktop bind mounts on macOS.
 
 Copy the example Flask environment file before the first run:
 
