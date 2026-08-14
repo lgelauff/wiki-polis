@@ -201,6 +201,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{slug}/participation-entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolve the authenticated participant's join-route state */
+        get: operations["getParticipationEntry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{slug}/pseudonym-suggestions": {
         parameters: {
             query?: never;
@@ -1897,6 +1914,48 @@ export interface components {
             conversation: string;
             about: string;
         };
+        ParticipationEntryConversation: {
+            id: number;
+            slug: string;
+            title: string;
+            descriptionHtml: string | null;
+            eligibilityLabel: string | null;
+        };
+        JoinParticipationEntry: {
+            /** @enum {string} */
+            state: "join";
+            conversation: components["schemas"]["ParticipationEntryConversation"];
+            pseudonyms: string[];
+            emailable: boolean;
+            reveal: {
+                cooldownDays: number;
+                windowEndDays: number;
+            };
+            links: {
+                home: string;
+                conversation: string;
+            };
+        };
+        RedirectParticipationEntry: {
+            /** @enum {string} */
+            state: "redirect";
+            /** @enum {string} */
+            reason: "demo" | "already_participating";
+            href: string;
+        };
+        InviteDeniedParticipationEntry: {
+            /** @enum {string} */
+            state: "invite_denied";
+            conversation: components["schemas"]["ParticipationEntryConversation"];
+            canModerate: boolean;
+            links: {
+                home: string;
+                manageInvites: string | null;
+            };
+        };
+        ParticipationEntryResponse: {
+            data: components["schemas"]["JoinParticipationEntry"] | components["schemas"]["RedirectParticipationEntry"] | components["schemas"]["InviteDeniedParticipationEntry"];
+        };
         PseudonymSuggestionsResponse: {
             data: {
                 pseudonyms: string[];
@@ -2895,6 +2954,46 @@ export interface operations {
             };
             /** @description Reveal window is not open */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getParticipationEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Join form, redirect, or invite-denied route state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationEntryResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

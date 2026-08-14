@@ -66,6 +66,7 @@ from services.conversation_lanes import (build_conversation_lane,
                                          scheduled_transition)
 from services.participations import (EligibilityDenied, InvalidPseudonym,
                                      PseudonymUnavailable, join_conversation)
+from services.participation_entry import build_participation_entry
 from services.explore import (ExploreGateway, ParticiapiSessionState,
                               ExploreUpstreamError, build_explore_state,
                               normalise_statements)
@@ -1889,12 +1890,45 @@ def _reveal_identity_api_payload(slug: str) -> tuple[dict, int]:
     )
 
 
-def _pseudonym_suggestions_api_payload(slug: str) -> list[str]:
+def _participation_entry_read_model(slug: str):
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
     if participant is None:
         abort(401)
-    _check_conversation_access(conv, participant)
+    invited = (
+        conv.access_policy != 'invite_only'
+        or ConversationInvite.query.filter_by(
+            conversation_id=conv.id,
+            mw_username=session.get('username'),
+        ).first() is not None
+    )
+    return build_participation_entry(
+        conversation=conv,
+        participant=participant,
+        invited=invited,
+        can_moderate=_can_moderate(conv, participant),
+        emailable=bool(session.get('emailable')),
+        pseudonyms=_generate_pseudonyms(5),
+        reveal_cooldown_days=_REVEAL_COOLDOWN_DAYS,
+        reveal_window_end_days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS,
+    )
+
+
+def _participation_entry_api_payload(slug: str) -> dict:
+    entry = _participation_entry_read_model(slug)
+    return entry.to_api(
+        conversation_link=url_for('participant.conversation', slug=slug),
+        home_link=url_for('index'),
+        manage_invites_link=url_for(
+            'admin.admin_conversation_invites', conv_id=entry.conversation.id,
+        ),
+    )
+
+
+def _pseudonym_suggestions_api_payload(slug: str) -> list[str]:
+    entry = _participation_entry_read_model(slug)
+    if entry.state != 'join':
+        abort(409, description='This conversation cannot be joined from this route.')
     return _generate_pseudonyms(5)
 
 
@@ -5622,21 +5656,20 @@ def admin_argument_moderate(conv_id, arg_id):
 @participant_bp.get('/accept/<slug>')
 @login_required
 def accept(slug):
-    conv        = Conversation.query.filter_by(slug=slug).first_or_404()
-    if conv.access_policy == 'demo':
+    entry = _participation_entry_read_model(slug)
+    conv = entry.conversation
+    if entry.state == 'redirect':
         return redirect(url_for('participant.conversation', slug=slug))
-    participant = _current_participant()
-    _check_conversation_access(conv, participant)
-    if participant and Participation.query.filter_by(
-            participant_id=participant.id,
-            conversation_id=conv.id).first():
-        return redirect(url_for('participant.conversation', slug=slug))
-    pseudonyms = _generate_pseudonyms(5)
-    emailable  = session.get('emailable', False)
+    if entry.state == 'invite_denied':
+        return make_response(render_template(
+            'forbidden_invite_only.html',
+            conversation=conv,
+            can_moderate=entry.can_moderate,
+        ), 403)
     return render_template('accept.html', conversation=conv,
-                           emailable=emailable, pseudonyms=pseudonyms,
-                           reveal_cooldown=_REVEAL_COOLDOWN_DAYS,
-                           reveal_window_end=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS)
+                           emailable=entry.emailable, pseudonyms=entry.pseudonyms,
+                           reveal_cooldown=entry.reveal_cooldown_days,
+                           reveal_window_end=entry.reveal_window_end_days)
 
 @participant_bp.post('/accept/<slug>')
 @login_required
@@ -6830,6 +6863,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_conversation_output=_conversation_output_api_payload,
         resolve_identity_reveal=_identity_reveal_api_payload,
         reveal_identity=_reveal_identity_api_payload,
+        resolve_participation_entry=_participation_entry_api_payload,
         join_conversation=_join_conversation_api_payload,
         resolve_pseudonym_suggestions=_pseudonym_suggestions_api_payload,
         resolve_explore_state=_explore_api_payload,

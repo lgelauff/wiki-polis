@@ -2,7 +2,83 @@
 
 from unittest.mock import patch
 
-from db import Participant, Participation, db
+from db import ConversationInvite, Participant, Participation, db
+
+
+def test_participation_entry_describes_the_legacy_join_form(
+    auth_client, participant, conversation,
+):
+    conversation.intro_text = '<p>Join this discussion.</p>'
+    conversation.eligibility_label = 'Extended-confirmed editors'
+    db.session.commit()
+
+    response = auth_client.get(
+        '/api/v1/conversations/test-conv/participation-entry',
+    )
+
+    assert response.status_code == 200
+    assert response.headers['Cache-Control'] == 'no-store'
+    data = response.get_json()['data']
+    assert data['state'] == 'join'
+    assert data['conversation'] == {
+        'id': conversation.id,
+        'slug': 'test-conv',
+        'title': 'Test Conversation',
+        'descriptionHtml': '<p>Join this discussion.</p>',
+        'eligibilityLabel': 'Extended-confirmed editors',
+    }
+    assert len(data['pseudonyms']) == 5
+    assert data['emailable'] is True
+    assert data['reveal'] == {'cooldownDays': 30, 'windowEndDays': 60}
+    assert data['links'] == {'home': '/', 'conversation': '/c/test-conv'}
+
+
+def test_participation_entry_returns_route_redirect_for_existing_participant(
+    auth_client, participant, conversation,
+):
+    db.session.add(Participation(
+        participant_id=participant.id,
+        conversation_id=conversation.id,
+        pseudonym='joined-otter',
+    ))
+    db.session.commit()
+
+    response = auth_client.get(
+        '/api/v1/conversations/test-conv/participation-entry',
+    )
+
+    assert response.get_json()['data'] == {
+        'state': 'redirect',
+        'reason': 'already_participating',
+        'href': '/c/test-conv',
+    }
+
+
+def test_participation_entry_exposes_invite_denial_as_route_state(
+    auth_client, participant, conversation,
+):
+    conversation.access_policy = 'invite_only'
+    db.session.commit()
+
+    denied = auth_client.get(
+        '/api/v1/conversations/test-conv/participation-entry',
+    )
+    assert denied.status_code == 200
+    data = denied.get_json()['data']
+    assert data['state'] == 'invite_denied'
+    assert data['conversation']['title'] == 'Test Conversation'
+    assert data['canModerate'] is False
+    assert data['links'] == {'home': '/', 'manageInvites': None}
+
+    db.session.add(ConversationInvite(
+        conversation_id=conversation.id,
+        mw_username=participant.mw_username,
+    ))
+    db.session.commit()
+    allowed = auth_client.get(
+        '/api/v1/conversations/test-conv/participation-entry',
+    )
+    assert allowed.get_json()['data']['state'] == 'join'
 
 
 def test_join_command_creates_participation_and_filters_email_preference(
@@ -130,7 +206,10 @@ def test_join_command_returns_typed_eligibility_denial(
         'error': {
             'code': 'eligibility_denied',
             'message': 'This account does not meet the participation criteria.',
-            'details': {'status': 'ineligible'},
+            'details': {
+                'status': 'ineligible',
+                'displayMessage': 'Not enough edits',
+            },
         },
     }
     assert Participation.query.count() == 0

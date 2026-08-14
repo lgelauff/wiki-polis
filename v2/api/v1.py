@@ -92,6 +92,7 @@ def create_api_v1_blueprint(
     resolve_conversation_output: Callable[[str, str], dict],
     resolve_identity_reveal: Callable[[str], dict],
     reveal_identity: Callable[[str], tuple[dict, int]],
+    resolve_participation_entry: Callable[[str], dict],
     join_conversation: Callable[[str, dict], tuple[dict, int]],
     resolve_pseudonym_suggestions: Callable[[str], list[str]],
     resolve_explore_state: Callable[[str], dict],
@@ -325,6 +326,10 @@ def create_api_v1_blueprint(
             )
         return _no_store(jsonify({'data': data})), status
 
+    @bp.get('/conversations/<slug>/participation-entry')
+    def get_participation_entry(slug: str):
+        return _no_store(jsonify({'data': resolve_participation_entry(slug)}))
+
     @bp.get('/conversations/<slug>/pseudonym-suggestions')
     def get_pseudonym_suggestions(slug: str):
         return _no_store(jsonify({
@@ -373,12 +378,20 @@ def create_api_v1_blueprint(
         except EligibilityDenied as exc:
             code = ('eligibility_unavailable'
                     if exc.status == 'unavailable' else 'eligibility_denied')
+            display_message = None
+            if isinstance(exc.detail, dict):
+                candidate = exc.detail.get('reason') or exc.detail.get('message')
+                if isinstance(candidate, str) and candidate.strip():
+                    display_message = candidate.strip()
             return error_response(
                 code,
                 'Eligibility could not be confirmed.' if exc.status == 'unavailable'
                 else 'This account does not meet the participation criteria.',
                 403,
-                details={'status': exc.status},
+                details={
+                    'status': exc.status,
+                    'displayMessage': display_message,
+                },
             )
         return _no_store(jsonify({'data': data})), status
 

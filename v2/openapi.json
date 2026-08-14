@@ -211,6 +211,28 @@
         }
       }
     },
+    "/conversations/{slug}/participation-entry": {
+      "get": {
+        "operationId": "getParticipationEntry",
+        "summary": "Resolve the authenticated participant's join-route state",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "minLength": 1}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Join form, redirect, or invite-denied route state",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ParticipationEntryResponse"}}}
+          },
+          "401": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+          "404": {"description": "Conversation not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        }
+      }
+    },
     "/conversations/{slug}/pseudonym-suggestions": {
       "get": {
         "operationId": "getPseudonymSuggestions",
@@ -1751,6 +1773,91 @@
           "self": {"type": "string"},
           "conversation": {"type": "string"},
           "about": {"type": "string"}
+        }
+      },
+      "ParticipationEntryConversation": {
+        "type": "object",
+        "required": ["id", "slug", "title", "descriptionHtml", "eligibilityLabel"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "slug": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "descriptionHtml": {"type": ["string", "null"]},
+          "eligibilityLabel": {"type": ["string", "null"]}
+        }
+      },
+      "JoinParticipationEntry": {
+        "type": "object",
+        "required": ["state", "conversation", "pseudonyms", "emailable", "reveal", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "state": {"type": "string", "enum": ["join"]},
+          "conversation": {"$ref": "#/components/schemas/ParticipationEntryConversation"},
+          "pseudonyms": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "pattern": "^[a-z]{2,20}-[a-z]{2,20}$"}
+          },
+          "emailable": {"type": "boolean"},
+          "reveal": {
+            "type": "object",
+            "required": ["cooldownDays", "windowEndDays"],
+            "additionalProperties": false,
+            "properties": {
+              "cooldownDays": {"type": "integer", "minimum": 0},
+              "windowEndDays": {"type": "integer", "minimum": 0}
+            }
+          },
+          "links": {
+            "type": "object",
+            "required": ["home", "conversation"],
+            "additionalProperties": false,
+            "properties": {"home": {"type": "string"}, "conversation": {"type": "string"}}
+          }
+        }
+      },
+      "RedirectParticipationEntry": {
+        "type": "object",
+        "required": ["state", "reason", "href"],
+        "additionalProperties": false,
+        "properties": {
+          "state": {"type": "string", "enum": ["redirect"]},
+          "reason": {"type": "string", "enum": ["demo", "already_participating"]},
+          "href": {"type": "string"}
+        }
+      },
+      "InviteDeniedParticipationEntry": {
+        "type": "object",
+        "required": ["state", "conversation", "canModerate", "links"],
+        "additionalProperties": false,
+        "properties": {
+          "state": {"type": "string", "enum": ["invite_denied"]},
+          "conversation": {"$ref": "#/components/schemas/ParticipationEntryConversation"},
+          "canModerate": {"type": "boolean"},
+          "links": {
+            "type": "object",
+            "required": ["home", "manageInvites"],
+            "additionalProperties": false,
+            "properties": {
+              "home": {"type": "string"},
+              "manageInvites": {"type": ["string", "null"]}
+            }
+          }
+        }
+      },
+      "ParticipationEntryResponse": {
+        "type": "object",
+        "required": ["data"],
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "oneOf": [
+              {"$ref": "#/components/schemas/JoinParticipationEntry"},
+              {"$ref": "#/components/schemas/RedirectParticipationEntry"},
+              {"$ref": "#/components/schemas/InviteDeniedParticipationEntry"}
+            ]
+          }
         }
       },
       "PseudonymSuggestionsResponse": {
