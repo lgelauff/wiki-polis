@@ -243,18 +243,19 @@ test('resolves a privacy-safe moderation item through the typed contract', async
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {name: 'Moderation queue'})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Moderation queue — Community strategy'})).toBeVisible();
   expect(screen.getByText('A statement containing private information.')).toBeVisible();
   expect(screen.getByText('Privacy violation')).toBeVisible();
-  expect(screen.getByText(/Reporter identities are intentionally excluded/)).toBeVisible();
-  fireEvent.change(screen.getByLabelText('Resolution note (optional)'), {
+  expect(screen.getByText(/Flagger identities are intentionally not shown here/)).toBeVisible();
+  fireEvent.change(screen.getByPlaceholderText('Resolution note (optional)'), {
     target: {value: 'Removed private detail'},
   });
-  fireEvent.click(screen.getByRole('button', {name: 'Resolve Statement #12'}));
+  fireEvent.click(screen.getByRole('button', {name: 'resolve'}));
 
   expect(await screen.findByText('No open flags.')).toBeVisible();
-  expect(screen.getByText('Removed private detail')).toBeVisible();
-  expect(screen.getByRole('heading', {name: 'Resolved'}).parentElement).toHaveTextContent('1');
+  expect(screen.queryByText('Removed private detail')).not.toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('Flag marked resolved.');
+  expect(screen.getByText('Statement #12')).toBeVisible();
 });
 
 test('adds and removes invitations through convergent admin commands', async () => {

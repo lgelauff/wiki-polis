@@ -136,15 +136,10 @@ function AdminFeaturedRoute() {
 function AdminModerationRoute() {
   const {conversationId = ''} = useParams();
   const {data: session} = useSuspenseQuery(sessionQuery());
-  return (
-    <>
-      <Header admin />
-      <AdminModerationPage
-        conversationId={Number(conversationId)}
-        csrfToken={session.csrfToken}
-      />
-    </>
-  );
+  return <AdminModerationPage
+    conversationId={Number(conversationId)}
+    csrfToken={session.csrfToken}
+  />;
 }
 
 function AdminInvitationsRoute() {
