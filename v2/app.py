@@ -2970,6 +2970,43 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
     active = _active_phases(conv)
     phase6_required = _route_has_phase(conv, 'informed_voting')
     phase6_ready = bool(conv.phase6_polis_conversation_id) or not phase6_required
+    client = _polis_server_client()
+    polis_stats = client.get_polis_stats(conv.polis_id)
+    phase6_visible = (
+        conv.phase_informed_voting or _in_cleanup_window(conv)
+    ) and bool(conv.phase6_polis_conversation_id)
+    phase6_stats = (
+        client.get_polis_stats(conv.phase6_polis_conversation_id)
+        if phase6_visible else None
+    )
+    stats_unavailable = bool(current_app.config.get('POLIS_DATABASE_URL')) and (
+        polis_stats is None or (phase6_visible and phase6_stats is None)
+    )
+    phase6_results = (
+        _build_phase6_results(conv, participation=None)
+        if phase6_visible else None
+    )
+    phase_groups = _phase_stat_groups(conv, polis_stats, phase6_stats)
+    biggest_shift = None
+    if phase6_results:
+        biggest = next((
+            row for row in phase6_results.get('statements', [])
+            if row.get('shift') is not None
+        ), None)
+        if biggest:
+            biggest_shift = {
+                'text': biggest['text'], 'shift': biggest['shift'],
+            }
+        results_filter = phase6_results.get('filter')
+        informed_summary = {
+            'participants': phase6_results.get('p6_participants'),
+            'statementCount': len(phase6_results.get('statements', [])),
+            'largestShift': biggest_shift,
+            'excludedStatementCount': len(results_filter.excluded_tids),
+            'excludedParticipantCount': len(results_filter.excluded_pids),
+        }
+    else:
+        informed_summary = None
     return build_admin_lifecycle(
         conversation=conv,
         role_label=_conversation_role_label(conv, participant),
@@ -2992,6 +3029,20 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
                     'Initialize informed voting before publishing.'
                 ),
             }],
+        },
+        statistics={
+            'upstreamUnavailable': stats_unavailable,
+            'groups': [{
+                'key': group['key'],
+                'label': group['label'],
+                'tiles': [{
+                    'value': tile['value'],
+                    'label': tile['label'],
+                    'unit': tile.get('unit'),
+                    'note': tile.get('note'),
+                } for tile in group['tiles']],
+            } for group in phase_groups],
+            'informedVoting': informed_summary,
         },
         counts={
             'participants': Participation.query.filter_by(conversation_id=conv.id).count(),

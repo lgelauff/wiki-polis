@@ -49,12 +49,13 @@ def test_lifecycle_contract_exposes_server_evaluated_transition(
     )
 
     assert response.status_code == 200
-    transition = response.get_json()['data']['phase']['transition']
+    data = response.get_json()['data']
+    transition = data['phase']['transition']
     assert transition['source'] == {'key': 'preparation', 'label': 'Preparation'}
     assert transition['target'] == {'key': 'submission', 'label': 'Explore'}
     assert len(transition['preconditions']) == 6
     assert all({'id', 'label', 'met', 'note'} == set(row) for row in transition['preconditions'])
-    publication = response.get_json()['data']['publicationReadiness']
+    publication = data['publicationReadiness']
     assert publication['windowOpen'] is False
     assert publication['preconditions'][-1] == {
         'id': 'phase6_initialized',
@@ -62,12 +63,48 @@ def test_lifecycle_contract_exposes_server_evaluated_transition(
         'met': False,
         'note': 'Initialize informed voting before publishing.',
     }
-    controls = response.get_json()['data']['phase']['advancedControls']
+    controls = data['phase']['advancedControls']
     assert controls[0]['key'] == 'submission'
     assert all('phase_' not in row['key'] for row in controls)
     informed = next(row for row in controls if row['key'] == 'informed_voting')
     assert informed['requiresInitialization'] is True
     assert informed['initialized'] is False
+    assert data['statistics'] == {
+        'upstreamUnavailable': False,
+        'groups': [{
+            'key': 'preparation', 'label': 'Preparation', 'tiles': [],
+        }],
+        'informedVoting': None,
+    }
+
+
+def test_lifecycle_contract_exposes_phase_statistics(
+    admin_client, conversation,
+):
+    conversation.phase_submission = True
+    db.session.commit()
+    stats = {
+        'n_participants': 9, 'n_votes': 27, 'n_statements': 4,
+        'n_seed': 1, 'avg_votes': 3, 'median_votes': 2,
+    }
+
+    with patch('app.PolisServerClient.get_polis_stats', return_value=stats):
+        data = admin_client.get(
+            f'/api/v1/admin/conversations/{conversation.id}',
+        ).get_json()['data']
+
+    assert data['statistics']['upstreamUnavailable'] is False
+    assert data['statistics']['groups'] == [{
+        'key': 'submission',
+        'label': 'Explore',
+        'tiles': [
+            {'value': 9, 'label': 'participants', 'unit': None, 'note': None},
+            {'value': 27, 'label': 'votes cast', 'unit': None, 'note': None},
+            {'value': 4, 'label': 'statements (1 seed)', 'unit': None, 'note': None},
+            {'value': 3, 'label': 'avg votes / person', 'unit': None, 'note': None},
+            {'value': 2, 'label': 'median votes / person', 'unit': None, 'note': None},
+        ],
+    }]
 
 
 def test_scoped_moderator_lifecycle_capabilities_are_read_only(

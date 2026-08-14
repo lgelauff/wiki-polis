@@ -1211,7 +1211,7 @@
         }
       },
       "AdminLifecycle": {
-        "type": "object", "required": ["conversation", "operator", "phase", "schedule", "publicationReadiness", "counts", "capabilities", "links"], "additionalProperties": false,
+        "type": "object", "required": ["conversation", "operator", "phase", "schedule", "publicationReadiness", "statistics", "counts", "capabilities", "links"], "additionalProperties": false,
         "properties": {
           "conversation": {"$ref": "#/components/schemas/AdminLifecycleConversation"},
           "operator": {"type": "object", "required": ["roleLabel"], "additionalProperties": false, "properties": {"roleLabel": {"type": "string"}}},
@@ -1227,6 +1227,20 @@
           "publicationReadiness": {"type": "object", "required": ["windowOpen", "preconditions"], "additionalProperties": false, "properties": {
             "windowOpen": {"type": "boolean"},
             "preconditions": {"type": "array", "items": {"type": "object", "required": ["id", "label", "met", "note"], "additionalProperties": false, "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "met": {"type": ["boolean", "null"]}, "note": {"type": ["string", "null"]}}}}
+          }},
+          "statistics": {"type": "object", "required": ["upstreamUnavailable", "groups", "informedVoting"], "additionalProperties": false, "properties": {
+            "upstreamUnavailable": {"type": "boolean"},
+            "groups": {"type": "array", "items": {"type": "object", "required": ["key", "label", "tiles"], "additionalProperties": false, "properties": {
+              "key": {"type": "string"}, "label": {"type": "string"},
+              "tiles": {"type": "array", "items": {"type": "object", "required": ["value", "label", "unit", "note"], "additionalProperties": false, "properties": {
+                "value": {"oneOf": [{"type": "integer"}, {"type": "number"}, {"type": "string"}]}, "label": {"type": "string"}, "unit": {"type": ["string", "null"]}, "note": {"type": ["string", "null"]}
+              }}}
+            }}},
+            "informedVoting": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["participants", "statementCount", "largestShift", "excludedStatementCount", "excludedParticipantCount"], "additionalProperties": false, "properties": {
+              "participants": {"type": ["integer", "null"], "minimum": 0}, "statementCount": {"type": "integer", "minimum": 0},
+              "largestShift": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["text", "shift"], "additionalProperties": false, "properties": {"text": {"type": "string"}, "shift": {"type": "number"}}}]},
+              "excludedStatementCount": {"type": "integer", "minimum": 0}, "excludedParticipantCount": {"type": "integer", "minimum": 0}
+            }}]}
           }},
           "counts": {"type": "object", "required": ["participants", "invitations", "openFlags", "featuredStatements"], "additionalProperties": false, "properties": {
             "participants": {"type": "integer", "minimum": 0}, "invitations": {"type": "integer", "minimum": 0}, "openFlags": {"type": "integer", "minimum": 0}, "featuredStatements": {"type": "integer", "minimum": 0}

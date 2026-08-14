@@ -1523,6 +1523,29 @@ export interface components {
                     note: string | null;
                 }[];
             };
+            statistics: {
+                upstreamUnavailable: boolean;
+                groups: {
+                    key: string;
+                    label: string;
+                    tiles: {
+                        value: number | string;
+                        label: string;
+                        unit: string | null;
+                        note: string | null;
+                    }[];
+                }[];
+                informedVoting: null | {
+                    participants: number | null;
+                    statementCount: number;
+                    largestShift: null | {
+                        text: string;
+                        shift: number;
+                    };
+                    excludedStatementCount: number;
+                    excludedParticipantCount: number;
+                };
+            };
             counts: {
                 participants: number;
                 invitations: number;

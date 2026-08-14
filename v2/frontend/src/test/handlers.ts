@@ -20,6 +20,7 @@ function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as st
     ]},
     schedule,
     publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
+    statistics: {upstreamUnavailable: false, groups: [{key: 'preparation', label: 'Preparation', tiles: []}], informedVoting: null},
     counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
     links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/app/admin/conversations/7/statements', featuredStatements: '/app/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
   };
@@ -171,6 +172,7 @@ export const handlers = [
       phase: {linear: true, currentIndex: 1, activeKeys: ['submission'], steps: [{key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'completed'}, {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'current'}, {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'}], transition: null, advancedControls: [{key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', active: true, requiresInitialization: false, initialized: true}]},
       schedule: {canSchedule: true, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
       publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
+      statistics: {upstreamUnavailable: false, groups: [{key: 'submission', label: 'Explore', tiles: []}], informedVoting: null},
       counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
       capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
       links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/app/admin/conversations/7/statements', featuredStatements: '/app/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
