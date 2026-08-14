@@ -10,6 +10,8 @@ afterEach(() => {
   cleanup();
   server.resetHandlers();
   globalThis.sessionStorage.clear();
-  globalThis.localStorage.clear();
+  if (typeof globalThis.localStorage?.clear === 'function') {
+    globalThis.localStorage.clear();
+  }
 });
 afterAll(() => server.close());

@@ -10,7 +10,7 @@ import './styles.css';
 const root = document.getElementById('root');
 if (!root) throw new Error('SPA root element is missing.');
 
-if (window.location.pathname === '/app/demo') {
+if (window.location.pathname === '/app/demo' || window.location.pathname === '/demo') {
   document.body.dataset.demo = 'true';
   document.body.dataset.spaInitialDemo = 'true';
 }

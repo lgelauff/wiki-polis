@@ -7,6 +7,7 @@ import {
   adminTerminationQuery,
   deleteAdminConversation,
 } from '../../api/queries';
+import {InternalLink} from '../../internal-link';
 
 export function AdminTerminationPage({conversationId, csrfToken}: {
   conversationId: number;
@@ -38,7 +39,7 @@ export function AdminTerminationPage({conversationId, csrfToken}: {
           <p className="eyebrow">Deletion complete</p>
           <h1>Conversation deleted</h1>
           <p>The empty conversation was hidden from the voting service and removed locally.</p>
-          <a href={mutation.data.links.admin}>Return to admin panel</a>
+          <InternalLink href={mutation.data.links.admin}>Return to admin panel</InternalLink>
         </section>
       </main>
     );
@@ -47,7 +48,7 @@ export function AdminTerminationPage({conversationId, csrfToken}: {
   return (
     <main className="termination-shell" id="main">
       <nav className="record-breadcrumb" aria-label="Breadcrumb">
-        <Link to="/app/admin">Admin panel</Link><span>/</span>
+        <Link to="/admin">Admin panel</Link><span>/</span>
         <Link to={data.links.lifecycle}>{data.conversation.title}</Link><span>/</span>
         <span>Delete</span>
       </nav>

@@ -10,6 +10,7 @@ import {
   skipArgumentContribution,
 } from '../../api/queries';
 import {LegacyContentFlag} from './legacy-content-flag';
+import {InternalLink} from '../../internal-link';
 
 type Mapping = components['schemas']['ArgumentMapping'];
 type Featured = components['schemas']['ArgumentFeaturedStatement'];
@@ -78,7 +79,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
         <div className="contribute-composer-header">
           <span className="contribute-glyph filled">{copy.sign}</span>
           <span className="contribute-composer-label" id={`contribute-label-${featuredId}-${side}`}>Your {copy.adjective}-argument · one sentence, one claim</span>
-          <a className="contribute-help-link" href="/help/arguments">Argument tips</a>
+          <InternalLink className="contribute-help-link" href="/help/arguments">Argument tips</InternalLink>
           <span className="contribute-charcount"><span className="cc-len">{body.length}</span> / 280</span>
         </div>
         <textarea ref={textareaRef} className="contribute-textarea" maxLength={280} rows={3} aria-labelledby={`contribute-label-${featuredId}-${side}`} placeholder={`Add a short ${copy.adjective}-argument (one sentence, max 280 characters)…`} value={body} onChange={(event) => setBody(event.target.value)} />

@@ -8,8 +8,11 @@ import {
   type ReactNode,
 } from 'react';
 import {useLocation} from 'react-router-dom';
+import {InternalLink} from './internal-link';
+import {canonicalClientPath} from './client-routes';
 
 const storageKey = 'wiki-polis:spa-only';
+const cookieName = 'wiki-polis-spa-only';
 
 type StrictSpaContextValue = {
   disable: () => void;
@@ -32,6 +35,13 @@ function storeMode(enabled: boolean) {
     else globalThis.sessionStorage.removeItem(storageKey);
   } catch {
     // Storage can be unavailable in privacy-restricted browser contexts.
+  }
+  try {
+    document.cookie = enabled
+      ? `${cookieName}=1; Path=/; Max-Age=86400; SameSite=Lax`
+      : `${cookieName}=; Path=/; Max-Age=0; SameSite=Lax`;
+  } catch {
+    // Cookies can be unavailable in privacy-restricted browser contexts.
   }
 }
 
@@ -56,11 +66,11 @@ function isServerSupportRoute(pathname: string): boolean {
 
 function legacyTarget(href: string): string | null {
   if (!href || href.startsWith('#')) return null;
+  if (canonicalClientPath(href)) return null;
 
   const url = new URL(href, globalThis.location.href);
   if (!['http:', 'https:'].includes(url.protocol)) return null;
   if (url.origin !== globalThis.location.origin) return null;
-  if (url.pathname === '/app' || url.pathname.startsWith('/app/')) return null;
   if (isServerSupportRoute(url.pathname)) return null;
 
   return `${url.pathname}${url.search}${url.hash}`;
@@ -170,7 +180,7 @@ export function MissingSpaRoute() {
       <p>No React route matches this URL:</p>
       <code>{target}</code>
       <div>
-        <a href="/app/real">Return to the SPA</a>
+        <InternalLink href="/consultations">Return to the SPA</InternalLink>
         <button type="button" onClick={disable}>Allow Jinja fallbacks</button>
       </div>
     </main>

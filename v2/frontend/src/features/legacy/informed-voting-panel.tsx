@@ -3,6 +3,7 @@ import {useMutation, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
 import {informedVotingQuery, putInformedVote} from '../../api/queries';
+import {InternalLink} from '../../internal-link';
 
 type Workspace = components['schemas']['ConversationWorkspace'];
 type Card = components['schemas']['InformedVotingCard'];
@@ -44,16 +45,16 @@ function Completion({workspace, onSelectPreliminary}: {
     <div className="p6-done">
       <h2 className="p6-done-heading">You've completed informed voting.</h2>
       {hasPreliminaryResults ? (
-        <p className="p6-done-text">See the <a href="#" onClick={(event) => { event.preventDefault(); onSelectPreliminary(); }}>Preliminary results</a> tab for the full comparison.</p>
+        <p className="p6-done-text">See the <InternalLink href="#" onClick={(event) => { event.preventDefault(); onSelectPreliminary(); }}>Preliminary results</InternalLink> tab for the full comparison.</p>
       ) : deliberationOpen ? (
         <p className="p6-done-text">The deliberation is still open — come back if new arguments are added.</p>
       ) : workspace.status === 'open' ? (
         <p className="p6-done-text">The results report will be published here once this consultation closes.</p>
       ) : (
-        <p className="p6-done-text">This consultation is now closed. <a href={workspace.links.results}>Read the final report <span aria-hidden="true">→</span></a></p>
+        <p className="p6-done-text">This consultation is now closed. <InternalLink href={workspace.links.results}>Read the final report <span aria-hidden="true">→</span></InternalLink></p>
       )}
       {workspace.reveal?.state === 'open' ? (
-        <p className="p6-done-reveal p6-done-reveal--open">Your votes are recorded under pseudonym <strong>{workspace.viewer.pseudonym}</strong>. The identity reveal window is open — <a href={`/app/conversations/${workspace.slug}/identity-reveal`}>optionally link your username <span aria-hidden="true">→</span></a></p>
+        <p className="p6-done-reveal p6-done-reveal--open">Your votes are recorded under pseudonym <strong>{workspace.viewer.pseudonym}</strong>. The identity reveal window is open — <InternalLink href={`/c/${workspace.slug}/reveal`}>optionally link your username <span aria-hidden="true">→</span></InternalLink></p>
       ) : workspace.reveal?.state !== 'revealed' && workspace.reveal?.state !== 'expired' ? (
         <p className="p6-done-reveal">Your votes are recorded under pseudonym <strong>{workspace.viewer.pseudonym}</strong>. Once this consultation closes, you will have a limited window to optionally link your Wikimedia username. You cannot make that decision yet.</p>
       ) : null}

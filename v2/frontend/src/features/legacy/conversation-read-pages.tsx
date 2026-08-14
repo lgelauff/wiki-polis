@@ -8,6 +8,7 @@ import {
   moderationLogQuery,
 } from '../../api/queries';
 import {LegacyShell} from './legacy-shell';
+import {InternalLink} from '../../internal-link';
 
 type OutputKey = components['schemas']['ConversationOutputDetail']['key'];
 
@@ -48,7 +49,7 @@ export function ConversationAboutLegacyPage() {
       headerCrumb={(
         <nav className="header-crumb" aria-label="Conversation context">
           <span className="header-crumb-sep">/</span>
-          <a href={`/c/${data.slug}`}>{truncated(data.title, 32)}</a>
+          <InternalLink href={`/c/${data.slug}`}>{truncated(data.title, 32)}</InternalLink>
           <span className="header-crumb-sep">/</span>
           <span>About</span>
         </nav>
@@ -106,15 +107,15 @@ export function ConversationAboutLegacyPage() {
           <ul>
             {data.outputs.map((output) => <li key={output.key}>
               {output.ready && output.href
-                ? <a href={output.href}>{output.label}</a>
+                ? <InternalLink href={output.href}>{output.label}</InternalLink>
                 : <>{output.label} <span className="muted">— pending</span></>}
             </li>)}
           </ul>
         </div>
 
         <p style={{marginTop: '1.25rem'}}>
-          <a href={`/c/${data.slug}/moderation-log`}>Moderation log{data.moderation.eventCount > 0 ? ` (${data.moderation.eventCount})` : ''}</a>
-          {' · '}<a href={`/c/${data.slug}`}>Return to conversation</a>
+          <InternalLink href={`/c/${data.slug}/moderation-log`}>Moderation log{data.moderation.eventCount > 0 ? ` (${data.moderation.eventCount})` : ''}</InternalLink>
+          {' · '}<InternalLink href={`/c/${data.slug}`}>Return to conversation</InternalLink>
         </p>
       </div>
     </LegacyShell>
@@ -135,7 +136,7 @@ export function ModerationLogPage() {
       headerCrumb={(
         <nav className="header-crumb" aria-label="Conversation context">
           <span className="header-crumb-sep">/</span>
-          <a href={`/c/${data.slug}/moderation-log`}>Moderation log</a>
+          <InternalLink href={`/c/${data.slug}/moderation-log`}>Moderation log</InternalLink>
         </nav>
       )}
     >
@@ -187,9 +188,9 @@ export function ConversationOutputPage() {
     )}>
       <div className="container" style={{maxWidth: 800}}>
         <p style={{marginBottom: '1.25rem'}}>
-          <a href={`/c/${data.slug}`} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>
+          <InternalLink href={`/c/${data.slug}`} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>
             <span aria-hidden="true">←</span> {data.title}
-          </a>
+          </InternalLink>
         </p>
 
         <div className="output-page-header">
@@ -229,12 +230,12 @@ function OutputBody({slug, output}: {
   if (output.key === 'argument-map') return <>
     <h2 className="report-section-heading">Featured statements and arguments</h2>
     <p className="muted">This page will collect the pro and con arguments for each featured statement and order them by participant support. Your own submitted arguments will be highlighted when you are signed in.</p>
-    <p><a href={`/c/${slug}#tab-arguments`}>Open the current Arguments tab <span aria-hidden="true">→</span></a></p>
+    <p><InternalLink href={`/c/${slug}#tab-arguments`}>Open the current Arguments tab <span aria-hidden="true">→</span></InternalLink></p>
   </>;
   if (output.key === 'preliminary-results') return <>
     <h2 className="report-section-heading">Live informed-vote preview</h2>
     <p className="muted">Preliminary results are a lightweight, provisional view of the informed-voting round. They are not the official outcome and may change until the organizer publishes the final report.</p>
-    <p><a href={`/c/${slug}#tab-p6-results`}>Open the preliminary results tab <span aria-hidden="true">→</span></a></p>
+    <p><InternalLink href={`/c/${slug}#tab-p6-results`}>Open the preliminary results tab <span aria-hidden="true">→</span></InternalLink></p>
   </>;
   if (output.key === 'dataset') return <>
     <h2 className="report-section-heading">Raw pseudonymous export</h2>

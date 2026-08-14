@@ -4,8 +4,9 @@ import {useParams} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {createIdentityReveal, identityRevealQuery, sessionQuery} from '../../api/queries';
-import {ExternalRedirect} from './external-redirect';
+import {NavigationRedirect} from './external-redirect';
 import {LegacyShell} from './legacy-shell';
+import {InternalLink} from '../../internal-link';
 
 type RevealData = components['schemas']['IdentityReveal'];
 
@@ -82,7 +83,7 @@ function RevealTimeline({data}: {data: RevealData}) {
 export function IdentityRevealLegacyPage() {
   const slug = requiredSlug(useParams().slug);
   const {data: session} = useSuspenseQuery(sessionQuery());
-  if (session.state !== 'authenticated') return <ExternalRedirect href={session.links.login} />;
+  if (session.state !== 'authenticated') return <NavigationRedirect href={session.links.login} />;
   return <AuthenticatedIdentityReveal slug={slug} csrfToken={session.csrfToken} />;
 }
 
@@ -96,7 +97,7 @@ function AuthenticatedIdentityReveal({slug, csrfToken}: {slug: string; csrfToken
     if (confirmed) mutation.mutate();
   }
 
-  if (mutation.data) return <ExternalRedirect href={mutation.data.links.conversation} />;
+  if (mutation.data) return <NavigationRedirect href={mutation.data.links.conversation} />;
 
   return (
     <LegacyShell headerCrumb={(
@@ -109,7 +110,7 @@ function AuthenticatedIdentityReveal({slug, csrfToken}: {slug: string; csrfToken
     )}>
       <div className="container" style={{maxWidth: 660}}>
         <p style={{marginBottom: '1.25rem'}}>
-          <a href={data.links.conversation} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>{`← ${data.title}`}</a>
+          <InternalLink href={data.links.conversation} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>{`← ${data.title}`}</InternalLink>
         </p>
 
         {data.state === 'revealed' ? (
@@ -167,7 +168,7 @@ function AuthenticatedIdentityReveal({slug, csrfToken}: {slug: string; csrfToken
               </label>
               <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
                 <button type="submit" className="participate-btn" style={{background: 'var(--ink)'}} disabled={mutation.isPending}>Yes, link my identity</button>
-                <a href={data.links.conversation} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>Cancel</a>
+                <InternalLink href={data.links.conversation} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>Cancel</InternalLink>
               </div>
             </form>
           </>

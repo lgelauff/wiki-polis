@@ -1,8 +1,14 @@
 import {useEffect} from 'react';
+import {useNavigate} from 'react-router-dom';
 
-export function ExternalRedirect({href}: {href: string}) {
+import {canonicalClientPath} from '../../client-routes';
+
+export function NavigationRedirect({href}: {href: string}) {
+  const navigate = useNavigate();
   useEffect(() => {
-    globalThis.location.assign(href);
-  }, [href]);
+    const clientPath = canonicalClientPath(href);
+    if (clientPath) navigate(clientPath, {replace: true});
+    else globalThis.location.assign(href);
+  }, [href, navigate]);
   return null;
 }

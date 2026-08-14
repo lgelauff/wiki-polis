@@ -11,12 +11,13 @@ import {
   putExploreVote,
   sessionQuery,
 } from '../../api/queries';
-import {ExternalRedirect} from './external-redirect';
+import {NavigationRedirect} from './external-redirect';
 import {LegacyArgumentMappingPanel} from './argument-mapping-panel';
 import {LegacyInformedVotingPanel} from './informed-voting-panel';
 import {LegacyPreliminaryResultsPanel} from './preliminary-results-panel';
 import {LegacyIntermediateResultsPanel} from './intermediate-results-panel';
 import {LegacyShell} from './legacy-shell';
+import {InternalLink} from '../../internal-link';
 import {LegacyContentFlag} from './legacy-content-flag';
 
 type Workspace = components['schemas']['ConversationWorkspace'];
@@ -56,10 +57,10 @@ function InviteOnlyPage({details}: {details: InviteOnlyDetails}) {
           <div style={{background: '#f0f4ff', border: '1px solid #c7d3f5', borderRadius: 8, padding: '1rem 1.25rem', fontSize: 14, color: 'var(--ink)', lineHeight: 1.6, marginBottom: '1.5rem'}}>
             <strong>You can moderate this consultation.</strong>{' '}
             To participate as a voter, add yourself to the invite list first:{' '}
-            <a href={details.links.invitations} style={{color: 'var(--accent)'}}>Manage invites →</a>
+            <InternalLink href={details.links.invitations} style={{color: 'var(--accent)'}}>Manage invites →</InternalLink>
           </div>
         )}
-        <a href={details.links.home} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>← back to home</a>
+        <InternalLink href={details.links.home} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>← back to home</InternalLink>
       </div>
     </LegacyShell>
   );
@@ -80,9 +81,9 @@ function ConversationCrumb({data}: {data: Workspace}) {
     <nav className="header-crumb" aria-label="Conversation context">
       <span className="header-crumb-sep">/</span>
       <span>{shortTitle(data.title)}</span>
-      <a className="header-manage-link" href={data.links.about}>About</a>
+      <InternalLink className="header-manage-link" href={data.links.about}>About</InternalLink>
       {data.capabilities.moderate && data.links.manage && (
-        <a className="header-manage-link" href={data.links.manage}>Manage</a>
+        <InternalLink className="header-manage-link" href={data.links.manage}>Manage</InternalLink>
       )}
     </nav>
   );
@@ -98,7 +99,7 @@ function SpaceWarning({space}: {space: 'real' | 'demo'}) {
         {space === 'real'
           ? 'These ballots are real — your votes here count. Just exploring? '
           : 'These are demonstration ballots — not a real consultation. '}
-        <a href="/app/demo">{space === 'real' ? 'Try the demo space →' : 'Browse the demo space →'}</a>
+        <InternalLink href="/demo">{space === 'real' ? 'Try the demo space →' : 'Browse the demo space →'}</InternalLink>
       </span>
       <button type="button" className="space-warn-ok" id="space-warn-x" onClick={() => setVisible(false)}>I understand</button>
     </div>
@@ -161,7 +162,7 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
       <div className="v2-composer-header">
         <div>
           <div className="v2-composer-title" id={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'}>{title}</div>
-          <div className="v2-composer-helper" id={helperId}>{suggest ? 'Stays close to the same idea — just a clearer or fairer phrasing. ' : 'A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool. '}<a href="/help/statements">Writing tips</a></div>
+          <div className="v2-composer-helper" id={helperId}>{suggest ? 'Stays close to the same idea — just a clearer or fairer phrasing. ' : 'A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool. '}<InternalLink href="/help/statements">Writing tips</InternalLink></div>
         </div>
         <span className="propose-charcount"><span>{text.length}</span> / 280</span>
       </div>
@@ -314,12 +315,12 @@ function ClosedWorkspace({data}: {data: Workspace}) {
           <p className="muted">This consultation closed on <strong>{legacyDate(reveal.closedAt)}</strong>. Your votes were recorded under your pseudonym; for a limited time you may optionally and permanently link your Wikimedia username to it.</p>
           <RevealTimeline reveal={reveal} />
           {reveal.state === 'revealed' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>You linked your identity — your username is associated with pseudonym <strong>{data.viewer.pseudonym}</strong> in this consultation's records.</p>}
-          {reveal.state === 'open' && <div className="reveal-callout"><p className="reveal-callout-text">The identity reveal window is open. Your participation is recorded under pseudonym <strong>{data.viewer.pseudonym}</strong>.</p><a className="reveal-callout-link" href={`/app/conversations/${data.slug}/identity-reveal`}>Optionally link your Wikimedia username <span aria-hidden="true">→</span></a></div>}
+          {reveal.state === 'open' && <div className="reveal-callout"><p className="reveal-callout-text">The identity reveal window is open. Your participation is recorded under pseudonym <strong>{data.viewer.pseudonym}</strong>.</p><InternalLink className="reveal-callout-link" href={`/c/${data.slug}/reveal`}>Optionally link your Wikimedia username <span aria-hidden="true">→</span></InternalLink></div>}
           {reveal.state === 'pending' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>The window opens on {legacyDate(reveal.opensAt)} — nothing to do until then.</p>}
           {reveal.state === 'expired' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>The reveal window has closed. Records stay pseudonymous — identities can no longer be linked.</p>}
         </>
       ) : <p className="muted">This consultation is closed.</p>}
-      {data.links.results && <p style={{marginTop: '1rem', fontSize: 14}}><a href={`/app/conversations/${data.slug}/results`}>Read the final report <span aria-hidden="true">→</span></a></p>}
+      {data.links.results && <p style={{marginTop: '1rem', fontSize: 14}}><InternalLink href={`/c/${data.slug}/report`}>Read the final report <span aria-hidden="true">→</span></InternalLink></p>}
     </div>
   );
 }
@@ -375,7 +376,7 @@ function RevealTimeline({reveal}: {reveal: NonNullable<Workspace['reveal']>}) {
 }
 
 function WorkspaceBody({data, csrfToken, routeTab}: {data: Workspace; csrfToken: string; routeTab?: WorkspaceTab}) {
-  const hashTab = globalThis.location.hash.replace(/^#tab-/, '') as WorkspaceTab;
+  const hashTab = useLocation().hash.replace(/^#tab-/, '') as WorkspaceTab;
   const requestedTab = routeTab ?? hashTab;
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(data.tabs.some((tab) => tab.key === requestedTab) ? requestedTab : data.defaultTab ?? 'vote');
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -428,7 +429,7 @@ export function ConversationWorkspacePage() {
   }, [workspace.data?.space]);
   if (workspace.isPending) return <p className="loading-state" role="status">Loading conversation…</p>;
   if (workspace.error instanceof ApiContractError && workspace.error.code === 'unauthorized') {
-    return <ExternalRedirect href={session.links.login} />;
+    return <NavigationRedirect href={session.links.login} />;
   }
   const restricted = inviteOnlyDetails(workspace.error);
   if (restricted) return <InviteOnlyPage details={restricted} />;
@@ -436,7 +437,7 @@ export function ConversationWorkspacePage() {
     return <LegacyShell title="Conversation unavailable — ProtoWiki"><div className="container"><div className="landing-section"><h1>Conversation unavailable</h1><p className="muted">{workspace.error.message}</p></div></div></LegacyShell>;
   }
   const data = workspace.data;
-  if (data.viewer.state === 'join_required') return <ExternalRedirect href={data.links.join} />;
+  if (data.viewer.state === 'join_required') return <NavigationRedirect href={data.links.join} />;
   return (
     <LegacyShell headerMode={data.space === 'demo' ? 'conversation-demo' : 'conversation-real'} headerCrumb={<ConversationCrumb data={data} />} title={`${data.title} — ProtoWiki`}>
       <WorkspaceBody data={data} csrfToken={session.csrfToken} {...(location.pathname.endsWith('/arguments') ? {routeTab: 'arguments' as const} : location.pathname.endsWith('/informed-voting') ? {routeTab: 'informed-voting' as const} : location.pathname.endsWith('/results') ? {routeTab: 'p6-results' as const} : {})} />

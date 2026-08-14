@@ -1,5 +1,6 @@
 import {useCallback, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
+import {useNavigate} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
@@ -11,6 +12,7 @@ import {
 } from '../../api/queries';
 import {LegacyShell} from '../legacy/legacy-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
+import {InternalLink} from '../../internal-link';
 
 type Catalog = components['schemas']['AdminCatalog'];
 type CreateRequest = components['schemas']['AdminConversationCreateRequest'];
@@ -28,6 +30,7 @@ function errorMessage(error: Error | null) {
 }
 
 export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
+  const navigate = useNavigate();
   const options = adminCatalogQuery();
   const {data} = useSuspenseQuery(options);
   const queryClient = useQueryClient();
@@ -45,7 +48,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
 
   const creation = useMutation({
     mutationFn: () => postAdminConversation(draft, csrfToken),
-    onSuccess: (result) => { globalThis.location.assign(result.links.manage); },
+    onSuccess: (result) => { navigate(result.links.manage); },
     onError: (error) => setToast({
       id: Date.now(),
       category: 'error',
@@ -111,7 +114,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
           <thead><tr><th>Title</th><th>Slug</th><th>Policy</th><th>Status</th><th /></tr></thead>
           <tbody>{data.conversations.map((conversation) => (
             <tr key={conversation.id}>
-              <td><a href={conversation.links.participant}>{conversation.title}</a></td>
+              <td><InternalLink href={conversation.links.participant}>{conversation.title}</InternalLink></td>
               <td><code>{conversation.slug}</code></td>
               <td>{conversation.accessPolicy}</td>
               <td>{conversation.status === 'active'
@@ -119,7 +122,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
                 : conversation.status === 'paused'
                   ? <span className="badge-paused-inline">paused</span>
                   : <span className="badge-inactive">closed</span>}</td>
-              <td><a href={conversation.links.manage} className="btn-small">manage</a></td>
+              <td><InternalLink href={conversation.links.manage} className="btn-small">manage</InternalLink></td>
             </tr>
           ))}</tbody>
         </table>

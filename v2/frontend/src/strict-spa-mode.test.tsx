@@ -5,6 +5,7 @@ import {expect, test, vi} from 'vitest';
 
 import {App} from './app';
 import {createQueryClient} from './query-client';
+import {StrictSpaBoundary} from './strict-spa-mode';
 
 function renderApp(entry: string) {
   return render(
@@ -18,15 +19,19 @@ function renderApp(entry: string) {
 
 test('blocks a Jinja navigation and identifies the missing React coverage', async () => {
   const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-  renderApp('/app/admin?spa_only=1');
+  render(
+    <MemoryRouter initialEntries={['/app/real?spa_only=1']}>
+      <StrictSpaBoundary><a href="/legacy-only">Legacy-only page</a></StrictSpaBoundary>
+    </MemoryRouter>,
+  );
 
   expect(await screen.findByLabelText('SPA-only testing mode')).toBeVisible();
-  fireEvent.click(await screen.findByRole('link', {name: 'Community strategy'}));
+  fireEvent.click(screen.getByRole('link', {name: 'Legacy-only page'}));
 
   const gap = screen.getByRole('alertdialog', {name: 'Not implemented in the React SPA'});
-  expect(gap).toHaveTextContent('/c/community-strategy');
+  expect(gap).toHaveTextContent('/legacy-only');
   expect(warning).toHaveBeenCalledWith(
-    '[SPA-only] Blocked legacy navigation to /c/community-strategy',
+    '[SPA-only] Blocked legacy navigation to /legacy-only',
   );
 });
 

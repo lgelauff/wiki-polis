@@ -8,6 +8,7 @@ import {
   type ConversationSpace,
 } from '../../api/queries';
 import {LegacyShell} from './legacy-shell';
+import {InternalLink} from '../../internal-link';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationOutput = components['schemas']['ConversationOutput'];
@@ -70,7 +71,7 @@ function OutputSymbols({
   return (
     <div className="conv-output-grid" aria-label="Consultation outputs">
       {outputs.map((output) => output.ready ? (
-        <a
+        <InternalLink
           key={output.key}
           className="conv-output-symbol conv-output-symbol--ready"
           href={output.href ?? undefined}
@@ -81,7 +82,7 @@ function OutputSymbols({
         >
           <span className={`phase-symbol phase-symbol--${output.symbol}`} aria-hidden="true" />
           <span className="sr-only">{output.label}</span>
-        </a>
+        </InternalLink>
       ) : (
         <button
           key={output.key}
@@ -182,7 +183,7 @@ function JoinedSection({
         <ul className="conv-list">
           {conversations.map((conversation) => <li key={conversation.slug}>
             <div className="conv-card conv-card--phase conv-card--outputs">
-              <a href={conversation.links.self} className="conv-card-main" aria-label={joinedAriaLabel(conversation, state)}>
+              <InternalLink href={conversation.links.self} className="conv-card-main" aria-label={joinedAriaLabel(conversation, state)}>
                 <div className="conv-card-left conv-card-left--col">
                   <div className="conv-card-title-row">
                     <h3 className="conv-card-title">{conversation.title}</h3>
@@ -199,7 +200,7 @@ function JoinedSection({
                   aria-hidden="true"
                   dangerouslySetInnerHTML={{__html: `${state === 'needs_attention' ? 'CONTINUE' : 'VIEW'} →`}}
                 />
-              </a>
+              </InternalLink>
               <span className="conv-card-output-divider" aria-hidden="true" />
               <OutputSymbols outputs={conversation.outputs} onPending={onPending} />
             </div>
@@ -260,13 +261,13 @@ function AvailableSection({
         <ul className="conv-list">
           {conversations.map((conversation) => <li key={conversation.slug}>
             <div className="conv-card conv-card--phase conv-card--outputs">
-              <a href={conversation.links.self} className="conv-card-main" aria-label={`${conversation.title} — join consultation`}>
+              <InternalLink href={conversation.links.self} className="conv-card-main" aria-label={`${conversation.title} — join consultation`}>
                 <div className="conv-card-left conv-card-left--col">
                   <div className="conv-card-title-row"><h3 className="conv-card-title">{conversation.title}</h3></div>
                   <InputTimeline phases={conversation.phases} />
                 </div>
                 <span className="conv-card-action" aria-hidden="true" dangerouslySetInnerHTML={{__html: 'JOIN →'}} />
-              </a>
+              </InternalLink>
               <span className="conv-card-output-divider" aria-hidden="true" />
               <OutputSymbols outputs={conversation.outputs} onPending={onPending} />
             </div>
@@ -291,11 +292,11 @@ function ModeratingSection({conversations}: {conversations: ConversationCard[]})
             <div className="conv-card conv-card--split">
               <div className="conv-card-left">
                 <span className={`conv-dot ${conversation.status === 'archived' ? 'conv-dot--closed' : 'conv-dot--active'}`} aria-hidden="true" />
-                <h3 className="conv-card-title-wrap"><a href={conversation.links.self} className="conv-card-title" aria-label={`${conversation.title} — open consultation`}>{conversation.title}</a></h3>
+                <h3 className="conv-card-title-wrap"><InternalLink href={conversation.links.self} className="conv-card-title" aria-label={`${conversation.title} — open consultation`}>{conversation.title}</InternalLink></h3>
                 {conversation.status === 'archived' && <span className="conv-card-badge">closed</span>}
               </div>
               <span className="conv-card-divider" aria-hidden="true" />
-              <a href={conversation.links.admin} className="admin-action-btn" aria-label={`Open admin panel for ${conversation.title}`}>Admin →</a>
+              <InternalLink href={conversation.links.admin} className="admin-action-btn" aria-label={`Open admin panel for ${conversation.title}`}>Admin →</InternalLink>
             </div>
           </li>)}
         </ul>
@@ -322,22 +323,22 @@ function AnonymousLane({
         compare to other community members — which statements already have
         consensus, and what topics are divisive, and why.
       </p>
-      <a href={loginHref} className="login-btn" style={{marginTop: 18}}>
+      <InternalLink href={loginHref} className="login-btn" style={{marginTop: 18}}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.4 1.6" aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
           <ellipse cx="12" cy="12" rx="9" ry="3.5" />
           <ellipse cx="12" cy="12" rx="3.5" ry="9" />
         </svg>
         Login with Wikimedia
-      </a>
+      </InternalLink>
       {developerLogins.length > 0 && <div style={{marginTop: '1.25rem', padding: '10px 14px', border: '1px dashed var(--spot)', borderRadius: 8, background: 'rgba(245,158,11,0.05)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap'}}>
         <span style={{fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--spot)'}}>Dev</span>
-        {developerLogins.map((login) => <a
+        {developerLogins.map((login) => <InternalLink
           key={login.username}
           href={login.href}
           style={{fontFamily: 'var(--mono)', fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--surface2)', border: '1px solid var(--hairline)', color: 'var(--ink)', textDecoration: 'none'}}
           title={`Log in as ${login.username}`}
-        >{login.username}</a>)}
+        >{login.username}</InternalLink>)}
       </div>}
     </div>
     {conversations.length > 0 && <section aria-labelledby="sec-open">
@@ -348,13 +349,13 @@ function AnonymousLane({
         </div>
         <ul className="conv-list">
           {conversations.map((conversation) => <li key={conversation.slug}>
-            <a href={conversation.links.self} className="conv-card" aria-label={`${conversation.title} — open consultation`}>
+            <InternalLink href={conversation.links.self} className="conv-card" aria-label={`${conversation.title} — open consultation`}>
               <div className="conv-card-left">
                 <span className="conv-dot conv-dot--available" aria-hidden="true" />
                 <h3 className="conv-card-title">{conversation.title}</h3>
               </div>
               <span className="conv-card-action" aria-hidden="true" dangerouslySetInnerHTML={{__html: 'JOIN →'}} />
-            </a>
+            </InternalLink>
           </li>)}
         </ul>
       </div>
@@ -427,9 +428,9 @@ export function ConversationLanePage({space}: {space: ConversationSpace}) {
       <div className="container home-container">
         <div className="home-banner">
           Prototype in active development — things may change.{' '}
-          <a href="https://github.com/lgelauff/wiki-polis/issues/new" target="_blank" rel="noopener">
+          <InternalLink href="https://github.com/lgelauff/wiki-polis/issues/new" target="_blank" rel="noopener">
             Open an issue<span className="sr-only"> (opens in a new tab)</span>
-          </a>{' '}if you find a bug.
+          </InternalLink>{' '}if you find a bug.
         </div>
 
         {!data.authenticated ? (

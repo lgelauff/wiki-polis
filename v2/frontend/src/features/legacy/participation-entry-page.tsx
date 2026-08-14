@@ -10,8 +10,9 @@ import {
   participationEntryQuery,
   sessionQuery,
 } from '../../api/queries';
-import {ExternalRedirect} from './external-redirect';
+import {NavigationRedirect} from './external-redirect';
 import {LegacyShell} from './legacy-shell';
+import {InternalLink} from '../../internal-link';
 
 function requiredSlug(value: string | undefined) {
   if (!value) throw new Error('Missing route parameter: slug');
@@ -22,7 +23,7 @@ export function ParticipationEntryLegacyPage() {
   const slug = requiredSlug(useParams().slug);
   const {data: session} = useSuspenseQuery(sessionQuery());
   if (session.state !== 'authenticated') {
-    return <ExternalRedirect href={session.links.login} />;
+    return <NavigationRedirect href={session.links.login} />;
   }
   return <AuthenticatedParticipationEntry slug={slug} csrfToken={session.csrfToken} />;
 }
@@ -32,7 +33,7 @@ function AuthenticatedParticipationEntry({slug, csrfToken}: {
   csrfToken: string;
 }) {
   const {data} = useSuspenseQuery(participationEntryQuery(slug));
-  if (data.state === 'redirect') return <ExternalRedirect href={data.href} />;
+  if (data.state === 'redirect') return <NavigationRedirect href={data.href} />;
   if (data.state === 'invite_denied') return <InviteDeniedPage data={data} />;
   return <JoinPage data={data} csrfToken={csrfToken} />;
 }
@@ -56,10 +57,10 @@ function InviteDeniedPage({data}: {data: InviteDeniedEntry}) {
           <div style={{background: '#f0f4ff', border: '1px solid #c7d3f5', borderRadius: 8, padding: '1rem 1.25rem', fontSize: 14, color: 'var(--ink)', lineHeight: 1.6, marginBottom: '1.5rem'}}>
             <strong>You can moderate this consultation.</strong>
             {' To participate as a voter, add yourself to the invite list first: '}
-            <a href={data.links.manageInvites} style={{color: 'var(--accent)'}}>Manage invites →</a>
+            <InternalLink href={data.links.manageInvites} style={{color: 'var(--accent)'}}>Manage invites →</InternalLink>
           </div>
         )}
-        <a href={data.links.home} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>← back to home</a>
+        <InternalLink href={data.links.home} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>← back to home</InternalLink>
       </div>
     </LegacyShell>
   );
@@ -100,7 +101,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
     },
   });
 
-  if (join.data) return <ExternalRedirect href={join.data.links.conversation} />;
+  if (join.data) return <NavigationRedirect href={join.data.links.conversation} />;
   if (join.error instanceof ApiContractError
       && ['eligibility_denied', 'eligibility_unavailable'].includes(join.error.code)) {
     return <EligibilityDeniedPage data={data} error={join.error} />;
@@ -183,7 +184,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
             ) : (
               <p className="muted" style={{marginTop: '.25rem'}}>
                 {'Email notifications unavailable — no confirmed email on your wiki account. '}
-                <a href="https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal" target="_blank" rel="noopener">Add one on Meta-Wiki<span className="sr-only"> (opens in a new tab)</span></a> and return to enable this.
+                <InternalLink href="https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal" target="_blank" rel="noopener">Add one on Meta-Wiki<span className="sr-only"> (opens in a new tab)</span></InternalLink> and return to enable this.
               </p>
             )}
             <label className="checkbox-label" style={{marginTop: '.5rem'}}>
@@ -214,7 +215,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
             <button type="submit" className="participate-btn" id="submit-btn" disabled={join.isPending}>
               Join consultation as <span id="chosen-name">{pseudonym}</span> →
             </button>
-            <a href={data.links.home} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>Not now</a>
+            <InternalLink href={data.links.home} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>Not now</InternalLink>
           </div>
         </form>
       </div>
@@ -240,7 +241,7 @@ function EligibilityDeniedPage({data, error}: {data: JoinEntry; error: ApiContra
             {data.conversation.eligibilityLabel && <><strong>{data.conversation.eligibilityLabel}</strong>.</>}
           </p>
           <p className="muted">{message}</p>
-          <p style={{marginTop: '1rem'}}><a href={data.links.home}>Return home <span aria-hidden="true">→</span></a></p>
+          <p style={{marginTop: '1rem'}}><InternalLink href={data.links.home}>Return home <span aria-hidden="true">→</span></InternalLink></p>
         </div>
       </div>
     </LegacyShell>

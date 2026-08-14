@@ -20,7 +20,7 @@ test('renders a conversation lane from the API contract', async () => {
   expect(screen.getByRole('status')).toHaveTextContent('Loading conversations');
   expect(await screen.findByRole('heading', {name: 'Needs attention'})).toBeVisible();
   expect(await screen.findByRole('link', {name: /Community strategy.*continue/}))
-    .toHaveAttribute('href', '/app/conversations/community-strategy/explore');
+    .toHaveAttribute('href', '/c/community-strategy');
   expect(screen.getByRole('button', {name: 'Your conversations'})).toHaveAttribute('aria-pressed', 'true');
   fireEvent.click(screen.getByRole('button', {name: 'Browse'}));
   expect(screen.getByText('No consultations open to you right now.')).toBeVisible();
@@ -47,7 +47,7 @@ test('matches the legacy pending-output dialog and restores focus', async () => 
             ready: false, href: '/c/community-strategy/outputs/initial-clustering',
           }],
           capabilities: {join: false, participate: true, moderate: false},
-          links: {self: '/app/conversations/community-strategy/explore', about: '/c/community-strategy/about'},
+          links: {self: '/c/community-strategy', about: '/c/community-strategy/about'},
         }],
         caughtUp: [], inactive: [], archived: [], available: [], moderating: [],
       },
@@ -69,7 +69,7 @@ test('runs site-wide administration without falling back to Jinja forms', async 
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin']}><App /></MemoryRouter></QueryClientProvider>);
 
   expect(await screen.findByRole('heading', {name: 'Admin panel'})).toBeVisible();
-  expect(screen.getByRole('link', {name: 'manage'})).toHaveAttribute('href', '/app/admin/conversations/7');
+  expect(screen.getByRole('link', {name: 'manage'})).toHaveAttribute('href', '/admin/conversations/7');
   expect(screen.getByText('Admin')).toHaveClass('header-mode-badge');
   expect(screen.getByRole('heading', {name: 'New conversation'})).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Example editor'}});
@@ -132,7 +132,7 @@ test('advances a conversation from the server-described lifecycle console', asyn
   expect(await screen.findByText('You are in phase 2 of 3')).toBeVisible();
   expect(screen.getByText('Report phase reached — not yet published.')).toBeVisible();
   expect(screen.getByRole('link', {name: /Participants/})).toHaveAttribute(
-    'href', '/app/admin/conversations/7/participants',
+    'href', '/admin/conversations/7/participants',
   );
 });
 
@@ -237,7 +237,7 @@ test('deletes a verified empty conversation through a deliberate receipt flow', 
   fireEvent.click(deletion);
 
   expect(await screen.findByRole('heading', {name: 'Conversation deleted'})).toBeVisible();
-  expect(screen.getByRole('link', {name: 'Return to admin panel'})).toHaveAttribute('href', '/app/admin');
+  expect(screen.getByRole('link', {name: 'Return to admin panel'})).toHaveAttribute('href', '/admin');
 });
 
 test('moderates statements and imports approved seeds through typed commands', async () => {
@@ -427,7 +427,7 @@ test('requires deliberate confirmation before permanently revealing identity', a
           pseudonym: 'quiet-otter', wikimediaUsername: 'Example editor', publicUsername: 'Example editor',
           timeline: {closedAt: '2026-06-01T12:00:00Z', opensAt: '2026-07-01T12:00:00Z', closesAt: '2026-07-31T12:00:00Z', nextBoundaryAt: null, daysRemaining: 0},
           capabilities: {revealIdentity: false},
-          links: {self: '/api/v1/conversations/community-strategy/identity-reveal', conversation: '/c/community-strategy', about: '/app/conversations/community-strategy/about'},
+          links: {self: '/api/v1/conversations/community-strategy/identity-reveal', conversation: '/c/community-strategy', about: '/c/community-strategy/about'},
         },
       }, {status: 201});
     },
@@ -582,7 +582,7 @@ test('routes preliminary results through the legacy workspace tab', async () => 
         }],
         opinionGroups: [],
         viewer: {participating: true, pseudonym: 'quiet-otter', revealState: null},
-        links: {self: '/api/v1/conversations/community-strategy/results', conversation: '/c/community-strategy', about: '/app/conversations/community-strategy/about'},
+        links: {self: '/api/v1/conversations/community-strategy/results', conversation: '/c/community-strategy', about: '/c/community-strategy/about'},
       }}),
     ),
     http.get(
@@ -599,7 +599,7 @@ test('routes preliminary results through the legacy workspace tab', async () => 
         defaultTab: 'informed-voting', reveal: null,
         statementContribution: {unlockAfter: 10, quota: 3, used: 0},
         capabilities: {participate: true, moderate: false},
-        links: {self: '/api/v1/conversations/community-strategy/workspace', conversation: '/c/community-strategy', about: '/app/conversations/community-strategy/about', join: '/app/conversations/community-strategy/join', informedVoting: '/api/v1/conversations/community-strategy/informed-voting', results: '/api/v1/conversations/community-strategy/results'},
+        links: {self: '/api/v1/conversations/community-strategy/workspace', conversation: '/c/community-strategy', about: '/c/community-strategy/about', join: '/accept/community-strategy', informedVoting: '/api/v1/conversations/community-strategy/informed-voting', results: '/api/v1/conversations/community-strategy/results'},
       }}),
     ),
   );

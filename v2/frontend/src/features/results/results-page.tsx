@@ -4,7 +4,7 @@ import {useSuspenseQuery} from '@tanstack/react-query';
 import {ApiContractError} from '../../api/client';
 import {resultsReportQuery} from '../../api/queries';
 import {ConversationWorkspacePage} from '../legacy/conversation-workspace-page';
-import {ExternalRedirect} from '../legacy/external-redirect';
+import {NavigationRedirect} from '../legacy/external-redirect';
 import {FinalReportLegacyPage} from '../legacy/final-report-page';
 
 export class ResultsAccessBoundary extends Component<
@@ -19,7 +19,7 @@ export class ResultsAccessBoundary extends Component<
 
   render() {
     if (this.state.error instanceof ApiContractError && this.state.error.code === 'unauthorized') {
-      return <ExternalRedirect href={`/login?next=${encodeURIComponent(`/c/${this.props.slug}/report`)}`} />;
+      return <NavigationRedirect href={`/login?next=${encodeURIComponent(`/c/${this.props.slug}/report`)}`} />;
     }
     if (this.state.error) throw this.state.error;
     return this.props.children;

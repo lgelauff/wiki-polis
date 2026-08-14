@@ -22,7 +22,7 @@ function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as st
     publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
     statistics: {upstreamUnavailable: false, groups: [{key: 'preparation', label: 'Preparation', tiles: []}], informedVoting: null},
     counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
-    links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/app/admin/conversations/7/statements', featuredStatements: '/app/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
+    links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/admin/conversations/7/participants', moderation: '/admin/conversations/7/flags', invitations: '/admin/conversations/7/invites', roles: '/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
   };
 }
 
@@ -40,7 +40,7 @@ function statementWorkspaceFixture(
     dataAvailability: {statements: true},
     seeding: {allowed: true, lockReason: null, maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
     capabilities: {moderate: true, seed: true},
-    links: {self: '/api/v1/admin/conversations/7/statements', lifecycle: '/app/admin/conversations/7'},
+    links: {self: '/api/v1/admin/conversations/7/statements', lifecycle: '/admin/conversations/7'},
   };
 }
 
@@ -48,7 +48,7 @@ function adminCatalogFixture(
   includeNewAdmin = false,
 ): components['schemas']['AdminCatalog'] {
   return {
-    conversations: [{id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', createdAt: '2026-08-01T10:00:00Z', links: {participant: '/c/community-strategy', manage: '/app/admin/conversations/7'}}],
+    conversations: [{id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', createdAt: '2026-08-01T10:00:00Z', links: {participant: '/c/community-strategy', manage: '/admin/conversations/7'}}],
     globalAdmins: [
       {participantId: 1, username: 'adminuser'},
       ...(includeNewAdmin ? [{participantId: 23, username: 'Example editor'}] : []),
@@ -61,7 +61,7 @@ function adminCatalogFixture(
 
 export const handlers = [
   http.get(new URL('/api/v1/admin', globalThis.location.origin).toString(), () => HttpResponse.json({data: adminCatalogFixture()})),
-  http.post(new URL('/api/v1/admin/conversations', globalThis.location.origin).toString(), () => HttpResponse.json({data: {conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'}, links: {manage: '/app/admin/conversations/7', catalog: '/api/v1/admin'}}}, {status: 201})),
+  http.post(new URL('/api/v1/admin/conversations', globalThis.location.origin).toString(), () => HttpResponse.json({data: {conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'}, links: {manage: '/admin/conversations/7', catalog: '/api/v1/admin'}}}, {status: 201})),
   http.post(new URL('/api/v1/admin/global-admin-grants', globalThis.location.origin).toString(), async ({request}) => {
     const body = await request.json() as {username: string};
     return HttpResponse.json({data: {participantId: 23, username: body.username, granted: true, changed: true, catalog: adminCatalogFixture(true)}}, {status: 201});
@@ -75,7 +75,7 @@ export const handlers = [
     selected: [{featuredId: 61, statementId: 12, text: 'An approved seed statement.', systemSuggested: true, provenance: null, arguments: [{id: 71, side: 'pro', body: 'A useful supporting argument.', proposerPseudonym: 'quiet-otter', hidden: false, createdAt: '2026-08-13T10:00:00Z'}]}],
     candidates: [{statementId: 13, text: 'A candidate preserving another viewpoint.', seed: false, votes: {agree: 3, pass: 2, disagree: 1, total: 6, agreementPercent: 75}, provenance: null}],
     dataAvailability: {candidates: true}, phase: {argumentMappingActive: false, informedVotingLive: false}, guidance: {recommendedCount: 15, note: 'Preserve meaningful viewpoints; agreement percentage is descriptive, not a selection score.'}, capabilities: {manage: true},
-    links: {self: '/api/v1/admin/conversations/7/featured-statements', lifecycle: '/app/admin/conversations/7'},
+    links: {self: '/api/v1/admin/conversations/7/featured-statements', lifecycle: '/admin/conversations/7'},
   }})),
   http.put(new URL('/api/v1/admin/conversations/7/featured-statements/:statementId', globalThis.location.origin).toString(), ({params}) => HttpResponse.json({data: {featuredId: 62, statementId: Number(params.statementId), changed: true, links: {featured: '/api/v1/admin/conversations/7/featured-statements'}}})),
   http.delete(new URL('/api/v1/admin/conversations/7/featured-selections/:featuredId', globalThis.location.origin).toString(), ({params}) => HttpResponse.json({data: {featuredId: Number(params.featuredId), statementId: 12, removed: true, links: {featured: '/api/v1/admin/conversations/7/featured-statements'}}})),
@@ -104,10 +104,10 @@ export const handlers = [
   http.get(new URL('/api/v1/admin/conversations/7/termination', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     deletion: {state: 'eligible', validVoteCount: 0, reason: 'No valid votes were found.'},
-    links: {self: '/api/v1/admin/conversations/7/termination', lifecycle: '/app/admin/conversations/7'},
+    links: {self: '/api/v1/admin/conversations/7/termination', lifecycle: '/admin/conversations/7'},
   }})),
   http.delete(new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
-    conversationId: 7, deleted: true, links: {admin: '/app/admin'},
+    conversationId: 7, deleted: true, links: {admin: '/admin'},
   }})),
   http.get(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', introHtml: '<p>Shape the future.</p>', outroHtml: '', accessPolicy: 'public', phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},
@@ -117,14 +117,14 @@ export const handlers = [
       {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12, featured_statements: 24}},
     ]},
     eligibility: {configured: true, eventId: 'extended-confirmed', label: 'Extended-confirmed editors', configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'},
-    capabilities: {edit: true}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/app/admin/conversations/7'},
+    capabilities: {edit: true}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
   }})),
   http.put(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), async ({request}) => {
     const body = await request.json() as {title: string; introHtml: string; outroHtml: string; accessPolicy: 'public' | 'invite_only' | 'demo'; eligibilityEventId: string; eligibilityLabel: string; recommendationTier: 'simple' | 'medium' | 'complex'};
     return HttpResponse.json({data: {changed: true, changedFields: ['title'], settings: {
       conversation: {id: 7, slug: 'community-strategy', title: body.title.trim(), introHtml: body.introHtml, outroHtml: body.outroHtml, accessPolicy: body.accessPolicy, phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},
       recommendations: {tier: body.recommendationTier, tiers: [{key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5}}, {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8}}, {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}}]},
-      eligibility: {configured: Boolean(body.eligibilityEventId), eventId: body.eligibilityEventId, label: body.eligibilityLabel || null, configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'}, capabilities: {edit: true}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/app/admin/conversations/7'},
+      eligibility: {configured: Boolean(body.eligibilityEventId), eventId: body.eligibilityEventId, label: body.eligibilityLabel || null, configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'}, capabilities: {edit: true}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
     }}});
   }),
   http.put(new URL('/api/v1/admin/conversations/7/recommendation-tier', globalThis.location.origin).toString(), async ({request}) => {
@@ -193,7 +193,7 @@ export const handlers = [
       statistics: {upstreamUnavailable: false, groups: [{key: 'submission', label: 'Explore', tiles: []}], informedVoting: null},
       counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
       capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
-      links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/app/admin/conversations/7/participants', moderation: '/app/admin/conversations/7/moderation', invitations: '/app/admin/conversations/7/invitations', roles: '/app/admin/conversations/7/roles', statements: '/app/admin/conversations/7/statements', featuredStatements: '/app/admin/conversations/7/featured', settings: '/app/admin/conversations/7/settings', termination: '/app/admin/conversations/7/termination'},
+      links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/admin/conversations/7/participants', moderation: '/admin/conversations/7/flags', invitations: '/admin/conversations/7/invites', roles: '/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
     },
   }})),
   http.get(new URL('/api/v1/admin/conversations/7/roles', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
@@ -201,7 +201,7 @@ export const handlers = [
     assignments: [{participantId: 23, username: 'Example editor', roles: ['moderator'], grantedAt: ['2026-08-01T10:00:00Z']}],
     candidates: [{participantId: 23, username: 'Example editor'}],
     availableRoles: ['moderator', 'organizer'], capabilities: {manageRoles: true},
-    links: {self: '/api/v1/admin/conversations/7/roles', conversation: '/app/admin/conversations/7'},
+    links: {self: '/api/v1/admin/conversations/7/roles', conversation: '/admin/conversations/7'},
   }})),
   http.put(new URL('/api/v1/admin/conversations/7/roles/23', globalThis.location.origin).toString(), async ({request}) => {
     const body = await request.json() as {roles: Role[]};
@@ -213,7 +213,7 @@ export const handlers = [
       conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'invite_only'},
       invitations: [{id: 51, username: 'Existing editor', createdAt: '2026-08-01T10:00:00Z'}],
       capabilities: {manageInvitations: true},
-      links: {self: '/api/v1/admin/conversations/7/invitations', conversation: '/app/admin/conversations/7'},
+      links: {self: '/api/v1/admin/conversations/7/invitations', conversation: '/admin/conversations/7'},
     }}),
   ),
   http.put(
@@ -252,14 +252,14 @@ export const handlers = [
           target: {
             type: 'statement', id: 12, label: 'Statement #12',
             text: 'A statement containing private information.',
-            reviewHref: '/app/admin/conversations/7/statements',
+            reviewHref: '/admin/conversations/7/statements',
           },
           resolution: null,
         }],
         resolved: [],
         dataAvailability: {statementText: true},
         capabilities: {resolveFlags: true},
-        links: {self: '/api/v1/admin/conversations/7/flags', conversation: '/app/admin/conversations/7'},
+        links: {self: '/api/v1/admin/conversations/7/flags', conversation: '/admin/conversations/7'},
       },
     }),
   ),
@@ -294,7 +294,7 @@ export const handlers = [
         capabilities: {setParticipantAccess: true},
         links: {
           self: '/api/v1/admin/conversations/7/participants',
-          conversation: '/app/admin/conversations/7',
+          conversation: '/admin/conversations/7',
         },
       },
     }),
@@ -337,7 +337,7 @@ export const handlers = [
         {occurredAt: '2026-08-14T09:30:00Z', action: 'Banned', pseudonym: 'quiet-otter', scope: 'conversation', actor: 'adminuser'},
         {occurredAt: '2026-08-13T08:15:00Z', action: 'Unbanned', pseudonym: 'patient-fox', scope: 'conversation', actor: 'moderator'},
       ],
-      links: {self: `/api/v1/conversations/${String(params.slug)}/moderation-log`, conversation: `/c/${String(params.slug)}`, about: `/app/conversations/${String(params.slug)}/about`},
+      links: {self: `/api/v1/conversations/${String(params.slug)}/moderation-log`, conversation: `/c/${String(params.slug)}`, about: `/c/${String(params.slug)}/about`},
     }}),
   ),
   http.get(
@@ -358,7 +358,7 @@ export const handlers = [
           method: 'A stable, participant-safe method description.',
           pending: 'This output is pending.',
         },
-        links: {self: `/api/v1/conversations/${String(params.slug)}/outputs/${key}`, conversation: `/c/${String(params.slug)}`, about: `/app/conversations/${String(params.slug)}/about`},
+        links: {self: `/api/v1/conversations/${String(params.slug)}/outputs/${key}`, conversation: `/c/${String(params.slug)}`, about: `/c/${String(params.slug)}/about`},
       }});
     },
   ),
@@ -386,12 +386,12 @@ export const handlers = [
             outputs: [],
             capabilities: {join: false, participate: true, moderate: false},
             links: {
-              self: '/app/conversations/community-strategy/explore',
+              self: '/c/community-strategy',
               about: '/c/community-strategy/about',
-              explore: '/app/conversations/community-strategy/explore',
-              informedVoting: '/app/conversations/community-strategy/informed-voting',
-              results: '/app/conversations/community-strategy/results',
-              identityReveal: '/app/conversations/community-strategy/identity-reveal',
+              explore: '/c/community-strategy',
+              informedVoting: '/c/community-strategy#tab-informed-voting',
+              results: '/c/community-strategy/report',
+              identityReveal: '/c/community-strategy/reveal',
             },
           }],
           caughtUp: [],
@@ -429,8 +429,8 @@ export const handlers = [
       links: {
         self: '/api/v1/conversations/community-strategy/workspace',
         conversation: '/c/community-strategy',
-        about: '/app/conversations/community-strategy/about',
-        join: '/app/conversations/community-strategy/join',
+        about: '/c/community-strategy/about',
+        join: '/accept/community-strategy',
         explore: '/api/v1/conversations/community-strategy/explore',
         intermediateResults: '/api/v1/conversations/community-strategy/intermediate-results',
         arguments: '/api/v1/conversations/community-strategy/arguments',
@@ -498,7 +498,7 @@ export const handlers = [
       links: {
         self: '/api/v1/conversations/community-strategy/intermediate-results',
         conversation: '/c/community-strategy',
-        about: '/app/conversations/community-strategy/about',
+        about: '/c/community-strategy/about',
       },
     }}),
   ),
@@ -547,8 +547,8 @@ export const handlers = [
         links: {
           self: '/api/v1/conversations/community-strategy/results',
           conversation: '/c/community-strategy',
-          about: '/app/conversations/community-strategy/about',
-          identityReveal: '/app/conversations/community-strategy/identity-reveal',
+          about: '/c/community-strategy/about',
+          identityReveal: '/c/community-strategy/reveal',
         },
       },
     }),
@@ -574,10 +574,10 @@ export const handlers = [
         capabilities: {vote: true},
         links: {
           self: '/api/v1/conversations/community-strategy/informed-voting',
-          about: '/app/conversations/community-strategy/about',
+          about: '/c/community-strategy/about',
           conversation: '/c/community-strategy',
-          explore: '/app/conversations/community-strategy/explore',
-          arguments: '/app/conversations/community-strategy/arguments',
+          explore: '/c/community-strategy',
+          arguments: '/c/community-strategy#tab-arguments',
         },
       },
     }),
@@ -616,7 +616,7 @@ export const handlers = [
         links: {
           self: '/api/v1/conversations/community-strategy/identity-reveal',
           conversation: '/c/community-strategy',
-          about: '/app/conversations/community-strategy/about',
+          about: '/c/community-strategy/about',
         },
       },
     }),
@@ -642,7 +642,7 @@ export const handlers = [
         links: {
           self: '/api/v1/conversations/community-strategy/identity-reveal',
           conversation: '/c/community-strategy',
-          about: '/app/conversations/community-strategy/about',
+          about: '/c/community-strategy/about',
         },
       },
     }, {status: 201}),
@@ -706,7 +706,7 @@ export const handlers = [
           self: '/api/v1/conversations/community-strategy/explore',
           about: '/c/community-strategy/about',
           conversation: '/c/community-strategy',
-          arguments: '/app/conversations/community-strategy/arguments',
+          arguments: '/c/community-strategy#tab-arguments',
         },
       },
     }),
@@ -777,9 +777,9 @@ export const handlers = [
         capabilities: {contribute: true, prioritize: true, flag: true, moderate: false},
         links: {
           self: '/api/v1/conversations/community-strategy/arguments',
-          about: '/app/conversations/community-strategy/about',
+          about: '/c/community-strategy/about',
           conversation: '/c/community-strategy',
-          explore: '/app/conversations/community-strategy/explore',
+          explore: '/c/community-strategy',
         },
       },
     }),

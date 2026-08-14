@@ -95,7 +95,7 @@ export function AdminInvitationsPage({
       headerCrumb={(
         <nav className="header-crumb" aria-label="Admin breadcrumb">
           <span className="header-crumb-sep">/</span>
-          <Link to="/app/admin">Admin panel</Link>
+          <Link to="/admin">Admin panel</Link>
           <span className="header-crumb-sep">/</span>
           <Link to={data.links.conversation}>{legacyTruncate(title)}</Link>
           <span className="header-crumb-sep">/</span>
@@ -106,7 +106,7 @@ export function AdminInvitationsPage({
     >
       <div className="container">
         <h2>
-          Invites — <Link to={`/app/conversations/${data.conversation.slug}/about`}>{title}</Link>
+          Invites — <Link to={`/c/${data.conversation.slug}/about`}>{title}</Link>
         </h2>
         <p className="muted" style={{marginBottom: '1.25rem'}}>
           Access policy: <strong>{data.conversation.accessPolicy}</strong>

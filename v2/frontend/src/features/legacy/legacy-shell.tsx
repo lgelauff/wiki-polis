@@ -2,6 +2,7 @@ import {useEffect, type ReactNode} from 'react';
 import {useSuspenseQuery} from '@tanstack/react-query';
 
 import {sessionQuery} from '../../api/queries';
+import {InternalLink} from '../../internal-link';
 
 type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'admin' | 'plain';
 
@@ -88,10 +89,10 @@ export function LegacyShell({
       <header className={`site-header ${headerMode === 'admin' ? 'site-header--admin' : 'site-header--participant'}`}>
         <div className="header-inner">
           <div className="header-left">
-            <a href="/app/parity/fork" className="header-logo">
+            <InternalLink href="/" className="header-logo">
               <OrbitMark />
               <span className="header-title">ProtoWiki</span>
-            </a>
+            </InternalLink>
             {headerMode === 'admin' && <span className="header-mode-badge">Admin</span>}
             {headerCrumb}
             {!headerCrumb && crumb && (
@@ -116,16 +117,16 @@ export function LegacyShell({
                   </svg>Real consultation
                 </span>
               ) : <div className="mode-switch" role="group" aria-label="Choose demo or real mode">
-                <a
-                  href="/app/demo"
+                <InternalLink
+                  href="/demo"
                   className={`mode-switch-opt mode-switch-opt--demo${headerMode === 'demo' ? ' is-active' : ''}`}
                   aria-current={headerMode === 'demo' ? 'true' : undefined}
-                >Try it out</a>
-                <a
-                  href="/app/real"
+                >Try it out</InternalLink>
+                <InternalLink
+                  href="/consultations"
                   className={`mode-switch-opt mode-switch-opt--real${headerMode === 'real' ? ' is-active' : ''}`}
                   aria-current={headerMode === 'real' ? 'true' : undefined}
-                >Real</a>
+                >Real</InternalLink>
               </div>
             )}
             {authenticated ? (
@@ -139,11 +140,11 @@ export function LegacyShell({
                   <button type="submit" className="header-logout">log out</button>
                 </form>
                 {session.capabilities.administerSite && (
-                  <a href="/app/admin" className="header-admin-link">admin</a>
+                  <InternalLink href="/admin" className="header-admin-link">admin</InternalLink>
                 )}
               </>
             ) : (
-              <a href={session.links.login} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>log in</a>
+              <InternalLink href={session.links.login} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>log in</InternalLink>
             )}
           </div>
         </div>

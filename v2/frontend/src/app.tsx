@@ -37,6 +37,7 @@ import {ParticipationEntryLegacyPage} from './features/legacy/participation-entr
 import {IdentityRevealLegacyPage} from './features/legacy/identity-reveal-page';
 import {ConversationLanePage} from './features/legacy/conversation-lane-page';
 import {ConversationWorkspacePage} from './features/legacy/conversation-workspace-page';
+import {InternalLink} from './internal-link';
 
 function OrbitMark() {
   return (
@@ -53,24 +54,24 @@ function Header({space, admin = false}: {space?: ConversationSpace; admin?: bool
   return (
     <header className="app-header">
       <div className="app-header__inner">
-        <a className="brand" href="/">
+        <InternalLink className="brand" href="/">
           <OrbitMark />
           <span>Wiki Polis</span>
           <span className="brand__beta">prototype</span>
-        </a>
+        </InternalLink>
         {admin ? (
           <nav className="admin-mode" aria-label="Workspace">
-            <strong><Link to="/app/admin">Admin workspace</Link></strong>
-            <Link to="/app/real">Participant view</Link>
+            <strong><Link to="/admin">Admin workspace</Link></strong>
+            <Link to="/consultations">Participant view</Link>
           </nav>
         ) : (
           <nav className="space-switch" aria-label="Conversation space">
-            <NavLink to="/app/demo" aria-current={space === 'demo' ? 'page' : undefined}>Try it out</NavLink>
-            <NavLink to="/app/real" aria-current={space === 'real' ? 'page' : undefined}>Real</NavLink>
+            <NavLink to="/demo" aria-current={space === 'demo' ? 'page' : undefined}>Try it out</NavLink>
+            <NavLink to="/consultations" aria-current={space === 'real' ? 'page' : undefined}>Real</NavLink>
           </nav>
         )}
         {session.state === 'anonymous' ? (
-          <a className="account-link" href={session.links.login}>Log in</a>
+          <InternalLink className="account-link" href={session.links.login}>Log in</InternalLink>
         ) : (
           <form method="post" action={session.links.logout} className="account-form">
             <span>{session.user?.username ?? 'Demo session'}</span>
@@ -157,7 +158,7 @@ function AdminRolesRoute() {
 
 function UnmatchedRoute() {
   const {enabled} = useStrictSpaMode();
-  return enabled ? <MissingSpaRoute /> : <Navigate to="/app/real" replace />;
+  return enabled ? <MissingSpaRoute /> : <Navigate to="/consultations" replace />;
 }
 
 export function App() {
@@ -166,6 +167,28 @@ export function App() {
       <a className="skip-link" href="#main">Skip to main content</a>
       <Suspense fallback={<p className="loading-state" role="status">Loading conversations…</p>}>
         <Routes>
+          <Route path="/" element={<ForkPage />} />
+          <Route path="/demo" element={<ConversationLanePage space="demo" />} />
+          <Route path="/consultations" element={<ConversationLanePage space="real" />} />
+          <Route path="/help/statements" element={<StatementGuidancePage />} />
+          <Route path="/help/arguments" element={<ArgumentGuidancePage />} />
+          <Route path="/accept/:slug" element={<ParticipationEntryLegacyPage />} />
+          <Route path="/c/:slug" element={<ConversationWorkspacePage />} />
+          <Route path="/c/:slug/about" element={<ConversationAboutLegacyPage />} />
+          <Route path="/c/:slug/moderation-log" element={<ModerationLogPage />} />
+          <Route path="/c/:slug/outputs/:outputKey" element={<ConversationOutputPage />} />
+          <Route path="/c/:slug/report" element={<ResultsRoute />} />
+          <Route path="/c/:slug/reveal" element={<IdentityRevealLegacyPage />} />
+          <Route path="/admin" element={<AdminAccessBoundary><AdminCatalogRoute /></AdminAccessBoundary>} />
+          <Route path="/admin/conversations/:conversationId" element={<AdminAccessBoundary><AdminLifecycleRoute /></AdminAccessBoundary>} />
+          <Route path="/admin/conversations/:conversationId/settings" element={<AdminAccessBoundary><AdminSettingsRoute /></AdminAccessBoundary>} />
+          <Route path="/admin/conversations/:conversationId/termination" element={<AdminAccessBoundary><AdminTerminationRoute /></AdminAccessBoundary>} />
+          <Route path="/admin/conversations/:conversationId/statements" element={<AdminAccessBoundary><AdminStatementsRoute /></AdminAccessBoundary>} />
+          <Route path="/admin/conversations/:conversationId/featured" element={<AdminAccessBoundary><AdminFeaturedRoute /></AdminAccessBoundary>} />
+          <Route path="/admin/conversations/:conversationId/participants" element={<AdminAccessBoundary><AdminParticipantsRoute /></AdminAccessBoundary>} />
+          <Route path="/admin/conversations/:conversationId/flags" element={<AdminAccessBoundary><AdminModerationRoute /></AdminAccessBoundary>} />
+          <Route path="/admin/conversations/:conversationId/invites" element={<AdminAccessBoundary><AdminInvitationsRoute /></AdminAccessBoundary>} />
+          <Route path="/admin/conversations/:conversationId/roles" element={<AdminAccessBoundary><AdminRolesRoute /></AdminAccessBoundary>} />
           <Route path="/app/parity/fork" element={<ForkPage />} />
           <Route path="/app/parity/help/statements" element={<StatementGuidancePage />} />
           <Route path="/app/parity/help/arguments" element={<ArgumentGuidancePage />} />

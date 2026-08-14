@@ -42,7 +42,7 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   return (
     <main className="settings-shell" id="main">
       <nav className="record-breadcrumb" aria-label="Breadcrumb">
-        <Link to="/app/admin">Admin panel</Link><span>/</span>
+        <Link to="/admin">Admin panel</Link><span>/</span>
         <Link to={data.links.lifecycle}>{data.conversation.title}</Link><span>/</span><span>Settings</span>
       </nav>
       <header className="settings-heading">

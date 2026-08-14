@@ -1,5 +1,6 @@
 import type {components} from '../../api/schema';
 import {LegacyShell} from './legacy-shell';
+import {InternalLink} from '../../internal-link';
 
 type Report = components['schemas']['ResultsReport'];
 type Statement = components['schemas']['ResultsStatement'];
@@ -128,7 +129,7 @@ function OpinionShift({statements}: {statements: Statement[]}) {
   if (statements.length === 0) return null;
   return <div className="report-section">
     <h2 className="report-section-heading">Opinion shift <span className="report-section-sub">Did argument exposure change views?</span></h2>
-    <p className="muted" style={{fontSize: 13, marginBottom: '1rem'}}>Each row compares the initial vote (Phase 2, before arguments) with the informed vote (Phase 6, after argument mapping). <strong>Shift</strong> is the change in population-level agree rate — a cross-round comparison of separate populations, not a matched individual delta (see <a href="#methodology" className="report-anchor">Methodology</a> below). Sorted by size of shift.</p>
+    <p className="muted" style={{fontSize: 13, marginBottom: '1rem'}}>Each row compares the initial vote (Phase 2, before arguments) with the informed vote (Phase 6, after argument mapping). <strong>Shift</strong> is the change in population-level agree rate — a cross-round comparison of separate populations, not a matched individual delta (see <InternalLink href="#methodology" className="report-anchor">Methodology</InternalLink> below). Sorted by size of shift.</p>
     <table className="p6-results-table report-table" aria-label="Aggregate opinion shift per statement">
       <thead><tr>
         <th className="p6-col-stmt">Statement</th>
@@ -217,7 +218,7 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
     <span>report</span>
   </span>}>
     <div className="container" style={{maxWidth: 800}}>
-      <p style={{marginBottom: '1.25rem'}}><a href={report.links.conversation} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}><span aria-hidden="true">←</span> {report.title}</a></p>
+      <p style={{marginBottom: '1.25rem'}}><InternalLink href={report.links.conversation} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}><span aria-hidden="true">←</span> {report.title}</InternalLink></p>
       <div className="report-header">
         <div>
           <h1 className="report-title">{report.title}</h1>
@@ -238,7 +239,7 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
       <ResultsBody report={report} />
       {report.viewer.revealState === 'open' && report.viewer.participating && <div className="reveal-callout" style={{marginTop: '2rem'}}>
         <p className="reveal-callout-text">The identity reveal window is open. Your participation is recorded under pseudonym <strong>{report.viewer.pseudonym}</strong>.</p>
-        <a className="reveal-callout-link" href={report.links.identityReveal}>Optionally link your Wikimedia username <span aria-hidden="true">→</span></a>
+        <InternalLink className="reveal-callout-link" href={report.links.identityReveal}>Optionally link your Wikimedia username <span aria-hidden="true">→</span></InternalLink>
       </div>}
     </div>
   </LegacyShell>;

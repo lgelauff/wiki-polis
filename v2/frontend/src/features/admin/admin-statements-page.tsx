@@ -374,7 +374,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       headerCrumb={(
         <nav className="header-crumb" aria-label="Admin breadcrumb">
           <span className="header-crumb-sep">/</span>
-          <Link to="/app/admin">Admin panel</Link>
+          <Link to="/admin">Admin panel</Link>
           <span className="header-crumb-sep">/</span>
           <Link to={data.links.lifecycle}>{legacyTruncate(title)}</Link>
           <span className="header-crumb-sep">/</span>
