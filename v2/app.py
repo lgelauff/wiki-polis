@@ -114,6 +114,12 @@ from services.admin_featured import (
     remove_featured_statement, select_featured_statement,
     set_featured_argument_visibility,
 )
+from services.admin_catalog import (
+    ConversationCreationSaveFailed, ConversationCreationUpstreamFailed,
+    ConversationSlugConflict, GlobalAdminParticipantNotFound,
+    build_admin_catalog, create_conversation as create_admin_conversation,
+    set_global_admin,
+)
 from services.admin_lifecycle import (
     Phase6InitializationConflict, Phase6InitializationSaveFailed,
     Phase6InitializationUnavailable,
@@ -2541,6 +2547,117 @@ def _admin_invitation_roster_api_payload(conv_id: int) -> dict:
         self_link=self_link,
         conversation_link=conversation_link,
     )
+
+
+def _managed_polis_creation() -> bool:
+    return all(current_app.config.get(key) for key in (
+        'POLIS_SERVER_URL', 'POLIS_ADMIN_EMAIL', 'POLIS_ADMIN_PASSWORD',
+    ))
+
+
+def _admin_catalog_api_payload() -> dict:
+    if not _is_global_admin():
+        abort(403)
+    return build_admin_catalog(
+        conversations=Conversation.query.order_by(Conversation.created_at.desc()).all(),
+        global_admins=Participant.query.filter_by(is_global_admin=True).order_by(
+            Participant.mw_username,
+        ).all(),
+        phase_routes=PHASE_ROUTES,
+        managed_creation=_managed_polis_creation(),
+        self_link=url_for('api_v1.get_admin_catalog'),
+        conversation_link=lambda conversation_id: url_for(
+            'spa_shell', spa_path=f'admin/conversations/{conversation_id}',
+        ),
+    )
+
+
+def _create_admin_conversation_api_payload(body: dict) -> dict:
+    if not _is_global_admin():
+        abort(403)
+    managed = _managed_polis_creation()
+    if not _valid_slug(body['slug']) or body['phaseRoute'] not in PHASE_ROUTES:
+        abort(400, description='Invalid conversation slug or phase route.')
+    if not managed and not _valid_polis_id(body['polisId'] or ''):
+        abort(400, description='A valid Polis conversation ID is required in manual mode.')
+    result = create_admin_conversation(
+        fields={**body, 'polis_id': body['polisId']},
+        existing_slug=Conversation.query.filter_by(slug=body['slug']).first() is not None,
+        managed_creation=managed,
+        create_upstream=lambda title: _polis_server_client().create_conversation(
+            title, strict_moderation=True,
+        ),
+        conversation_factory=lambda polis_id: Conversation(
+            slug=body['slug'], title=body['title'].strip(), polis_id=polis_id,
+            active=True, access_policy=body['accessPolicy'],
+            phase_route=body['phaseRoute'],
+            intro_text=_sanitise_text(body['introHtml']),
+            outro_text=_sanitise_text(body['outroHtml']),
+            eligibility_event_id=body['eligibilityEventId'] or None,
+            eligibility_label=body['eligibilityLabel'] or None,
+            statement_moderation_policy='moderate',
+        ),
+        session=db.session,
+        audit=lambda conversation_id, slug: record_audit(
+            'conversation.create', conv_id=conversation_id, slug=slug,
+        ),
+        upstream_errors=(PolisServerError,),
+    )
+    conversation = result.conversation
+    return {
+        'conversation': {
+            'id': conversation.id,
+            'slug': conversation.slug,
+            'title': conversation.title,
+        },
+        'links': {
+            'manage': url_for(
+                'spa_shell', spa_path=f'admin/conversations/{conversation.id}',
+            ),
+            'catalog': url_for('api_v1.get_admin_catalog'),
+        },
+    }
+
+
+def _grant_global_admin_api_payload(body: dict) -> dict:
+    if not _is_global_admin():
+        abort(403)
+    participant = Participant.query.filter_by(
+        mw_username=body['username'].strip(),
+    ).first()
+    changed = set_global_admin(
+        participant=participant, granted=True, session=db.session,
+        audit=lambda participant_id, granted: record_audit(
+            'global_admin.grant', target_type='participant', target_id=participant_id,
+        ),
+    )
+    return {
+        'participantId': participant.id,
+        'username': participant.mw_username,
+        'granted': True,
+        'changed': changed,
+        'catalog': _admin_catalog_api_payload(),
+    }
+
+
+def _set_global_admin_api_payload(participant_id: int, body: dict) -> dict:
+    if not _is_global_admin():
+        abort(403)
+    participant = db.session.get(Participant, participant_id)
+    changed = set_global_admin(
+        participant=participant, granted=body['granted'], session=db.session,
+        audit=lambda target_id, granted: record_audit(
+            'global_admin.grant' if granted else 'global_admin.revoke',
+            target_type='participant', target_id=target_id,
+        ),
+    )
+    return {
+        'participantId': participant.id,
+        'username': participant.mw_username,
+        'granted': body['granted'],
+        'changed': changed,
+        'catalog': _admin_catalog_api_payload(),
+    }
 
 
 def _admin_role_roster_api_payload(conv_id: int) -> dict:
@@ -6646,6 +6763,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_informed_voting=_informed_voting_api_payload,
         submit_informed_vote=_informed_vote_api_payload,
         resolve_results_report=_results_report_api_payload,
+        resolve_admin_catalog=_admin_catalog_api_payload,
+        create_admin_conversation=_create_admin_conversation_api_payload,
+        grant_global_admin=_grant_global_admin_api_payload,
+        set_global_admin=_set_global_admin_api_payload,
         resolve_admin_participants=_admin_participant_roster_api_payload,
         set_admin_participant_access=_set_admin_participant_access_api_payload,
         resolve_admin_flags=_admin_flag_queue_api_payload,

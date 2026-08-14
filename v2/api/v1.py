@@ -58,6 +58,10 @@ from services.admin_featured import (
     FeaturedSourceUnavailable, FeaturedStatementNotFound,
     LastFeaturedSelectionProtected,
 )
+from services.admin_catalog import (
+    ConversationCreationSaveFailed, ConversationCreationUpstreamFailed,
+    ConversationSlugConflict, GlobalAdminParticipantNotFound,
+)
 
 _OPENAPI_SPEC = json.loads(
     (Path(__file__).resolve().parents[1] / 'openapi.json').read_text(encoding='utf-8')
@@ -92,6 +96,10 @@ def create_api_v1_blueprint(
     resolve_informed_voting: Callable[[str], dict],
     submit_informed_vote: Callable[[str, int, str], dict],
     resolve_results_report: Callable[[str], dict],
+    resolve_admin_catalog: Callable[[], dict],
+    create_admin_conversation: Callable[[dict], dict],
+    grant_global_admin: Callable[[dict], dict],
+    set_global_admin: Callable[[int, dict], dict],
     resolve_admin_participants: Callable[[int], dict],
     set_admin_participant_access: Callable[[int, int, dict], dict],
     resolve_admin_flags: Callable[[int], dict],
@@ -170,6 +178,87 @@ def create_api_v1_blueprint(
     @bp.get('/openapi.json')
     def openapi_spec():
         return _no_store(jsonify(_OPENAPI_SPEC))
+
+    @bp.get('/admin')
+    def get_admin_catalog():
+        return _no_store(jsonify({'data': resolve_admin_catalog()}))
+
+    @bp.post('/admin/conversations')
+    def post_admin_conversation():
+        body = request.get_json(silent=True)
+        required = {
+            'slug', 'title', 'introHtml', 'outroHtml', 'accessPolicy',
+            'phaseRoute', 'eligibilityEventId', 'eligibilityLabel', 'polisId',
+        }
+        if (not isinstance(body, dict) or set(body) != required
+                or not isinstance(body.get('slug'), str)
+                or not isinstance(body.get('title'), str)
+                or not body['title'].strip() or len(body['title'].strip()) > 255
+                or any(not isinstance(body.get(key), str) for key in (
+                    'introHtml', 'outroHtml', 'phaseRoute',
+                    'eligibilityEventId', 'eligibilityLabel',
+                ))
+                or len(body['eligibilityEventId']) > 80
+                or len(body['eligibilityLabel']) > 255
+                or body.get('accessPolicy') not in {'public', 'invite_only', 'demo'}
+                or (body.get('polisId') is not None
+                    and not isinstance(body['polisId'], str))):
+            return error_response(
+                'validation_failed', 'Check the conversation fields.', 400,
+            )
+        try:
+            data = create_admin_conversation(body)
+        except ConversationSlugConflict:
+            return error_response(
+                'slug_conflict', 'That conversation slug is already in use.', 409,
+            )
+        except ConversationCreationUpstreamFailed:
+            return error_response(
+                'upstream_unavailable',
+                'The voting conversation could not be created.', 502,
+            )
+        except ConversationCreationSaveFailed as exc:
+            return error_response(
+                'command_outcome_unknown' if exc.outcome_unknown else 'save_failed',
+                ('A voting conversation may have been created. Do not retry until a site admin checks it.'
+                 if exc.outcome_unknown else 'The conversation could not be saved.'),
+                409 if exc.outcome_unknown else 503,
+            )
+        return _no_store(jsonify({'data': data})), 201
+
+    @bp.post('/admin/global-admin-grants')
+    def post_global_admin_grant():
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'username'}
+                or not isinstance(body.get('username'), str)
+                or not body['username'].strip()):
+            return error_response(
+                'validation_failed', 'Provide a Wikimedia username.', 400,
+            )
+        try:
+            data = grant_global_admin(body)
+        except GlobalAdminParticipantNotFound:
+            return error_response(
+                'participant_not_found',
+                'That account must sign in once before it can be granted access.', 404,
+            )
+        return _no_store(jsonify({'data': data})), 201 if data['changed'] else 200
+
+    @bp.put('/admin/global-admins/<int:participant_id>')
+    def put_global_admin(participant_id: int):
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {'granted'}
+                or not isinstance(body.get('granted'), bool)):
+            return error_response(
+                'validation_failed', 'Use granted true or false.', 400,
+            )
+        try:
+            data = set_global_admin(participant_id, body)
+        except GlobalAdminParticipantNotFound:
+            return error_response(
+                'participant_not_found', 'That participant does not exist.', 404,
+            )
+        return _no_store(jsonify({'data': data}))
 
     @bp.get('/conversations')
     def get_conversation_lane():

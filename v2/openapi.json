@@ -30,6 +30,40 @@
         }
       }
     },
+    "/admin": {
+      "get": {"operationId": "getAdminCatalog", "summary": "Return site-wide conversation and administrator operations", "responses": {
+        "200": {"description": "Admin catalog", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminCatalogResponse"}}}},
+        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
+    "/admin/conversations": {
+      "post": {"operationId": "postAdminConversation", "summary": "Create a local conversation and its managed voting conversation", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminConversationCreateRequest"}}}}, "responses": {
+        "201": {"description": "Conversation creation receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminConversationCreateResponse"}}}},
+        "400": {"description": "Invalid conversation fields", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "Slug conflict or unknown creation outcome", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "502": {"description": "Voting service creation failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "503": {"description": "Local save failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
+    "/admin/global-admin-grants": {
+      "post": {"operationId": "postGlobalAdminGrant", "summary": "Grant site-wide administration by known Wikimedia username", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GlobalAdminGrantRequest"}}}}, "responses": {
+        "200": {"description": "Existing grant receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GlobalAdminGrantResponse"}}}},
+        "201": {"description": "New grant receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GlobalAdminGrantResponse"}}}},
+        "400": {"description": "Invalid username", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "404": {"description": "Participant has not signed in", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
+    "/admin/global-admins/{participantId}": {
+      "parameters": [{"name": "participantId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+      "put": {"operationId": "putGlobalAdmin", "summary": "Set desired site-wide administrator membership", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GlobalAdminSetRequest"}}}}, "responses": {
+        "200": {"description": "Membership receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GlobalAdminGrantResponse"}}}},
+        "400": {"description": "Invalid desired state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "404": {"description": "Participant not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+      }}
+    },
     "/admin/conversations/{conversationId}/termination": {
       "parameters": [{"name": "conversationId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
       "get": {"operationId": "getAdminConversationTermination", "summary": "Inspect live empty-conversation deletion eligibility", "responses": {
@@ -950,6 +984,19 @@
   },
   "components": {
     "schemas": {
+      "AdminCatalogResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminCatalog"}}},
+      "AdminCatalog": {"type": "object", "required": ["conversations", "globalAdmins", "phaseRoutes", "creation", "links"], "additionalProperties": false, "properties": {
+        "conversations": {"type": "array", "items": {"type": "object", "required": ["id", "slug", "title", "accessPolicy", "status", "createdAt", "links"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "status": {"type": "string", "enum": ["active", "paused", "archived", "closed"]}, "createdAt": {"type": ["string", "null"], "format": "date-time"}, "links": {"type": "object", "required": ["participant", "manage"], "additionalProperties": false, "properties": {"participant": {"type": "string"}, "manage": {"type": "string"}}}}}},
+        "globalAdmins": {"type": "array", "items": {"type": "object", "required": ["participantId", "username"], "additionalProperties": false, "properties": {"participantId": {"type": "integer", "minimum": 1}, "username": {"type": "string"}}}},
+        "phaseRoutes": {"type": "array", "items": {"type": "object", "required": ["key", "label", "description"], "additionalProperties": false, "properties": {"key": {"type": "string"}, "label": {"type": "string"}, "description": {"type": "string"}}}},
+        "creation": {"type": "object", "required": ["mode", "defaultModerationPolicy"], "additionalProperties": false, "properties": {"mode": {"type": "string", "enum": ["managed", "manual_polis_id"]}, "defaultModerationPolicy": {"type": "string", "const": "moderate"}}},
+        "links": {"type": "object", "required": ["self"], "additionalProperties": false, "properties": {"self": {"type": "string"}}}
+      }},
+      "AdminConversationCreateRequest": {"type": "object", "required": ["slug", "title", "introHtml", "outroHtml", "accessPolicy", "phaseRoute", "eligibilityEventId", "eligibilityLabel", "polisId"], "additionalProperties": false, "properties": {"slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 80}, "title": {"type": "string", "minLength": 1, "maxLength": 255}, "introHtml": {"type": "string"}, "outroHtml": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "phaseRoute": {"type": "string", "minLength": 1}, "eligibilityEventId": {"type": "string", "maxLength": 80}, "eligibilityLabel": {"type": "string", "maxLength": 255}, "polisId": {"type": ["string", "null"]}}},
+      "AdminConversationCreateResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["conversation", "links"], "additionalProperties": false, "properties": {"conversation": {"type": "object", "required": ["id", "slug", "title"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}}}, "links": {"type": "object", "required": ["manage", "catalog"], "additionalProperties": false, "properties": {"manage": {"type": "string"}, "catalog": {"type": "string"}}}}}}},
+      "GlobalAdminGrantRequest": {"type": "object", "required": ["username"], "additionalProperties": false, "properties": {"username": {"type": "string", "minLength": 1, "maxLength": 255}}},
+      "GlobalAdminSetRequest": {"type": "object", "required": ["granted"], "additionalProperties": false, "properties": {"granted": {"type": "boolean"}}},
+      "GlobalAdminGrantResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"type": "object", "required": ["participantId", "username", "granted", "changed", "catalog"], "additionalProperties": false, "properties": {"participantId": {"type": "integer", "minimum": 1}, "username": {"type": "string"}, "granted": {"type": "boolean"}, "changed": {"type": "boolean"}, "catalog": {"$ref": "#/components/schemas/AdminCatalog"}}}}},
       "AdminTerminationResponse": {"type": "object", "required": ["data"], "additionalProperties": false, "properties": {"data": {"$ref": "#/components/schemas/AdminTermination"}}},
       "AdminTermination": {"type": "object", "required": ["conversation", "deletion", "links"], "additionalProperties": false, "properties": {
         "conversation": {"type": "object", "required": ["id", "slug", "title"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}}},
