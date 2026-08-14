@@ -2082,7 +2082,7 @@ def _join_conversation_api_payload(slug: str, body: dict) -> tuple[dict, int]:
     }, 201 if result.created else 200)
 
 
-def _require_explore_api_context(slug: str):
+def _require_explore_api_context(slug: str, *, allow_banned_read: bool = False):
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
     if participant is None:
@@ -2096,7 +2096,8 @@ def _require_explore_api_context(slug: str):
         abort(409, description='Join this conversation before participating.')
     if not conv.active or conv.paused or not conv.phase_submission:
         abort(409, description='Explore voting is not open.')
-    _abort_if_banned(conv, participant)
+    if not allow_banned_read:
+        _abort_if_banned(conv, participant)
     return conv, participant, participation
 
 
@@ -2157,7 +2158,9 @@ def _explore_state_payload(conv: Conversation, participant: Participant,
 
 
 def _explore_api_payload(slug: str) -> dict:
-    conv, participant, participation = _require_explore_api_context(slug)
+    conv, participant, participation = _require_explore_api_context(
+        slug, allow_banned_read=True,
+    )
     gateway, states = _explore_gateway(conv, participant)
     try:
         return _explore_state_payload(conv, participant, participation, gateway)
@@ -2198,7 +2201,9 @@ def _explore_vote_api_payload(
         _save_explore_gateway_state(conv, gateway, states)
 
 
-def _require_informed_voting_api_context(slug: str):
+def _require_informed_voting_api_context(
+    slug: str, *, allow_banned_read: bool = False,
+):
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
     if participant is None:
@@ -2213,7 +2218,8 @@ def _require_informed_voting_api_context(slug: str):
     if (not conv.active or conv.paused or not conv.phase_informed_voting
             or not conv.phase6_polis_conversation_id):
         abort(409, description='Informed voting is not open.')
-    _abort_if_banned(conv, participant)
+    if not allow_banned_read:
+        _abort_if_banned(conv, participant)
     return conv, participant, participation
 
 
@@ -2248,7 +2254,9 @@ def _save_phase6_gateway(gateway: ExploreGateway, key) -> None:
 
 
 def _informed_voting_api_payload(slug: str) -> dict:
-    conv, participant, participation = _require_informed_voting_api_context(slug)
+    conv, participant, participation = _require_informed_voting_api_context(
+        slug, allow_banned_read=True,
+    )
     gateway, key = _phase6_gateway(conv, participant)
     try:
         participant_payload = gateway.read_participant(
@@ -2387,7 +2395,9 @@ def _intermediate_results_api_payload(slug: str) -> dict:
 
 
 def _argument_mapping_api_payload(slug: str) -> dict:
-    conv, _participant, participation = _require_argument_api_context(slug)
+    conv, _participant, participation = _require_argument_api_context(
+        slug, allow_banned_read=True,
+    )
     can_moderate = _can_moderate(conv)
     links = {
         'self': url_for('api_v1.get_argument_mapping', slug=slug),
@@ -2409,7 +2419,7 @@ def _argument_mapping_api_payload(slug: str) -> dict:
     )
 
 
-def _require_argument_api_context(slug: str):
+def _require_argument_api_context(slug: str, *, allow_banned_read: bool = False):
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
     participant = _current_participant()
     if participant is None:
@@ -2423,7 +2433,8 @@ def _require_argument_api_context(slug: str):
         abort(409, description='Join this conversation before participating.')
     if not conv.active or conv.paused or not conv.phase_argument_mapping:
         abort(409, description='Argument mapping is not open.')
-    _abort_if_banned(conv, participant)
+    if not allow_banned_read:
+        _abort_if_banned(conv, participant)
     return conv, participant, participation
 
 

@@ -4,7 +4,8 @@ import json
 from unittest.mock import patch
 
 from db import (Argument, ArgumentSideState, ArgumentVote, AuditEvent,
-                ContentFlag, Conversation, FeaturedStatement, Participation, db)
+                ContentFlag, Conversation, ConversationBan, FeaturedStatement,
+                Participation, db)
 
 
 def _argument_fixture(participant):
@@ -92,6 +93,30 @@ def test_argument_mapping_api_returns_explicit_gates_without_identity_leaks(
     assert participant.mw_username not in serialized
     assert participation.pseudonym in serialized
     assert conversation.polis_id not in serialized
+
+
+def test_banned_participant_can_read_arguments_but_cannot_submit(
+    auth_client, participant,
+):
+    conversation, _participation, featured, _arguments = _argument_fixture(participant)
+    db.session.add(ConversationBan(
+        conversation_id=conversation.id,
+        participant_id=participant.id,
+        summary='Participation suspended',
+    ))
+    db.session.commit()
+
+    with patch('app._statement_text_map', return_value={}):
+        read = auth_client.get('/api/v1/conversations/argument-api/arguments')
+    command = auth_client.post(
+        f'/api/v1/conversations/argument-api/featured-statements/{featured.id}/arguments',
+        json={'side': 'pro', 'body': 'This command must stay blocked.'},
+    )
+
+    assert read.status_code == 200
+    assert read.get_json()['data']['featuredStatements']
+    assert command.status_code == 403
+    assert command.get_json()['error']['code'] == 'forbidden'
 
 
 def test_argument_mapping_api_hides_moderated_arguments(

@@ -5,8 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from db import (AuditEvent, CommandReceipt, Participation, StatementPassSignal,
-                StatementProvenance, StatementSimilarityScore, db)
+from db import (AuditEvent, CommandReceipt, ConversationBan, Participation,
+                StatementPassSignal, StatementProvenance,
+                StatementSimilarityScore, db)
 from polis_admin import PolisServerError
 from services.explore import build_explore_state
 
@@ -110,6 +111,41 @@ def test_explore_api_owns_upstream_session_and_returns_privacy_safe_state(
     assert stored == {
         'cookie': 'upstream-cookie', 'csrfToken': 'upstream-csrf',
     }
+
+
+def test_banned_participant_can_read_explore_but_cannot_vote(
+    auth_client, participant, conversation,
+):
+    _join(participant, conversation)
+    db.session.add(ConversationBan(
+        conversation_id=conversation.id,
+        participant_id=participant.id,
+        summary='Participation suspended',
+    ))
+    db.session.commit()
+    session_response = _response(
+        {'csrf_token': 'upstream-csrf'}, cookies={'session': 'upstream-cookie'},
+    )
+
+    with (
+        patch('app.polis_http.post', return_value=session_response),
+        patch('app.polis_http.get', side_effect=[
+            _response({'7': {'id': 7, 'text': 'Visible statement'}}),
+            _response({'votes': [], 'statements': []}),
+        ]),
+        patch('app.polis_http.put') as put,
+    ):
+        read = auth_client.get('/api/v1/conversations/test-conv/explore')
+        vote = auth_client.put(
+            '/api/v1/conversations/test-conv/statements/7/vote',
+            json={'choice': 'agree'},
+        )
+
+    assert read.status_code == 200
+    assert read.get_json()['data']['currentStatement']['text'] == 'Visible statement'
+    assert vote.status_code == 403
+    assert vote.get_json()['error']['code'] == 'forbidden'
+    put.assert_not_called()
 
 
 def test_explore_vote_is_idempotent_put_and_translates_agree_sign(

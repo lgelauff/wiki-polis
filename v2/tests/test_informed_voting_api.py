@@ -3,7 +3,8 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from db import Argument, Conversation, FeaturedStatement, Participation, db
+from db import (Argument, Conversation, ConversationBan, FeaturedStatement,
+                Participation, db)
 from services.informed_voting import build_informed_voting_state
 
 
@@ -97,6 +98,42 @@ def test_informed_voting_api_returns_private_progress_and_persists_new_cards(
     assert participant.xid not in serialized
     assert conversation.polis_id not in serialized
     assert conversation.phase6_polis_conversation_id not in serialized
+
+
+def test_banned_participant_can_read_informed_round_but_cannot_vote(
+    auth_client, participant,
+):
+    conversation, _participation, first, _second = _fixture(participant)
+    db.session.add(ConversationBan(
+        conversation_id=conversation.id,
+        participant_id=participant.id,
+        summary='Participation suspended',
+    ))
+    db.session.commit()
+    session_response = _response(
+        {'csrf_token': 'phase6-csrf'}, cookies={'session': 'phase6-cookie'},
+    )
+
+    with (
+        patch('app.polis_http.post', return_value=session_response),
+        patch('app.polis_http.get', return_value=_response({
+            'votes': [], 'statements': [],
+        })),
+        patch('app.polis_http.put') as put,
+    ):
+        read = auth_client.get(
+            '/api/v1/conversations/informed-api/informed-voting',
+        )
+        vote = auth_client.put(
+            f'/api/v1/conversations/informed-api/featured-statements/{first.id}/informed-vote',
+            json={'choice': 'agree'},
+        )
+
+    assert read.status_code == 200
+    assert read.get_json()['data']['cards']
+    assert vote.status_code == 403
+    assert vote.get_json()['error']['code'] == 'forbidden'
+    put.assert_not_called()
 
 
 def test_informed_vote_is_idempotent_put_and_translates_phase6_sign(
