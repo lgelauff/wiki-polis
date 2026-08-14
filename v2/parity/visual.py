@@ -42,6 +42,11 @@ def load_scenarios(selected: set[str] | None = None) -> tuple[dict, list[dict]]:
 
 def prepare_page(page: Page, url: str) -> None:
     page.goto(url, wait_until='networkidle')
+    page.wait_for_function(
+        """() => [...document.styleSheets].some(sheet =>
+            sheet.href && new URL(sheet.href).pathname === '/static/style.css'
+        )"""
+    )
     page.wait_for_function("document.fonts.status === 'loaded'")
     page.add_style_tag(content=STABILIZING_CSS)
     page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")

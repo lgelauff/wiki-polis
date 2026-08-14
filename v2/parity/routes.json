@@ -11,10 +11,10 @@
       "legacyEndpoints": ["index"],
       "legacyRoutes": ["/"],
       "templates": ["fork.html"],
-      "temporaryReactRoutes": [],
+      "temporaryReactRoutes": ["/app/parity/fork"],
       "targetReactRoutes": ["/"],
       "apiOperations": ["getSession"],
-      "status": "missing",
+      "status": "partial",
       "scenarios": ["anonymous", "authenticated", "local-test-users"]
     },
     {
@@ -44,10 +44,10 @@
       "legacyEndpoints": ["participant.statement_guidance"],
       "legacyRoutes": ["/help/statements"],
       "templates": ["guidance_statement.html"],
-      "temporaryReactRoutes": [],
+      "temporaryReactRoutes": ["/app/parity/help/statements"],
       "targetReactRoutes": ["/help/statements"],
       "apiOperations": [],
-      "status": "missing",
+      "status": "parity",
       "scenarios": ["public"]
     },
     {
@@ -55,10 +55,10 @@
       "legacyEndpoints": ["participant.argument_guidance"],
       "legacyRoutes": ["/help/arguments"],
       "templates": ["guidance_argument.html"],
-      "temporaryReactRoutes": [],
+      "temporaryReactRoutes": ["/app/parity/help/arguments"],
       "targetReactRoutes": ["/help/arguments"],
       "apiOperations": [],
-      "status": "missing",
+      "status": "parity",
       "scenarios": ["public"]
     },
     {

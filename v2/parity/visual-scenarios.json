@@ -14,22 +14,22 @@
       "pageId": "entry-fork",
       "state": "anonymous",
       "legacyPath": "/",
-      "reactPath": null,
+      "reactPath": "/app/parity/fork",
       "viewport": {"width": 1440, "height": 900},
       "auth": "anonymous",
       "goldenSha256": "cd6e1428f9000e5bb75e7c02bfe12d7189cab4b350d8d81aaa4f864a078ddf58",
-      "parityGate": false
+      "parityGate": true
     },
     {
       "id": "entry-fork--anonymous--mobile",
       "pageId": "entry-fork",
       "state": "anonymous",
       "legacyPath": "/",
-      "reactPath": null,
+      "reactPath": "/app/parity/fork",
       "viewport": {"width": 390, "height": 844},
       "auth": "anonymous",
       "goldenSha256": "3f41b35379de0e8e4339bf7bf0bb7300f1364ddf3ad23e1fda104cbe2b96d71a",
-      "parityGate": false
+      "parityGate": true
     },
     {
       "id": "demo-lane--anonymous-populated--desktop",
@@ -58,22 +58,44 @@
       "pageId": "statement-guidance",
       "state": "public",
       "legacyPath": "/help/statements",
-      "reactPath": null,
+      "reactPath": "/app/parity/help/statements",
       "viewport": {"width": 1440, "height": 900},
       "auth": "anonymous",
       "goldenSha256": "358ec87de6f46160998753f8f42c17e3bc54da4da9316920e43b1a9394f656e2",
-      "parityGate": false
+      "parityGate": true
+    },
+    {
+      "id": "statement-guidance--public--mobile",
+      "pageId": "statement-guidance",
+      "state": "public",
+      "legacyPath": "/help/statements",
+      "reactPath": "/app/parity/help/statements",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "anonymous",
+      "goldenSha256": "7d744b856f1527634128357e045a11f7453f94523178e9ed8238fe72f889f237",
+      "parityGate": true
     },
     {
       "id": "argument-guidance--public--desktop",
       "pageId": "argument-guidance",
       "state": "public",
       "legacyPath": "/help/arguments",
-      "reactPath": null,
+      "reactPath": "/app/parity/help/arguments",
       "viewport": {"width": 1440, "height": 900},
       "auth": "anonymous",
       "goldenSha256": "066d2d37470ce28f145846ae1797bf2fa7e820f0902a71838fb7ba966d60d253",
-      "parityGate": false
+      "parityGate": true
+    },
+    {
+      "id": "argument-guidance--public--mobile",
+      "pageId": "argument-guidance",
+      "state": "public",
+      "legacyPath": "/help/arguments",
+      "reactPath": "/app/parity/help/arguments",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "anonymous",
+      "goldenSha256": "2710fb6fdc104f15d83eeb75f7e4c68092e80090e78dce5d1872d983855b93bd",
+      "parityGate": true
     }
   ]
 }
