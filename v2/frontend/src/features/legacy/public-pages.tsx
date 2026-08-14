@@ -1,6 +1,11 @@
+import {useSuspenseQuery} from '@tanstack/react-query';
+
+import {sessionQuery} from '../../api/queries';
 import {LegacyShell} from './legacy-shell';
 
 export function ForkPage() {
+  const {data: session} = useSuspenseQuery(sessionQuery());
+
   return (
     <LegacyShell headerMode="fork">
       <div className="container home-container">
@@ -40,6 +45,20 @@ export function ForkPage() {
             <span className="fork-card-cta">Participate →</span>
           </a>
         </div>
+
+        {session.developerLogins.length > 0 && (
+          <div style={{marginTop: '1.25rem', padding: '10px 14px', border: '1px dashed var(--spot)', borderRadius: 8, background: 'rgba(245,158,11,0.05)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap'}}>
+            <span style={{fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--spot)'}}>Dev</span>
+            {session.developerLogins.map((login) => (
+              <a
+                key={login.username}
+                href={login.href}
+                style={{fontFamily: 'var(--mono)', fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--surface2)', border: '1px solid var(--hairline)', color: 'var(--ink)', textDecoration: 'none'}}
+                title={`Log in as ${login.username}`}
+              >{login.username}</a>
+            ))}
+          </div>
+        )}
       </div>
     </LegacyShell>
   );
