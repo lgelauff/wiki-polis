@@ -74,8 +74,30 @@ test('runs site-wide administration without falling back to Jinja forms', async 
   expect(screen.getByRole('heading', {name: 'New conversation'})).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Example editor'}});
   fireEvent.click(screen.getByRole('button', {name: 'Grant'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Example editor granted site-wide administration');
-  expect(screen.getAllByText('Example editor')).toHaveLength(2);
+  await waitFor(() => expect(screen.getAllByText('Example editor')).toHaveLength(2));
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+
+test('matches the legacy catalog error for an unknown global admin', async () => {
+  server.use(http.post(
+    new URL('/api/v1/admin/global-admin-grants', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      error: {
+        code: 'participant_not_found',
+        message: 'That account must sign in once before it can be granted access.',
+      },
+    }, {status: 404}),
+  ));
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin']}><App /></MemoryRouter></QueryClientProvider>);
+
+  const username = await screen.findByLabelText('Wikimedia username');
+  fireEvent.change(username, {target: {value: 'MissingEditor'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Grant'}));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'No account found for "MissingEditor". They must log in at least once first.',
+  );
+  expect(username).toHaveValue('');
 });
 
 test('advances a conversation from the server-described lifecycle console', async () => {

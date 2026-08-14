@@ -1,4 +1,4 @@
-import {useState, type FormEvent} from 'react';
+import {useCallback, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -10,6 +10,7 @@ import {
   putGlobalAdmin,
 } from '../../api/queries';
 import {LegacyShell} from '../legacy/legacy-shell';
+import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 
 type Catalog = components['schemas']['AdminCatalog'];
 type CreateRequest = components['schemas']['AdminConversationCreateRequest'];
@@ -35,7 +36,8 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
     phaseRoute: data.phaseRoutes[0]?.key ?? '',
   });
   const [username, setUsername] = useState('');
-  const [receipt, setReceipt] = useState<string | null>(null);
+  const [toast, setToast] = useState<LegacyToastMessage | null>(null);
+  const dismissToast = useCallback(() => setToast(null), []);
 
   function replaceCatalog(catalog: Catalog) {
     queryClient.setQueryData<Catalog>(options.queryKey, catalog);
@@ -44,15 +46,28 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
   const creation = useMutation({
     mutationFn: () => postAdminConversation(draft, csrfToken),
     onSuccess: (result) => { globalThis.location.assign(result.links.manage); },
+    onError: (error) => setToast({
+      id: Date.now(),
+      category: 'error',
+      message: errorMessage(error) ?? 'The site operation could not be completed.',
+    }),
   });
   const grant = useMutation({
     mutationFn: () => postGlobalAdminGrant({username}, csrfToken),
     onSuccess: (result) => {
       replaceCatalog(result.catalog);
       setUsername('');
-      setReceipt(result.changed
-        ? `${result.username} granted site-wide administration.`
-        : `${result.username} already has site-wide administration.`);
+    },
+    onError: (error) => {
+      const attemptedUsername = username;
+      setUsername('');
+      setToast({
+        id: Date.now(),
+        category: 'error',
+        message: error instanceof ApiContractError && error.code === 'participant_not_found'
+          ? `No account found for "${attemptedUsername}". They must log in at least once first.`
+          : errorMessage(error) ?? 'The site operation could not be completed.',
+      });
     },
   });
   const membership = useMutation({
@@ -61,10 +76,13 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
     ),
     onSuccess: (result) => {
       replaceCatalog(result.catalog);
-      setReceipt(`${result.username} removed from site-wide administration.`);
     },
+    onError: (error) => setToast({
+      id: Date.now(),
+      category: 'error',
+      message: errorMessage(error) ?? 'The site operation could not be completed.',
+    }),
   });
-  const activeError = creation.error ?? grant.error ?? membership.error;
 
   function submitConversation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -81,11 +99,10 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
       headerMode="admin"
       title="Admin panel — ProtoWiki"
       headerCrumb={<nav className="header-crumb" aria-label="Admin breadcrumb"><span className="header-crumb-sep">/</span><span>Admin panel</span></nav>}
+      toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
     >
       <div className="container">
         <h2>Admin panel</h2>
-
-        {(receipt || activeError) && <p className="muted" role="status">{errorMessage(activeError) ?? receipt}</p>}
 
         <h3 className="section-heading">Conversations</h3>
         <table className="admin-table">
