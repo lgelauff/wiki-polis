@@ -1,17 +1,12 @@
-import {Suspense, useState} from 'react';
-import {useMutation, useSuspenseQuery} from '@tanstack/react-query';
+import {Suspense} from 'react';
+import {useSuspenseQuery} from '@tanstack/react-query';
 import {Link, Navigate, NavLink, Route, Routes, useParams} from 'react-router-dom';
 
-import type {components} from './api/schema';
 import {
-  exploreStateQuery,
-  putExploreVote,
   sessionQuery,
   type ConversationSpace,
 } from './api/queries';
-import {StatementComposer} from './features/explore/statement-composer';
 import {ArgumentMappingPage} from './features/arguments/argument-mapping-page';
-import {ContentFlagControl} from './features/flags/content-flag-control';
 import {InformedVotingPage} from './features/informed-voting/informed-voting-page';
 import {ResultsAccessBoundary, ResultsPage} from './features/results/results-page';
 import {AdminParticipantsPage} from './features/admin/admin-participants-page';
@@ -42,6 +37,7 @@ import {
 import {ParticipationEntryLegacyPage} from './features/legacy/participation-entry-page';
 import {IdentityRevealLegacyPage} from './features/legacy/identity-reveal-page';
 import {ConversationLanePage} from './features/legacy/conversation-lane-page';
+import {ConversationWorkspacePage} from './features/legacy/conversation-workspace-page';
 
 function OrbitMark() {
   return (
@@ -85,196 +81,6 @@ function Header({space, admin = false}: {space?: ConversationSpace; admin?: bool
         )}
       </div>
     </header>
-  );
-}
-
-type ExploreChoice = components['schemas']['ExploreVoteRequest']['choice'];
-type ExploreVoteRequest = components['schemas']['ExploreVoteRequest'];
-type PassReason = NonNullable<ExploreVoteRequest['passReason']>;
-
-function ExploreVoteButtons({onVote, disabled}: {
-  onVote: (choice: ExploreChoice) => void;
-  disabled: boolean;
-}) {
-  return (
-    <div className="explore-choices" aria-label="Your position">
-      <button type="button" data-choice="agree" disabled={disabled} onClick={() => onVote('agree')}>
-        <span className="choice-dot choice-dot--agree" />Agree
-      </button>
-      <button type="button" data-choice="pass" disabled={disabled} onClick={() => onVote('pass')}>
-        <span className="choice-dot choice-dot--pass" />Pass
-      </button>
-      <button type="button" data-choice="disagree" disabled={disabled} onClick={() => onVote('disagree')}>
-        <span className="choice-dot choice-dot--disagree" />Disagree
-      </button>
-    </div>
-  );
-}
-
-function PassReasonControl({selected, onSelect, disabled}: {
-  selected: PassReason | null;
-  onSelect: (reason: PassReason) => void;
-  disabled: boolean;
-}) {
-  return (
-    <fieldset className="pass-reason">
-      <legend>Why did you pass?</legend>
-      <p>This stays within Wiki-Polis and helps distinguish uncertainty from unclear wording.</p>
-      <div className="pass-reason__choices">
-        <button
-          type="button"
-          aria-pressed={selected === 'unsure'}
-          disabled={disabled}
-          onClick={() => onSelect('unsure')}
-        >
-          I’m unsure
-        </button>
-        <button
-          type="button"
-          aria-pressed={selected === 'confusing'}
-          disabled={disabled}
-          onClick={() => onSelect('confusing')}
-        >
-          The wording is confusing
-        </button>
-      </div>
-    </fieldset>
-  );
-}
-
-function ExplorePage() {
-  const {slug = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  const {data, refetch, isFetching} = useSuspenseQuery(exploreStateQuery(slug));
-  const [receipt, setReceipt] = useState<components['schemas']['ExploreVoteReceipt'] | null>(null);
-  const [composerMode, setComposerMode] = useState<'derivative' | 'new' | null>(null);
-  const vote = useMutation({
-    mutationFn: (request: ExploreVoteRequest) => {
-      if (!data.currentStatement) throw new Error('There is no statement to vote on.');
-      return putExploreVote(
-        slug, data.currentStatement.id, request, session.csrfToken,
-      );
-    },
-    onMutate: () => setComposerMode(null),
-    onSuccess: setReceipt,
-  });
-
-  async function nextStatement() {
-    setReceipt(null);
-    setComposerMode(null);
-    await refetch();
-  }
-
-  return (
-    <>
-      <Header />
-      <main className="explore-shell" id="main">
-        <header className="explore-heading">
-          <div>
-            <p className="eyebrow">Explore · private vote</p>
-            <h1>{data.title}</h1>
-          </div>
-          <nav className="activity-nav" aria-label="Conversation activity">
-            <span aria-current="page">Explore</span>
-            {data.links.arguments && <Link to={data.links.arguments}>Arguments</Link>}
-            <Link to={`/app/conversations/${slug}/about`}>About</Link>
-          </nav>
-        </header>
-
-        <div className="explore-progress">
-          <div><strong>{data.progress.completed}</strong> of {data.progress.total} statements covered</div>
-          <progress value={data.progress.completed} max={Math.max(1, data.progress.total)}>
-            {data.progress.completed} of {data.progress.total}
-          </progress>
-        </div>
-
-        {data.progress.allDone ? (
-          <section className="explore-complete" role="status">
-            <p className="eyebrow">Queue complete</p>
-            <h2>You’ve covered every available statement.</h2>
-            <p>Your votes are recorded as <code>{data.pseudonym}</code>. New statements may appear while Explore remains open.</p>
-            <button type="button" className="explore-refresh" onClick={() => refetch()} disabled={isFetching}>
-              {isFetching ? 'Checking…' : 'Check for new statements'}
-            </button>
-            {data.newStatement.unlocked && composerMode !== 'new' && (
-              <button type="button" className="composer-link" onClick={() => setComposerMode('new')}>
-                Add a new statement
-              </button>
-            )}
-            {composerMode === 'new' && (
-              <StatementComposer
-                slug={slug}
-                csrfToken={session.csrfToken}
-                onCancel={() => setComposerMode(null)}
-                onCreated={() => nextStatement()}
-              />
-            )}
-          </section>
-        ) : data.currentStatement && (
-          <section className={`explore-card${receipt ? ' explore-card--voted' : ''}`}>
-            <div className="explore-card__meta">
-              <span>{data.currentStatement.isMeta ? 'Process' : data.currentStatement.isSeed ? 'Starting statement' : 'Community statement'}</span>
-              <span className="explore-card__tools">
-                <span>Statement {data.progress.completed + 1}</span>
-                <ContentFlagControl
-                  slug={slug}
-                  csrfToken={session.csrfToken}
-                  target={{contentType: 'statement', targetId: data.currentStatement.id}}
-                  targetLabel={data.currentStatement.text}
-                />
-              </span>
-            </div>
-            <p className="explore-statement">{data.currentStatement.text}</p>
-            {receipt ? (
-              <div className="vote-receipt" role="status">
-                <p>You voted <strong>{receipt.choice}</strong>.</p>
-                <ExploreVoteButtons onVote={(choice) => vote.mutate({choice})} disabled={vote.isPending} />
-                {receipt.choice === 'pass' && (
-                  <PassReasonControl
-                    selected={receipt.passReason}
-                    disabled={vote.isPending}
-                    onSelect={(passReason) => vote.mutate({choice: 'pass', passReason})}
-                  />
-                )}
-                <div className="post-vote-actions">
-                  <button type="button" className="next-statement" onClick={nextStatement} disabled={isFetching}>
-                    {isFetching ? 'Loading…' : 'Next statement'}
-                  </button>
-                  <button type="button" className="composer-link" onClick={() => setComposerMode('derivative')}>
-                    Suggest clearer wording
-                  </button>
-                  {data.newStatement.unlocked && (
-                    <button type="button" className="composer-link" onClick={() => setComposerMode('new')}>
-                      Add a new statement
-                    </button>
-                  )}
-                </div>
-                {composerMode && (
-                  <StatementComposer
-                    key={`${composerMode}-${data.currentStatement.id}`}
-                    slug={slug}
-                    csrfToken={session.csrfToken}
-                    {...(composerMode === 'derivative'
-                      ? {parentStatement: data.currentStatement}
-                      : {})}
-                    onCancel={() => setComposerMode(null)}
-                    onCreated={() => nextStatement()}
-                  />
-                )}
-              </div>
-            ) : (
-              <ExploreVoteButtons onVote={(choice) => vote.mutate({choice})} disabled={vote.isPending} />
-            )}
-            {vote.error && <p className="command-error" role="alert">{vote.error.message}</p>}
-          </section>
-        )}
-
-        <footer className="explore-footer">
-          <span>Participating as <code>{data.pseudonym}</code></span>
-          <a href={data.links.conversation}>Open legacy conversation view</a>
-        </footer>
-      </main>
-    </>
   );
 }
 
@@ -407,7 +213,7 @@ export function App() {
           <Route path="/app/real" element={<ConversationLanePage space="real" />} />
           <Route path="/app/conversations/:slug/about" element={<ConversationAboutLegacyPage />} />
           <Route path="/app/conversations/:slug/join" element={<ParticipationEntryLegacyPage />} />
-          <Route path="/app/conversations/:slug/explore" element={<ExplorePage />} />
+          <Route path="/app/conversations/:slug/explore" element={<ConversationWorkspacePage />} />
           <Route path="/app/conversations/:slug/arguments" element={<ArgumentMappingRoute />} />
           <Route path="/app/conversations/:slug/informed-voting" element={<InformedVotingRoute />} />
           <Route path="/app/conversations/:slug/results" element={<ResultsRoute />} />

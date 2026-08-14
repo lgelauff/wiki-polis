@@ -22,6 +22,12 @@ button, a { font: inherit; }
 a { color: inherit; }
 :focus-visible { outline: 3px solid #315c9b; outline-offset: 3px; }
 .legacy-main button { font-family: Arial; line-height: normal; }
+.legacy-main .vote-choice,
+.legacy-main .v2-option-card,
+.legacy-main .change-vote-btn,
+.legacy-main .btn-small,
+.legacy-main .propose-submit-btn { font-family: var(--sans); }
+.legacy-main .propose-submit-btn { line-height: 1.8; }
 .skip-link {
   position: fixed;
   inset: 0 auto auto 1rem;

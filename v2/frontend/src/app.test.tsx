@@ -394,14 +394,13 @@ test('votes in Explore through the wiki-polis API contract', async () => {
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByText(/shared technical infrastructure/)).toBeVisible();
-  fireEvent.click(screen.getByRole('button', {name: 'Agree'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Agree'}));
 
-  expect(await screen.findByText(/You voted/)).toHaveTextContent('agree');
-  expect(screen.getByRole('button', {name: 'Next statement'})).toBeVisible();
+  expect(await screen.findByText('AGREE', {selector: '#voted-label'})).toBeVisible();
+  expect(screen.getByRole('button', {name: /Move on/})).toBeVisible();
 });
 
-test('can explain a pass as confusing without changing its vote meaning', async () => {
+test('records a pass and opens the legacy post-vote choices', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/app/conversations/community-strategy/explore']}>
@@ -410,19 +409,11 @@ test('can explain a pass as confusing without changing its vote meaning', async 
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByText(/shared technical infrastructure/)).toBeVisible();
-  fireEvent.click(screen.getByRole('button', {name: 'Pass'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Pass'}));
 
-  const confusing = await screen.findByRole('button', {
-    name: 'The wording is confusing',
-  });
-  expect(confusing).toHaveAttribute('aria-pressed', 'false');
-  fireEvent.click(confusing);
-
-  expect(await screen.findByRole('button', {
-    name: 'The wording is confusing', pressed: true,
-  })).toBeVisible();
-  expect(screen.getByRole('button', {name: 'Suggest clearer wording'})).toBeVisible();
+  expect(await screen.findByText('PASS', {selector: '#voted-label'})).toBeVisible();
+  expect(screen.getByText('What now?')).toBeVisible();
+  expect(screen.getByRole('button', {name: /Suggest different wording/})).toBeVisible();
 });
 
 test('completes informed voting through the typed replacement command', async () => {
@@ -477,19 +468,15 @@ test('submits clearer wording through the idempotent statement contract', async 
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByText(/shared technical infrastructure/)).toBeVisible();
-  fireEvent.click(screen.getByRole('button', {name: 'Pass'}));
-  fireEvent.click(await screen.findByRole('button', {name: 'Suggest clearer wording'}));
+  fireEvent.click(await screen.findByRole('button', {name: 'Pass'}));
+  fireEvent.click(await screen.findByRole('button', {name: /Suggest different wording/}));
 
-  const text = screen.getByRole('textbox', {name: 'Statement text'});
+  const text = screen.getByRole('textbox', {name: 'Suggest different wording'});
   expect(text).toHaveValue('Our movement should invest more in shared technical infrastructure.');
   fireEvent.change(text, {target: {value: 'Invest together in shared technical infrastructure.'}});
-  fireEvent.click(screen.getByRole('button', {name: 'Submit clearer wording'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Submit & next'}));
 
-  expect(await screen.findByRole('heading', {
-    name: 'Your clearer wording is now available to participants.',
-  })).toBeVisible();
-  expect(screen.getByText(/linked to the original wording/)).toBeVisible();
+  expect(await screen.findByText('PROPOSED — heading to moderation')).toBeVisible();
 });
 
 test('submits a new statement from the Explore loop', async () => {
@@ -501,18 +488,14 @@ test('submits a new statement from the Explore loop', async () => {
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByText(/shared technical infrastructure/)).toBeVisible();
-  fireEvent.click(screen.getByRole('button', {name: 'Agree'}));
-  fireEvent.click(await screen.findByRole('button', {name: 'Add a new statement'}));
-  fireEvent.change(screen.getByRole('textbox', {name: 'Statement text'}), {
+  fireEvent.click(await screen.findByRole('button', {name: 'Agree'}));
+  fireEvent.click(await screen.findByRole('button', {name: /Propose a new statement/}));
+  fireEvent.change(screen.getByRole('textbox', {name: 'Propose a new statement'}), {
     target: {value: 'Regional communities should share maintenance funding.'},
   });
-  fireEvent.click(screen.getByRole('button', {name: 'Submit statement'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Submit & next'}));
 
-  expect(await screen.findByRole('heading', {
-    name: 'Your statement is now available to participants.',
-  })).toBeVisible();
-  expect(screen.getByText(/2 new-statement slots remaining/)).toBeVisible();
+  expect(await screen.findByText('PROPOSED — heading to moderation')).toBeVisible();
 });
 
 test('freezes a statement attempt when the upstream outcome is unknown', async () => {
@@ -537,17 +520,16 @@ test('freezes a statement attempt when the upstream outcome is unknown', async (
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByText(/shared technical infrastructure/)).toBeVisible();
-  fireEvent.click(screen.getByRole('button', {name: 'Pass'}));
-  fireEvent.click(await screen.findByRole('button', {name: 'Add a new statement'}));
-  fireEvent.change(screen.getByRole('textbox', {name: 'Statement text'}), {
+  fireEvent.click(await screen.findByRole('button', {name: 'Pass'}));
+  fireEvent.click(await screen.findByRole('button', {name: /Propose a new statement/}));
+  fireEvent.change(screen.getByRole('textbox', {name: 'Propose a new statement'}), {
     target: {value: 'A statement with an uncertain outcome.'},
   });
-  fireEvent.click(screen.getByRole('button', {name: 'Submit statement'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Submit & next'}));
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('Contact a moderator');
-  expect(screen.getByRole('textbox', {name: 'Statement text'})).toBeDisabled();
-  expect(screen.getByRole('button', {name: 'Submit statement'})).toBeDisabled();
+  expect(await screen.findByRole('alert')).toHaveTextContent('may have reached the voting service');
+  expect(screen.getByRole('textbox', {name: 'Propose a new statement'})).toBeEnabled();
+  expect(screen.getByRole('button', {name: 'Submit & next'})).toBeEnabled();
 });
 
 test('renders explicit argument contribution states and submits through the typed API', async () => {
@@ -578,7 +560,7 @@ test('renders explicit argument contribution states and submits through the type
   );
 });
 
-test('reports a statement through an accessible modal without edge positioning', async () => {
+test('reports a statement through the legacy inline disclosure', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/app/conversations/community-strategy/explore']}>
@@ -587,20 +569,15 @@ test('reports a statement through an accessible modal without edge positioning',
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByText(/shared technical infrastructure/)).toBeVisible();
-  fireEvent.click(screen.getByRole('button', {name: 'Report concern'}));
-  const dialog = screen.getByRole('dialog', {name: 'Report a concern'});
-  expect(dialog).toBeVisible();
+  const flagTrigger = await screen.findByLabelText('Flag this statement for moderator review');
+  fireEvent.click(flagTrigger);
   fireEvent.change(screen.getByRole('combobox', {name: 'Reason'}), {
     target: {value: 'other'},
   });
-  expect(screen.getByRole('button', {name: 'Send for review'})).toBeDisabled();
-  fireEvent.change(screen.getByRole('textbox', {name: 'Details (required)'}), {
+  fireEvent.change(screen.getByRole('textbox', {name: 'Details'}), {
     target: {value: 'The wording could be interpreted in two incompatible ways.'},
   });
-  fireEvent.click(screen.getByRole('button', {name: 'Send for review'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Send'}));
 
-  expect(await screen.findByRole('heading', {
-    name: 'Thank you for raising this concern.',
-  })).toBeVisible();
+  await waitFor(() => expect(flagTrigger.parentElement).not.toHaveAttribute('open'));
 });

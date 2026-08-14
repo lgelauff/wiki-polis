@@ -381,6 +381,36 @@ export const handlers = [
     },
   ),
   http.get(
+    new URL('/api/v1/conversations/community-strategy/workspace', globalThis.location.origin).toString(),
+    () => HttpResponse.json({data: {
+      slug: 'community-strategy',
+      title: 'Community strategy',
+      space: 'real',
+      status: 'open',
+      descriptionHtml: '<p>Shape the future together.</p>',
+      outroHtml: '<p>A closing note for participants.</p>',
+      viewer: {state: 'participant', pseudonym: 'quiet-otter'},
+      spaceWarning: null,
+      scheduledTransition: null,
+      tabs: [
+        {key: 'vote', label: 'Vote', dataHref: '/api/v1/conversations/community-strategy/explore'},
+        {key: 'arguments', label: 'Arguments', dataHref: '/api/v1/conversations/community-strategy/arguments'},
+      ],
+      defaultTab: 'vote',
+      reveal: null,
+      statementContribution: {unlockAfter: 0, quota: 3, used: 0},
+      capabilities: {participate: true, moderate: false},
+      links: {
+        self: '/api/v1/conversations/community-strategy/workspace',
+        conversation: '/c/community-strategy',
+        about: '/app/conversations/community-strategy/about',
+        join: '/app/conversations/community-strategy/join',
+        explore: '/api/v1/conversations/community-strategy/explore',
+        arguments: '/api/v1/conversations/community-strategy/arguments',
+      },
+    }}),
+  ),
+  http.get(
     new URL('/api/v1/conversations/community-strategy/about', globalThis.location.origin).toString(),
     () => HttpResponse.json({
       data: {

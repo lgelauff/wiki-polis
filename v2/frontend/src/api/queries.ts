@@ -31,6 +31,16 @@ export const conversationAboutQuery = (slug: string) => queryOptions({
   staleTime: 15_000,
 });
 
+export const conversationWorkspaceQuery = (slug: string) => queryOptions({
+  queryKey: ['conversation-workspace', slug],
+  queryFn: async () => (
+    await requireApiData(api.GET('/conversations/{slug}/workspace', {
+      params: {path: {slug}},
+    }))
+  ).data,
+  staleTime: 0,
+});
+
 export const moderationLogQuery = (slug: string) => queryOptions({
   queryKey: ['moderation-log', slug],
   queryFn: async () => (
