@@ -35,6 +35,11 @@ import {
   StrictSpaBoundary,
   useStrictSpaMode,
 } from './strict-spa-mode';
+import {
+  ArgumentGuidancePage,
+  ForkPage,
+  StatementGuidancePage,
+} from './features/legacy/public-pages';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationGroups = components['schemas']['ConversationGroups'];
@@ -870,6 +875,9 @@ export function App() {
       <a className="skip-link" href="#main">Skip to main content</a>
       <Suspense fallback={<p className="loading-state" role="status">Loading conversations…</p>}>
         <Routes>
+          <Route path="/app/parity/fork" element={<ForkPage />} />
+          <Route path="/app/parity/help/statements" element={<StatementGuidancePage />} />
+          <Route path="/app/parity/help/arguments" element={<ArgumentGuidancePage />} />
           <Route path="/app/demo" element={<ConversationLanePage space="demo" />} />
           <Route path="/app/real" element={<ConversationLanePage space="real" />} />
           <Route path="/app/conversations/:slug/about" element={<ConversationAboutPage />} />
