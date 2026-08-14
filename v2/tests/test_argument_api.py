@@ -50,7 +50,7 @@ def _argument_fixture(participant):
     return conversation, participation, featured, arguments
 
 
-def test_argument_mapping_api_returns_explicit_gates_without_identity_or_tallies(
+def test_argument_mapping_api_returns_explicit_gates_without_identity_leaks(
     auth_client, participant,
 ):
     conversation, participation, featured, arguments = _argument_fixture(participant)
@@ -59,6 +59,7 @@ def test_argument_mapping_api_returns_explicit_gates_without_identity_or_tallies
 
     assert response.status_code == 200
     data = response.get_json()['data']
+    assert data['conversationId'] == conversation.id
     assert data['progress'] == {
         'completed': 0,
         'total': 1,
@@ -81,7 +82,10 @@ def test_argument_mapping_api_returns_explicit_gates_without_identity_or_tallies
     }
     assert card['sides']['con']['prioritization']['available'] is False
     assert card['sides']['pro']['arguments'][0]['selected'] is True
-    assert 'importanceVoteCount' not in card['sides']['pro']['arguments'][0]
+    assert card['sides']['pro']['arguments'][0]['importanceVoteCount'] == 1
+    assert card['sides']['pro']['arguments'][0]['hidden'] is False
+    assert card['sides']['pro']['arguments'][0]['capabilities']['moderate'] is False
+    assert data['capabilities']['moderate'] is False
     assert data['links']['explore'] == '/app/conversations/argument-api/explore'
     serialized = json.dumps(data)
     assert participant.xid not in serialized
@@ -107,6 +111,31 @@ def test_argument_mapping_api_hides_moderated_arguments(
     assert data['featuredStatements'][0]['sides']['pro'][
         'prioritization'
     ]['available'] is False
+
+
+def test_argument_mapping_api_exposes_hidden_arguments_to_moderators(
+    auth_client, participant,
+):
+    conversation, _participation, _featured, arguments = _argument_fixture(participant)
+    participant.is_global_admin = True
+    arguments[1].hidden = True
+    db.session.commit()
+
+    with patch('app._statement_text_map', return_value={}):
+        data = auth_client.get(
+            '/api/v1/conversations/argument-api/arguments',
+        ).get_json()['data']
+
+    visible = data['featuredStatements'][0]['sides']['pro']['arguments']
+    hidden = next(argument for argument in visible if argument['id'] == arguments[1].id)
+    assert data['conversationId'] == conversation.id
+    assert data['capabilities']['moderate'] is True
+    assert hidden['hidden'] is True
+    assert hidden['capabilities'] == {
+        'prioritize': False,
+        'flag': False,
+        'moderate': True,
+    }
 
 
 def test_argument_mapping_api_rejects_closed_phase_before_building_state(
@@ -144,7 +173,9 @@ def test_openapi_documents_argument_mapping_read(client):
 
     assert operation['operationId'] == 'getArgumentMapping'
     argument = spec['components']['schemas']['ArgumentItem']['properties']
-    assert 'importanceVoteCount' not in argument
+    assert argument['importanceVoteCount'] == {'type': 'integer', 'minimum': 0}
+    assert argument['hidden'] == {'type': 'boolean'}
+    assert 'moderate' in argument['capabilities']['properties']
 
 
 def test_argument_submission_is_idempotent_for_same_body_and_conflicts_for_edit(

@@ -2270,6 +2270,7 @@ export interface components {
             data: components["schemas"]["ArgumentMapping"];
         };
         ArgumentMapping: {
+            conversationId: number;
             slug: string;
             title: string;
             pseudonym: string;
@@ -2328,15 +2329,19 @@ export interface components {
             body: string;
             own: boolean;
             selected: boolean;
+            hidden: boolean;
+            importanceVoteCount: number;
             capabilities: {
                 prioritize: boolean;
                 flag: boolean;
+                moderate: boolean;
             };
         };
         ArgumentMappingCapabilities: {
             contribute: boolean;
             prioritize: boolean;
             flag: boolean;
+            moderate: boolean;
         };
         ArgumentMappingLinks: {
             self: string;

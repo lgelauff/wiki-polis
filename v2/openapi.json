@@ -2449,9 +2449,10 @@
       },
       "ArgumentMapping": {
         "type": "object",
-        "required": ["slug", "title", "pseudonym", "progress", "featuredStatements", "capabilities", "links"],
+        "required": ["conversationId", "slug", "title", "pseudonym", "progress", "featuredStatements", "capabilities", "links"],
         "additionalProperties": false,
         "properties": {
+          "conversationId": {"type": "integer", "minimum": 1},
           "slug": {"type": "string"},
           "title": {"type": "string"},
           "pseudonym": {"type": "string"},
@@ -2544,26 +2545,28 @@
       },
       "ArgumentItem": {
         "type": "object",
-        "required": ["id", "body", "own", "selected", "capabilities"],
+        "required": ["id", "body", "own", "selected", "hidden", "importanceVoteCount", "capabilities"],
         "additionalProperties": false,
         "properties": {
           "id": {"type": "integer"},
           "body": {"type": "string", "maxLength": 280},
           "own": {"type": "boolean"},
           "selected": {"type": "boolean"},
+          "hidden": {"type": "boolean"},
+          "importanceVoteCount": {"type": "integer", "minimum": 0},
           "capabilities": {
             "type": "object",
-            "required": ["prioritize", "flag"],
+            "required": ["prioritize", "flag", "moderate"],
             "additionalProperties": false,
-            "properties": {"prioritize": {"type": "boolean"}, "flag": {"type": "boolean"}}
+            "properties": {"prioritize": {"type": "boolean"}, "flag": {"type": "boolean"}, "moderate": {"type": "boolean"}}
           }
         }
       },
       "ArgumentMappingCapabilities": {
         "type": "object",
-        "required": ["contribute", "prioritize", "flag"],
+        "required": ["contribute", "prioritize", "flag", "moderate"],
         "additionalProperties": false,
-        "properties": {"contribute": {"type": "boolean"}, "prioritize": {"type": "boolean"}, "flag": {"type": "boolean"}}
+        "properties": {"contribute": {"type": "boolean"}, "prioritize": {"type": "boolean"}, "flag": {"type": "boolean"}, "moderate": {"type": "boolean"}}
       },
       "ArgumentMappingLinks": {
         "type": "object",

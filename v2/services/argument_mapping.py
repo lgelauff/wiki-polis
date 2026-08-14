@@ -4,7 +4,8 @@ from db import Conversation, Participation
 
 
 def _side_projection(item: dict, side: str, pseudonym: str,
-                     both_contributions_done: bool) -> dict:
+                     both_contributions_done: bool,
+                     can_moderate: bool) -> dict:
     arguments = item[f'{side}_args']
     proposed = item[f'{side}_proposed']
     state = item[f'{side}_state']
@@ -38,9 +39,12 @@ def _side_projection(item: dict, side: str, pseudonym: str,
                 'body': argument.body,
                 'own': argument.proposer_pseudonym == pseudonym,
                 'selected': argument.id in selected_ids,
+                'hidden': bool(argument.hidden),
+                'importanceVoteCount': len(argument.votes),
                 'capabilities': {
-                    'prioritize': prioritization_available,
-                    'flag': argument.proposer_pseudonym != pseudonym,
+                    'prioritize': prioritization_available and not argument.hidden,
+                    'flag': not argument.hidden and not can_moderate,
+                    'moderate': can_moderate,
                 },
             }
             for argument in arguments
@@ -50,13 +54,17 @@ def _side_projection(item: dict, side: str, pseudonym: str,
 
 def build_argument_mapping_state(
     *, conversation: Conversation, participation: Participation,
-    featured_data: list[dict], links: dict,
+    featured_data: list[dict], links: dict, can_moderate: bool = False,
 ) -> dict:
     featured_statements = []
     for item in featured_data:
         both_done = item['pro_gate'] and item['con_gate']
-        pro = _side_projection(item, 'pro', participation.pseudonym, both_done)
-        con = _side_projection(item, 'con', participation.pseudonym, both_done)
+        pro = _side_projection(
+            item, 'pro', participation.pseudonym, both_done, can_moderate,
+        )
+        con = _side_projection(
+            item, 'con', participation.pseudonym, both_done, can_moderate,
+        )
         complete = (
             both_done
             and pro['prioritization']['complete']
@@ -80,6 +88,7 @@ def build_argument_mapping_state(
         featured_statements[0]['id'] if featured_statements else None,
     )
     return {
+        'conversationId': conversation.id,
         'slug': conversation.slug,
         'title': conversation.title,
         'pseudonym': participation.pseudonym,
@@ -94,6 +103,7 @@ def build_argument_mapping_state(
             'contribute': True,
             'prioritize': True,
             'flag': True,
+            'moderate': can_moderate,
         },
         'links': links,
     }

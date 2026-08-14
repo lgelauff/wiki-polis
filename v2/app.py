@@ -2335,6 +2335,7 @@ def _results_report_api_payload(slug: str) -> dict:
 
 def _argument_mapping_api_payload(slug: str) -> dict:
     conv, _participant, participation = _require_argument_api_context(slug)
+    can_moderate = _can_moderate(conv)
     links = {
         'self': url_for('api_v1.get_argument_mapping', slug=slug),
         'about': url_for('spa_shell', spa_path=f'conversations/{slug}/about'),
@@ -2347,8 +2348,11 @@ def _argument_mapping_api_payload(slug: str) -> dict:
     return build_argument_mapping_state(
         conversation=conv,
         participation=participation,
-        featured_data=_build_featured_data(conv, participation),
+        featured_data=_build_featured_data(
+            conv, participation, can_mod=can_moderate,
+        ),
         links=links,
+        can_moderate=can_moderate,
     )
 
 
@@ -3980,7 +3984,8 @@ def _build_featured_data(conv, participation, can_mod=False):
     """
     fss = (FeaturedStatement.query
            .filter_by(conversation_id=conv.id, confirmed_by_admin=True)
-           .options(joinedload(FeaturedStatement.arguments))
+           .options(joinedload(FeaturedStatement.arguments)
+                    .joinedload(Argument.votes))
            .order_by(FeaturedStatement.created_at)
            .all())
     if not fss:
