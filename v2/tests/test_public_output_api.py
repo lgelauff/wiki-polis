@@ -29,7 +29,7 @@ def test_public_moderation_log_is_empty_without_events(client, conversation):
         'links': {
             'self': '/api/v1/conversations/test-conv/moderation-log',
             'conversation': '/c/test-conv',
-            'about': '/app/conversations/test-conv/about',
+            'about': '/c/test-conv/about',
         },
     }
 
@@ -109,7 +109,7 @@ def test_output_contract_projects_ready_context(
     assert data['links'] == {
         'self': '/api/v1/conversations/test-conv/outputs/initial-clustering',
         'conversation': '/c/test-conv',
-        'about': '/app/conversations/test-conv/about',
+        'about': '/c/test-conv/about',
     }
 
 

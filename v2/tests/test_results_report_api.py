@@ -151,7 +151,7 @@ def test_results_api_exposes_privacy_safe_viewer_report_state(
         'pseudonym': 'curious-fox',
         'revealState': 'open',
     }
-    assert data['links']['identityReveal'].endswith('/identity-reveal')
+    assert data['links']['identityReveal'] == '/c/test-conv/reveal'
 
 
 def test_preliminary_results_passes_participation_for_private_vote_overlay(

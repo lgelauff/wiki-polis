@@ -31,7 +31,7 @@ def test_admin_catalog_is_privacy_safe_and_spa_linked(
     data = response.get_json()['data']
     assert data['creation']['mode'] == 'manual_polis_id'
     assert data['conversations'][0]['links']['manage'].endswith(
-        f'/app/admin/conversations/{conversation.id}',
+        f'/admin/conversations/{conversation.id}',
     )
     assert data['globalAdmins'] == [{
         'participantId': admin_participant.id,
@@ -54,7 +54,7 @@ def test_manual_conversation_creation_returns_receipt_and_moderate_default(
     assert conversation.polis_id == 'manual12345'
     assert conversation.statement_moderation_policy == 'moderate'
     assert response.get_json()['data']['links']['manage'].endswith(
-        f'/app/admin/conversations/{conversation.id}',
+        f'/admin/conversations/{conversation.id}',
     )
     assert AuditEvent.query.filter_by(operation='conversation.create').count() == 1
 

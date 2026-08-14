@@ -87,7 +87,7 @@ def test_argument_mapping_api_returns_explicit_gates_without_identity_leaks(
     assert card['sides']['pro']['arguments'][0]['hidden'] is False
     assert card['sides']['pro']['arguments'][0]['capabilities']['moderate'] is False
     assert data['capabilities']['moderate'] is False
-    assert data['links']['explore'] == '/app/conversations/argument-api/explore'
+    assert data['links']['explore'] == '/c/argument-api'
     serialized = json.dumps(data)
     assert participant.xid not in serialized
     assert participant.mw_username not in serialized
@@ -188,8 +188,8 @@ def test_concurrent_participant_phases_advertise_both_activity_links(
         data = auth_client.get('/api/v1/conversations').get_json()['data']
 
     card = data['groups']['needsAttention'][0]
-    assert card['links']['explore'] == '/app/conversations/argument-api/explore'
-    assert card['links']['arguments'] == '/app/conversations/argument-api/arguments'
+    assert card['links']['explore'] == '/c/argument-api'
+    assert card['links']['arguments'] == '/c/argument-api#tab-arguments'
 
 
 def test_openapi_documents_argument_mapping_read(client):

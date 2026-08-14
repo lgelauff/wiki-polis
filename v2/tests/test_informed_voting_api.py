@@ -90,8 +90,8 @@ def test_informed_voting_api_returns_private_progress_and_persists_new_cards(
         'for': [{'id': 1, 'body': 'Useful context', 'helpfulVotes': 0}],
         'against': [{'id': 2, 'body': 'Important caveat', 'helpfulVotes': 0}],
     }
-    assert data['links']['explore'] == '/app/conversations/informed-api/explore'
-    assert data['links']['arguments'] == '/app/conversations/informed-api/arguments'
+    assert data['links']['explore'] == '/c/informed-api'
+    assert data['links']['arguments'] == '/c/informed-api#tab-arguments'
     db.session.refresh(participation)
     assert participation.phase6_card_order == [first.id, second.id]
     serialized = json.dumps(data)

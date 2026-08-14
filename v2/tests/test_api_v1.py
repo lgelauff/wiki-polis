@@ -137,9 +137,9 @@ def test_authenticated_lane_uses_participant_workload_projection(
     assert card['pseudonym'] == 'api-otter'
     assert card['statementsRemaining'] == 0
     assert card['capabilities']['participate'] is True
-    assert card['links']['self'] == '/app/conversations/test-conv/explore'
+    assert card['links']['self'] == '/c/test-conv'
     assert card['links']['about'] == '/c/test-conv/about'
-    assert card['links']['explore'] == '/app/conversations/test-conv/explore'
+    assert card['links']['explore'] == '/c/test-conv'
     serialized = json.dumps(data)
     assert participant.xid not in serialized
     assert str(participant.mw_user_id) not in serialized
@@ -177,9 +177,7 @@ def test_closed_joined_conversation_advertises_identity_reveal_route(
         'groups'
     ]['archived'][0]
 
-    assert card['links']['identityReveal'] == (
-        '/app/conversations/test-conv/identity-reveal'
-    )
+    assert card['links']['identityReveal'] == '/c/test-conv/reveal'
     assert card['closedAt'] is not None
     assert card['reveal']['state'] in {'pending', 'open', 'revealed', 'expired'}
     assert card['reveal']['daysRemaining'] >= 0

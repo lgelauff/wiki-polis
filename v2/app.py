@@ -1716,6 +1716,36 @@ def _polis_server_client() -> PolisServerClient:
     )
 
 
+def _conversation_client_link(slug: str, *, tab: str | None = None) -> str:
+    path = url_for('participant.conversation', slug=slug)
+    return f'{path}#tab-{tab}' if tab else path
+
+
+def _admin_client_link(conversation_id: int, page: str | None = None) -> str:
+    base = url_for('admin.admin_conversation_detail', conv_id=conversation_id)
+    return f'{base}/{page}' if page else base
+
+
+_SPA_ONLY_COOKIE = 'wiki-polis-spa-only'
+
+
+def _is_canonical_spa_path(path: str) -> bool:
+    if path in {
+        '/', '/demo', '/consultations', '/help/statements', '/help/arguments', '/admin',
+    }:
+        return True
+    if re.fullmatch(r'/accept/[^/]+', path):
+        return True
+    if re.fullmatch(
+        r'/c/[^/]+(?:/(?:about|moderation-log|report|reveal|outputs/[^/]+))?', path,
+    ):
+        return True
+    return re.fullmatch(
+        r'/admin/conversations/\d+(?:/(?:participants|flags|invites|statements|featured|settings|termination|roles))?',
+        path,
+    ) is not None
+
+
 def _conversation_lane_api_payload(demo: bool) -> dict:
     """Build the privacy-safe browser projection for one conversation space."""
     session['space'] = 'demo' if demo else 'real'
@@ -1731,28 +1761,14 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
         polis_client=_polis_server_client(),
     )
     return lane.to_api(
-        conversation_link=lambda slug: url_for(
-            'spa_shell', spa_path=f'conversations/{slug}/explore',
-        ),
+        conversation_link=_conversation_client_link,
         about_link=lambda slug: url_for('participant.conversation_about', slug=slug),
-        explore_link=lambda slug: url_for(
-            'spa_shell', spa_path=f'conversations/{slug}/explore',
-        ),
-        arguments_link=lambda slug: url_for(
-            'spa_shell', spa_path=f'conversations/{slug}/arguments',
-        ),
-        informed_voting_link=lambda slug: url_for(
-            'spa_shell', spa_path=f'conversations/{slug}/informed-voting',
-        ),
-        results_link=lambda slug: url_for(
-            'spa_shell', spa_path=f'conversations/{slug}/results',
-        ),
-        reveal_link=lambda slug: url_for(
-            'spa_shell', spa_path=f'conversations/{slug}/identity-reveal',
-        ),
-        admin_link=lambda conv_id: url_for(
-            'admin.admin_conversation_detail', conv_id=conv_id,
-        ),
+        explore_link=_conversation_client_link,
+        arguments_link=lambda slug: _conversation_client_link(slug, tab='arguments'),
+        informed_voting_link=lambda slug: _conversation_client_link(slug, tab='informed-voting'),
+        results_link=lambda slug: url_for('participant.conversation_report', slug=slug),
+        reveal_link=lambda slug: url_for('participant.reveal_identity', slug=slug),
+        admin_link=_admin_client_link,
     )
 
 
@@ -1779,13 +1795,10 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
     if access_denial == 'invite_only':
         can_moderate = _can_moderate(conv, participant)
         access_links = {
-            'home': url_for('spa_shell', spa_path='parity/fork'),
+            'home': url_for('index'),
         }
         if can_moderate:
-            access_links['invitations'] = url_for(
-                'spa_shell',
-                spa_path=f'admin/conversations/{conv.id}/invitations',
-            )
+            access_links['invitations'] = _admin_client_link(conv.id, 'invites')
         raise InviteOnlyWorkspaceAccess(
             title=conv.title,
             can_moderate=can_moderate,
@@ -1825,12 +1838,8 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
     links = {
         'self': url_for('api_v1.get_conversation_workspace', slug=slug),
         'conversation': url_for('participant.conversation', slug=slug),
-        'about': url_for(
-            'spa_shell', spa_path=f'conversations/{slug}/about',
-        ),
-        'join': url_for(
-            'spa_shell', spa_path=f'conversations/{slug}/join',
-        ),
+        'about': url_for('participant.conversation_about', slug=slug),
+        'join': url_for('participant.accept', slug=slug),
     }
     if conv.phase_submission:
         links['explore'] = url_for('api_v1.get_explore_state', slug=slug)
@@ -1923,7 +1932,7 @@ def _moderation_log_api_payload(slug: str) -> dict:
         'links': {
             'self': url_for('api_v1.get_moderation_log', slug=slug),
             'conversation': url_for('participant.conversation', slug=slug),
-            'about': url_for('spa_shell', spa_path=f'conversations/{slug}/about'),
+            'about': url_for('participant.conversation_about', slug=slug),
         },
     }
 
@@ -1957,7 +1966,7 @@ def _conversation_output_api_payload(slug: str, output_key: str) -> dict:
                 'api_v1.get_conversation_output', slug=slug, output_key=output_key,
             ),
             'conversation': url_for('participant.conversation', slug=slug),
-            'about': url_for('spa_shell', spa_path=f'conversations/{slug}/about'),
+            'about': url_for('participant.conversation_about', slug=slug),
         },
     }
 
@@ -2008,9 +2017,7 @@ def _identity_reveal_dto(conv, participant, participation) -> dict:
         'links': {
             'self': url_for('api_v1.get_identity_reveal', slug=conv.slug),
             'conversation': url_for('participant.conversation', slug=conv.slug),
-            'about': url_for(
-                'spa_shell', spa_path=f'conversations/{conv.slug}/about',
-            ),
+            'about': url_for('participant.conversation_about', slug=conv.slug),
         },
     }
 
@@ -2164,9 +2171,7 @@ def _explore_state_payload(conv: Conversation, participant: Participant,
         'conversation': url_for('participant.conversation', slug=conv.slug),
     }
     if conv.phase_argument_mapping:
-        links['arguments'] = url_for(
-            'spa_shell', spa_path=f'conversations/{conv.slug}/arguments',
-        )
+        links['arguments'] = _conversation_client_link(conv.slug, tab='arguments')
     return {
         'slug': conv.slug,
         'title': conv.title,
@@ -2293,21 +2298,15 @@ def _informed_voting_api_payload(slug: str) -> dict:
         )
         links = {
             'self': url_for('api_v1.get_informed_voting', slug=slug),
-            'about': url_for('spa_shell', spa_path=f'conversations/{slug}/about'),
+            'about': url_for('participant.conversation_about', slug=slug),
             'conversation': url_for('participant.conversation', slug=slug),
         }
         if conv.phase_submission:
-            links['explore'] = url_for(
-                'spa_shell', spa_path=f'conversations/{slug}/explore',
-            )
+            links['explore'] = _conversation_client_link(slug)
         if conv.phase_argument_mapping:
-            links['arguments'] = url_for(
-                'spa_shell', spa_path=f'conversations/{slug}/arguments',
-            )
+            links['arguments'] = _conversation_client_link(slug, tab='arguments')
         if conv.phase_public_results or conv.phase_personal_results:
-            links['results'] = url_for(
-                'spa_shell', spa_path=f'conversations/{slug}/results',
-            )
+            links['results'] = url_for('participant.conversation_report', slug=slug)
         return {
             'slug': conv.slug,
             'title': conv.title,
@@ -2388,9 +2387,9 @@ def _results_report_api_payload(slug: str) -> dict:
         reveal_state=reveal['state'] if reveal else None,
         self_link=url_for('api_v1.get_results_report', slug=slug),
         conversation_link=url_for('participant.conversation', slug=slug),
-        about_link=url_for('spa_shell', spa_path=f'conversations/{slug}/about'),
+        about_link=url_for('participant.conversation_about', slug=slug),
         identity_reveal_link=(
-            url_for('spa_shell', spa_path=f'conversations/{slug}/identity-reveal')
+            url_for('participant.reveal_identity', slug=slug)
             if reveal else None
         ),
     )
@@ -2412,9 +2411,7 @@ def _intermediate_results_api_payload(slug: str) -> dict:
         recomputing=recomputing,
         self_link=url_for('api_v1.get_intermediate_results', slug=slug),
         conversation_link=url_for('participant.conversation', slug=slug),
-        about_link=url_for(
-            'spa_shell', spa_path=f'conversations/{slug}/about',
-        ),
+        about_link=url_for('participant.conversation_about', slug=slug),
     )
 
 
@@ -2425,13 +2422,11 @@ def _argument_mapping_api_payload(slug: str) -> dict:
     can_moderate = _can_moderate(conv)
     links = {
         'self': url_for('api_v1.get_argument_mapping', slug=slug),
-        'about': url_for('spa_shell', spa_path=f'conversations/{slug}/about'),
+        'about': url_for('participant.conversation_about', slug=slug),
         'conversation': url_for('participant.conversation', slug=slug),
     }
     if conv.phase_submission:
-        links['explore'] = url_for(
-            'spa_shell', spa_path=f'conversations/{slug}/explore',
-        )
+        links['explore'] = _conversation_client_link(slug)
     return build_argument_mapping_state(
         conversation=conv,
         participation=participation,
@@ -2769,9 +2764,7 @@ def _admin_participant_roster_api_payload(conv_id: int) -> dict:
             'api_v1.get_admin_conversation_participants',
             conversation_id=conv.id,
         ),
-        conversation_link=url_for(
-            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
-        ),
+        conversation_link=_admin_client_link(conv.id),
     )
 
 
@@ -2815,7 +2808,7 @@ def _set_admin_participant_access_api_payload(
 def _admin_invitation_links(conv: Conversation) -> tuple[str, str]:
     return (
         url_for('api_v1.get_admin_conversation_invites', conversation_id=conv.id),
-        url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}'),
+        _admin_client_link(conv.id),
     )
 
 
@@ -2846,9 +2839,7 @@ def _admin_catalog_api_payload() -> dict:
         phase_routes=PHASE_ROUTES,
         managed_creation=_managed_polis_creation(),
         self_link=url_for('api_v1.get_admin_catalog'),
-        conversation_link=lambda conversation_id: url_for(
-            'spa_shell', spa_path=f'admin/conversations/{conversation_id}',
-        ),
+        conversation_link=_admin_client_link,
     )
 
 
@@ -2891,9 +2882,7 @@ def _create_admin_conversation_api_payload(body: dict) -> dict:
             'title': conversation.title,
         },
         'links': {
-            'manage': url_for(
-                'spa_shell', spa_path=f'admin/conversations/{conversation.id}',
-            ),
+            'manage': _admin_client_link(conversation.id),
             'catalog': url_for('api_v1.get_admin_catalog'),
         },
     }
@@ -2948,9 +2937,7 @@ def _admin_role_roster_api_payload(conv_id: int) -> dict:
         self_link=url_for(
             'api_v1.get_admin_conversation_roles', conversation_id=conv.id,
         ),
-        conversation_link=url_for(
-            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
-        ),
+        conversation_link=_admin_client_link(conv.id),
     )
 
 
@@ -3088,20 +3075,14 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
         links={
             'self': url_for('api_v1.get_admin_conversation_lifecycle', conversation_id=conv.id),
             'participantView': url_for('participant.conversation', slug=conv.slug),
-            'participants': url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}/participants'),
-            'moderation': url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}/moderation'),
-            'invitations': url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}/invitations'),
-            'roles': url_for('spa_shell', spa_path=f'admin/conversations/{conv.id}/roles'),
-            'statements': url_for(
-                'spa_shell', spa_path=f'admin/conversations/{conv.id}/statements',
-            ),
-            'featuredStatements': url_for(
-                'spa_shell', spa_path=f'admin/conversations/{conv.id}/featured',
-            ),
-            'settings': url_for('api_v1.get_admin_conversation_settings', conversation_id=conv.id),
-            'termination': url_for(
-                'spa_shell', spa_path=f'admin/conversations/{conv.id}/termination',
-            ),
+            'participants': _admin_client_link(conv.id, 'participants'),
+            'moderation': _admin_client_link(conv.id, 'flags'),
+            'invitations': _admin_client_link(conv.id, 'invites'),
+            'roles': _admin_client_link(conv.id, 'roles'),
+            'statements': _admin_client_link(conv.id, 'statements'),
+            'featuredStatements': _admin_client_link(conv.id, 'featured'),
+            'settings': _admin_client_link(conv.id, 'settings'),
+            'termination': _admin_client_link(conv.id, 'termination'),
         },
     )
 
@@ -3119,9 +3100,7 @@ def _admin_settings_api_payload(conv_id: int) -> dict:
         self_link=url_for(
             'api_v1.get_admin_conversation_settings', conversation_id=conv.id,
         ),
-        lifecycle_link=url_for(
-            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
-        ),
+        lifecycle_link=_admin_client_link(conv.id),
     )
 
 
@@ -3135,9 +3114,7 @@ def _admin_termination_api_payload(conv_id: int) -> dict:
         self_link=url_for(
             'api_v1.get_admin_conversation_termination', conversation_id=conv.id,
         ),
-        lifecycle_link=url_for(
-            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
-        ),
+        lifecycle_link=_admin_client_link(conv.id),
     )
 
 
@@ -3189,9 +3166,7 @@ def _admin_statements_api_payload(conv_id: int) -> dict:
         self_link=url_for(
             'api_v1.get_admin_conversation_statements', conversation_id=conv.id,
         ),
-        lifecycle_link=url_for(
-            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
-        ),
+        lifecycle_link=_admin_client_link(conv.id),
     )
 
 
@@ -3389,9 +3364,7 @@ def _admin_featured_api_payload(conv_id: int) -> dict:
         self_link=url_for(
             'api_v1.get_admin_featured_statements', conversation_id=conv.id,
         ),
-        lifecycle_link=url_for(
-            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
-        ),
+        lifecycle_link=_admin_client_link(conv.id),
     )
 
 
@@ -3559,7 +3532,7 @@ def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
     return {
         'conversationId': result.conversation_id,
         'deleted': True,
-        'links': {'admin': url_for('spa_shell', spa_path='admin')},
+        'links': {'admin': url_for('admin.admin')},
     }
 
 
@@ -4796,15 +4769,9 @@ def _admin_flag_queue_api_payload(conv_id: int) -> dict:
         self_link=url_for(
             'api_v1.get_admin_conversation_flags', conversation_id=conv.id,
         ),
-        conversation_link=url_for(
-            'spa_shell', spa_path=f'admin/conversations/{conv.id}',
-        ),
-        statement_review_link=url_for(
-            'spa_shell', spa_path=f'admin/conversations/{conv.id}/statements',
-        ),
-        argument_review_link=url_for(
-            'spa_shell', spa_path=f'admin/conversations/{conv.id}/featured',
-        ),
+        conversation_link=_admin_client_link(conv.id),
+        statement_review_link=_admin_client_link(conv.id, 'statements'),
+        argument_review_link=_admin_client_link(conv.id, 'featured'),
     )
 
 
@@ -7075,6 +7042,18 @@ def create_app(test_config: dict | None = None) -> Flask:
         g.request_id = rid or secrets.token_urlsafe(8)
         g._t0 = time.perf_counter()
 
+    @app.before_request
+    def _serve_canonical_spa_only_request():
+        if request.method != 'GET' or not _is_canonical_spa_path(request.path):
+            return None
+        requested = request.args.get('spa_only')
+        enabled = requested == '1' or (
+            requested is None and request.cookies.get(_SPA_ONLY_COOKIE) == '1'
+        )
+        if enabled:
+            return send_from_directory(_SPA_BUILD_DIR, 'index.html')
+        return None
+
     @app.context_processor
     def _inject_globals():
         participant = _current_participant()
@@ -7091,6 +7070,13 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.after_request
     def _security_headers(response):
+        requested_spa_mode = request.args.get('spa_only')
+        if requested_spa_mode == '1':
+            response.set_cookie(
+                _SPA_ONLY_COOKIE, '1', max_age=86_400, path='/', samesite='Lax',
+            )
+        elif requested_spa_mode == '0':
+            response.delete_cookie(_SPA_ONLY_COOKIE, path='/', samesite='Lax')
         nonce = g.get('csp_nonce', '')
         csp = (
             "default-src 'self'; "

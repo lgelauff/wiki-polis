@@ -63,7 +63,7 @@ def test_workspace_contract_owns_legacy_tab_composition(
         'unlockAfter': 7, 'quota': 4, 'used': 0,
     }
     assert data['capabilities'] == {'participate': True, 'moderate': False}
-    assert data['links']['join'] == '/app/conversations/test-conv/join'
+    assert data['links']['join'] == '/accept/test-conv'
     assert data['links']['informedVoting'] == (
         '/api/v1/conversations/test-conv/informed-voting'
     )
@@ -135,7 +135,7 @@ def test_workspace_returns_structured_invite_only_denial(
     assert error['details'] == {
         'title': conversation.title,
         'canModerate': False,
-        'links': {'home': '/app/parity/fork'},
+        'links': {'home': '/'},
     }
 
 
@@ -157,8 +157,8 @@ def test_workspace_invite_only_denial_exposes_moderator_recovery_link(
         'title': conversation.title,
         'canModerate': True,
         'links': {
-            'home': '/app/parity/fork',
-            'invitations': f'/app/admin/conversations/{conversation.id}/invitations',
+            'home': '/',
+            'invitations': f'/admin/conversations/{conversation.id}/invites',
         },
     }
 

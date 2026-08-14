@@ -97,7 +97,7 @@ def test_explore_api_owns_upstream_session_and_returns_privacy_safe_state(
         'completed': 1, 'total': 2, 'remaining': 1, 'allDone': False,
     }
     assert data['capabilities']['vote'] is True
-    assert data['links']['arguments'] == '/app/conversations/test-conv/arguments'
+    assert data['links']['arguments'] == '/c/test-conv#tab-arguments'
     serialized = json.dumps(data)
     assert participant.xid not in serialized
     assert conversation.polis_id not in serialized

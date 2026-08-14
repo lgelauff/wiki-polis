@@ -28,7 +28,7 @@ def test_lifecycle_contract_separates_phase_from_publication(
     assert pending['publicationReadiness']['preconditions'][-1]['met'] is True
     assert pending['phase']['transition'] is None
     assert pending['links']['participants'].endswith(
-        f'/app/admin/conversations/{conversation.id}/participants'
+            f'/admin/conversations/{conversation.id}/participants'
     )
 
     conversation.active = False

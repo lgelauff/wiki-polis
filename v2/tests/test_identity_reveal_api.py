@@ -40,7 +40,7 @@ def test_identity_reveal_read_exposes_timeline_and_server_capability(
     assert data['timeline']['opensAt'].endswith('Z')
     assert data['timeline']['closesAt'].endswith('Z')
     assert data['timeline']['nextBoundaryAt'].endswith('Z')
-    assert data['links']['about'] == '/app/conversations/test-conv/about'
+    assert data['links']['about'] == '/c/test-conv/about'
     serialized = json.dumps(data)
     assert participant.xid not in serialized
     assert str(participant.mw_user_id) not in serialized
