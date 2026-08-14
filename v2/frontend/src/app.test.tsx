@@ -211,22 +211,28 @@ test('deletes a verified empty conversation through a deliberate receipt flow', 
 test('moderates statements and imports approved seeds through typed commands', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/statements']}><App /></MemoryRouter></QueryClientProvider>);
 
-  expect(await screen.findByRole('heading', {name: 'Statements'})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Statements — Community strategy'})).toBeVisible();
   expect(screen.getByText('A participant proposal awaiting review.')).toBeVisible();
-  expect(screen.getByRole('button', {name: /Require review/})).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', {name: /Auto-approve/}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Future participant statements will be approved automatically');
-  expect(screen.getByRole('heading', {name: 'Pending review'}).parentElement).toHaveTextContent('1');
-  fireEvent.click(screen.getByRole('button', {name: 'Approve'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Statement #11 moved to approved');
-  expect(screen.getByRole('heading', {name: 'Approved'}).parentElement).toHaveTextContent('2');
+  expect(screen.getByRole('checkbox', {name: /Strict moderation/})).toBeChecked();
+  fireEvent.click(screen.getByRole('checkbox', {name: /Strict moderation/}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+  await waitFor(() => expect(screen.getByRole('checkbox', {name: /Strict moderation/})).not.toBeChecked());
+  expect(screen.getByRole('heading', {name: /Pending review/})).toHaveTextContent('1');
+  fireEvent.click(screen.getByRole('button', {name: 'approve'}));
+  await waitFor(() => expect(screen.getByRole('heading', {name: /Approved/})).toHaveTextContent('2'));
 
-  fireEvent.change(screen.getByLabelText('Seed statements'), {
+  fireEvent.change(screen.getByLabelText('Statements'), {
     target: {value: 'First seed\nSecond seed'},
   });
-  expect(screen.getByText('2 / 20 statements')).toBeVisible();
-  fireEvent.click(screen.getByRole('button', {name: 'Import approved seeds'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('2 imported');
+  fireEvent.click(screen.getByRole('button', {name: 'Import statements'}));
+  expect((await screen.findAllByText('✓ 2 statements imported'))[0]).toBeVisible();
+
+  fireEvent.change(screen.getByLabelText('Statement text (max 280 characters)'), {
+    target: {value: 'A corrected seed'},
+  });
+  fireEvent.change(screen.getByLabelText(/Corrects statement/), {target: {value: '12'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Add seed statement'}));
+  expect((await screen.findAllByText('Seed statement added (recorded as a correction of #12).'))[0]).toBeVisible();
 });
 
 test('manages featured statements with transparent vote metrics and argument review', async () => {

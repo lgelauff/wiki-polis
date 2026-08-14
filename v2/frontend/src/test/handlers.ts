@@ -84,6 +84,10 @@ export const handlers = [
   }),
   http.delete(new URL('/api/v1/admin/conversations/7/featured-arguments/:argumentId', globalThis.location.origin).toString(), ({params}) => HttpResponse.json({data: {argumentId: Number(params.argumentId), featuredId: 61, deleted: true, links: {featured: '/api/v1/admin/conversations/7/featured-statements'}}})),
   http.get(new URL('/api/v1/admin/conversations/7/statements', globalThis.location.origin).toString(), () => HttpResponse.json({data: statementWorkspaceFixture()})),
+  http.post(new URL('/api/v1/admin/conversations/7/statements', globalThis.location.origin).toString(), async ({request}) => {
+    const body = await request.json() as {text: string; derivedFromId: number | null};
+    return HttpResponse.json({data: {statementId: body.derivedFromId === null ? null : 14, derivedFromId: body.derivedFromId, provenanceRecorded: body.derivedFromId === null ? null : true, links: {statements: '/api/v1/admin/conversations/7/statements'}}}, {status: 201});
+  }),
   http.put(new URL('/api/v1/admin/conversations/7/statement-moderation-policy', globalThis.location.origin).toString(), async ({request}) => {
     const body = await request.json() as {mode: 'moderate' | 'auto_approve'};
     return HttpResponse.json({data: {mode: body.mode, changed: true, reconciledStatements: 0, workspace: statementWorkspaceFixture(body.mode)}});

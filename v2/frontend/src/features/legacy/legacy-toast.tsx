@@ -2,7 +2,7 @@ import {useEffect} from 'react';
 
 export type LegacyToastMessage = {
   id: number;
-  category: 'error' | 'info' | 'success' | 'warning';
+  category: 'error' | 'import_result' | 'import_row_error' | 'info' | 'success' | 'warning';
   message: string;
 };
 
@@ -11,6 +11,8 @@ const durations = {
   warning: 6_000,
   success: 4_000,
   info: 5_000,
+  import_result: 6_000,
+  import_row_error: 6_000,
 } as const;
 
 export function LegacyToast({
