@@ -129,3 +129,14 @@ def test_committed_golden_images_match_manifest_digests():
         assert golden.is_file(), f'Missing Jinja golden: {golden}'
         digest = hashlib.sha256(golden.read_bytes()).hexdigest()
         assert digest == scenario['goldenSha256']
+
+
+def test_completed_parity_program_stays_fully_gated():
+    visual = json.loads(
+        (V2_ROOT / 'parity' / 'visual-scenarios.json').read_text(encoding='utf-8')
+    )
+    groups = MANIFEST['pages'] + MANIFEST['features']
+
+    assert MANIFEST['knownApiGaps'] == []
+    assert all(group['status'] == 'parity' for group in groups)
+    assert all(scenario['parityGate'] is True for scenario in visual['scenarios'])

@@ -156,8 +156,8 @@
       "templates": ["admin_conversation.html"],
       "temporaryReactRoutes": ["/app/admin/conversations/:conversationId", "/app/admin/conversations/:conversationId/settings", "/app/admin/conversations/:conversationId/termination", "/app/admin/conversations/:conversationId/roles"],
       "targetReactRoutes": ["/admin/conversations/:conversationId"],
-      "apiOperations": ["getAdminConversationLifecycle", "getAdminConversationSettings", "getAdminConversationTermination", "getAdminConversationRoles", "putAdminConversationPause", "putAdminConversationPhase", "putAdminConversationPhases", "putAdminConversationSchedule", "putAdminConversationArchive", "putAdminConversationSettings", "putAdminConversationRoles", "createAdminPhase6Initialization", "createAdminConversationPublication", "deleteAdminConversation"],
-      "status": "partial",
+      "apiOperations": ["getAdminConversationLifecycle", "getAdminConversationSettings", "getAdminConversationTermination", "getAdminConversationRoles", "putAdminConversationPause", "putAdminConversationPhase", "putAdminConversationPhases", "putAdminConversationSchedule", "putAdminConversationArchive", "putAdminConversationSettings", "putAdminConversationRecommendationTier", "putAdminConversationRoles", "createAdminPhase6Initialization", "createAdminConversationPublication", "deleteAdminConversation"],
+      "status": "parity",
       "scenarios": ["preparation", "submission", "argument-mapping", "informed-voting", "cleanup", "closed", "paused", "scheduled", "advanced-phases", "upstream-unavailable", "moderator", "organizer", "global-admin", "deletion-eligible", "deletion-blocked"]
     },
     {
@@ -221,7 +221,7 @@
       "id": "authentication",
       "legacyEndpoints": ["login", "logout", "oauth_callback", "dev_login", "dev_fake_login"],
       "apiOperations": ["getSession"],
-      "status": "implemented-unverified"
+      "status": "parity"
     },
     {
       "id": "participation-acceptance",
@@ -233,19 +233,19 @@
       "id": "statement-contribution",
       "legacyEndpoints": ["participant.conversation_statement_new", "participant.statement_flag"],
       "apiOperations": ["createStatement", "createContentFlag"],
-      "status": "implemented-unverified"
+      "status": "parity"
     },
     {
       "id": "argument-contribution",
       "legacyEndpoints": ["participant.argument_flag", "participant.argument_hide", "participant.argument_skip", "participant.argument_skip_legacy", "participant.argument_submit", "participant.argument_submit_legacy", "participant.argument_unhide", "participant.argument_unvote", "participant.argument_vote"],
       "apiOperations": ["createArgument", "putArgumentContributionSkip", "putArgumentPriority", "createContentFlag", "putAdminFeaturedArgument"],
-      "status": "implemented-unverified"
+      "status": "parity"
     },
     {
       "id": "informed-vote",
       "legacyEndpoints": ["participant.phase6_vote"],
       "apiOperations": ["putInformedVote"],
-      "status": "implemented-unverified"
+      "status": "parity"
     },
     {
       "id": "identity-reveal-command",
@@ -257,50 +257,44 @@
       "id": "admin-catalog-commands",
       "legacyEndpoints": ["admin.admin_conversation_new", "admin.admin_global_admin_add", "admin.admin_global_admin_remove"],
       "apiOperations": ["postAdminConversation", "postGlobalAdminGrant", "putGlobalAdmin"],
-      "status": "implemented-unverified"
+      "status": "parity"
     },
     {
       "id": "admin-lifecycle-commands",
       "legacyEndpoints": ["admin.admin_conversation_advance", "admin.admin_conversation_close", "admin.admin_conversation_delete", "admin.admin_conversation_edit", "admin.admin_conversation_pause", "admin.admin_conversation_phase_schedule", "admin.admin_conversation_phases", "admin.admin_conversation_recommendations", "admin.admin_phase6_init", "admin.admin_role_add", "admin.admin_role_remove"],
-      "apiOperations": ["putAdminConversationPhase", "createAdminConversationPublication", "deleteAdminConversation", "putAdminConversationSettings", "putAdminConversationPause", "putAdminConversationSchedule", "putAdminConversationPhases", "createAdminPhase6Initialization", "putAdminConversationRoles"],
-      "status": "partial"
+      "apiOperations": ["putAdminConversationPhase", "createAdminConversationPublication", "deleteAdminConversation", "putAdminConversationSettings", "putAdminConversationRecommendationTier", "putAdminConversationPause", "putAdminConversationSchedule", "putAdminConversationPhases", "createAdminPhase6Initialization", "putAdminConversationRoles"],
+      "status": "parity"
     },
     {
       "id": "admin-statement-commands",
       "legacyEndpoints": ["admin.admin_conversation_strict_moderation", "admin.admin_statement_moderate", "admin.admin_statement_seed", "admin.admin_statement_seed_import_text"],
       "apiOperations": ["putAdminStatementModerationPolicy", "putAdminStatementModeration", "postAdminStatementImport"],
-      "status": "implemented-unverified"
+      "status": "parity"
     },
     {
       "id": "admin-featured-commands",
       "legacyEndpoints": ["admin.admin_argument_delete", "admin.admin_argument_moderate", "admin.admin_featured_add", "admin.admin_featured_confirm", "admin.admin_featured_remove"],
       "apiOperations": ["putAdminFeaturedStatement", "deleteAdminFeaturedSelection", "putAdminFeaturedArgument", "deleteAdminFeaturedArgument"],
-      "status": "implemented-unverified"
+      "status": "parity"
     },
     {
       "id": "admin-flag-resolution",
       "legacyEndpoints": ["admin.admin_flag_resolve"],
       "apiOperations": ["putAdminFlagResolution"],
-      "status": "implemented-unverified"
+      "status": "parity"
     },
     {
       "id": "admin-invitation-commands",
       "legacyEndpoints": ["admin.admin_invite_add", "admin.admin_invite_remove"],
       "apiOperations": ["putAdminConversationInvitations", "deleteAdminConversationInvitation"],
-      "status": "implemented-unverified"
+      "status": "parity"
     },
     {
       "id": "admin-participant-access",
       "legacyEndpoints": ["admin.admin_participant_ban", "admin.admin_participant_unban"],
       "apiOperations": ["putAdminParticipantAccess"],
-      "status": "implemented-unverified"
+      "status": "parity"
     }
   ],
-  "knownApiGaps": [
-    {
-      "id": "recommendation-tier-command",
-      "requiredBy": ["admin-lifecycle"],
-      "description": "Expose the recommended-quantities tier command used by the Jinja lifecycle page."
-    }
-  ]
+  "knownApiGaps": []
 }

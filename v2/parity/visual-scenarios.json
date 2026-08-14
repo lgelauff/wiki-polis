@@ -2654,6 +2654,237 @@
       "serverFixture": "isolated",
       "goldenSha256": "f6079e410223b9d85538f4a63981b9f18f95cfae85b2f051b6a3b2310c0bee88",
       "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--submission--desktop",
+      "pageId": "admin-lifecycle",
+      "state": "submission",
+      "legacyPath": "/admin/conversations/81?parity-state=admin-lifecycle-submission",
+      "reactPath": "/app/admin/conversations/81?parity-state=admin-lifecycle-submission",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "f4787865d74a40204a3653b5af9d50f55a0763e479d4d5a24ace3c6e8b937beb", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--submission--mobile",
+      "pageId": "admin-lifecycle", "state": "submission",
+      "legacyPath": "/admin/conversations/81?parity-state=admin-lifecycle-submission",
+      "reactPath": "/app/admin/conversations/81?parity-state=admin-lifecycle-submission",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "645052a775cd2437981b81811ac43299bfdb7cd85ff6b105e84e128348d520f2", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--argument-mapping--desktop",
+      "pageId": "admin-lifecycle", "state": "argument-mapping",
+      "legacyPath": "/admin/conversations/82?parity-state=admin-lifecycle-argument-mapping",
+      "reactPath": "/app/admin/conversations/82?parity-state=admin-lifecycle-argument-mapping",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "3e76134abf97a265af39d3afe1b9509c6e80990da7d31b7edeffd32cb504b587", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--argument-mapping--mobile",
+      "pageId": "admin-lifecycle", "state": "argument-mapping",
+      "legacyPath": "/admin/conversations/82?parity-state=admin-lifecycle-argument-mapping",
+      "reactPath": "/app/admin/conversations/82?parity-state=admin-lifecycle-argument-mapping",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "45c9da1c8ebf175f3d7509596987d3d1725fa8b15f5c9d678653f5522904c270", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--informed-voting--desktop",
+      "pageId": "admin-lifecycle", "state": "informed-voting",
+      "legacyPath": "/admin/conversations/83?parity-state=admin-lifecycle-informed-voting",
+      "reactPath": "/app/admin/conversations/83?parity-state=admin-lifecycle-informed-voting",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "79ce90ec0e2ca4ca138c6b26cf81ad908838afaeb4d1cf3dfdbade9426d61012", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--informed-voting--mobile",
+      "pageId": "admin-lifecycle", "state": "informed-voting",
+      "legacyPath": "/admin/conversations/83?parity-state=admin-lifecycle-informed-voting",
+      "reactPath": "/app/admin/conversations/83?parity-state=admin-lifecycle-informed-voting",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "f3dec39fae53780866c99977a380395d605269a4f5f126f0dc604e2830470627", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--cleanup--desktop",
+      "pageId": "admin-lifecycle", "state": "cleanup",
+      "legacyPath": "/admin/conversations/84?parity-state=admin-lifecycle-cleanup",
+      "reactPath": "/app/admin/conversations/84?parity-state=admin-lifecycle-cleanup",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "ea7dfc21b282729bd6f03b59e3219467f924078313a74fd2bd25ff0b930b362d", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--cleanup--mobile",
+      "pageId": "admin-lifecycle", "state": "cleanup",
+      "legacyPath": "/admin/conversations/84?parity-state=admin-lifecycle-cleanup",
+      "reactPath": "/app/admin/conversations/84?parity-state=admin-lifecycle-cleanup",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "fbc528b906b1d1a394ed10e8878722767ca63f3017330f19bdb420882bc21d11", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--closed--desktop",
+      "pageId": "admin-lifecycle", "state": "closed",
+      "legacyPath": "/admin/conversations/85?parity-state=admin-lifecycle-closed",
+      "reactPath": "/app/admin/conversations/85?parity-state=admin-lifecycle-closed",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "6b218ee3c4212120fe13fa075738125c74ca24d8caa51d1abd2defbbc9bd59c1", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--closed--mobile",
+      "pageId": "admin-lifecycle", "state": "closed",
+      "legacyPath": "/admin/conversations/85?parity-state=admin-lifecycle-closed",
+      "reactPath": "/app/admin/conversations/85?parity-state=admin-lifecycle-closed",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "2079a3d173d2c95639909941f11696b0c0ef8becab29a7753574d0d73254f926", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--paused--desktop",
+      "pageId": "admin-lifecycle", "state": "paused",
+      "legacyPath": "/admin/conversations/86?parity-state=admin-lifecycle-paused",
+      "reactPath": "/app/admin/conversations/86?parity-state=admin-lifecycle-paused",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "a844d098003f085219ca5064cbfd761e1b5c7520fc2649134067f05eeb75f02c", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--paused--mobile",
+      "pageId": "admin-lifecycle", "state": "paused",
+      "legacyPath": "/admin/conversations/86?parity-state=admin-lifecycle-paused",
+      "reactPath": "/app/admin/conversations/86?parity-state=admin-lifecycle-paused",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "c54e54c83f0f28a88bf00e92717edd7a43b463b4960604998ce28d6a15c4e759", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--scheduled--desktop",
+      "pageId": "admin-lifecycle", "state": "scheduled",
+      "legacyPath": "/admin/conversations/87?parity-state=admin-lifecycle-scheduled",
+      "reactPath": "/app/admin/conversations/87?parity-state=admin-lifecycle-scheduled",
+      "viewport": {"width": 1440, "height": 900}, "clock": "2026-08-14T12:00:00Z",
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "9304c12c97b5fa9bc31b9e663c5a9cb9572a0c4bb813629658af2be5e7fd6199", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--scheduled--mobile",
+      "pageId": "admin-lifecycle", "state": "scheduled",
+      "legacyPath": "/admin/conversations/87?parity-state=admin-lifecycle-scheduled",
+      "reactPath": "/app/admin/conversations/87?parity-state=admin-lifecycle-scheduled",
+      "viewport": {"width": 390, "height": 844}, "clock": "2026-08-14T12:00:00Z",
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "6d23683faae4c32450e726ce3c2826c46853fdb39ac3ca9946c5375d4b6dd36f", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--advanced-phases--desktop",
+      "pageId": "admin-lifecycle", "state": "advanced-phases",
+      "legacyPath": "/admin/conversations/88?parity-state=admin-lifecycle-advanced-phases",
+      "reactPath": "/app/admin/conversations/88?parity-state=admin-lifecycle-advanced-phases",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin", "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "button", "name": "Advanced"}],
+      "goldenSha256": "2ab83b136ec96b1f65f2c6bda933d6e7403b41fd91251dbc49a9cfe7e4c76506",
+      "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--advanced-phases--mobile",
+      "pageId": "admin-lifecycle", "state": "advanced-phases",
+      "legacyPath": "/admin/conversations/88?parity-state=admin-lifecycle-advanced-phases",
+      "reactPath": "/app/admin/conversations/88?parity-state=admin-lifecycle-advanced-phases",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin", "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "button", "name": "Advanced"}],
+      "goldenSha256": "540511f55a5c8651c8fde4aa080dab37d688216e97a6deb7069b5f3b06fb2a48",
+      "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--upstream-unavailable--desktop",
+      "pageId": "admin-lifecycle", "state": "upstream-unavailable",
+      "legacyPath": "/admin/conversations/89?parity-state=admin-lifecycle-upstream-unavailable",
+      "reactPath": "/app/admin/conversations/89?parity-state=admin-lifecycle-upstream-unavailable",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "d4c232c08fdd2e49ee27537a1c01a1d031d6fef718d7af9a4bcb5d2f302946f8", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--upstream-unavailable--mobile",
+      "pageId": "admin-lifecycle", "state": "upstream-unavailable",
+      "legacyPath": "/admin/conversations/89?parity-state=admin-lifecycle-upstream-unavailable",
+      "reactPath": "/app/admin/conversations/89?parity-state=admin-lifecycle-upstream-unavailable",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "b14b436e71ba92c8194f80a1fc6d03f9fb39951240b8751143cfc70546dfd127", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--moderator--desktop",
+      "pageId": "admin-lifecycle", "state": "moderator",
+      "legacyPath": "/admin/conversations/90?parity-state=admin-lifecycle-moderator",
+      "reactPath": "/app/admin/conversations/90?parity-state=admin-lifecycle-moderator",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-2", "serverFixture": "isolated", "goldenSha256": "cf3e806bef2daa3e832318a15601130692cd6023a16e68729f0c5b0385526132", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--moderator--mobile",
+      "pageId": "admin-lifecycle", "state": "moderator",
+      "legacyPath": "/admin/conversations/90?parity-state=admin-lifecycle-moderator",
+      "reactPath": "/app/admin/conversations/90?parity-state=admin-lifecycle-moderator",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-2", "serverFixture": "isolated", "goldenSha256": "e05597b955d512e10f029dfb0a7216cd18a048548f4ed3b27875957808d1c7c5", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--organizer--desktop",
+      "pageId": "admin-lifecycle", "state": "organizer",
+      "legacyPath": "/admin/conversations/91?parity-state=admin-lifecycle-organizer",
+      "reactPath": "/app/admin/conversations/91?parity-state=admin-lifecycle-organizer",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1", "serverFixture": "isolated", "goldenSha256": "9d8382272a4287bf83cf92a8f0dfe5ef262efd9e0457f22057210a70499edb82", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--organizer--mobile",
+      "pageId": "admin-lifecycle", "state": "organizer",
+      "legacyPath": "/admin/conversations/91?parity-state=admin-lifecycle-organizer",
+      "reactPath": "/app/admin/conversations/91?parity-state=admin-lifecycle-organizer",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1", "serverFixture": "isolated", "goldenSha256": "70d23e84b3b685f70673409cec349c1d937ed3c257f2bb6b48229c3040b8a2dc", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--global-admin--desktop",
+      "pageId": "admin-lifecycle", "state": "global-admin",
+      "legacyPath": "/admin/conversations/92?parity-state=admin-lifecycle-global-admin",
+      "reactPath": "/app/admin/conversations/92?parity-state=admin-lifecycle-global-admin",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "3cac489e42b6b5525cf0d36c8ecb6a6c42e575522d086cfed8066701308126a5", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--global-admin--mobile",
+      "pageId": "admin-lifecycle", "state": "global-admin",
+      "legacyPath": "/admin/conversations/92?parity-state=admin-lifecycle-global-admin",
+      "reactPath": "/app/admin/conversations/92?parity-state=admin-lifecycle-global-admin",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "66b3ced059841af59df196b0c724c2a52e236baccea5eae0d3f9b64fd3db7704", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--deletion-eligible--desktop",
+      "pageId": "admin-lifecycle", "state": "deletion-eligible",
+      "legacyPath": "/admin/conversations/93?parity-state=admin-lifecycle-deletion-eligible",
+      "reactPath": "/app/admin/conversations/93?parity-state=admin-lifecycle-deletion-eligible",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "5bcab7094f3eb466126093a3be1ff61dfa39f1fef7472f3a3b8a6fc808499f68", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--deletion-eligible--mobile",
+      "pageId": "admin-lifecycle", "state": "deletion-eligible",
+      "legacyPath": "/admin/conversations/93?parity-state=admin-lifecycle-deletion-eligible",
+      "reactPath": "/app/admin/conversations/93?parity-state=admin-lifecycle-deletion-eligible",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "db463c682df633b7505e126b8da8337ee209e05001e8ede6d21d3d8fecdd159f", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--deletion-blocked--desktop",
+      "pageId": "admin-lifecycle", "state": "deletion-blocked",
+      "legacyPath": "/admin/conversations/94?parity-state=admin-lifecycle-deletion-blocked",
+      "reactPath": "/app/admin/conversations/94?parity-state=admin-lifecycle-deletion-blocked",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "f06353f19377a0e2116223396c35b6a65fbb29f4ae41891dff65f8a1b071cf9d", "parityGate": true
+    },
+    {
+      "id": "admin-lifecycle--deletion-blocked--mobile",
+      "pageId": "admin-lifecycle", "state": "deletion-blocked",
+      "legacyPath": "/admin/conversations/94?parity-state=admin-lifecycle-deletion-blocked",
+      "reactPath": "/app/admin/conversations/94?parity-state=admin-lifecycle-deletion-blocked",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-admin", "serverFixture": "isolated", "goldenSha256": "e3600ecdfed3a6459b3c2185ee5bca90ac57e4edfdbc4093bfd4c71650dc042d", "parityGate": true
     }
   ]
 }
