@@ -84,6 +84,12 @@ _original_seed_statement_lock_reason = app_module._seed_statement_lock_reason
 _original_admin_statements_view = application.view_functions[
     'admin.admin_conversation_statements'
 ]
+_original_admin_featured_view = application.view_functions[
+    'admin.admin_conversation_featured'
+]
+_original_admin_featured_api_view = application.view_functions[
+    'api_v1.get_admin_featured_statements'
+]
 
 
 def _parity_state():
@@ -513,6 +519,101 @@ application.view_functions[
 ] = _fixture_admin_statements_view
 
 
+def _fixture_featured_model(conv_id):
+    state = _parity_state()
+    if not state or not state.startswith('admin-featured-'):
+        return None
+    conversation = app_module._require_mod_for_conv(conv_id)
+    selected_tids = {
+        'admin-featured-selected': {701},
+        'admin-featured-arguments': {702},
+        'admin-featured-hidden-argument': {704},
+        'admin-featured-phase-locked': {711},
+    }.get(state, set())
+    confirmed = (
+        FeaturedStatement.query.filter_by(conversation_id=conversation.id)
+        .options(app_module.joinedload(FeaturedStatement.arguments))
+        .order_by(FeaturedStatement.created_at).all()
+    )
+    confirmed = [
+        row for row in confirmed if row.polis_statement_id in selected_tids
+    ]
+    for selection in confirmed:
+        selection.arguments.sort(
+            key=lambda argument: (
+                argument.side.value
+                if hasattr(argument.side, 'value') else str(argument.side)
+            ),
+        )
+    candidates = []
+    if state == 'admin-featured-candidates':
+        candidates = [
+            {
+                'tid': 703,
+                'text': 'Regional communities should jointly fund shared infrastructure.',
+                'is_seed': True,
+                'n_agree': 11,
+                'n_disagree': 2,
+                'n_pass': 3,
+                'n_votes': 16,
+            },
+            {
+                'tid': 705,
+                'text': 'Local affiliates should retain independent programme budgets.',
+                'is_seed': False,
+                'n_agree': 7,
+                'n_disagree': 9,
+                'n_pass': 2,
+                'n_votes': 18,
+            },
+        ]
+    tids = [row.polis_statement_id for row in confirmed]
+    tids.extend(row['tid'] for row in candidates)
+    provenance_map = app_module._provenance_map(conversation.id, tids)
+    return conversation, confirmed, candidates, provenance_map
+
+
+def _fixture_admin_featured_view(conv_id):
+    model = _fixture_featured_model(conv_id)
+    if model is None:
+        return _original_admin_featured_view(conv_id)
+    conversation, confirmed, candidates, provenance_map = model
+    return app_module.render_template(
+        'admin_featured.html',
+        conversation=conversation,
+        confirmed=confirmed,
+        candidates=candidates,
+        provenance_map=provenance_map,
+        phase_active=conversation.phase_argument_mapping,
+    )
+
+
+def _fixture_admin_featured_api_view(conversation_id):
+    model = _fixture_featured_model(conversation_id)
+    if model is None:
+        return _original_admin_featured_api_view(conversation_id)
+    conversation, confirmed, candidates, provenance_map = model
+    payload = app_module.build_featured_workspace(
+        conversation=conversation,
+        confirmed=confirmed,
+        candidates=candidates,
+        provenance_by_tid=provenance_map,
+        statement_text_by_tid={row['tid']: row['text'] for row in candidates},
+        recommendation=15,
+        self_link=f'/api/v1/admin/conversations/{conversation.id}/featured-statements',
+        lifecycle_link=f'/app/admin/conversations/{conversation.id}',
+    )
+    return app_module.jsonify({'data': payload})
+
+
+application.view_functions[
+    'admin.admin_conversation_featured'
+] = _fixture_admin_featured_view
+application.view_functions[
+    'api_v1.get_admin_featured_statements'
+] = _fixture_admin_featured_api_view
+
+
 class _FixtureParticiapiResponse:
     def __init__(self, payload: dict, status: int = 200, *, cookies=None):
         self.status_code = status
@@ -858,6 +959,17 @@ def _seed() -> None:
         access_policy='demo', phase_submission=True,
         created_at=datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc),
     )
+    featured = Conversation(
+        id=70, slug='parity-featured', polis_id='parity-featured-polis',
+        title='Community infrastructure priorities', active=True,
+        access_policy='public',
+    )
+    featured_locked = Conversation(
+        id=71, slug='parity-featured-locked',
+        polis_id='parity-featured-locked-polis',
+        title='Locked community infrastructure priorities', active=True,
+        access_policy='public', phase_argument_mapping=True,
+    )
     for reveal_conversation in (
         reveal_pending, reveal_open, reveal_revealed, reveal_expired,
     ):
@@ -881,6 +993,7 @@ def _seed() -> None:
         report_public, report_personal, report_empty,
         lane_attention, lane_caught, lane_paused, lane_waiting, lane_closed,
         lane_available, lane_moderated, demo_available, demo_joined,
+        featured, featured_locked,
     ]
     for index, conversation in enumerate(seed_conversations):
         if isinstance(conversation, Conversation) and conversation.created_at is None:
@@ -1136,6 +1249,72 @@ def _seed() -> None:
         provenance_id=provenance.id,
         model='char',
         value=0.88,
+        scored_at=_PARITY_NOW,
+    ))
+
+    featured_selections = [
+        FeaturedStatement(
+            conversation_id=featured.id, polis_statement_id=701,
+            statement_text='Regional communities should share infrastructure funding.',
+            suggested_by_system=True, confirmed_by_admin=True,
+            created_at=datetime(2026, 8, 10, 9, 0, tzinfo=timezone.utc),
+        ),
+        FeaturedStatement(
+            conversation_id=featured.id, polis_statement_id=702,
+            statement_text='Technical standards should be governed by affected communities.',
+            confirmed_by_admin=True,
+            created_at=datetime(2026, 8, 10, 10, 0, tzinfo=timezone.utc),
+        ),
+        FeaturedStatement(
+            conversation_id=featured.id, polis_statement_id=704,
+            statement_text='Shared platforms should publish long-term maintenance plans.',
+            confirmed_by_admin=True,
+            created_at=datetime(2026, 8, 10, 11, 0, tzinfo=timezone.utc),
+        ),
+        FeaturedStatement(
+            conversation_id=featured_locked.id, polis_statement_id=711,
+            statement_text='The final mapped statement remains available to participants.',
+            confirmed_by_admin=True,
+            created_at=datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc),
+        ),
+    ]
+    db.session.add_all(featured_selections)
+    db.session.flush()
+    _, arguments_selection, hidden_selection, _ = featured_selections
+    db.session.add_all([
+        Argument(
+            featured_statement_id=arguments_selection.id, side='pro',
+            body='Shared governance creates durable legitimacy.',
+            proposer_pseudonym='careful-raven', hidden=False,
+            created_at=datetime(2026, 8, 11, 9, 15, tzinfo=timezone.utc),
+        ),
+        Argument(
+            featured_statement_id=arguments_selection.id, side='con',
+            body='Broad governance can slow urgent technical decisions.',
+            proposer_pseudonym=None, hidden=False,
+            created_at=datetime(2026, 8, 12, 14, 30, tzinfo=timezone.utc),
+        ),
+        Argument(
+            featured_statement_id=hidden_selection.id, side='pro',
+            body='Published plans make deferred maintenance visible.',
+            proposer_pseudonym='quiet-otter', hidden=True,
+            created_at=datetime(2026, 8, 13, 8, 45, tzinfo=timezone.utc),
+        ),
+    ])
+    featured_provenance = StatementProvenance(
+        conversation_id=featured.id,
+        polis_statement_id=703,
+        derived_from_tid=701,
+        provenance_type='derivative',
+        link_method='declared',
+        created_at=_PARITY_NOW,
+    )
+    db.session.add(featured_provenance)
+    db.session.flush()
+    db.session.add(StatementSimilarityScore(
+        provenance_id=featured_provenance.id,
+        model='char',
+        value=0.91,
         scored_at=_PARITY_NOW,
     ))
 

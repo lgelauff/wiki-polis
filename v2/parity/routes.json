@@ -212,7 +212,7 @@
       "temporaryReactRoutes": ["/app/admin/conversations/:conversationId/featured"],
       "targetReactRoutes": ["/admin/conversations/:conversationId/featured"],
       "apiOperations": ["getAdminFeaturedStatements", "putAdminFeaturedStatement", "deleteAdminFeaturedSelection", "putAdminFeaturedArgument", "deleteAdminFeaturedArgument"],
-      "status": "partial",
+      "status": "parity",
       "scenarios": ["empty", "candidates", "selected", "arguments", "hidden-argument", "phase-locked"]
     }
   ],
