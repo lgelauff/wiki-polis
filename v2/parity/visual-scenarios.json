@@ -442,6 +442,190 @@
       "serverFixture": "isolated",
       "goldenSha256": "ee55876b6f72e126961ca5c6afdd7dbf05b58d5d8c7ae69b5ade4a26845cbda9",
       "parityGate": true
+    },
+    {
+      "id": "accept-conversation--public--desktop",
+      "pageId": "accept-conversation",
+      "state": "public",
+      "legacyPath": "/accept/parity-join-public",
+      "reactPath": "/app/conversations/parity-join-public/join",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "15490e2c8129b6d9351ccead0bd701e552c0b31b9f3a149d317e3670b1a7f6ee",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--public--mobile",
+      "pageId": "accept-conversation",
+      "state": "public",
+      "legacyPath": "/accept/parity-join-public",
+      "reactPath": "/app/conversations/parity-join-public/join",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "b85a372d4ce04a4cb55c65104387923b9785c61b020bb1880f675506c3339422",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--email-ready--desktop",
+      "pageId": "accept-conversation",
+      "state": "email-ready",
+      "legacyPath": "/accept/parity-join-email",
+      "reactPath": "/app/conversations/parity-join-email/join",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "3d8ec0ffea238b198e0bda9a23d661cccacf47f17a0d4593b1a781843964a73d",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--email-ready--mobile",
+      "pageId": "accept-conversation",
+      "state": "email-ready",
+      "legacyPath": "/accept/parity-join-email",
+      "reactPath": "/app/conversations/parity-join-email/join",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "4d3b85ca0ed022bb75eac437fc51d1a24ffb2211d955d4f124a939235429e82e",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--invite-authorized--desktop",
+      "pageId": "accept-conversation",
+      "state": "invite-authorized",
+      "legacyPath": "/accept/parity-join-invite",
+      "reactPath": "/app/conversations/parity-join-invite/join",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "610959250cf1c31e99d057770ba7a80ec9001396d6833d067158bf04ca4f07b2",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--invite-authorized--mobile",
+      "pageId": "accept-conversation",
+      "state": "invite-authorized",
+      "legacyPath": "/accept/parity-join-invite",
+      "reactPath": "/app/conversations/parity-join-invite/join",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "goldenSha256": "2b6e29cbe11288b34636d8a0eddd8fb5c99f9d6ca80715bf235ff85d47300c78",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--invite-required--desktop",
+      "pageId": "accept-conversation",
+      "state": "invite-required",
+      "legacyPath": "/accept/parity-join-invite",
+      "reactPath": "/app/conversations/parity-join-invite/join",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-3",
+      "serverFixture": "isolated",
+      "goldenSha256": "c20eb7ac49df32a5a9b1db836245839b2aae5d7a3dd9b6ba52de6d08bec047b8",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--invite-required--mobile",
+      "pageId": "accept-conversation",
+      "state": "invite-required",
+      "legacyPath": "/accept/parity-join-invite",
+      "reactPath": "/app/conversations/parity-join-invite/join",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-3",
+      "serverFixture": "isolated",
+      "goldenSha256": "29de9a1f4ba7ac7e535da316e6e13d02b6a355d5e5ce9faeaf122584c35bcb2a",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--moderator-not-invited--desktop",
+      "pageId": "accept-conversation",
+      "state": "moderator-not-invited",
+      "legacyPath": "/accept/parity-join-invite",
+      "reactPath": "/app/conversations/parity-join-invite/join",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "72c19e7e8e1c2d2f99dedf20a491d6bd2f44c5e4932d0515fd29b7ba2cef5ba5",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--moderator-not-invited--mobile",
+      "pageId": "accept-conversation",
+      "state": "moderator-not-invited",
+      "legacyPath": "/accept/parity-join-invite",
+      "reactPath": "/app/conversations/parity-join-invite/join",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "goldenSha256": "fbac72712ac93fd80f083a82a67b46754e4ee0cee4ed6f3c3ffd766e38af8e03",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--eligibility-denied--desktop",
+      "pageId": "accept-conversation",
+      "state": "eligibility-denied",
+      "legacyPath": "/accept/parity-join-eligibility",
+      "reactPath": "/app/conversations/parity-join-eligibility/join",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [
+        {"type": "check", "label": "I understand my votes and arguments are recorded with this pseudonym, and ProtoWiki keeps an internal username link while this consultation runs."},
+        {"type": "click", "role": "button", "name": "Join consultation as calm-otter →"}
+      ],
+      "goldenSha256": "4fc4bfe033194245cee0c2c22995533d37b44114df8ce200b407616a32c83f1f",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--eligibility-denied--mobile",
+      "pageId": "accept-conversation",
+      "state": "eligibility-denied",
+      "legacyPath": "/accept/parity-join-eligibility",
+      "reactPath": "/app/conversations/parity-join-eligibility/join",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [
+        {"type": "check", "label": "I understand my votes and arguments are recorded with this pseudonym, and ProtoWiki keeps an internal username link while this consultation runs."},
+        {"type": "click", "role": "button", "name": "Join consultation as calm-otter →"}
+      ],
+      "goldenSha256": "12057f345e9c26a3a409b58af30c15382c4263e055afc70451377c4c90c1c5ff",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--pseudonym-conflict--desktop",
+      "pageId": "accept-conversation",
+      "state": "pseudonym-conflict",
+      "legacyPath": "/accept/parity-join-conflict",
+      "reactPath": "/app/conversations/parity-join-conflict/join",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [
+        {"type": "check", "label": "I understand my votes and arguments are recorded with this pseudonym, and ProtoWiki keeps an internal username link while this consultation runs."},
+        {"type": "click", "role": "button", "name": "Join consultation as calm-otter →"}
+      ],
+      "goldenSha256": "2bc32b40fa2628d2fad870a7466ee8d37fb3c12c4bb5d8e201bfa8a1cec8d8e1",
+      "parityGate": true
+    },
+    {
+      "id": "accept-conversation--pseudonym-conflict--mobile",
+      "pageId": "accept-conversation",
+      "state": "pseudonym-conflict",
+      "legacyPath": "/accept/parity-join-conflict",
+      "reactPath": "/app/conversations/parity-join-conflict/join",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [
+        {"type": "check", "label": "I understand my votes and arguments are recorded with this pseudonym, and ProtoWiki keeps an internal username link while this consultation runs."},
+        {"type": "click", "role": "button", "name": "Join consultation as calm-otter →"}
+      ],
+      "goldenSha256": "ae05ca3c523055906072f7951e52fba80353f6ff8334d4fe571a5f41517aa32c",
+      "parityGate": true
     }
   ]
 }

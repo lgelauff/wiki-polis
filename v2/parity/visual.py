@@ -55,6 +55,10 @@ def load_scenarios(
 
 def prepare_page(page: Page, url: str) -> None:
     page.goto(url, wait_until='networkidle')
+    stabilize_page(page)
+
+
+def stabilize_page(page: Page) -> None:
     page.wait_for_function(
         """() => [...document.styleSheets].some(sheet =>
             sheet.href && new URL(sheet.href).pathname === '/static/style.css'
@@ -63,6 +67,22 @@ def prepare_page(page: Page, url: str) -> None:
     page.wait_for_function("document.fonts.status === 'loaded'")
     page.add_style_tag(content=STABILIZING_CSS)
     page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+
+
+def run_actions(page: Page, actions: list[dict]) -> None:
+    for action in actions:
+        action_type = action.get('type')
+        if action_type == 'check':
+            page.get_by_label(action['label'], exact=True).check()
+        elif action_type == 'click':
+            page.get_by_role(
+                action['role'], name=action['name'], exact=True,
+            ).click()
+        else:
+            raise ValueError(f'Unsupported visual action: {action_type!r}')
+        page.wait_for_load_state('networkidle')
+    if actions:
+        stabilize_page(page)
 
 
 def authenticate(page: Page, base_url: str, auth: str) -> None:
@@ -99,6 +119,7 @@ def capture(
         page = context.new_page()
         authenticate(page, base_url, scenario['auth'])
         prepare_page(page, f"{base_url}{scenario[path_key]}")
+        run_actions(page, scenario.get('actions', []))
         destination.parent.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=destination, full_page=defaults['fullPage'])
     finally:

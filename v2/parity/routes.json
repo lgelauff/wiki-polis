@@ -68,9 +68,9 @@
       "templates": ["accept.html"],
       "temporaryReactRoutes": ["/app/conversations/:slug/join"],
       "targetReactRoutes": ["/accept/:slug"],
-      "apiOperations": ["getConversationAbout", "getPseudonymSuggestions", "createParticipation"],
-      "status": "partial",
-      "scenarios": ["public", "invite-required", "invite-authorized", "eligibility-denied", "already-participating", "suggestions-loading", "validation-error"]
+      "apiOperations": ["getParticipationEntry", "getPseudonymSuggestions", "createParticipation"],
+      "status": "parity",
+      "scenarios": ["public", "email-ready", "invite-required", "invite-authorized", "moderator-not-invited", "eligibility-denied", "already-participating", "suggestions-loading", "validation-error", "pseudonym-conflict"]
     },
     {
       "id": "conversation-workflow",

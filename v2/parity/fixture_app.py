@@ -34,7 +34,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app as app_module  # noqa: E402  (environment must precede app configuration)
 from db import (  # noqa: E402
-    AdminRole, AuditEvent, Conversation, Participant, Participation, db,
+    AdminRole, AuditEvent, Conversation, ConversationInvite, Participant,
+    Participation, db,
 )
 
 
@@ -48,6 +49,22 @@ application.config.update(
     POLIS_ADMIN_EMAIL='',
     POLIS_ADMIN_PASSWORD='',
 )
+
+_PARITY_PSEUDONYMS = [
+    'calm-otter', 'bright-fox', 'steady-heron', 'gentle-raven', 'quiet-badger',
+]
+app_module._generate_pseudonyms = lambda count=5: _PARITY_PSEUDONYMS[:count]
+app_module._is_emailable = lambda username: username == 'dev-user-2'
+_original_eligibility_check = app_module._check_join_eligibility
+
+
+def _fixture_eligibility_check(conversation, participant):
+    if conversation.eligibility_event_id == 'parity-denied':
+        return False, 'ineligible', {'reason': 'This fixture account needs more edits.'}
+    return _original_eligibility_check(conversation, participant)
+
+
+app_module._check_join_eligibility = _fixture_eligibility_check
 
 
 def _seed() -> None:
@@ -123,9 +140,38 @@ def _seed() -> None:
         phase_submission=True,
         phase_argument_mapping=True,
     )
+    join_public = Conversation(
+        slug='parity-join-public', polis_id='parity-join-public-polis',
+        title='Public consultation invitation', active=True, access_policy='public',
+        intro_text='<p>Help shape a shared plan with <strong>trusted context</strong>.</p>',
+    )
+    join_email = Conversation(
+        slug='parity-join-email', polis_id='parity-join-email-polis',
+        title='Email-ready consultation', active=True, access_policy='public',
+    )
+    join_invite = Conversation(
+        slug='parity-join-invite', polis_id='parity-join-invite-polis',
+        title='Invited contributors only', active=True, access_policy='invite_only',
+    )
+    join_eligibility = Conversation(
+        slug='parity-join-eligibility', polis_id='parity-join-eligibility-polis',
+        title='Experienced editor consultation', active=True, access_policy='public',
+        eligibility_event_id='parity-denied',
+        eligibility_label='Experienced editors',
+    )
+    join_conflict = Conversation(
+        slug='parity-join-conflict', polis_id='parity-join-conflict-polis',
+        title='Pseudonym conflict consultation', active=True, access_policy='public',
+    )
+    pseudonym_owner = Conversation(
+        slug='parity-pseudonym-owner', polis_id='parity-pseudonym-owner-polis',
+        title='Pseudonym owner fixture', active=False, access_policy='public',
+    )
     db.session.add_all([
         admin, target, participant, moderator, moderation, closed,
         about_public, about_participant, about_moderator, about_scheduled, about_mixed,
+        join_public, join_email, join_invite, join_eligibility, join_conflict,
+        pseudonym_owner,
     ])
     db.session.flush()
     db.session.add_all([
@@ -165,9 +211,24 @@ def _seed() -> None:
             conversation_id=about_mixed.id,
             pseudonym='steady-wolf',
         ),
+        Participation(
+            participant_id=admin.id,
+            conversation_id=pseudonym_owner.id,
+            pseudonym='calm-otter',
+        ),
+        ConversationInvite(
+            conversation_id=join_invite.id,
+            mw_username=participant.mw_username,
+        ),
         AdminRole(
             participant_id=moderator.id,
             conversation_id=about_moderator.id,
+            role='moderator',
+            granted_by=admin.id,
+        ),
+        AdminRole(
+            participant_id=moderator.id,
+            conversation_id=join_invite.id,
             role='moderator',
             granted_by=admin.id,
         ),
