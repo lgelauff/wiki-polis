@@ -1204,6 +1204,84 @@
       ],
       "goldenSha256": "63270ebce1ceb3ee155b82c28480ad6f802c87e14777093d8ee3140b16ee2ec4",
       "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--argument-mapping--desktop",
+      "pageId": "conversation-workflow",
+      "state": "argument-mapping",
+      "legacyPath": "/c/parity-arguments-mapping",
+      "reactPath": "/app/conversations/parity-arguments-mapping/arguments",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "tab", "name": "Arguments"}],
+      "goldenSha256": "efe9f2c154fd9d47a87f1a152f52348d1a5cecbda97c3a499825f4952001a3e9",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--argument-mapping--mobile",
+      "pageId": "conversation-workflow",
+      "state": "argument-mapping",
+      "legacyPath": "/c/parity-arguments-mapping",
+      "reactPath": "/app/conversations/parity-arguments-mapping/arguments",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "tab", "name": "Arguments"}],
+      "goldenSha256": "9d96d6b0dd673741a23c69f0d2527fb39776d022cced0016d71b3fc88aea260a",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--argument-gates--desktop",
+      "pageId": "conversation-workflow",
+      "state": "argument-gates",
+      "legacyPath": "/c/parity-arguments-gates",
+      "reactPath": "/app/conversations/parity-arguments-gates/arguments",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "tab", "name": "Arguments"}],
+      "goldenSha256": "10a9cc01acd5240ca9716f5bda29680512381e357d14c9befdec69b6045b9413",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--argument-gates--mobile",
+      "pageId": "conversation-workflow",
+      "state": "argument-gates",
+      "legacyPath": "/c/parity-arguments-gates",
+      "reactPath": "/app/conversations/parity-arguments-gates/arguments",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "tab", "name": "Arguments"}],
+      "goldenSha256": "03e7631766018b8f4ca440b4ed83d34e86e712fd5bd57f0446ded08fd2c79d8e",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--argument-moderator--desktop",
+      "pageId": "conversation-workflow",
+      "state": "argument-moderator",
+      "legacyPath": "/c/parity-arguments-moderator",
+      "reactPath": "/app/conversations/parity-arguments-moderator/arguments",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "tab", "name": "Arguments"}],
+      "goldenSha256": "ca35c10c8e86dd77c4d9ca96f90c7f5469168a0f2f563488d4a657b5de10b557",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--argument-moderator--mobile",
+      "pageId": "conversation-workflow",
+      "state": "argument-moderator",
+      "legacyPath": "/c/parity-arguments-moderator",
+      "reactPath": "/app/conversations/parity-arguments-moderator/arguments",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-2",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "tab", "name": "Arguments"}],
+      "goldenSha256": "0b1927fe9626d315fe7c652ff193f2126ce15732b9250da8c0e71eedb3d2d487",
+      "parityGate": true
     }
   ]
 }

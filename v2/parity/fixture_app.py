@@ -36,7 +36,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app as app_module  # noqa: E402  (environment must precede app configuration)
 from db import (  # noqa: E402
-    AdminRole, AuditEvent, Conversation, ConversationInvite, Participant,
+    AdminRole, Argument, ArgumentSideState, ArgumentVote, AuditEvent,
+    Conversation, ConversationInvite, FeaturedStatement, Participant,
     Participation, db,
 )
 
@@ -296,6 +297,24 @@ def _seed() -> None:
         phase_submission=True,
         phase_argument_mapping=True,
     )
+    arguments_mapping = Conversation(
+        slug='parity-arguments-mapping', polis_id='parity-arguments-mapping-polis',
+        title='Community infrastructure priorities', active=True,
+        access_policy='public', phase_submission=True,
+        phase_argument_mapping=True, argument_vote_data={'K': 2},
+    )
+    arguments_gates = Conversation(
+        slug='parity-arguments-gates', polis_id='parity-arguments-gates-polis',
+        title='Shared platform principles', active=True,
+        access_policy='public', phase_submission=True,
+        phase_argument_mapping=True, argument_vote_data={'K': 2},
+    )
+    arguments_moderator = Conversation(
+        slug='parity-arguments-moderator', polis_id='parity-arguments-moderator-polis',
+        title='Moderated infrastructure discussion', active=True,
+        access_policy='public', phase_submission=True,
+        phase_argument_mapping=True, argument_vote_data={'K': 2},
+    )
     join_public = Conversation(
         slug='parity-join-public', polis_id='parity-join-public-polis',
         title='Public consultation invitation', active=True, access_policy='public',
@@ -438,6 +457,7 @@ def _seed() -> None:
     db.session.add_all([
         admin, target, participant, moderator, moderation, closed,
         about_public, about_participant, about_moderator, about_scheduled, about_mixed,
+        arguments_mapping, arguments_gates, arguments_moderator,
         join_public, join_email, join_invite, join_eligibility, join_conflict,
         pseudonym_owner, reveal_pending, reveal_open, reveal_revealed, reveal_expired,
         report_public, report_personal, report_empty,
@@ -481,6 +501,21 @@ def _seed() -> None:
             participant_id=participant.id,
             conversation_id=about_mixed.id,
             pseudonym='steady-wolf',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=arguments_mapping.id,
+            pseudonym='thoughtful-kestrel',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=arguments_gates.id,
+            pseudonym='patient-osprey',
+        ),
+        Participation(
+            participant_id=moderator.id,
+            conversation_id=arguments_moderator.id,
+            pseudonym='watchful-hawk',
         ),
         Participation(
             participant_id=admin.id,
@@ -556,6 +591,12 @@ def _seed() -> None:
         ),
         AdminRole(
             participant_id=moderator.id,
+            conversation_id=arguments_moderator.id,
+            role='moderator',
+            granted_by=admin.id,
+        ),
+        AdminRole(
+            participant_id=moderator.id,
             conversation_id=join_invite.id,
             role='moderator',
             granted_by=admin.id,
@@ -566,6 +607,70 @@ def _seed() -> None:
             role='moderator',
             granted_by=admin.id,
         ),
+    ])
+    db.session.flush()
+
+    mapping_participation = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=arguments_mapping.id,
+    ).one()
+    gates_participation = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=arguments_gates.id,
+    ).one()
+    moderator_participation = Participation.query.filter_by(
+        participant_id=moderator.id, conversation_id=arguments_moderator.id,
+    ).one()
+    featured_rows = [
+        FeaturedStatement(
+            conversation_id=arguments_mapping.id, polis_statement_id=201,
+            statement_text='Regional communities should share infrastructure funding.',
+            confirmed_by_admin=True,
+        ),
+        FeaturedStatement(
+            conversation_id=arguments_gates.id, polis_statement_id=202,
+            statement_text='Shared platforms should publish long-term maintenance plans.',
+            confirmed_by_admin=True,
+        ),
+        FeaturedStatement(
+            conversation_id=arguments_moderator.id, polis_statement_id=203,
+            statement_text='Technical standards should be governed by affected communities.',
+            confirmed_by_admin=True,
+        ),
+    ]
+    db.session.add_all(featured_rows)
+    db.session.flush()
+    mapping_fs, gates_fs, moderator_fs = featured_rows
+
+    mapping_arguments = [
+        Argument(featured_statement_id=mapping_fs.id, side='pro', body='Shared funding reduces duplicated maintenance work.'),
+        Argument(featured_statement_id=mapping_fs.id, side='pro', body='Smaller communities gain access to specialist support.'),
+        Argument(featured_statement_id=mapping_fs.id, side='con', body='Shared budgets can blur local accountability.'),
+    ]
+    gates_arguments = [
+        Argument(featured_statement_id=gates_fs.id, side='pro', body='Published plans make deferred maintenance visible.'),
+        Argument(featured_statement_id=gates_fs.id, side='pro', body='Communities can coordinate upgrades before systems fail.'),
+        Argument(featured_statement_id=gates_fs.id, side='pro', body='Long-term plans make funding requests easier to compare.'),
+        Argument(featured_statement_id=gates_fs.id, side='con', body='Plans can become obsolete before implementation.'),
+        Argument(featured_statement_id=gates_fs.id, side='con', body='Mandatory planning may burden small volunteer teams.'),
+    ]
+    moderator_arguments = [
+        Argument(featured_statement_id=moderator_fs.id, side='pro', body='Affected communities bring essential operational knowledge.'),
+        Argument(featured_statement_id=moderator_fs.id, side='pro', body='Shared governance creates durable legitimacy.', hidden=True),
+        Argument(featured_statement_id=moderator_fs.id, side='pro', body='Community review catches implementation risks early.'),
+        Argument(featured_statement_id=moderator_fs.id, side='con', body='Broad governance can slow urgent technical decisions.'),
+        Argument(featured_statement_id=moderator_fs.id, side='con', body='Specialist standards require sustained technical expertise.'),
+        Argument(featured_statement_id=moderator_fs.id, side='con', body='Responsibility may become difficult to assign.'),
+    ]
+    db.session.add_all(mapping_arguments + gates_arguments + moderator_arguments)
+    db.session.flush()
+    db.session.add_all([
+        ArgumentSideState(participant_id=mapping_participation.participant_id, featured_statement_id=mapping_fs.id, side='pro', skipped=False, argument_order=[item.id for item in mapping_arguments if item.side == 'pro']),
+        ArgumentSideState(participant_id=mapping_participation.participant_id, featured_statement_id=mapping_fs.id, side='con', skipped=True, argument_order=[item.id for item in mapping_arguments if item.side == 'con']),
+        ArgumentSideState(participant_id=gates_participation.participant_id, featured_statement_id=gates_fs.id, side='pro', skipped=True, argument_order=[item.id for item in gates_arguments if item.side == 'pro']),
+        ArgumentSideState(participant_id=gates_participation.participant_id, featured_statement_id=gates_fs.id, side='con', skipped=True, argument_order=[item.id for item in gates_arguments if item.side == 'con']),
+        ArgumentSideState(participant_id=moderator_participation.participant_id, featured_statement_id=moderator_fs.id, side='pro', skipped=True, argument_order=[item.id for item in moderator_arguments if item.side == 'pro']),
+        ArgumentSideState(participant_id=moderator_participation.participant_id, featured_statement_id=moderator_fs.id, side='con', skipped=True, argument_order=[item.id for item in moderator_arguments if item.side == 'con']),
+        ArgumentVote(argument_id=gates_arguments[0].id, participant_id=participant.id),
+        ArgumentVote(argument_id=moderator_arguments[0].id, participant_id=moderator.id),
     ])
     db.session.add_all([
         AuditEvent(
