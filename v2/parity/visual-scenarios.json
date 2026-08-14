@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "browser": "chromium",
+  "defaults": {
+    "locale": "en-US",
+    "timezone": "UTC",
+    "colorScheme": "light",
+    "deviceScaleFactor": 1,
+    "fullPage": true
+  },
+  "scenarios": [
+    {
+      "id": "entry-fork--anonymous--desktop",
+      "pageId": "entry-fork",
+      "state": "anonymous",
+      "legacyPath": "/",
+      "reactPath": null,
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "anonymous",
+      "goldenSha256": "cd6e1428f9000e5bb75e7c02bfe12d7189cab4b350d8d81aaa4f864a078ddf58",
+      "parityGate": false
+    },
+    {
+      "id": "entry-fork--anonymous--mobile",
+      "pageId": "entry-fork",
+      "state": "anonymous",
+      "legacyPath": "/",
+      "reactPath": null,
+      "viewport": {"width": 390, "height": 844},
+      "auth": "anonymous",
+      "goldenSha256": "3f41b35379de0e8e4339bf7bf0bb7300f1364ddf3ad23e1fda104cbe2b96d71a",
+      "parityGate": false
+    },
+    {
+      "id": "demo-lane--anonymous-populated--desktop",
+      "pageId": "demo-lane",
+      "state": "anonymous-populated",
+      "legacyPath": "/demo",
+      "reactPath": "/app/demo",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "anonymous",
+      "goldenSha256": "2a7cb276f80b8aea7208820377d44c50cd954cde3528455dbdfe1dd8dac60eef",
+      "parityGate": false
+    },
+    {
+      "id": "consultation-lane--anonymous-public--desktop",
+      "pageId": "consultation-lane",
+      "state": "anonymous-public",
+      "legacyPath": "/consultations",
+      "reactPath": "/app/real",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "anonymous",
+      "goldenSha256": "e4ba0eac8e370bc663a50c4dc257fffdb66aaf0c1909713a63ad77f297f8f1c2",
+      "parityGate": false
+    },
+    {
+      "id": "statement-guidance--public--desktop",
+      "pageId": "statement-guidance",
+      "state": "public",
+      "legacyPath": "/help/statements",
+      "reactPath": null,
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "anonymous",
+      "goldenSha256": "358ec87de6f46160998753f8f42c17e3bc54da4da9316920e43b1a9394f656e2",
+      "parityGate": false
+    },
+    {
+      "id": "argument-guidance--public--desktop",
+      "pageId": "argument-guidance",
+      "state": "public",
+      "legacyPath": "/help/arguments",
+      "reactPath": null,
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "anonymous",
+      "goldenSha256": "066d2d37470ce28f145846ae1797bf2fa7e820f0902a71838fb7ba966d60d253",
+      "parityGate": false
+    }
+  ]
+}

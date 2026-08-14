@@ -18,3 +18,21 @@ Status meanings:
 
 The existing public URL is the final React URL. `/app/...` entries are temporary strangler
 routes and are removed after their corresponding legacy URL is cut over.
+
+## Visual baselines
+
+`visual-scenarios.json` defines deterministic browser scenarios. Capture current Jinja
+goldens and compare available React routes with:
+
+```sh
+cd v2
+.venv/bin/python parity/visual.py capture
+.venv/bin/python parity/visual.py compare
+```
+
+The runner fixes Chromium, locale, timezone, color scheme, reduced motion, device scale,
+and viewport; waits for the network and fonts; disables residual animation; and masks the
+changing commit fingerprint. A visual match is byte-for-byte PNG equality. During the
+migration, missing/different screens are reported but only scenarios marked `parityGate`
+fail. `--require-parity` turns every missing or different scenario into a failure for the
+final cutover audit. Browser artifacts live under `output/playwright/`.
