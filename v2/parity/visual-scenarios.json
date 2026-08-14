@@ -1388,6 +1388,58 @@
       ],
       "goldenSha256": "8318422464a3186e8debc129688f1385b3c2f90bdafb6f8b261dfe6dabfd5817",
       "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--preliminary-results--desktop",
+      "pageId": "conversation-workflow",
+      "state": "preliminary-results",
+      "legacyPath": "/c/parity-preliminary-results",
+      "reactPath": "/app/conversations/parity-preliminary-results/results",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "tab", "name": "Preliminary results"}],
+      "goldenSha256": "f6572b2e8f254a569765114e3baaba719e89ed4f0c575e91b20d628f717d8531",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--preliminary-results--mobile",
+      "pageId": "conversation-workflow",
+      "state": "preliminary-results",
+      "legacyPath": "/c/parity-preliminary-results",
+      "reactPath": "/app/conversations/parity-preliminary-results/results",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "tab", "name": "Preliminary results"}],
+      "goldenSha256": "450da02e75a44c42da41ba096da2a5786830cd9c5d77df52beabdbf47deddf43",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--preliminary-results-unavailable--desktop",
+      "pageId": "conversation-workflow",
+      "state": "preliminary-results-unavailable",
+      "legacyPath": "/c/parity-preliminary-results-unavailable",
+      "reactPath": "/app/conversations/parity-preliminary-results-unavailable/results",
+      "viewport": {"width": 1440, "height": 900},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "tab", "name": "Preliminary results"}],
+      "goldenSha256": "3da2f76d31ae461fcec7904f64fc9f7feeed0344ad10fba5369fb4212c1d5eb3",
+      "parityGate": true
+    },
+    {
+      "id": "conversation-workflow--preliminary-results-unavailable--mobile",
+      "pageId": "conversation-workflow",
+      "state": "preliminary-results-unavailable",
+      "legacyPath": "/c/parity-preliminary-results-unavailable",
+      "reactPath": "/app/conversations/parity-preliminary-results-unavailable/results",
+      "viewport": {"width": 390, "height": 844},
+      "auth": "dev-user-1",
+      "serverFixture": "isolated",
+      "actions": [{"type": "click", "role": "tab", "name": "Preliminary results"}],
+      "goldenSha256": "f3b97a801ed55e2d83b2e83e3c17127123e8fed0add6ed869264deacf270fb14",
+      "parityGate": true
     }
   ]
 }

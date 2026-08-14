@@ -83,6 +83,30 @@ app_module._reveal_context = lambda conversation, participation: _original_revea
 def _fixture_results(conversation, participation, results_filter=None):
     if conversation.slug == 'parity-report-empty':
         return None
+    if conversation.slug.startswith('parity-preliminary-results'):
+        detailed = not conversation.slug.endswith('-unavailable')
+        statements = [{
+            'fs_id': 201,
+            'text': 'Regional communities should share infrastructure funding.',
+            'p2': {'n_agree': 12, 'n_pass': 3, 'n_disagree': 5, 'n_voters': 20,
+                   'pct_agree': 60.0, 'pct_pass': 15.0, 'pct_disagree': 25.0},
+            'p6': {'n_agree': 14, 'n_pass': 4, 'n_disagree': 2, 'n_voters': 20,
+                   'pct_agree': 70.0, 'pct_pass': 20.0, 'pct_disagree': 10.0},
+            'shift': 10.0,
+            'my_p6_label': 'Agree' if participation else None,
+        }]
+        return {
+            'statements': statements,
+            'p2_participants': 25,
+            'p6_participants': 22,
+            'matched_participants': None,
+            'p2_consensus': statements,
+            'p2_divisive': statements,
+            'filter': results_filter or app_module.Phase6ResultsFilter.empty(),
+            'is_preliminary': True,
+            'clusters': None,
+            'pg_available': detailed,
+        }
     if not (conversation.slug.startswith('parity-report-')
             or conversation.slug.startswith('parity-reveal-')):
         return _original_build_phase6_results(
@@ -177,6 +201,7 @@ class _FixtureParticiapiResponse:
         self.ok = status < 400
         self._payload = payload
         self.content = json.dumps(payload).encode('utf-8')
+        self.text = self.content.decode('utf-8')
         self.cookies = cookies or {}
         self.headers = {'Content-Type': 'application/json'}
 
@@ -207,6 +232,8 @@ def _fixture_particiapi(method='GET', url='', **_kwargs):
         return _FixtureParticiapiResponse({
             'votes': [12] if empty else [], 'statements': [],
         })
+    if path.endswith('/results'):
+        return _FixtureParticiapiResponse({'groups': [], 'majority': {}})
     if '/votes/' in path:
         return _FixtureParticiapiResponse({})
     return _FixtureParticiapiResponse({}, status=404)
@@ -333,6 +360,20 @@ def _seed() -> None:
         title='Informed round awaiting statements', active=True,
         access_policy='public', phase_informed_voting=True,
         phase6_polis_conversation_id='parity-informed-empty-phase6',
+    )
+    preliminary_results = Conversation(
+        slug='parity-preliminary-results', polis_id='parity-preliminary-results-polis',
+        title='Community infrastructure priorities', active=True,
+        access_policy='public', phase_informed_voting=True,
+        phase_public_results=True,
+        phase6_polis_conversation_id='parity-preliminary-results-phase6',
+    )
+    preliminary_unavailable = Conversation(
+        slug='parity-preliminary-results-unavailable',
+        polis_id='parity-preliminary-results-unavailable-polis',
+        title='Results data temporarily unavailable', active=True,
+        access_policy='public', phase_public_results=True,
+        phase6_polis_conversation_id='parity-preliminary-results-unavailable-phase6',
     )
     join_public = Conversation(
         slug='parity-join-public', polis_id='parity-join-public-polis',
@@ -478,6 +519,7 @@ def _seed() -> None:
         about_public, about_participant, about_moderator, about_scheduled, about_mixed,
         arguments_mapping, arguments_gates, arguments_moderator,
         informed_voting, informed_pending, informed_empty,
+        preliminary_results, preliminary_unavailable,
         join_public, join_email, join_invite, join_eligibility, join_conflict,
         pseudonym_owner, reveal_pending, reveal_open, reveal_revealed, reveal_expired,
         report_public, report_personal, report_empty,
@@ -551,6 +593,16 @@ def _seed() -> None:
             participant_id=participant.id,
             conversation_id=informed_empty.id,
             pseudonym='waiting-wren',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=preliminary_results.id,
+            pseudonym='analytical-kite',
+        ),
+        Participation(
+            participant_id=participant.id,
+            conversation_id=preliminary_unavailable.id,
+            pseudonym='patient-tern',
         ),
         Participation(
             participant_id=admin.id,
@@ -719,7 +771,19 @@ def _seed() -> None:
         statement_text='Featured statements should remain visible while initialization completes.',
         confirmed_by_admin=True,
     )
-    db.session.add_all([informed_fs, pending_fs])
+    preliminary_fs = FeaturedStatement(
+        conversation_id=preliminary_results.id, polis_statement_id=303,
+        phase6_polis_statement_id=403,
+        statement_text='Regional communities should share infrastructure funding.',
+        confirmed_by_admin=True,
+    )
+    unavailable_fs = FeaturedStatement(
+        conversation_id=preliminary_unavailable.id, polis_statement_id=304,
+        phase6_polis_statement_id=404,
+        statement_text='Detailed results should degrade without inventing zero counts.',
+        confirmed_by_admin=True,
+    )
+    db.session.add_all([informed_fs, pending_fs, preliminary_fs, unavailable_fs])
     db.session.flush()
     informed_participation = Participation.query.filter_by(
         participant_id=participant.id, conversation_id=informed_voting.id,
