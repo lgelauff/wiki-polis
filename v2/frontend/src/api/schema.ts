@@ -1822,9 +1822,12 @@ export interface components {
             pseudonym: string | null;
             /** @enum {string} */
             status: "open" | "paused" | "archived";
+            /** Format: date-time */
+            closedAt: string | null;
             phases: string[];
             statementsRemaining: number | null;
             scheduledTransition: components["schemas"]["ScheduledTransition"] | null;
+            reveal: components["schemas"]["ConversationRevealSignal"] | null;
             outputs: components["schemas"]["ConversationOutput"][];
             capabilities: components["schemas"]["ConversationCapabilities"];
             links: components["schemas"]["ConversationLinks"];
@@ -2401,8 +2404,16 @@ export interface components {
             key: string;
             label: string;
             status: string;
+            symbol: string;
+            tooltip: string;
+            pending: string;
             ready: boolean;
             href: string | null;
+        };
+        ConversationRevealSignal: {
+            /** @enum {string} */
+            state: "pending" | "open" | "revealed" | "expired";
+            daysRemaining: number;
         };
         ConversationCapabilities: {
             join: boolean;

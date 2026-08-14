@@ -119,11 +119,21 @@ class ConversationLane:
                     'key': item['key'],
                     'label': item['label'],
                     'status': item['status'],
+                    'symbol': item['symbol'],
+                    'tooltip': item['tooltip'],
+                    'pending': item['pending'],
                     'ready': bool(item['ready']),
                     'href': item.get('href'),
                 }
                 for item in signal.get('outputs', [])
             ]
+            reveal = signal.get('reveal')
+            closed_at = conv.closed_at
+            if closed_at is not None:
+                closed_at = (
+                    closed_at if closed_at.tzinfo
+                    else closed_at.replace(tzinfo=timezone.utc)
+                ).astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
             links = {
                 'self': conversation_link(conv.slug),
                 'about': about_link(conv.slug),
@@ -151,9 +161,14 @@ class ConversationLane:
                 'pseudonym': participation.pseudonym if participation else None,
                 'status': ('archived' if not conv.active else
                            'paused' if conv.paused else 'open'),
+                'closedAt': closed_at,
                 'phases': phases,
                 'statementsRemaining': signal.get('statements_remaining'),
                 'scheduledTransition': scheduled_transition(conv),
+                'reveal': ({
+                    'state': reveal['state'],
+                    'daysRemaining': reveal['days_left'],
+                } if reveal else None),
                 'outputs': outputs,
                 'capabilities': {
                     'join': relationship == 'available' and self.authenticated,

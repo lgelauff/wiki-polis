@@ -1610,7 +1610,7 @@
       },
       "ConversationCard": {
         "type": "object",
-        "required": ["slug", "title", "relationship", "participantState", "pseudonym", "status", "phases", "statementsRemaining", "scheduledTransition", "outputs", "capabilities", "links"],
+        "required": ["slug", "title", "relationship", "participantState", "pseudonym", "status", "closedAt", "phases", "statementsRemaining", "scheduledTransition", "reveal", "outputs", "capabilities", "links"],
         "additionalProperties": false,
         "properties": {
           "slug": {"type": "string", "minLength": 1},
@@ -1624,11 +1624,18 @@
           },
           "pseudonym": {"type": ["string", "null"]},
           "status": {"type": "string", "enum": ["open", "paused", "archived"]},
+          "closedAt": {"type": ["string", "null"], "format": "date-time"},
           "phases": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
           "statementsRemaining": {"type": ["integer", "null"], "minimum": 0},
           "scheduledTransition": {
             "oneOf": [
               {"$ref": "#/components/schemas/ScheduledTransition"},
+              {"type": "null"}
+            ]
+          },
+          "reveal": {
+            "oneOf": [
+              {"$ref": "#/components/schemas/ConversationRevealSignal"},
               {"type": "null"}
             ]
           },
@@ -2670,14 +2677,26 @@
       },
       "ConversationOutput": {
         "type": "object",
-        "required": ["key", "label", "status", "ready", "href"],
+        "required": ["key", "label", "status", "symbol", "tooltip", "pending", "ready", "href"],
         "additionalProperties": false,
         "properties": {
           "key": {"type": "string"},
           "label": {"type": "string"},
           "status": {"type": "string"},
+          "symbol": {"type": "string"},
+          "tooltip": {"type": "string"},
+          "pending": {"type": "string"},
           "ready": {"type": "boolean"},
           "href": {"type": ["string", "null"]}
+        }
+      },
+      "ConversationRevealSignal": {
+        "type": "object",
+        "required": ["state", "daysRemaining"],
+        "additionalProperties": false,
+        "properties": {
+          "state": {"type": "string", "enum": ["pending", "open", "revealed", "expired"]},
+          "daysRemaining": {"type": "integer", "minimum": 0}
         }
       },
       "ConversationCapabilities": {

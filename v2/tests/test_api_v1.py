@@ -95,6 +95,11 @@ def test_anonymous_conversation_lane_exposes_public_contract_without_internal_id
     assert card['capabilities'] == {
         'join': False, 'participate': False, 'moderate': False,
     }
+    assert card['closedAt'] is None
+    assert card['reveal'] is None
+    assert card['outputs'][0].keys() >= {
+        'symbol', 'tooltip', 'pending', 'ready', 'href',
+    }
     serialized = json.dumps(data)
     assert conversation.polis_id not in serialized
     assert 'conversation_id' not in serialized
@@ -165,6 +170,9 @@ def test_closed_joined_conversation_advertises_identity_reveal_route(
     assert card['links']['identityReveal'] == (
         '/app/conversations/test-conv/identity-reveal'
     )
+    assert card['closedAt'] is not None
+    assert card['reveal']['state'] in {'pending', 'open', 'revealed', 'expired'}
+    assert card['reveal']['daysRemaining'] >= 0
 
 
 def test_conversation_lane_rejects_unknown_space(client):
