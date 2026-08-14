@@ -806,6 +806,14 @@ a { color: inherit; }
 .statements-heading dd { margin: .3rem 0 0; font: 650 1.8rem var(--mono); }
 .statement-admin-notice, .statement-admin-policy { margin: 1.5rem 0 0; padding: 1rem; border-left: 4px solid var(--signal); background: white; color: var(--muted); font-size: .75rem; line-height: 1.5; }
 .statement-admin-notice { border-color: var(--dissent); color: var(--dissent); }
+.statement-admin-policy { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2rem; }
+.statement-admin-policy h2 { margin: .2rem 0 .5rem; color: var(--ink); font-size: 1.2rem; }
+.statement-admin-policy div[role="group"] { display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+.statement-admin-policy button { display: grid; gap: .25rem; padding: .7rem; border: 1px solid var(--ink); background: white; cursor: pointer; text-align: left; }
+.statement-admin-policy button + button { border-left: 0; }
+.statement-admin-policy button[aria-pressed="true"] { color: white; background: var(--ink); }
+.statement-admin-policy button span { font-size: .58rem; opacity: .75; }
+.statement-admin-policy > p[role="alert"] { grid-column: 1 / -1; }
 .statement-import { display: grid; grid-template-columns: minmax(0, .8fr) minmax(360px, 1fr); gap: 4rem; padding: 4rem 0; border-bottom: 1px solid var(--ink); }
 .statement-import h2 { margin: .3rem 0 .8rem; font-size: clamp(1.8rem, 4vw, 3rem); letter-spacing: -.045em; }
 .statement-import > div > p:last-child { color: var(--muted); font-size: .76rem; line-height: 1.5; }
@@ -964,6 +972,9 @@ a { color: inherit; }
   .termination-record, .termination-decision { grid-template-columns: 1fr; gap: 1.5rem; }
   .termination-record dl { flex-wrap: wrap; }
   .statements-heading, .statement-import { grid-template-columns: 1fr; align-items: start; gap: 1.5rem; }
+  .statement-admin-policy { grid-template-columns: 1fr; }
+  .statement-admin-policy div[role="group"] { grid-template-columns: 1fr; }
+  .statement-admin-policy button + button { border-left: 1px solid var(--ink); border-top: 0; }
   .statements-heading dl { flex-wrap: wrap; }
   .statement-admin-row { grid-template-columns: 1fr; }
   .featured-heading, .featured-manual { grid-template-columns: 1fr; align-items: start; gap: 1.5rem; }

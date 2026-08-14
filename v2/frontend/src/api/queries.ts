@@ -338,6 +338,20 @@ export const adminStatementWorkspaceQuery = (conversationId: number) => queryOpt
   staleTime: 5_000,
 });
 
+export async function putAdminStatementModerationPolicy(
+  conversationId: number,
+  body: components['schemas']['AdminStatementModerationPolicyRequest'],
+  csrfToken: string,
+) {
+  return (await requireApiData(api.PUT(
+    '/admin/conversations/{conversationId}/statement-moderation-policy',
+    {
+      params: {path: {conversationId}}, body,
+      headers: {'X-CSRFToken': csrfToken},
+    },
+  ))).data;
+}
+
 export async function putAdminStatementModeration(
   conversationId: number,
   statementId: number,

@@ -7,6 +7,7 @@ import {ApiContractError} from '../../api/client';
 import {
   adminStatementWorkspaceQuery,
   postAdminStatementImport,
+  putAdminStatementModerationPolicy,
   putAdminStatementModeration,
 } from '../../api/queries';
 
@@ -122,6 +123,22 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       void queryClient.invalidateQueries({queryKey: options.queryKey});
     },
   });
+  const policyMutation = useMutation({
+    mutationFn: (mode: 'moderate' | 'auto_approve') => (
+      putAdminStatementModerationPolicy(conversationId, {mode}, csrfToken)
+    ),
+    onSuccess: (result) => {
+      queryClient.setQueryData<Workspace>(options.queryKey, result.workspace);
+      const behavior = result.mode === 'moderate'
+        ? 'Future participant statements will wait for review.'
+        : 'Future participant statements will be approved automatically.';
+      setReceipt(`${behavior} Existing statement decisions were preserved.${
+        result.reconciledStatements
+          ? ` ${result.reconciledStatements} legacy statement decision(s) were made explicit.`
+          : ''
+      }`);
+    },
+  });
 
   function moveStatement(statement: Statement, status: Status) {
     queryClient.setQueryData<Workspace>(options.queryKey, (workspace) => {
@@ -166,10 +183,30 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
         <p className="statement-admin-notice" role="status">Statement data is temporarily unavailable. Moderation is disabled.</p>
       )}
       {data.moderationPolicy.available && (
-        <p className="statement-admin-policy">
-          New participant statements are currently <strong>{data.moderationPolicy.strict ? 'held for review' : 'visible before review'}</strong>.
-          Policy changes remain unavailable here until per-statement creation decisions replace the legacy retroactive toggle.
-        </p>
+        <section className="statement-admin-policy" aria-labelledby="statement-policy-heading">
+          <div>
+            <p className="eyebrow">Future submissions only</p>
+            <h2 id="statement-policy-heading">Default moderation decision</h2>
+            <p>Changing this default never changes the status or visibility of existing statements.</p>
+          </div>
+          <div role="group" aria-label="Default moderation decision">
+            <button
+              type="button"
+              aria-pressed={data.moderationPolicy.mode === 'moderate'}
+              disabled={policyMutation.isPending || data.moderationPolicy.mode === 'moderate'}
+              onClick={() => policyMutation.mutate('moderate')}
+            >Require review <span>New statements start pending</span></button>
+            <button
+              type="button"
+              aria-pressed={data.moderationPolicy.mode === 'auto_approve'}
+              disabled={policyMutation.isPending || data.moderationPolicy.mode === 'auto_approve'}
+              onClick={() => policyMutation.mutate('auto_approve')}
+            >Auto-approve <span>New statements start approved</span></button>
+          </div>
+          {policyMutation.error && <p className="statement-admin-error" role="alert">{
+            errorMessage(policyMutation.error, 'The moderation policy could not be updated.')
+          }</p>}
+        </section>
       )}
       {receipt && <p className="lifecycle-receipt" role="status">{receipt}</p>}
 

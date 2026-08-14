@@ -25,6 +25,24 @@ function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as st
   };
 }
 
+function statementWorkspaceFixture(
+  mode: 'moderate' | 'auto_approve' = 'moderate',
+): components['schemas']['AdminStatementWorkspace'] {
+  return {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+    statements: {
+      pending: [{id: 11, text: 'A participant proposal awaiting review.', moderation: 'pending', seed: false, featured: false, votes: {agree: 2, pass: 1, disagree: 3}, provenance: null}],
+      approved: [{id: 12, text: 'An approved seed statement.', moderation: 'approved', seed: true, featured: true, votes: {agree: 8, pass: 2, disagree: 1}, provenance: null}],
+      hidden: [],
+    },
+    moderationPolicy: {mode, newStatements: mode === 'moderate' ? 'pending' : 'approved', available: true},
+    dataAvailability: {statements: true},
+    seeding: {allowed: true, lockReason: null, maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
+    capabilities: {moderate: true, seed: true},
+    links: {self: '/api/v1/admin/conversations/7/statements', lifecycle: '/app/admin/conversations/7'},
+  };
+}
+
 export const handlers = [
   http.get(new URL('/api/v1/admin/conversations/7/featured-statements', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
@@ -40,19 +58,11 @@ export const handlers = [
     return HttpResponse.json({data: {argumentId: Number(params.argumentId), hidden: body.hidden, changed: true, links: {featured: '/api/v1/admin/conversations/7/featured-statements'}}});
   }),
   http.delete(new URL('/api/v1/admin/conversations/7/featured-arguments/:argumentId', globalThis.location.origin).toString(), ({params}) => HttpResponse.json({data: {argumentId: Number(params.argumentId), featuredId: 61, deleted: true, links: {featured: '/api/v1/admin/conversations/7/featured-statements'}}})),
-  http.get(new URL('/api/v1/admin/conversations/7/statements', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
-    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
-    statements: {
-      pending: [{id: 11, text: 'A participant proposal awaiting review.', moderation: 'pending', seed: false, featured: false, votes: {agree: 2, pass: 1, disagree: 3}, provenance: null}],
-      approved: [{id: 12, text: 'An approved seed statement.', moderation: 'approved', seed: true, featured: true, votes: {agree: 8, pass: 2, disagree: 1}, provenance: null}],
-      hidden: [],
-    },
-    moderationPolicy: {strict: true, available: true},
-    dataAvailability: {statements: true},
-    seeding: {allowed: true, lockReason: null, maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
-    capabilities: {moderate: true, seed: true},
-    links: {self: '/api/v1/admin/conversations/7/statements', lifecycle: '/app/admin/conversations/7'},
-  }})),
+  http.get(new URL('/api/v1/admin/conversations/7/statements', globalThis.location.origin).toString(), () => HttpResponse.json({data: statementWorkspaceFixture()})),
+  http.put(new URL('/api/v1/admin/conversations/7/statement-moderation-policy', globalThis.location.origin).toString(), async ({request}) => {
+    const body = await request.json() as {mode: 'moderate' | 'auto_approve'};
+    return HttpResponse.json({data: {mode: body.mode, changed: true, reconciledStatements: 0, workspace: statementWorkspaceFixture(body.mode)}});
+  }),
   http.put(new URL('/api/v1/admin/conversations/7/statements/:statementId/moderation', globalThis.location.origin).toString(), async ({params, request}) => {
     const body = await request.json() as {status: 'approved' | 'pending' | 'hidden'};
     return HttpResponse.json({data: {statementId: Number(params.statementId), status: body.status, links: {statements: '/api/v1/admin/conversations/7/statements'}}});

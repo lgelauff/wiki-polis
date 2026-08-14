@@ -122,7 +122,10 @@ test('moderates statements and imports approved seeds through typed commands', a
 
   expect(await screen.findByRole('heading', {name: 'Statements'})).toBeVisible();
   expect(screen.getByText('A participant proposal awaiting review.')).toBeVisible();
-  expect(screen.getByText('held for review').parentElement).toHaveTextContent('New participant statements are currently');
+  expect(screen.getByRole('button', {name: /Require review/})).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', {name: /Auto-approve/}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Future participant statements will be approved automatically');
+  expect(screen.getByRole('heading', {name: 'Pending review'}).parentElement).toHaveTextContent('1');
   fireEvent.click(screen.getByRole('button', {name: 'Approve'}));
   expect(await screen.findByRole('status')).toHaveTextContent('Statement #11 moved to approved');
   expect(screen.getByRole('heading', {name: 'Approved'}).parentElement).toHaveTextContent('2');

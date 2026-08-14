@@ -564,6 +564,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/conversations/{conversationId}/statement-moderation-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the default decision for future statements without reinterpreting existing statements */
+        put: operations["putAdminStatementModerationPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations/{conversationId}/statements/{statementId}/moderation": {
         parameters: {
             query?: never;
@@ -870,6 +889,19 @@ export interface components {
         AdminStatementWorkspaceResponse: {
             data: components["schemas"]["AdminStatementWorkspace"];
         };
+        AdminStatementModerationPolicyRequest: {
+            /** @enum {string} */
+            mode: "moderate" | "auto_approve";
+        };
+        AdminStatementModerationPolicyResponse: {
+            data: {
+                /** @enum {string} */
+                mode: "moderate" | "auto_approve";
+                changed: boolean;
+                reconciledStatements: number;
+                workspace: components["schemas"]["AdminStatementWorkspace"];
+            };
+        };
         AdminStatementModerationRequest: {
             /** @enum {string} */
             status: "approved" | "pending" | "hidden";
@@ -1024,7 +1056,10 @@ export interface components {
                 hidden: components["schemas"]["AdminStatement"][];
             };
             moderationPolicy: {
-                strict: boolean | null;
+                /** @enum {string|null} */
+                mode: "moderate" | "auto_approve" | null;
+                /** @enum {string|null} */
+                newStatements: "pending" | "approved" | null;
                 available: boolean;
             };
             dataAvailability: {
@@ -3781,6 +3816,77 @@ export interface operations {
             };
             /** @description Conversation not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putAdminStatementModerationPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStatementModerationPolicyRequest"];
+            };
+        };
+        responses: {
+            /** @description Policy receipt and refreshed statement workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStatementModerationPolicyResponse"];
+                };
+            };
+            /** @description Invalid policy */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conversation moderation permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upstream outcome may be unknown */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Moderation baseline reconciliation failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Current state could not be verified or saved */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
