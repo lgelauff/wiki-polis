@@ -92,15 +92,10 @@ function ResultsRoute() {
 function AdminParticipantsRoute() {
   const {conversationId = ''} = useParams();
   const {data: session} = useSuspenseQuery(sessionQuery());
-  return (
-    <>
-      <Header admin />
-      <AdminParticipantsPage
-        conversationId={Number(conversationId)}
-        csrfToken={session.csrfToken}
-      />
-    </>
-  );
+  return <AdminParticipantsPage
+    conversationId={Number(conversationId)}
+    csrfToken={session.csrfToken}
+  />;
 }
 
 function AdminLifecycleRoute() {

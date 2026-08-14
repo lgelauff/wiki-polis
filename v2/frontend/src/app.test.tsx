@@ -217,24 +217,21 @@ test('manages participant access in the distinct admin workspace', async () => {
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {name: 'Community strategy'})).toBeVisible();
-  expect(screen.getByRole('navigation', {name: 'Workspace'})).toHaveTextContent(
-    'Admin workspace',
-  );
-  expect(screen.getByRole('rowheader', {name: /Example editor/})).toHaveTextContent(
-    'quiet-otter',
-  );
+  expect(await screen.findByRole('heading', {name: 'Participants — Community strategy'})).toBeVisible();
+  expect(within(screen.getByRole('table')).getByText('Example editor')).toBeVisible();
   expect(screen.getByText('8 / 12')).toBeVisible();
-  fireEvent.change(screen.getByLabelText('Reason (optional)'), {
+  fireEvent.change(screen.getByPlaceholderText('Reason (optional)'), {
     target: {value: 'Repeated disruption'},
   });
-  fireEvent.click(screen.getByRole('button', {name: 'Ban Example editor'}));
+  fireEvent.click(screen.getByRole('button', {name: 'ban'}));
 
   expect(await screen.findByRole('button', {
-    name: 'Unban Example editor',
+    name: 'unban',
   })).toBeVisible();
   expect(screen.getByText('Repeated disruption')).toBeVisible();
-  expect(screen.getByRole('status')).toHaveTextContent('Access updated');
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Participant banned from this conversation.',
+  );
 });
 
 test('resolves a privacy-safe moderation item through the typed contract', async () => {
