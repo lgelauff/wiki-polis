@@ -29,10 +29,11 @@ violations. API links between migrated screens must point to `/app/...` routes.
 
 ## Strict SPA testing
 
-In local development, use the `SPA only` switch in the header. The choice persists
-across tabs and browser restarts. `/app/real?spa_only=1` remains available as a
-direct activation URL. Same-origin navigation to a Jinja route is then blocked and
-shown as a React coverage gap; switch it off to allow fallbacks again.
+In local development and on the isolated `wiki-polis-dev` staging tool, use the
+`SPA only` switch in the header. It stays hidden in production. The choice persists
+across tabs and browser restarts. `/app/real?spa_only=1` remains available as a direct
+activation URL. Same-origin navigation to a Jinja route is then blocked and shown as
+a React coverage gap; switch it off to allow fallbacks again.
 
 ## State ownership
 

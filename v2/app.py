@@ -1723,11 +1723,12 @@ _SPA_ONLY_MAX_AGE = 365 * 24 * 60 * 60
 
 
 def _spa_developer_controls_enabled() -> bool:
-    """Expose migration controls only on a local debug server."""
-    return bool(
+    """Expose migration controls on local debug and the isolated staging tool."""
+    local_debug = bool(
         current_app.debug
         and not os.environ.get('TOOL_TOOLFORGE_API_URL')
     )
+    return local_debug or _is_staging_toolforge_app(current_app)
 
 
 def _is_canonical_spa_path(path: str) -> bool:

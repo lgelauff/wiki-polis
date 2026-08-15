@@ -55,7 +55,26 @@ def test_jinja_header_offers_spa_toggle_only_in_local_debug(app, client):
     assert b'SPA only <span>off</span>' in response.data
 
 
-def test_jinja_header_hides_spa_toggle_outside_local_debug(client):
+def test_jinja_header_offers_spa_toggle_on_toolforge_staging(monkeypatch, client):
+    monkeypatch.setenv('TOOL_NAME', 'wiki-polis-dev')
+    monkeypatch.setenv(
+        'TOOL_TOOLFORGE_API_URL',
+        'https://api.svc.tools.eqiad1.wikimedia.cloud',
+    )
+
+    response = client.get('/consultations')
+
+    assert b'role="switch"' in response.data
+    assert b'SPA only <span>off</span>' in response.data
+
+
+def test_jinja_header_hides_spa_toggle_in_toolforge_production(monkeypatch, client):
+    monkeypatch.setenv('TOOL_NAME', 'wiki-polis')
+    monkeypatch.setenv(
+        'TOOL_TOOLFORGE_API_URL',
+        'https://api.svc.tools.eqiad1.wikimedia.cloud',
+    )
+
     response = client.get('/consultations')
 
     assert b'SPA only <span>off</span>' not in response.data
