@@ -504,6 +504,12 @@ step is non-fatal but loud — if `toolforge jobs load` fails, the script prints
 continues the web deploy, but scheduled phase transitions won't fire until the job is reloaded
 manually.
 
+The script also builds the React frontend on every deploy. When `npm` is available it builds
+directly; on a Toolforge bastion, where application runtimes are intentionally absent, it
+automatically opens an ephemeral `node20` runtime shell and builds there. Toolforge mounts the
+tool's shared home directory into that shell, so the resulting `v2/static/spa` assets are ready
+for the Python webservice restart. No manual npm or partial-deployment recovery step is needed.
+
 ### Buildservice status
 
 Toolforge buildservice has been evaluated but is **not** the default deploy path. The

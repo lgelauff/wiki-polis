@@ -45,15 +45,25 @@ echo "==> Syncing dependencies (v2)..."
 ~/www/python/venv/bin/pip install -e ~/wiki-polis/v2
 
 echo "==> Building React frontend..."
-if ! command -v npm >/dev/null 2>&1; then
-  echo "!!  ERROR: npm is required to build v2/frontend before deployment." >&2
+if command -v npm >/dev/null 2>&1; then
+  (
+    cd ~/wiki-polis/v2/frontend
+    npm ci
+    npm run build
+  )
+elif command -v toolforge >/dev/null 2>&1; then
+  # Toolforge bastions intentionally do not provide application runtimes. Run
+  # the build in an ephemeral Node pod; the shared home mount makes the output
+  # immediately available to the Python webservice after it restarts.
+  echo "    npm is unavailable on the bastion; using a Toolforge Node 20 shell..."
+  # Expand HOME inside the runtime pod, not on the bastion.
+  # shellcheck disable=SC2016
+  toolforge webservice --backend=kubernetes node20 shell -- \
+    bash -lc 'set -euo pipefail; cd "$HOME/wiki-polis/v2/frontend"; npm ci; npm run build'
+else
+  echo "!!  ERROR: npm is required to build v2/frontend (Toolforge CLI fallback unavailable)." >&2
   exit 1
 fi
-(
-  cd ~/wiki-polis/v2/frontend
-  npm ci
-  npm run build
-)
 
 # Existing Toolforge secrets (secret-key, database-url, oauth-*, admin-users) are reused unchanged.
 # Only new secret needed: particiapi-base-url
@@ -84,6 +94,7 @@ if [ "$MIGRATE" -eq 1 ]; then
   # MIGRATION_MODE=1 skips web-server-only startup checks (Redis, TRUSTED_HOSTS)
   # that require Kubernetes-injected vars unavailable on the bastion.
   # Has no effect on which code runs — migrations only touch the DB.
+  # shellcheck disable=SC1090
   source ~/www/python/venv/bin/activate
   cd ~/wiki-polis/v2
   MIGRATION_MODE=1 flask --app app db upgrade
