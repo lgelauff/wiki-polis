@@ -145,7 +145,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
           Pick the name you will use in this consultation.
         </p>
 
-        <form method="post" action={`/accept/${data.conversation.slug}`} id="accept-form" aria-labelledby="accept-title" aria-describedby={`pseudonym-help accept-privacy-note${formError ? ' accept-error' : ''}`} onSubmit={submit}>
+        <form id="accept-form" aria-labelledby="accept-title" aria-describedby={`pseudonym-help accept-privacy-note${formError ? ' accept-error' : ''}`} onSubmit={submit}>
           <input type="hidden" name="csrf_token" value={csrfToken} />
           <div className="pseudonym-card" role="radiogroup" aria-labelledby="pseudonym-title" aria-describedby="pseudonym-help pseudonym-status">
             <div className="pseudonym-card-header">

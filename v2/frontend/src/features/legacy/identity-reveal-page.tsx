@@ -160,7 +160,7 @@ function AuthenticatedIdentityReveal({slug, csrfToken}: {slug: string; csrfToken
               </ul>
             </div>
             <IdentityCard pseudonym={data.pseudonym} username={data.wikimediaUsername} />
-            <form method="post" action={`/c/${data.slug}/reveal`} style={{marginTop: 22}} onSubmit={submit}>
+            <form style={{marginTop: 22}} onSubmit={submit}>
               <input type="hidden" name="csrf_token" value={csrfToken} />
               <label className="checkbox-label" style={{marginBottom: 16}}>
                 <input type="checkbox" name="confirm" value="1" required checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />

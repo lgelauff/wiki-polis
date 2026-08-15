@@ -1,11 +1,12 @@
 import {QueryClientProvider} from '@tanstack/react-query';
 import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
-import {MemoryRouter} from 'react-router-dom';
+import {Link, MemoryRouter} from 'react-router-dom';
 import {expect, test, vi} from 'vitest';
 
 import {App} from './app';
 import {createQueryClient} from './query-client';
+import {adminCatalogFixture} from './test/handlers';
 import {server} from './test/server';
 
 test('renders a conversation lane from the API contract', async () => {
@@ -24,6 +25,35 @@ test('renders a conversation lane from the API contract', async () => {
   expect(screen.getByRole('button', {name: 'Your conversations'})).toHaveAttribute('aria-pressed', 'true');
   fireEvent.click(screen.getByRole('button', {name: 'Browse'}));
   expect(screen.getByText('No consultations open to you right now.')).toBeVisible();
+});
+
+test('keeps the current route painted while the next route loads', async () => {
+  let releaseAdmin!: () => void;
+  const adminReady = new Promise<void>((resolve) => { releaseAdmin = resolve; });
+  server.use(http.get(
+    new URL('/api/v1/admin', globalThis.location.origin).toString(),
+    async () => {
+      await adminReady;
+      return HttpResponse.json({data: adminCatalogFixture()});
+    },
+  ));
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/consultations']}>
+        <Link to="/admin">Open admin</Link>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  const currentHeading = await screen.findByRole('heading', {name: 'Needs attention'});
+  fireEvent.click(screen.getByRole('link', {name: 'Open admin'}));
+
+  expect(currentHeading).toBeVisible();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+  releaseAdmin();
+  expect(await screen.findByRole('heading', {name: 'Admin panel'})).toBeVisible();
 });
 
 test('matches the legacy pending-output dialog and restores focus', async () => {
@@ -444,6 +474,8 @@ test('requires deliberate confirmation before permanently revealing identity', a
     name: 'Permanently link quiet-otter to your wiki name?',
   })).toBeVisible();
   const submit = screen.getByRole('button', {name: 'Yes, link my identity'});
+  expect(submit.closest('form')).not.toHaveAttribute('action');
+  expect(submit.closest('form')).not.toHaveAttribute('method');
   fireEvent.click(submit);
   expect(revealed).not.toHaveBeenCalled();
 
@@ -478,8 +510,11 @@ test('joins a conversation through the typed command', async () => {
   );
 
   expect(await screen.findByRole('heading', {name: 'Community strategy'})).toBeVisible();
+  const joinButton = screen.getByRole('button', {name: 'Join consultation as quiet-otter →'});
+  expect(joinButton.closest('form')).not.toHaveAttribute('action');
+  expect(joinButton.closest('form')).not.toHaveAttribute('method');
   fireEvent.click(screen.getByRole('checkbox', {name: /I understand my votes/}));
-  fireEvent.click(screen.getByRole('button', {name: 'Join consultation as quiet-otter →'}));
+  fireEvent.click(joinButton);
 
   await waitFor(() => expect(joined).toHaveBeenCalledWith({
     pseudonym: 'quiet-otter',

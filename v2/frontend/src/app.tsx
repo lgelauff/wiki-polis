@@ -1,6 +1,14 @@
-import {Suspense} from 'react';
+import {Suspense, useDeferredValue} from 'react';
 import {useSuspenseQuery} from '@tanstack/react-query';
-import {Link, Navigate, NavLink, Route, Routes, useParams} from 'react-router-dom';
+import {
+  Link,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from 'react-router-dom';
 
 import {
   sessionQuery,
@@ -163,60 +171,69 @@ function UnmatchedRoute() {
   return enabled ? <MissingSpaRoute /> : <Navigate to="/consultations" replace />;
 }
 
+function DeferredRoutes() {
+  const location = useLocation();
+  const deferredLocation = useDeferredValue(location);
+
+  return (
+    <Routes location={deferredLocation}>
+      <Route path="/" element={<ForkPage />} />
+      <Route path="/demo" element={<ConversationLanePage space="demo" />} />
+      <Route path="/consultations" element={<ConversationLanePage space="real" />} />
+      <Route path="/help/statements" element={<StatementGuidancePage />} />
+      <Route path="/help/arguments" element={<ArgumentGuidancePage />} />
+      <Route path="/accept/:slug" element={<ParticipationEntryLegacyPage />} />
+      <Route path="/c/:slug" element={<ConversationWorkspacePage />} />
+      <Route path="/c/:slug/about" element={<ConversationAboutLegacyPage />} />
+      <Route path="/c/:slug/moderation-log" element={<ModerationLogPage />} />
+      <Route path="/c/:slug/outputs/:outputKey" element={<ConversationOutputPage />} />
+      <Route path="/c/:slug/report" element={<ResultsRoute />} />
+      <Route path="/c/:slug/reveal" element={<IdentityRevealLegacyPage />} />
+      <Route path="/admin" element={<AdminAccessBoundary><AdminCatalogRoute /></AdminAccessBoundary>} />
+      <Route path="/admin/conversations/:conversationId" element={<AdminAccessBoundary><AdminLifecycleRoute /></AdminAccessBoundary>} />
+      <Route path="/admin/conversations/:conversationId/settings" element={<AdminAccessBoundary><AdminSettingsRoute /></AdminAccessBoundary>} />
+      <Route path="/admin/conversations/:conversationId/termination" element={<AdminAccessBoundary><AdminTerminationRoute /></AdminAccessBoundary>} />
+      <Route path="/admin/conversations/:conversationId/statements" element={<AdminAccessBoundary><AdminStatementsRoute /></AdminAccessBoundary>} />
+      <Route path="/admin/conversations/:conversationId/featured" element={<AdminAccessBoundary><AdminFeaturedRoute /></AdminAccessBoundary>} />
+      <Route path="/admin/conversations/:conversationId/participants" element={<AdminAccessBoundary><AdminParticipantsRoute /></AdminAccessBoundary>} />
+      <Route path="/admin/conversations/:conversationId/flags" element={<AdminAccessBoundary><AdminModerationRoute /></AdminAccessBoundary>} />
+      <Route path="/admin/conversations/:conversationId/invites" element={<AdminAccessBoundary><AdminInvitationsRoute /></AdminAccessBoundary>} />
+      <Route path="/admin/conversations/:conversationId/roles" element={<AdminAccessBoundary><AdminRolesRoute /></AdminAccessBoundary>} />
+      <Route path="/app/parity/fork" element={<ForkPage />} />
+      <Route path="/app/parity/help/statements" element={<StatementGuidancePage />} />
+      <Route path="/app/parity/help/arguments" element={<ArgumentGuidancePage />} />
+      <Route path="/app/parity/conversations/:slug/moderation-log" element={<ModerationLogPage />} />
+      <Route path="/app/parity/conversations/:slug/outputs/:outputKey" element={<ConversationOutputPage />} />
+      <Route path="/app/demo" element={<ConversationLanePage space="demo" />} />
+      <Route path="/app/real" element={<ConversationLanePage space="real" />} />
+      <Route path="/app/conversations/:slug/about" element={<ConversationAboutLegacyPage />} />
+      <Route path="/app/conversations/:slug/join" element={<ParticipationEntryLegacyPage />} />
+      <Route path="/app/conversations/:slug/explore" element={<ConversationWorkspacePage />} />
+      <Route path="/app/conversations/:slug/arguments" element={<ConversationWorkspacePage />} />
+      <Route path="/app/conversations/:slug/informed-voting" element={<ConversationWorkspacePage />} />
+      <Route path="/app/conversations/:slug/results" element={<ResultsRoute />} />
+      <Route path="/app/conversations/:slug/identity-reveal" element={<IdentityRevealLegacyPage />} />
+      <Route path="/app/admin" element={<AdminAccessBoundary><AdminCatalogRoute /></AdminAccessBoundary>} />
+      <Route path="/app/admin/conversations/:conversationId" element={<AdminAccessBoundary><AdminLifecycleRoute /></AdminAccessBoundary>} />
+      <Route path="/app/admin/conversations/:conversationId/settings" element={<AdminAccessBoundary><AdminSettingsRoute /></AdminAccessBoundary>} />
+      <Route path="/app/admin/conversations/:conversationId/termination" element={<AdminAccessBoundary><AdminTerminationRoute /></AdminAccessBoundary>} />
+      <Route path="/app/admin/conversations/:conversationId/statements" element={<AdminAccessBoundary><AdminStatementsRoute /></AdminAccessBoundary>} />
+      <Route path="/app/admin/conversations/:conversationId/featured" element={<AdminAccessBoundary><AdminFeaturedRoute /></AdminAccessBoundary>} />
+      <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminAccessBoundary><AdminParticipantsRoute /></AdminAccessBoundary>} />
+      <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminAccessBoundary><AdminModerationRoute /></AdminAccessBoundary>} />
+      <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminAccessBoundary><AdminInvitationsRoute /></AdminAccessBoundary>} />
+      <Route path="/app/admin/conversations/:conversationId/roles" element={<AdminAccessBoundary><AdminRolesRoute /></AdminAccessBoundary>} />
+      <Route path="*" element={<UnmatchedRoute />} />
+    </Routes>
+  );
+}
+
 export function App() {
   return (
     <StrictSpaBoundary>
       <a className="skip-link" href="#main">Skip to main content</a>
       <Suspense fallback={<p className="loading-state" role="status">Loading conversations…</p>}>
-        <Routes>
-          <Route path="/" element={<ForkPage />} />
-          <Route path="/demo" element={<ConversationLanePage space="demo" />} />
-          <Route path="/consultations" element={<ConversationLanePage space="real" />} />
-          <Route path="/help/statements" element={<StatementGuidancePage />} />
-          <Route path="/help/arguments" element={<ArgumentGuidancePage />} />
-          <Route path="/accept/:slug" element={<ParticipationEntryLegacyPage />} />
-          <Route path="/c/:slug" element={<ConversationWorkspacePage />} />
-          <Route path="/c/:slug/about" element={<ConversationAboutLegacyPage />} />
-          <Route path="/c/:slug/moderation-log" element={<ModerationLogPage />} />
-          <Route path="/c/:slug/outputs/:outputKey" element={<ConversationOutputPage />} />
-          <Route path="/c/:slug/report" element={<ResultsRoute />} />
-          <Route path="/c/:slug/reveal" element={<IdentityRevealLegacyPage />} />
-          <Route path="/admin" element={<AdminAccessBoundary><AdminCatalogRoute /></AdminAccessBoundary>} />
-          <Route path="/admin/conversations/:conversationId" element={<AdminAccessBoundary><AdminLifecycleRoute /></AdminAccessBoundary>} />
-          <Route path="/admin/conversations/:conversationId/settings" element={<AdminAccessBoundary><AdminSettingsRoute /></AdminAccessBoundary>} />
-          <Route path="/admin/conversations/:conversationId/termination" element={<AdminAccessBoundary><AdminTerminationRoute /></AdminAccessBoundary>} />
-          <Route path="/admin/conversations/:conversationId/statements" element={<AdminAccessBoundary><AdminStatementsRoute /></AdminAccessBoundary>} />
-          <Route path="/admin/conversations/:conversationId/featured" element={<AdminAccessBoundary><AdminFeaturedRoute /></AdminAccessBoundary>} />
-          <Route path="/admin/conversations/:conversationId/participants" element={<AdminAccessBoundary><AdminParticipantsRoute /></AdminAccessBoundary>} />
-          <Route path="/admin/conversations/:conversationId/flags" element={<AdminAccessBoundary><AdminModerationRoute /></AdminAccessBoundary>} />
-          <Route path="/admin/conversations/:conversationId/invites" element={<AdminAccessBoundary><AdminInvitationsRoute /></AdminAccessBoundary>} />
-          <Route path="/admin/conversations/:conversationId/roles" element={<AdminAccessBoundary><AdminRolesRoute /></AdminAccessBoundary>} />
-          <Route path="/app/parity/fork" element={<ForkPage />} />
-          <Route path="/app/parity/help/statements" element={<StatementGuidancePage />} />
-          <Route path="/app/parity/help/arguments" element={<ArgumentGuidancePage />} />
-          <Route path="/app/parity/conversations/:slug/moderation-log" element={<ModerationLogPage />} />
-          <Route path="/app/parity/conversations/:slug/outputs/:outputKey" element={<ConversationOutputPage />} />
-          <Route path="/app/demo" element={<ConversationLanePage space="demo" />} />
-          <Route path="/app/real" element={<ConversationLanePage space="real" />} />
-          <Route path="/app/conversations/:slug/about" element={<ConversationAboutLegacyPage />} />
-          <Route path="/app/conversations/:slug/join" element={<ParticipationEntryLegacyPage />} />
-          <Route path="/app/conversations/:slug/explore" element={<ConversationWorkspacePage />} />
-          <Route path="/app/conversations/:slug/arguments" element={<ConversationWorkspacePage />} />
-          <Route path="/app/conversations/:slug/informed-voting" element={<ConversationWorkspacePage />} />
-          <Route path="/app/conversations/:slug/results" element={<ResultsRoute />} />
-          <Route path="/app/conversations/:slug/identity-reveal" element={<IdentityRevealLegacyPage />} />
-          <Route path="/app/admin" element={<AdminAccessBoundary><AdminCatalogRoute /></AdminAccessBoundary>} />
-          <Route path="/app/admin/conversations/:conversationId" element={<AdminAccessBoundary><AdminLifecycleRoute /></AdminAccessBoundary>} />
-          <Route path="/app/admin/conversations/:conversationId/settings" element={<AdminAccessBoundary><AdminSettingsRoute /></AdminAccessBoundary>} />
-          <Route path="/app/admin/conversations/:conversationId/termination" element={<AdminAccessBoundary><AdminTerminationRoute /></AdminAccessBoundary>} />
-          <Route path="/app/admin/conversations/:conversationId/statements" element={<AdminAccessBoundary><AdminStatementsRoute /></AdminAccessBoundary>} />
-          <Route path="/app/admin/conversations/:conversationId/featured" element={<AdminAccessBoundary><AdminFeaturedRoute /></AdminAccessBoundary>} />
-          <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminAccessBoundary><AdminParticipantsRoute /></AdminAccessBoundary>} />
-          <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminAccessBoundary><AdminModerationRoute /></AdminAccessBoundary>} />
-          <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminAccessBoundary><AdminInvitationsRoute /></AdminAccessBoundary>} />
-          <Route path="/app/admin/conversations/:conversationId/roles" element={<AdminAccessBoundary><AdminRolesRoute /></AdminAccessBoundary>} />
-          <Route path="*" element={<UnmatchedRoute />} />
-        </Routes>
+        <DeferredRoutes />
       </Suspense>
     </StrictSpaBoundary>
   );

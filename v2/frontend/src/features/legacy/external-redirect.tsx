@@ -1,14 +1,15 @@
-import {useEffect} from 'react';
-import {useNavigate} from 'react-router-dom';
+import {useLayoutEffect} from 'react';
+import {Navigate} from 'react-router-dom';
 
 import {canonicalClientPath} from '../../client-routes';
 
 export function NavigationRedirect({href}: {href: string}) {
-  const navigate = useNavigate();
-  useEffect(() => {
-    const clientPath = canonicalClientPath(href);
-    if (clientPath) navigate(clientPath, {replace: true});
-    else globalThis.location.assign(href);
-  }, [href, navigate]);
+  const clientPath = canonicalClientPath(href);
+
+  useLayoutEffect(() => {
+    if (!clientPath) globalThis.location.assign(href);
+  }, [clientPath, href]);
+
+  if (clientPath) return <Navigate to={clientPath} replace />;
   return null;
 }

@@ -44,7 +44,7 @@ function statementWorkspaceFixture(
   };
 }
 
-function adminCatalogFixture(
+export function adminCatalogFixture(
   includeNewAdmin = false,
 ): components['schemas']['AdminCatalog'] {
   return {
