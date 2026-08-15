@@ -56,10 +56,8 @@ elif command -v toolforge >/dev/null 2>&1; then
   # the build in an ephemeral Node pod; the shared home mount makes the output
   # immediately available to the Python webservice after it restarts.
   echo "    npm is unavailable on the bastion; using a Toolforge Node 20 shell..."
-  # Expand HOME inside the runtime pod, not on the bastion.
-  # shellcheck disable=SC2016
   toolforge webservice --backend=kubernetes node20 shell -- \
-    bash -lc 'set -euo pipefail; cd "$HOME/wiki-polis/v2/frontend"; npm ci; npm run build'
+    "$HOME/wiki-polis/v2/bin/build-spa.sh"
 else
   echo "!!  ERROR: npm is required to build v2/frontend (Toolforge CLI fallback unavailable)." >&2
   exit 1
