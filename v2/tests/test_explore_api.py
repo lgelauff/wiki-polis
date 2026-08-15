@@ -391,6 +391,36 @@ def test_statement_command_creates_once_and_replays_completed_receipt(
     assert decision.detail == {'decision': 0, 'policy': 'moderate'}
 
 
+def test_statement_command_bootstraps_safe_policy_when_settings_are_unavailable(
+    auth_client, participant, conversation,
+):
+    conversation.statement_moderation_policy = None
+    db.session.commit()
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    server = MagicMock()
+    server.get_statements.return_value = ([{'tid': 11}], [], [])
+    participant_client = MagicMock()
+    participant_client.get_settings.return_value = {}
+
+    with (
+        patch('app.polis_http.post', return_value=_response({'id': 48}, status=201)),
+        patch('app._polis_server_client', return_value=server),
+        patch('app.PolisParticipantClient', return_value=participant_client),
+    ):
+        response = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'A safely moderated legacy claim.'},
+            headers={'Idempotency-Key': 'statement-key-48'},
+        )
+
+    assert response.status_code == 201
+    server.set_strict_moderation.assert_called_once_with(conversation.polis_id, True)
+    server.moderate.assert_not_called()
+    db.session.refresh(conversation)
+    assert conversation.statement_moderation_policy == 'moderate'
+
+
 def test_auto_approve_policy_explicitly_moderates_new_statement(
     auth_client, participant, conversation,
 ):

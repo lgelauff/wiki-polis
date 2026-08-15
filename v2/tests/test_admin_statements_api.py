@@ -110,7 +110,7 @@ def test_policy_change_explicitly_approves_visible_pending_before_strict_baselin
     ]
 
 
-def test_policy_change_fails_closed_when_live_state_is_unavailable(
+def test_auto_approve_policy_establishes_strict_baseline_without_settings_read(
     admin_client, conversation,
 ):
     server, participant = _upstream()
@@ -125,10 +125,37 @@ def test_policy_change_fails_closed_when_live_state_is_unavailable(
             json={'mode': 'auto_approve'},
         )
 
-    assert response.status_code == 503
-    assert response.get_json()['error']['code'] == 'verification_unavailable'
+    assert response.status_code == 200
+    assert response.get_json()['data']['reconciledStatements'] == 1
+    server.moderate.assert_called_once_with(conversation.polis_id, 11, 1)
+    server.set_strict_moderation.assert_called_once_with(conversation.polis_id, True)
+    db.session.refresh(conversation)
+    assert conversation.statement_moderation_policy == 'auto_approve'
+
+
+def test_moderate_policy_preserves_pending_rows_without_settings_read(
+    admin_client, conversation,
+):
+    conversation.statement_moderation_policy = None
+    db.session.commit()
+    server, participant = _upstream()
+    from polis_admin import PolisParticipantError
+    participant.get_settings.side_effect = PolisParticipantError('offline')
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app.PolisParticipantClient', return_value=participant),
+    ):
+        response = admin_client.put(
+            f'/api/v1/admin/conversations/{conversation.id}/statement-moderation-policy',
+            json={'mode': 'moderate'},
+        )
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['reconciledStatements'] == 0
     server.moderate.assert_not_called()
-    server.set_strict_moderation.assert_not_called()
+    server.set_strict_moderation.assert_called_once_with(conversation.polis_id, True)
+    db.session.refresh(conversation)
+    assert conversation.statement_moderation_policy == 'moderate'
 
 
 def test_statement_workspace_distinguishes_unavailable_from_empty(

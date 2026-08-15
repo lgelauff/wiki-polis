@@ -156,17 +156,21 @@ def set_statement_moderation_policy(
     """Converge Polis on explicit per-statement decisions, then store the default."""
     if policy not in {'moderate', 'auto_approve'}:
         raise ValueError('Unknown statement moderation policy.')
-    if upstream_strict is None or pending_statements is None:
+    if pending_statements is None:
         raise ModerationPolicyVerificationUnavailable()
 
     reconciled: list[int] = []
     upstream_changed = False
-    if not upstream_strict:
+    if upstream_strict is not True:
         try:
-            for row in pending_statements:
-                statement_id = int(row['tid'])
-                moderate_upstream(conversation.polis_id, statement_id, 1)
-                reconciled.append(statement_id)
+            # An explicit non-strict state means all existing statements belong
+            # to the pre-baseline pool. If settings are unavailable, preserve
+            # pending statements unless the requested policy is auto-approval.
+            if upstream_strict is False or policy == 'auto_approve':
+                for row in pending_statements:
+                    statement_id = int(row['tid'])
+                    moderate_upstream(conversation.polis_id, statement_id, 1)
+                    reconciled.append(statement_id)
             set_upstream_strict(conversation.polis_id, True)
             upstream_changed = True
         except upstream_errors as exc:

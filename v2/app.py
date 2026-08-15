@@ -2615,24 +2615,14 @@ def _statement_api_payload(
                 model=model, similarity=score, threshold=threshold,
             )
 
-    policy = conv.statement_moderation_policy
-    if policy is None:
-        try:
-            current_rows, upstream_strict = _load_admin_statement_sources(conv)
-            policy = resolved_moderation_policy(
-                conversation=conv, upstream_strict=upstream_strict,
-            )
-            if current_rows is None or policy is None:
-                raise ModerationPolicyVerificationUnavailable()
-            policy = _set_statement_moderation_policy_command(
-                conv, policy, sources=(current_rows, upstream_strict),
-            ).policy
-        except (
-            ModerationPolicyVerificationUnavailable,
-            ModerationPolicyUpstreamFailed,
-            ModerationPolicySaveFailed,
-        ) as exc:
-            raise StatementPreparationUnavailable() from exc
+    try:
+        policy = _ensure_statement_moderation_policy(conv)
+    except (
+        ModerationPolicyVerificationUnavailable,
+        ModerationPolicyUpstreamFailed,
+        ModerationPolicySaveFailed,
+    ) as exc:
+        raise StatementPreparationUnavailable() from exc
 
     canonical_request = {
         'text': text_value,
@@ -3196,6 +3186,22 @@ def _set_statement_moderation_policy_command(
         ),
         upstream_errors=(PolisServerError,),
     )
+
+
+def _ensure_statement_moderation_policy(conv: Conversation) -> str:
+    """Persist a safe strict baseline for legacy conversations on first write."""
+    if conv.statement_moderation_policy is not None:
+        return conv.statement_moderation_policy
+
+    current_rows, upstream_strict = _load_admin_statement_sources(conv)
+    if current_rows is None:
+        raise ModerationPolicyVerificationUnavailable()
+    policy = resolved_moderation_policy(
+        conversation=conv, upstream_strict=upstream_strict,
+    ) or 'moderate'
+    return _set_statement_moderation_policy_command(
+        conv, policy, sources=(current_rows, upstream_strict),
+    ).policy
 
 
 def _set_admin_statement_policy_api_payload(conv_id: int, body: dict) -> dict:
@@ -4379,25 +4385,15 @@ def conversation_statement_new(slug):
                 'threshold': threshold,
             }), 409
 
-    policy = conv.statement_moderation_policy
-    if policy is None:
-        try:
-            current_rows, upstream_strict = _load_admin_statement_sources(conv)
-            policy = resolved_moderation_policy(
-                conversation=conv, upstream_strict=upstream_strict,
-            )
-            if current_rows is None or policy is None:
-                raise ModerationPolicyVerificationUnavailable()
-            policy = _set_statement_moderation_policy_command(
-                conv, policy, sources=(current_rows, upstream_strict),
-            ).policy
-        except (
-            ModerationPolicyVerificationUnavailable,
-            ModerationPolicyUpstreamFailed,
-            ModerationPolicySaveFailed,
-        ):
-            current_app.logger.exception('statement moderation baseline unavailable')
-            return jsonify({'error': 'moderation_policy_unavailable'}), 502
+    try:
+        policy = _ensure_statement_moderation_policy(conv)
+    except (
+        ModerationPolicyVerificationUnavailable,
+        ModerationPolicyUpstreamFailed,
+        ModerationPolicySaveFailed,
+    ):
+        current_app.logger.exception('statement moderation baseline unavailable')
+        return jsonify({'error': 'moderation_policy_unavailable'}), 502
 
     # Establish the Particiapi session + CSRF token BEFORE taking the row lock, so the
     # ~5s session-create round-trip does not run while holding the FOR UPDATE lock (#275
