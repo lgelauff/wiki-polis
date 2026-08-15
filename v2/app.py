@@ -32,11 +32,11 @@ from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect, validate_csrf
 from sqlalchemy import text as _sa_text
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from wtforms.validators import ValidationError
 
-from db import (ACCESS_POLICIES, ADMIN_ROLES, FLAG_CATEGORIES, AdminRole, Argument,
+from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument,
                 ArgumentSideState, ArgumentVote, AuditEvent, ContentFlag, Conversation,
                 ConversationBan, ConversationInvite, FeaturedStatement, Participant,
                 Participation, StatementProvenance, StatementSimilarityScore, db)
@@ -106,24 +106,19 @@ from services.admin_statements import (
     LastFeaturedStatementProtected, StatementModerationUpstreamFailed,
     ModerationPolicySaveFailed, ModerationPolicyUpstreamFailed,
     ModerationPolicyVerificationUnavailable,
-    SeedImportUpstreamFailed, SeedImportValidationFailed,
-    SeedImportVerificationUnavailable, SeedStatementParentNotFound,
+    SeedImportValidationFailed, SeedStatementParentNotFound,
     SeedStatementUpstreamFailed, SeedStatementValidationFailed,
     add_seed_statement, build_statement_workspace, import_seed_statements,
     moderate_statement, resolved_moderation_policy, set_statement_moderation_policy,
 )
 from services.admin_featured import (
     ArgumentNotInFeaturedWorkspace,
-    FeaturedCommandOutcomeUnknown, FeaturedRoundSyncFailed,
-    FeaturedSourceUnavailable, FeaturedStatementNotFound,
-    LastFeaturedSelectionProtected,
+    FeaturedSourceUnavailable,
     build_featured_workspace, delete_featured_argument,
     remove_featured_statement, select_featured_statement,
     set_featured_argument_visibility,
 )
 from services.admin_catalog import (
-    ConversationCreationSaveFailed, ConversationCreationUpstreamFailed,
-    ConversationSlugConflict, GlobalAdminParticipantNotFound,
     build_admin_catalog, create_conversation as create_admin_conversation,
     set_global_admin,
 )
@@ -133,10 +128,7 @@ from services.admin_lifecycle import (
     PhasePreparationFailed, PhaseReadinessBlocked,
     PhaseReadinessUnconfirmed, PhaseTransitionConflict,
     PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
-    ConversationClosed, PublicationPhase6Missing,
-    InvalidAdvancedPhaseSet,
-    PublicationReadinessUnconfirmed, PublicationUnavailable,
-    ScheduleInPast, ScheduleUnavailable,
+    ScheduleInPast,
     advance_conversation_phase, build_admin_lifecycle, initialize_phase6,
     publish_final_report, set_advanced_phases, set_conversation_archived,
     set_conversation_paused,
@@ -2556,7 +2548,7 @@ def _submit_content_flag_api_payload(slug: str, body: dict) -> tuple[dict, int]:
     content_type = body['contentType']
     target_id = body['targetId']
     if content_type == 'argument':
-        argument = (
+        (
             Argument.query.join(FeaturedStatement)
             .filter(
                 Argument.id == target_id,
