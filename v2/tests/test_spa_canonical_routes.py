@@ -1,3 +1,18 @@
+import pytest
+
+import app as app_module
+
+
+@pytest.fixture(autouse=True)
+def spa_build_fixture(tmp_path, monkeypatch):
+    build_dir = tmp_path / 'spa'
+    build_dir.mkdir()
+    (build_dir / 'index.html').write_text(
+        '<!doctype html><div id="root"></div>', encoding='utf-8',
+    )
+    monkeypatch.setattr(app_module, '_SPA_BUILD_DIR', str(build_dir))
+
+
 def test_canonical_route_keeps_jinja_as_default_fallback(client, conversation):
     response = client.get(f'/c/{conversation.slug}')
 
