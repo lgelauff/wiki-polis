@@ -1727,6 +1727,15 @@ def _admin_client_link(conversation_id: int, page: str | None = None) -> str:
 
 
 _SPA_ONLY_COOKIE = 'wiki-polis-spa-only'
+_SPA_ONLY_MAX_AGE = 365 * 24 * 60 * 60
+
+
+def _spa_developer_controls_enabled() -> bool:
+    """Expose migration controls only on a local debug server."""
+    return bool(
+        current_app.debug
+        and not os.environ.get('TOOL_TOOLFORGE_API_URL')
+    )
 
 
 def _is_canonical_spa_path(path: str) -> bool:
@@ -7062,6 +7071,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             'username':   session.get('username'),
             'csp_nonce':  g.get('csp_nonce', ''),
             'git_version': _GIT_VERSION,
+            'spa_developer_controls': _spa_developer_controls_enabled(),
             # Header mode drives the demo/real switch + demo theme (#293).
             # Pages override this via render_template kwargs; default keeps the
             # switch off on pages outside the fork/lanes (e.g. admin).
@@ -7073,7 +7083,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         requested_spa_mode = request.args.get('spa_only')
         if requested_spa_mode == '1':
             response.set_cookie(
-                _SPA_ONLY_COOKIE, '1', max_age=86_400, path='/', samesite='Lax',
+                _SPA_ONLY_COOKIE, '1', max_age=_SPA_ONLY_MAX_AGE,
+                path='/', samesite='Lax',
             )
         elif requested_spa_mode == '0':
             response.delete_cookie(_SPA_ONLY_COOKIE, path='/', samesite='Lax')
@@ -7137,6 +7148,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             }
             for user in current_app.config.get('DEV_TEST_USERS', [])
         ],
+        resolve_developer_mode=_spa_developer_controls_enabled,
         resolve_conversation_lane=_conversation_lane_api_payload,
         resolve_conversation_workspace=_conversation_workspace_api_payload,
         resolve_conversation_about=_conversation_about_api_payload,

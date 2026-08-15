@@ -225,6 +225,23 @@ header {
   font-size: 13px;
 }
 
+.spa-dev-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .24rem .42rem;
+  border: 1px solid var(--muted);
+  color: var(--muted);
+  background: transparent;
+  font: 600 .62rem var(--mono);
+  letter-spacing: .03em;
+  text-decoration: none;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.spa-dev-toggle span { color: var(--dissent, #a03c2f); }
+.spa-dev-toggle[aria-checked="true"] span { color: var(--accent, #217a5b); }
+
 .header-user-chip {
   display: inline-flex;
   align-items: center;

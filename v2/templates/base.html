@@ -32,6 +32,11 @@
       </div>
 
       <div class="header-right">
+        {% if spa_developer_controls %}
+          <a class="spa-dev-toggle" href="{{ request.path }}?spa_only=1" role="switch" aria-checked="false">
+            SPA only <span>off</span>
+          </a>
+        {% endif %}
         {% if header_mode in ('fork', 'demo', 'real') %}
           <div class="mode-switch" role="group" aria-label="Choose demo or real mode">
             <a href="{{ url_for('demo_lane') }}"
