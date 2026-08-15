@@ -1,5 +1,6 @@
 import {Component, type ReactNode} from 'react';
 import {useSuspenseQuery} from '@tanstack/react-query';
+import {useParams} from 'react-router-dom';
 
 import {ApiContractError} from '../../api/client';
 import {resultsReportQuery} from '../../api/queries';
@@ -31,4 +32,11 @@ export function ResultsPage({slug}: {slug: string}) {
   return data.publication === 'preliminary'
     ? <ConversationWorkspacePage />
     : <FinalReportLegacyPage report={data} />;
+}
+
+export function ResultsRoute() {
+  const {slug = ''} = useParams();
+  return <ResultsAccessBoundary slug={slug}>
+    <ResultsPage slug={slug} />
+  </ResultsAccessBoundary>;
 }

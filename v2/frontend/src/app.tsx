@@ -1,170 +1,42 @@
-import {Suspense, useDeferredValue} from 'react';
-import {useSuspenseQuery} from '@tanstack/react-query';
-import {
-  Link,
-  Navigate,
-  NavLink,
-  Route,
-  Routes,
-  useLocation,
-  useParams,
-} from 'react-router-dom';
+import {lazy, Suspense, useDeferredValue} from 'react';
+import {Navigate, Route, Routes, useLocation} from 'react-router-dom';
 
 import {
-  sessionQuery,
-  type ConversationSpace,
-} from './api/queries';
-import {ResultsAccessBoundary, ResultsPage} from './features/results/results-page';
-import {AdminParticipantsPage} from './features/admin/admin-participants-page';
-import {AdminModerationPage} from './features/admin/admin-moderation-page';
-import {AdminInvitationsPage} from './features/admin/admin-invitations-page';
-import {AdminRolesPage} from './features/admin/admin-roles-page';
-import {AdminLifecyclePage} from './features/admin/admin-lifecycle-page';
-import {AdminSettingsPage} from './features/admin/admin-settings-page';
-import {AdminTerminationPage} from './features/admin/admin-termination-page';
-import {AdminStatementsPage} from './features/admin/admin-statements-page';
-import {AdminFeaturedPage} from './features/admin/admin-featured-page';
-import {AdminCatalogPage} from './features/admin/admin-catalog-page';
-import {AdminAccessBoundary} from './features/admin/admin-access-boundary';
-import {
   MissingSpaRoute,
-  SpaModeToggle,
   StrictSpaBoundary,
   useStrictSpaMode,
 } from './strict-spa-mode';
-import {
-  ArgumentGuidancePage,
-  ForkPage,
-  StatementGuidancePage,
-} from './features/legacy/public-pages';
-import {
-  ConversationAboutLegacyPage,
-  ConversationOutputPage,
-  ModerationLogPage,
-} from './features/legacy/conversation-read-pages';
-import {ParticipationEntryLegacyPage} from './features/legacy/participation-entry-page';
-import {IdentityRevealLegacyPage} from './features/legacy/identity-reveal-page';
+import {ForkPage} from './features/legacy/public-pages';
 import {ConversationLanePage} from './features/legacy/conversation-lane-page';
 import {ConversationWorkspacePage} from './features/legacy/conversation-workspace-page';
-import {InternalLink} from './internal-link';
+import {
+  loadAdminRoutes,
+  loadConversationReadPages,
+  loadGuidancePages,
+  loadIdentityRevealPage,
+  loadParticipationEntryPage,
+  loadResultsPage,
+} from './route-modules';
 
-function OrbitMark() {
-  return (
-    <svg className="brand__orbit" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" />
-      <ellipse cx="12" cy="12" rx="9" ry="3.5" />
-      <ellipse cx="12" cy="12" rx="3.5" ry="9" />
-    </svg>
-  );
-}
+const ArgumentGuidancePage = lazy(() => loadGuidancePages().then((module) => ({default: module.ArgumentGuidancePage})));
+const StatementGuidancePage = lazy(() => loadGuidancePages().then((module) => ({default: module.StatementGuidancePage})));
+const ParticipationEntryLegacyPage = lazy(() => loadParticipationEntryPage().then((module) => ({default: module.ParticipationEntryLegacyPage})));
+const IdentityRevealLegacyPage = lazy(() => loadIdentityRevealPage().then((module) => ({default: module.IdentityRevealLegacyPage})));
+const ConversationAboutLegacyPage = lazy(() => loadConversationReadPages().then((module) => ({default: module.ConversationAboutLegacyPage})));
+const ConversationOutputPage = lazy(() => loadConversationReadPages().then((module) => ({default: module.ConversationOutputPage})));
+const ModerationLogPage = lazy(() => loadConversationReadPages().then((module) => ({default: module.ModerationLogPage})));
+const ResultsRoute = lazy(() => loadResultsPage().then((module) => ({default: module.ResultsRoute})));
 
-function Header({space, admin = false}: {space?: ConversationSpace; admin?: boolean}) {
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  return (
-    <header className="app-header">
-      <div className="app-header__inner">
-        <InternalLink className="brand" href="/">
-          <OrbitMark />
-          <span>Wiki Polis</span>
-          <span className="brand__beta">prototype</span>
-        </InternalLink>
-        <SpaModeToggle developerMode={session.developerMode} />
-        {admin ? (
-          <nav className="admin-mode" aria-label="Workspace">
-            <strong><Link to="/admin">Admin workspace</Link></strong>
-            <Link to="/consultations">Participant view</Link>
-          </nav>
-        ) : (
-          <nav className="space-switch" aria-label="Conversation space">
-            <NavLink to="/demo" aria-current={space === 'demo' ? 'page' : undefined}>Try it out</NavLink>
-            <NavLink to="/consultations" aria-current={space === 'real' ? 'page' : undefined}>Real</NavLink>
-          </nav>
-        )}
-        {session.state === 'anonymous' ? (
-          <InternalLink className="account-link" href={session.links.login}>Log in</InternalLink>
-        ) : (
-          <form method="post" action={session.links.logout} className="account-form">
-            <span>{session.user?.username ?? 'Demo session'}</span>
-            <input type="hidden" name="csrf_token" value={session.csrfToken} />
-            <button type="submit">Log out</button>
-          </form>
-        )}
-      </div>
-    </header>
-  );
-}
-
-function ResultsRoute() {
-  const {slug = ''} = useParams();
-  return <ResultsAccessBoundary slug={slug}>
-    <ResultsPage slug={slug} />
-  </ResultsAccessBoundary>;
-}
-
-function AdminParticipantsRoute() {
-  const {conversationId = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  return <AdminParticipantsPage
-    conversationId={Number(conversationId)}
-    csrfToken={session.csrfToken}
-  />;
-}
-
-function AdminLifecycleRoute() {
-  const {conversationId = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  return <AdminLifecyclePage conversationId={Number(conversationId)} csrfToken={session.csrfToken} />;
-}
-
-function AdminSettingsRoute() {
-  const {conversationId = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  return <><Header admin /><AdminSettingsPage conversationId={Number(conversationId)} csrfToken={session.csrfToken} /></>;
-}
-
-function AdminTerminationRoute() {
-  const {conversationId = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  return <><Header admin /><AdminTerminationPage conversationId={Number(conversationId)} csrfToken={session.csrfToken} /></>;
-}
-
-function AdminStatementsRoute() {
-  const {conversationId = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  return <AdminStatementsPage conversationId={Number(conversationId)} csrfToken={session.csrfToken} />;
-}
-
-function AdminCatalogRoute() {
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  return <AdminCatalogPage csrfToken={session.csrfToken} />;
-}
-
-function AdminFeaturedRoute() {
-  const {conversationId = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  return <AdminFeaturedPage conversationId={Number(conversationId)} csrfToken={session.csrfToken} />;
-}
-
-function AdminModerationRoute() {
-  const {conversationId = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  return <AdminModerationPage
-    conversationId={Number(conversationId)}
-    csrfToken={session.csrfToken}
-  />;
-}
-
-function AdminInvitationsRoute() {
-  const {conversationId = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  return <AdminInvitationsPage conversationId={Number(conversationId)} csrfToken={session.csrfToken} />;
-}
-
-function AdminRolesRoute() {
-  const {conversationId = ''} = useParams();
-  const {data: session} = useSuspenseQuery(sessionQuery());
-  return <><Header admin /><AdminRolesPage conversationId={Number(conversationId)} csrfToken={session.csrfToken} /></>;
-}
+const AdminCatalogRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminCatalogRoute})));
+const AdminLifecycleRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminLifecycleRoute})));
+const AdminSettingsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsRoute})));
+const AdminTerminationRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminTerminationRoute})));
+const AdminStatementsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminStatementsRoute})));
+const AdminFeaturedRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminFeaturedRoute})));
+const AdminParticipantsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminParticipantsRoute})));
+const AdminModerationRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminModerationRoute})));
+const AdminInvitationsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminInvitationsRoute})));
+const AdminRolesRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminRolesRoute})));
 
 function UnmatchedRoute() {
   const {enabled} = useStrictSpaMode();
@@ -189,16 +61,16 @@ function DeferredRoutes() {
       <Route path="/c/:slug/outputs/:outputKey" element={<ConversationOutputPage />} />
       <Route path="/c/:slug/report" element={<ResultsRoute />} />
       <Route path="/c/:slug/reveal" element={<IdentityRevealLegacyPage />} />
-      <Route path="/admin" element={<AdminAccessBoundary><AdminCatalogRoute /></AdminAccessBoundary>} />
-      <Route path="/admin/conversations/:conversationId" element={<AdminAccessBoundary><AdminLifecycleRoute /></AdminAccessBoundary>} />
-      <Route path="/admin/conversations/:conversationId/settings" element={<AdminAccessBoundary><AdminSettingsRoute /></AdminAccessBoundary>} />
-      <Route path="/admin/conversations/:conversationId/termination" element={<AdminAccessBoundary><AdminTerminationRoute /></AdminAccessBoundary>} />
-      <Route path="/admin/conversations/:conversationId/statements" element={<AdminAccessBoundary><AdminStatementsRoute /></AdminAccessBoundary>} />
-      <Route path="/admin/conversations/:conversationId/featured" element={<AdminAccessBoundary><AdminFeaturedRoute /></AdminAccessBoundary>} />
-      <Route path="/admin/conversations/:conversationId/participants" element={<AdminAccessBoundary><AdminParticipantsRoute /></AdminAccessBoundary>} />
-      <Route path="/admin/conversations/:conversationId/flags" element={<AdminAccessBoundary><AdminModerationRoute /></AdminAccessBoundary>} />
-      <Route path="/admin/conversations/:conversationId/invites" element={<AdminAccessBoundary><AdminInvitationsRoute /></AdminAccessBoundary>} />
-      <Route path="/admin/conversations/:conversationId/roles" element={<AdminAccessBoundary><AdminRolesRoute /></AdminAccessBoundary>} />
+      <Route path="/admin" element={<AdminCatalogRoute />} />
+      <Route path="/admin/conversations/:conversationId" element={<AdminLifecycleRoute />} />
+      <Route path="/admin/conversations/:conversationId/settings" element={<AdminSettingsRoute />} />
+      <Route path="/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
+      <Route path="/admin/conversations/:conversationId/statements" element={<AdminStatementsRoute />} />
+      <Route path="/admin/conversations/:conversationId/featured" element={<AdminFeaturedRoute />} />
+      <Route path="/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
+      <Route path="/admin/conversations/:conversationId/flags" element={<AdminModerationRoute />} />
+      <Route path="/admin/conversations/:conversationId/invites" element={<AdminInvitationsRoute />} />
+      <Route path="/admin/conversations/:conversationId/roles" element={<AdminRolesRoute />} />
       <Route path="/app/parity/fork" element={<ForkPage />} />
       <Route path="/app/parity/help/statements" element={<StatementGuidancePage />} />
       <Route path="/app/parity/help/arguments" element={<ArgumentGuidancePage />} />
@@ -213,16 +85,16 @@ function DeferredRoutes() {
       <Route path="/app/conversations/:slug/informed-voting" element={<ConversationWorkspacePage />} />
       <Route path="/app/conversations/:slug/results" element={<ResultsRoute />} />
       <Route path="/app/conversations/:slug/identity-reveal" element={<IdentityRevealLegacyPage />} />
-      <Route path="/app/admin" element={<AdminAccessBoundary><AdminCatalogRoute /></AdminAccessBoundary>} />
-      <Route path="/app/admin/conversations/:conversationId" element={<AdminAccessBoundary><AdminLifecycleRoute /></AdminAccessBoundary>} />
-      <Route path="/app/admin/conversations/:conversationId/settings" element={<AdminAccessBoundary><AdminSettingsRoute /></AdminAccessBoundary>} />
-      <Route path="/app/admin/conversations/:conversationId/termination" element={<AdminAccessBoundary><AdminTerminationRoute /></AdminAccessBoundary>} />
-      <Route path="/app/admin/conversations/:conversationId/statements" element={<AdminAccessBoundary><AdminStatementsRoute /></AdminAccessBoundary>} />
-      <Route path="/app/admin/conversations/:conversationId/featured" element={<AdminAccessBoundary><AdminFeaturedRoute /></AdminAccessBoundary>} />
-      <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminAccessBoundary><AdminParticipantsRoute /></AdminAccessBoundary>} />
-      <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminAccessBoundary><AdminModerationRoute /></AdminAccessBoundary>} />
-      <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminAccessBoundary><AdminInvitationsRoute /></AdminAccessBoundary>} />
-      <Route path="/app/admin/conversations/:conversationId/roles" element={<AdminAccessBoundary><AdminRolesRoute /></AdminAccessBoundary>} />
+      <Route path="/app/admin" element={<AdminCatalogRoute />} />
+      <Route path="/app/admin/conversations/:conversationId" element={<AdminLifecycleRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/settings" element={<AdminSettingsRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/statements" element={<AdminStatementsRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/featured" element={<AdminFeaturedRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminModerationRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminInvitationsRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/roles" element={<AdminRolesRoute />} />
       <Route path="*" element={<UnmatchedRoute />} />
     </Routes>
   );

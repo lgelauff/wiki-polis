@@ -30,7 +30,10 @@ def test_react_owned_forms_do_not_fall_back_to_legacy_posts():
     server_form_sources.sort(key=lambda item: str(item[0]))
 
     assert server_form_sources == [
-        (Path('app.tsx'), '<form method="post" action={session.links.logout} className="account-form">'),
+        (
+            Path('features/admin/admin-routes.tsx'),
+            '<form method="post" action={session.links.logout} className="account-form">',
+        ),
         (
             Path('features/legacy/legacy-shell.tsx'),
             "<form method=\"post\" action={session.links.logout} style={{display: 'inline'}}>",

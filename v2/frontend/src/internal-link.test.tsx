@@ -1,9 +1,10 @@
 import {fireEvent, render, screen} from '@testing-library/react';
 import {MemoryRouter, useLocation} from 'react-router-dom';
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 
 import {canonicalClientPath} from './client-routes';
 import {InternalLink} from './internal-link';
+import * as routeModules from './route-modules';
 
 function LocationProbe() {
   const location = useLocation();
@@ -31,6 +32,18 @@ test('prevents a document navigation and updates React Router location', () => {
   expect(link).toHaveAttribute('href', '/consultations');
   expect(fireEvent.click(link)).toBe(false);
   expect(screen.getByLabelText('client location')).toHaveTextContent('/consultations');
+});
+
+test('prefetches a lazy route on hover and keyboard focus', () => {
+  const prefetch = vi.spyOn(routeModules, 'prefetchClientRoute').mockImplementation(() => undefined);
+  render(<MemoryRouter><InternalLink href="/c/topic/report">Report</InternalLink></MemoryRouter>);
+
+  const link = screen.getByRole('link', {name: 'Report'});
+  fireEvent.mouseEnter(link);
+  fireEvent.focus(link);
+
+  expect(prefetch).toHaveBeenNthCalledWith(1, '/c/topic/report');
+  expect(prefetch).toHaveBeenNthCalledWith(2, '/c/topic/report');
 });
 
 test.each([
