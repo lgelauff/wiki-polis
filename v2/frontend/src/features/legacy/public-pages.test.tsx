@@ -1,5 +1,5 @@
 import {QueryClientProvider} from '@tanstack/react-query';
-import {render, screen, waitFor} from '@testing-library/react';
+import {render, screen} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test} from 'vitest';
@@ -26,7 +26,7 @@ test('renders the entry fork with the legacy shell and card contract', async () 
   expect(screen.getByRole('link', {name: /Try out the platform/})).toHaveClass('fork-card--demo');
   expect(screen.getByRole('link', {name: /Participate in real consultations/})).toHaveClass('fork-card--real');
   expect(screen.getByRole('link', {name: /Open an issue/})).toHaveAttribute('target', '_blank');
-  await waitFor(() => expect(document.querySelector('link[data-react-legacy-styles]')).toBeTruthy());
+  expect(document.querySelector('link[data-react-legacy-styles]')).toBeNull();
 });
 
 test('renders server-projected developer login shortcuts without environment logic', async () => {

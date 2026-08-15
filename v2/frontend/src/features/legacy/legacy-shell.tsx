@@ -1,4 +1,4 @@
-import {useEffect, type ReactNode} from 'react';
+import {useLayoutEffect, type ReactNode} from 'react';
 import {useSuspenseQuery} from '@tanstack/react-query';
 
 import {sessionQuery} from '../../api/queries';
@@ -28,7 +28,7 @@ function OrbitMark() {
 }
 
 function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previousTitle = document.title;
     const previousDemo = document.body.getAttribute('data-demo');
     const initialDemo = document.body.dataset.spaInitialDemo === 'true';
@@ -36,11 +36,6 @@ function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
     const previousBackground = root.style.getPropertyValue('background');
     const previousFontSynthesis = root.style.getPropertyValue('font-synthesis');
     const previousTextRendering = root.style.getPropertyValue('text-rendering');
-    const stylesheet = document.createElement('link');
-    stylesheet.rel = 'stylesheet';
-    stylesheet.href = '/static/style.css';
-    stylesheet.dataset.reactLegacyStyles = 'true';
-    document.head.appendChild(stylesheet);
     document.title = title;
     root.style.setProperty('font-synthesis', 'weight style small-caps');
     root.style.setProperty('text-rendering', 'auto');
@@ -49,7 +44,6 @@ function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
     else document.body.removeAttribute('data-demo');
 
     return () => {
-      stylesheet.remove();
       document.title = previousTitle;
       if (previousBackground) root.style.setProperty('background', previousBackground);
       else root.style.removeProperty('background');

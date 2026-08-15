@@ -1,4 +1,4 @@
-import {Fragment, useCallback, useEffect, useState, type FormEvent} from 'react';
+import {Fragment, useCallback, useLayoutEffect, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 
@@ -38,7 +38,7 @@ function message(error: Error, fallback = 'The command could not be completed.')
 }
 
 function useRedesignStyles() {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = '/static/redesign.css';
