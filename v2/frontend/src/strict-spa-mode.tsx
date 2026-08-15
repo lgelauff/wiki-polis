@@ -7,7 +7,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
-import {useLocation} from 'react-router-dom';
+import {useLocation, useNavigate} from 'react-router-dom';
 import {InternalLink} from './internal-link';
 import {canonicalClientPath} from './client-routes';
 
@@ -16,6 +16,7 @@ const cookieName = 'wiki-polis-spa-only';
 
 type StrictSpaContextValue = {
   disable: () => void;
+  enable: () => void;
   enabled: boolean;
 };
 
@@ -23,22 +24,25 @@ const StrictSpaContext = createContext<StrictSpaContextValue | null>(null);
 
 function readStoredMode(): boolean {
   try {
-    return globalThis.sessionStorage.getItem(storageKey) === '1';
+    if (globalThis.localStorage.getItem(storageKey) === '1') return true;
+    if (globalThis.sessionStorage.getItem(storageKey) === '1') return true;
   } catch {
-    return false;
+    // Storage can be unavailable in privacy-restricted browser contexts.
   }
+  return document.cookie.split(';').some((part) => part.trim() === `${cookieName}=1`);
 }
 
 function storeMode(enabled: boolean) {
   try {
-    if (enabled) globalThis.sessionStorage.setItem(storageKey, '1');
-    else globalThis.sessionStorage.removeItem(storageKey);
+    if (enabled) globalThis.localStorage.setItem(storageKey, '1');
+    else globalThis.localStorage.removeItem(storageKey);
+    globalThis.sessionStorage.removeItem(storageKey);
   } catch {
     // Storage can be unavailable in privacy-restricted browser contexts.
   }
   try {
     document.cookie = enabled
-      ? `${cookieName}=1; Path=/; Max-Age=86400; SameSite=Lax`
+      ? `${cookieName}=1; Path=/; Max-Age=31536000; SameSite=Lax`
       : `${cookieName}=; Path=/; Max-Age=0; SameSite=Lax`;
   } catch {
     // Cookies can be unavailable in privacy-restricted browser contexts.
@@ -78,6 +82,7 @@ function legacyTarget(href: string): string | null {
 
 export function StrictSpaBoundary({children}: {children: ReactNode}) {
   const location = useLocation();
+  const navigate = useNavigate();
   const initialRequest = requestedMode(location.search);
   const [enabled, setEnabled] = useState(() => initialRequest ?? readStoredMode());
   const [blockedTarget, setBlockedTarget] = useState<string | null>(null);
@@ -98,6 +103,17 @@ export function StrictSpaBoundary({children}: {children: ReactNode}) {
     setEnabled(false);
     setBlockedTarget(null);
     storeMode(false);
+    const search = new URLSearchParams(location.search);
+    if (search.has('spa_only')) {
+      search.delete('spa_only');
+      navigate({pathname: location.pathname, search: search.toString(), hash: location.hash}, {replace: true});
+    }
+  }
+
+  function enable() {
+    setEnabled(true);
+    setBlockedTarget(null);
+    storeMode(true);
   }
 
   function block(target: string) {
@@ -128,15 +144,8 @@ export function StrictSpaBoundary({children}: {children: ReactNode}) {
   }
 
   return (
-    <StrictSpaContext.Provider value={{disable, enabled}}>
+    <StrictSpaContext.Provider value={{disable, enable, enabled}}>
       <div onClickCapture={captureLink} onSubmitCapture={captureForm}>
-        {enabled && (
-          <aside className="spa-only-banner" aria-label="SPA-only testing mode">
-            <strong>SPA-only mode</strong>
-            <span>Jinja fallbacks are blocked.</span>
-            <button type="button" onClick={disable}>Allow Jinja fallbacks</button>
-          </aside>
-        )}
         {children}
         {blockedTarget && (
           <div className="spa-coverage-backdrop">
@@ -159,6 +168,24 @@ export function StrictSpaBoundary({children}: {children: ReactNode}) {
         )}
       </div>
     </StrictSpaContext.Provider>
+  );
+}
+
+export function SpaModeToggle({developerMode}: {developerMode: boolean}) {
+  const {disable, enable, enabled} = useStrictSpaMode();
+  if (!developerMode) return null;
+
+  return (
+    <button
+      type="button"
+      className="spa-dev-toggle"
+      role="switch"
+      aria-checked={enabled}
+      onClick={enabled ? disable : enable}
+      title="Persistently block or allow Jinja route fallbacks in this browser"
+    >
+      SPA only <span>{enabled ? 'on' : 'off'}</span>
+    </button>
   );
 }
 

@@ -3,6 +3,7 @@ import {useSuspenseQuery} from '@tanstack/react-query';
 
 import {sessionQuery} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
+import {SpaModeToggle} from '../../strict-spa-mode';
 
 type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'admin' | 'plain';
 
@@ -104,6 +105,7 @@ export function LegacyShell({
           </div>
 
           <div className="header-right">
+            <SpaModeToggle developerMode={session.developerMode} />
             {headerMode !== 'plain' && headerMode !== 'admin' && (
               headerMode === 'conversation-demo' ? (
                 <span className="mode-lock mode-lock--demo">

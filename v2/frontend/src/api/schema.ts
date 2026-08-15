@@ -1904,6 +1904,7 @@ export interface components {
             user: components["schemas"]["SessionUser"] | null;
             capabilities: components["schemas"]["SiteCapabilities"];
             csrfToken: string;
+            developerMode: boolean;
             developerLogins: components["schemas"]["DeveloperLogin"][];
             links: components["schemas"]["SessionLinks"];
         };

@@ -323,6 +323,7 @@ export const handlers = [
         user: {username: 'Example editor', emailable: true},
         capabilities: {administerSite: false},
         csrfToken: 'test-csrf-token',
+        developerMode: true,
         developerLogins: [],
         links: {login: '/login', logout: '/logout'},
       },

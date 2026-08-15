@@ -29,10 +29,10 @@ violations. API links between migrated screens must point to `/app/...` routes.
 
 ## Strict SPA testing
 
-Open `/app/real?spa_only=1` to persist SPA-only mode for the current browser tab.
-Same-origin navigation to a Jinja route is then blocked and shown as a React coverage
-gap. Use the amber banner to allow Jinja fallbacks again, or open any SPA URL with
-`?spa_only=0`.
+In local development, use the `SPA only` switch in the header. The choice persists
+across tabs and browser restarts. `/app/real?spa_only=1` remains available as a
+direct activation URL. Same-origin navigation to a Jinja route is then blocked and
+shown as a React coverage gap; switch it off to allow fallbacks again.
 
 ## State ownership
 

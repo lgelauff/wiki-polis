@@ -20,6 +20,7 @@ import {AdminCatalogPage} from './features/admin/admin-catalog-page';
 import {AdminAccessBoundary} from './features/admin/admin-access-boundary';
 import {
   MissingSpaRoute,
+  SpaModeToggle,
   StrictSpaBoundary,
   useStrictSpaMode,
 } from './strict-spa-mode';
@@ -59,6 +60,7 @@ function Header({space, admin = false}: {space?: ConversationSpace; admin?: bool
           <span>Wiki Polis</span>
           <span className="brand__beta">prototype</span>
         </InternalLink>
+        <SpaModeToggle developerMode={session.developerMode} />
         {admin ? (
           <nav className="admin-mode" aria-label="Workspace">
             <strong><Link to="/admin">Admin workspace</Link></strong>

@@ -48,24 +48,22 @@ a { color: inherit; }
 }
 .skip-link:focus { translate: 0 .75rem; }
 
-.spa-only-banner {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  min-height: 38px;
-  display: flex;
-  justify-content: center;
+.spa-dev-toggle {
+  display: inline-flex;
   align-items: center;
-  gap: .7rem;
-  padding: .45rem 1rem;
-  color: #3d2200;
-  background: #ffd88a;
-  border-bottom: 1px solid #b56d00;
-  font-size: .72rem;
+  gap: .35rem;
+  padding: .24rem .42rem;
+  border: 1px solid var(--muted);
+  color: var(--muted);
+  background: transparent;
+  font: 600 .62rem var(--mono);
+  letter-spacing: .03em;
+  text-decoration: none;
+  text-transform: uppercase;
+  cursor: pointer;
 }
-.spa-only-banner strong { font: 700 .68rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
-.spa-only-banner button { padding: .25rem .45rem; border: 1px solid currentColor; color: inherit; background: transparent; cursor: pointer; }
-.spa-only-banner + .skip-link { top: 38px; }
+.spa-dev-toggle span { color: var(--dissent); }
+.spa-dev-toggle[aria-checked="true"] span { color: var(--civic); }
 
 .spa-coverage-backdrop {
   position: fixed;

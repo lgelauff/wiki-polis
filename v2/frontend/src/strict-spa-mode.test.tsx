@@ -5,7 +5,7 @@ import {expect, test, vi} from 'vitest';
 
 import {App} from './app';
 import {createQueryClient} from './query-client';
-import {StrictSpaBoundary} from './strict-spa-mode';
+import {SpaModeToggle, StrictSpaBoundary} from './strict-spa-mode';
 
 function renderApp(entry: string) {
   return render(
@@ -25,7 +25,7 @@ test('blocks a Jinja navigation and identifies the missing React coverage', asyn
     </MemoryRouter>,
   );
 
-  expect(await screen.findByLabelText('SPA-only testing mode')).toBeVisible();
+  expect(globalThis.localStorage.getItem('wiki-polis:spa-only')).toBe('1');
   fireEvent.click(screen.getByRole('link', {name: 'Legacy-only page'}));
 
   const gap = screen.getByRole('alertdialog', {name: 'Not implemented in the React SPA'});
@@ -37,32 +37,60 @@ test('blocks a Jinja navigation and identifies the missing React coverage', asyn
 
 test('persists SPA-only mode for later navigation in the same tab', async () => {
   const first = renderApp('/app/real?spa_only=1');
-  expect(await screen.findByLabelText('SPA-only testing mode')).toBeVisible();
-  expect(globalThis.sessionStorage.getItem('wiki-polis:spa-only')).toBe('1');
+  expect(await screen.findByRole('switch', {name: /SPA only on/})).toBeVisible();
+  expect(globalThis.localStorage.getItem('wiki-polis:spa-only')).toBe('1');
   first.unmount();
 
   renderApp('/app/real');
-  expect(await screen.findByLabelText('SPA-only testing mode')).toBeVisible();
+  expect(await screen.findByRole('switch', {name: /SPA only on/})).toBeVisible();
 });
 
 test('allows the tester to turn Jinja fallbacks back on', async () => {
   renderApp('/app/real?spa_only=1');
-  const banner = await screen.findByLabelText('SPA-only testing mode');
+  const toggle = await screen.findByRole('switch', {name: /SPA only on/});
 
-  fireEvent.click(screen.getByRole('button', {name: 'Allow Jinja fallbacks'}));
+  fireEvent.click(toggle);
 
-  expect(banner).not.toBeInTheDocument();
-  expect(globalThis.sessionStorage.getItem('wiki-polis:spa-only')).toBeNull();
+  expect(await screen.findByRole('switch', {name: /SPA only off/})).toBeVisible();
+  expect(globalThis.localStorage.getItem('wiki-polis:spa-only')).toBeNull();
 });
 
 test('supports an explicit URL switch to disable persisted strict mode', async () => {
-  globalThis.sessionStorage.setItem('wiki-polis:spa-only', '1');
+  globalThis.localStorage.setItem('wiki-polis:spa-only', '1');
   renderApp('/app/real?spa_only=0');
 
   await waitFor(() => {
-    expect(screen.queryByLabelText('SPA-only testing mode')).not.toBeInTheDocument();
-    expect(globalThis.sessionStorage.getItem('wiki-polis:spa-only')).toBeNull();
+    expect(screen.getByRole('switch', {name: /SPA only off/})).toBeVisible();
+    expect(globalThis.localStorage.getItem('wiki-polis:spa-only')).toBeNull();
   });
+});
+
+test('offers a persistent header toggle only in development', () => {
+  render(
+    <MemoryRouter>
+      <StrictSpaBoundary>
+        <SpaModeToggle developerMode />
+      </StrictSpaBoundary>
+    </MemoryRouter>,
+  );
+
+  fireEvent.click(screen.getByRole('switch', {name: /SPA only off/}));
+
+  expect(screen.getByRole('switch', {name: /SPA only on/})).toBeVisible();
+  expect(globalThis.localStorage.getItem('wiki-polis:spa-only')).toBe('1');
+  expect(document.cookie).toContain('wiki-polis-spa-only=1');
+});
+
+test('hides the header toggle outside development', () => {
+  render(
+    <MemoryRouter>
+      <StrictSpaBoundary>
+        <SpaModeToggle developerMode={false} />
+      </StrictSpaBoundary>
+    </MemoryRouter>,
+  );
+
+  expect(screen.queryByRole('switch')).not.toBeInTheDocument();
 });
 
 test('shows an explicit gap for an unknown SPA route instead of redirecting', () => {
