@@ -9,6 +9,10 @@ tmp/
 .dev-session
 audit/
 
+# Analysis exporters + notebook, and the de-identified export bundles they
+# produce. Local-only: bundles can contain participant-authored statement text.
+private/
+
 # Design handoff (local reference only)
 design_handoff_propose_and_arguments/
 
