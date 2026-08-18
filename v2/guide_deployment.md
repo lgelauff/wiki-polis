@@ -688,7 +688,20 @@ To export an envvar to the shell:
 export SECRET_KEY=$(toolforge envvars show SECRET_KEY | tail -1 | awk '{print $NF}')
 ```
 
-`deploy.sh --migrate` does this automatically — it loads **all** Toolforge envvars dynamically (the full `toolforge envvars list`), so every required variable is present with no hard-coded list to maintain.
+**This only works on the bastion.** `toolforge` is not installed inside `toolforge webservice python3.13 shell` (confirmed 2026-08 — `bash: toolforge: command not found`), and `/run/secrets/wiki-polis/<name>` is also **not** mounted in that debug shell (despite being what `_read_secret()` in `app.py` reads from at runtime — that mount exists in the actual serving pod, not this ad-hoc shell). So the pattern above cannot be run from inside the webservice shell itself.
+
+If you need a secret value inside the webservice shell (e.g. to run a one-off script that isn't wired into `flask --app app.py ...`), fetch it on the bastion first, then pass it in without echoing it to the screen or shell history:
+
+```bash
+# On the bastion:
+toolforge envvars show DATABASE_URL   # note the value
+
+# Inside the webservice shell:
+read -rs DATABASE_URL   # paste the value at the hidden prompt, press Enter
+export DATABASE_URL
+```
+
+`deploy.sh --migrate` does this automatically — it loads **all** Toolforge envvars dynamically (the full `toolforge envvars list`), so every required variable is present with no hard-coded list to maintain. `flask --app app db upgrade`, run via `deploy.sh --migrate`, is the supported path precisely because it avoids this gap.
 
 ---
 
@@ -702,6 +715,8 @@ export SECRET_KEY=$(toolforge envvars show SECRET_KEY | tail -1 | awk '{print $N
 | No SQLite CLI on Toolforge | Use `python3 -c 'import sqlite3; ...'` if needed |
 | Replica DBs unavailable locally | `get_polis_stats()` already handles missing `POLIS_DATABASE_URL` gracefully |
 | "lseek: Illegal seek" in logs | uWSGI stdout rotation noise — safe to ignore |
+| `toolforge: command not found` / secrets missing inside `toolforge webservice python3.13 shell` | That debug shell has neither the `toolforge` CLI nor the `/run/secrets/wiki-polis/` mount the serving pod has. Fetch values on the bastion and pass them in via `read -rs VARNAME` (see "Exporting envvars manually" above), or run the work as a job, which *does* get the tool's envvars injected |
+| Envvars empty in a script (`$DATABASE_URL` unset) | An interactive **bastion** shell gets no injected envvars — only jobs and the webservice do. Run one-off work with `toolforge jobs run … --wait`, as `v2/bin/phase-scheduler.sh` does |
 
 ---
 
