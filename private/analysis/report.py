@@ -468,6 +468,51 @@ def _svg(fig) -> str:
     return svg[svg.index('<svg'):]
 
 
+def _merge_map(redundant: pd.DataFrame | None) -> dict[int, int]:
+    """{tid: representative tid} over the pairs judged redundant. Union-find, so a
+    chain of pairwise merges collapses to one representative."""
+    if redundant is None or redundant.empty:
+        return {}
+    parent: dict[int, int] = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for row in redundant[redundant['verdict'].str.startswith('redundant')].itertuples():
+        a, b = find(int(row.tid_a)), find(int(row.tid_b))
+        if a != b:
+            parent[max(a, b)] = min(a, b)
+    return {tid: find(tid) for tid in parent}
+
+
+def _collapse_duplicates(frame: pd.DataFrame, merge: dict[int, int]) -> pd.DataFrame:
+    """One row per proposition, not per wording.
+
+    The deduplication section merges near-identical statements before the grouping is
+    computed, and then the selection tables listed every wording separately again — so
+    the eight most divisive statements were four propositions, and an organiser reading
+    down the list saw the same argument three times. Collapse by the same map the
+    clustering uses, keep the wording with the most opinions behind it, and say which
+    others it stands for.
+    """
+    if frame.empty or not merge:
+        return frame
+    out = frame.copy()
+    out['_rep'] = out['tid'].map(lambda t: merge.get(int(t), int(t)))
+    order = 'n_decided' if 'n_decided' in out.columns else 'n_voters'
+    out = out.sort_values(order, ascending=False)
+    kept = out.drop_duplicates('_rep', keep='first').copy()
+    others = (out.groupby('_rep')['tid']
+              .apply(lambda s: list(s)[1:]).to_dict())
+    kept['also submitted as'] = kept['_rep'].map(
+        lambda r: ', '.join(f'#{int(t)}' for t in others.get(r, [])) or '')
+    return kept.drop(columns='_rep')
+
+
 def _table(df: pd.DataFrame, max_rows: int = 40) -> str:
     if df is None or (hasattr(df, 'empty') and df.empty):
         return '<p class="missing">Nothing to show.</p>'
@@ -695,6 +740,11 @@ def write_report(*, bundle, conv_key, checks, funnel, server, gate, sweep, stabi
     # depending on the answer — so the answer travels with them instead of staying in
     # the section that computed it, several screens up. The threshold is corrected for
     # the number of tests run, matching what that section says in words.
+    # One row per proposition in every selection table and figure below. Built here
+    # so the three consumers of `divergence` cannot drift apart on it.
+    merge = _merge_map(redundant)
+    deduped = _collapse_duplicates(divergence, merge) if not divergence.empty else divergence
+
     grouping_is_weak = False
     if significance is not None and not significance.empty:
         p_values = significance['p (permutation test)']
@@ -1248,7 +1298,7 @@ def write_report(*, bundle, conv_key, checks, funnel, server, gate, sweep, stabi
         # statements in the consultation while admitting one at 69%. Ranked on overall
         # agreement instead, which is the quantity that does not depend on a grouping
         # this report goes on to show is indistinguishable from noise.
-        agreed = divergence[divergence['agree_pct'].notna()].copy()
+        agreed = deduped[deduped['agree_pct'].notna()].copy()
         cols = [c for c in agreed.columns if c.startswith('agree_group')]
         floor = max(5, POLIS_VOTE_THRESHOLD)
         broad = agreed[agreed['n_decided'] >= floor].sort_values(
@@ -1278,7 +1328,7 @@ def write_report(*, bundle, conv_key, checks, funnel, server, gate, sweep, stabi
             '<p>Each statement appears once, showing how much each group agreed with it, '
             'counting only people who took a side. The further apart the marks, the more '
             'that statement divides the room.</p>')
-        parts.append(f'<figure class="figwrap">{_svg(plot_divergence(divergence))}</figure>')
+        parts.append(f'<figure class="figwrap">{_svg(plot_divergence(deduped))}</figure>')
         parts.append(weak_note)
 
     # ── alterations ──────────────────────────────────────────────────────────
@@ -1646,7 +1696,9 @@ def write_report(*, bundle, conv_key, checks, funnel, server, gate, sweep, stabi
         parts.append(
             '<p>These split the groups most sharply. They are not necessarily the ones '
             'to drop — a consultation exists to find them — but they are the ones that '
-            'will need argument rather than a count.</p>')
+            'will need argument rather than a count. One row per proposition: where the '
+            'same idea was written several ways, the wording with the most opinions '
+            'behind it stands for the rest, which are named beside it.</p>')
         cols = [c for c in divergence.columns if c.startswith('agree_group')]
         # Interleave each group's rate with how many in that group actually took a
         # side. Without it the visible denominator is n_voters (12, 22…), while the
@@ -1657,8 +1709,10 @@ def write_report(*, bundle, conv_key, checks, funnel, server, gate, sweep, stabi
             n_col = c.replace('agree_group', 'decided_group')
             if n_col in divergence.columns:
                 interleaved.append(n_col)
-        top = divergence.dropna(subset=['gap']).head(8)[
-            ['tid'] + interleaved + ['gap', 'statement']]
+        extra = ['also submitted as'] if 'also submitted as' in deduped.columns else []
+        top = deduped.dropna(subset=['gap']).sort_values(
+            'gap', ascending=False).head(8)[
+            ['tid'] + interleaved + ['gap', 'statement'] + extra]
         parts.append(f'<div class="tablewrap">{_table(top)}</div>')
         parts.append(weak_note)
 
