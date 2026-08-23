@@ -6859,6 +6859,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['SESSION_COOKIE_HTTPONLY']    = True
     app.config['SESSION_COOKIE_SAMESITE']    = 'Lax'
     app.config['SESSION_COOKIE_SECURE']      = not app.debug
+    app.config['SPA_DEFAULT_ENABLED']        = True
 
     app.config['OAUTH_CLIENT_ID']     = _read_secret('oauth-client-id')
     app.config['OAUTH_CLIENT_SECRET'] = _read_secret('oauth-client-secret')
@@ -7055,13 +7056,21 @@ def create_app(test_config: dict | None = None) -> Flask:
         g._t0 = time.perf_counter()
 
     @app.before_request
-    def _serve_canonical_spa_only_request():
+    def _serve_canonical_spa_request():
         if request.method != 'GET' or not _is_canonical_spa_path(request.path):
             return None
+        # Accessing ``request.host`` applies Flask's TRUSTED_HOSTS validation.
+        # Route dispatch normally triggers it later, but this before-request SPA
+        # response intentionally bypasses route dispatch.
+        _ = request.host
         requested = request.args.get('spa_only')
-        enabled = requested == '1' or (
-            requested is None and request.cookies.get(_SPA_ONLY_COOKIE) == '1'
-        )
+        stored = request.cookies.get(_SPA_ONLY_COOKIE)
+        if requested in {'0', '1'}:
+            enabled = requested == '1'
+        elif stored in {'0', '1'}:
+            enabled = stored == '1'
+        else:
+            enabled = bool(current_app.config['SPA_DEFAULT_ENABLED'])
         if enabled:
             return send_from_directory(_SPA_BUILD_DIR, 'index.html')
         return None
@@ -7090,7 +7099,10 @@ def create_app(test_config: dict | None = None) -> Flask:
                 path='/', samesite='Lax',
             )
         elif requested_spa_mode == '0':
-            response.delete_cookie(_SPA_ONLY_COOKIE, path='/', samesite='Lax')
+            response.set_cookie(
+                _SPA_ONLY_COOKIE, '0', max_age=_SPA_ONLY_MAX_AGE,
+                path='/', samesite='Lax',
+            )
         nonce = g.get('csp_nonce', '')
         csp = (
             "default-src 'self'; "

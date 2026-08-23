@@ -152,6 +152,9 @@ def capture(
         if spa_only:
             separator = '&' if '?' in path else '?'
             path = f'{path}{separator}spa_only=1'
+        elif path_key == 'legacyPath':
+            separator = '&' if '?' in path else '?'
+            path = f'{path}{separator}spa_only=0'
         prepare_page(
             page,
             f'{base_url}{path}',

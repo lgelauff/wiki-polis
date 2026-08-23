@@ -35,6 +35,13 @@ test('blocks a Jinja navigation and identifies the missing React coverage', asyn
   );
 });
 
+test('enables SPA-only mode by default', async () => {
+  renderApp('/app/real');
+
+  expect(await screen.findByRole('switch', {name: /SPA only on/})).toBeVisible();
+  expect(globalThis.localStorage.getItem('wiki-polis:spa-only')).toBe('1');
+});
+
 test('persists SPA-only mode for later navigation in the same tab', async () => {
   const first = renderApp('/app/real?spa_only=1');
   expect(await screen.findByRole('switch', {name: /SPA only on/})).toBeVisible();
@@ -52,7 +59,8 @@ test('allows the tester to turn Jinja fallbacks back on', async () => {
   fireEvent.click(toggle);
 
   expect(await screen.findByRole('switch', {name: /SPA only off/})).toBeVisible();
-  expect(globalThis.localStorage.getItem('wiki-polis:spa-only')).toBeNull();
+  expect(globalThis.localStorage.getItem('wiki-polis:spa-only')).toBe('0');
+  expect(document.cookie).toContain('wiki-polis-spa-only=0');
 });
 
 test('supports an explicit URL switch to disable persisted strict mode', async () => {
@@ -61,7 +69,7 @@ test('supports an explicit URL switch to disable persisted strict mode', async (
 
   await waitFor(() => {
     expect(screen.getByRole('switch', {name: /SPA only off/})).toBeVisible();
-    expect(globalThis.localStorage.getItem('wiki-polis:spa-only')).toBeNull();
+    expect(globalThis.localStorage.getItem('wiki-polis:spa-only')).toBe('0');
   });
 });
 
@@ -74,11 +82,11 @@ test('offers a persistent header toggle only in development', () => {
     </MemoryRouter>,
   );
 
-  fireEvent.click(screen.getByRole('switch', {name: /SPA only off/}));
+  fireEvent.click(screen.getByRole('switch', {name: /SPA only on/}));
 
-  expect(screen.getByRole('switch', {name: /SPA only on/})).toBeVisible();
-  expect(globalThis.localStorage.getItem('wiki-polis:spa-only')).toBe('1');
-  expect(document.cookie).toContain('wiki-polis-spa-only=1');
+  expect(screen.getByRole('switch', {name: /SPA only off/})).toBeVisible();
+  expect(globalThis.localStorage.getItem('wiki-polis:spa-only')).toBe('0');
+  expect(document.cookie).toContain('wiki-polis-spa-only=0');
 });
 
 test('hides the header toggle outside development', () => {

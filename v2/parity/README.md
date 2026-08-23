@@ -30,9 +30,9 @@ cd v2
 .venv/bin/python parity/visual.py compare
 ```
 
-To verify the canonical URLs with Jinja fallback blocked, run the final gate in
-SPA-only mode. The runner renders Jinja at each canonical path, then renders React
-at that same path with `spa_only=1` in a fresh browser context:
+React is the default on canonical URLs. The runner explicitly renders Jinja with
+`spa_only=0` at each canonical path, then renders React at that same path in a
+fresh browser context:
 
 ```sh
 .venv/bin/python parity/visual.py compare --spa-only --require-parity

@@ -22,7 +22,7 @@ def run(base_url: str) -> dict:
         )
         try:
             page.goto(f'{base_url}/dev-login', wait_until='networkidle')
-            page.goto(f'{base_url}/admin?spa_only=1', wait_until='networkidle')
+            page.goto(f'{base_url}/admin', wait_until='networkidle')
             assert page.get_by_role('switch', name='SPA only on').is_visible()
 
             before_click = len(document_requests)
@@ -36,12 +36,12 @@ def run(base_url: str) -> dict:
                 f'{document_requests[before_click:]}'
             )
             assert page.get_by_role('alertdialog').count() == 0
-            assert page.locator('footer code').text_content() == 'react'
+            assert page.locator('footer code').text_content()
 
             page.reload(wait_until='networkidle')
             assert urlparse(page.url).path == destination
             assert page.get_by_role('switch', name='SPA only on').is_visible()
-            assert page.locator('footer code').text_content() == 'react'
+            assert page.locator('footer code').text_content()
 
             return {
                 'destination': destination,

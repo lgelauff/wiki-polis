@@ -64,6 +64,8 @@ def test_trusted_hosts_rejects_unexpected_host(tmp_path):
         'SESSION_TYPE': 'cachelib',
         'SESSION_CACHELIB': FileSystemCache(str(session_dir)),
         'TRUSTED_HOSTS': ['wiki-polis.test'],
+        # This unit test isolates host validation and does not build SPA assets.
+        'SPA_DEFAULT_ENABLED': False,
     })
     with a.app_context():
         db.create_all()

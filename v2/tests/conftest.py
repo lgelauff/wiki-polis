@@ -74,6 +74,9 @@ def app(tmp_path):
             'SESSION_TYPE': 'cachelib',
             'SESSION_CACHELIB': FileSystemCache(str(session_dir)),
             'SESSION_PERMANENT': False,
+            # Most tests exercise the legacy route handlers directly. The
+            # canonical-routing suite opts back into the production React default.
+            'SPA_DEFAULT_ENABLED': False,
             # Test behavior must not depend on developer .env/secrets or live
             # local Polis processes. Individual tests opt in with config/mocks.
             'POLIS_DATABASE_URL': '',

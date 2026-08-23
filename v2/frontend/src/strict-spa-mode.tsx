@@ -23,27 +23,31 @@ type StrictSpaContextValue = {
 const StrictSpaContext = createContext<StrictSpaContextValue | null>(null);
 
 function readStoredMode(): boolean {
+  const cookie = document.cookie.split(';').find((part) => (
+    part.trim().startsWith(`${cookieName}=`)
+  ))?.trim();
+  if (cookie === `${cookieName}=0`) return false;
+  if (cookie === `${cookieName}=1`) return true;
   try {
+    if (globalThis.localStorage.getItem(storageKey) === '0') return false;
     if (globalThis.localStorage.getItem(storageKey) === '1') return true;
+    if (globalThis.sessionStorage.getItem(storageKey) === '0') return false;
     if (globalThis.sessionStorage.getItem(storageKey) === '1') return true;
   } catch {
     // Storage can be unavailable in privacy-restricted browser contexts.
   }
-  return document.cookie.split(';').some((part) => part.trim() === `${cookieName}=1`);
+  return true;
 }
 
 function storeMode(enabled: boolean) {
   try {
-    if (enabled) globalThis.localStorage.setItem(storageKey, '1');
-    else globalThis.localStorage.removeItem(storageKey);
+    globalThis.localStorage.setItem(storageKey, enabled ? '1' : '0');
     globalThis.sessionStorage.removeItem(storageKey);
   } catch {
     // Storage can be unavailable in privacy-restricted browser contexts.
   }
   try {
-    document.cookie = enabled
-      ? `${cookieName}=1; Path=/; Max-Age=31536000; SameSite=Lax`
-      : `${cookieName}=; Path=/; Max-Age=0; SameSite=Lax`;
+    document.cookie = `${cookieName}=${enabled ? '1' : '0'}; Path=/; Max-Age=31536000; SameSite=Lax`;
   } catch {
     // Cookies can be unavailable in privacy-restricted browser contexts.
   }
