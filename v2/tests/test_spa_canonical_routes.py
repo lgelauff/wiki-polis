@@ -20,6 +20,25 @@ def test_canonical_route_keeps_jinja_as_default_fallback(client, conversation):
     assert '/login' in response.headers['Location']
 
 
+@pytest.mark.parametrize('page', ['settings', 'termination', 'roles'])
+def test_react_only_admin_route_has_authorized_jinja_fallback(
+    admin_client, conversation, page,
+):
+    response = admin_client.get(f'/admin/conversations/{conversation.id}/{page}')
+
+    assert response.status_code == 302
+    assert response.headers['Location'] == f'/admin/conversations/{conversation.id}'
+
+
+@pytest.mark.parametrize('page', ['settings', 'termination', 'roles'])
+def test_react_only_admin_fallback_preserves_permissions(
+    auth_client, conversation, page,
+):
+    response = auth_client.get(f'/admin/conversations/{conversation.id}/{page}')
+
+    assert response.status_code == 403
+
+
 def test_spa_only_query_serves_react_shell_on_canonical_route(client, conversation):
     response = client.get(f'/c/{conversation.slug}?spa_only=1')
 

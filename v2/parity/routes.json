@@ -151,8 +151,8 @@
     },
     {
       "id": "admin-lifecycle",
-      "legacyEndpoints": ["admin.admin_conversation_detail"],
-      "legacyRoutes": ["/admin/conversations/:conversationId"],
+      "legacyEndpoints": ["admin.admin_conversation_detail", "admin.admin_conversation_spa_fallback"],
+      "legacyRoutes": ["/admin/conversations/:conversationId", "/admin/conversations/:conversationId/settings", "/admin/conversations/:conversationId/termination", "/admin/conversations/:conversationId/roles"],
       "templates": ["admin_conversation.html"],
       "temporaryReactRoutes": ["/app/admin/conversations/:conversationId", "/app/admin/conversations/:conversationId/settings", "/app/admin/conversations/:conversationId/termination", "/app/admin/conversations/:conversationId/roles"],
       "targetReactRoutes": ["/admin/conversations/:conversationId"],

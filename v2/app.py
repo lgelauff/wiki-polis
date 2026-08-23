@@ -4952,6 +4952,16 @@ def admin_conversation_detail(conv_id):
                            cleanup_window=_in_cleanup_window(conv))
 
 
+@admin_bp.get('/admin/conversations/<int:conv_id>/settings')
+@admin_bp.get('/admin/conversations/<int:conv_id>/termination')
+@admin_bp.get('/admin/conversations/<int:conv_id>/roles')
+@login_required
+def admin_conversation_spa_fallback(conv_id):
+    """Keep React-only admin URLs usable when the Jinja fallback is active."""
+    _require_mod_for_conv(conv_id)
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+
 @admin_bp.get('/admin/conversations/<int:conv_id>/participants')
 @login_required
 def admin_conversation_participants(conv_id):
