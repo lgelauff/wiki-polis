@@ -12,12 +12,12 @@ jobs:
       run:
         working-directory: v2/frontend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: v2/frontend/package-lock.json
 
@@ -39,18 +39,24 @@ jobs:
       run:
         working-directory: v2
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Set up Node (for the inline-JS syntax gate)
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked
+
+      - name: Verify deploy dependency snapshot
+        run: |
+          uv export --locked --no-dev --no-hashes --no-emit-project --no-header --no-annotate \
+            --output-file /tmp/requirements-deploy.txt
+          diff --unified requirements-deploy.txt /tmp/requirements-deploy.txt
 
       - name: Lint (ruff — pyflakes; catches undefined names / unused)
         run: uvx ruff check .
@@ -84,13 +90,27 @@ jobs:
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # migration-check.sh worktrees the base ref to build the pre-change schema
-      - uses: astral-sh/setup-uv@v8.2.0
+      - uses: astral-sh/setup-uv@v10.0.1
       - name: Migrations apply on MariaDB (deploy DB engine)
         env:
           MIGCHECK_DB_URL: "mysql+pymysql://root:root@127.0.0.1:3306/wikipolis"
           # Pass via env (not inline ${{ }}) so a crafted branch name can't inject into the shell.
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: bash migration-check.sh "origin/${BASE_REF}"
+
+  embedding-sidecar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build CPU-only embedding image
+        run: docker build --tag wiki-polis-embedding-sidecar:test v2/embedding_sidecar
+
+      - name: Verify upgraded runtime imports
+        run: >-
+          docker run --rm wiki-polis-embedding-sidecar:test
+          python -c "import fastapi, sentence_transformers, torch, uvicorn;
+          assert not torch.cuda.is_available()"
