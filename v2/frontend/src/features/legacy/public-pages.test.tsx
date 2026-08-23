@@ -26,6 +26,7 @@ test('renders the entry fork with the legacy shell and card contract', async () 
   expect(screen.getByRole('link', {name: /Try out the platform/})).toHaveClass('fork-card--demo');
   expect(screen.getByRole('link', {name: /Participate in real consultations/})).toHaveClass('fork-card--real');
   expect(screen.getByRole('link', {name: /Open an issue/})).toHaveAttribute('target', '_blank');
+  expect(screen.getByText('test-version')).toBeVisible();
   expect(document.querySelector('link[data-react-legacy-styles]')).toBeNull();
 });
 
@@ -37,10 +38,12 @@ test('renders server-projected developer login shortcuts without environment log
       user: null,
       capabilities: {administerSite: false},
       csrfToken: 'test-csrf-token',
+      developerMode: true,
       developerLogins: [
         {username: 'dev-user-1', href: '/dev/login/dev-user-1'},
         {username: 'dev-user-2', href: '/dev/login/dev-user-2'},
       ],
+      gitVersion: 'test-version',
       links: {login: '/login', logout: '/logout'},
     }}),
   ));

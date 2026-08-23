@@ -56,6 +56,7 @@ def create_api_v1_blueprint(
     resolve_global_admin: Callable[[Participant | None], bool],
     resolve_developer_logins: Callable[[], list[dict]],
     resolve_developer_mode: Callable[[], bool],
+    resolve_git_version: Callable[[], str],
     resolve_conversation_lane: Callable[[bool], dict],
     resolve_conversation_workspace: Callable[[str], dict],
     resolve_conversation_about: Callable[[str], dict],
@@ -147,6 +148,7 @@ def create_api_v1_blueprint(
                 'csrfToken': generate_csrf(),
                 'developerMode': resolve_developer_mode(),
                 'developerLogins': resolve_developer_logins(),
+                'gitVersion': resolve_git_version(),
                 'links': {
                     'login': url_for('login'),
                     'logout': url_for('logout'),

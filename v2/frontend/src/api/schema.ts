@@ -1906,6 +1906,7 @@ export interface components {
             csrfToken: string;
             developerMode: boolean;
             developerLogins: components["schemas"]["DeveloperLogin"][];
+            gitVersion: string;
             links: components["schemas"]["SessionLinks"];
         };
         DeveloperLogin: {

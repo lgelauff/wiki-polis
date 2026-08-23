@@ -149,7 +149,7 @@ export function LegacyShell({
       <main className="legacy-main" id="main" tabIndex={-1}>{children}</main>
       <div id="toast-container">{toast}</div>
       <footer style={{textAlign: 'right', padding: '.5rem 1rem', fontSize: 11, color: 'var(--muted)'}}>
-        <code>react</code>
+        <code>{session.gitVersion}</code>
       </footer>
     </>
   );

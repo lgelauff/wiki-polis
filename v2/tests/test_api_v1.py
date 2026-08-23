@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
+import app as app_module
 from db import Conversation, Participant, Participation, db
 
 
@@ -29,6 +30,14 @@ def test_session_contract_exposes_local_development_mode(app, client):
     data = client.get('/api/v1/session').get_json()['data']
 
     assert data['developerMode'] is True
+
+
+def test_session_contract_exposes_deployed_git_version(monkeypatch, client):
+    monkeypatch.setattr(app_module, '_GIT_VERSION', 'deployed-commit')
+
+    data = client.get('/api/v1/session').get_json()['data']
+
+    assert data['gitVersion'] == 'deployed-commit'
 
 
 def test_session_contract_for_authenticated_participant(auth_client, participant):

@@ -7152,6 +7152,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             for user in current_app.config.get('DEV_TEST_USERS', [])
         ],
         resolve_developer_mode=_spa_developer_controls_enabled,
+        resolve_git_version=lambda: _GIT_VERSION,
         resolve_conversation_lane=_conversation_lane_api_payload,
         resolve_conversation_workspace=_conversation_workspace_api_payload,
         resolve_conversation_about=_conversation_about_api_payload,
