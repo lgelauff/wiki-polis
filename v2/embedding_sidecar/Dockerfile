@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -12,7 +12,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# The sidecar does not use a GPU. Installing torch from its dedicated CPU
+# index avoids pulling several gigabytes of CUDA libraries from the default
+# Linux wheel before sentence-transformers resolves the rest of the stack.
+RUN pip install --no-cache-dir \
+        --index-url https://download.pytorch.org/whl/cpu \
+        "$(grep '^torch==' requirements.txt)" \
+    && pip install --no-cache-dir -r requirements.txt
 
 COPY app.py contract.py ./
 
