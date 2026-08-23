@@ -68,11 +68,21 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
   onSelectPreliminary: () => void;
 }) {
   const {data} = useSuspenseQuery(informedVotingQuery(workspace.slug));
-  const [currentIndex, setCurrentIndex] = useState(0);
+  // Seed from the server projection so a reload resumes where the participant
+  // left off. `cards[].voted` reflects the upstream Polis vote record, so this
+  // survives a new browser session, not just a re-render.
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    const next = data.cards.findIndex((card) => !card.voted);
+    return next < 0 ? 0 : next;
+  });
+  // `votes` stays empty on load: the projection reports THAT a card was voted,
+  // not which way, so the choice badge cannot be restored from the contract.
   const [votes, setVotes] = useState<Record<number, Choice>>({});
-  const [terminalIds, setTerminalIds] = useState<Set<number>>(() => new Set());
+  const [terminalIds, setTerminalIds] = useState<Set<number>>(
+    () => new Set(data.cards.filter((card) => card.voted).map((card) => card.featuredStatementId)),
+  );
   const [networkErrorId, setNetworkErrorId] = useState<number | null>(null);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(() => data.progress.allDone);
   const advanceTimer = useRef<number | null>(null);
   const current = data.cards[currentIndex];
 
