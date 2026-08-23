@@ -351,7 +351,8 @@ Dependencies must be installed **inside the webservice shell** — a venv create
 toolforge webservice python3.13 shell
 python3 -m venv ~/www/python/venv
 source ~/www/python/venv/bin/activate
-pip install -e ~/wiki-polis/v2
+pip install -r ~/wiki-polis/v2/requirements-deploy.txt
+pip install --no-deps -e ~/wiki-polis/v2
 exit
 ```
 
@@ -482,7 +483,8 @@ https://wiki-polis.toolforge.org/login     → redirects to Wikimedia OAuth
 ```bash
 # On Toolforge bastion as wiki-polis user:
 cd ~/wiki-polis && git pull
-pip install -e ~/wiki-polis/v2   # skip if no new dependencies
+pip install -r ~/wiki-polis/v2/requirements-deploy.txt
+pip install --no-deps -e ~/wiki-polis/v2
 ```
 
 If the deploy includes database migrations, run them **before** restarting (see [Database migrations](#database-migrations) below).
@@ -515,6 +517,9 @@ bash ~/wiki-polis/deploy.sh --pr 303 --expect 94fda38
 The script fetches with pruning and validates `--expect` before installing
 dependencies, building assets, running migrations, or restarting the service. A
 deleted branch, missing pull ref, or SHA mismatch therefore fails closed.
+Python dependencies are installed from `v2/requirements-deploy.txt`, an exact
+production snapshot exported from `v2/uv.lock`; the editable app install then uses
+`--no-deps` so pip cannot silently re-resolve a different graph on Toolforge.
 
 `deploy.sh` also runs `toolforge jobs load ~/wiki-polis/jobs.yaml` on every deploy, re-asserting
 the `phase-scheduler` scheduled job (see [One-time tool setup](#one-time-tool-setup) above). This

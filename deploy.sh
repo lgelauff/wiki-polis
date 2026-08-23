@@ -120,7 +120,8 @@ echo "    Source : $DEPLOY_LABEL"
 echo "    Last   : $LAST_HASH $LAST_MSG ($LAST_AGO)"
 
 echo "==> Syncing dependencies (v2)..."
-~/www/python/venv/bin/pip install -e ~/wiki-polis/v2
+~/www/python/venv/bin/pip install -r ~/wiki-polis/v2/requirements-deploy.txt
+~/www/python/venv/bin/pip install --no-deps -e ~/wiki-polis/v2
 
 echo "==> Building React frontend..."
 if command -v npm >/dev/null 2>&1; then

@@ -10,10 +10,12 @@ generic root buildpack could build the wrong app unless the build context is exp
 ## Current path
 
 - Code update: `git pull` on the bastion.
-- Dependencies: `~/www/python/venv/bin/pip install -e ~/wiki-polis/v2`.
+- Dependencies: install `v2/requirements-deploy.txt`, then install `v2/` editable
+  with `--no-deps`.
 - Runtime: Toolforge `python3.13` webservice using `~/www/python/uwsgi.ini`.
 - Pros: known-good, immediate restarts, migration path already scripted.
-- Cons: the venv can drift if `pip install -e` is skipped after dependency changes.
+- Cons: dependency installation and asset builds still happen as mutable deploy
+  steps rather than in a prebuilt image.
 
 ## Buildservice target shape
 
