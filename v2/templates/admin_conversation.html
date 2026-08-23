@@ -108,8 +108,18 @@
         </div>
         <div class="phase-now-head" style="margin-top:2px">
           <span class="phase-now-name">{{ phase_sequence[current_stage_index].label }}</span>
+          {% if phase_sequence[current_stage_index].key == 'public_results' %}
+          <span class="status-pill {{ 'status-pill--closed' if conversation.closed_at else 'status-pill--paused' }}">
+            <span class="status-pill-dot"></span>
+            {{ 'Published' if conversation.closed_at else 'Not yet published' }}
+          </span>
+          {% endif %}
         </div>
+        {% if phase_sequence[current_stage_index].key == 'public_results' and conversation.closed_at %}
+        <p class="phase-now-desc">The final aggregate report is published and participant activity is closed.</p>
+        {% else %}
         <p class="phase-now-desc">{{ phase_sequence[current_stage_index].effect }}</p>
+        {% endif %}
         {% else %}
         {# Advanced/non-linear: several phase flags are on at once — name them all rather
            than only the furthest-along one. #}
@@ -320,7 +330,11 @@
           {% if is_admin %}Use Advanced below to adjust.{% else %}A site admin can adjust this.{% endif %}
         </p>
       {% else %}
-        <p class="muted" style="margin-top:14px;font-size:13px">Final phase reached — the report is open.</p>
+        {% if conversation.closed_at %}
+        <p class="muted" style="margin-top:14px;font-size:13px"><strong>Final report published.</strong> The frozen aggregate results are open.</p>
+        {% else %}
+        <p class="muted" style="margin-top:14px;font-size:13px"><strong>Report phase reached — not yet published.</strong> Complete cleanup and use “Publish final report” below to open the frozen results.</p>
+        {% endif %}
       {% endif %}
 
       {% if is_admin and schedule.can_schedule %}
@@ -430,7 +444,7 @@
         <div class="manage-card-title">Statements</div>
         <div class="manage-card-desc">Review, approve or hide statements; add seed statements</div>
       </a>
-      <a class="manage-card" href="{{ url_for('admin.admin_conversation_invites', conv_id=conversation.id) }}">
+      <a class="manage-card" href="{{ url_for('spa_shell', spa_path='admin/conversations/' ~ conversation.id ~ '/invitations') }}">
         <div class="manage-card-top"><span class="manage-card-count">{{ invite_count }} invite{{ 's' if invite_count != 1 }}</span></div>
         <div class="manage-card-title">Invites &amp; access</div>
         <div class="manage-card-desc">Who can join this consultation</div>
@@ -440,15 +454,20 @@
         <div class="manage-card-title">Featured statements</div>
         <div class="manage-card-desc">Curate the set for arguments &amp; informed voting</div>
       </a>
-      <a class="manage-card" href="{{ url_for('admin.admin_conversation_participants', conv_id=conversation.id) }}">
+      <a class="manage-card" href="{{ url_for('spa_shell', spa_path='admin/conversations/' ~ conversation.id ~ '/participants') }}">
         <div class="manage-card-top"><span class="manage-card-count">{{ participant_count }} joined</span></div>
         <div class="manage-card-title">Participants</div>
         <div class="manage-card-desc">Review per-participant engagement and drop-off signals</div>
       </a>
-      <a class="manage-card" href="{{ url_for('admin.admin_conversation_flags', conv_id=conversation.id) }}">
+      <a class="manage-card" href="{{ url_for('spa_shell', spa_path='admin/conversations/' ~ conversation.id ~ '/moderation') }}">
         <div class="manage-card-top"><span class="manage-card-count">{{ open_flag_count }} open</span></div>
         <div class="manage-card-title">Moderation queue</div>
         <div class="manage-card-desc">Review participant flags for statements and arguments</div>
+      </a>
+      <a class="manage-card" href="{{ url_for('spa_shell', spa_path='admin/conversations/' ~ conversation.id ~ '/roles') }}">
+        <div class="manage-card-top"><span class="manage-card-count">{{ conv_roles | length }} assigned</span></div>
+        <div class="manage-card-title">Conversation roles</div>
+        <div class="manage-card-desc">Review moderator and organizer access</div>
       </a>
     </div>
   </div>
@@ -573,9 +592,10 @@
             </select>
           </label>
           {% for key, label in recommendation_labels.items() %}
-          <label>{{ label | capitalize }}
-            <input type="number" min="1" max="999" name="{{ key }}" value="{{ recommendation_profile[key] }}">
-          </label>
+          <div class="recommendation-value">
+            <span>{{ label | capitalize }}</span>
+            <strong>{{ recommendation_profile[key] }}</strong>
+          </div>
           {% endfor %}
         </div>
         <button type="submit">Save recommendations</button>

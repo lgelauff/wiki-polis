@@ -5,6 +5,7 @@
 <nav class="header-crumb" aria-label="Conversation context">
   <span class="header-crumb-sep">/</span>
   <span>{{ conversation.title | truncate(40, True, '…') }}</span>
+  <a class="header-manage-link" href="{{ url_for('participant.conversation_about', slug=conversation.slug) }}">About</a>
   {% if can_moderate %}
     <a class="header-manage-link" href="{{ url_for('admin.admin_conversation_detail', conv_id=conversation.id) }}">Manage</a>
   {% endif %}
@@ -28,6 +29,7 @@
     </select>
     <label class="sr-only" for="flag-detail-{{ uid }}">Details</label>
     <textarea id="flag-detail-{{ uid }}" name="detail" rows="2" maxlength="1000"
+              data-required-for-category="other"
               placeholder="Optional details"></textarea>
     <button type="submit" class="btn-small">Send</button>
   </form>
@@ -82,11 +84,11 @@
   </div>
   {% endif %}
 
-  {% if conversation.scheduled_transition_at and conversation.scheduled_transition_target and not conversation.scheduled_transition_frozen %}
+  {% if scheduled_transition %}
   <div class="landing-section output-context">
     <p class="muted" style="margin:0">
-      Next phase change scheduled for
-      <strong>{{ conversation.scheduled_transition_at.strftime('%Y-%m-%d %H:%M') }} UTC</strong>.
+      Next: <strong>{{ scheduled_transition.targetLabel }}</strong> on
+      <time datetime="{{ scheduled_transition.at }}" data-local-datetime>{{ scheduled_transition.at | replace('T', ' ') | replace('Z', ' UTC') }}</time>.
     </p>
   </div>
   {% endif %}
@@ -238,6 +240,7 @@
               </select>
               <label class="sr-only" for="stmt-flag-detail">Details</label>
               <textarea id="stmt-flag-detail" name="detail" rows="2" maxlength="1000"
+                        data-required-for-category="other"
                         placeholder="Optional details"></textarea>
               <button type="submit" class="btn-small">Send</button>
             </form>
@@ -412,7 +415,7 @@
   <div id="tab-results" class="tab-panel{% if tabs|length > 1 and tabs[0] != 'results' %} tab-panel--hidden{% endif %}"
        role="tabpanel" aria-labelledby="tab-btn-results">
     <div class="landing-section results-section">
-      <h3>Results{% if polis_stats and polis_stats.n_participants %}<span class="muted" style="font-size:13px;font-weight:400;margin-left:.75rem">{{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}</span>{% endif %}</h3>
+      <h2>Results{% if polis_stats and polis_stats.n_participants %}<span class="muted" style="font-size:13px;font-weight:400;margin-left:.75rem">{{ polis_stats.n_participants }} participant{{ 's' if polis_stats.n_participants != 1 }}</span>{% endif %}</h2>
 
       {% if conversation.phase_public_results or conversation.phase_personal_results %}
 
@@ -1051,19 +1054,21 @@
             <td class="p6-col-stmt">{{ s.text }}</td>
             <td class="p6-col-phase">
               {% if s.p2 %}
-              <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}%">
+              <div class="p6-vote-bar" title="Agree {{ s.p2.pct_agree }}% · Disagree {{ s.p2.pct_disagree }}% · Pass {{ s.p2.pct_pass }}%">
                 <div class="p6-bar-agree" style="width:{{ s.p2.pct_agree }}%"></div>
                 <div class="p6-bar-disagree" style="width:{{ s.p2.pct_disagree }}%"></div>
+                <div class="p6-bar-pass" style="width:{{ s.p2.pct_pass }}%"></div>
               </div>
-              <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree</span>
+              <span class="p6-bar-label">{{ s.p2.pct_agree }}% agree · {{ s.p2.pct_pass }}% pass</span>
               {% else %}<span class="muted">—</span>{% endif %}
             </td>
             <td class="p6-col-phase">
-              <div class="p6-vote-bar" title="Agree {{ s.p6.pct_agree }}% · Disagree {{ s.p6.pct_disagree }}%">
+              <div class="p6-vote-bar" title="Agree {{ s.p6.pct_agree }}% · Disagree {{ s.p6.pct_disagree }}% · Pass {{ s.p6.pct_pass }}%">
                 <div class="p6-bar-agree" style="width:{{ s.p6.pct_agree }}%"></div>
                 <div class="p6-bar-disagree" style="width:{{ s.p6.pct_disagree }}%"></div>
+                <div class="p6-bar-pass" style="width:{{ s.p6.pct_pass }}%"></div>
               </div>
-              <span class="p6-bar-label">{{ s.p6.pct_agree }}% agree</span>
+              <span class="p6-bar-label">{{ s.p6.pct_agree }}% agree · {{ s.p6.pct_pass }}% pass</span>
             </td>
             <td class="p6-col-shift">
               {% if s.shift is not none %}
@@ -1274,12 +1279,6 @@
 
   {% endif %}{# end tabs | length > 0 #}
   {% endif %}{# end active/paused/else #}
-
-  {% if moderation_log_count %}
-  <p class="muted" style="font-size:13px;margin-top:1.5rem">
-    <a href="{{ url_for('participant.conversation_moderation_log', slug=conversation.slug) }}">Moderation log</a>
-  </p>
-  {% endif %}
 
   {% if conversation.outro_text %}
   <div class="outro-text">
@@ -2569,6 +2568,16 @@
   document.querySelectorAll('.content-flag').forEach(function (details) {
     var form = details.querySelector('form');
     if (!form) return;
+    var category = form.querySelector('[name=category]');
+    var detail = form.querySelector('[name=detail][data-required-for-category]');
+    function syncDetailRequirement() {
+      if (!category || !detail) return;
+      var required = category.value === detail.dataset.requiredForCategory;
+      detail.required = required;
+      detail.placeholder = required ? 'Please explain this reason' : 'Optional details';
+    }
+    if (category) category.addEventListener('change', syncDetailRequirement);
+    syncDetailRequirement();
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var btn  = form.querySelector('button[type=submit]');

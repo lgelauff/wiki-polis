@@ -19,6 +19,7 @@ import os
 import re
 import threading
 from contextlib import contextmanager
+from urllib.parse import urlparse
 
 import requests
 
@@ -176,7 +177,8 @@ _FEATURED_CANDIDATES_SQL = """
         v.tid,
         COUNT(DISTINCT v.pid) FILTER (WHERE v.vote = -1)::int  AS n_agree,
         COUNT(DISTINCT v.pid) FILTER (WHERE v.vote =  1)::int  AS n_disagree,
-        COUNT(DISTINCT v.pid) FILTER (WHERE v.vote != 0)::int  AS n_votes
+        COUNT(DISTINCT v.pid) FILTER (WHERE v.vote =  0)::int  AS n_pass,
+        COUNT(DISTINCT v.pid)::int                            AS n_votes
       FROM votes_latest_unique v, z WHERE v.zid = z.zid GROUP BY v.tid
     )
     SELECT
@@ -185,6 +187,7 @@ _FEATURED_CANDIDATES_SQL = """
       c.is_seed,
       COALESCE(vs.n_agree,    0) AS n_agree,
       COALESCE(vs.n_disagree, 0) AS n_disagree,
+      COALESCE(vs.n_pass,     0) AS n_pass,
       COALESCE(vs.n_votes,    0) AS n_votes
     FROM comments c
     JOIN z ON c.zid = z.zid
@@ -192,8 +195,9 @@ _FEATURED_CANDIDATES_SQL = """
     WHERE c.active = TRUE AND c.mod >= 0
     ORDER BY
       c.is_seed DESC,
-      (COALESCE(vs.n_votes, 0) >= 3) DESC,
-      COALESCE(vs.n_agree, 0)::float / NULLIF(vs.n_votes, 0) DESC NULLS LAST
+      (COALESCE(vs.n_votes, 0) - COALESCE(vs.n_pass, 0) >= 3) DESC,
+      COALESCE(vs.n_agree, 0)::float
+        / NULLIF(COALESCE(vs.n_votes, 0) - COALESCE(vs.n_pass, 0), 0) DESC NULLS LAST
     LIMIT %s
 """
 
@@ -407,8 +411,37 @@ class PolisParticipantClient:
 
 # ── Polis server admin client ─────────────────────────────────────────────────
 
+POLIS_NOT_CONFIGURED_MESSAGE = (
+    'Polis server is not configured. Set POLIS_SERVER_URL, '
+    'POLIS_ADMIN_EMAIL, and POLIS_ADMIN_PASSWORD.'
+)
+POLIS_UNREACHABLE_MESSAGE = (
+    'Could not reach Polis. Check the server connection and try again.'
+)
+
+
+def polis_server_config_error(url: str, email: str, password: str) -> str | None:
+    """Return an operator-facing HTTP-admin config error, if any.
+
+    Direct Postgres reads do not use this configuration, so callers invoke this
+    only before HTTP admin operations rather than rejecting the entire client.
+    """
+    parsed = urlparse((url or '').strip())
+    if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+        return POLIS_NOT_CONFIGURED_MESSAGE
+    if not (email or '').strip() or not password:
+        return POLIS_NOT_CONFIGURED_MESSAGE
+    return None
+
+
 class PolisServerError(Exception):
-    pass
+    """Internal Polis failure with a safe message suitable for admin UI."""
+
+    def __init__(self, message: str, *, admin_message: str | None = None):
+        super().__init__(message)
+        self.admin_message = admin_message or (
+            'Could not complete the Polis operation. Check server logs for details.'
+        )
 
 
 class PolisServerClient:
@@ -443,6 +476,12 @@ class PolisServerClient:
         token is returned as an explicit header, never relied on via session cookies,
         and no session state is mutated here.
         """
+        config_error = polis_server_config_error(
+            self._base, self._email, self._password,
+        )
+        if config_error:
+            raise PolisServerError(config_error, admin_message=config_error)
+
         sess = _http
         try:
             resp = sess.post(
@@ -452,11 +491,16 @@ class PolisServerClient:
                 timeout=10,
             )
         except requests.RequestException as exc:
-            raise PolisServerError(str(exc)) from exc
+            raise PolisServerError(
+                str(exc), admin_message=POLIS_UNREACHABLE_MESSAGE,
+            ) from exc
         if not resp.ok:
             raise PolisServerError(
                 f'Polis login failed (HTTP {resp.status_code}). '
-                'Check POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD env vars.'
+                'Check POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD env vars.',
+                admin_message=(
+                    'Could not authenticate with Polis. Check the admin credentials.'
+                ),
             )
         token = resp.json().get('token')
         extra = {'x-polis': token} if token else {}
@@ -608,7 +652,9 @@ class PolisServerClient:
                 timeout=10,
             )
         except requests.RequestException as exc:
-            raise PolisServerError(str(exc)) from exc
+            raise PolisServerError(
+                str(exc), admin_message=POLIS_UNREACHABLE_MESSAGE,
+            ) from exc
         if not resp.ok:
             raise PolisServerError(
                 f'Polis seed statement creation failed (HTTP {resp.status_code}): '
@@ -730,7 +776,7 @@ class PolisServerClient:
                                 max_statements: int = 20) -> list[dict] | None:
         """Return candidate statements for featuring, or None if unavailable.
 
-        Each item: {tid, text, is_seed, n_agree, n_disagree, n_votes}.
+        Each item: {tid, text, is_seed, n_agree, n_disagree, n_pass, n_votes}.
         Seeds always appear first; remainder ranked by agree rate.
         Returns None when db_url is absent or the query fails.
         """
@@ -742,7 +788,7 @@ class PolisServerClient:
             return None
         return [
             {'tid': r[0], 'text': r[1], 'is_seed': r[2],
-             'n_agree': r[3], 'n_disagree': r[4], 'n_votes': r[5]}
+             'n_agree': r[3], 'n_disagree': r[4], 'n_pass': r[5], 'n_votes': r[6]}
             for r in rows
         ]
 

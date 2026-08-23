@@ -338,7 +338,7 @@ def test_statement_new_accepts_valid_csrf_when_csrf_enabled(csrf_enabled_app):
         sess['username'] = p.mw_username
         sess['xid'] = p.xid
 
-    page = client.get('/c/csrf-ok')
+    page = client.get('/c/csrf-ok?spa_only=0')
     token_match = re.search(rb"var csrfToken = '([^']+)'", page.data)
     assert token_match is not None
     csrf_token = token_match.group(1).decode()
@@ -377,7 +377,7 @@ def test_statement_new_allows_missing_provenance_after_valid_manual_csrf(csrf_en
         sess['username'] = p.mw_username
         sess['xid'] = p.xid
 
-    page = client.get('/c/csrf-only')
+    page = client.get('/c/csrf-only?spa_only=0')
     token_match = re.search(rb"var csrfToken = '([^']+)'", page.data)
     assert token_match is not None
     csrf_token = token_match.group(1).decode()

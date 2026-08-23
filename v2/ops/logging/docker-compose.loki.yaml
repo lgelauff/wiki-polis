@@ -1,8 +1,6 @@
-version: "3.8"
-
 services:
   loki:
-    image: grafana/loki:3.4.2
+    image: grafana/loki:3.7.6
     command: -config.file=/etc/loki/local-config.yaml
     restart: always
     volumes:
@@ -12,7 +10,7 @@ services:
       - "127.0.0.1:3100:3100"
 
   grafana:
-    image: grafana/grafana-oss:11.5.2
+    image: grafana/grafana-oss:13.2.0
     restart: always
     environment:
       GF_SERVER_ROOT_URL: "https://logs.example.org/grafana/"
@@ -24,7 +22,7 @@ services:
       - "127.0.0.1:3000:3000"
 
   fluent-bit:
-    image: fluent/fluent-bit:3.2
+    image: fluent/fluent-bit:5.1.1
     restart: always
     depends_on:
       - loki

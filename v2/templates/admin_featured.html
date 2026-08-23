@@ -149,6 +149,7 @@
         <th>Seed</th>
         <th>Agree</th>
         <th>Disagree</th>
+        <th>Pass</th>
         <th>Votes</th>
         <th></th>
       </tr>
@@ -170,6 +171,7 @@
         <td>{{ '✓' if c.is_seed else '' }}</td>
         <td>{{ c.n_agree }}</td>
         <td>{{ c.n_disagree }}</td>
+        <td>{{ c.n_pass }}</td>
         <td>{{ c.n_votes }}</td>
         <td>
           <form method="post"

@@ -239,3 +239,5 @@ __marimo__/
 # Local-only research/example working files (not product docs)
 examples/arbcomreglement/
 veto-mindset-storyline.md
+output/playwright/actual/
+output/playwright/diff/

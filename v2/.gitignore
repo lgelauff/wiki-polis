@@ -1,2 +1,6 @@
 # Internal Claude planning/working files — never commit
 .claude/
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+static/spa/

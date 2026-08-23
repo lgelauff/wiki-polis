@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from db import AdminRole, ContentFlag, Conversation, ConversationInvite, Participant, db
-from polis_admin import PolisServerError
+from polis_admin import POLIS_NOT_CONFIGURED_MESSAGE, PolisServerError
 from tests.conftest import login
 
 
@@ -96,6 +96,22 @@ def test_create_conversation_polis_failure_redirects(app, admin_client):
         })
     assert resp.status_code == 302
     assert Conversation.query.filter_by(slug='should-not-exist').first() is None
+
+
+def test_single_seed_surfaces_safe_polis_configuration_error(admin_client, conv):
+    error = PolisServerError(
+        'internal configuration detail',
+        admin_message=POLIS_NOT_CONFIGURED_MESSAGE,
+    )
+    with patch('app.PolisServerClient.add_seed', side_effect=error):
+        resp = admin_client.post(
+            f'/admin/conversations/{conv.id}/statements/seed',
+            data={'txt': 'A seed statement'},
+            follow_redirects=True,
+        )
+
+    assert POLIS_NOT_CONFIGURED_MESSAGE.encode() in resp.data
+    assert b'internal configuration detail' not in resp.data
 
 
 def test_edit_conversation(admin_client, conv):
@@ -275,6 +291,30 @@ def test_move_at_final_stage_is_noop(admin_client, conv):
     db.session.refresh(conv)
     assert conv.phase_public_results is True
     assert _current_stage_index(conv) == len(PHASE_SEQUENCE) - 1
+
+
+def test_report_phase_distinguishes_pending_publication_from_published(
+    admin_client, conv,
+):
+    conv.phase_public_results = True
+    db.session.commit()
+
+    pending = admin_client.get(f'/admin/conversations/{conv.id}').data
+
+    assert b'Not yet published' in pending
+    assert b'Report phase reached' in pending
+    assert b'Publish final report' in pending
+    assert b'Final report published' not in pending
+
+    conv.active = False
+    conv.closed_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    published = admin_client.get(f'/admin/conversations/{conv.id}').data
+
+    assert b'Published' in published
+    assert b'Final report published' in published
+    assert b'not yet published' not in published.lower()
 
 
 def test_move_forbidden_for_regular_participant(auth_client, conv):
@@ -876,20 +916,53 @@ def test_featured_check_shows_selected_count_and_recommendation(admin_client, co
     assert b'2 selected, 15 recommended' in resp.data
 
 
-def test_recommendation_override_updates_featured_guidance(admin_client, conv):
+def test_recommendation_tier_owns_featured_guidance(admin_client, conv):
     conv.phase_personal_results = True
     db.session.commit()
     _add_featured(conv)
     admin_client.post(f'/admin/conversations/{conv.id}/recommendations', data={
         'tier': 'complex',
-        'seed_statements': '11',
+        # Legacy numeric inputs are ignored: guidance belongs to the tool (#278).
         'featured_statements': '21',
-        'arguments_per_featured': '4',
-        'votes_per_statement': '60',
     })
     resp = admin_client.get(f'/admin/conversations/{conv.id}')
     assert resp.status_code == 200
-    assert b'1 selected, 21 recommended' in resp.data
+    assert b'1 selected, 24 recommended' in resp.data
+    assert conv.recommended_quantities == {'tier': 'complex'}
+
+
+def test_legacy_recommendation_overrides_are_ignored(admin_client, conv):
+    conv.phase_personal_results = True
+    conv.recommended_quantities = {
+        'tier': 'simple',
+        'featured_statements': 999,
+    }
+    db.session.commit()
+    _add_featured(conv)
+
+    resp = admin_client.get(f'/admin/conversations/{conv.id}')
+
+    assert b'1 selected, 8 recommended' in resp.data
+    assert b'999 recommended' not in resp.data
+
+
+def test_organizer_can_select_recommendation_tier(client, conv, participant):
+    db.session.add(AdminRole(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        role='organizer',
+    ))
+    db.session.commit()
+    login(client, 'testuser')
+
+    response = client.post(
+        f'/admin/conversations/{conv.id}/recommendations',
+        data={'tier': 'simple'},
+    )
+
+    assert response.status_code == 302
+    db.session.refresh(conv)
+    assert conv.recommended_quantities == {'tier': 'simple'}
 
 
 def test_featured_check_zero_confirmed_suppresses_count(admin_client, conv):
@@ -1420,6 +1493,65 @@ def test_add_invite(admin_client, conv):
     assert usernames == {'Alice', 'Bob'}
 
 
+def test_add_invite_reports_existing_and_duplicate_input(admin_client, conv):
+    db.session.add(ConversationInvite(conversation_id=conv.id, mw_username='Alice'))
+    db.session.commit()
+
+    resp = admin_client.post(
+        f'/admin/conversations/{conv.id}/invites/add',
+        data={'mw_usernames': 'Alice\nBob\nBob\n'},
+        follow_redirects=True,
+    )
+
+    assert b'1 added' in resp.data
+    assert b'1 already present' in resp.data
+    assert b'1 duplicate input' in resp.data
+    assert {row.mw_username for row in ConversationInvite.query.all()} == {'Alice', 'Bob'}
+
+
+def test_add_invite_keeps_non_conflicting_rows_when_one_insert_loses_race(
+        admin_client, conv, monkeypatch):
+    """A unique race for X must not roll back unrelated Y/Z additions (#242)."""
+    db.session.add(ConversationInvite(conversation_id=conv.id, mw_username='X'))
+    db.session.commit()
+    original_scalars = db.session.scalars
+    first_read = True
+
+    def stale_existing_snapshot(*args, **kwargs):
+        nonlocal first_read
+        if first_read:
+            first_read = False
+            return iter(())  # X was inserted after the command's conceptual snapshot.
+        return original_scalars(*args, **kwargs)
+
+    monkeypatch.setattr(db.session, 'scalars', stale_existing_snapshot)
+    resp = admin_client.post(
+        f'/admin/conversations/{conv.id}/invites/add',
+        data={'mw_usernames': 'X\nY\nZ\n'},
+        follow_redirects=True,
+    )
+
+    assert resp.status_code == 200
+    assert b'2 added' in resp.data
+    assert b'1 added concurrently by another moderator' in resp.data
+    assert {row.mw_username for row in ConversationInvite.query.all()} == {'X', 'Y', 'Z'}
+
+
+def test_add_invite_reports_batch_save_failure(admin_client, conv):
+    from services.invites import InviteBatchSaveError
+
+    with patch('app.add_conversation_invites',
+               side_effect=InviteBatchSaveError('database unavailable')):
+        resp = admin_client.post(
+            f'/admin/conversations/{conv.id}/invites/add',
+            data={'mw_usernames': 'Alice'},
+            follow_redirects=True,
+        )
+
+    assert resp.status_code == 200
+    assert b'save invites' in resp.data
+
+
 def test_remove_invite(admin_client, conv):
     inv = ConversationInvite(conversation_id=conv.id, mw_username='Charlie')
     db.session.add(inv)
@@ -1480,6 +1612,41 @@ def test_participants_page_shows_engagement_metrics(app, admin_client, conv, par
     assert re.search(r'<td>\s*2\s*</td>', page)
     assert re.search(r'<td>\s*1\s*</td>', page)
     assert '2026-06-23 12:30' in page
+
+
+def test_participants_progress_uses_conversation_scoped_polis_subject(
+    app, admin_client, conv, participant,
+):
+    from db import Participation
+
+    app.config['POLIS_DATABASE_URL'] = 'postgres://stats.example/db'
+    app.config['PARTICIAPI_SUB_SECRET'] = 'subject-secret'
+    part = Participation(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        pseudonym='scoped-lion',
+    )
+    db.session.add(part)
+    db.session.commit()
+    server = MagicMock()
+    server.get_statement_progress_for_participants.return_value = {
+        'scoped-subject': {'total': 5, 'voted': 3, 'remaining': 2},
+    }
+
+    with (
+        patch('app._polis_server_client', return_value=server),
+        patch('app._conversation_subject', return_value='scoped-subject') as subject,
+    ):
+        response = admin_client.get(
+            f'/admin/conversations/{conv.id}/participants',
+        )
+
+    assert response.status_code == 200
+    assert '3 / 5' in response.data.decode()
+    subject.assert_called_once_with(participant.xid, conv)
+    server.get_statement_progress_for_participants.assert_called_once_with(
+        conv.polis_id, ['scoped-subject'],
+    )
 
 
 def test_admin_can_ban_and_unban_participant(admin_client, conv, participant):
@@ -1687,3 +1854,24 @@ def test_admin_flag_queue_resolves_statement_flag(admin_client, conv, participan
     db.session.refresh(flag)
     assert flag.status == 'resolved'
     assert flag.resolution_note == 'handled'
+
+
+def test_admin_flag_queue_explains_legacy_other_flag_without_detail(
+    admin_client, conv, participant,
+):
+    flag = ContentFlag(
+        conversation_id=conv.id,
+        participant_id=participant.id,
+        content_type='statement',
+        statement_tid=8,
+        category='other',
+        detail=None,
+        status='open',
+    )
+    db.session.add(flag)
+    db.session.commit()
+
+    with patch('app._statement_text_map', return_value={8: 'Legacy statement'}):
+        page = admin_client.get(f'/admin/conversations/{conv.id}/flags').data.decode()
+
+    assert '(no explanation provided)' in page

@@ -37,6 +37,10 @@ retention commitment (decision D-PRIV), pending legal/comms review.
 
 ## 3. Code health
 
+- **SPA/API foundation** — active. Establish a versioned same-origin browser API,
+  application-service boundaries, generated TypeScript contracts, and a strangler
+  migration to React. Dependency order and issue map: [`plan_spa-foundation.md`](plan_spa-foundation.md).
+
 - **Blueprint refactor** — ✅ **done.** `app.py` decomposed into `proxy_bp` / `admin_bp` /
   `participant_bp`; `_register_routes` complexity 177→33. Steps 1–4 (PR #88), 5–6 (#97),
   7 (#98), 8 (#99), 9 (#100); issues #89–93 closed. See

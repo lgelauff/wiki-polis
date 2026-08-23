@@ -90,6 +90,42 @@ def test_oauth_callback_updates_username_if_changed(client, app, participant):
     assert participant.mw_username == 'RenamedUser'
 
 
+def test_oauth_callback_preserves_existing_xid_when_secret_changes(client, app, participant):
+    """A secret rotation must not detach an existing participant from Polis history."""
+    original_xid = participant.xid
+    original_version = participant.xid_key_version
+    app.config.update(
+        OAUTH_CLIENT_ID='cid',
+        OAUTH_CLIENT_SECRET='csecret',
+        OAUTH_REDIRECT_URI='http://localhost/cb',
+        XID_HASH_SECRET='rotated-secret',
+    )
+    with client.session_transaction() as sess:
+        sess['oauth_state'] = 'st'
+        sess['oauth_code_verifier'] = 'v'
+
+    token_resp = MagicMock()
+    token_resp.json.return_value = {'access_token': 'tok'}
+    token_resp.raise_for_status = MagicMock()
+    profile_resp = MagicMock()
+    profile_resp.json.return_value = {
+        'username': participant.mw_username,
+        'sub': participant.mw_user_id,
+    }
+    profile_resp.raise_for_status = MagicMock()
+
+    with patch('app.requests.post', return_value=token_resp), \
+         patch('app.requests.get', return_value=profile_resp), \
+         patch('app._is_emailable', return_value=False):
+        client.get('/oauth-callback?code=x&state=st')
+
+    db.session.refresh(participant)
+    assert participant.xid == original_xid
+    assert participant.xid_key_version == original_version
+    with client.session_transaction() as sess:
+        assert sess['xid'] == original_xid
+
+
 def test_current_participant_resolves_stale_username_by_xid(app, participant):
     """A renamed user keeps the same stable xid, so old session username is ignored."""
     from app import _current_participant

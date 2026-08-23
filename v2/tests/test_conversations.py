@@ -43,6 +43,22 @@ def test_index_shows_fork_between_demo_and_real(client):
     assert b'Participate in real consultations' in resp.data
 
 
+def test_spa_history_routes_serve_the_same_built_shell(client, monkeypatch, tmp_path):
+    import app as app_module
+
+    shell = tmp_path / 'index.html'
+    shell.write_text('<div id="root">SPA shell</div>', encoding='utf-8')
+    monkeypatch.setattr(app_module, '_SPA_BUILD_DIR', str(tmp_path))
+
+    root_response = client.get('/app')
+    nested_response = client.get('/app/demo/conversations')
+
+    assert root_response.status_code == 200
+    assert nested_response.status_code == 200
+    assert root_response.data == nested_response.data
+    assert b'id="root"' in root_response.data
+
+
 def test_consultations_unauthenticated_shows_public_conversations(client, conv):
     resp = client.get('/consultations')
     assert resp.status_code == 200
@@ -306,6 +322,20 @@ def test_no_first_vote_confirm_on_real_conversation(auth_client, conv, participa
     html = auth_client.get('/c/test-conv').data.decode()
     assert 'id="live-vote-confirm"' not in html
     assert 'your vote will be recorded' not in html
+
+
+def test_conversation_shows_scheduled_transition_target_and_localizable_time(
+    auth_client, conv, participation,
+):
+    conv.phase_submission = True
+    conv.scheduled_transition_at = datetime(2026, 8, 20, 14, 30)
+    conv.scheduled_transition_target = 'informed_voting'
+    db.session.commit()
+
+    html = auth_client.get('/c/test-conv').data.decode()
+
+    assert 'Next: <strong>Informed vote</strong>' in html
+    assert 'datetime="2026-08-20T14:30:00Z"' in html
 
 
 def test_real_conversation_warns_on_direct_arrival(auth_client, conv, participation):
@@ -646,6 +676,18 @@ def test_report_route_uses_filter_snapshot(client, conv):
         excluded_tids=frozenset({42}),
         excluded_pids=frozenset({7}),
     )
+
+
+def test_personal_report_redirects_anonymous_viewer_to_login(client, conv):
+    conv.active = False
+    conv.phase_personal_results = True
+    conv.closed_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    response = client.get('/c/test-conv/report')
+
+    assert response.status_code == 302
+    assert response.headers['Location'] == '/login?next=/c/test-conv/report'
 
 
 # ── Access control ────────────────────────────────────────────────────────────

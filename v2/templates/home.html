@@ -73,6 +73,12 @@
 
 {# ── Action chips macro ─────────────────────────────────────────────────────── #}
 {% macro conv_chips(sig) %}
+{%- if sig and sig.get('scheduled_transition') -%}
+{%- set transition = sig.get('scheduled_transition') -%}
+<span class="conv-chip">Next: {{ transition.targetLabel }}
+  <time datetime="{{ transition.at }}" data-local-datetime>{{ transition.at | replace('T', ' ') | replace('Z', ' UTC') }}</time>
+</span>
+{%- endif -%}
 {%- if sig and sig.get('statements_remaining') is not none and sig.get('statements_remaining') > 0 -%}
 <span class="conv-chip">{{ sig.get('statements_remaining') }} to vote</span>
 {%- endif -%}
@@ -82,6 +88,47 @@
 {%- elif sig and sig.get('reveal') and sig.get('reveal').state == 'pending' -%}
 <span class="conv-chip">Reveal opens in {{ sig.get('reveal').days_left }}d</span>
 {%- endif -%}
+{% endmacro %}
+
+{% macro joined_section(conversations, label, section_id, state) %}
+{% if conversations %}
+<section aria-labelledby="{{ section_id }}">
+  <div class="home-section">
+    <div class="home-section-header">
+      <h2 class="home-section-label" id="{{ section_id }}">{{ label }}</h2>
+      <span class="home-section-count" aria-hidden="true">{{ conversations | length }}</span>
+    </div>
+    <ul class="conv-list">
+      {% for c in conversations %}
+      {% set part = pseudonym_map.get(c.id) %}
+      {% set sig = signals_map.get(c.id, {}) %}
+      <li>
+        <div class="conv-card conv-card--phase conv-card--outputs">
+          <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card-main"
+             aria-label="{{ c.title }}{% if part and part.pseudonym %} — your pseudonym: {{ part.pseudonym }}{% endif %}{% if sig.statements_remaining %} — {{ sig.statements_remaining }} statements to vote{% endif %} — {{ 'continue' if state == 'needs_attention' else state|replace('_', ' ') }}">
+            <div class="conv-card-left conv-card-left--col">
+              <div class="conv-card-title-row">
+                <h3 class="conv-card-title">{{ c.title }}</h3>
+                {% if part and part.pseudonym %}<span class="conv-card-badge" aria-hidden="true">{{ part.pseudonym }}</span>{% endif %}
+                {% if state == 'caught_up' %}<span class="conv-card-badge conv-card-badge--muted">caught up</span>{% endif %}
+                {% if state == 'inactive' %}<span class="conv-card-badge conv-card-badge--muted">{{ 'paused' if c.paused else 'waiting' }}</span>{% endif %}
+                {% if state == 'archived' and c.closed_at %}<span class="conv-card-badge conv-card-badge--muted" aria-hidden="true">{{ c.closed_at.strftime('%b %Y') }}</span>{% endif %}
+              </div>
+              {{ input_timeline(sig.phases if sig.phases is defined else set()) }}
+              {% set chips = conv_chips(sig) %}
+              {% if chips.strip() %}<div class="conv-chips">{{ chips }}</div>{% endif %}
+            </div>
+            <span class="conv-card-action{% if state != 'needs_attention' %} conv-card-action--muted{% endif %}" aria-hidden="true">{{ 'CONTINUE' if state == 'needs_attention' else 'VIEW' }} →</span>
+          </a>
+          <span class="conv-card-output-divider" aria-hidden="true"></span>
+          {{ output_symbols(sig.outputs if sig.outputs is defined else []) }}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}
 {% endmacro %}
 
 <div class="container home-container">
@@ -97,7 +144,8 @@
   {# ── Unauthenticated landing (demo or real lane — same UI, tinted background) ── #}
 
   <div class="landing-section">
-    <h1 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Where the community actually stands.</h1>
+    <h1 class="sr-only">Consultations</h1>
+    <h2 style="font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin-bottom:12px">Where the community actually stands.</h2>
     <p style="font-size:15px;line-height:1.6;color:var(--body);max-width:520px">
       Vote on short statements, and suggest improvements. Learn how your views
       compare to other community members — which statements already have
@@ -154,7 +202,7 @@
 
   {# ── Authenticated view ────────────────────────────────────────────────── #}
 
-  <h1 class="sr-only">Your consultations</h1>
+  <h1 class="sr-only">Consultations</h1>
 
   {# ── Flow diagram ─────────────────────────────────────────────────────── #}
   <img src="{{ url_for('static', filename='wiki-polis-flow.svg') }}"
@@ -213,80 +261,12 @@
   {# ── Your conversations ────────────────────────────────────────────────── #}
   <div id="home-yours">
 
-    {% if active_joined %}
-    <section aria-labelledby="sec-active">
-      <div class="home-section">
-        <div class="home-section-header">
-          <h2 class="home-section-label" id="sec-active">Active</h2>
-          <span class="home-section-count" aria-hidden="true">{{ active_joined | length }}</span>
-        </div>
-        <ul class="conv-list">
-          {% for c in active_joined %}
-          {% set part = pseudonym_map.get(c.id) %}
-          {% set sig  = signals_map.get(c.id, {}) %}
-          <li>
-            <div class="conv-card conv-card--phase conv-card--outputs">
-              <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card-main"
-                 aria-label="{{ c.title }}{% if part and part.pseudonym %} — your pseudonym: {{ part.pseudonym }}{% endif %}{% if sig.statements_remaining %} — {{ sig.statements_remaining }} statements to vote{% endif %} — continue">
-                <div class="conv-card-left conv-card-left--col">
-                <div class="conv-card-title-row">
-                  <h3 class="conv-card-title">{{ c.title }}</h3>
-                  {% if part and part.pseudonym %}<span class="conv-card-badge" aria-hidden="true">{{ part.pseudonym }}</span>{% endif %}
-                </div>
-                {{ input_timeline(sig.phases if sig.phases is defined else set()) }}
-                {% set chips = conv_chips(sig) %}
-                {% if chips.strip() %}<div class="conv-chips">{{ chips }}</div>{% endif %}
-                </div>
-                <span class="conv-card-action" aria-hidden="true">CONTINUE →</span>
-              </a>
-              <span class="conv-card-output-divider" aria-hidden="true"></span>
-              {{ output_symbols(sig.outputs if sig.outputs is defined else []) }}
-            </div>
-          </li>
-          {% endfor %}
-        </ul>
-      </div>
-    </section>
-    {% endif %}
+    {{ joined_section(attention_joined, 'Needs attention', 'sec-attention', 'needs_attention') }}
+    {{ joined_section(caught_up_joined, 'Caught up', 'sec-caught-up', 'caught_up') }}
+    {{ joined_section(inactive_joined, 'Inactive / paused', 'sec-inactive', 'inactive') }}
+    {{ joined_section(archived_joined, 'Closed', 'sec-closed', 'archived') }}
 
-    {% if archived_joined %}
-    <section aria-labelledby="sec-closed">
-      <div class="home-section">
-        <div class="home-section-header">
-          <h2 class="home-section-label" id="sec-closed">Closed</h2>
-          <span class="home-section-count" aria-hidden="true">{{ archived_joined | length }}</span>
-        </div>
-        <ul class="conv-list">
-          {% for c in archived_joined %}
-          {% set part = pseudonym_map.get(c.id) %}
-          {% set sig  = signals_map.get(c.id, {}) %}
-          <li>
-            <div class="conv-card conv-card--phase conv-card--outputs">
-              <a href="{{ url_for('participant.conversation', slug=c.slug) }}" class="conv-card-main"
-                 aria-label="{{ c.title }}{% if part and part.pseudonym %} — pseudonym: {{ part.pseudonym }}{% endif %} — closed{% if c.closed_at %} {{ c.closed_at.strftime('%B %Y') }}{% endif %}">
-                <div class="conv-card-left conv-card-left--col">
-                <div class="conv-card-title-row">
-                  <h3 class="conv-card-title">{{ c.title }}</h3>
-                  {% if part and part.pseudonym %}<span class="conv-card-badge" aria-hidden="true">{{ part.pseudonym }}</span>{% endif %}
-                  {% if c.closed_at %}<span class="conv-card-badge conv-card-badge--muted" aria-hidden="true">{{ c.closed_at.strftime('%b %Y') }}</span>{% endif %}
-                </div>
-                {{ input_timeline(sig.phases if sig.phases is defined else set()) }}
-                {% set chips = conv_chips(sig) %}
-                {% if chips.strip() %}<div class="conv-chips">{{ chips }}</div>{% endif %}
-                </div>
-                <span class="conv-card-action conv-card-action--muted" aria-hidden="true">VIEW →</span>
-              </a>
-              <span class="conv-card-output-divider" aria-hidden="true"></span>
-              {{ output_symbols(sig.outputs if sig.outputs is defined else []) }}
-            </div>
-          </li>
-          {% endfor %}
-        </ul>
-      </div>
-    </section>
-    {% endif %}
-
-    {% if not active_joined and not archived_joined %}
+    {% if not attention_joined and not caught_up_joined and not inactive_joined and not archived_joined %}
     <div class="home-empty">
       <p class="muted">You haven't joined any consultations yet. Use Browse to find one.</p>
     </div>
@@ -372,7 +352,7 @@
 {% if username %}
 <div class="output-dialog" id="output-dialog" role="dialog" aria-modal="true" aria-labelledby="output-dialog-title" hidden>
   <div class="output-dialog-panel">
-    <button type="button" class="output-dialog-close" aria-label="Close output details">&times;</button>
+    <button type="button" class="output-dialog-close" aria-label="Close output details"></button>
     <h2 id="output-dialog-title">Output pending</h2>
     <p id="output-dialog-body" class="muted"></p>
   </div>

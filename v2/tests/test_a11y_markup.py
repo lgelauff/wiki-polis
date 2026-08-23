@@ -70,6 +70,27 @@ def test_conversation_has_h1_with_title(auth_client, conv, participation):
     assert re.search(rb'<h1[^>]*>\s*Test Conversation\s*</h1>', resp.data)
 
 
+def test_accept_heading_outline_does_not_skip_h2(auth_client, conv):
+    resp = auth_client.get('/accept/test-conv')
+
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert '<h1 id="accept-title"' in html
+    assert '<h2 id="notification-title">Stay informed</h2>' in html
+    assert '<h2>Privacy summary</h2>' in html
+    assert '<h3' not in html
+
+
+def test_anonymous_lane_uses_functional_consultations_heading(client, conv):
+    anonymous = client.get('/consultations').get_data(as_text=True)
+    assert '<h1 class="sr-only">Consultations</h1>' in anonymous
+
+
+def test_authenticated_lane_uses_same_functional_heading(auth_client, conv):
+    authenticated = auth_client.get('/consultations').get_data(as_text=True)
+    assert '<h1 class="sr-only">Consultations</h1>' in authenticated
+
+
 # ── No hidden API-proxy controls (4.1.2 / #159) ───────────────────────────────
 
 def test_conversation_has_no_hidden_pa_proxy_controls(auth_client, conv, participation):

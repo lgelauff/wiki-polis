@@ -5,6 +5,7 @@ import pytest
 import requests as _requests
 
 from polis_admin import (
+    POLIS_NOT_CONFIGURED_MESSAGE, POLIS_UNREACHABLE_MESSAGE,
     PolisParticipantClient, PolisParticipantError,
     PolisServerClient, PolisServerError,
 )
@@ -36,6 +37,40 @@ def _mock_login(client):
     """Patch _login to return a mock session + empty auth headers."""
     sess = MagicMock()
     return patch.object(type(client), '_login', return_value=(sess, {})), sess
+
+
+@pytest.mark.parametrize('url', ['', 'polis:8001', 'ftp://polis:8001'])
+def test_server_login_rejects_missing_or_invalid_http_config(url):
+    client = PolisServerClient(url, 'admin@test.com', 'pass')
+
+    with patch('polis_admin._http.post') as post, \
+         pytest.raises(PolisServerError) as exc_info:
+        client._login()
+
+    assert str(exc_info.value) == POLIS_NOT_CONFIGURED_MESSAGE
+    assert exc_info.value.admin_message == POLIS_NOT_CONFIGURED_MESSAGE
+    post.assert_not_called()
+
+
+def test_server_login_rejects_missing_credentials_before_request():
+    client = PolisServerClient('http://polis:8001', '', '')
+
+    with patch('polis_admin._http.post') as post, \
+         pytest.raises(PolisServerError) as exc_info:
+        client._login()
+
+    assert exc_info.value.admin_message == POLIS_NOT_CONFIGURED_MESSAGE
+    post.assert_not_called()
+
+
+def test_server_login_classifies_unreachable_server_for_admins():
+    client = _server_client()
+
+    with patch('polis_admin._http.post', side_effect=_requests.ConnectionError('refused')), \
+         pytest.raises(PolisServerError) as exc_info:
+        client._login()
+
+    assert exc_info.value.admin_message == POLIS_UNREACHABLE_MESSAGE
 
 
 # ── PolisParticipantClient.get_statements ─────────────────────────────────────
@@ -254,6 +289,26 @@ def test_statement_progress_for_participants_guards():
     assert client.get_statement_progress_for_participants('abc123', []) == {}
 
 
+def test_featured_candidates_expose_passes_and_total_votes():
+    client = PolisServerClient(
+        'http://polis', 'a@b.com', 'pw', db_url='postgresql://localhost/polis',
+    )
+    row = (7, 'Candidate', False, 4, 2, 3, 9)
+
+    with patch.object(client, '_pg_query', return_value=[row]):
+        candidates = client.get_featured_candidates('abc123')
+
+    assert candidates == [{
+        'tid': 7,
+        'text': 'Candidate',
+        'is_seed': False,
+        'n_agree': 4,
+        'n_disagree': 2,
+        'n_pass': 3,
+        'n_votes': 9,
+    }]
+
+
 # ── PolisServerClient.create_conversation ────────────────────────────────────
 
 def _setup_create(zinvite='abc123'):
@@ -296,6 +351,41 @@ def test_create_conversation_raises_on_polis_error():
     with login_patch:
         with pytest.raises(PolisServerError):
             client.create_conversation('My conversation')
+
+
+def test_add_seed_classifies_post_login_disconnect_for_admins():
+    client = _server_client()
+    login_patch, sess = _mock_login(client)
+    sess.post.side_effect = _requests.ConnectionError('connection reset')
+
+    with login_patch, pytest.raises(PolisServerError) as exc_info:
+        client.add_seed('abc123', 'A seed statement')
+
+    assert exc_info.value.admin_message == POLIS_UNREACHABLE_MESSAGE
+
+
+def test_bulk_seed_import_posts_explicit_approved_seed_statements():
+    client = _server_client()
+    login_patch, sess = _mock_login(client)
+    sess.post.return_value = _mock_ok({})
+
+    with login_patch:
+        successes, failures = client.bulk_add_seeds(
+            'abc123', ['First seed', 'Second seed'],
+        )
+
+    assert successes == 2
+    assert failures == []
+    assert [call.kwargs['json'] for call in sess.post.call_args_list] == [
+        {
+            'conversation_id': 'abc123', 'txt': 'First seed',
+            'is_seed': True, 'vote': 0,
+        },
+        {
+            'conversation_id': 'abc123', 'txt': 'Second seed',
+            'is_seed': True, 'vote': 0,
+        },
+    ]
 
 
 def test_close_and_hide_conversation_deactivates_and_hides_results():

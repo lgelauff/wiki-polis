@@ -15,6 +15,7 @@ ARGUMENT_SIDES  = ('pro', 'con')
 FLAG_CONTENT_TYPES = ('statement', 'argument')
 FLAG_CATEGORIES = ('personal_attack', 'privacy', 'off_topic', 'other')
 FLAG_STATUSES = ('open', 'resolved')
+STATEMENT_MODERATION_POLICIES = ('moderate', 'auto_approve')
 
 
 class Participant(db.Model):
@@ -51,6 +52,10 @@ class Conversation(db.Model):
         # IntegrityError rather than a silent overwrite.
         db.UniqueConstraint('phase6_polis_conversation_id',
                             name='uq_conversations_phase6_polis_conversation_id'),
+        db.CheckConstraint(
+            "statement_moderation_policy IN ('moderate', 'auto_approve')",
+            name='ck_conversation_statement_moderation_policy',
+        ),
     )
 
     id           = db.Column(db.Integer, primary_key=True)
@@ -63,6 +68,11 @@ class Conversation(db.Model):
     active       = db.Column(db.Boolean, default=True, nullable=False)
     paused       = db.Column(db.Boolean, default=False, nullable=False)  # reversible; does NOT start reveal clock
     access_policy = db.Column(db.String(20), nullable=False, default='public')
+    # Local default for future participant statements. Nullable only for legacy rows:
+    # their current upstream strict_moderation value is adopted on first reconciliation.
+    statement_moderation_policy = db.Column(
+        db.String(20), nullable=True, default='moderate',
+    )
     # Optional join-time AccountEligibility event gate (#146). Empty event id = open
     # to any logged-in user allowed by access_policy.
     eligibility_event_id = db.Column(db.String(80), nullable=True)
@@ -208,6 +218,81 @@ class ConversationInvite(db.Model):
     created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     conversation = db.relationship('Conversation', back_populates='invites')
+
+
+class CommandReceipt(db.Model):
+    """Durable idempotency record for non-idempotent browser commands.
+
+    A pending row blocks blind retries when an upstream POST may have succeeded
+    without a response. Completed rows replay the original privacy-safe result.
+    """
+    __tablename__ = 'command_receipts'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'participant_id', 'conversation_id', 'command', 'idempotency_key',
+            name='uq_command_receipt_scope_key',
+        ),
+        db.CheckConstraint(
+            "(state = 'pending' AND response IS NULL AND completed_at IS NULL) "
+            "OR (state = 'completed' AND response IS NOT NULL "
+            "AND completed_at IS NOT NULL)",
+            name='ck_command_receipt_lifecycle',
+        ),
+        db.Index('ix_command_receipts_created_at', 'created_at'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    participant_id = db.Column(
+        db.Integer, db.ForeignKey('participants.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    conversation_id = db.Column(
+        db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    command = db.Column(db.String(64), nullable=False)
+    idempotency_key = db.Column(db.String(128), nullable=False)
+    request_hash = db.Column(db.String(64), nullable=False)
+    state = db.Column(db.String(16), nullable=False, default='pending')
+    response = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(
+        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc),
+    )
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+
+class StatementPassSignal(db.Model):
+    """Optional participant reason attached to a Polis pass vote (#287)."""
+    __tablename__ = 'statement_pass_signals'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'participant_id', 'conversation_id', 'statement_id',
+            name='uq_statement_pass_signal_target',
+        ),
+        db.CheckConstraint(
+            "reason IN ('unsure', 'confusing')",
+            name='ck_statement_pass_signal_reason',
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    participant_id = db.Column(
+        db.Integer, db.ForeignKey('participants.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    conversation_id = db.Column(
+        db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    statement_id = db.Column(db.Integer, nullable=False)
+    reason = db.Column(db.String(16), nullable=False)
+    created_at = db.Column(
+        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
 
 class AdminRole(db.Model):

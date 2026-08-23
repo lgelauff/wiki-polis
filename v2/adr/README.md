@@ -13,3 +13,4 @@ capture the **architectural / product** decisions.
 | [0001](0001-self-host-polis.md) | Self-host Polis + Particiapi instead of hosted pol.is | Accepted |
 | [0002](0002-auth-proxy-and-xid.md) | OAuth at Flask; auth-disabled Particiapi behind a proxy; xid identity | Accepted |
 | [0003](0003-identity-pseudonyms-and-reveal.md) | Per-conversation pseudonyms + opt-in permanent reveal | Accepted |
+| [0004](0004-versioned-browser-api-and-spa.md) | Versioned same-origin API + React/TypeScript SPA | Accepted |

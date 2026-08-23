@@ -24,7 +24,7 @@ import requests
 from dotenv import load_dotenv
 from flask import (Blueprint, Flask, abort, current_app, flash, g, jsonify,
                    has_request_context, make_response, redirect, render_template,
-                   request, session, url_for)
+                   request, send_from_directory, session, url_for)
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
@@ -32,29 +32,123 @@ from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect, validate_csrf
 from sqlalchemy import text as _sa_text
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from wtforms.validators import ValidationError
 
-from db import (ACCESS_POLICIES, ADMIN_ROLES, FLAG_CATEGORIES, AdminRole, Argument,
+from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument,
                 ArgumentSideState, ArgumentVote, AuditEvent, ContentFlag, Conversation,
                 ConversationBan, ConversationInvite, FeaturedStatement, Participant,
                 Participation, StatementProvenance, StatementSimilarityScore, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
-                         PolisServerClient, PolisServerError)
+                         PolisServerClient, PolisServerError,
+                         polis_server_config_error)
 from http_pool import session as polis_http
 from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
                       RowError, strip_formula_prefixes)
 from logging_setup import configure_logging
+from api.v1 import create_api_v1_blueprint, register_api_error_handlers
+from services.identity import reconcile_participant_login
+from services.identity_reveal import (
+    REVEAL_COOLDOWN_DAYS, REVEAL_WINDOW_DAYS, RevealUnavailable,
+    build_reveal_context as _reveal_context,
+    reveal_identity as reveal_identity_command,
+)
+from services.informed_voting import build_informed_voting_state
+from services.results_report import build_results_report
+from services.intermediate_results import build_intermediate_results
+from services.invites import (
+    InvitationNotInConversation, InviteBatchSaveError,
+    add_conversation_invites, build_invitation_roster,
+    remove_conversation_invite,
+)
+from services.conversation_about import build_conversation_about
+from services.conversation_lanes import (build_conversation_lane,
+                                         scheduled_transition)
+from services.conversation_workspace import (
+    InviteOnlyWorkspaceAccess, build_conversation_workspace,
+)
+from services.participations import (EligibilityDenied, InvalidPseudonym,
+                                     PseudonymUnavailable, join_conversation)
+from services.participation_entry import build_participation_entry
+from services.explore import (ExploreGateway, ParticiapiSessionState,
+                              ExploreUpstreamError, build_explore_state,
+                              normalise_statements)
+from services.explore_votes import update_pass_signal
+from services.argument_mapping import build_argument_mapping_state
+from services.argument_commands import (
+    ContributionGateClosed, ExistingArgumentConflict, HiddenArgument,
+    InvalidArgument, PrioritizationUnavailable, PriorityBudgetExceeded,
+    set_argument_priority, skip_argument_contribution,
+    submit_argument as submit_argument_command,
+)
+from services.content_flags import InvalidFlag, submit_content_flag
+from services.admin_participants import (
+    ParticipantNotInConversation, build_admin_participant_roster,
+    set_participant_access,
+)
+from services.admin_moderation import (
+    FlagNotInConversation, build_admin_flag_queue, resolve_content_flag,
+)
+from services.admin_roles import (
+    RoleParticipantNotFound, build_admin_role_roster,
+    replace_conversation_roles,
+)
+from services.admin_settings import (build_admin_settings,
+                                     update_conversation_settings,
+                                     update_recommendation_tier)
+from services.admin_termination import (
+    DeletionBlockedByVotes, DeletionOutcomeUnknown, DeletionUpstreamFailed,
+    DeletionVerificationUnavailable, build_termination_state,
+    delete_empty_conversation,
+)
+from services.admin_statements import (
+    LastFeaturedStatementProtected, StatementModerationUpstreamFailed,
+    ModerationPolicySaveFailed, ModerationPolicyUpstreamFailed,
+    ModerationPolicyVerificationUnavailable,
+    SeedImportValidationFailed, SeedStatementParentNotFound,
+    SeedStatementUpstreamFailed, SeedStatementValidationFailed,
+    add_seed_statement, build_statement_workspace, import_seed_statements,
+    moderate_statement, resolved_moderation_policy, set_statement_moderation_policy,
+)
+from services.admin_featured import (
+    ArgumentNotInFeaturedWorkspace,
+    FeaturedSourceUnavailable,
+    build_featured_workspace, delete_featured_argument,
+    remove_featured_statement, select_featured_statement,
+    set_featured_argument_visibility,
+)
+from services.admin_catalog import (
+    build_admin_catalog, create_conversation as create_admin_conversation,
+    set_global_admin,
+)
+from services.admin_lifecycle import (
+    Phase6InitializationConflict, Phase6InitializationSaveFailed,
+    Phase6InitializationUnavailable,
+    PhasePreparationFailed, PhaseReadinessBlocked,
+    PhaseReadinessUnconfirmed, PhaseTransitionConflict,
+    PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
+    ScheduleInPast,
+    advance_conversation_phase, build_admin_lifecycle, initialize_phase6,
+    publish_final_report, set_advanced_phases, set_conversation_archived,
+    set_conversation_paused,
+    set_phase_schedule,
+)
+from services.idempotency import (complete_command, release_reservation,
+                                  request_digest, reserve_command)
+from services.statements import (DerivativeSimilarityTooLow,
+                                 StatementPreparationUnavailable,
+                                 StatementQuotaExceeded,
+                                 UnknownParentStatement)
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
 _MW_USER_AGENT   = 'wiki-polis/2.0 (Toolforge tool; https://wiki-polis.toolforge.org)'
+_SPA_BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'spa')
 _TEXT_ALLOWED_TAGS  = {'p', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'br'}
 _TEXT_ALLOWED_ATTRS = {'a': {'href', 'title'}}
 _POLIS_ID_RE     = re.compile(r'^[A-Za-z0-9]{6,20}$')
 _SLUG_RE         = re.compile(r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
-_PSEUDONYM_RE    = re.compile(r'^[a-z]{2,20}-[a-z]{2,20}$')
 _REDIS_RATELIMIT_SCHEMES = ('redis://', 'rediss://')
 _MIN_RATELIMIT_IDENTITY_SECRET_LEN = 32
 _XID_HMAC_VERSION = 2
@@ -113,8 +207,8 @@ def _staging_dev_login_token(username: str, secret: str) -> str:
 
 ADMIN_USERS = [u.strip() for u in _read_secret('admin-users').split(',') if u.strip()]
 
-_REVEAL_COOLDOWN_DAYS = 30   # days after close before reveal window opens
-_REVEAL_WINDOW_DAYS   = 30   # days participants may opt in once the window opens
+_REVEAL_COOLDOWN_DAYS = REVEAL_COOLDOWN_DAYS
+_REVEAL_WINDOW_DAYS = REVEAL_WINDOW_DAYS
 _MATH_RECOMPUTE_COOLDOWN = 600  # seconds between auto-triggered recomputes per conversation
 _DEMO_MW_ID_MIN = -2_000_000_000
 _DEMO_MW_ID_MAX = -1_000_000_000
@@ -484,44 +578,32 @@ def _snapshot_report_filter(conv) -> Phase6ResultsFilter:
 _math_recompute_last: dict[int, float] = {}  # conv.id → epoch of last trigger
 
 
-def _reveal_context(conv, participation):
-    """Identity-reveal timeline for a closed conversation (#70): when it closed, when
-    the opt-in window opens (after the cooldown) and closes, the current state, and the
-    days left while the window is open. Returns None when the conversation is not closed.
-    """
-    if not conv.closed_at:
-        return None
-    # Normalize ONCE to a tz-aware UTC instant, then derive everything from it — so the
-    # displayed dates and the countdown target are the same correct UTC moments the
-    # state math uses. (DB may hand back a naive datetime; deriving window dates off a
-    # naive value would make the live countdown tick to the wrong instant.)
-    closed = (conv.closed_at if conv.closed_at.tzinfo
-              else conv.closed_at.replace(tzinfo=timezone.utc))
-    opens_at  = closed + timedelta(days=_REVEAL_COOLDOWN_DAYS)
-    closes_at = closed + timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS)
-    now = datetime.now(timezone.utc)
-    age = now - closed
-    if participation and participation.public_username:
-        state = 'revealed'
-    elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS):
-        state = 'expired'
-    elif age >= timedelta(days=_REVEAL_COOLDOWN_DAYS):
-        state = 'open'
-    else:
-        state = 'pending'
-    # The window's next boundary, as a UTC instant the client ticks a live countdown
-    # against (per the design): opens_at while in cooldown, closes_at while open.
-    target = opens_at if state == 'pending' else closes_at if state == 'open' else None
-    # No-JS fallback: whole days to that boundary, partial day rounded UP so the final
-    # open day never reads "0 days left" while the reveal POST is still accepted.
-    days_left = 0
-    if target is not None:
-        _d = target - now
-        days_left = max(0, _d.days + (1 if (_d.seconds or _d.microseconds) else 0))
-    return {'closed_at': closed, 'opens_at': opens_at, 'closes_at': closes_at,
-            'state': state, 'days_left': days_left,
-            'countdown_target_iso': target.isoformat() if target else None,
-            'cooldown_days': _REVEAL_COOLDOWN_DAYS, 'window_days': _REVEAL_WINDOW_DAYS}
+def _load_intermediate_results(conv) -> tuple[dict | None, dict | None, bool]:
+    """Load the Phase 2 result surfaces with the legacy recompute throttle."""
+    if not (conv.phase_public_results or conv.phase_personal_results):
+        return None, None, False
+    raw = PolisParticipantClient(
+        current_app.config['PARTICIAPI_BASE'],
+    ).get_results(conv.polis_id)
+    results = raw if (
+        raw and (
+            raw.get('groups')
+            or raw.get('majority', {}).get('agree')
+            or raw.get('majority', {}).get('disagree')
+        )
+    ) else None
+    polis_stats = _polis_server_client().get_polis_stats(conv.polis_id)
+    recomputing = False
+    if results is None:
+        import time
+        now = time.monotonic()
+        last = _math_recompute_last.get(conv.id, 0)
+        if now - last > _MATH_RECOMPUTE_COOLDOWN:
+            if _polis_server_client().queue_math_recompute(conv.polis_id):
+                _math_recompute_last[conv.id] = now
+                recomputing = True
+    return results, polis_stats, recomputing
+
 
 # Canonical consultation phase sequence. One flag per stage; preparation = all off.
 # Simple mode advances through this list (forward-only, exclusive). The existing
@@ -540,7 +622,7 @@ PHASE_SEQUENCE = [
     {'key': 'informed_voting',    'label': 'Informed vote',      'flag': 'phase_informed_voting',
      'effect': 'participants vote again on featured statements (requires initialising Phase 6)'},
     {'key': 'public_results',     'label': 'Report',             'flag': 'phase_public_results',
-     'effect': 'everyone can see the full aggregate results'},
+     'effect': 'participant activity has ended; review preliminary results before final publication'},
 ]
 _PHASE_BY_KEY = {stage['key']: stage for stage in PHASE_SEQUENCE}
 
@@ -709,8 +791,9 @@ PHASE_TRANSITIONS = {
     ]},
 }
 
-# Recommended quantities are advisory unless a transition has a separate machine
-# check. Organizers can choose a tier and override individual values per conversation.
+# Recommended quantities are tool-owned guidance unless a transition has a separate
+# machine check. Organizers characterize scope with a tier; they do not override the
+# guidance values individually (#278).
 _RECOMMENDATION_TIERS = {
     'simple': {
         'label': 'Simple topic',
@@ -741,9 +824,6 @@ _RECOMMENDATION_LABELS = {
     'arguments_per_featured': 'arguments per featured statement',
     'votes_per_statement': 'votes per statement before advancing',
 }
-_RECOMMENDED_FEATURED = _RECOMMENDATION_TIERS[_DEFAULT_RECOMMENDATION_TIER]['featured_statements']
-
-
 def _recommendation_profile(conv) -> dict:
     raw = getattr(conv, 'recommended_quantities', None) or {}
     tier = raw.get('tier', _DEFAULT_RECOMMENDATION_TIER)
@@ -751,10 +831,6 @@ def _recommendation_profile(conv) -> dict:
         tier = _DEFAULT_RECOMMENDATION_TIER
     profile = dict(_RECOMMENDATION_TIERS[tier])
     profile['tier'] = tier
-    for key in _RECOMMENDATION_LABELS:
-        value = raw.get(key)
-        if isinstance(value, int) and value > 0:
-            profile[key] = value
     return profile
 
 
@@ -1632,6 +1708,1021 @@ def _polis_server_client() -> PolisServerClient:
     )
 
 
+def _conversation_client_link(slug: str, *, tab: str | None = None) -> str:
+    path = url_for('participant.conversation', slug=slug)
+    return f'{path}#tab-{tab}' if tab else path
+
+
+def _admin_client_link(conversation_id: int, page: str | None = None) -> str:
+    base = url_for('admin.admin_conversation_detail', conv_id=conversation_id)
+    return f'{base}/{page}' if page else base
+
+
+_SPA_ONLY_COOKIE = 'wiki-polis-spa-only'
+_SPA_ONLY_MAX_AGE = 365 * 24 * 60 * 60
+
+
+def _spa_developer_controls_enabled() -> bool:
+    """Expose migration controls on local debug and the isolated staging tool."""
+    local_debug = bool(
+        current_app.debug
+        and not os.environ.get('TOOL_TOOLFORGE_API_URL')
+    )
+    return local_debug or _is_staging_toolforge_app(current_app)
+
+
+def _is_canonical_spa_path(path: str) -> bool:
+    if path in {
+        '/', '/demo', '/consultations', '/help/statements', '/help/arguments', '/admin',
+    }:
+        return True
+    if re.fullmatch(r'/accept/[^/]+', path):
+        return True
+    if re.fullmatch(
+        r'/c/[^/]+(?:/(?:about|moderation-log|report|reveal|outputs/[^/]+))?', path,
+    ):
+        return True
+    return re.fullmatch(
+        r'/admin/conversations/\d+(?:/(?:participants|flags|invites|statements|featured|settings|termination|roles))?',
+        path,
+    ) is not None
+
+
+def _conversation_lane_api_payload(demo: bool) -> dict:
+    """Build the privacy-safe browser projection for one conversation space."""
+    session['space'] = 'demo' if demo else 'real'
+    participant = _current_participant()
+    lane = build_conversation_lane(
+        demo=demo,
+        username=session.get('username'),
+        participant=participant,
+        global_admin=_is_global_admin(participant),
+        active_phases=_active_phases,
+        output_items=_output_items,
+        reveal_context=_reveal_context,
+        polis_client=_polis_server_client(),
+    )
+    return lane.to_api(
+        conversation_link=_conversation_client_link,
+        about_link=lambda slug: url_for('participant.conversation_about', slug=slug),
+        explore_link=_conversation_client_link,
+        arguments_link=lambda slug: _conversation_client_link(slug, tab='arguments'),
+        informed_voting_link=lambda slug: _conversation_client_link(slug, tab='informed-voting'),
+        results_link=lambda slug: url_for('participant.conversation_report', slug=slug),
+        reveal_link=lambda slug: url_for('participant.reveal_identity', slug=slug),
+        admin_link=_admin_client_link,
+    )
+
+
+def _conversation_workspace_api_payload(slug: str) -> dict:
+    """Return the page-composition state previously owned by the Jinja route."""
+    conv = Conversation.query.filter_by(slug=slug).first()
+    if conv is None:
+        if 'username' not in session and not _is_demo_session():
+            abort(401)
+        abort(404)
+
+    if conv.access_policy == 'demo':
+        participation = _ensure_demo_participation(conv)
+        participant = participation.participant
+    else:
+        if _is_demo_session():
+            _exit_demo_session()
+        if 'username' not in session:
+            abort(401)
+        participant = _current_participant()
+        participation = None
+
+    access_denial = _conversation_access_denial(conv, participant)
+    if access_denial == 'invite_only':
+        can_moderate = _can_moderate(conv, participant)
+        access_links = {
+            'home': url_for('index'),
+        }
+        if can_moderate:
+            access_links['invitations'] = _admin_client_link(conv.id, 'invites')
+        raise InviteOnlyWorkspaceAccess(
+            title=conv.title,
+            can_moderate=can_moderate,
+            links=access_links,
+        )
+    if access_denial is not None:
+        abort(403)
+    if participation is None and participant is not None:
+        participation = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+        ).first()
+
+    can_moderate = _can_moderate(conv, participant)
+    conv_space = 'demo' if conv.access_policy == 'demo' else 'real'
+    has_admin_access = _is_global_admin(participant) or bool(
+        participant and AdminRole.query.filter_by(
+            participant_id=participant.id,
+        ).first()
+    )
+    space_warning = conv_space if (
+        participation is not None
+        and not has_admin_access
+        and session.get('space') != conv_space
+    ) else None
+    if participation is not None:
+        session['space'] = conv_space
+
+    phase6_results_available = False
+    if (conv.phase_public_results and conv.phase6_polis_conversation_id
+            and participation is not None):
+        phase6_results = _build_phase6_results(conv, participation)
+        phase6_results_available = bool(
+            phase6_results and phase6_results.get('statements')
+        )
+
+    links = {
+        'self': url_for('api_v1.get_conversation_workspace', slug=slug),
+        'conversation': url_for('participant.conversation', slug=slug),
+        'about': url_for('participant.conversation_about', slug=slug),
+        'join': url_for('participant.accept', slug=slug),
+    }
+    if conv.phase_submission:
+        links['explore'] = url_for('api_v1.get_explore_state', slug=slug)
+    if conv.phase_argument_mapping:
+        links['arguments'] = url_for('api_v1.get_argument_mapping', slug=slug)
+    if conv.phase_informed_voting and conv.phase6_polis_conversation_id:
+        links['informedVoting'] = url_for(
+            'api_v1.get_informed_voting', slug=slug,
+        )
+    if conv.phase_public_results or conv.phase_personal_results:
+        links['intermediateResults'] = url_for(
+            'api_v1.get_intermediate_results', slug=slug,
+        )
+        links['results'] = url_for('api_v1.get_results_report', slug=slug)
+    if can_moderate:
+        links['manage'] = url_for(
+            'admin.admin_conversation_detail', conv_id=conv.id,
+        )
+
+    reveal = _reveal_context(conv, participation) if participation else None
+    return build_conversation_workspace(
+        conversation=conv,
+        participation=participation,
+        can_moderate=can_moderate,
+        space_warning=space_warning,
+        reveal=reveal,
+        phase6_results_available=phase6_results_available,
+        links=links,
+    )
+
+
+def _conversation_about_model(conv: Conversation, participant: Participant | None):
+    participation = (
+        Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+        ).first()
+        if participant else None
+    )
+    phase_labels = {stage['key']: stage['label'] for stage in PHASE_SEQUENCE}
+    phase_labels.update({'cleanup_window': 'Cleanup', 'closed': 'Closed'})
+    return build_conversation_about(
+        conversation=conv,
+        participant=participant,
+        participation=participation,
+        active_phases=_active_phases,
+        phase_labels=phase_labels,
+        output_items=_output_items,
+        polis_client=_polis_server_client(),
+        can_moderate=_can_moderate(conv, participant),
+    )
+
+
+def _conversation_about_api_payload(slug: str) -> dict:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    _check_conversation_access(conv, participant)
+    return _conversation_about_model(conv, participant).to_api(
+        self_link=url_for('api_v1.get_conversation_about', slug=slug),
+        conversation_link=url_for('participant.conversation', slug=slug),
+        moderation_log_link=url_for(
+            'participant.conversation_moderation_log', slug=slug,
+        ),
+    )
+
+
+def _moderation_log_api_payload(slug: str) -> dict:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    _check_conversation_access(conv, _current_participant())
+
+    def utc_iso(value):
+        if value is None:
+            return None
+        aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return aware.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+    return {
+        'slug': conv.slug,
+        'title': conv.title,
+        'events': [
+            {
+                'occurredAt': utc_iso(row['ts']),
+                'action': row['action'],
+                'pseudonym': row['pseudonym'],
+                'scope': row['scope'],
+                'actor': row['actor'],
+            }
+            for row in _conversation_ban_log_rows(conv)
+        ],
+        'links': {
+            'self': url_for('api_v1.get_moderation_log', slug=slug),
+            'conversation': url_for('participant.conversation', slug=slug),
+            'about': url_for('participant.conversation_about', slug=slug),
+        },
+    }
+
+
+def _conversation_output_api_payload(slug: str, output_key: str) -> dict:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        abort(409, description='Join this conversation before viewing its outputs.')
+    if _output_definition(output_key) is None:
+        abort(404)
+    output = next(
+        item for item in _output_items(conv) if item['key'] == output_key
+    )
+    return {
+        'slug': conv.slug,
+        'title': conv.title,
+        'output': {
+            key: output[key]
+            for key in ('key', 'label', 'phase', 'status', 'ready', 'method', 'pending')
+        },
+        'links': {
+            'self': url_for(
+                'api_v1.get_conversation_output', slug=slug, output_key=output_key,
+            ),
+            'conversation': url_for('participant.conversation', slug=slug),
+            'about': url_for('participant.conversation_about', slug=slug),
+        },
+    }
+
+
+def _identity_reveal_api_context(slug: str):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        abort(409, description='Join this conversation before managing identity reveal.')
+    if not conv.closed_at:
+        abort(409, description='Identity reveal is available only after closure.')
+    return conv, participant, participation
+
+
+def _identity_reveal_dto(conv, participant, participation) -> dict:
+    reveal = _reveal_context(conv, participation)
+
+    def utc_iso(value):
+        aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return aware.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+    return {
+        'slug': conv.slug,
+        'title': conv.title,
+        'state': reveal['state'],
+        'pseudonym': participation.pseudonym,
+        'wikimediaUsername': participant.mw_username,
+        'publicUsername': participation.public_username,
+        'timeline': {
+            'closedAt': utc_iso(reveal['closed_at']),
+            'opensAt': utc_iso(reveal['opens_at']),
+            'closesAt': utc_iso(reveal['closes_at']),
+            'nextBoundaryAt': (
+                utc_iso(reveal['opens_at']) if reveal['state'] == 'pending'
+                else utc_iso(reveal['closes_at']) if reveal['state'] == 'open'
+                else None
+            ),
+            'daysRemaining': reveal['days_left'],
+        },
+        'capabilities': {'revealIdentity': reveal['state'] == 'open'},
+        'links': {
+            'self': url_for('api_v1.get_identity_reveal', slug=conv.slug),
+            'conversation': url_for('participant.conversation', slug=conv.slug),
+            'about': url_for('participant.conversation_about', slug=conv.slug),
+        },
+    }
+
+
+def _identity_reveal_api_payload(slug: str) -> dict:
+    return _identity_reveal_dto(*_identity_reveal_api_context(slug))
+
+
+def _reveal_identity_api_payload(slug: str) -> tuple[dict, int]:
+    conv, participant, participation = _identity_reveal_api_context(slug)
+    result = reveal_identity_command(
+        conversation=conv,
+        participation=participation,
+        wikimedia_username=participant.mw_username,
+    )
+    return (
+        _identity_reveal_dto(conv, participant, result.participation),
+        201 if result.created else 200,
+    )
+
+
+def _participation_entry_read_model(slug: str):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    invited = (
+        conv.access_policy != 'invite_only'
+        or ConversationInvite.query.filter_by(
+            conversation_id=conv.id,
+            mw_username=session.get('username'),
+        ).first() is not None
+    )
+    return build_participation_entry(
+        conversation=conv,
+        participant=participant,
+        invited=invited,
+        can_moderate=_can_moderate(conv, participant),
+        emailable=bool(session.get('emailable')),
+        pseudonyms=_generate_pseudonyms(5),
+        reveal_cooldown_days=_REVEAL_COOLDOWN_DAYS,
+        reveal_window_end_days=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS,
+    )
+
+
+def _participation_entry_api_payload(slug: str) -> dict:
+    entry = _participation_entry_read_model(slug)
+    return entry.to_api(
+        conversation_link=url_for('participant.conversation', slug=slug),
+        home_link=url_for('index'),
+        manage_invites_link=url_for(
+            'admin.admin_conversation_invites', conv_id=entry.conversation.id,
+        ),
+    )
+
+
+def _pseudonym_suggestions_api_payload(slug: str) -> list[str]:
+    entry = _participation_entry_read_model(slug)
+    if entry.state != 'join':
+        abort(409, description='This conversation cannot be joined from this route.')
+    return _generate_pseudonyms(5)
+
+
+def _join_conversation_api_payload(slug: str, body: dict) -> tuple[dict, int]:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    if conv.access_policy == 'demo':
+        abort(409, description='Demo conversations are joined automatically.')
+    result = join_conversation(
+        conversation=conv,
+        participant=participant,
+        pseudonym=body['pseudonym'],
+        notify_email=body.get('notifyEmail', False),
+        notify_talk_page=body.get('notifyTalkPage', False),
+        emailable=bool(session.get('emailable')),
+        check_eligibility=_check_join_eligibility,
+    )
+    participation = result.participation
+    return ({
+        'pseudonym': participation.pseudonym,
+        'notifications': {
+            'email': bool(participation.notify_email),
+            'talkPage': bool(participation.notify_talk_page),
+        },
+        'eligibilityStatus': participation.eligibility_status,
+        'links': {
+            'conversation': url_for('participant.conversation', slug=slug),
+            'about': url_for('participant.conversation_about', slug=slug),
+        },
+    }, 201 if result.created else 200)
+
+
+def _require_explore_api_context(slug: str, *, allow_banned_read: bool = False):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        abort(409, description='Join this conversation before participating.')
+    if not conv.active or conv.paused or not conv.phase_submission:
+        abort(409, description='Explore voting is not open.')
+    if not allow_banned_read:
+        _abort_if_banned(conv, participant)
+    return conv, participant, participation
+
+
+def _explore_gateway(conv: Conversation, participant: Participant):
+    states = dict(session.get('particiapi_api_sessions') or {})
+    state = ParticiapiSessionState.from_dict(states.get(str(conv.id)))
+    subject_secret = current_app.config.get('PARTICIAPI_SUB_SECRET')
+    gateway = ExploreGateway(
+        base_url=current_app.config['PARTICIAPI_BASE'],
+        transport=polis_http,
+        state=state,
+        subject=_conversation_subject(participant.xid, conv) if subject_secret else None,
+        subject_secret=subject_secret,
+    )
+    return gateway, states
+
+
+def _save_explore_gateway_state(
+    conv: Conversation, gateway: ExploreGateway, states: dict,
+) -> None:
+    states[str(conv.id)] = gateway.state.to_dict()
+    session['particiapi_api_sessions'] = states
+
+
+def _explore_state_payload(conv: Conversation, participant: Participant,
+                           participation: Participation, gateway: ExploreGateway) -> dict:
+    statements, upstream_participant = gateway.read(conv.polis_id)
+    config = conv.argument_vote_data or {}
+    projection = build_explore_state(
+        statements_payload=statements,
+        participant_payload=upstream_participant,
+        ordering_key=f'{participant.xid}:{conv.id}',
+        new_statement_unlock_at=int(config.get('new_stmt_unlock_at', 10)),
+        new_statement_max=int(config.get('new_stmt_max', 3)),
+        new_statements_used=len(participation.new_stmt_ids or []),
+    )
+    links = {
+        'self': url_for('api_v1.get_explore_state', slug=conv.slug),
+        'about': url_for('participant.conversation_about', slug=conv.slug),
+        'conversation': url_for('participant.conversation', slug=conv.slug),
+    }
+    if conv.phase_argument_mapping:
+        links['arguments'] = _conversation_client_link(conv.slug, tab='arguments')
+    return {
+        'slug': conv.slug,
+        'title': conv.title,
+        'pseudonym': participation.pseudonym,
+        **projection,
+        'capabilities': {
+            'vote': True,
+            'suggestWording': projection['currentStatement'] is not None,
+            'submitNewStatement': projection['newStatement']['unlocked'],
+        },
+        'links': links,
+    }
+
+
+def _explore_api_payload(slug: str) -> dict:
+    conv, participant, participation = _require_explore_api_context(
+        slug, allow_banned_read=True,
+    )
+    gateway, states = _explore_gateway(conv, participant)
+    try:
+        return _explore_state_payload(conv, participant, participation, gateway)
+    finally:
+        _save_explore_gateway_state(conv, gateway, states)
+
+
+def _explore_vote_api_payload(
+    slug: str, statement_id: int, choice: str, pass_reason: str | None,
+) -> dict:
+    conv, participant, participation = _require_explore_api_context(slug)
+    gateway, states = _explore_gateway(conv, participant)
+    try:
+        statements, _ = gateway.read(conv.polis_id)
+        known_ids = {item['id'] for item in normalise_statements(statements)}
+        if statement_id not in known_ids:
+            abort(404, description='Statement not found in this conversation.')
+        polis_values = {'agree': -1, 'pass': 0, 'disagree': 1}
+        gateway.vote(conv.polis_id, statement_id, polis_values[choice])
+        stored_pass_reason = update_pass_signal(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+            statement_id=statement_id,
+            choice=choice,
+            pass_reason=pass_reason,
+        )
+        _touch_last_engagement(participation)
+        db.session.commit()
+        return {
+            'statementId': statement_id,
+            'choice': choice,
+            'passReason': stored_pass_reason,
+            'links': {
+                'explore': url_for('api_v1.get_explore_state', slug=conv.slug),
+            },
+        }
+    finally:
+        _save_explore_gateway_state(conv, gateway, states)
+
+
+def _require_informed_voting_api_context(
+    slug: str, *, allow_banned_read: bool = False,
+):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        abort(409, description='Join this conversation before informed voting.')
+    if (not conv.active or conv.paused or not conv.phase_informed_voting
+            or not conv.phase6_polis_conversation_id):
+        abort(409, description='Informed voting is not open.')
+    if not allow_banned_read:
+        _abort_if_banned(conv, participant)
+    return conv, participant, participation
+
+
+def _phase6_gateway(conv: Conversation, participant: Participant):
+    key = (participant.xid, conv.id)
+    state = ParticiapiSessionState(
+        cookie=session.get('_p6_pa'),
+        csrf_token=session.get('_p6_csrf'),
+    )
+    gateway = ExploreGateway(
+        base_url=current_app.config['PARTICIAPI_BASE'],
+        transport=polis_http,
+        state=state,
+        subject=None,
+        subject_secret=None,
+    )
+    if not (state.cookie and state.csrf_token):
+        with _p6_bootstrap_lock(key):
+            shared = _p6_session_cache.get(key)
+            if shared:
+                state.cookie, state.csrf_token = shared
+            else:
+                gateway.ensure_session()
+                _p6_session_cache[key] = (state.cookie, state.csrf_token)
+    return gateway, key
+
+
+def _save_phase6_gateway(gateway: ExploreGateway, key) -> None:
+    session['_p6_pa'] = gateway.state.cookie
+    session['_p6_csrf'] = gateway.state.csrf_token
+    _p6_session_cache[key] = (gateway.state.cookie, gateway.state.csrf_token)
+
+
+def _informed_voting_api_payload(slug: str) -> dict:
+    conv, participant, participation = _require_informed_voting_api_context(
+        slug, allow_banned_read=True,
+    )
+    gateway, key = _phase6_gateway(conv, participant)
+    try:
+        participant_payload = gateway.read_participant(
+            conv.phase6_polis_conversation_id,
+        )
+        projection = build_informed_voting_state(
+            conversation_id=conv.id,
+            participation=participation,
+            participant_payload=participant_payload,
+        )
+        links = {
+            'self': url_for('api_v1.get_informed_voting', slug=slug),
+            'about': url_for('participant.conversation_about', slug=slug),
+            'conversation': url_for('participant.conversation', slug=slug),
+        }
+        if conv.phase_submission:
+            links['explore'] = _conversation_client_link(slug)
+        if conv.phase_argument_mapping:
+            links['arguments'] = _conversation_client_link(slug, tab='arguments')
+        if conv.phase_public_results or conv.phase_personal_results:
+            links['results'] = url_for('participant.conversation_report', slug=slug)
+        return {
+            'slug': conv.slug,
+            'title': conv.title,
+            'pseudonym': participation.pseudonym,
+            **projection,
+            'capabilities': {'vote': True},
+            'links': links,
+        }
+    finally:
+        _save_phase6_gateway(gateway, key)
+
+
+def _informed_vote_api_payload(
+    slug: str, featured_statement_id: int, choice: str,
+) -> dict:
+    conv, participant, participation = _require_informed_voting_api_context(slug)
+    featured = FeaturedStatement.query.filter_by(
+        id=featured_statement_id,
+        conversation_id=conv.id,
+        confirmed_by_admin=True,
+    ).first()
+    if featured is None or featured.phase6_polis_statement_id is None:
+        abort(404, description='Featured statement is not available in this round.')
+    gateway, key = _phase6_gateway(conv, participant)
+    try:
+        polis_values = {'agree': 1, 'pass': 0, 'disagree': -1}
+        gateway.vote(
+            conv.phase6_polis_conversation_id,
+            featured.phase6_polis_statement_id,
+            polis_values[choice],
+        )
+        _touch_last_engagement(participation)
+        db.session.commit()
+        return {
+            'featuredStatementId': featured.id,
+            'choice': choice,
+            'links': {
+                'informedVoting': url_for(
+                    'api_v1.get_informed_voting', slug=slug,
+                ),
+            },
+        }
+    finally:
+        _save_phase6_gateway(gateway, key)
+
+
+def _results_report_api_payload(slug: str) -> dict:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    _check_conversation_access(conv, participant)
+    if not (conv.phase_public_results or conv.phase_personal_results):
+        abort(409, description='Results are not published for this conversation.')
+    if conv.phase_personal_results and not conv.phase_public_results and participant is None:
+        abort(401)
+    participation = (
+        Participation.query.filter_by(
+            participant_id=participant.id, conversation_id=conv.id,
+        ).first()
+        if participant else None
+    )
+    result_filter = (
+        Phase6ResultsFilter.from_snapshot(conv.report_filter_snapshot)
+        if conv.closed_at else _current_phase6_results_filter(conv)
+    )
+    results = _build_phase6_results(
+        conv, participation=participation, results_filter=result_filter,
+    )
+    output_key = 'report' if conv.closed_at else 'preliminary-results'
+    output_context = next(
+        item for item in _output_items(conv) if item['key'] == output_key
+    )
+    reveal = _reveal_context(conv, participation)
+    return build_results_report(
+        conversation=conv,
+        phase6_results=results,
+        output_context=output_context,
+        participation=participation,
+        reveal_state=reveal['state'] if reveal else None,
+        self_link=url_for('api_v1.get_results_report', slug=slug),
+        conversation_link=url_for('participant.conversation', slug=slug),
+        about_link=url_for('participant.conversation_about', slug=slug),
+        identity_reveal_link=(
+            url_for('participant.reveal_identity', slug=slug)
+            if reveal else None
+        ),
+    )
+
+
+def _intermediate_results_api_payload(slug: str) -> dict:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    _check_conversation_access(conv, participant)
+    if not (conv.phase_public_results or conv.phase_personal_results):
+        abort(409, description='Intermediate results are not published.')
+    if conv.phase_personal_results and not conv.phase_public_results and participant is None:
+        abort(401)
+    results, polis_stats, recomputing = _load_intermediate_results(conv)
+    return build_intermediate_results(
+        conversation=conv,
+        results=results,
+        polis_stats=polis_stats,
+        recomputing=recomputing,
+        self_link=url_for('api_v1.get_intermediate_results', slug=slug),
+        conversation_link=url_for('participant.conversation', slug=slug),
+        about_link=url_for('participant.conversation_about', slug=slug),
+    )
+
+
+def _argument_mapping_api_payload(slug: str) -> dict:
+    conv, _participant, participation = _require_argument_api_context(
+        slug, allow_banned_read=True,
+    )
+    can_moderate = _can_moderate(conv)
+    links = {
+        'self': url_for('api_v1.get_argument_mapping', slug=slug),
+        'about': url_for('participant.conversation_about', slug=slug),
+        'conversation': url_for('participant.conversation', slug=slug),
+    }
+    if conv.phase_submission:
+        links['explore'] = _conversation_client_link(slug)
+    return build_argument_mapping_state(
+        conversation=conv,
+        participation=participation,
+        featured_data=_build_featured_data(
+            conv, participation, can_mod=can_moderate,
+        ),
+        links=links,
+        can_moderate=can_moderate,
+    )
+
+
+def _require_argument_api_context(slug: str, *, allow_banned_read: bool = False):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        abort(409, description='Join this conversation before participating.')
+    if not conv.active or conv.paused or not conv.phase_argument_mapping:
+        abort(409, description='Argument mapping is not open.')
+    if not allow_banned_read:
+        _abort_if_banned(conv, participant)
+    return conv, participant, participation
+
+
+def _argument_links(slug: str) -> dict:
+    return {
+        'arguments': url_for('api_v1.get_argument_mapping', slug=slug),
+    }
+
+
+def _submit_argument_api_payload(
+    slug: str, featured_statement_id: int, body: dict,
+) -> tuple[dict, int]:
+    conv, _participant, participation = _require_argument_api_context(slug)
+    result = submit_argument_command(
+        conversation=conv,
+        participation=participation,
+        featured_statement_id=featured_statement_id,
+        side=body['side'],
+        body=body['body'],
+        touch=_touch_last_engagement,
+    )
+    argument = result.argument
+    return ({
+        'featuredStatementId': featured_statement_id,
+        'side': argument.side,
+        'status': 'submitted',
+        'argument': {
+            'id': argument.id,
+            'body': argument.body,
+            'own': True,
+            'selected': False,
+            'capabilities': {'prioritize': False, 'flag': False},
+        },
+        'links': _argument_links(slug),
+    }, 201 if result.created else 200)
+
+
+def _skip_argument_api_payload(
+    slug: str, featured_statement_id: int, side: str,
+) -> dict:
+    conv, _participant, participation = _require_argument_api_context(slug)
+    skip_argument_contribution(
+        conversation=conv,
+        participation=participation,
+        featured_statement_id=featured_statement_id,
+        side=side,
+        touch=_touch_last_engagement,
+    )
+    return {
+        'featuredStatementId': featured_statement_id,
+        'side': side,
+        'status': 'skipped',
+        'links': _argument_links(slug),
+    }
+
+
+def _set_argument_priority_api_payload(
+    slug: str, argument_id: int, selected: bool,
+) -> dict:
+    conv, _participant, participation = _require_argument_api_context(slug)
+    _vote, selected_count, budget = set_argument_priority(
+        conversation=conv,
+        participation=participation,
+        argument_id=argument_id,
+        selected=selected,
+        touch=_touch_last_engagement,
+    )
+    return {
+        'argumentId': argument_id,
+        'selected': selected,
+        'selectedCount': selected_count,
+        'selectionBudget': budget,
+        'links': _argument_links(slug),
+    }
+
+
+def _submit_content_flag_api_payload(slug: str, body: dict) -> tuple[dict, int]:
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    if participant is None:
+        abort(401)
+    _check_conversation_access(conv, participant)
+    participation = Participation.query.filter_by(
+        participant_id=participant.id, conversation_id=conv.id,
+    ).first()
+    if participation is None:
+        abort(409, description='Join this conversation before flagging content.')
+    if not conv.active or conv.paused:
+        abort(409, description='Content flags are not open.')
+    _abort_if_banned(conv, participant)
+    content_type = body['contentType']
+    target_id = body['targetId']
+    if content_type == 'argument':
+        (
+            Argument.query.join(FeaturedStatement)
+            .filter(
+                Argument.id == target_id,
+                FeaturedStatement.conversation_id == conv.id,
+                Argument.hidden.is_(False),
+            ).first_or_404()
+        )
+    else:
+        try:
+            statement_exists = target_id in _statement_text_map(conv.polis_id)
+        except PolisParticipantError as exc:
+            raise ExploreUpstreamError('Could not validate the statement.') from exc
+        if not statement_exists:
+            abort(404, description='Statement not found in this conversation.')
+    result = submit_content_flag(
+        conversation=conv,
+        participation=participation,
+        content_type=content_type,
+        target_id=target_id,
+        category=body['category'],
+        detail=body.get('detail'),
+        audit=record_audit,
+    )
+    return ({
+        'contentType': content_type,
+        'targetId': target_id,
+        'category': result.flag.category,
+        'status': 'open',
+        'created': result.created,
+        'links': {
+            'conversation': url_for('participant.conversation', slug=slug),
+        },
+    }, 201 if result.created else 200)
+
+
+def _statement_api_payload(
+    slug: str, body: dict, idempotency_key: str,
+) -> tuple[dict, int]:
+    conv, participant, participation = _require_explore_api_context(slug)
+    text_value = body['text'].strip()
+    if not text_value or len(text_value) > 280:
+        abort(400, description='Statement text must contain 1 to 280 characters.')
+    derived_from = body.get('derivedFromStatementId')
+    config = conv.argument_vote_data or {}
+    new_statement_max = int(config.get('new_stmt_max', 3))
+    if derived_from is None and len(participation.new_stmt_ids or []) >= new_statement_max:
+        raise StatementQuotaExceeded()
+
+    parent_text = None
+    scores = None
+    if derived_from is not None:
+        try:
+            parent_text = _statement_text_map(conv.polis_id).get(derived_from)
+        except PolisParticipantError as exc:
+            raise ExploreUpstreamError('Could not load the original statement.') from exc
+        if parent_text is None:
+            raise UnknownParentStatement(derived_from)
+        scores = _statement_similarity_scores(text_value, parent_text)
+        model, score = _preferred_similarity_score(scores)
+        threshold = _derivative_similarity_threshold()
+        if threshold and score is not None and score < threshold:
+            raise DerivativeSimilarityTooLow(
+                model=model, similarity=score, threshold=threshold,
+            )
+
+    try:
+        policy = _ensure_statement_moderation_policy(conv)
+    except (
+        ModerationPolicyVerificationUnavailable,
+        ModerationPolicyUpstreamFailed,
+        ModerationPolicySaveFailed,
+    ) as exc:
+        raise StatementPreparationUnavailable() from exc
+
+    canonical_request = {
+        'text': text_value,
+        'derivedFromStatementId': derived_from,
+    }
+    reservation = reserve_command(
+        participant_id=participant.id,
+        conversation_id=conv.id,
+        command='statement.create',
+        idempotency_key=idempotency_key,
+        request_hash=request_digest(canonical_request),
+    )
+    if reservation.replay is not None:
+        return reservation.replay, 200
+
+    gateway, states = _explore_gateway(conv, participant)
+    try:
+        gateway.ensure_session()
+    except ExploreUpstreamError as exc:
+        # No statement POST has occurred, so a retry with the same key is safe.
+        release_reservation(reservation.receipt)
+        _save_explore_gateway_state(conv, gateway, states)
+        raise StatementPreparationUnavailable() from exc
+    try:
+        # Bootstrap outside the participation-row lock: only the non-idempotent
+        # POST and its local bookkeeping need serialization.
+        participation = Participation.query.filter_by(
+            participant_id=participant.id,
+            conversation_id=conv.id,
+        ).populate_existing().with_for_update().one()
+        if (derived_from is None
+                and len(participation.new_stmt_ids or []) >= new_statement_max):
+            release_reservation(reservation.receipt)
+            raise StatementQuotaExceeded()
+
+        statement_id = gateway.submit_statement(conv.polis_id, text_value)
+        decision = 1 if policy == 'auto_approve' else 0
+        if decision == 1:
+            try:
+                _polis_server_client().moderate(conv.polis_id, statement_id, decision)
+            except PolisServerError as exc:
+                raise ExploreUpstreamError(
+                    'The statement was created but its moderation decision is unknown.',
+                    outcome_unknown=True,
+                ) from exc
+        if derived_from is None:
+            ids = list(participation.new_stmt_ids or [])
+            ids.append(statement_id)
+            participation.new_stmt_ids = ids
+            kind = 'new'
+        else:
+            provenance = StatementProvenance(
+                conversation_id=conv.id,
+                polis_statement_id=statement_id,
+                derived_from_tid=derived_from,
+                provenance_type='derivative',
+                link_method='declared',
+            )
+            db.session.add(provenance)
+            db.session.flush()
+            for name, value in (scores or {}).items():
+                db.session.add(StatementSimilarityScore(
+                    provenance_id=provenance.id,
+                    model=name,
+                    value=value,
+                ))
+            kind = 'derivative'
+        response = {
+            'statementId': statement_id,
+            'kind': kind,
+            'derivedFromStatementId': derived_from,
+            'newStatementQuotaRemaining': max(
+                0,
+                new_statement_max - len(participation.new_stmt_ids or []),
+            ),
+            'links': {
+                'explore': url_for('api_v1.get_explore_state', slug=conv.slug),
+            },
+        }
+        _touch_last_engagement(participation)
+        complete_command(reservation.receipt, response)
+        db.session.commit()
+        record_audit(
+            'statement.creation_moderation', conv_id=conv.id,
+            target_type='statement', target_id=statement_id,
+            decision=decision, policy=policy,
+        )
+        return response, 201
+    except ExploreUpstreamError as exc:
+        db.session.rollback()
+        if exc.outcome_unknown:
+            # The committed pending receipt survives the rollback and blocks a
+            # blind retry after an ambiguous upstream POST.
+            raise
+        release_reservation(reservation.receipt)
+        raise StatementPreparationUnavailable() from exc
+    finally:
+        _save_explore_gateway_state(conv, gateway, states)
+
+
 def _require_mod_for_conv(conv_id: int) -> 'Conversation':
     """Return conversation or abort 403 if the current user can't moderate it."""
     conv = Conversation.query.get_or_404(conv_id)
@@ -1646,6 +2737,1067 @@ def _require_organizer_for_conv(conv_id: int) -> 'Conversation':
     if not _can_organize(conv):
         abort(403)
     return conv
+
+
+def _admin_participant_roster_model(conv: Conversation):
+    scoped_subjects = bool(current_app.config.get('PARTICIAPI_SUB_SECRET'))
+    return build_admin_participant_roster(
+        conversation=conv,
+        polis_client=_polis_server_client(),
+        polis_pg_configured=bool(current_app.config.get('POLIS_DATABASE_URL')),
+        participant_subject=(
+            lambda participant: _conversation_subject(participant.xid, conv)
+            if scoped_subjects else participant.xid
+        ),
+    )
+
+
+def _admin_participant_roster_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    roster = _admin_participant_roster_model(conv)
+    return roster.to_api(
+        self_link=url_for(
+            'api_v1.get_admin_conversation_participants',
+            conversation_id=conv.id,
+        ),
+        conversation_link=_admin_client_link(conv.id),
+    )
+
+
+def _set_admin_participant_access_api_payload(
+    conv_id: int, participant_id: int, body: dict,
+) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    try:
+        result = set_participant_access(
+            conversation=conv,
+            participant_id=participant_id,
+            banned=body['banned'],
+            summary=body.get('summary'),
+            actor=_current_participant(),
+            audit=record_audit,
+        )
+    except ParticipantNotInConversation:
+        abort(404, description='Participant not found in this conversation.')
+
+    def utc_iso(value):
+        if value is None:
+            return None
+        aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return aware.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+    return {
+        'participantId': result.participant_id,
+        'banned': result.banned,
+        'changed': result.changed,
+        'changedAt': utc_iso(result.changed_at),
+        'summary': result.summary,
+        'links': {
+            'participants': url_for(
+                'api_v1.get_admin_conversation_participants',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _admin_invitation_links(conv: Conversation) -> tuple[str, str]:
+    return (
+        url_for('api_v1.get_admin_conversation_invites', conversation_id=conv.id),
+        _admin_client_link(conv.id),
+    )
+
+
+def _admin_invitation_roster_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    self_link, conversation_link = _admin_invitation_links(conv)
+    return build_invitation_roster(
+        conversation=conv,
+        self_link=self_link,
+        conversation_link=conversation_link,
+    )
+
+
+def _managed_polis_creation() -> bool:
+    return all(current_app.config.get(key) for key in (
+        'POLIS_SERVER_URL', 'POLIS_ADMIN_EMAIL', 'POLIS_ADMIN_PASSWORD',
+    ))
+
+
+def _admin_catalog_api_payload() -> dict:
+    if not _is_global_admin():
+        abort(403)
+    return build_admin_catalog(
+        conversations=Conversation.query.order_by(Conversation.created_at.desc()).all(),
+        global_admins=Participant.query.filter_by(is_global_admin=True).order_by(
+            Participant.mw_username,
+        ).all(),
+        phase_routes=PHASE_ROUTES,
+        managed_creation=_managed_polis_creation(),
+        self_link=url_for('api_v1.get_admin_catalog'),
+        conversation_link=_admin_client_link,
+    )
+
+
+def _create_admin_conversation_api_payload(body: dict) -> dict:
+    if not _is_global_admin():
+        abort(403)
+    managed = _managed_polis_creation()
+    if not _valid_slug(body['slug']) or body['phaseRoute'] not in PHASE_ROUTES:
+        abort(400, description='Invalid conversation slug or phase route.')
+    if not managed and not _valid_polis_id(body['polisId'] or ''):
+        abort(400, description='A valid Polis conversation ID is required in manual mode.')
+    result = create_admin_conversation(
+        fields={**body, 'polis_id': body['polisId']},
+        existing_slug=Conversation.query.filter_by(slug=body['slug']).first() is not None,
+        managed_creation=managed,
+        create_upstream=lambda title: _polis_server_client().create_conversation(
+            title, strict_moderation=True,
+        ),
+        conversation_factory=lambda polis_id: Conversation(
+            slug=body['slug'], title=body['title'].strip(), polis_id=polis_id,
+            active=True, access_policy=body['accessPolicy'],
+            phase_route=body['phaseRoute'],
+            intro_text=_sanitise_text(body['introHtml']),
+            outro_text=_sanitise_text(body['outroHtml']),
+            eligibility_event_id=body['eligibilityEventId'] or None,
+            eligibility_label=body['eligibilityLabel'] or None,
+            statement_moderation_policy='moderate',
+        ),
+        session=db.session,
+        audit=lambda conversation_id, slug: record_audit(
+            'conversation.create', conv_id=conversation_id, slug=slug,
+        ),
+        upstream_errors=(PolisServerError,),
+    )
+    conversation = result.conversation
+    return {
+        'conversation': {
+            'id': conversation.id,
+            'slug': conversation.slug,
+            'title': conversation.title,
+        },
+        'links': {
+            'manage': _admin_client_link(conversation.id),
+            'catalog': url_for('api_v1.get_admin_catalog'),
+        },
+    }
+
+
+def _grant_global_admin_api_payload(body: dict) -> dict:
+    if not _is_global_admin():
+        abort(403)
+    participant = Participant.query.filter_by(
+        mw_username=body['username'].strip(),
+    ).first()
+    changed = set_global_admin(
+        participant=participant, granted=True, session=db.session,
+        audit=lambda participant_id, granted: record_audit(
+            'global_admin.grant', target_type='participant', target_id=participant_id,
+        ),
+    )
+    return {
+        'participantId': participant.id,
+        'username': participant.mw_username,
+        'granted': True,
+        'changed': changed,
+        'catalog': _admin_catalog_api_payload(),
+    }
+
+
+def _set_global_admin_api_payload(participant_id: int, body: dict) -> dict:
+    if not _is_global_admin():
+        abort(403)
+    participant = db.session.get(Participant, participant_id)
+    changed = set_global_admin(
+        participant=participant, granted=body['granted'], session=db.session,
+        audit=lambda target_id, granted: record_audit(
+            'global_admin.grant' if granted else 'global_admin.revoke',
+            target_type='participant', target_id=target_id,
+        ),
+    )
+    return {
+        'participantId': participant.id,
+        'username': participant.mw_username,
+        'granted': body['granted'],
+        'changed': changed,
+        'catalog': _admin_catalog_api_payload(),
+    }
+
+
+def _admin_role_roster_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    return build_admin_role_roster(
+        conversation=conv,
+        can_manage=_is_global_admin(),
+        self_link=url_for(
+            'api_v1.get_admin_conversation_roles', conversation_id=conv.id,
+        ),
+        conversation_link=_admin_client_link(conv.id),
+    )
+
+
+_PUBLICATION_READINESS = (
+    ('cleanup_reviewed_results', 'Reviewed preliminary results'),
+    ('cleanup_moderated_flagged',
+     'Moderated any remaining flagged informed-voting statements'),
+    ('cleanup_reviewed_exclusions', 'Reviewed participant exclusions'),
+    ('cleanup_report_intro', 'Written or reviewed the report introduction text'),
+)
+_PUBLICATION_READINESS_IDS = {key for key, _label in _PUBLICATION_READINESS}
+
+
+def _admin_lifecycle_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    participant = _current_participant()
+    sequence = _phase_sequence_for(conv)
+    active = _active_phases(conv)
+    phase6_required = _route_has_phase(conv, 'informed_voting')
+    phase6_ready = bool(conv.phase6_polis_conversation_id) or not phase6_required
+    client = _polis_server_client()
+    polis_stats = client.get_polis_stats(conv.polis_id)
+    phase6_visible = (
+        conv.phase_informed_voting or _in_cleanup_window(conv)
+    ) and bool(conv.phase6_polis_conversation_id)
+    phase6_stats = (
+        client.get_polis_stats(conv.phase6_polis_conversation_id)
+        if phase6_visible else None
+    )
+    stats_unavailable = bool(current_app.config.get('POLIS_DATABASE_URL')) and (
+        polis_stats is None or (phase6_visible and phase6_stats is None)
+    )
+    phase6_results = (
+        _build_phase6_results(conv, participation=None)
+        if phase6_visible else None
+    )
+    phase_groups = _phase_stat_groups(conv, polis_stats, phase6_stats)
+    confirmed_featured_count = FeaturedStatement.query.filter_by(
+        conversation_id=conv.id, confirmed_by_admin=True,
+    ).count()
+    phase6_seeded_count = FeaturedStatement.query.filter(
+        FeaturedStatement.conversation_id == conv.id,
+        FeaturedStatement.confirmed_by_admin.is_(True),
+        FeaturedStatement.phase6_polis_statement_id.isnot(None),
+    ).count()
+    reveal = _reveal_context(conv, participation=None)
+    biggest_shift = None
+    if phase6_results:
+        biggest = next((
+            row for row in phase6_results.get('statements', [])
+            if row.get('shift') is not None
+        ), None)
+        if biggest:
+            biggest_shift = {
+                'text': biggest['text'], 'shift': biggest['shift'],
+            }
+        results_filter = phase6_results.get('filter')
+        informed_summary = {
+            'participants': phase6_results.get('p6_participants'),
+            'statementCount': len(phase6_results.get('statements', [])),
+            'largestShift': biggest_shift,
+            'excludedStatementCount': len(results_filter.excluded_tids),
+            'excludedParticipantCount': len(results_filter.excluded_pids),
+        }
+    else:
+        informed_summary = None
+    return build_admin_lifecycle(
+        conversation=conv,
+        role_label=_conversation_role_label(conv, participant),
+        phase_sequence=sequence,
+        current_stage_index=_current_stage_index(conv),
+        active_phase_keys=active,
+        linear=_is_linear_phase_state(conv),
+        transition=_transition_context(conv),
+        schedule=_schedule_context(conv),
+        publication_readiness={
+            'windowOpen': _in_cleanup_window(conv),
+            'preconditions': [
+                {'id': key, 'label': label, 'met': None, 'note': None}
+                for key, label in _PUBLICATION_READINESS
+            ] + [{
+                'id': 'phase6_initialized',
+                'label': 'Informed voting round initialized',
+                'met': phase6_ready,
+                'note': None if phase6_ready else (
+                    'Initialize informed voting before publishing.'
+                ),
+            }],
+        },
+        identity_reveal=(
+            {
+                'state': reveal['state'],
+                'opensAt': (
+                    reveal['opens_at'].isoformat()
+                    if reveal.get('opens_at') else None
+                ),
+                'closesAt': (
+                    reveal['closes_at'].isoformat()
+                    if reveal.get('closes_at') else None
+                ),
+                'daysLeft': reveal.get('days_left'),
+            }
+            if reveal else None
+        ),
+        phase6_setup=(
+            {
+                'polisConversationId': conv.phase6_polis_conversation_id,
+                'seededStatementCount': phase6_seeded_count,
+                'confirmedStatementCount': confirmed_featured_count,
+            }
+            if conv.phase_informed_voting else None
+        ),
+        statistics={
+            'upstreamUnavailable': stats_unavailable,
+            'groups': [{
+                'key': group['key'],
+                'label': group['label'],
+                'tiles': [{
+                    'value': tile['value'],
+                    'label': tile['label'],
+                    'unit': tile.get('unit'),
+                    'note': tile.get('note'),
+                } for tile in group['tiles']],
+            } for group in phase_groups],
+            'informedVoting': informed_summary,
+        },
+        counts={
+            'participants': Participation.query.filter_by(conversation_id=conv.id).count(),
+            'invitations': ConversationInvite.query.filter_by(conversation_id=conv.id).count(),
+            'openFlags': ContentFlag.query.filter_by(conversation_id=conv.id, status='open').count(),
+            'featuredStatements': confirmed_featured_count,
+        },
+        can_organize=_can_organize(conv, participant),
+        can_administer=_is_global_admin(participant),
+        links={
+            'self': url_for('api_v1.get_admin_conversation_lifecycle', conversation_id=conv.id),
+            'participantView': url_for('participant.conversation', slug=conv.slug),
+            'participants': _admin_client_link(conv.id, 'participants'),
+            'moderation': _admin_client_link(conv.id, 'flags'),
+            'invitations': _admin_client_link(conv.id, 'invites'),
+            'roles': _admin_client_link(conv.id, 'roles'),
+            'statements': _admin_client_link(conv.id, 'statements'),
+            'featuredStatements': _admin_client_link(conv.id, 'featured'),
+            'settings': _admin_client_link(conv.id, 'settings'),
+            'termination': _admin_client_link(conv.id, 'termination'),
+        },
+    )
+
+
+def _admin_settings_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    return build_admin_settings(
+        conversation=conv,
+        recommendation_tiers=_RECOMMENDATION_TIERS,
+        recommendation_profile=_recommendation_profile(conv),
+        phase_route_label=PHASE_ROUTES.get(
+            conv.phase_route, PHASE_ROUTES['default_7'],
+        )['label'],
+        can_edit=_can_organize(conv),
+        self_link=url_for(
+            'api_v1.get_admin_conversation_settings', conversation_id=conv.id,
+        ),
+        lifecycle_link=_admin_client_link(conv.id),
+    )
+
+
+def _admin_termination_api_payload(conv_id: int) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    return build_termination_state(
+        conversation=conv,
+        valid_vote_count=_polis_server_client().get_valid_vote_count(conv.polis_id),
+        self_link=url_for(
+            'api_v1.get_admin_conversation_termination', conversation_id=conv.id,
+        ),
+        lifecycle_link=_admin_client_link(conv.id),
+    )
+
+
+def _load_admin_statement_sources(conv: Conversation):
+    """Load the upstream statement buckets and policy without exposing raw rows."""
+    result = _polis_server_client().get_statements(conv.polis_id)
+    if result is None:
+        try:
+            result = PolisParticipantClient(
+                current_app.config['PARTICIAPI_BASE'],
+            ).get_statements(conv.polis_id)
+        except PolisParticipantError:
+            result = None
+    strict_moderation = None
+    try:
+        settings = PolisParticipantClient(
+            current_app.config['PARTICIAPI_BASE'],
+        ).get_settings(conv.polis_id)
+        if isinstance(settings.get('strict_moderation'), bool):
+            strict_moderation = settings['strict_moderation']
+    except PolisParticipantError:
+        pass
+    return result, strict_moderation
+
+
+def _admin_statements_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    result, strict_moderation = _load_admin_statement_sources(conv)
+    pending, approved, hidden = result or ([], [], [])
+    all_tids = [row['tid'] for row in pending + approved + hidden]
+    featured_tids = {
+        row.polis_statement_id
+        for row in FeaturedStatement.query.filter_by(conversation_id=conv.id).all()
+    }
+    return build_statement_workspace(
+        conversation=conv,
+        buckets={
+            'pending': pending, 'approved': approved, 'hidden': hidden,
+        },
+        featured_tids=featured_tids,
+        provenance_by_tid=_provenance_map(conv.id, all_tids),
+        moderation_policy=resolved_moderation_policy(
+            conversation=conv, upstream_strict=strict_moderation,
+        ),
+        statements_available=result is not None,
+        seed_lock_reason=_seed_statement_lock_reason(conv),
+        max_import_rows=MAX_ROWS,
+        max_statement_characters=MAX_TEXT_CHARS,
+        self_link=url_for(
+            'api_v1.get_admin_conversation_statements', conversation_id=conv.id,
+        ),
+        lifecycle_link=_admin_client_link(conv.id),
+    )
+
+
+def _set_statement_moderation_policy_command(
+    conv: Conversation, policy: str, *, sources=None,
+):
+    result, upstream_strict = sources or _load_admin_statement_sources(conv)
+    pending = None if result is None else result[0]
+    server = _polis_server_client()
+    return set_statement_moderation_policy(
+        conversation=conv,
+        policy=policy,
+        upstream_strict=upstream_strict,
+        pending_statements=pending,
+        moderate_upstream=server.moderate,
+        set_upstream_strict=server.set_strict_moderation,
+        session=db.session,
+        audit_reconciled=lambda statement_id: record_audit(
+            'statement.moderation.baseline', conv_id=conv.id,
+            target_type='statement', target_id=statement_id, decision=1,
+        ),
+        audit_policy=lambda policy, reconciled: record_audit(
+            'statement.moderation_policy.set', conv_id=conv.id,
+            policy=policy, reconciled_statements=reconciled,
+        ),
+        upstream_errors=(PolisServerError,),
+    )
+
+
+def _ensure_statement_moderation_policy(conv: Conversation) -> str:
+    """Persist a safe strict baseline for legacy conversations on first write."""
+    if conv.statement_moderation_policy is not None:
+        return conv.statement_moderation_policy
+
+    current_rows, upstream_strict = _load_admin_statement_sources(conv)
+    if current_rows is None:
+        raise ModerationPolicyVerificationUnavailable()
+    policy = resolved_moderation_policy(
+        conversation=conv, upstream_strict=upstream_strict,
+    ) or 'moderate'
+    return _set_statement_moderation_policy_command(
+        conv, policy, sources=(current_rows, upstream_strict),
+    ).policy
+
+
+def _set_admin_statement_policy_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    outcome = _set_statement_moderation_policy_command(conv, body['mode'])
+    return {
+        'mode': outcome.policy,
+        'changed': outcome.changed,
+        'reconciledStatements': len(outcome.reconciled_statement_ids),
+        'workspace': _admin_statements_api_payload(conv.id),
+    }
+
+
+def _moderate_admin_statement_api_payload(
+    conv_id: int, statement_id: int, body: dict,
+) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    result, _strict = _load_admin_statement_sources(conv)
+    if result is None:
+        raise StatementModerationUpstreamFailed()
+    pending, approved, hidden = result
+    known_tids = {
+        int(row['tid']) for row in pending + approved + hidden
+    }
+    if statement_id not in known_tids:
+        abort(404, description='Statement not found in this conversation.')
+    featured_count = FeaturedStatement.query.filter_by(
+        conversation_id=conv.id,
+    ).count()
+    is_featured = FeaturedStatement.query.filter_by(
+        conversation_id=conv.id, polis_statement_id=statement_id,
+    ).first() is not None
+    outcome = moderate_statement(
+        conversation=conv,
+        statement_id=statement_id,
+        status=body['status'],
+        is_featured=is_featured,
+        featured_count=featured_count,
+        moderate_upstream=_polis_server_client().moderate,
+        audit=lambda tid, decision: record_audit(
+            'statement.moderate', conv_id=conv.id,
+            target_type='statement', target_id=tid, decision=decision,
+        ),
+        upstream_errors=(PolisServerError,),
+    )
+    return {
+        'statementId': outcome.statement_id,
+        'status': outcome.status,
+        'links': {
+            'statements': url_for(
+                'api_v1.get_admin_conversation_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _import_admin_seed_statements_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    lock_reason = _seed_statement_lock_reason(conv)
+    if lock_reason:
+        raise SeedImportValidationFailed(lock_reason)
+    existing, _strict = _load_admin_statement_sources(conv)
+    result = import_seed_statements(
+        conversation=conv,
+        candidates=body['statements'],
+        existing_buckets=existing,
+        sanitize=lambda text: nh3.clean(text, tags=_NH3_NO_TAGS),
+        strip_formula_prefixes=strip_formula_prefixes,
+        bulk_add_seeds=_polis_server_client().bulk_add_seeds,
+        max_rows=MAX_ROWS,
+        max_characters=MAX_TEXT_CHARS,
+        upstream_errors=(PolisServerError,),
+        audit=lambda **detail: record_audit(
+            'statement.seed_import', conv_id=conv.id, **detail,
+        ),
+    )
+    return {
+        'outcome': {
+            'imported': result.imported,
+            'skippedExisting': result.skipped_existing,
+            'skippedDuplicateInput': result.skipped_duplicate_input,
+            'failedUpstream': result.failed_upstream,
+        },
+        'links': {
+            'statements': url_for(
+                'api_v1.get_admin_conversation_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _add_admin_seed_statement_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    lock_reason = _seed_statement_lock_reason(conv)
+    if lock_reason:
+        raise SeedStatementValidationFailed(lock_reason)
+    result = add_seed_statement(
+        conversation=conv,
+        text=body['text'],
+        derived_from_id=body['derivedFromId'],
+        sanitize=lambda text: nh3.clean(text, tags=_NH3_NO_TAGS),
+        statement_text_map=_statement_text_map,
+        add_seed=_polis_server_client().add_seed,
+        add_seed_return_id=_polis_server_client().add_seed_return_id,
+        record_provenance=record_statement_provenance,
+        audit=lambda statement_id, derived_from_id: record_audit(
+            'statement.seed', conv_id=conv.id,
+            **({'target_type': 'statement', 'target_id': statement_id,
+                'derived_from': derived_from_id}
+               if statement_id is not None else {}),
+        ),
+        max_characters=MAX_TEXT_CHARS,
+        upstream_errors=(PolisServerError, PolisParticipantError),
+    )
+    return {
+        'statementId': result.statement_id,
+        'derivedFromId': result.derived_from_id,
+        'provenanceRecorded': result.provenance_recorded,
+        'links': {
+            'statements': url_for(
+                'api_v1.get_admin_conversation_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _admin_featured_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    confirmed = (
+        FeaturedStatement.query.filter_by(conversation_id=conv.id)
+        .options(joinedload(FeaturedStatement.arguments))
+        .order_by(FeaturedStatement.created_at).all()
+    )
+    for selection in confirmed:
+        selection.arguments.sort(
+            key=lambda argument: (
+                argument.side.value
+                if hasattr(argument.side, 'value') else str(argument.side)
+            ),
+        )
+    confirmed_tids = {row.polis_statement_id for row in confirmed}
+    candidates = _polis_server_client().get_featured_candidates(conv.polis_id)
+    if candidates is not None:
+        candidates = [
+            row for row in candidates if row['tid'] not in confirmed_tids
+        ]
+    candidate_tids = [row['tid'] for row in candidates or []]
+    statement_text_by_tid = {
+        row['tid']: row['text'] for row in candidates or []
+    }
+    if any(not row.statement_text for row in confirmed):
+        try:
+            statement_text_by_tid.update(_statement_text_map(conv.polis_id))
+        except PolisParticipantError:
+            pass
+    return build_featured_workspace(
+        conversation=conv,
+        confirmed=confirmed,
+        candidates=candidates,
+        provenance_by_tid=_provenance_map(
+            conv.id, list(confirmed_tids) + candidate_tids,
+        ),
+        statement_text_by_tid=statement_text_by_tid,
+        recommendation=_recommended_quantity(conv, 'featured_statements'),
+        self_link=url_for(
+            'api_v1.get_admin_featured_statements', conversation_id=conv.id,
+        ),
+        lifecycle_link=_admin_client_link(conv.id),
+    )
+
+
+def _select_admin_featured_api_payload(
+    conv_id: int, statement_id: int, body: dict,
+) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    try:
+        text = _statement_text_map(conv.polis_id).get(statement_id, '')
+    except PolisParticipantError as exc:
+        raise FeaturedSourceUnavailable() from exc
+    result = select_featured_statement(
+        conversation=conv,
+        statement_id=statement_id,
+        text=text,
+        system_suggested=body['source'] == 'system',
+        find_existing=lambda tid: FeaturedStatement.query.filter_by(
+            conversation_id=conv.id, polis_statement_id=tid,
+        ).first(),
+        create_selection=lambda tid, statement_text, suggested: FeaturedStatement(
+            conversation_id=conv.id,
+            polis_statement_id=tid,
+            statement_text=statement_text,
+            suggested_by_system=suggested,
+            confirmed_by_admin=True,
+        ),
+        session=db.session,
+        sync_live_round=_sync_phase6_featured,
+        audit=lambda row: record_audit(
+            'featured.select', conv_id=conv.id,
+            target_type='statement', target_id=row.polis_statement_id,
+            source=body['source'],
+        ),
+    )
+    return {
+        'featuredId': result.featured_id,
+        'statementId': result.statement_id,
+        'changed': result.changed,
+        'links': {
+            'featured': url_for(
+                'api_v1.get_admin_featured_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _remove_admin_featured_api_payload(conv_id: int, featured_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    selection = FeaturedStatement.query.filter_by(
+        id=featured_id, conversation_id=conv.id,
+    ).first_or_404()
+    statement_id = selection.polis_statement_id
+    remove_featured_statement(
+        conversation=conv,
+        selection=selection,
+        selection_count=FeaturedStatement.query.filter_by(
+            conversation_id=conv.id,
+        ).with_for_update().count(),
+        session=db.session,
+        sync_live_round=_sync_phase6_featured,
+        audit=lambda removed_id: record_audit(
+            'featured.remove', conv_id=conv.id,
+            target_type='featured', target_id=removed_id,
+            statement_id=statement_id,
+        ),
+    )
+    return {
+        'featuredId': featured_id,
+        'statementId': statement_id,
+        'removed': True,
+        'links': {
+            'featured': url_for(
+                'api_v1.get_admin_featured_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _require_admin_featured_argument(conv_id: int, argument_id: int):
+    conv = _require_mod_for_conv(conv_id)
+    argument = (
+        Argument.query.join(FeaturedStatement)
+        .filter(
+            Argument.id == argument_id,
+            FeaturedStatement.conversation_id == conv.id,
+        ).first()
+    )
+    if argument is None:
+        raise ArgumentNotInFeaturedWorkspace()
+    return conv, argument
+
+
+def _set_admin_featured_argument_api_payload(
+    conv_id: int, argument_id: int, body: dict,
+) -> dict:
+    conv, argument = _require_admin_featured_argument(conv_id, argument_id)
+    changed = set_featured_argument_visibility(
+        argument=argument,
+        hidden=body['hidden'],
+        session=db.session,
+        audit=lambda target_id, hidden: record_audit(
+            'argument.moderate', conv_id=conv.id,
+            target_type='argument', target_id=target_id, hidden=hidden,
+        ),
+    )
+    return {
+        'argumentId': argument.id,
+        'hidden': argument.hidden,
+        'changed': changed,
+        'links': {
+            'featured': url_for(
+                'api_v1.get_admin_featured_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _delete_admin_featured_argument_api_payload(
+    conv_id: int, argument_id: int,
+) -> dict:
+    conv, argument = _require_admin_featured_argument(conv_id, argument_id)
+    featured_id = argument.featured_statement_id
+    delete_featured_argument(
+        argument=argument,
+        session=db.session,
+        audit=lambda target_id, selection_id: record_audit(
+            'argument.delete', conv_id=conv.id,
+            target_type='argument', target_id=target_id,
+            featured_statement_id=selection_id,
+        ),
+    )
+    return {
+        'argumentId': argument_id,
+        'featuredId': featured_id,
+        'deleted': True,
+        'links': {
+            'featured': url_for(
+                'api_v1.get_admin_featured_statements',
+                conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    client = _polis_server_client()
+    result = delete_empty_conversation(
+        conversation=conv,
+        valid_vote_count=client.get_valid_vote_count(conv.polis_id),
+        hide_upstream=client.close_and_hide_conversation,
+        delete_local=_delete_local_conversation,
+        session=db.session,
+        audit_deleted=lambda deleted_id: record_audit(
+            'conversation.delete', target_type='conversation',
+            target_id=deleted_id, valid_vote_count=0,
+        ),
+        upstream_errors=(PolisServerError,),
+    )
+    return {
+        'conversationId': result.conversation_id,
+        'deleted': True,
+        'links': {'admin': url_for('admin.admin')},
+    }
+
+
+def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_organizer_for_conv(conv_id)
+    result = update_conversation_settings(
+        conversation=conv,
+        title=body['title'], intro_html=body['introHtml'],
+        outro_html=body['outroHtml'], access_policy=body['accessPolicy'],
+        eligibility_event_id=body['eligibilityEventId'],
+        eligibility_label=body['eligibilityLabel'],
+        tier=body['recommendationTier'], sanitise=_sanitise_text,
+        session=db.session, audit=record_audit,
+    )
+    return {
+        'changed': result.changed,
+        'changedFields': result.changed_fields,
+        'settings': _admin_settings_api_payload(conv.id),
+    }
+
+
+def _update_admin_recommendation_tier_api_payload(
+    conv_id: int, body: dict,
+) -> dict:
+    conv = _require_organizer_for_conv(conv_id)
+    changed = update_recommendation_tier(
+        conversation=conv, tier=body['tier'], session=db.session,
+        audit=record_audit,
+    )
+    return {
+        'changed': changed,
+        'recommendations': _admin_settings_api_payload(conv.id)['recommendations'],
+    }
+
+
+def _advance_admin_phase_command(conv: Conversation, confirmed_ids: set[str]):
+    return advance_conversation_phase(
+        conversation=conv,
+        transition=_transition_context(conv),
+        linear=_is_linear_phase_state(conv),
+        confirmed_preconditions=confirmed_ids,
+        session=db.session,
+        init_phase6=_init_phase6,
+        sync_phase6=_sync_phase6_featured,
+        apply_transition=_apply_phase_transition,
+        sync_visibility=_sync_vis_type,
+        invalidate_results=_invalidate_phase6_results_cache,
+        audit=record_audit,
+        logger=current_app.logger,
+    )
+
+
+def _advance_admin_phase_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_organizer_for_conv(conv_id)
+    result = _advance_admin_phase_command(
+        conv, set(body['confirmedPreconditionIds']),
+    )
+    return {
+        'transition': {
+            'sourceKey': result.source_key,
+            'targetKey': result.target_key,
+            'targetLabel': result.target_label,
+            'phase6Created': result.phase6_created,
+            'phase6SyncMessage': result.sync_message,
+            'visibilitySynced': result.visibility_synced,
+        },
+        'lifecycle': _admin_lifecycle_api_payload(conv.id),
+    }
+
+
+def _initialize_admin_phase6_command(conv: Conversation):
+    return initialize_phase6(
+        conversation=conv,
+        session=db.session,
+        initialize_upstream=_init_phase6,
+        audit=record_audit,
+        logger=current_app.logger,
+    )
+
+
+def _initialize_admin_phase6_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    _initialize_admin_phase6_command(conv)
+    return {
+        'initialized': True,
+        'lifecycle': _admin_lifecycle_api_payload(conv.id),
+    }
+
+
+def _set_admin_pause_api_payload(conv_id: int, body: dict) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    changed = set_conversation_paused(
+        conversation=conv, paused=body['paused'],
+        session=db.session, audit=record_audit,
+    )
+    return {
+        'paused': bool(conv.paused),
+        'changed': changed,
+        'lifecycle': _admin_lifecycle_api_payload(conv.id),
+    }
+
+
+def _set_admin_archive_api_payload(conv_id: int, body: dict) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    changed = set_conversation_archived(
+        conversation=conv, archived=body['archived'],
+        clear_schedule=_clear_scheduled_transition,
+        session=db.session, audit=record_audit,
+    )
+    return {
+        'archived': not bool(conv.active),
+        'changed': changed,
+        'lifecycle': _admin_lifecycle_api_payload(conv.id),
+    }
+
+
+def _set_admin_schedule_api_payload(conv_id: int, body: dict) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    scheduled_at = (
+        _parse_utc_timestamp(body['scheduledAt'])
+        if body['scheduledAt'] is not None else None
+    )
+    if body['scheduledAt'] is not None and scheduled_at is None:
+        raise ScheduleInPast()
+    context = _schedule_context(conv)
+    changed = set_phase_schedule(
+        conversation=conv, transition=context['transition'],
+        schedulable=context['can_schedule'], scheduled_at=scheduled_at,
+        frozen=body['frozen'], now=datetime.now(timezone.utc),
+        clear_schedule=_clear_scheduled_transition,
+        session=db.session, audit=record_audit,
+    )
+    return {
+        'changed': changed,
+        'lifecycle': _admin_lifecycle_api_payload(conv.id),
+    }
+
+
+def _set_admin_phases_api_payload(conv_id: int, body: dict) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    result = set_advanced_phases(
+        conversation=conv, phase_definitions=_phase_sequence_for(conv),
+        active_keys=set(body['activeKeys']),
+        clear_schedule=_clear_scheduled_transition,
+        session=db.session, audit=record_audit,
+        sync_visibility=_sync_vis_type,
+        invalidate_results=_invalidate_phase6_results_cache,
+    )
+    return {
+        'changed': result.changed,
+        'activeKeys': result.active_keys,
+        'visibilitySynced': result.visibility_synced,
+        'lifecycle': _admin_lifecycle_api_payload(conv.id),
+    }
+
+
+def _publish_admin_report_api_payload(conv_id: int, body: dict) -> dict:
+    conv = Conversation.query.get_or_404(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    publish_final_report(
+        conversation=conv,
+        in_cleanup_window=_in_cleanup_window(conv),
+        required_precondition_ids=_PUBLICATION_READINESS_IDS,
+        confirmed_precondition_ids=set(body['confirmedPreconditionIds']),
+        phase6_required=_route_has_phase(conv, 'informed_voting'),
+        publish=_publish_final_report,
+        session=db.session,
+        invalidate_results=_invalidate_phase6_results_cache,
+        audit=record_audit,
+    )
+    return {'lifecycle': _admin_lifecycle_api_payload(conv.id)}
+
+
+def _replace_admin_roles_api_payload(
+    conv_id: int, participant_id: int, body: dict,
+) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    if not _is_global_admin():
+        abort(403)
+    try:
+        result = replace_conversation_roles(
+            conversation=conv,
+            participant_id=participant_id,
+            roles=body['roles'],
+            grantor=_current_participant(),
+            audit=record_audit,
+        )
+    except RoleParticipantNotFound:
+        abort(404, description='Participant not found.')
+    return {
+        'participantId': result.participant.id,
+        'username': result.participant.mw_username,
+        'roles': result.roles,
+        'changed': bool(result.added or result.removed),
+        'added': result.added,
+        'removed': result.removed,
+        'links': {
+            'roles': url_for(
+                'api_v1.get_admin_conversation_roles', conversation_id=conv.id,
+            ),
+        },
+    }
+
+
+def _add_admin_invitations_api_payload(conv_id: int, body: dict) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    usernames = [username.strip() for username in body['usernames']]
+    result = add_conversation_invites(
+        db.session, conversation_id=conv.id, usernames=usernames,
+    )
+    if result.added:
+        record_audit('invite.add', conv_id=conv.id, count=result.added)
+    roster = _admin_invitation_roster_api_payload(conv.id)
+    return {
+        'outcome': {
+            'added': result.added,
+            'alreadyPresent': result.already_present,
+            'concurrentConflicts': result.concurrent_conflicts,
+            'duplicateInputs': result.duplicate_inputs,
+        },
+        'invitations': roster['invitations'],
+        'links': {'invitations': roster['links']['self']},
+    }
+
+
+def _remove_admin_invitation_api_payload(conv_id: int, invite_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    try:
+        remove_conversation_invite(
+            db.session, conversation_id=conv.id, invite_id=invite_id,
+        )
+    except InvitationNotInConversation:
+        abort(404, description='Invitation not found in this conversation.')
+    record_audit(
+        'invite.remove', conv_id=conv.id,
+        target_type='invite', target_id=invite_id,
+    )
+    roster = _admin_invitation_roster_api_payload(conv.id)
+    return {
+        'invitationId': invite_id,
+        'removed': True,
+        'invitations': roster['invitations'],
+        'links': {'invitations': roster['links']['self']},
+    }
 
 
 def _active_conversation_ban(conversation, participant: 'Participant | None'):
@@ -1663,38 +3815,46 @@ def _abort_if_banned(conversation, participant: 'Participant | None') -> None:
         abort(403)
 
 
-def _check_conversation_access(conversation, participant) -> None:
+def _conversation_access_denial(conversation, participant) -> str | None:
     # NOTE (#293): for a demo session this expects the session to be ALREADY bound
     # to `conversation` — the conversation view calls _ensure_demo_participation
     # (which rebinds) before this. Don't reorder those calls, or demo roaming
     # (visiting a demo the session isn't yet bound to) would 403 here.
     if _is_demo_session():
         if conversation.access_policy == 'demo' and _demo_bound_conversation_id() == conversation.id:
-            return
-        abort(403)
+            return None
+        return 'forbidden'
     if conversation.access_policy == 'demo':
-        return
+        return None
     if conversation.access_policy != 'invite_only':
-        return
+        return None
     if participant:
         existing = Participation.query.filter_by(
             participant_id=participant.id,
             conversation_id=conversation.id,
         ).first()
         if existing:
-            return
+            return None
     username = session.get('username')
     invited = ConversationInvite.query.filter_by(
         conversation_id=conversation.id,
         mw_username=username,
     ).first()
-    if not invited:
+    return None if invited else 'invite_only'
+
+
+def _check_conversation_access(conversation, participant) -> None:
+    denial = _conversation_access_denial(conversation, participant)
+    if denial is None:
+        return
+    if denial == 'invite_only' and not request.path.startswith('/api/v1/'):
         can_mod = _can_moderate(conversation, participant)
         abort(make_response(render_template(
             'forbidden_invite_only.html',
             conversation=conversation,
             can_moderate=can_mod,
         ), 403))
+    abort(403)
 
 
 # ── Particiapi proxy ──────────────────────────────────────────────────────────
@@ -2041,7 +4201,8 @@ def _build_featured_data(conv, participation, can_mod=False):
     """
     fss = (FeaturedStatement.query
            .filter_by(conversation_id=conv.id, confirmed_by_admin=True)
-           .options(joinedload(FeaturedStatement.arguments))
+           .options(joinedload(FeaturedStatement.arguments)
+                    .joinedload(Argument.votes))
            .order_by(FeaturedStatement.created_at)
            .all())
     if not fss:
@@ -2228,6 +4389,16 @@ def conversation_statement_new(slug):
                 'threshold': threshold,
             }), 409
 
+    try:
+        policy = _ensure_statement_moderation_policy(conv)
+    except (
+        ModerationPolicyVerificationUnavailable,
+        ModerationPolicyUpstreamFailed,
+        ModerationPolicySaveFailed,
+    ):
+        current_app.logger.exception('statement moderation baseline unavailable')
+        return jsonify({'error': 'moderation_policy_unavailable'}), 502
+
     # Establish the Particiapi session + CSRF token BEFORE taking the row lock, so the
     # ~5s session-create round-trip does not run while holding the FOR UPDATE lock (#275
     # M3) — that keeps the lock's held time down to just the submit + append. Only the
@@ -2284,6 +4455,7 @@ def conversation_statement_new(slug):
 
     if stmt_resp.status_code == 201:
         stmt_id = stmt_resp.json().get('id')
+        moderation_failed = False
         if stmt_id is not None:
             if derived_from is None:
                 ids = list(part.new_stmt_ids or [])
@@ -2293,9 +4465,29 @@ def conversation_statement_new(slug):
                 record_statement_provenance(conv.id, stmt_id, derived_from,
                                             parent_text=parent_text, new_text=text,
                                             scores=scores)
+            if policy == 'auto_approve':
+                try:
+                    _polis_server_client().moderate(conv.polis_id, stmt_id, 1)
+                except PolisServerError:
+                    moderation_failed = True
+                    current_app.logger.exception(
+                        'statement %s was created but auto-approval failed', stmt_id,
+                    )
         _touch_last_engagement(part)
         db.session.commit()
-        flask_resp = make_response(stmt_resp.content, 201)
+        if stmt_id is not None:
+            record_audit(
+                'statement.creation_moderation', conv_id=conv.id,
+                target_type='statement', target_id=stmt_id,
+                decision=1 if policy == 'auto_approve' else 0,
+                policy=policy,
+                outcome='upstream_failed' if moderation_failed else 'ok',
+            )
+        flask_resp = make_response(
+            jsonify({'error': 'command_outcome_unknown'}) if moderation_failed
+            else stmt_resp.content,
+            502 if moderation_failed else 201,
+        )
         flask_resp.headers['Content-Type'] = 'application/json'
     else:
         current_app.logger.error('Particiapi statement error: %s', stmt_resp.status_code)
@@ -2462,9 +4654,14 @@ def _import_seed_statement_texts(conv: Conversation, texts: list[str]) -> dict:
                 current_app.logger.warning('Polis rejected imported row (%s, may already exist): %s',
                                            type(exc).__name__, exc)
                 polis_skipped.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
-        except PolisServerError:
+        except PolisServerError as exc:
             current_app.logger.exception('Polis login failed during bulk import')
             polis_errors = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
+            polis_failure_message = exc.admin_message
+        else:
+            polis_failure_message = None
+    else:
+        polis_failure_message = None
 
     if dedup_check_failed:
         flash('Could not check for existing statements — some may be duplicates. Check server logs.', 'warning')
@@ -2485,7 +4682,7 @@ def _import_seed_statement_texts(conv: Conversation, texts: list[str]) -> dict:
     elif successes:
         flash(f'✓ {successes} imported — ⚠ {n_skipped} skipped', 'import_result')
     elif n_errors:
-        flash('✗ Import failed — could not reach Polis. Check server logs.', 'import_result')
+        flash(f'✗ Import failed — {polis_failure_message}', 'import_result')
     elif n_skipped:
         flash(f'⚠ 0 imported — {n_skipped} already existed in Polis', 'import_result')
     else:
@@ -2558,66 +4755,63 @@ def _delete_local_conversation(conv: Conversation) -> None:
     db.session.delete(conv)
 
 
-def _parse_content_flag_form() -> tuple[str, str | None]:
-    category = (request.form.get('category') or '').strip()
-    if category not in FLAG_CATEGORIES:
-        abort(400)
-    detail = nh3.clean((request.form.get('detail') or '').strip(),
-                       tags=_NH3_NO_TAGS)[:1000]
-    return category, detail or None
-
-
-def _existing_open_flag(
-    conv_id: int,
-    participant_id: int,
-    content_type: str,
-    category: str,
-    *,
-    statement_tid: int | None = None,
-    argument_id: int | None = None,
-) -> ContentFlag | None:
-    query = ContentFlag.query.filter_by(
-        conversation_id=conv_id,
-        participant_id=participant_id,
-        content_type=content_type,
-        category=category,
-        status='open',
+def _admin_flag_queue_model(conv: Conversation):
+    return build_admin_flag_queue(
+        conversation=conv,
+        read_statement_texts=lambda: _statement_text_map(conv.polis_id),
+        statement_read_errors=(PolisParticipantError,),
+        category_labels=_FLAG_CATEGORY_LABELS,
     )
-    if content_type == 'statement':
-        query = query.filter_by(statement_tid=statement_tid)
-    else:
-        query = query.filter_by(argument_id=argument_id)
-    return query.first()
 
 
-def _flag_rows_for_admin(conv: Conversation) -> list[dict]:
-    flags = (ContentFlag.query
-             .filter_by(conversation_id=conv.id)
-             .options(joinedload(ContentFlag.argument))
-             .order_by(ContentFlag.status, ContentFlag.created_at.desc())
-             .all())
-    statement_tids = [f.statement_tid for f in flags if f.content_type == 'statement']
-    statement_texts = {}
-    if statement_tids:
-        try:
-            statement_texts = _statement_text_map(conv.polis_id)
-        except PolisParticipantError:
-            statement_texts = {}
-    rows = []
-    for flag in flags:
-        if flag.content_type == 'argument':
-            target_text = flag.argument.body if flag.argument else 'Argument removed'
-            target_label = f'Argument #{flag.argument_id}'
-        else:
-            target_text = statement_texts.get(flag.statement_tid, 'Statement text unavailable')
-            target_label = f'Statement #{flag.statement_tid}'
-        rows.append({
-            'flag': flag,
-            'category_label': _FLAG_CATEGORY_LABELS.get(flag.category, flag.category),
-            'target_label': target_label,
-            'target_text': target_text,
-        })
-    return rows
+def _admin_flag_queue_api_payload(conv_id: int) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    queue = _admin_flag_queue_model(conv)
+    return queue.to_api(
+        self_link=url_for(
+            'api_v1.get_admin_conversation_flags', conversation_id=conv.id,
+        ),
+        conversation_link=_admin_client_link(conv.id),
+        statement_review_link=_admin_client_link(conv.id, 'statements'),
+        argument_review_link=_admin_client_link(conv.id, 'featured'),
+    )
+
+
+def _resolve_admin_flag_api_payload(
+    conv_id: int, flag_id: int, body: dict,
+) -> dict:
+    conv = _require_mod_for_conv(conv_id)
+    try:
+        result = resolve_content_flag(
+            conversation=conv,
+            flag_id=flag_id,
+            note=body.get('note'),
+            actor=_current_participant(),
+            audit=record_audit,
+        )
+    except FlagNotInConversation:
+        abort(404, description='Flag not found in this conversation.')
+    flag = result.flag
+    resolved_at = flag.resolved_at
+    if resolved_at and not resolved_at.tzinfo:
+        resolved_at = resolved_at.replace(tzinfo=timezone.utc)
+    return {
+        'flagId': flag.id,
+        'status': flag.status,
+        'changed': result.changed,
+        'resolution': {
+            'resolvedAt': (
+                resolved_at.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+                if resolved_at else None
+            ),
+            'note': flag.resolution_note,
+        },
+        'links': {
+            'flags': url_for(
+                'api_v1.get_admin_conversation_flags', conversation_id=conv.id,
+            ),
+        },
+    }
 
 
 def _conversation_ban_log_rows(conv: Conversation) -> list[dict]:
@@ -2762,75 +4956,27 @@ def admin_conversation_detail(conv_id):
                            cleanup_window=_in_cleanup_window(conv))
 
 
+@admin_bp.get('/admin/conversations/<int:conv_id>/settings')
+@admin_bp.get('/admin/conversations/<int:conv_id>/termination')
+@admin_bp.get('/admin/conversations/<int:conv_id>/roles')
+@login_required
+def admin_conversation_spa_fallback(conv_id):
+    """Keep React-only admin URLs usable when the Jinja fallback is active."""
+    _require_mod_for_conv(conv_id)
+    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+
+
 @admin_bp.get('/admin/conversations/<int:conv_id>/participants')
 @login_required
 def admin_conversation_participants(conv_id):
     conv = _require_mod_for_conv(conv_id)
-    participations = (Participation.query
-                      .join(Participant)
-                      .filter(Participation.conversation_id == conv_id)
-                      .options(joinedload(Participation.participant))
-                      .order_by(Participant.mw_username)
-                      .all())
-
-    # Arguments store the proposer's pseudonym (not a participant FK) for privacy (#113),
-    # so attribute submitted-argument counts by pseudonym within this conversation.
-    submitted_counts = dict(
-        db.session.query(Argument.proposer_pseudonym, db.func.count(Argument.id))
-        .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
-        .filter(FeaturedStatement.conversation_id == conv_id,
-                Argument.proposer_pseudonym.isnot(None))
-        .group_by(Argument.proposer_pseudonym)
-        .all()
-    )
-    voted_counts = dict(
-        db.session.query(ArgumentVote.participant_id, db.func.count(ArgumentVote.id))
-        .join(Argument, ArgumentVote.argument_id == Argument.id)
-        .join(FeaturedStatement, Argument.featured_statement_id == FeaturedStatement.id)
-        .filter(FeaturedStatement.conversation_id == conv_id)
-        .group_by(ArgumentVote.participant_id)
-        .all()
-    )
-
-    client = _polis_server_client()
-    pg_configured = bool(current_app.config.get('POLIS_DATABASE_URL'))
-    statement_progress_unavailable = pg_configured
-    # One batched query for every participant's progress — previously this issued a
-    # fresh Postgres connection per participant (O(N) connects on this page, which
-    # stalled at 1000 participants).
-    progress_by_xid = None
-    if pg_configured:
-        progress_by_xid = client.get_statement_progress_for_participants(
-            conv.polis_id, [p.participant.xid for p in participations])
-        if progress_by_xid is not None:
-            statement_progress_unavailable = False
-    active_bans = {
-        ban.participant_id: ban
-        for ban in ConversationBan.query.filter_by(
-            conversation_id=conv_id,
-            lifted_at=None,
-        ).all()
-    }
-    rows = []
-    for part in participations:
-        progress_row = (
-            progress_by_xid.get(part.participant.xid)
-            if progress_by_xid is not None else None
-        )
-        rows.append({
-            'participation': part,
-            'participant': part.participant,
-            'statement_progress': progress_row,
-            'arguments_submitted': int(submitted_counts.get(part.pseudonym, 0)),
-            'arguments_voted': int(voted_counts.get(part.participant_id, 0)),
-            'active_ban': active_bans.get(part.participant_id),
-        })
+    roster = _admin_participant_roster_model(conv)
 
     return render_template(
         'admin_participants.html',
         conversation=conv,
-        rows=rows,
-        statement_progress_unavailable=statement_progress_unavailable,
+        rows=roster.rows,
+        statement_progress_unavailable=roster.statement_progress_unavailable,
     )
 
 
@@ -2838,13 +4984,17 @@ def admin_conversation_participants(conv_id):
 @login_required
 def admin_conversation_flags(conv_id):
     conv = _require_mod_for_conv(conv_id)
-    rows = _flag_rows_for_admin(conv)
-    open_count = sum(1 for row in rows if row['flag'].status == 'open')
+    queue = _admin_flag_queue_model(conv)
     return render_template(
         'admin_flags.html',
         conversation=conv,
-        rows=rows,
-        open_count=open_count,
+        rows=[{
+            'flag': row.flag,
+            'category_label': row.category_label,
+            'target_label': row.target_label,
+            'target_text': row.target_text,
+        } for row in queue.rows],
+        open_count=queue.open_count,
     )
 
 
@@ -2852,21 +5002,20 @@ def admin_conversation_flags(conv_id):
 @login_required
 def admin_flag_resolve(conv_id, flag_id):
     conv = _require_mod_for_conv(conv_id)
-    flag = ContentFlag.query.filter_by(
-        id=flag_id,
-        conversation_id=conv.id,
-    ).first_or_404()
-    note = nh3.clean((request.form.get('resolution_note') or '').strip(),
-                     tags=_NH3_NO_TAGS)[:1000]
-    actor = _current_participant()
-    flag.status = 'resolved'
-    flag.resolved_at = datetime.now(timezone.utc)
-    flag.resolved_by_id = actor.id if actor else None
-    flag.resolution_note = note or None
-    db.session.commit()
-    record_audit('content_flag.resolve', conv_id=conv.id, target_type='content_flag',
-                 target_id=flag.id, content_type=flag.content_type)
-    flash('Flag marked resolved.', 'success')
+    try:
+        result = resolve_content_flag(
+            conversation=conv,
+            flag_id=flag_id,
+            note=request.form.get('resolution_note'),
+            actor=_current_participant(),
+            audit=record_audit,
+        )
+    except FlagNotInConversation:
+        abort(404)
+    flash(
+        'Flag marked resolved.' if result.changed else 'Flag was already resolved.',
+        'success' if result.changed else 'warning',
+    )
     return redirect(url_for('admin.admin_conversation_flags', conv_id=conv.id))
 
 
@@ -2874,32 +5023,20 @@ def admin_flag_resolve(conv_id, flag_id):
 @login_required
 def admin_participant_ban(conv_id, participant_id):
     conv = _require_mod_for_conv(conv_id)
-    Participation.query.filter_by(
-        conversation_id=conv_id,
-        participant_id=participant_id,
-    ).first_or_404()
-    existing = ConversationBan.query.filter_by(
-        conversation_id=conv_id,
-        participant_id=participant_id,
-        lifted_at=None,
-    ).first()
-    if existing:
+    try:
+        result = set_participant_access(
+            conversation=conv,
+            participant_id=participant_id,
+            banned=True,
+            summary=request.form.get('summary'),
+            actor=_current_participant(),
+            audit=record_audit,
+        )
+    except ParticipantNotInConversation:
+        abort(404)
+    if not result.changed:
         flash('Participant is already banned from this conversation.', 'warning')
         return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
-
-    summary = nh3.clean((request.form.get('summary') or '').strip(), tags=_NH3_NO_TAGS)[:1000]
-    actor = _current_participant()
-    ban = ConversationBan(
-        conversation_id=conv_id,
-        participant_id=participant_id,
-        banned_by_id=actor.id if actor else None,
-        summary=summary or None,
-    )
-    db.session.add(ban)
-    db.session.commit()
-    record_audit('participant.ban', conv_id=conv.id, target_type='participant',
-                 target_id=participant_id, scope='conversation',
-                 summary_present=bool(summary))
     flash('Participant banned from this conversation.', 'success')
     return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
 
@@ -2908,20 +5045,20 @@ def admin_participant_ban(conv_id, participant_id):
 @login_required
 def admin_participant_unban(conv_id, participant_id):
     conv = _require_mod_for_conv(conv_id)
-    ban = ConversationBan.query.filter_by(
-        conversation_id=conv_id,
-        participant_id=participant_id,
-        lifted_at=None,
-    ).first_or_404()
-    summary = nh3.clean((request.form.get('summary') or '').strip(), tags=_NH3_NO_TAGS)[:1000]
-    actor = _current_participant()
-    ban.lifted_at = datetime.now(timezone.utc)
-    ban.lifted_by_id = actor.id if actor else None
-    ban.lift_summary = summary or None
-    db.session.commit()
-    record_audit('participant.unban', conv_id=conv.id, target_type='participant',
-                 target_id=participant_id, scope='conversation',
-                 summary_present=bool(summary))
+    try:
+        result = set_participant_access(
+            conversation=conv,
+            participant_id=participant_id,
+            banned=False,
+            summary=request.form.get('summary'),
+            actor=_current_participant(),
+            audit=record_audit,
+        )
+    except ParticipantNotInConversation:
+        abort(404)
+    if not result.changed:
+        flash('Participant is already allowed in this conversation.', 'warning')
+        return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
     flash('Participant unbanned from this conversation.', 'success')
     return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
 
@@ -2948,7 +5085,11 @@ def admin_conversation_new():
         'POLIS_SERVER_URL', 'POLIS_ADMIN_EMAIL', 'POLIS_ADMIN_PASSWORD'))
     if polis_configured:
         try:
-            polis_id = _polis_server_client().create_conversation(fields['title'], strict_moderation=True)
+            # Polis stays strict permanently; wiki-polis records the desired decision
+            # on each new statement instead of relying on retroactive read semantics.
+            polis_id = _polis_server_client().create_conversation(
+                fields['title'], strict_moderation=True,
+            )
         except PolisServerError:
             current_app.logger.exception('Polis conversation creation failed')
             flash('Could not create the Polis conversation. Check server logs for details.', 'error')
@@ -2963,6 +5104,7 @@ def admin_conversation_new():
             )))
 
     conv = Conversation(slug=slug, active=True, polis_id=polis_id,
+                        statement_moderation_policy='moderate',
                         phase_route=phase_route, **fields)
     db.session.add(conv)
     db.session.commit()
@@ -3035,18 +5177,12 @@ def admin_conversation_close(conv_id):
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/recommendations')
 @login_required
-@admin_required
 def admin_conversation_recommendations(conv_id):
-    conv = Conversation.query.get_or_404(conv_id)
+    conv = _require_organizer_for_conv(conv_id)
     tier = request.form.get('tier', _DEFAULT_RECOMMENDATION_TIER)
     if tier not in _RECOMMENDATION_TIERS:
         tier = _DEFAULT_RECOMMENDATION_TIER
-    config = {'tier': tier}
-    for key in _RECOMMENDATION_LABELS:
-        value = request.form.get(key, type=int)
-        if value is not None and value > 0:
-            config[key] = min(value, 999)
-    conv.recommended_quantities = config
+    conv.recommended_quantities = {'tier': tier}
     db.session.commit()
     record_audit('recommendations.set', conv_id=conv.id, tier=tier)
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
@@ -3094,34 +5230,26 @@ def admin_conversation_phase_schedule(conv_id):
 @login_required
 @admin_required
 def admin_conversation_delete(conv_id):
-    conv = Conversation.query.get_or_404(conv_id)
-    client = _polis_server_client()
-    valid_vote_count = client.get_valid_vote_count(conv.polis_id)
-    if valid_vote_count is None:
+    try:
+        _delete_admin_conversation_api_payload(conv_id)
+    except DeletionVerificationUnavailable:
         flash('Cannot delete this conversation because Polis vote data could not be verified.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    if valid_vote_count != 0:
+    except DeletionBlockedByVotes as exc:
         flash(
-            f'Cannot delete this conversation because it has {valid_vote_count} valid vote'
-            f'{"s" if valid_vote_count != 1 else ""}.',
+            f'Cannot delete this conversation because it has {exc.count} valid vote'
+            f'{"s" if exc.count != 1 else ""}. Archive it instead.',
             'error',
         )
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    try:
-        client.close_and_hide_conversation(conv.polis_id)
-    except PolisServerError:
+    except DeletionUpstreamFailed:
         current_app.logger.exception('Polis conversation close/hide failed')
         flash('Could not hide the Polis conversation. Nothing was deleted.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    slug = conv.slug
-    polis_id = conv.polis_id
-    record_audit('conversation.delete', conv_id=conv.id, target_type='conversation',
-                 target_id=conv.id, valid_vote_count=valid_vote_count)
-    _delete_local_conversation(conv)
-    db.session.commit()
-    current_app.logger.info('deleted empty conversation slug=%s polis_id=%s', slug, polis_id)
+    except DeletionOutcomeUnknown:
+        current_app.logger.exception('Local deletion failed after Polis hide')
+        flash('The voting service was hidden but local deletion failed. Do not retry until an administrator checks the record.', 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
     flash('Conversation deleted.', 'success')
     return redirect(url_for('admin.admin'))
 
@@ -3156,23 +5284,18 @@ def admin_conversation_phases(conv_id):
     # ≥1 featured statement before argument mapping; this route deliberately does not, so
     # a single rejected toggle never silently discards the whole save).
     conv = Conversation.query.get_or_404(conv_id)
-    conv.phase_submission       = bool(request.form.get('phase_submission'))
-    conv.phase_personal_results = bool(request.form.get('phase_personal_results'))
-    conv.phase_argument_mapping = bool(request.form.get('phase_argument_mapping'))
-    conv.phase_cleanup          = bool(request.form.get('phase_cleanup'))
-    conv.phase_public_results   = bool(request.form.get('phase_public_results'))
-    conv.phase_informed_voting  = bool(request.form.get('phase_informed_voting'))
-    db.session.commit()
-    record_audit('phase.set', conv_id=conv.id, phases={
-        'submission': conv.phase_submission, 'personal_results': conv.phase_personal_results,
-        'argument_mapping': conv.phase_argument_mapping, 'cleanup': conv.phase_cleanup,
-        'public_results': conv.phase_public_results, 'informed_voting': conv.phase_informed_voting})
-
-    if not _sync_vis_type(conv):
+    form_to_key = {
+        stage['flag']: stage['key']
+        for stage in _phase_sequence_for(conv) if stage['flag']
+    }
+    result = _set_admin_phases_api_payload(conv_id, {
+        'activeKeys': [
+            key for field, key in form_to_key.items() if request.form.get(field)
+        ],
+    })
+    if not result['visibilitySynced']:
         flash('Phases saved, but updating results visibility in Polis failed — '
               'results may not appear until you save phases again.', 'error')
-    # A vis_type change alters what /results/ returns — drop any cached aggregate.
-    _invalidate_phase6_results_cache(conv)
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 
@@ -3192,74 +5315,33 @@ def admin_conversation_advance(conv_id):
     """
     conv = _require_organizer_for_conv(conv_id)
     redirect_to = redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    ctx = _transition_context(conv)
-    if ctx is None:
-        if not _is_linear_phase_state(conv):
-            flash('Phases are in a custom state — use Advanced controls to adjust.', 'error')
-        else:
-            flash('Already at the final phase (public results).', 'error')
-        return redirect_to
-
-    # Server-side enforcement of the readiness checklist (the UI disables the button
-    # until all are ticked; a stale page or direct POST must not bypass it).
-    for p in ctx['preconditions']:
-        if request.form.get(p['id']) != 'on':
-            flash('Confirm every readiness check before moving on.', 'error')
-            return redirect_to
-        if p.get('met') is False:                 # machine-checkable and currently unmet
-            flash('A readiness condition is not met yet — fix it before moving on.', 'error')
-            return redirect_to
-
-    # Run the Phase 6 Polis I/O FIRST, before mutating conv. This keeps the network
-    # round-trips out of the open write transaction: the only DB write happens at the
-    # commit below, so a slow Polis backend never holds a row lock on the conversation.
-    # First entry → initialise the round. Re-entry (the featured set may have changed
-    # in between) → re-sync round 6 to the current featured set, preserving votes (#175).
-    created_p6 = None
-    sync_msg = None
-    if ctx['runs_phase6_init']:
-        if not conv.phase6_polis_conversation_id:
-            ok, msg = _init_phase6(conv)          # assigns ids onto conv/featured; no commit
-            if not ok:
-                db.session.rollback()
-                flash(msg, 'error')
-                return redirect_to
-            created_p6 = conv.phase6_polis_conversation_id
-        else:
-            ok, sync_msg = _sync_phase6_featured(conv)
-            if not ok:
-                db.session.rollback()
-                flash(sync_msg, 'error')
-                return redirect_to
-
-    source_key, target_key = _apply_phase_transition(conv, ctx)
-
-    slug = conv.slug                              # capture before any rollback expires it
     try:
-        db.session.commit()                       # flag flip (+ phase6 ids / close) atomic
-    except IntegrityError:
-        db.session.rollback()
-        # A concurrent transition won the UNIQUE race. The winner committed cleanly, so
-        # reload-and-retry resolves it. If we created a Phase 6 Polis conversation in this
-        # request it is now orphaned — log it for manual cleanup.
-        if created_p6:
-            current_app.logger.error(
-                'Phase advance lost a concurrent race after Phase 6 init — '
-                'orphaned Polis conversation %s (conv %s)', created_p6, slug)
+        result = _advance_admin_phase_command(
+            conv,
+            {key for key, value in request.form.items() if value == 'on'},
+        )
+    except PhaseTransitionUnavailable as exc:
+        flash(
+            'Phases are in a custom state — use Advanced controls to adjust.'
+            if exc.nonlinear else 'Already at the final phase (public results).',
+            'error',
+        )
+        return redirect_to
+    except PhaseReadinessUnconfirmed:
+        flash('Confirm every readiness check before moving on.', 'error')
+        return redirect_to
+    except PhaseReadinessBlocked:
+        flash('A readiness condition is not met yet — fix it before moving on.', 'error')
+        return redirect_to
+    except PhasePreparationFailed as exc:
+        flash(exc.message, 'error')
+        return redirect_to
+    except PhaseTransitionConflict:
         flash('Could not move on — the conversation changed at the same time. '
               'Reload and try again.', 'error')
         return redirect_to
-    except SQLAlchemyError:
-        # Any other DB failure (deadlock, timeout, lost connection). Scoped to
-        # SQLAlchemyError so genuine programming errors still surface. If Phase 6 init
-        # already created a remote conversation it is orphaned — a blind retry would
-        # create a SECOND one, so warn the organizer rather than inviting a re-submit.
-        db.session.rollback()
-        if created_p6:
-            current_app.logger.error(
-                'Phase advance commit failed after Phase 6 init — '
-                'orphaned Polis conversation %s (conv %s)', created_p6, slug)
+    except PhaseTransitionSaveFailed as exc:
+        if exc.outcome_unknown:
             flash('Could not complete the move — a database error occurred, and a '
                   'linked Polis conversation may already have been created. Do not '
                   'simply retry; check with a site admin first.', 'error')
@@ -3267,14 +5349,14 @@ def admin_conversation_advance(conv_id):
             flash('Could not move on — a database error occurred. Please try again.', 'error')
         return redirect_to
 
-    record_audit('phase.advance', conv_id=conv.id, target_type='phase', target_id=target_key,
-                 from_phase=source_key, phase6_created=bool(created_p6))
-
-    if not _sync_vis_type(conv):
+    if not result.visibility_synced:
         flash('Phase moved, but updating results visibility in Polis failed.', 'error')
-    if sync_msg:                                  # re-entry re-synced round 6 (#175)
-        flash(sync_msg, 'warning' if 'check manually' in sync_msg else 'success')
-    flash(f'Moved to: {ctx["target"]["label"]}.', 'success')
+    if result.sync_message:
+        flash(
+            result.sync_message,
+            'warning' if 'check manually' in result.sync_message else 'success',
+        )
+    flash(f'Moved to: {result.target_label}.', 'success')
     return redirect_to
 
 
@@ -3294,44 +5376,27 @@ def admin_phase6_init(conv_id):
     # Allows conversation moderators (not just global admins) to initialise Phase 6.
     conv = _require_mod_for_conv(conv_id)
 
-    if not conv.active or conv.paused:
-        flash('Cannot initialise Phase 6 on a closed or paused conversation.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    if not conv.phase_informed_voting:
-        flash('Enable the Informed voting toggle first, then initialise.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    if conv.phase6_polis_conversation_id:
-        flash('Phase 6 already initialised.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    ok, msg = _init_phase6(conv)
-    if not ok:
-        flash(msg, 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    orphan_id = conv.phase6_polis_conversation_id  # capture before any rollback expires it
-    slug = conv.slug
     try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
+        result = _initialize_admin_phase6_command(conv)
+    except Phase6InitializationUnavailable as exc:
+        messages = {
+            'inactive': 'Cannot initialise Phase 6 on a closed or paused conversation.',
+            'phase_disabled': 'Enable the Informed voting toggle first, then initialise.',
+            'already_initialized': 'Phase 6 already initialised.',
+        }
+        flash(messages[exc.reason], 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    except PhasePreparationFailed as exc:
+        flash(exc.message, 'error')
+        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
+    except Phase6InitializationConflict:
         flash('Phase 6 was already initialised by a concurrent request.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    except SQLAlchemyError:
-        db.session.rollback()
-        # Logged unconditionally (unlike the guided route's `if created_p6:`
-        # guard): this route early-returns when an id already exists and has no
-        # re-sync path, so reaching the commit means _init_phase6 just created a
-        # fresh Polis conversation, now orphaned by the rollback.
-        current_app.logger.error(
-            'Phase 6 standalone init: DB error after Polis I/O — '
-            'orphaned Polis conversation %s (conv %s)', orphan_id, slug)
+    except Phase6InitializationSaveFailed:
         flash('Phase 6 initialisation failed due to a database error. '
               'Contact a site admin — the Polis conversation id has been logged.', 'error')
         return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    record_audit('phase6.init', conv_id=conv.id)
-    flash(msg, 'success')
+    flash(result.message, 'success')
     return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 
@@ -3580,31 +5645,42 @@ def admin_invite_add(conv_id):
     usernames = [u for u in raw if 1 <= len(u) <= 255]
     if not usernames:
         return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
-    existing = {inv.mw_username for inv in
-                ConversationInvite.query.filter_by(conversation_id=conv_id).all()}
-    added = 0
-    for username in usernames:
-        if username not in existing:
-            db.session.add(ConversationInvite(
-                conversation_id=conv_id, mw_username=username))
-            added += 1
     try:
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-    else:
-        if added:
-            record_audit('invite.add', conv_id=conv_id, count=added)  # count only — no usernames (PII)
+        result = add_conversation_invites(
+            db.session,
+            conversation_id=conv_id,
+            usernames=usernames,
+        )
+    except InviteBatchSaveError:
+        current_app.logger.exception('invite batch save failed for conversation %s', conv_id)
+        flash("Couldn't save invites — please review the list and retry.", 'error')
+        return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
+
+    if result.added:
+        record_audit('invite.add', conv_id=conv_id,
+                     count=result.added)  # counts only — no usernames (PII)
+
+    summary = [f'{result.added} added']
+    if result.already_present:
+        summary.append(f'{result.already_present} already present')
+    if result.duplicate_inputs:
+        summary.append(f'{result.duplicate_inputs} duplicate input')
+    if result.concurrent_conflicts:
+        summary.append(f'{result.concurrent_conflicts} added concurrently by another moderator')
+    flash('Invites: ' + '; '.join(summary) + '.',
+          'info' if result.concurrent_conflicts else 'success')
     return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/invites/<int:invite_id>/remove')
 @login_required
 def admin_invite_remove(conv_id, invite_id):
     _require_mod_for_conv(conv_id)
-    invite = ConversationInvite.query.filter_by(
-        id=invite_id, conversation_id=conv_id).first_or_404()
-    db.session.delete(invite)
-    db.session.commit()
+    try:
+        remove_conversation_invite(
+            db.session, conversation_id=conv_id, invite_id=invite_id,
+        )
+    except InvitationNotInConversation:
+        abort(404)
     record_audit('invite.remove', conv_id=conv_id, target_type='invite', target_id=invite_id)
     return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
 
@@ -3660,76 +5736,50 @@ def admin_conversation_statements(conv_id):
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
 @login_required
 def admin_statement_moderate(conv_id, tid):
-    conv = _require_mod_for_conv(conv_id)
     mod  = request.form.get('mod', type=int)
     if mod not in (-1, 0, 1):
         abort(400)
-    if mod in (-1, 0):
-        is_featured = FeaturedStatement.query.filter_by(
-            conversation_id=conv_id, polis_statement_id=tid).first() is not None
-        if is_featured and conv.phase_argument_mapping:
-            # Best-effort check: the mutation here is a Polis API call, not a
-            # DB write, so FOR UPDATE would be released before the call anyway.
-            # The strong DB-level invariant is enforced by admin_featured_remove,
-            # which does lock correctly before db.session.commit().
-            featured_count = FeaturedStatement.query.filter_by(
-                conversation_id=conv_id).count()
-            if featured_count <= 1:
-                flash(
-                    'Cannot hide or move the last featured statement to pending while argument mapping is active. Disable the argument mapping phase first.',
-                    'error'
-                )
-                return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
     try:
-        _polis_server_client().moderate(conv.polis_id, tid, mod)
-    except PolisServerError:
+        _moderate_admin_statement_api_payload(
+            conv_id, tid,
+            {'status': {-1: 'hidden', 0: 'pending', 1: 'approved'}[mod]},
+        )
+    except LastFeaturedStatementProtected:
+        flash(
+            'Cannot hide or move the last featured statement to pending while argument mapping is active. Disable the argument mapping phase first.',
+            'error',
+        )
+    except StatementModerationUpstreamFailed:
         current_app.logger.exception('moderate failed')
         flash('Moderation action failed. Check server logs for details.', 'error')
-        return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
-    record_audit('statement.moderate', conv_id=conv_id, target_type='statement',
-                 target_id=tid, decision=mod)
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed')
 @login_required
 def admin_statement_seed(conv_id):
-    conv = _require_mod_for_conv(conv_id)
-    lock_reason = _seed_statement_lock_reason(conv)
-    if lock_reason:
-        flash(lock_reason, 'error')
-        return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
-    text = request.form.get('txt', '').strip()
-    text = nh3.clean(text, tags=frozenset())
-    if not text or len(text) > 280:
-        abort(400)
-    # Optional provenance (#143): the tid this statement corrects/derives from. When set,
-    # we need the NEW statement's tid back, so seed via add_seed_return_id and record the link.
     derived_from = request.form.get('derived_from', type=int)
     try:
-        if derived_from is not None:
-            # Validate the parent is a real statement in THIS conversation before recording a
-            # link — a typo'd / cross-conversation tid would otherwise store a bogus link.
-            text_map = _statement_text_map(conv.polis_id)
-            if derived_from not in text_map:
-                flash(f'Statement #{derived_from} was not found in this conversation — '
-                      'fix the "corrects" number and try again. Nothing was added.', 'error')
-                return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
-            new_tid = _polis_server_client().add_seed_return_id(conv.polis_id, text)
-            prov = record_statement_provenance(conv_id, new_tid, derived_from,
-                                               parent_text=text_map.get(derived_from), new_text=text)
-            if prov is None:
-                flash('Seed statement added, but the correction link could not be recorded.', 'warning')
-            else:
-                flash(f'Seed statement added (recorded as a correction of #{derived_from}).', 'success')
-            record_audit('statement.seed', conv_id=conv_id, target_type='statement',
-                         target_id=new_tid, derived_from=derived_from)
+        result = _add_admin_seed_statement_api_payload(conv_id, {
+            'text': request.form.get('txt', ''),
+            'derivedFromId': derived_from,
+        })
+        if result['provenanceRecorded'] is False:
+            flash('Seed statement added, but the correction link could not be recorded.', 'warning')
+        elif derived_from is not None:
+            flash(f'Seed statement added (recorded as a correction of #{derived_from}).', 'success')
         else:
-            _polis_server_client().add_seed(conv.polis_id, text)
             flash('Seed statement added.', 'success')
-            record_audit('statement.seed', conv_id=conv_id)   # no text (statement content)
-    except PolisServerError:
+    except SeedStatementValidationFailed as exc:
+        if str(exc):
+            flash(str(exc), 'error')
+        else:
+            abort(400)
+    except SeedStatementParentNotFound as exc:
+        flash(f'Statement #{exc.statement_id} was not found in this conversation — '
+              'fix the "corrects" number and try again. Nothing was added.', 'error')
+    except SeedStatementUpstreamFailed as exc:
         current_app.logger.exception('add_seed failed')
-        flash('Could not add seed statement. Check server logs for details.', 'error')
+        flash(exc.message, 'error')
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed/import-text')
@@ -3763,14 +5813,24 @@ def admin_statement_seed_import_text(conv_id):
 @admin_bp.post('/admin/conversations/<int:conv_id>/strict-moderation')
 @login_required
 def admin_conversation_strict_moderation(conv_id):
-    conv    = _require_mod_for_conv(conv_id)
+    _require_mod_for_conv(conv_id)
     enabled = request.form.get('strict_moderation') == '1'
     try:
-        _polis_server_client().set_strict_moderation(conv.polis_id, enabled)
-        record_audit('strict_moderation.set', conv_id=conv_id, enabled=enabled)
-    except PolisServerError:
-        current_app.logger.exception('set_strict_moderation failed')
+        _set_admin_statement_policy_api_payload(
+            conv_id, {'mode': 'moderate' if enabled else 'auto_approve'},
+        )
+    except ModerationPolicyVerificationUnavailable:
+        flash('Could not verify the current moderation state. Try again later.', 'error')
+    except ModerationPolicyUpstreamFailed:
+        current_app.logger.exception('statement moderation policy update failed')
         flash('Could not update moderation settings. Check server logs for details.', 'error')
+    except ModerationPolicySaveFailed as exc:
+        flash(
+            'The voting service may have been updated, but the local policy could not be saved. '
+            'Do not retry until a site admin checks it.' if exc.outcome_unknown else
+            'Could not save the moderation policy. Try again later.',
+            'error',
+        )
     return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
 
 # ── Featured statements ───────────────────────────────────────────────────
@@ -3864,29 +5924,21 @@ def admin_featured_remove(conv_id, fs_id):
 @admin_bp.post('/admin/conversations/<int:conv_id>/arguments/<int:arg_id>/delete')
 @login_required
 def admin_argument_delete(conv_id, arg_id):
-    conv = _require_mod_for_conv(conv_id)
-    arg  = Argument.query.filter_by(id=arg_id).first_or_404()
-    FeaturedStatement.query.filter_by(
-        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-    fs_id = arg.featured_statement_id
-    db.session.delete(arg)
-    db.session.commit()
-    record_audit('argument.delete', conv_id=conv_id, target_type='argument', target_id=arg_id,
-                 featured_statement_id=fs_id)
+    try:
+        _delete_admin_featured_argument_api_payload(conv_id, arg_id)
+    except ArgumentNotInFeaturedWorkspace:
+        abort(404)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
 
 @admin_bp.post('/admin/conversations/<int:conv_id>/arguments/<int:arg_id>/moderate')
 @login_required
 def admin_argument_moderate(conv_id, arg_id):
-    conv = _require_mod_for_conv(conv_id)
-    arg  = Argument.query.filter_by(id=arg_id).first_or_404()
-    FeaturedStatement.query.filter_by(
-        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-    hidden = request.form.get('hidden') == '1'
-    arg.hidden = hidden
-    db.session.commit()
-    record_audit('argument.moderate', conv_id=conv_id, target_type='argument',
-                 target_id=arg_id, hidden=hidden)
+    try:
+        _set_admin_featured_argument_api_payload(
+            conv_id, arg_id, {'hidden': request.form.get('hidden') == '1'},
+        )
+    except ArgumentNotInFeaturedWorkspace:
+        abort(404)
     return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
 
 
@@ -3895,21 +5947,20 @@ def admin_argument_moderate(conv_id, arg_id):
 @participant_bp.get('/accept/<slug>')
 @login_required
 def accept(slug):
-    conv        = Conversation.query.filter_by(slug=slug).first_or_404()
-    if conv.access_policy == 'demo':
+    entry = _participation_entry_read_model(slug)
+    conv = entry.conversation
+    if entry.state == 'redirect':
         return redirect(url_for('participant.conversation', slug=slug))
-    participant = _current_participant()
-    _check_conversation_access(conv, participant)
-    if participant and Participation.query.filter_by(
-            participant_id=participant.id,
-            conversation_id=conv.id).first():
-        return redirect(url_for('participant.conversation', slug=slug))
-    pseudonyms = _generate_pseudonyms(5)
-    emailable  = session.get('emailable', False)
+    if entry.state == 'invite_denied':
+        return make_response(render_template(
+            'forbidden_invite_only.html',
+            conversation=conv,
+            can_moderate=entry.can_moderate,
+        ), 403)
     return render_template('accept.html', conversation=conv,
-                           emailable=emailable, pseudonyms=pseudonyms,
-                           reveal_cooldown=_REVEAL_COOLDOWN_DAYS,
-                           reveal_window_end=_REVEAL_COOLDOWN_DAYS + _REVEAL_WINDOW_DAYS)
+                           emailable=entry.emailable, pseudonyms=entry.pseudonyms,
+                           reveal_cooldown=entry.reveal_cooldown_days,
+                           reveal_window_end=entry.reveal_window_end_days)
 
 @participant_bp.post('/accept/<slug>')
 @login_required
@@ -3923,41 +5974,28 @@ def accept_post(slug):
         abort(404)
     _check_conversation_access(conv, participant)
 
-    if Participation.query.filter_by(
-            participant_id=participant.id,
-            conversation_id=conv.id).first():
-        return redirect(url_for('participant.conversation', slug=slug))
-
     pseudonym = request.form.get('pseudonym', '').strip()
     emailable = session.get('emailable', False)
-
-    if not _PSEUDONYM_RE.match(pseudonym):
+    try:
+        join_conversation(
+            conversation=conv,
+            participant=participant,
+            pseudonym=pseudonym,
+            notify_email=bool(request.form.get('notify_email')),
+            notify_talk_page=bool(request.form.get('notify_talk_page')),
+            emailable=bool(emailable),
+            check_eligibility=_check_join_eligibility,
+        )
+    except InvalidPseudonym:
         abort(400)
-
-    allowed, eligibility_status, eligibility_detail = _check_join_eligibility(conv, participant)
-    if not allowed:
+    except EligibilityDenied as exc:
         return make_response(render_template(
             'forbidden_eligibility.html',
             conversation=conv,
-            status=eligibility_status,
-            detail=eligibility_detail,
+            status=exc.status,
+            detail=exc.detail,
         ), 403)
-
-    db.session.add(Participation(
-        participant_id=participant.id,
-        conversation_id=conv.id,
-        pseudonym=pseudonym,
-        notify_email=bool(request.form.get('notify_email')) and emailable,
-        notify_talk_page=bool(request.form.get('notify_talk_page')),
-        eligibility_status=eligibility_status,
-        eligibility_checked_at=datetime.now(timezone.utc)
-        if eligibility_status != 'not_required' else None,
-        eligibility_detail=eligibility_detail or None,
-    ))
-    try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
+    except PseudonymUnavailable:
         pseudonyms = _generate_pseudonyms(5)
         return render_template('accept.html', conversation=conv,
                                emailable=emailable, pseudonyms=pseudonyms,
@@ -4024,26 +6062,8 @@ def conversation(slug):
         not has_admin_access and session.get('space') != conv_space) else None
     session['space'] = conv_space
 
-    results     = None
-    polis_stats = None
-    # Fetch clustering results for either results phase. Personal results (Phase 3,
-    # logged-in only) and public results (Phase 4, everyone) currently render the same
-    # aggregate data; #81 part 2 will scope personal results to the participant's voted
-    # statements (anti-anchoring).
-    recomputing = False
-    if conv.phase_public_results or conv.phase_personal_results:
-        _r = PolisParticipantClient(
-            current_app.config['PARTICIAPI_BASE']).get_results(conv.polis_id)
-        results = _r if (_r and (_r.get('groups') or _r.get('majority', {}).get('agree') or _r.get('majority', {}).get('disagree'))) else None
-        polis_stats = _polis_server_client().get_polis_stats(conv.polis_id)
-        if results is None:
-            import time
-            _now = time.monotonic()
-            _last = _math_recompute_last.get(conv.id, 0)
-            if _now - _last > _MATH_RECOMPUTE_COOLDOWN:
-                if _polis_server_client().queue_math_recompute(conv.polis_id):
-                    _math_recompute_last[conv.id] = _now
-                    recomputing = True
+    # Phase 2 clustering shared with the typed intermediate-results endpoint.
+    results, polis_stats, recomputing = _load_intermediate_results(conv)
 
     # Reveal-window timeline for closed conversations (#70).
     reveal          = _reveal_context(conv, participation)
@@ -4053,11 +6073,6 @@ def conversation(slug):
     featured_data = []
     if conv.phase_argument_mapping and participation:
         featured_data = _build_featured_data(conv, participation, can_mod=can_mod)
-
-    moderation_log_count = AuditEvent.query.filter(
-        AuditEvent.conversation_id == conv.id,
-        AuditEvent.operation.in_(('participant.ban', 'participant.unban')),
-    ).count()
 
     # Phase 6 — build card data: each confirmed featured statement with its
     # top-10 visible arguments per side, sorted by usefulness vote count.
@@ -4129,8 +6144,22 @@ def conversation(slug):
                            new_stmt_ids=participation.new_stmt_ids if participation else [],
                            phase6_data=phase6_data,
                            phase6_results=phase6_results,
-                           output_items=_output_items(conv),
-                           moderation_log_count=moderation_log_count)
+                           scheduled_transition=scheduled_transition(conv),
+                           output_items=_output_items(conv))
+
+
+@participant_bp.get('/c/<slug>/about')
+@limiter.limit('120 per minute')
+def conversation_about(slug):
+    conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    participant = _current_participant()
+    _check_conversation_access(conv, participant)
+    about = _conversation_about_model(conv, participant)
+    return render_template(
+        'conversation_about.html',
+        header_mode='conversation',
+        **about.template_context(),
+    )
 
 
 @participant_bp.get('/c/<slug>/outputs/<output_key>')
@@ -4160,6 +6189,7 @@ def conversation_output(slug, output_key):
 @participant_bp.get('/c/<slug>/moderation-log')
 def conversation_moderation_log(slug):
     conv = Conversation.query.filter_by(slug=slug).first_or_404()
+    _check_conversation_access(conv, _current_participant())
     return render_template(
         'moderation_log.html',
         conversation=conv,
@@ -4179,65 +6209,42 @@ def argument_submit_legacy(slug, fs_id):
 @limiter.limit('20 per minute')
 def argument_submit(slug, fs_id):
     conv, part = _require_arg_participation(slug)
-    FeaturedStatement.query.filter_by(
-        id=fs_id, conversation_id=conv.id).first_or_404()
     side = request.form.get('side', '').strip()
-    body = nh3.clean(request.form.get('body', '').strip(), tags=frozenset())
-    if side not in ('pro', 'con') or not body or len(body) > 280:
+    body = request.form.get('body', '')
+    try:
+        result = submit_argument_command(
+            conversation=conv,
+            participation=part,
+            featured_statement_id=fs_id,
+            side=side,
+            body=body,
+            touch=_touch_last_engagement,
+        )
+    except InvalidArgument:
         abort(400)
-
-    existing = Argument.query.filter_by(
-        proposer_pseudonym=part.pseudonym,
-        featured_statement_id=fs_id,
-        side=side,
-    ).first()
-    if existing:
+    except ExistingArgumentConflict:
+        # Preserve the legacy form's first-write-wins behavior. The API returns
+        # a typed conflict so SPA clients never mistake changed text for a replay.
+        argument = Argument.query.filter_by(
+            proposer_pseudonym=part.pseudonym,
+            featured_statement_id=fs_id,
+            side=side,
+        ).one()
         if request.headers.get('X-Requested-With') == 'fetch':
             return jsonify({
                 'ok': True,
-                'id': existing.id,
-                'body': existing.body,
-                'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=existing.id),
-                'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=existing.id),
+                'id': argument.id,
+                'body': argument.body,
+                'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=argument.id),
+                'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=argument.id),
             })
         return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
-
-    arg = Argument(
-        featured_statement_id=fs_id,
-        proposer_pseudonym=part.pseudonym,
-        body=body,
-        side=side,
-    )
-    db.session.add(arg)
-    db.session.flush()   # get arg.id before commit
-
-    # Insert new argument at a random position in this participant's display order.
-    # Create ArgumentSideState now if the participant hasn't visited the page yet.
-    state = ArgumentSideState.query.filter_by(
-        participant_id=part.participant_id,
-        featured_statement_id=fs_id,
-        side=side,
-    ).first()
-    if state is None:
-        state = ArgumentSideState(
-            participant_id=part.participant_id,
-            featured_statement_id=fs_id,
-            side=side,
-            argument_order=[],
-        )
-        db.session.add(state)
-        db.session.flush()
-    order = list(state.argument_order)
-    order.insert(random.randint(0, len(order)), arg.id)
-    state.argument_order = order
-
-    _touch_last_engagement(part)
-    db.session.commit()
+    arg = result.argument
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({
             'ok': True,
             'id': arg.id,
-            'body': body,
+            'body': arg.body,
             'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=arg.id),
             'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=arg.id),
         })
@@ -4253,32 +6260,18 @@ def argument_skip_legacy(slug, fs_id, side):
 @login_or_demo_required
 def argument_skip(slug, fs_id, side):
     conv, part = _require_arg_participation(slug)
-    FeaturedStatement.query.filter_by(
-        id=fs_id, conversation_id=conv.id).first_or_404()
-    if side not in ('pro', 'con'):
-        abort(400)
-
-    state = ArgumentSideState.query.filter_by(
-        participant_id=part.participant_id,
-        featured_statement_id=fs_id,
-        side=side,
-    ).first()
-    if state is None:
-        state = ArgumentSideState(
-            participant_id=part.participant_id,
+    try:
+        skip_argument_contribution(
+            conversation=conv,
+            participation=part,
             featured_statement_id=fs_id,
             side=side,
-            skipped=True,
+            touch=_touch_last_engagement,
         )
-        db.session.add(state)
-        _touch_last_engagement(part)
-        db.session.commit()
-    elif not state.skipped:
-        state.skipped = True
-        _touch_last_engagement(part)
-        db.session.commit()
-    else:
-        _touch_last_engagement(part, commit=True)
+    except InvalidArgument:
+        abort(400)
+    except ExistingArgumentConflict:
+        pass
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
@@ -4287,59 +6280,31 @@ def argument_skip(slug, fs_id, side):
 @login_or_demo_required
 def argument_vote(slug, arg_id):
     conv, part = _require_arg_participation(slug)
-    arg = Argument.query.filter_by(id=arg_id).first_or_404()
-    fs  = FeaturedStatement.query.filter_by(
-        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-
-    # Gate: participant must have proposed or skipped both sides.
-    pro_state = ArgumentSideState.query.filter_by(
-        participant_id=part.participant_id,
-        featured_statement_id=fs.id, side='pro').first()
-    con_state = ArgumentSideState.query.filter_by(
-        participant_id=part.participant_id,
-        featured_statement_id=fs.id, side='con').first()
-    pro_proposed = Argument.query.filter_by(
-        proposer_pseudonym=part.pseudonym,
-        featured_statement_id=fs.id, side='pro').first()
-    con_proposed = Argument.query.filter_by(
-        proposer_pseudonym=part.pseudonym,
-        featured_statement_id=fs.id, side='con').first()
-    pro_gate = bool(pro_proposed or (pro_state and pro_state.skipped))
-    con_gate = bool(con_proposed or (con_state and con_state.skipped))
     is_ajax = request.headers.get('X-Requested-With') == 'fetch'
-    if not (pro_gate and con_gate):
+    try:
+        set_argument_priority(
+            conversation=conv,
+            participation=part,
+            argument_id=arg_id,
+            selected=True,
+            touch=_touch_last_engagement,
+        )
+    except ContributionGateClosed:
         if is_ajax:
             return jsonify({'ok': False, 'reason': 'gate'}), 403
         abort(403)
-
-    # K-approval cap: count existing votes for this side.
-    k = int((conv.argument_vote_data or {}).get('K', 2))
-    side_arg_ids = [a.id for a in
-                    Argument.query.filter_by(
-                        featured_statement_id=fs.id, side=arg.side).all()]
-    existing_votes = ArgumentVote.query.filter(
-        ArgumentVote.participant_id == part.participant_id,
-        ArgumentVote.argument_id.in_(side_arg_ids),
-    ).count()
-    if existing_votes >= k:
+    except PrioritizationUnavailable:
+        if is_ajax:
+            return jsonify({'ok': False, 'reason': 'volume'}), 409
+        abort(409)
+    except PriorityBudgetExceeded:
         if is_ajax:
             return jsonify({'ok': False, 'reason': 'cap'}), 409
-        abort(409)   # cap reached
-
-    # Can't vote on a hidden argument.
-    if arg.hidden:
+        abort(409)
+    except HiddenArgument:
         if is_ajax:
             return jsonify({'ok': False, 'reason': 'hidden'}), 403
         abort(403)
-    existing = ArgumentVote.query.filter_by(
-        participant_id=part.participant_id, argument_id=arg_id).first()
-    if not existing:
-        db.session.add(ArgumentVote(
-            argument_id=arg_id,
-            participant_id=part.participant_id,
-        ))
-        _touch_last_engagement(part)
-        db.session.commit()
     if is_ajax:
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
@@ -4348,15 +6313,13 @@ def argument_vote(slug, arg_id):
 @login_or_demo_required
 def argument_unvote(slug, arg_id):
     conv, part = _require_arg_participation(slug)
-    arg = Argument.query.filter_by(id=arg_id).first_or_404()
-    FeaturedStatement.query.filter_by(
-        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-    existing = ArgumentVote.query.filter_by(
-        participant_id=part.participant_id, argument_id=arg_id).first()
-    if existing:
-        db.session.delete(existing)
-        _touch_last_engagement(part)
-        db.session.commit()
+    set_argument_priority(
+        conversation=conv,
+        participation=part,
+        argument_id=arg_id,
+        selected=False,
+        touch=_touch_last_engagement,
+    )
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
@@ -4401,26 +6364,15 @@ def argument_flag(slug, arg_id):
             return jsonify({'ok': True, 'already_reviewed': True})
         flash('This argument is already under moderator review.', 'info')
         return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
-    category, detail = _parse_content_flag_form()
-    if not _existing_open_flag(
-        conv.id,
-        part.participant_id,
-        'argument',
-        category,
-        argument_id=arg.id,
-    ):
-        db.session.add(ContentFlag(
-            conversation_id=conv.id,
-            participant_id=part.participant_id,
-            content_type='argument',
-            argument_id=arg.id,
-            category=category,
-            detail=detail,
-            status='open',
-        ))
-        db.session.commit()
-        record_audit('content_flag.create', conv_id=conv.id, target_type='argument',
-                     target_id=arg.id, category=category)
+    try:
+        submit_content_flag(
+            conversation=conv, participation=part,
+            content_type='argument', target_id=arg.id,
+            category=(request.form.get('category') or '').strip(),
+            detail=request.form.get('detail'), audit=record_audit,
+        )
+    except InvalidFlag:
+        abort(400, description='Choose a valid reason and explain Other.')
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     flash('Thanks - this has been sent to the moderator for review.', 'success')
@@ -4454,26 +6406,15 @@ def statement_flag(slug, tid):
         # with no test coverage and no documented rationale; caused every flag on a
         # featured (often seed-derived) statement to 400.
 
-    category, detail = _parse_content_flag_form()
-    if not _existing_open_flag(
-        conv.id,
-        part.participant_id,
-        'statement',
-        category,
-        statement_tid=tid,
-    ):
-        db.session.add(ContentFlag(
-            conversation_id=conv.id,
-            participant_id=part.participant_id,
-            content_type='statement',
-            statement_tid=tid,
-            category=category,
-            detail=detail,
-            status='open',
-        ))
-        db.session.commit()
-        record_audit('content_flag.create', conv_id=conv.id, target_type='statement',
-                     target_id=tid, category=category)
+    try:
+        submit_content_flag(
+            conversation=conv, participation=part,
+            content_type='statement', target_id=tid,
+            category=(request.form.get('category') or '').strip(),
+            detail=request.form.get('detail'), audit=record_audit,
+        )
+    except InvalidFlag:
+        abort(400, description='Choose a valid reason and explain Other.')
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True})
     flash('Thanks - this has been sent to the moderator for review.', 'success')
@@ -4522,18 +6463,16 @@ def reveal_identity_post(slug):
     if not conv.closed_at:
         abort(400)
 
-    # Same source of truth as the GET page / timeline — the window is open iff
-    # _reveal_context says so. (Already-revealed → state 'revealed', also rejected.)
-    if _reveal_context(conv, participation)['state'] != 'open':
-        abort(400)
-    if participation.public_username is not None:
-        abort(400)
     if request.form.get('confirm') != '1':
         return redirect(url_for('participant.reveal_identity', slug=slug))
-
-    participation.public_username = participant.mw_username
-    participation.revealed_at     = datetime.now(timezone.utc)
-    db.session.commit()
+    try:
+        reveal_identity_command(
+            conversation=conv,
+            participation=participation,
+            wikimedia_username=participant.mw_username,
+        )
+    except RevealUnavailable:
+        abort(400)
     return redirect(url_for('participant.conversation', slug=slug))
 
 
@@ -4920,6 +6859,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['SESSION_COOKIE_HTTPONLY']    = True
     app.config['SESSION_COOKIE_SAMESITE']    = 'Lax'
     app.config['SESSION_COOKIE_SECURE']      = not app.debug
+    app.config['SPA_DEFAULT_ENABLED']        = True
 
     app.config['OAUTH_CLIENT_ID']     = _read_secret('oauth-client-id')
     app.config['OAUTH_CLIENT_SECRET'] = _read_secret('oauth-client-secret')
@@ -4959,6 +6899,14 @@ def create_app(test_config: dict | None = None) -> Flask:
     # SQLALCHEMY_DATABASE_URI, etc. are effective from the first db.init_app call.
     if test_config is not None:
         app.config.update(test_config)
+
+    _polis_config_error = polis_server_config_error(
+        app.config.get('POLIS_SERVER_URL', ''),
+        app.config.get('POLIS_ADMIN_EMAIL', ''),
+        app.config.get('POLIS_ADMIN_PASSWORD', ''),
+    )
+    if _polis_config_error:
+        app.logger.warning('Polis HTTP admin configuration: %s', _polis_config_error)
 
     # Migration mode: set by deploy.sh --migrate to skip web-server-only
     # startup checks (rate limiting, trusted hosts) that require
@@ -5107,6 +7055,26 @@ def create_app(test_config: dict | None = None) -> Flask:
         g.request_id = rid or secrets.token_urlsafe(8)
         g._t0 = time.perf_counter()
 
+    @app.before_request
+    def _serve_canonical_spa_request():
+        if request.method != 'GET' or not _is_canonical_spa_path(request.path):
+            return None
+        # Accessing ``request.host`` applies Flask's TRUSTED_HOSTS validation.
+        # Route dispatch normally triggers it later, but this before-request SPA
+        # response intentionally bypasses route dispatch.
+        _ = request.host
+        requested = request.args.get('spa_only')
+        stored = request.cookies.get(_SPA_ONLY_COOKIE)
+        if requested in {'0', '1'}:
+            enabled = requested == '1'
+        elif stored in {'0', '1'}:
+            enabled = stored == '1'
+        else:
+            enabled = bool(current_app.config['SPA_DEFAULT_ENABLED'])
+        if enabled:
+            return send_from_directory(_SPA_BUILD_DIR, 'index.html')
+        return None
+
     @app.context_processor
     def _inject_globals():
         participant = _current_participant()
@@ -5115,6 +7083,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             'username':   session.get('username'),
             'csp_nonce':  g.get('csp_nonce', ''),
             'git_version': _GIT_VERSION,
+            'spa_developer_controls': _spa_developer_controls_enabled(),
             # Header mode drives the demo/real switch + demo theme (#293).
             # Pages override this via render_template kwargs; default keeps the
             # switch off on pages outside the fork/lanes (e.g. admin).
@@ -5123,6 +7092,17 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.after_request
     def _security_headers(response):
+        requested_spa_mode = request.args.get('spa_only')
+        if requested_spa_mode == '1':
+            response.set_cookie(
+                _SPA_ONLY_COOKIE, '1', max_age=_SPA_ONLY_MAX_AGE,
+                path='/', samesite='Lax',
+            )
+        elif requested_spa_mode == '0':
+            response.set_cookie(
+                _SPA_ONLY_COOKIE, '0', max_age=_SPA_ONLY_MAX_AGE,
+                path='/', samesite='Lax',
+            )
         nonce = g.get('csp_nonce', '')
         csp = (
             "default-src 'self'; "
@@ -5173,6 +7153,78 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(proxy_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(participant_bp)
+    app.register_blueprint(create_api_v1_blueprint(
+        resolve_participant=_current_participant,
+        resolve_global_admin=_is_global_admin,
+        resolve_developer_logins=lambda: [
+            {
+                'username': user['username'],
+                'href': url_for('dev_fake_login', username=user['username']),
+            }
+            for user in current_app.config.get('DEV_TEST_USERS', [])
+        ],
+        resolve_developer_mode=_spa_developer_controls_enabled,
+        resolve_git_version=lambda: _GIT_VERSION,
+        resolve_conversation_lane=_conversation_lane_api_payload,
+        resolve_conversation_workspace=_conversation_workspace_api_payload,
+        resolve_conversation_about=_conversation_about_api_payload,
+        resolve_moderation_log=_moderation_log_api_payload,
+        resolve_conversation_output=_conversation_output_api_payload,
+        resolve_identity_reveal=_identity_reveal_api_payload,
+        reveal_identity=_reveal_identity_api_payload,
+        resolve_participation_entry=_participation_entry_api_payload,
+        join_conversation=_join_conversation_api_payload,
+        resolve_pseudonym_suggestions=_pseudonym_suggestions_api_payload,
+        resolve_explore_state=_explore_api_payload,
+        resolve_argument_mapping=_argument_mapping_api_payload,
+        resolve_informed_voting=_informed_voting_api_payload,
+        submit_informed_vote=_informed_vote_api_payload,
+        resolve_intermediate_results=_intermediate_results_api_payload,
+        resolve_results_report=_results_report_api_payload,
+        resolve_admin_catalog=_admin_catalog_api_payload,
+        create_admin_conversation=_create_admin_conversation_api_payload,
+        grant_global_admin=_grant_global_admin_api_payload,
+        set_global_admin=_set_global_admin_api_payload,
+        resolve_admin_participants=_admin_participant_roster_api_payload,
+        set_admin_participant_access=_set_admin_participant_access_api_payload,
+        resolve_admin_flags=_admin_flag_queue_api_payload,
+        resolve_admin_flag=_resolve_admin_flag_api_payload,
+        resolve_admin_invites=_admin_invitation_roster_api_payload,
+        add_admin_invites=_add_admin_invitations_api_payload,
+        remove_admin_invite=_remove_admin_invitation_api_payload,
+        resolve_admin_roles=_admin_role_roster_api_payload,
+        replace_admin_roles=_replace_admin_roles_api_payload,
+        resolve_admin_lifecycle=_admin_lifecycle_api_payload,
+        resolve_admin_settings=_admin_settings_api_payload,
+        update_admin_settings=_update_admin_settings_api_payload,
+        update_admin_recommendation_tier=_update_admin_recommendation_tier_api_payload,
+        resolve_admin_termination=_admin_termination_api_payload,
+        delete_admin_conversation=_delete_admin_conversation_api_payload,
+        resolve_admin_statements=_admin_statements_api_payload,
+        set_admin_statement_policy=_set_admin_statement_policy_api_payload,
+        moderate_admin_statement=_moderate_admin_statement_api_payload,
+        add_admin_seed_statement=_add_admin_seed_statement_api_payload,
+        import_admin_seed_statements=_import_admin_seed_statements_api_payload,
+        resolve_admin_featured=_admin_featured_api_payload,
+        select_admin_featured=_select_admin_featured_api_payload,
+        remove_admin_featured=_remove_admin_featured_api_payload,
+        set_admin_featured_argument=_set_admin_featured_argument_api_payload,
+        delete_admin_featured_argument=_delete_admin_featured_argument_api_payload,
+        advance_admin_phase=_advance_admin_phase_api_payload,
+        initialize_admin_phase6=_initialize_admin_phase6_api_payload,
+        set_admin_pause=_set_admin_pause_api_payload,
+        set_admin_archive=_set_admin_archive_api_payload,
+        set_admin_schedule=_set_admin_schedule_api_payload,
+        set_admin_phases=_set_admin_phases_api_payload,
+        publish_admin_report=_publish_admin_report_api_payload,
+        submit_argument=_submit_argument_api_payload,
+        skip_argument=_skip_argument_api_payload,
+        set_argument_priority=_set_argument_priority_api_payload,
+        submit_content_flag=_submit_content_flag_api_payload,
+        submit_explore_vote=_explore_vote_api_payload,
+        submit_statement=_statement_api_payload,
+    ))
+    register_api_error_handlers(app)
     csrf.exempt(proxy_bp)
 
     # Startup fingerprint — config-only, no secrets, no live probe. Answers
@@ -5226,7 +7278,7 @@ def conversation_report(slug):
         return redirect(url_for('participant.conversation', slug=slug))
 
     if conv.phase_personal_results and not conv.phase_public_results and not participant:
-        return redirect(url_for('participant.login') + f'?next={request.path}')
+        return redirect(url_for('login') + f'?next={request.path}')
 
     report_filter = Phase6ResultsFilter.from_snapshot(conv.report_filter_snapshot)
     phase6_results = _build_phase6_results(
@@ -5265,21 +7317,18 @@ def _register_routes(app: Flask) -> None:
         def dev_login():
             username = _dev_login_user
             xid = _derive_xid(f'dev:{username}')
-            participant = Participant.query.filter_by(mw_username=username).first()
-            if participant is None:
-                participant = Participant(
-                    mw_user_id=abs(hash(username)) % 10**9,
-                    mw_username=username,
-                    xid=xid,
-                    xid_key_version=_XID_HMAC_VERSION,
-                )
+            participant = reconcile_participant_login(
+                Participant.query.filter_by(mw_username=username).first(),
+                mw_user_id=abs(hash(username)) % 10**9,
+                mw_username=username,
+                new_xid=xid,
+                xid_key_version=_XID_HMAC_VERSION,
+            )
+            if participant.id is None:
                 db.session.add(participant)
-            else:
-                participant.xid = xid
-                participant.xid_key_version = _XID_HMAC_VERSION
             db.session.commit()
             session['username']  = username
-            session['xid']       = xid
+            session['xid']       = participant.xid
             session['emailable'] = _is_emailable(username)
             return redirect(url_for('index'))
 
@@ -5318,22 +7367,18 @@ def _register_routes(app: Flask) -> None:
                 if not hmac.compare_digest(supplied, expected):
                     abort(403)
             xid = _derive_xid(f'dev-fake:{user["mw_user_id"]}:{username}')
-            participant = Participant.query.filter_by(mw_user_id=user['mw_user_id']).first()
-            if participant is None:
-                participant = Participant(
-                    mw_user_id=user['mw_user_id'],
-                    mw_username=username,
-                    xid=xid,
-                    xid_key_version=_XID_HMAC_VERSION,
-                )
+            participant = reconcile_participant_login(
+                Participant.query.filter_by(mw_user_id=user['mw_user_id']).first(),
+                mw_user_id=user['mw_user_id'],
+                mw_username=username,
+                new_xid=xid,
+                xid_key_version=_XID_HMAC_VERSION,
+            )
+            if participant.id is None:
                 db.session.add(participant)
-            else:
-                participant.mw_username = username
-                participant.xid = xid
-                participant.xid_key_version = _XID_HMAC_VERSION
             db.session.commit()
             session['username']  = username
-            session['xid']       = xid
+            session['xid']       = participant.xid
             session['emailable'] = False
             return redirect(url_for('index'))
 
@@ -5349,6 +7394,12 @@ def _register_routes(app: Flask) -> None:
                                header_mode='fork',
                                dev_test_users=dev_test_users)
 
+    @app.get('/app')
+    @app.get('/app/<path:spa_path>')
+    def spa_shell(spa_path: str = ''):
+        """Serve the built React shell; client routing owns the remaining path."""
+        return send_from_directory(_SPA_BUILD_DIR, 'index.html')
+
     def _render_lane(*, demo: bool, header_mode: str):
         """Render the home listing for one space (#293).
 
@@ -5358,120 +7409,23 @@ def _register_routes(app: Flask) -> None:
         keeps one listing implementation instead of a bespoke demo page.
         """
         dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
-
-        if 'username' not in session:
-            if demo:
-                listing = (Conversation.query
-                           .filter_by(active=True, paused=False, access_policy='demo')
-                           .order_by(Conversation.created_at.desc()).all())
-            else:
-                listing = (Conversation.query
-                           .filter_by(active=True, paused=False)
-                           .filter(Conversation.access_policy == 'public')
-                           .order_by(Conversation.created_at.desc()).all())
-            signals_map = {c.id: {'phases': _active_phases(c),
-                                  'outputs': _output_items(c)} for c in listing}
-            return render_template('home.html',
-                                   header_mode=header_mode,
-                                   public_conversations=listing,
-                                   signals_map=signals_map,
-                                   dev_test_users=dev_test_users)
-
         participant = _current_participant()
-        username    = session['username']
-
-        joined_parts = (
-            Participation.query
-            .options(joinedload(Participation.conversation))
-            .filter_by(participant_id=participant.id).all()
-            if participant else []
+        lane = build_conversation_lane(
+            demo=demo,
+            username=session.get('username'),
+            participant=participant,
+            global_admin=_is_global_admin(participant),
+            active_phases=_active_phases,
+            output_items=_output_items,
+            reveal_context=_reveal_context,
+            polis_client=_polis_server_client(),
         )
-        joined_ids = {p.conversation_id for p in joined_parts}
-
-        # Each lane lists only its own space's conversations.
-        active_joined   = []
-        archived_joined = []
-        for part in joined_parts:
-            conv = part.conversation
-            if conv and (conv.access_policy == 'demo') == demo:
-                (active_joined if conv.active else archived_joined).append(conv)
-
-        if demo:
-            available = (Conversation.query
-                         .filter_by(active=True, paused=False, access_policy='demo')
-                         .filter(~Conversation.id.in_(joined_ids or [0]))
-                         .order_by(Conversation.created_at.desc()).all())
-        else:
-            invited_ids = [
-                inv.conversation_id
-                for inv in ConversationInvite.query.filter_by(mw_username=username).all()
-            ]
-            available = (Conversation.query
-                         .filter_by(active=True, paused=False)
-                         .filter(~Conversation.id.in_(joined_ids or [0]))
-                         .filter(db.or_(
-                             Conversation.access_policy == 'public',
-                             db.and_(
-                                 Conversation.access_policy == 'invite_only',
-                                 Conversation.id.in_(invited_ids or [0]),
-                             ),
-                         ))
-                         .order_by(Conversation.created_at.desc()).all())
-
-        mod_ids: set = set()
-        moderating = []
-        if participant:
-            if _is_global_admin(participant):
-                moderating = (Conversation.query
-                              .order_by(Conversation.created_at.desc()).all())
-                mod_ids = {c.id for c in moderating}
-            else:
-                roles = AdminRole.query.filter(
-                    AdminRole.participant_id == participant.id,
-                ).all()
-                if roles:
-                    mod_ids = {r.conversation_id for r in roles}
-                    moderating = Conversation.query.filter(
-                        Conversation.id.in_(mod_ids)).all()
-
-        # "You moderate" is scoped to this lane's space too.
-        moderating = [c for c in moderating if (c.access_policy == 'demo') == demo]
-        # Exclude moderated conversations from Browse — they already appear in "You moderate"
-        available = [c for c in available if c.id not in mod_ids]
-
-        pseudonym_map = {p.conversation_id: p for p in joined_parts}
-        all_home_convs = active_joined + archived_joined + list(available)
-
-        xid = session.get('xid')
-        submission_convs = [c for c in all_home_convs if c.phase_submission and c.active]
-        zinvites = [c.polis_id for c in submission_convs if c.polis_id]
-        remaining_by_zinvite: dict = {}
-        if zinvites and xid:
-            result = _polis_server_client().get_statements_remaining_bulk(zinvites, xid)
-            if result:
-                remaining_by_zinvite = result
-        signals_map: dict = {}
-        for conv in all_home_convs:
-            part = pseudonym_map.get(conv.id)
-            reveal = _reveal_context(conv, part) if conv.closed_at else None
-            remaining = remaining_by_zinvite.get(
-                conv.polis_id) if conv.polis_id else None
-            signals_map[conv.id] = {
-                'phases':               _active_phases(conv),
-                'outputs':              _output_items(conv),
-                'statements_remaining': remaining,
-                'reveal':               reveal,
-            }
-
-        return render_template('home.html',
-                               header_mode=header_mode,
-                               active_joined=active_joined,
-                               archived_joined=archived_joined,
-                               available=available,
-                               moderating=moderating,
-                               pseudonym_map=pseudonym_map,
-                               signals_map=signals_map,
-                               dev_test_users=dev_test_users)
+        return render_template(
+            'home.html',
+            header_mode=header_mode,
+            dev_test_users=dev_test_users,
+            **lane.template_context(),
+        )
 
     @app.get('/demo')
     def demo_lane():
@@ -5566,22 +7520,21 @@ def _register_routes(app: Flask) -> None:
 
         xid = _derive_xid(f'mw:{mw_user_id}')
 
-        participant = Participant.query.filter_by(mw_user_id=mw_user_id).first()
-        if participant is None:
-            participant = Participant(mw_user_id=mw_user_id, mw_username=username, xid=xid,
-                                      xid_key_version=_XID_HMAC_VERSION)
+        participant = reconcile_participant_login(
+            Participant.query.filter_by(mw_user_id=mw_user_id).first(),
+            mw_user_id=mw_user_id,
+            mw_username=username,
+            new_xid=xid,
+            xid_key_version=_XID_HMAC_VERSION,
+        )
+        if participant.id is None:
             db.session.add(participant)
-        elif participant.mw_username != username:
-            participant.mw_username = username
-        if participant.xid != xid:
-            participant.xid = xid
-            participant.xid_key_version = _XID_HMAC_VERSION
         db.session.commit()
 
         next_url = session.pop('next', None)
         session.clear()
         session['username']   = username
-        session['xid']        = xid
+        session['xid']        = participant.xid
         session['emailable']  = _is_emailable(username)
 
         return redirect(_safe_redirect(next_url or '', url_for('index')))

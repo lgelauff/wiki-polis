@@ -145,14 +145,16 @@ def test_reveal_post_after_window_rejected(auth_client, app, participant):
     assert resp.status_code == 400
 
 
-def test_reveal_post_already_revealed_rejected(auth_client, app, participant):
+def test_reveal_post_already_revealed_is_safe_replay(auth_client, app, participant):
     conv = _closed_conv(app, 'already', 45, 'alr1234567')
     part = _participate(participant, conv, 'tall-crane')
     part.public_username = 'testuser'
     part.revealed_at = datetime.now(timezone.utc)
     db.session.commit()
     resp = auth_client.post('/c/already/reveal', data={'confirm': '1'})
-    assert resp.status_code == 400
+    assert resp.status_code == 302
+    db.session.refresh(part)
+    assert part.public_username == 'testuser'
 
 
 # ── Reveal permanence ─────────────────────────────────────────────────────────

@@ -24,7 +24,7 @@
     </p>
     <p class="muted" style="font-size:13px;margin-bottom:0">
       Flagger identities are intentionally not shown here. The queue displays the target,
-      reason, optional note, and timestamp.
+      reason, explanation when applicable, and timestamp.
     </p>
   </div>
 
@@ -68,8 +68,8 @@
         </td>
         <td style="vertical-align:top">
           <strong>{{ row.category_label }}</strong>
-          {% if flag.detail %}
-          <div class="muted" style="font-size:12px;margin-top:.25rem">{{ flag.detail }}</div>
+          {% if flag.detail or flag.category == 'other' %}
+          <div class="muted" style="font-size:12px;margin-top:.25rem">{{ flag.detail or '(no explanation provided)' }}</div>
           {% endif %}
         </td>
         <td class="muted" style="vertical-align:top;white-space:nowrap">
@@ -112,8 +112,8 @@
         </td>
         <td>
           <strong>{{ row.category_label }}</strong>
-          {% if flag.detail %}
-          <div class="muted" style="font-size:12px;margin-top:.25rem">{{ flag.detail }}</div>
+          {% if flag.detail or flag.category == 'other' %}
+          <div class="muted" style="font-size:12px;margin-top:.25rem">{{ flag.detail or '(no explanation provided)' }}</div>
           {% endif %}
         </td>
         <td class="muted" style="white-space:nowrap">

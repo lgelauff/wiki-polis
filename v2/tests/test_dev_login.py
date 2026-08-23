@@ -59,8 +59,8 @@ def test_dev_fake_login_creates_participant(fake_login_app):
         assert p.xid != hashlib.sha256(b'dev-fake-dev-user-1').hexdigest()
 
 
-def test_dev_fake_login_syncs_drifted_username(fake_login_app):
-    """A reused dev row whose username/xid drifted is corrected on login."""
+def test_dev_fake_login_syncs_username_but_preserves_stored_xid(fake_login_app):
+    """A reused dev row refreshes profile data without orphaning its Polis identity."""
     with fake_login_app.app_context():
         db.session.add(Participant(mw_user_id=-2, mw_username='stale-name', xid='x' * 64))
         db.session.commit()
@@ -73,7 +73,7 @@ def test_dev_fake_login_syncs_drifted_username(fake_login_app):
         rows = Participant.query.filter_by(mw_user_id=-2).all()
         assert len(rows) == 1
         assert rows[0].mw_username == 'dev-user-2'
-        assert rows[0].xid == app_module._derive_xid('dev-fake:-2:dev-user-2')
+        assert rows[0].xid == 'x' * 64
         assert rows[0].xid_key_version == app_module._XID_HMAC_VERSION
         # The row now matches both legacy username checks and stable xid session lookup.
         assert Participant.query.filter_by(mw_username='dev-user-2').first() is not None
@@ -81,6 +81,16 @@ def test_dev_fake_login_syncs_drifted_username(fake_login_app):
 
 def test_dev_fake_login_unknown_user_404(fake_login_app):
     assert fake_login_app.test_client().get('/dev/login/not-a-dev-user').status_code == 404
+
+
+def test_dev_login_options_are_projected_through_the_session_contract(fake_login_app):
+    data = fake_login_app.test_client().get('/api/v1/session').get_json()['data']
+
+    assert data['developerLogins'] == [
+        {'username': 'dev-user-1', 'href': '/dev/login/dev-user-1'},
+        {'username': 'dev-user-2', 'href': '/dev/login/dev-user-2'},
+        {'username': 'dev-user-3', 'href': '/dev/login/dev-user-3'},
+    ]
 
 
 def _staging_app(tmp_path, tool_name='wiki-polis-dev', trusted_hosts='wiki-polis-dev.toolforge.org'):

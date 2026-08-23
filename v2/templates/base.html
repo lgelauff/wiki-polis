@@ -32,6 +32,11 @@
       </div>
 
       <div class="header-right">
+        {% if spa_developer_controls %}
+          <a class="spa-dev-toggle" href="{{ request.path }}?spa_only=1" role="switch" aria-checked="false">
+            SPA only <span>off</span>
+          </a>
+        {% endif %}
         {% if header_mode in ('fork', 'demo', 'real') %}
           <div class="mode-switch" role="group" aria-label="Choose demo or real mode">
             <a href="{{ url_for('demo_lane') }}"
@@ -84,6 +89,17 @@
   <footer style="text-align:right;padding:.5rem 1rem;font-size:11px;color:var(--muted)">
     <code>{{ git_version }}</code>
   </footer>
+
+  <script nonce="{{ csp_nonce }}">
+  document.querySelectorAll('time[data-local-datetime]').forEach(function (el) {
+    var instant = new Date(el.getAttribute('datetime'));
+    if (Number.isNaN(instant.getTime())) return;
+    el.textContent = new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium', timeStyle: 'short'
+    }).format(instant);
+    el.title = 'Shown in your local timezone';
+  });
+  </script>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}

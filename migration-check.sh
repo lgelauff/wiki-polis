@@ -59,7 +59,7 @@ runner() {  # runner <workdir> <flask|python> [args…]
   if command -v uv >/dev/null 2>&1; then ( cd "$wd" && uv run "$tool" "$@" ); else ( cd "$wd" && ".venv/bin/$tool" "$@" ); fi
 }
 ensure_venv() {  # ensure_venv <v2dir>
-  command -v uv >/dev/null 2>&1 && { ( cd "$1" && uv sync >/dev/null 2>&1 ); return; }
+  command -v uv >/dev/null 2>&1 && { ( cd "$1" && uv sync --locked >/dev/null 2>&1 ); return; }
   [ -x "$1/.venv/bin/python" ] || "${PYTHON:-python3}" -m venv "$1/.venv"
   ( cd "$1" && .venv/bin/python -m pip install -q -e . pymysql >/dev/null 2>&1 )
 }

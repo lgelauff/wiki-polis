@@ -351,7 +351,8 @@ Dependencies must be installed **inside the webservice shell** — a venv create
 toolforge webservice python3.13 shell
 python3 -m venv ~/www/python/venv
 source ~/www/python/venv/bin/activate
-pip install -e ~/wiki-polis/v2
+pip install -r ~/wiki-polis/v2/requirements-deploy.txt
+pip install --no-deps -e ~/wiki-polis/v2
 exit
 ```
 
@@ -482,7 +483,8 @@ https://wiki-polis.toolforge.org/login     → redirects to Wikimedia OAuth
 ```bash
 # On Toolforge bastion as wiki-polis user:
 cd ~/wiki-polis && git pull
-pip install -e ~/wiki-polis/v2   # skip if no new dependencies
+pip install -r ~/wiki-polis/v2/requirements-deploy.txt
+pip install --no-deps -e ~/wiki-polis/v2
 ```
 
 If the deploy includes database migrations, run them **before** restarting (see [Database migrations](#database-migrations) below).
@@ -498,11 +500,38 @@ Or use the deploy script (which handles all steps):
 bash ~/wiki-polis/deploy.sh
 ```
 
+Deploy a named branch only while it remains a live `origin` ref, and pin the
+reviewed commit when staging a moving development branch:
+
+```bash
+bash ~/wiki-polis/deploy.sh refactor/spa-api-foundation --expect 94fda38
+```
+
+For a pull request whose head branch belongs to a fork, deploy GitHub's pull ref
+directly instead of temporarily changing `origin`:
+
+```bash
+bash ~/wiki-polis/deploy.sh --pr 303 --expect 94fda38
+```
+
+The script fetches with pruning and validates `--expect` before installing
+dependencies, building assets, running migrations, or restarting the service. A
+deleted branch, missing pull ref, or SHA mismatch therefore fails closed.
+Python dependencies are installed from `v2/requirements-deploy.txt`, an exact
+production snapshot exported from `v2/uv.lock`; the editable app install then uses
+`--no-deps` so pip cannot silently re-resolve a different graph on Toolforge.
+
 `deploy.sh` also runs `toolforge jobs load ~/wiki-polis/jobs.yaml` on every deploy, re-asserting
 the `phase-scheduler` scheduled job (see [One-time tool setup](#one-time-tool-setup) above). This
 step is non-fatal but loud — if `toolforge jobs load` fails, the script prints an error and
 continues the web deploy, but scheduled phase transitions won't fire until the job is reloaded
 manually.
+
+The script also builds the React frontend on every deploy. When `npm` is available it builds
+directly; on a Toolforge bastion, where application runtimes are intentionally absent, it
+automatically opens an ephemeral `node20` runtime shell and builds there. Toolforge mounts the
+tool's shared home directory into that shell, so the resulting `v2/static/spa` assets are ready
+for the Python webservice restart. No manual npm or partial-deployment recovery step is needed.
 
 ### Buildservice status
 
