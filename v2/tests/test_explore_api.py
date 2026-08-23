@@ -9,7 +9,8 @@ from db import (AuditEvent, CommandReceipt, ConversationBan, Participation,
                 StatementPassSignal, StatementProvenance,
                 StatementSimilarityScore, db)
 from polis_admin import PolisServerError
-from services.explore import build_explore_state
+from services.explore import (ExploreGateway, ParticiapiSessionState,
+                              build_explore_state)
 
 
 def _response(payload=None, *, status=200, cookies=None):
@@ -285,6 +286,46 @@ def test_explore_api_returns_typed_upstream_failure(
     assert response.get_json()['error']['code'] == 'upstream_unavailable'
 
 
+def test_explore_gateway_refreshes_stale_session_for_reads_and_votes():
+    transport = MagicMock()
+    transport.post.side_effect = [
+        _response({'csrf_token': 'fresh-csrf-1'}, cookies={'session': 'fresh-cookie-1'}),
+        _response({'csrf_token': 'fresh-csrf-2'}, cookies={'session': 'fresh-cookie-2'}),
+    ]
+    transport.get.side_effect = [
+        _response({}, status=403),
+        _response({'votes': [7], 'statements': []}),
+    ]
+    transport.put.side_effect = [_response({}, status=401), _response({})]
+    gateway = ExploreGateway(
+        base_url='https://particiapi.example',
+        transport=transport,
+        state=ParticiapiSessionState('stale-cookie', 'stale-csrf'),
+        subject='scoped-subject',
+        subject_secret='binding-secret',
+    )
+
+    participant = gateway.read_participant('conversation-id')
+    gateway.vote('conversation-id', 7, -1)
+
+    assert participant == {'votes': [7], 'statements': []}
+    assert transport.get.call_args_list[0].kwargs['cookies'] == {
+        'session': 'stale-cookie',
+    }
+    assert transport.get.call_args_list[1].kwargs['cookies'] == {
+        'session': 'fresh-cookie-1',
+    }
+    assert transport.put.call_args_list[0].kwargs['headers']['X-CSRF-Token'] == (
+        'fresh-csrf-1'
+    )
+    assert transport.put.call_args_list[1].kwargs['headers']['X-CSRF-Token'] == (
+        'fresh-csrf-2'
+    )
+    assert gateway.state.to_dict() == {
+        'cookie': 'fresh-cookie-2', 'csrfToken': 'fresh-csrf-2',
+    }
+
+
 def test_explore_api_rejects_malformed_upstream_payload(
     auth_client, participant, conversation,
 ):
@@ -521,6 +562,66 @@ def test_statement_command_blocks_retry_after_ambiguous_upstream_failure(
     assert retry.get_json()['error']['code'] == 'command_outcome_unknown'
     post.assert_called_once()
     assert CommandReceipt.query.one().state == 'pending'
+
+
+def test_statement_command_refreshes_stale_session_before_creating(
+    auth_client, participant, conversation,
+):
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    with patch('app.polis_http.post', side_effect=[
+        _response({}, status=403),
+        _response(
+            {'csrf_token': 'fresh-csrf'}, cookies={'session': 'fresh-cookie'},
+        ),
+        _response({'id': 49}, status=201),
+    ]) as post:
+        response = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'A claim after session refresh.'},
+            headers={'Idempotency-Key': 'statement-key-49'},
+        )
+
+    assert response.status_code == 201
+    assert response.get_json()['data']['statementId'] == 49
+    assert [call.args[0].split('/api/', 1)[1] for call in post.call_args_list] == [
+        'conversations/abc1234567/statements/',
+        'session',
+        'conversations/abc1234567/statements/',
+    ]
+    assert post.call_args_list[-1].kwargs['cookies'] == {'session': 'fresh-cookie'}
+    assert CommandReceipt.query.one().state == 'completed'
+
+
+def test_statement_command_releases_receipt_after_definite_rejection(
+    auth_client, participant, conversation,
+):
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    with patch('app.polis_http.post', side_effect=[
+        _response({}, status=403),
+        _response(
+            {'csrf_token': 'fresh-csrf'}, cookies={'session': 'fresh-cookie'},
+        ),
+        _response({}, status=400),
+        _response({'id': 50}, status=201),
+    ]):
+        failed = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'A safely retryable claim.'},
+            headers={'Idempotency-Key': 'statement-key-50'},
+        )
+        retried = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'A safely retryable claim.'},
+            headers={'Idempotency-Key': 'statement-key-50'},
+        )
+
+    assert failed.status_code == 502
+    assert failed.get_json()['error']['code'] == 'upstream_unavailable'
+    assert retried.status_code == 201
+    assert retried.get_json()['data']['statementId'] == 50
+    assert CommandReceipt.query.one().state == 'completed'
 
 
 def test_statement_command_releases_receipt_when_session_bootstrap_fails(

@@ -2666,6 +2666,7 @@ def _statement_api_payload(
             except PolisServerError as exc:
                 raise ExploreUpstreamError(
                     'The statement was created but its moderation decision is unknown.',
+                    outcome_unknown=True,
                 ) from exc
         if derived_from is None:
             ids = list(participation.new_stmt_ids or [])
@@ -2710,11 +2711,14 @@ def _statement_api_payload(
             decision=decision, policy=policy,
         )
         return response, 201
-    except ExploreUpstreamError:
+    except ExploreUpstreamError as exc:
         db.session.rollback()
-        # The committed pending receipt survives the rollback and blocks a blind
-        # retry after an ambiguous upstream POST.
-        raise
+        if exc.outcome_unknown:
+            # The committed pending receipt survives the rollback and blocks a
+            # blind retry after an ambiguous upstream POST.
+            raise
+        release_reservation(reservation.receipt)
+        raise StatementPreparationUnavailable() from exc
     finally:
         _save_explore_gateway_state(conv, gateway, states)
 

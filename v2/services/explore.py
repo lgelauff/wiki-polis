@@ -9,6 +9,10 @@ import requests
 class ExploreUpstreamError(RuntimeError):
     """Particiapi could not complete an Explore read or command."""
 
+    def __init__(self, message: str, *, outcome_unknown: bool = False):
+        super().__init__(message)
+        self.outcome_unknown = outcome_unknown
+
 
 @dataclass
 class ParticiapiSessionState:
@@ -37,6 +41,17 @@ class ExploreGateway:
 
     def _cookies(self) -> dict:
         return {'session': self.state.cookie} if self.state.cookie else {}
+
+    def _refresh_session(self) -> None:
+        self.state.cookie = None
+        self.state.csrf_token = None
+        self.ensure_session()
+
+    def _retry_authenticated_request(self, response, send):
+        if response.status_code not in {401, 403}:
+            return response
+        self._refresh_session()
+        return send()
 
     def ensure_session(self) -> None:
         if self.state.cookie and self.state.csrf_token:
@@ -74,16 +89,24 @@ class ExploreGateway:
         self.state.csrf_token = csrf_token
 
     def read(self, conversation_id: str) -> tuple[dict, dict]:
-        self.ensure_session()
+        def send():
+            return (
+                self.transport.get(
+                    f'{self.base_url}/api/conversations/{conversation_id}/statements/',
+                    cookies=self._cookies(), timeout=10,
+                ),
+                self.transport.get(
+                    f'{self.base_url}/api/conversations/{conversation_id}/participant',
+                    cookies=self._cookies(), timeout=10,
+                ),
+            )
+
         try:
-            statements = self.transport.get(
-                f'{self.base_url}/api/conversations/{conversation_id}/statements/',
-                cookies=self._cookies(), timeout=10,
-            )
-            participant = self.transport.get(
-                f'{self.base_url}/api/conversations/{conversation_id}/participant',
-                cookies=self._cookies(), timeout=10,
-            )
+            self.ensure_session()
+            statements, participant = send()
+            if {statements.status_code, participant.status_code} & {401, 403}:
+                self._refresh_session()
+                statements, participant = send()
         except requests.RequestException as exc:
             raise ExploreUpstreamError('Particiapi is unavailable.') from exc
         if not statements.ok or not participant.ok:
@@ -96,12 +119,15 @@ class ExploreGateway:
         return statement_payload, participant_payload
 
     def read_participant(self, conversation_id: str) -> dict:
-        self.ensure_session()
-        try:
-            response = self.transport.get(
+        def send():
+            return self.transport.get(
                 f'{self.base_url}/api/conversations/{conversation_id}/participant',
                 cookies=self._cookies(), timeout=10,
             )
+
+        try:
+            self.ensure_session()
+            response = self._retry_authenticated_request(send(), send)
         except requests.RequestException as exc:
             raise ExploreUpstreamError('Particiapi is unavailable.') from exc
         if not response.ok:
@@ -114,9 +140,8 @@ class ExploreGateway:
         return payload
 
     def vote(self, conversation_id: str, statement_id: int, polis_value: int) -> None:
-        self.ensure_session()
-        try:
-            response = self.transport.put(
+        def send():
+            return self.transport.put(
                 f'{self.base_url}/api/conversations/{conversation_id}/votes/{statement_id}',
                 cookies=self._cookies(),
                 headers={
@@ -126,6 +151,10 @@ class ExploreGateway:
                 json={'value': polis_value},
                 timeout=10,
             )
+
+        try:
+            self.ensure_session()
+            response = self._retry_authenticated_request(send(), send)
         except requests.RequestException as exc:
             raise ExploreUpstreamError('Particiapi is unavailable.') from exc
         if not response.ok:
@@ -135,9 +164,8 @@ class ExploreGateway:
 
     def submit_statement(self, conversation_id: str, text: str) -> int:
         """Create one upstream statement. Callers must provide idempotency."""
-        self.ensure_session()
-        try:
-            response = self.transport.post(
+        def send():
+            return self.transport.post(
                 f'{self.base_url}/api/conversations/{conversation_id}/statements/',
                 cookies=self._cookies(),
                 headers={
@@ -147,19 +175,26 @@ class ExploreGateway:
                 json={'text': text},
                 timeout=10,
             )
+
+        try:
+            self.ensure_session()
+            response = self._retry_authenticated_request(send(), send)
         except requests.RequestException as exc:
             raise ExploreUpstreamError(
                 'The statement outcome is unknown; do not retry with a new key.',
+                outcome_unknown=True,
             ) from exc
         if response.status_code != 201:
             raise ExploreUpstreamError(
-                f'Particiapi statement outcome is unknown after HTTP {response.status_code}.',
+                f'Particiapi statement failed with HTTP {response.status_code}.',
+                outcome_unknown=response.status_code >= 500,
             )
         payload = response.json() if response.content else {}
         statement_id = payload.get('id') if isinstance(payload, dict) else None
         if not isinstance(statement_id, int):
             raise ExploreUpstreamError(
                 'Particiapi created a statement but returned no usable identifier.',
+                outcome_unknown=True,
             )
         return statement_id
 
