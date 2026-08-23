@@ -498,6 +498,24 @@ Or use the deploy script (which handles all steps):
 bash ~/wiki-polis/deploy.sh
 ```
 
+Deploy a named branch only while it remains a live `origin` ref, and pin the
+reviewed commit when staging a moving development branch:
+
+```bash
+bash ~/wiki-polis/deploy.sh refactor/spa-api-foundation --expect 94fda38
+```
+
+For a pull request whose head branch belongs to a fork, deploy GitHub's pull ref
+directly instead of temporarily changing `origin`:
+
+```bash
+bash ~/wiki-polis/deploy.sh --pr 303 --expect 94fda38
+```
+
+The script fetches with pruning and validates `--expect` before installing
+dependencies, building assets, running migrations, or restarting the service. A
+deleted branch, missing pull ref, or SHA mismatch therefore fails closed.
+
 `deploy.sh` also runs `toolforge jobs load ~/wiki-polis/jobs.yaml` on every deploy, re-asserting
 the `phase-scheduler` scheduled job (see [One-time tool setup](#one-time-tool-setup) above). This
 step is non-fatal but loud — if `toolforge jobs load` fails, the script prints an error and
