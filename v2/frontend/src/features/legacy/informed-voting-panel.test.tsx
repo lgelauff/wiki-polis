@@ -196,7 +196,11 @@ test('shows the completion state when every card was answered upstream', async (
   );
   await openInformedVoting();
 
-  // Without seeding `done`, a fully answered deck reopens at card one.
-  expect(await screen.findByText('Answered statement 1.')).toBeInTheDocument();
-  expect(document.querySelector('.p6-done')).not.toBeNull();
+  // Reported from staging: a deck with every card answered reopened on card 1
+  // with three live vote buttons, above "You've completed informed voting."
+  // Voting there overwrites a recorded vote.
+  await waitFor(() => expect(document.querySelector('.p6-done')).not.toBeNull(), {timeout: 5000});
+  expect(screen.queryByText('Answered statement 1.')).toBeNull();
+  expect(document.querySelector('.p6-card')).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Agree'})).toBeNull();
 });

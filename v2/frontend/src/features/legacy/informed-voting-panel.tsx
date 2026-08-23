@@ -83,6 +83,11 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
   );
   const [networkErrorId, setNetworkErrorId] = useState<number | null>(null);
   const [done, setDone] = useState(() => data.progress.allDone);
+  // Whether the deck was ALREADY finished on arrival, as distinct from being
+  // finished during this visit. Only the former should hide the cards: when the
+  // last vote lands in-session the card must stay up for the 400ms confirmation
+  // badge at :141-149 before the panel scrolls to the completion block.
+  const [arrivedComplete] = useState(() => data.progress.allDone);
   const advanceTimer = useRef<number | null>(null);
   const queryClient = useQueryClient();
   const current = data.cards[currentIndex];
@@ -130,7 +135,7 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
   if (data.cards.length === 0) return <div className="landing-section"><p className="muted">No statements are available for informed voting yet.</p></div>;
 
   return <>
-    {data.cards.map((card, index) => {
+    {!arrivedComplete && data.cards.map((card, index) => {
       const selected = votes[card.featuredStatementId];
       const error = networkErrorId === card.featuredStatementId;
       return <div className={`p6-card${index !== currentIndex ? ' p6-card--hidden' : ''}${selected ? ' p6-card--voted' : ''}${terminalIds.has(card.featuredStatementId) ? ' p6-card--done' : ''}`} data-fs-id={card.featuredStatementId} key={card.featuredStatementId}>
