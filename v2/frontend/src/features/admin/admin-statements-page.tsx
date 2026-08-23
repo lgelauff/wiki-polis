@@ -427,8 +427,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
             <h3 className="section-heading">Add seed statement</h3>
             <div className="edit-form">
               <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
-                Adds a statement that immediately appears in the vote view for all participants.
-                {' '}Statements added here appear as regular participant statements (not seed-marked).
+                Adds a seed-marked statement that appears early in the voting sequence for participants.
               </p>
               <form onSubmit={(event) => { event.preventDefault(); seedMutation.mutate(); }}>
                 <input type="hidden" name="csrf_token" value={csrfToken} />

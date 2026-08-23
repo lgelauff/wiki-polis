@@ -275,6 +275,9 @@ test('moderates statements and imports approved seeds through typed commands', a
 
   expect(await screen.findByRole('heading', {name: 'Statements — Community strategy'})).toBeVisible();
   expect(screen.getByText('A participant proposal awaiting review.')).toBeVisible();
+  expect(screen.getByText(
+    'Adds a seed-marked statement that appears early in the voting sequence for participants.',
+  )).toBeVisible();
   expect(screen.getByRole('checkbox', {name: /Strict moderation/})).toBeChecked();
   fireEvent.click(screen.getByRole('checkbox', {name: /Strict moderation/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));

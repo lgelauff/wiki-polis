@@ -175,6 +175,17 @@ def test_statements_page_hides_seed_forms_when_locked(admin_client, conv):
     assert b'name="statement_texts"' not in resp.data
 
 
+def test_statements_page_describes_actual_seed_behavior(admin_client, conv):
+    with _mock_polis():
+        resp = admin_client.get(f'/admin/conversations/{conv.id}/statements')
+
+    assert (
+        b'Adds a seed-marked statement that appears early in the voting sequence '
+        b'for participants.'
+    ) in resp.data
+    assert b'not seed-marked' not in resp.data
+
+
 def test_text_import_empty_input_imports_nothing(admin_client, conv):
     with _mock_polis() as mock:
         resp = _text_import(admin_client, conv.id, '   \n  \n')

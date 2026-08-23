@@ -60,8 +60,7 @@
   <h3 class="section-heading">Add seed statement</h3>
   <div class="edit-form">
     <p class="muted" style="margin-bottom:.75rem;font-size:13px">
-      Adds a statement that immediately appears in the vote view for all participants.
-      Statements added here appear as regular participant statements (not seed-marked).
+      Adds a seed-marked statement that appears early in the voting sequence for participants.
     </p>
     <form method="post" action="{{ url_for('admin.admin_statement_seed', conv_id=conversation.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
