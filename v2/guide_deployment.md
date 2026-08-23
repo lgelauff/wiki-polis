@@ -531,7 +531,61 @@ The script also builds the React frontend on every deploy. When `npm` is availab
 directly; on a Toolforge bastion, where application runtimes are intentionally absent, it
 automatically opens an ephemeral `node20` runtime shell and builds there. Toolforge mounts the
 tool's shared home directory into that shell, so the resulting `v2/static/spa` assets are ready
-for the Python webservice restart. No manual npm or partial-deployment recovery step is needed.
+for the Python webservice restart. No manual npm step is needed.
+
+**The build step is not verified by the script.** `deploy.sh` does not check that the build
+produced anything, and the app does not either — the two `send_from_directory(_SPA_BUILD_DIR,
+'index.html')` calls in `app.py` have no existence guard. A build that fails inside the `node20`
+shell therefore yields a deploy that reports success and a site that returns 404 for every
+canonical route to any browser carrying the `spa_only` cookie, plus all of `/app/...`. Always run
+the asset check below before considering a deploy finished.
+
+The `node20` runtime is also older than parts of the frontend dependency tree, which emits
+`EBADENGINE` warnings asking for `node >=22.19.0`. The build currently succeeds anyway; treat a
+future `npm ci` failure in that shell as the expected first symptom if the tree moves.
+
+### Verifying a deploy
+
+Run all four. The first is the one that catches a silent frontend-build failure.
+
+```bash
+# 1. The SPA assets exist and are from THIS deploy (check the timestamps)
+ls -la ~/wiki-polis/v2/static/spa/index.html ~/wiki-polis/v2/static/spa/assets/ | head
+```
+
+If `index.html` is missing, the frontend build failed. Roll back rather than leaving the tool in
+that state — see [If something goes wrong — rollback](#if-something-goes-wrong--rollback).
+
+```bash
+# 2. The webservice actually restarted onto the new code.
+#    The stamp is fixed at process start, so a stale value means the restart did not take.
+curl -s https://wiki-polis.toolforge.org/ | grep -oE '<code>[0-9a-f]{7,40}</code>'
+```
+
+```bash
+# 3. The scheduled job survived. 'toolforge jobs load' failures are non-fatal in deploy.sh,
+#    so a missing phase-scheduler here is a real failure the deploy did not stop for.
+toolforge jobs list
+```
+
+4. **Migration position.** `deploy.sh --migrate` prints `Migrations done` and is the authoritative
+   signal, because it loads envvars itself. To check independently, note that an interactive
+   bastion shell has **no injected envvars** — see
+   [Exporting envvars manually](#exporting-envvars-manually) — so fetch `DATABASE_URL` first and
+   pass it in via `read -rs` rather than putting it on the command line.
+
+### Rolling back a frontend deploy
+
+`deploy.sh` overwrites `v2/static/spa/` in place and keeps no previous copy, so redeploying an
+earlier branch does **not** restore the earlier bundle — it leaves whichever bundle was built
+last. That is harmless while the older code never serves the SPA, but if you want a clean state:
+
+```bash
+rm -rf ~/wiki-polis/v2/static/spa
+```
+
+Database migrations do not roll back with a redeploy either; see
+[If something goes wrong — rollback](#if-something-goes-wrong--rollback).
 
 ### Buildservice status
 
