@@ -91,30 +91,6 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
     if (advanceTimer.current !== null) globalThis.clearTimeout(advanceTimer.current);
   }, []);
 
-  // The initialisers above run once, against whatever the cache held at mount.
-  // `informedVotingQuery` sets staleTime 0, so a remount serves stale data
-  // synchronously and refetches behind it — resync when that lands, or the
-  // participant is left on a card they already answered.
-  useEffect(() => {
-    const answered = data.cards.filter((card) => card.voted).map((card) => card.featuredStatementId);
-    if (answered.length === 0) return;
-    setTerminalIds((existing) => {
-      // Union, never replace: a vote cast in this session is already in here and
-      // the projection may not have caught up with it yet.
-      if (answered.every((id) => existing.has(id))) return existing;
-      const merged = new Set(existing);
-      for (const id of answered) merged.add(id);
-      return merged;
-    });
-    setCurrentIndex((index) => {
-      const shown = data.cards[index];
-      if (!shown || !shown.voted) return index;
-      const next = data.cards.findIndex((card) => !card.voted);
-      return next < 0 ? index : next;
-    });
-    if (data.progress.allDone) setDone(true);
-  }, [data]);
-
   function showCard(index: number) {
     setCurrentIndex(index);
     globalThis.requestAnimationFrame(() => {
