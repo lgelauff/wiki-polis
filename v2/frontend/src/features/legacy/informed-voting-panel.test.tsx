@@ -1,6 +1,6 @@
 import {QueryClientProvider} from '@tanstack/react-query';
 import {http, HttpResponse} from 'msw';
-import {fireEvent, render, screen} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test} from 'vitest';
 
@@ -82,6 +82,85 @@ test('marks cards already voted upstream as done', async () => {
   expect(card(31)?.className).toContain('p6-card--done');
   expect(card(32)?.className).toContain('p6-card--done');
   expect(card(33)?.className).not.toContain('p6-card--done');
+});
+
+test('does not drop back onto an answered card after leaving and returning to the tab', async () => {
+  // The projection is authoritative and changes once the vote lands upstream.
+  const answered = new Set<number>();
+  let projectionReads = 0;
+  server.use(
+    http.get(
+      new URL(
+        '/api/v1/conversations/community-strategy/informed-voting',
+        globalThis.location.origin,
+      ).toString(),
+      () => {
+        projectionReads += 1;
+        const cards = Array.from({length: 3}, (_, index) => ({
+          featuredStatementId: 51 + index,
+          statement: `Resumable statement ${index + 1}.`,
+          canVote: true,
+          voted: answered.has(51 + index),
+          arguments: {for: [], against: []},
+        }));
+        return HttpResponse.json({
+          data: {
+            slug: 'community-strategy',
+            title: 'Community strategy',
+            pseudonym: 'quiet-otter',
+            cards,
+            progress: {
+              completed: answered.size,
+              total: 3,
+              remaining: 3 - answered.size,
+              allDone: answered.size === 3,
+            },
+            capabilities: {vote: true},
+            links: {
+              self: '/api/v1/conversations/community-strategy/informed-voting',
+              about: '/c/community-strategy/about',
+              conversation: '/c/community-strategy',
+            },
+          },
+        });
+      },
+    ),
+    http.put(
+      new URL(
+        '/api/v1/conversations/community-strategy/featured-statements/51/informed-vote',
+        globalThis.location.origin,
+      ).toString(),
+      async ({request}) => {
+        const body = await request.json() as {choice: 'agree' | 'pass' | 'disagree'};
+        answered.add(51);
+        return HttpResponse.json({
+          data: {
+            featuredStatementId: 51,
+            choice: body.choice,
+            links: {informedVoting: '/api/v1/conversations/community-strategy/informed-voting'},
+          },
+        });
+      },
+    ),
+  );
+
+  await openInformedVoting();
+  await screen.findByText('Resumable statement 1.');
+
+  fireEvent.click(within(card(51)!).getByRole('button', {name: 'Agree'}));
+  await waitFor(() => expect(answered.has(51)).toBe(true), {timeout: 5000});
+
+  // The vote must invalidate the projection; without that the cache keeps
+  // voted:false for card 51 and the remount below reseeds onto it.
+  await waitFor(() => expect(projectionReads).toBeGreaterThan(1), {timeout: 5000});
+
+  // Leave the tab and come back — this unmounts and remounts the panel, which
+  // re-runs the seeding initialisers against whatever the cache now holds.
+  fireEvent.click(screen.getByRole('tab', {name: 'Vote'}));
+  fireEvent.click(screen.getByRole('tab', {name: 'Informed vote'}));
+
+  await waitFor(() => expect(card(51)?.className).toContain('p6-card--hidden'), {timeout: 5000});
+  expect(card(52)?.className).not.toContain('p6-card--hidden');
 });
 
 test('shows the completion state when every card was answered upstream', async () => {

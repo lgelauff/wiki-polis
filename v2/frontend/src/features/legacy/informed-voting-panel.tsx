@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {useMutation, useSuspenseQuery} from '@tanstack/react-query';
+import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
 import {informedVotingQuery, putInformedVote} from '../../api/queries';
@@ -84,11 +84,36 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
   const [networkErrorId, setNetworkErrorId] = useState<number | null>(null);
   const [done, setDone] = useState(() => data.progress.allDone);
   const advanceTimer = useRef<number | null>(null);
+  const queryClient = useQueryClient();
   const current = data.cards[currentIndex];
 
   useEffect(() => () => {
     if (advanceTimer.current !== null) globalThis.clearTimeout(advanceTimer.current);
   }, []);
+
+  // The initialisers above run once, against whatever the cache held at mount.
+  // `informedVotingQuery` sets staleTime 0, so a remount serves stale data
+  // synchronously and refetches behind it — resync when that lands, or the
+  // participant is left on a card they already answered.
+  useEffect(() => {
+    const answered = data.cards.filter((card) => card.voted).map((card) => card.featuredStatementId);
+    if (answered.length === 0) return;
+    setTerminalIds((existing) => {
+      // Union, never replace: a vote cast in this session is already in here and
+      // the projection may not have caught up with it yet.
+      if (answered.every((id) => existing.has(id))) return existing;
+      const merged = new Set(existing);
+      for (const id of answered) merged.add(id);
+      return merged;
+    });
+    setCurrentIndex((index) => {
+      const shown = data.cards[index];
+      if (!shown || !shown.voted) return index;
+      const next = data.cards.findIndex((card) => !card.voted);
+      return next < 0 ? index : next;
+    });
+    if (data.progress.allDone) setDone(true);
+  }, [data]);
 
   function showCard(index: number) {
     setCurrentIndex(index);
@@ -108,6 +133,10 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
       setVotes((existing) => ({...existing, [receipt.featuredStatementId]: receipt.choice}));
       setTerminalIds(nextTerminal);
       setNetworkErrorId(null);
+      // Without this the cache keeps voted:false for the card just answered, so
+      // a later remount (tab switch, client-side nav) reseeds from stale data
+      // and drops the participant back onto it. Matches the admin pages.
+      void queryClient.invalidateQueries({queryKey: informedVotingQuery(workspace.slug).queryKey});
       if (nextTerminal.size === data.cards.length) setDone(true);
       const forward = data.cards.findIndex((card, index) => index > currentIndex && !nextTerminal.has(card.featuredStatementId));
       const wrapped = forward < 0 ? data.cards.findIndex((card) => !nextTerminal.has(card.featuredStatementId)) : forward;
