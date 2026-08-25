@@ -85,6 +85,12 @@ test against real data rather than mocks. `UPDATE ... SET vote = -vote` destroys
 
 ⚠️ **This is the part that makes or breaks the repair.**
 
+> **Rehearsed 2026-08-25** on a local Polis stack, in a transaction rolled back afterwards.
+> Repairing `votes` alone reported `UPDATE 6` and mirrored all six rows — while
+> `votes_latest_unique` came back **byte-for-byte unchanged**. Repairing both, as below,
+> produced identical mirrored data in each. The single-table version fails silently and
+> reports success; this is not a theoretical concern.
+
 - `votes(zid, pid, tid, vote, created)` — append-only history. Has `created`, **no `modified`**.
 - `votes_latest_unique(zid, pid, tid, vote, modified)` — **the authoritative current vote**, and
   **what every phase-6 read path actually queries** (`polis_admin.py:156, 182, 220, 232, 265,
