@@ -24,7 +24,14 @@ is a separate Polis conversation. The pair is the whole point — the verificati
 
 ## 2. Cloud VPS — prove the mismatch
 
-On the VPS, open psql in the postgres container. Substituting the zinvites from step 1:
+⚠️ **Pin the container name.** Production and staging Polis run side by side on that host —
+`particiapp-docker_postgres_1` (port 5432, production) and `wiki-polis-staging_postgres_1`
+(port 5442). A grepped name matches both and will silently pick one, or fail confusingly by
+passing the second name as a command. Confirm which you are on before any write: query
+`zinvites` for the phase-6 zinvite in the container you intend to use — a `zid` back means
+production, empty means staging.
+
+On the VPS, open psql in that pinned container. Substituting the zinvites from step 1:
 
 ```sql
 SELECT 'phase2' AS phase, v.vote, count(*) FROM votes v WHERE v.zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE2_ZINVITE>') GROUP BY v.vote UNION ALL SELECT 'phase6', v.vote, count(*) FROM votes v WHERE v.zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') GROUP BY v.vote ORDER BY phase, vote;
