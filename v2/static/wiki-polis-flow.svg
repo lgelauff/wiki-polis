@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-label="How a wiki-polis conversation works">
 <title>How a wiki-polis conversation works</title>
 <desc>Three phases — Explore the questions, Map the arguments, Express informed opinions — each producing data that converges into a more balanced policy draft.</desc>
-<rect x="0.5" y="0.5" width="1199" height="599" rx="18" fill="#fafaf9" stroke="#e5e5e6"></rect>
+<rect x="0.5" y="0.5" width="1199" height="599" rx="18" fill="#fafaf9"></rect>
 <text x="48" y="62" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="30" font-weight="700" letter-spacing="-0.7" fill="#0c0c0e">How a wiki-polis conversation works</text>
 <text x="48" y="94" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="16" fill="#5f5f68">Not a decision exercise — a shared picture of where a community agrees, disagrees, and why.</text>
 <g transform="translate(48,124)">

@@ -12,6 +12,38 @@
 {% set is_demo_view = header_mode == 'demo' or (header_mode == 'conversation' and conversation is defined and conversation.access_policy == 'demo') %}
 <body{% if is_demo_view %} data-demo="true"{% endif %}>
   <a class="skip-link" href="#main">Skip to main content</a>
+  <aside class="site-notice" id="site-notice" aria-label="Prototype notice"
+         data-storage-key="proto-wiki.site-notice.development.v1">
+    <div class="site-notice__inner">
+      <p>
+        Prototype in active development. Things may change.
+        <a href="https://github.com/lgelauff/wiki-polis/issues/new"
+           target="_blank" rel="noopener">Open an issue<span class="sr-only"> (opens in a new tab)</span></a> if you find a bug.
+      </p>
+      <button class="site-notice__dismiss" id="site-notice-dismiss" type="button"
+              aria-label="Dismiss site notice" hidden><span aria-hidden="true">×</span></button>
+    </div>
+  </aside>
+  <script nonce="{{ csp_nonce }}">
+  (function () {
+    var notice = document.getElementById('site-notice');
+    var dismiss = document.getElementById('site-notice-dismiss');
+    if (!notice || !dismiss) return;
+    var key = notice.getAttribute('data-storage-key');
+    try {
+      if (localStorage.getItem(key) === 'dismissed') {
+        notice.remove();
+        return;
+      }
+    } catch (e) {}
+    dismiss.hidden = false;
+    dismiss.addEventListener('click', function () {
+      try { localStorage.setItem(key, 'dismissed'); } catch (e) {}
+      notice.remove();
+    });
+  }());
+  </script>
+
   <header class="site-header {% if request.blueprint == 'admin' %}site-header--admin{% else %}site-header--participant{% endif %}">
     <div class="header-inner">
       <div class="header-left">

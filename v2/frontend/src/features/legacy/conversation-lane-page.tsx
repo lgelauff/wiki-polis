@@ -9,6 +9,7 @@ import {
 } from '../../api/queries';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
+import {ConversationFlow} from './conversation-flow';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationOutput = components['schemas']['ConversationOutput'];
@@ -426,18 +427,11 @@ export function ConversationLanePage({space}: {space: ConversationSpace}) {
   return (
     <LegacyShell headerMode={space}>
       <div className="container home-container">
-        <div className="home-banner">
-          Prototype in active development — things may change.{' '}
-          <InternalLink href="https://github.com/lgelauff/wiki-polis/issues/new" target="_blank" rel="noopener">
-            Open an issue<span className="sr-only"> (opens in a new tab)</span>
-          </InternalLink>{' '}if you find a bug.
-        </div>
-
         {!data.authenticated ? (
           <AnonymousLane conversations={groups.available} developerLogins={session.developerLogins} loginHref={session.links.login} />
         ) : <>
           <h1 className="sr-only">Consultations</h1>
-          <img src="/static/wiki-polis-flow.svg" alt="How a ProtoWiki conversation works" style={{width: '100%', maxWidth: 900, display: 'block', margin: '0 auto 1.5rem'}} />
+          <ConversationFlow />
           <PhaseLegend />
           <div className="home-mode-toggle" role="group" aria-label="View mode">
             <button className={`home-mode-btn${mode === 'yours' ? ' home-mode-btn--active' : ''}`} data-target="yours" type="button" aria-pressed={mode === 'yours'} onClick={() => changeMode('yours')}>Your conversations</button>

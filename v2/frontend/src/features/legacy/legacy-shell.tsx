@@ -1,4 +1,4 @@
-import {useLayoutEffect, type ReactNode} from 'react';
+import {useLayoutEffect, useState, type ReactNode} from 'react';
 import {useSuspenseQuery} from '@tanstack/react-query';
 
 import {sessionQuery} from '../../api/queries';
@@ -6,6 +6,39 @@ import {InternalLink} from '../../internal-link';
 import {SpaModeToggle} from '../../strict-spa-mode';
 
 type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'admin' | 'plain';
+
+const SITE_NOTICE_STORAGE_KEY = 'proto-wiki.site-notice.development.v1';
+
+function SiteNotice() {
+  const [visible, setVisible] = useState(() => {
+    try { return localStorage.getItem(SITE_NOTICE_STORAGE_KEY) !== 'dismissed'; }
+    catch { return true; }
+  });
+
+  if (!visible) return null;
+
+  function dismiss() {
+    try { localStorage.setItem(SITE_NOTICE_STORAGE_KEY, 'dismissed'); }
+    catch { /* Dismiss for this view even when browser storage is unavailable. */ }
+    setVisible(false);
+  }
+
+  return (
+    <aside className="site-notice" aria-label="Prototype notice">
+      <div className="site-notice__inner">
+        <p>
+          Prototype in active development. Things may change.{' '}
+          <InternalLink href="https://github.com/lgelauff/wiki-polis/issues/new" target="_blank" rel="noopener">
+            Open an issue<span className="sr-only"> (opens in a new tab)</span>
+          </InternalLink>{' '}if you find a bug.
+        </p>
+        <button className="site-notice__dismiss" type="button" aria-label="Dismiss site notice" onClick={dismiss}>
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
 
 function OrbitMark() {
   return (
@@ -81,6 +114,8 @@ export function LegacyShell({
 
   return (
     <>
+      <SiteNotice />
+
       <header className={`site-header ${headerMode === 'admin' ? 'site-header--admin' : 'site-header--participant'}`}>
         <div className="header-inner">
           <div className="header-left">

@@ -20,11 +20,64 @@ test('renders a conversation lane from the API contract', async () => {
 
   expect(screen.getByRole('status')).toHaveTextContent('Loading conversations');
   expect(await screen.findByRole('heading', {name: 'Needs attention'})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'How a ProtoWiki conversation works'})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Explore the questions'})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Map the arguments'})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Express informed opinions'})).toBeVisible();
   expect(await screen.findByRole('link', {name: /Community strategy.*continue/}))
     .toHaveAttribute('href', '/c/community-strategy');
   expect(screen.getByRole('button', {name: 'Your conversations'})).toHaveAttribute('aria-pressed', 'true');
   fireEvent.click(screen.getByRole('button', {name: 'Browse'}));
   expect(screen.getByText('No consultations open to you right now.')).toBeVisible();
+});
+
+test('persists dismissal of the site-wide development notice', async () => {
+  const firstView = render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/real']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  const dismiss = await screen.findByRole('button', {name: 'Dismiss site notice'});
+  fireEvent.click(dismiss);
+  expect(screen.queryByLabelText('Prototype notice')).not.toBeInTheDocument();
+  expect(localStorage.getItem('proto-wiki.site-notice.development.v1')).toBe('dismissed');
+
+  firstView.unmount();
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/real']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await screen.findByRole('heading', {name: 'Needs attention'});
+  expect(screen.queryByLabelText('Prototype notice')).not.toBeInTheDocument();
+});
+
+test('persists the conversation overview display preference', async () => {
+  const firstView = render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/real']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  const hideOverview = await screen.findByRole('button', {name: 'Hide conversation overview'});
+  fireEvent.click(hideOverview);
+  expect(hideOverview).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByRole('heading', {name: 'Explore the questions'})).not.toBeInTheDocument();
+  expect(localStorage.getItem('proto-wiki.conversation-flow.collapsed.v1')).toBe('collapsed');
+
+  firstView.unmount();
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/real']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  const showOverview = await screen.findByRole('button', {name: 'Show conversation overview'});
+  expect(screen.queryByRole('heading', {name: 'Explore the questions'})).not.toBeInTheDocument();
+  fireEvent.click(showOverview);
+  expect(await screen.findByRole('heading', {name: 'Explore the questions'})).toBeVisible();
+  expect(localStorage.getItem('proto-wiki.conversation-flow.collapsed.v1')).toBe('expanded');
 });
 
 test('keeps the current route painted while the next route loads', async () => {

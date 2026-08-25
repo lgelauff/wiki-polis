@@ -1,0 +1,176 @@
+<section class="flow-rebuild" aria-labelledby="flow-rebuild-title">
+  <header class="flow-rebuild__heading">
+    <h2 id="flow-rebuild-title">How a ProtoWiki conversation works</h2>
+    <button class="flow-rebuild__toggle"
+            id="flow-rebuild-toggle"
+            type="button"
+            aria-expanded="true"
+            aria-controls="flow-rebuild-content"
+            aria-label="Hide conversation overview"
+            hidden>
+      <span class="flow-rebuild__toggle-label">Hide</span>
+      <span class="flow-rebuild__toggle-chevron" aria-hidden="true"></span>
+    </button>
+  </header>
+
+  <div id="flow-rebuild-content">
+  <p class="flow-rebuild__intro">Not a decision exercise — a shared picture of where a community agrees, disagrees, and why.</p>
+
+  <div class="flow-rebuild__steps">
+    <article class="flow-rebuild__card">
+      <h3>Explore the questions</h3>
+      <svg class="flow-rebuild__illustration" viewBox="0 0 190 120" aria-hidden="true">
+        <rect x="26" y="14" width="138" height="46" rx="9" class="flow-svg-surface"/>
+        <path d="M42 31h78M42 43h54" class="flow-svg-copy"/>
+        <g transform="rotate(38 150 44)">
+          <rect x="120" y="38" width="40" height="12" rx="2" class="flow-svg-pencil"/>
+          <rect x="116" y="38" width="8" height="12" class="flow-svg-pencil-band"/>
+          <path d="m160 38 10 6-10 6Z" class="flow-svg-ink"/>
+        </g>
+        <g transform="translate(58 78)">
+          <rect width="30" height="30" rx="7" class="flow-svg-agree-box"/>
+          <path d="m9 15 4 4 8-9" class="flow-svg-agree-mark"/>
+        </g>
+        <g transform="translate(102 78)">
+          <rect width="30" height="30" rx="7" class="flow-svg-disagree-box"/>
+          <path d="m10 10 10 10m0-10L10 20" class="flow-svg-disagree-mark"/>
+        </g>
+      </svg>
+      <p class="flow-rebuild__instruction">Vote yes / no — and edit or add statements</p>
+      <div class="flow-rebuild__learning">
+        <p class="flow-rebuild__learning-label">What we learn</p>
+        <div class="flow-rebuild__learning-body">
+          <svg viewBox="0 0 40 36" aria-hidden="true">
+            <circle cx="9" cy="11" r="3.2"/><circle cx="20" cy="7" r="3.2"/>
+            <circle cx="16" cy="19" r="3.2"/><circle cx="28" cy="15" r="3.2" opacity=".55"/>
+            <circle cx="11" cy="25" r="3.2" opacity=".55"/><circle cx="30" cy="26" r="3.2" opacity=".55"/>
+          </svg>
+          <p>Clusters of statements that inform the topic</p>
+        </div>
+      </div>
+    </article>
+
+    <span class="flow-rebuild__step-arrow" aria-hidden="true"></span>
+
+    <article class="flow-rebuild__card">
+      <h3>Map the arguments</h3>
+      <svg class="flow-rebuild__illustration" viewBox="0 0 190 120" aria-hidden="true">
+        <rect x="26" y="6" width="138" height="34" rx="8" class="flow-svg-surface"/>
+        <path d="M40 18h78M40 28h54" class="flow-svg-copy"/>
+        <rect x="30" y="52" width="118" height="24" rx="7" class="flow-svg-pro-box"/>
+        <path d="M40 64h10m-5-5v10" class="flow-svg-pro-mark"/>
+        <g transform="rotate(34 150 64)">
+          <rect x="120" y="59" width="30" height="9" rx="1.5" class="flow-svg-pencil"/>
+          <rect x="117" y="59" width="6" height="9" class="flow-svg-pencil-band"/>
+          <path d="m150 59 8 4.5-8 4.5Z" class="flow-svg-ink"/>
+        </g>
+        <rect x="30" y="84" width="118" height="24" rx="7" class="flow-svg-con-box"/>
+        <path d="M40 96h10" class="flow-svg-con-mark"/>
+        <g transform="rotate(34 150 96)">
+          <rect x="120" y="91" width="30" height="9" rx="1.5" class="flow-svg-pencil"/>
+          <rect x="117" y="91" width="6" height="9" class="flow-svg-pencil-band"/>
+          <path d="m150 91 8 4.5-8 4.5Z" class="flow-svg-ink"/>
+        </g>
+      </svg>
+      <p class="flow-rebuild__instruction">Write the pro &amp; con arguments that matter</p>
+      <div class="flow-rebuild__learning">
+        <p class="flow-rebuild__learning-label">What we learn</p>
+        <div class="flow-rebuild__learning-body">
+          <svg viewBox="0 0 40 36" aria-hidden="true">
+            <rect x="4" y="5" width="14" height="10" rx="2.5" class="flow-learn-pro"/>
+            <path d="M8 10h6m-3-3v6" class="flow-learn-pro-mark"/>
+            <rect x="22" y="6" width="14" height="8" rx="2.5" opacity=".12"/>
+            <rect x="4" y="20" width="14" height="10" rx="2.5" class="flow-learn-con"/>
+            <path d="M8 25h6" class="flow-learn-con-mark"/>
+            <rect x="22" y="21" width="14" height="8" rx="2.5" opacity=".08"/>
+          </svg>
+          <p>A map of the arguments that matter, pro &amp; con</p>
+        </div>
+      </div>
+    </article>
+
+    <span class="flow-rebuild__step-arrow" aria-hidden="true"></span>
+
+    <article class="flow-rebuild__card">
+      <h3>Express informed opinions</h3>
+      <svg class="flow-rebuild__illustration" viewBox="0 0 190 120" aria-hidden="true">
+        <rect x="26" y="4" width="138" height="30" rx="8" class="flow-svg-surface"/>
+        <path d="M40 14h78M40 24h54" class="flow-svg-copy"/>
+        <g transform="translate(34 44)">
+          <rect width="56" height="20" rx="6" class="flow-svg-agree-box"/>
+          <path d="M12 10h9m-4.5-4.5v9M30 10h18" class="flow-svg-agree-mark"/>
+        </g>
+        <g transform="translate(100 44)">
+          <rect width="56" height="20" rx="6" class="flow-svg-con-box"/>
+          <path d="M12 10h9m9 0h18" class="flow-svg-con-mark"/>
+        </g>
+        <g transform="translate(58 78)">
+          <rect width="30" height="30" rx="7" class="flow-svg-agree-box"/>
+          <path d="m9 15 4 4 8-9" class="flow-svg-agree-mark"/>
+        </g>
+        <g transform="translate(102 78)">
+          <rect width="30" height="30" rx="7" class="flow-svg-disagree-box"/>
+          <path d="m10 10 10 10m0-10L10 20" class="flow-svg-disagree-mark"/>
+        </g>
+      </svg>
+      <p class="flow-rebuild__instruction">Vote again, with the key arguments shown</p>
+      <div class="flow-rebuild__learning">
+        <p class="flow-rebuild__learning-label">What we learn</p>
+        <div class="flow-rebuild__learning-body">
+          <svg viewBox="0 0 40 36" aria-hidden="true">
+            <rect x="5" y="16" width="8" height="14" rx="2"/>
+            <rect x="16" y="8" width="8" height="22" rx="2"/>
+            <rect x="27" y="20" width="8" height="10" rx="2" opacity=".55"/>
+          </svg>
+          <p>How different parts of the community feel</p>
+        </div>
+      </div>
+    </article>
+  </div>
+
+  <svg class="flow-rebuild__merge" viewBox="0 0 1104 54" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M174 0c0 26 378 18 378 36M552 0v36M930 0c0 26-378 18-378 36M552 36v14m-6-6 6 6 6-6"/>
+    <circle cx="552" cy="36" r="2.6"/>
+  </svg>
+
+  <div class="flow-rebuild__outcome">
+    <span class="flow-rebuild__outcome-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <path d="M14 2v6h6"/>
+        <path d="m9 14 2 2 4-4" class="flow-outcome-check"/>
+      </svg>
+    </span>
+    <strong>A more balanced policy draft</strong>
+  </div>
+  </div>
+</section>
+
+<script nonce="{{ csp_nonce }}">
+  (function () {
+    var section = document.querySelector('.flow-rebuild');
+    var button = document.getElementById('flow-rebuild-toggle');
+    var content = document.getElementById('flow-rebuild-content');
+    var label = button && button.querySelector('.flow-rebuild__toggle-label');
+    var key = 'proto-wiki.conversation-flow.collapsed.v1';
+    if (!section || !button || !content || !label) return;
+
+    function setCollapsed(collapsed) {
+      section.classList.toggle('flow-rebuild--collapsed', collapsed);
+      content.hidden = collapsed;
+      button.setAttribute('aria-expanded', String(!collapsed));
+      button.setAttribute('aria-label', (collapsed ? 'Show' : 'Hide') + ' conversation overview');
+      label.textContent = collapsed ? 'Show' : 'Hide';
+    }
+
+    var collapsed = false;
+    try { collapsed = localStorage.getItem(key) === 'collapsed'; } catch (e) {}
+    setCollapsed(collapsed);
+    button.hidden = false;
+    button.addEventListener('click', function () {
+      collapsed = !collapsed;
+      setCollapsed(collapsed);
+      try { localStorage.setItem(key, collapsed ? 'collapsed' : 'expanded'); } catch (e) {}
+    });
+  }());
+</script>
