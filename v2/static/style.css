@@ -4287,6 +4287,15 @@ a { color: var(--pass); }
   width: 104px;
 }
 
+/* The uniform width puts the strip's minimum around 525px, which would force
+   the legend into its own horizontal scroll on a phone. Narrow viewports fall
+   back to label-sized nodes: the centring is a full-width refinement, and a
+   scrollbar costs more than a few px of drift. The strip needs ~574px of
+   viewport to fit, so the fallback starts above that rather than at 560. */
+@media (max-width: 600px) {
+  .phase-legend-node { width: auto; }
+}
+
 .phase-legend-icon {
   display: flex;
   align-items: center;
@@ -4359,13 +4368,24 @@ a { color: var(--pass); }
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 1px;
   background: var(--body);
-  transform-origin: top center;
 }
 
-.phase-legend-mid-dot::before { height: 3px; transform: translate(-50%, -50%); }
-.phase-legend-mid-dot::after { height: 4px; transform: translate(-50%, -50%) rotate(90deg); }
+/* Both hands pivot on the dot's centre. .conv-input-clock rotates about
+   `top center`, which lands its second hand above and left of the centre
+   instead of through it — a near-invisible quirk at hairline weight, but a
+   visible elbow at the weight this marker carries. */
+.phase-legend-mid-dot::before {
+  width: 1px;
+  height: 3px;
+  transform: translate(-50%, -100%);
+}
+
+.phase-legend-mid-dot::after {
+  width: 4px;
+  height: 1px;
+  transform: translate(0, -50%);
+}
 
 /* ── Homepage: mode toggle ─────────────────────────────────────────────────── */
 

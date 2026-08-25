@@ -64,11 +64,11 @@ function PhaseIllustration({phase}: {phase: FlowPhase}) {
         <path d="M11 12h9" className="flow-svg-con-mark" />
         <path d="M28 8.5h22M28 15.5h14" className="flow-svg-rowcopy" />
       </g>
-      <g transform="translate(58 82)">
+      <g transform="translate(58 78)">
         <rect width="30" height="30" rx="7" className="flow-svg-agree-box" />
         <path d="m9 15 4 4 8-9" className="flow-svg-agree-mark" />
       </g>
-      <g transform="translate(102 82)">
+      <g transform="translate(102 78)">
         <rect width="30" height="30" rx="7" className="flow-svg-disagree-box" />
         <path d="m10 10 10 10m0-10L10 20" className="flow-svg-disagree-mark" />
       </g>
