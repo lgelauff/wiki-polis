@@ -81,24 +81,44 @@ and they may matter later in ways that are not obvious now — reconstructing wh
 shown to someone was affected, validating the repair itself, or as a fixture for a regression
 test against real data rather than mocks. `UPDATE ... SET vote = -vote` destroys that record.
 
-Copy the affected rows first. A plain table in the same database, so it travels with any dump:
+### Two tables, not one
+
+⚠️ **This is the part that makes or breaks the repair.**
+
+- `votes(zid, pid, tid, vote, created)` — append-only history. Has `created`, **no `modified`**.
+- `votes_latest_unique(zid, pid, tid, vote, modified)` — **the authoritative current vote**, and
+  **what every phase-6 read path actually queries** (`polis_admin.py:156, 182, 220, 232, 265,
+  305, 327`). Has `modified`, **no `created`**.
+
+`votes_latest_unique` is maintained by an **INSERT rule** on `votes` (`ref_polis-data-model.md:93`,
+`guide_runbook.md:154-157`). An `UPDATE` fires no INSERT rule, so **updating `votes` alone changes
+nothing that anyone sees** — and leaves the two tables permanently disagreeing with no marker.
+Repairing only `votes` is worse than not repairing at all.
+
+Both tables must be snapshotted and both must be updated, in one transaction.
 
 ```sql
 CREATE TABLE IF NOT EXISTS votes_phase6_presign_backup (LIKE votes INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS vlu_phase6_presign_backup (LIKE votes_latest_unique INCLUDING ALL);
 ```
+
+Copy this conversation's rows, guarded so a re-run cannot double-insert:
 
 ```sql
-INSERT INTO votes_phase6_presign_backup SELECT * FROM votes WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>');
+INSERT INTO votes_phase6_presign_backup SELECT v.* FROM votes v WHERE v.zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND NOT EXISTS (SELECT 1 FROM votes_phase6_presign_backup b WHERE b.zid = v.zid);
+INSERT INTO vlu_phase6_presign_backup SELECT u.* FROM votes_latest_unique u WHERE u.zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND NOT EXISTS (SELECT 1 FROM vlu_phase6_presign_backup b WHERE b.zid = u.zid);
 ```
 
-Confirm the copy matches before going further:
+Confirm the copies match — **scoped to this conversation on both sides.** The backup tables
+accumulate across conversations by design, so an unscoped count compares A+B against B and
+reports a false failure on the second conversation:
 
 ```sql
-SELECT (SELECT count(*) FROM votes_phase6_presign_backup) AS backed_up, (SELECT count(*) FROM votes WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>')) AS live;
+SELECT (SELECT count(*) FROM votes_phase6_presign_backup WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>')) AS votes_backed_up, (SELECT count(*) FROM votes WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>')) AS votes_live, (SELECT count(*) FROM vlu_phase6_presign_backup WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>')) AS vlu_backed_up, (SELECT count(*) FROM votes_latest_unique WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>')) AS vlu_live;
 ```
 
-The two numbers must be equal. This also gives you a genuine rollback: the pre-repair state is
-recoverable even after `COMMIT`, which the transaction alone does not give you.
+Each pair must match. This is also your genuine rollback: the pre-repair state survives even
+after `COMMIT`, which the transaction alone does not give you.
 
 ---
 
@@ -123,34 +143,48 @@ webservice restarted onto the fix, not the moment you started reading this:
 SELECT extract(epoch FROM TIMESTAMPTZ '2026-08-25 16:40:00+00') * 1000 AS cutoff_millis;
 ```
 
-Then, with that number substituted:
+Then **both** statements, with that number substituted. Note the different time columns —
+`votes` has `created`, `votes_latest_unique` has `modified`; swapping them errors:
 
 ```sql
 UPDATE votes SET vote = -vote WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND vote <> 0 AND created < <CUTOFF_MILLIS>;
+UPDATE votes_latest_unique SET vote = -vote WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND vote <> 0 AND modified < <CUTOFF_MILLIS>;
 ```
+
+Bounding the second on `modified` is also semantically right, not just a column-name
+accommodation: a participant who voted before the deploy and re-voted after it has an inverted
+*history* row in `votes` but an already-correct *current* row in `votes_latest_unique`. The
+`modified` bound leaves that current row alone, which is what you want.
 
 If you are unsure of the exact deploy moment, prefer a cutoff slightly **earlier** than the
 restart. Missing a few genuinely-inverted rows leaves them wrong and correctable later; catching
 correct rows makes them wrong with nothing to distinguish them afterwards.
 
-Safest of all: pause the consultation (admin → Pause) for the deploy-and-repair window, so no
-votes are cast in between and the boundary question does not arise.
+**Better: pause the consultation for the whole window.** Pause it (admin → Pause) *before* the
+deploy in step 3, repair, then resume. `app.py:6497` rejects phase-6 votes while paused, so no
+votes are cast in between: the cutoff question disappears, and — more importantly — participants
+never see the blended-sign results described in step 3.
 
-Check the reported row count against the **bounded** set, not step 2's overall total — step 2
-was taken before the cutoff existed. Count what you expect to touch first:
-
-```sql
-SELECT count(*) FROM votes WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND vote <> 0 AND created < <CUTOFF_MILLIS>;
-```
-
-The `UPDATE` must report exactly that number. Passes (`vote = 0`) are
-excluded deliberately — negating zero is a no-op that would pad the count and mask a mistake.
-
-Verify before committing; the distribution should mirror, `-1` and `+1` swapped, `0` unchanged:
+Check each `UPDATE`'s row count against its own bounded set. Count both first:
 
 ```sql
-SELECT vote, count(*) FROM votes WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') GROUP BY vote ORDER BY vote;
+SELECT (SELECT count(*) FROM votes WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND vote <> 0 AND created < <CUTOFF_MILLIS>) AS votes_expected, (SELECT count(*) FROM votes_latest_unique WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND vote <> 0 AND modified < <CUTOFF_MILLIS>) AS vlu_expected;
 ```
+
+Each `UPDATE` must report exactly its own number. They will normally **differ** — `votes` holds
+every re-vote as a separate row while `votes_latest_unique` holds one per (pid, tid) — so a
+mismatch between the two is expected and is not an error. Passes (`vote = 0`) are excluded
+deliberately: negating zero is a no-op that would pad the counts and mask a mistake.
+
+Verify before committing. Both distributions should mirror — `-1` and `+1` swapped, `0`
+unchanged — and this query reads **both** tables so a divergence is visible *before* you commit:
+
+```sql
+SELECT 'votes' AS t, vote, count(*) FROM votes WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') GROUP BY vote UNION ALL SELECT 'votes_latest_unique', vote, count(*) FROM votes_latest_unique WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') GROUP BY vote ORDER BY t, vote;
+```
+
+⚠️ Verifying against `votes` alone is the trap this runbook previously walked into: it would
+show a perfectly mirrored distribution while every participant-facing number stayed inverted.
 
 Then `COMMIT;` — or `ROLLBACK;` if anything is off.
 
