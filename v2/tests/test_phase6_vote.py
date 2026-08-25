@@ -101,3 +101,35 @@ def test_phase6_vote_rebootstraps_on_stale_token(auth_client, participant):
     assert r.status_code == 200
     assert post.call_count == 1   # the stale reused token 403s -> exactly one re-bootstrap
     assert put.call_count == 2    # first PUT 403, retry PUT 200
+
+
+def test_both_phase6_surfaces_send_the_polis_agree_sign():
+    """Guard the sign at BOTH phase-6 write sites.
+
+    Polis stores -1 = agree (polis_admin.py:211, guide_runbook.md). The API route
+    maps `choice` server-side; the legacy Jinja route forwards the client's raw
+    data-vote attribute unchanged (app.py:6591), so for that surface the template
+    IS the contract. A divergence writes both signs into one votes table depending
+    only on whether the participant is on the SPA or ?spa_only=0 — worse than the
+    original bug, because the rows become indistinguishable. Nothing else in the
+    suite covers the legacy attribute.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+
+    template = (root / 'templates' / 'conversation.html').read_text()
+    # Only the phase-6 deck uses btn-p6-vote; phase 2 has its own vote controls.
+    buttons = re.findall(
+        r'btn-p6-vote"\s+data-vote="(-?\d)"\s*>\s*'
+        r'<span class="vote-dot vote-dot--(\w+)"></span>(\w+)',
+        template,
+    )
+    assert len(buttons) == 3, f'expected 3 phase-6 vote buttons, found {len(buttons)}'
+    mapping = {label: int(value) for value, _dot, label in buttons}
+    assert mapping == {'Agree': -1, 'Pass': 0, 'Disagree': 1}, mapping
+
+    app_src = (root / 'app.py').read_text()
+    assert app_src.count("polis_values = {'agree': -1, 'pass': 0, 'disagree': 1}") == 2, \
+        'both the Explore and informed-vote API paths must map agree to -1'

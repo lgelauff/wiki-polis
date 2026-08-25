@@ -9,10 +9,13 @@ type Workspace = components['schemas']['ConversationWorkspace'];
 type Card = components['schemas']['InformedVotingCard'];
 type Choice = components['schemas']['InformedVoteRequest']['choice'];
 
+// `value` is only the rendered data-vote attribute — the wire payload is the
+// `choice` string, mapped server-side. It still follows the Polis convention
+// (-1 = agree) so the SPA and the legacy template emit identical DOM.
 const voteValues: Array<{choice: Choice; value: number; label: string}> = [
-  {choice: 'agree', value: 1, label: 'Agree'},
+  {choice: 'agree', value: -1, label: 'Agree'},
   {choice: 'pass', value: 0, label: 'Pass'},
-  {choice: 'disagree', value: -1, label: 'Disagree'},
+  {choice: 'disagree', value: 1, label: 'Disagree'},
 ];
 
 function ArgumentSide({side, items}: {

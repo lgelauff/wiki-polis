@@ -931,13 +931,13 @@
 
           {% if item.phase6_stmt_id is not none %}
           <div class="vote-choice-row p6-vote-row">
-            <button class="vote-choice btn-p6-vote" data-vote="1">
+            <button class="vote-choice btn-p6-vote" data-vote="-1">
               <span class="vote-dot vote-dot--agree"></span>Agree
             </button>
             <button class="vote-choice btn-p6-vote" data-vote="0">
               <span class="vote-dot vote-dot--pass"></span>Pass
             </button>
-            <button class="vote-choice btn-p6-vote" data-vote="-1">
+            <button class="vote-choice btn-p6-vote" data-vote="1">
               <span class="vote-dot vote-dot--disagree"></span>Disagree
             </button>
           </div>
@@ -1251,8 +1251,10 @@
             body: JSON.stringify({ fs_id: parseInt(fsId, 10), vote: vote }),
           }).then(function (resp) {
             if (resp.ok) {
-              var label = vote === 1 ? 'Agreed' : vote === -1 ? 'Disagreed' : 'Passed';
-              var cls   = vote === 1 ? 'agree' : vote === -1 ? 'disagree' : 'pass';
+              // Polis convention: -1 = agree, +1 = disagree, 0 = pass — same as the
+              // buttons above and as the phase-2 path. See v2/guide_runbook.md.
+              var label = vote === -1 ? 'Agreed' : vote === 1 ? 'Disagreed' : 'Passed';
+              var cls   = vote === -1 ? 'agree' : vote === 1 ? 'disagree' : 'pass';
               badge.className = 'p6-voted-badge p6-voted-badge--' + cls;
               badge.removeAttribute('hidden');
               badge.innerHTML = '<span aria-hidden="true">✓</span> ' + label;
