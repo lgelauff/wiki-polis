@@ -54,19 +54,21 @@ function PhaseIllustration({phase}: {phase: FlowPhase}) {
     <svg className="flow-rebuild__illustration" viewBox="0 0 190 120" aria-hidden="true">
       <rect x="26" y="4" width="138" height="30" rx="8" className="flow-svg-surface" />
       <path d="M40 14h78M40 24h54" className="flow-svg-copy" />
-      <g transform="translate(34 44)">
-        <rect width="56" height="20" rx="6" className="flow-svg-agree-box" />
-        <path d="M12 10h9m-4.5-4.5v9M30 10h18" className="flow-svg-agree-mark" />
+      <g transform="translate(30 44)">
+        <rect width="60" height="24" rx="6" className="flow-svg-agree-box" />
+        <path d="M11 12h9m-4.5-4.5v9" className="flow-svg-agree-mark" />
+        <path d="M28 8.5h22M28 15.5h14" className="flow-svg-rowcopy" />
       </g>
       <g transform="translate(100 44)">
-        <rect width="56" height="20" rx="6" className="flow-svg-con-box" />
-        <path d="M12 10h9m9 0h18" className="flow-svg-con-mark" />
+        <rect width="60" height="24" rx="6" className="flow-svg-con-box" />
+        <path d="M11 12h9" className="flow-svg-con-mark" />
+        <path d="M28 8.5h22M28 15.5h14" className="flow-svg-rowcopy" />
       </g>
-      <g transform="translate(58 78)">
+      <g transform="translate(58 82)">
         <rect width="30" height="30" rx="7" className="flow-svg-agree-box" />
         <path d="m9 15 4 4 8-9" className="flow-svg-agree-mark" />
       </g>
-      <g transform="translate(102 78)">
+      <g transform="translate(102 82)">
         <rect width="30" height="30" rx="7" className="flow-svg-disagree-box" />
         <path d="m10 10 10 10m0-10L10 20" className="flow-svg-disagree-mark" />
       </g>
@@ -89,10 +91,10 @@ function LearningIcon({phase}: {phase: FlowPhase}) {
       <svg viewBox="0 0 40 36" aria-hidden="true">
         <rect x="4" y="5" width="14" height="10" rx="2.5" className="flow-learn-pro" />
         <path d="M8 10h6m-3-3v6" className="flow-learn-pro-mark" />
-        <rect x="22" y="6" width="14" height="8" rx="2.5" opacity=".12" />
+        <path d="M25 7.5h13M25 12.5h8" className="flow-learn-copy" />
         <rect x="4" y="20" width="14" height="10" rx="2.5" className="flow-learn-con" />
         <path d="M8 25h6" className="flow-learn-con-mark" />
-        <rect x="22" y="21" width="14" height="8" rx="2.5" opacity=".08" />
+        <path d="M25 22.5h13M25 27.5h8" className="flow-learn-copy" />
       </svg>
     );
   }
