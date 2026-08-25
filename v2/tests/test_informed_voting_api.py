@@ -158,7 +158,12 @@ def test_informed_vote_is_idempotent_put_and_translates_phase6_sign(
             'informedVoting': '/api/v1/conversations/informed-api/informed-voting',
         },
     }
-    assert put.call_args.kwargs['json'] == {'value': 1}
+    # Polis convention: -1 = agree, +1 = disagree, 0 = pass. Same as the Explore
+    # path at app.py:2212, and what polis_admin.py:153 counts as agree_count.
+    # This asserted {'value': 1} before, which locked in the inverted sign and is
+    # why every informed vote on production was stored as its own opposite.
+    # Verified against a live Polis: an agree in each phase now stores -1 in both.
+    assert put.call_args.kwargs['json'] == {'value': -1}
     assert put.call_args.kwargs['cookies'] == {'session': 'phase6-cookie'}
     db.session.refresh(participation)
     assert participation.last_engagement is not None
