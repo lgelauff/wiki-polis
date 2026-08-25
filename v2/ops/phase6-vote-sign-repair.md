@@ -111,11 +111,39 @@ run once, verify, do not re-run.
 BEGIN;
 ```
 
+⚠️ **The time bound is not optional.** Step 3 deploys the fix first, so every vote cast after
+that moment is *already correct*. An unbounded `UPDATE` would negate those too and make them
+wrong — reintroducing the very bug this repair removes, in rows that were fine. Bound the
+statement to votes written **before the deploy**.
+
+Get the cutoff as epoch milliseconds (`votes.created` is bigint millis). Use the moment the
+webservice restarted onto the fix, not the moment you started reading this:
+
 ```sql
-UPDATE votes SET vote = -vote WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND vote <> 0;
+SELECT extract(epoch FROM TIMESTAMPTZ '2026-08-25 16:40:00+00') * 1000 AS cutoff_millis;
 ```
 
-The reported row count **must equal the non-zero total from step 2**. Passes (`vote = 0`) are
+Then, with that number substituted:
+
+```sql
+UPDATE votes SET vote = -vote WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND vote <> 0 AND created < <CUTOFF_MILLIS>;
+```
+
+If you are unsure of the exact deploy moment, prefer a cutoff slightly **earlier** than the
+restart. Missing a few genuinely-inverted rows leaves them wrong and correctable later; catching
+correct rows makes them wrong with nothing to distinguish them afterwards.
+
+Safest of all: pause the consultation (admin → Pause) for the deploy-and-repair window, so no
+votes are cast in between and the boundary question does not arise.
+
+Check the reported row count against the **bounded** set, not step 2's overall total — step 2
+was taken before the cutoff existed. Count what you expect to touch first:
+
+```sql
+SELECT count(*) FROM votes WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND vote <> 0 AND created < <CUTOFF_MILLIS>;
+```
+
+The `UPDATE` must report exactly that number. Passes (`vote = 0`) are
 excluded deliberately — negating zero is a no-op that would pad the count and mask a mistake.
 
 Verify before committing; the distribution should mirror, `-1` and `+1` swapped, `0` unchanged:
