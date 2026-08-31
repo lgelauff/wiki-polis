@@ -37,10 +37,14 @@ MIN_COMPARABLE = POLIS_VOTE_THRESHOLD
 
 #: Decisive responses a proposition needs before its agreement figure is printed
 #: for participants. Below this a percentage is arithmetic rather than a finding:
-#: with four people, one more vote moves it 20 points. Derived from the engine's
-#: own cutoff rather than picked, and floored at 5 — the same rule already applied
-#: to representative selection below.
-MIN_DECIDED_TO_REPORT = max(5, POLIS_VOTE_THRESHOLD)
+#: with four people, one more vote moves it 20 points.
+#:
+#: Matches `family_representatives(min_decided=5)`, so the floor for *choosing* a
+#: representative and the floor for *reporting* its agreement are the same number.
+#: Note this is unrelated to POLIS_VOTE_THRESHOLD: that is the engine's
+#: participant-side cutoff — how many statements a person must answer to be
+#: clustered — and says nothing about how many responses a statement needs.
+MIN_DECIDED_TO_REPORT = 5
 
 #: Similarity above which two versions inside one family are near-identical to each
 #: other. Higher than the threshold that forms the families themselves: this flags
@@ -976,7 +980,8 @@ def write_report(*, bundle, conv_key, checks, funnel, server, gate, sweep, stabi
             else:
                 # A percentage from three people reads as a finding and is not one.
                 # Say why it is withheld rather than leaving an empty cell.
-                agreement = f'<span class="footnote">too few responses ({decided})</span>'
+                agreement = ('<span class="footnote">not enough responses '
+                             'to report</span>')
             rows.append(
                 f'<tr><td>{html.escape(str(r.text))}</td>'
                 f'<td class="footnote">{wording}</td>'
@@ -995,8 +1000,8 @@ def write_report(*, bundle, conv_key, checks, funnel, server, gate, sweep, stabi
             parts.append(
                 f'<p class="footnote">{withheld} of {len(representatives)} propositions '
                 f'drew fewer than {MIN_DECIDED_TO_REPORT} responses either way. A '
-                f'percentage from that few people moves by tens with one more vote, '
-                f'so no figure is given for them — they were proposed, not settled.</p>')
+                f'percentage from that few people is arithmetic rather than a result, '
+                f'so none is given.</p>')
 
     # ── groups ───────────────────────────────────────────────────────────────
     if 'groups' in show and server.get('available'):
