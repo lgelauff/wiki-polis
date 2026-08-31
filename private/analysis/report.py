@@ -46,6 +46,12 @@ MIN_COMPARABLE = POLIS_VOTE_THRESHOLD
 #: clustered — and says nothing about how many responses a statement needs.
 MIN_DECIDED_TO_REPORT = 5
 
+#: How far apart the wordings of one idea must land before the range is shown
+#: next to the representative's figure. Matches the 'clear' vs 'close' cutoff
+#: used for representative status, so the report calls a spread significant in
+#: one place exactly when it does in the other.
+WORDING_SPREAD_WORTH_SHOWING = 15
+
 #: Similarity above which two versions inside one family are near-identical to each
 #: other. Higher than the threshold that forms the families themselves: this flags
 #: parallel effort — two people separately narrowing the same statement the same
@@ -968,7 +974,24 @@ def write_report(*, bundle, conv_key, checks, funnel, server, gate, sweep, stabi
         parts.append('<h2>What was proposed</h2>')
         parts.append(
             '<p>One row per proposition. Where the same idea was written several '
-            'ways, the wording shown is the one that best represents the group.</p>')
+            'ways, the wording shown is the one that best represents the group, and '
+            'the figure is for that wording — not pooled across the alternatives.</p>')
+        # agree_pct and n_decided describe the representative wording alone, not
+        # the family. The representative is chosen as the highest-agreement
+        # variant, so printing it unqualified shows every proposition at its most
+        # flattering — and in this consultation nine families have variants
+        # differing by 15 points or more. Print the range alongside when the
+        # wordings genuinely disagree.
+        spread_by_root = {}
+        for family in (families or []):
+            members = family['members']
+            eligible = members[members['n_decided'] >= MIN_DECIDED_TO_REPORT]
+            if len(eligible) > 1:
+                low = float(eligible['agree_pct'].min())
+                high = float(eligible['agree_pct'].max())
+                if high - low >= WORDING_SPREAD_WORTH_SHOWING:
+                    spread_by_root[family['root']] = (low, high)
+
         rows = []
         for r in representatives.itertuples():
             variants = int(r.n_variants)
@@ -976,7 +999,11 @@ def write_report(*, bundle, conv_key, checks, funnel, server, gate, sweep, stabi
             decided = int(r.n_decided)
             if decided >= MIN_DECIDED_TO_REPORT:
                 agreement = (f'<b>{r.agree_pct:.0f}%</b> agreed, '
-                             f'of {decided} who took a side')
+                             f'of {decided} who responded to this wording')
+                spread = spread_by_root.get(r.family)
+                if spread:
+                    agreement += (f'<br><span class="footnote">other wordings of this '
+                                  f'idea ran {spread[0]:.0f}–{spread[1]:.0f}%</span>')
             else:
                 # A percentage from three people reads as a finding and is not one.
                 # Say why it is withheld rather than leaving an empty cell.
