@@ -709,8 +709,11 @@ AUDIENCES = {
                   'methods_compared', 'ladder', 'consensus',
                   'divergence', 'wording', 'families', 'generations', 'shortlist',
                   'caveats', 'meta'],
-    'participant': ['intro', 'participation', 'groups', 'stability', 'divergence',
-                    'roster', 'caveats', 'meta'],
+    # 'wording_brief' comes before 'groups': the grouping is computed on merged
+    # statements, so a reader meeting the group results first has already been
+    # given a statement count they cannot reconcile with what they voted on.
+    'participant': ['intro', 'participation', 'wording_brief', 'groups', 'stability',
+                    'divergence', 'roster', 'caveats', 'meta'],
 }
 
 
@@ -909,6 +912,41 @@ def write_report(*, bundle, conv_key, checks, funnel, server, gate, sweep, stabi
             f'of them gave opinions on enough statements to be included in the group '
             f'analysis. '
             f'Everything below rests on those numbers, which are small.</p>')
+
+    # ── how the same idea, worded twice, was handled (participant version) ────
+    # The organiser gets 'deduplication', which argues the case at length because
+    # they are deciding which wording carries forward. A participant only needs to
+    # know it happened, and that the numbers below already account for it —
+    # otherwise "22 statements" silently contradicts the count they remember
+    # voting on. Deliberately no naive-vs-deduplicated comparison: that is the
+    # organiser's evidence, and showing a reader two numbers for one quantity
+    # invites the question of which is the real one.
+    if 'wording_brief' in show:
+        merged_pairs = 0
+        if redundant is not None and not redundant.empty:
+            merged_pairs = int(redundant['verdict'].str.startswith('redundant').sum())
+        parts.append('<h2>The same idea, worded more than once</h2>')
+        parts.append(
+            '<p>People could rewrite each other’s statements, so the same idea often '
+            'appears several times in slightly different words. Counted as they stand, '
+            'a popular idea phrased five ways would weigh five times as much as one '
+            'phrased once.</p>')
+        parts.append(
+            '<p>So before anything was counted, near-identical statements were grouped '
+            'together and treated as one. Whether two are really the same is judged by '
+            'the opinions of people who responded to <i>both</i> — not by how similar '
+            'the wording looks, because “at least a thousand edits” and “at least five '
+            'hundred edits” read almost the same and mean quite different things.</p>')
+        if merged_pairs:
+            parts.append(
+                f'<p>{merged_pairs} pair{"s" if merged_pairs != 1 else ""} of statements '
+                f'were merged this way. Every number on this page already accounts for '
+                f'that, so the statement count here is smaller than the number you were '
+                f'shown while voting.</p>')
+        else:
+            parts.append(
+                '<p>No statements were merged in this consultation: no two were close '
+                'enough to be treated as one.</p>')
 
     # ── groups ───────────────────────────────────────────────────────────────
     if 'groups' in show and server.get('available'):
