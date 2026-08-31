@@ -35,6 +35,13 @@ from pipeline import (POLIS_VOTE_THRESHOLD, RAW_AGREE, RAW_DISAGREE,
 #: rather than 'not enough people'. Matches the engine's own participation cutoff.
 MIN_COMPARABLE = POLIS_VOTE_THRESHOLD
 
+#: Decisive responses a proposition needs before its agreement figure is printed
+#: for participants. Below this a percentage is arithmetic rather than a finding:
+#: with four people, one more vote moves it 20 points. Derived from the engine's
+#: own cutoff rather than picked, and floored at 5 — the same rule already applied
+#: to representative selection below.
+MIN_DECIDED_TO_REPORT = max(5, POLIS_VOTE_THRESHOLD)
+
 #: Similarity above which two versions inside one family are near-identical to each
 #: other. Higher than the threshold that forms the families themselves: this flags
 #: parallel effort — two people separately narrowing the same statement the same
@@ -712,8 +719,8 @@ AUDIENCES = {
     # 'wording_brief' comes before 'groups': the grouping is computed on merged
     # statements, so a reader meeting the group results first has already been
     # given a statement count they cannot reconcile with what they voted on.
-    'participant': ['intro', 'participation', 'wording_brief', 'groups', 'stability',
-                    'divergence', 'roster', 'caveats', 'meta'],
+    'participant': ['intro', 'participation', 'wording_brief', 'families_brief',
+                    'groups', 'stability', 'divergence', 'roster', 'caveats', 'meta'],
 }
 
 
@@ -947,6 +954,49 @@ def write_report(*, bundle, conv_key, checks, funnel, server, gate, sweep, stabi
             parts.append(
                 '<p>No statements were merged in this consultation: no two were close '
                 'enough to be treated as one.</p>')
+
+    # ── what was actually proposed (participant version) ──────────────────────
+    # One row per proposition rather than per statement: a family is one idea
+    # written several ways, and listing every wording asks the reader to work out
+    # for themselves which are the same. The organiser gets the full variant
+    # trees under 'families' and 'generations'; a participant wants the list.
+    if 'families_brief' in show and representatives is not None and not representatives.empty:
+        parts.append('<h2>What was proposed</h2>')
+        parts.append(
+            '<p>One row per proposition. Where the same idea was written several '
+            'ways, the wording shown is the one that best represents the group.</p>')
+        rows = []
+        for r in representatives.itertuples():
+            variants = int(r.n_variants)
+            wording = (f'{variants} wordings' if variants > 1 else 'one wording')
+            decided = int(r.n_decided)
+            if decided >= MIN_DECIDED_TO_REPORT:
+                agreement = (f'<b>{r.agree_pct:.0f}%</b> agreed, '
+                             f'of {decided} who took a side')
+            else:
+                # A percentage from three people reads as a finding and is not one.
+                # Say why it is withheld rather than leaving an empty cell.
+                agreement = f'<span class="footnote">too few responses ({decided})</span>'
+            rows.append(
+                f'<tr><td>{html.escape(str(r.text))}</td>'
+                f'<td class="footnote">{wording}</td>'
+                f'<td>{agreement}</td></tr>')
+        # Explicit widths: left to itself the proposition text takes almost all
+        # the width and "of 20 who took a side" wraps onto three lines.
+        parts.append(
+            '<div class="tablewrap"><table class="propositions">'
+            '<colgroup><col style="width:58%"><col style="width:11%">'
+            '<col style="width:31%"></colgroup>'
+            '<thead><tr>'
+            '<th>Proposition</th><th>Written as</th><th>Agreement</th>'
+            '</tr></thead><tbody>' + ''.join(rows) + '</tbody></table></div>')
+        withheld = int((representatives['n_decided'] < MIN_DECIDED_TO_REPORT).sum())
+        if withheld:
+            parts.append(
+                f'<p class="footnote">{withheld} of {len(representatives)} propositions '
+                f'drew fewer than {MIN_DECIDED_TO_REPORT} responses either way. A '
+                f'percentage from that few people moves by tens with one more vote, '
+                f'so no figure is given for them — they were proposed, not settled.</p>')
 
     # ── groups ───────────────────────────────────────────────────────────────
     if 'groups' in show and server.get('available'):
