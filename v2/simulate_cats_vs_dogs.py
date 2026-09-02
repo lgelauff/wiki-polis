@@ -20,6 +20,7 @@ Usage (from v2/ directory):
   uv run python simulate_cats_vs_dogs.py --conversation-id <existing_zinvite>
   uv run python simulate_cats_vs_dogs.py --particiapi-url http://127.0.0.1:8002
   uv run python simulate_cats_vs_dogs.py --skip-flask
+  uv run python simulate_cats_vs_dogs.py --phase6   # also advance into informed voting
 """
 
 import argparse
@@ -28,6 +29,7 @@ import random
 import re
 import string
 import subprocess
+import uuid
 import sys
 from pathlib import Path
 
@@ -38,7 +40,18 @@ load_dotenv(Path(__file__).with_name(".env"))
 
 PARTICIAPI  = os.environ.get("PARTICIAPI_BASE_URL", "http://127.0.0.1:8002").rstrip("/")
 FLASK       = os.environ.get("WIKI_POLIS_FLASK_URL", "http://127.0.0.1:5001").rstrip("/")
-DB_CONTAINER = "particiapp-docker-postgres-1"
+# Overridable: container names collide across stacks on a shared host, and psql()
+# below writes. Pin it explicitly rather than trusting the default to be local.
+DB_CONTAINER = os.environ.get("POLIS_DB_CONTAINER", "particiapp-docker-postgres-1")
+
+# Trusted-subject secret. When set (and honoured by the Particiapi image), each
+# simulated person keeps ONE Polis uid across sessions and across the Phase 2 and
+# Phase 6 conversations — which is what production does, and what any analysis
+# comparing the two rounds needs. Without it Particiapi mints a throwaway uid per
+# session and the two rounds cannot be linked. See ref_cross-device-identity.md.
+SUB_SECRET = (os.environ.get("PARTICIAPI_SUB_SECRET")
+              or os.environ.get("TRUSTED_SUB_SECRET") or "")
+STABLE_IDENTITY = False   # set by probe_stable_identity()
 
 # ── Statements ────────────────────────────────────────────────────────────────
 
@@ -108,6 +121,20 @@ VOTES = [
 
 GROUP_SIZES = [35, 30, 10]   # cat people, dog people, neutral
 
+# ── Derivative statements (#143 provenance) ───────────────────────────────────
+# Rewordings of a seed statement, submitted mid-run as "an improvement on" their
+# parent. Each is (index into SEED_STATEMENTS, reworded text). They express the
+# same proposition as the parent, so simulated voters vote them the parent's way —
+# which is what makes a lineage look like a lineage in the vote matrix.
+DERIVATIVE_STATEMENTS = [
+    (0, "Cats make better companions than dogs for most households"),
+    (1, "Dogs show their loyalty more openly than cats do"),
+    (2, "Cats need less daily care than dogs"),
+    (3, "Dogs suit families with young children better than cats do"),
+    (4, "Cats keep themselves cleaner than dogs do"),
+    (8, "Cats adapt to apartment living better than dogs"),
+]
+
 # ── Seeded arguments for featured statements ──────────────────────────────────
 # Maps statement text → {'pro': [...], 'con': [...]}
 # proposer_id=None marks these as admin-seeded (not participant-authored).
@@ -169,13 +196,28 @@ FEATURED_ARGS = {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def new_session() -> tuple[str, str]:
-    """Create a fresh anonymous Particiapi session. Returns (session_cookie, csrf_token).
+def subject_for(conv_id: str, person_idx: int) -> str:
+    """Stable synthetic subject for one simulated person, scoped to this run so
+    repeated runs don't merge into each other's participants."""
+    return f"sim-{conv_id}-p{person_idx}"
+
+
+def new_session(subject: str | None = None) -> tuple[str, str]:
+    """Create a Particiapi session. Returns (session_cookie, csrf_token).
+
+    With `subject` (and a working trusted-sub secret) Particiapi resolves the same
+    uid every time, the way Flask's proxy does in production. Otherwise it mints a
+    fresh anonymous uid, which is fine for single-round tests but leaves Phase 2 and
+    Phase 6 participants unlinkable.
 
     requests honours the Secure flag and won't send the cookie over plain HTTP,
     so we extract the raw value from Set-Cookie and pass it manually.
     """
-    r = requests.post(f"{PARTICIAPI}/api/session?create=true")
+    headers = {}
+    if subject and SUB_SECRET and STABLE_IDENTITY:
+        headers = {"X-Particiapi-Sub": subject,
+                   "X-Particiapi-Sub-Secret": SUB_SECRET}
+    r = requests.post(f"{PARTICIAPI}/api/session?create=true", headers=headers)
     r.raise_for_status()
     m = re.search(r'session=([^;]+)', r.headers.get('Set-Cookie', ''))
     if not m:
@@ -228,12 +270,32 @@ def add_noise(vote: int, flip_prob: float = 0.12, pass_prob: float = 0.08) -> in
     return vote
 
 
-def psql(sql: str) -> str:
-    """Run a SQL statement in the Polis PostgreSQL container. Returns first result row."""
+def psql(sql: str, **params: str) -> str:
+    """Run a SQL statement in the Polis PostgreSQL container. Returns first result row.
+
+    Pass caller-supplied values as keyword arguments and reference them as :\'name\'
+    in `sql`; psql quotes them itself. The text that actually needs this is the
+    conversation topic and description below — under --phase6 the topic is built
+    from `conv.title`, which an admin edits, and a `$$` in it would otherwise
+    terminate the dollar quote it used to be pasted into.
+    """
+    var_args: list[str] = []
+    for name, value in params.items():
+        var_args += ["-v", f"{name}={value}"]
+    # The SQL goes in on stdin, not as -c: psql only interpolates :\'name\' while
+    # lexing input it reads, and silently does not do it for -c (which fails with
+    # "syntax error at or near \":\"" instead).
+    #
+    # ON_ERROR_STOP is what makes reading from stdin safe. Without it psql reports
+    # a failed statement on stderr and still exits 0, so the returncode check below
+    # never fires and the caller reads "" as though it were a value. Measured
+    # against postgres:18-trixie: a bad statement via -c exits 1, via stdin exits
+    # 0, via stdin with ON_ERROR_STOP exits 3. It goes ahead of *var_args so a
+    # caller's parameter cannot shadow it.
     r = subprocess.run(
-        ["docker", "exec", DB_CONTAINER,
-         "psql", "-U", "polis", "polis", "-t", "-c", sql],
-        capture_output=True, text=True,
+        ["docker", "exec", "-i", DB_CONTAINER,
+         "psql", "-U", "polis", "polis", "-t", "-v", "ON_ERROR_STOP=1", *var_args],
+        input=sql, capture_output=True, text=True,
     )
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip())
@@ -242,24 +304,91 @@ def psql(sql: str) -> str:
     return lines[0] if lines else ""
 
 
+def probe_stable_identity() -> bool:
+    """Check whether this Particiapi honours X-Particiapi-Sub, and set STABLE_IDENTITY.
+
+    Opens one session with a throwaway subject and looks for the resulting
+    `particiapi_users` row. A `TRUSTED_SUB_SECRET` that is unset, mismatched, or
+    absent from the running image all present the same way — a silently anonymous
+    session — so this asks the database rather than trusting the response.
+    """
+    global STABLE_IDENTITY
+    if not SUB_SECRET:
+        print("  [identity] PARTICIAPI_SUB_SECRET unset — participants will be "
+              "anonymous and Phase 2/Phase 6 cannot be linked")
+        STABLE_IDENTITY = False
+        return False
+
+    # Unique per run. A fixed subject is satisfied by a row that some earlier run
+    # left behind, so the probe would keep reporting success after the secret was
+    # rotated or the image swapped for one without trusted-sub — and since a
+    # mismatched secret degrades to an anonymous session with a 200, nothing else
+    # would catch it either. The row this leaves behind has no participants or
+    # votes rows, so it joins to nothing.
+    probe = f"sim-identity-probe-{uuid.uuid4().hex[:12]}"
+    try:
+        requests.post(f"{PARTICIAPI}/api/session?create=true",
+                      headers={"X-Particiapi-Sub": probe,
+                               "X-Particiapi-Sub-Secret": SUB_SECRET}).raise_for_status()
+        found = psql("SELECT COUNT(*) FROM particiapi_users WHERE subject = :'s';",
+                     s=probe)
+        STABLE_IDENTITY = found.strip() not in ("", "0")
+    except Exception as e:
+        print(f"  [identity] probe failed ({e}) — falling back to anonymous sessions")
+        STABLE_IDENTITY = False
+        return False
+
+    if STABLE_IDENTITY:
+        print("  [identity] trusted-sub honoured — participants keep one uid across rounds")
+    else:
+        print("  [identity] trusted-sub NOT honoured (secret mismatch, or a Particiapi "
+              "image predating the feature) — participants will be anonymous")
+    return STABLE_IDENTITY
+
+
+def record_provenance(conv_id: str, new_tid: int, parent_tid: int,
+                      new_text: str, parent_text: str) -> bool:
+    """Record `new_tid` as a declared improvement on `parent_tid` in the Flask DB.
+
+    Calls the app's own `record_statement_provenance`, so the row and its similarity
+    scores are written by exactly the code the /statements/new route uses. (The route
+    itself needs an OAuth session and CSRF, which this simulator has no way to hold.)
+    """
+    try:
+        from app import app, record_statement_provenance
+        from db import Conversation
+        with app.app_context():
+            conv = Conversation.query.filter_by(polis_id=conv_id).first()
+            if conv is None:
+                return False
+            row = record_statement_provenance(
+                conv.id, new_tid, parent_tid,
+                parent_text=parent_text, new_text=new_text)
+            return row is not None
+    except Exception as e:
+        print(f"    [warn] provenance write failed for tid={new_tid}: {e}")
+        return False
+
+
 def create_polis_conversation(topic: str, description: str) -> str:
     """Insert a new conversation directly into Polis PostgreSQL. Returns zinvite."""
     zinvite = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
     zid = psql(
         "INSERT INTO conversations "
         "(topic, description, owner, is_active, is_public, write_type, vis_type) "
-        "VALUES ($$%s$$, $$%s$$, 1, true, true, 1, 1) RETURNING zid;" % (topic, description)
-    )
-    psql(f"INSERT INTO zinvites (zid, zinvite) VALUES ({zid}, '{zinvite}');")
+        "VALUES (:'topic', :'descr', 1, true, true, 1, 1) RETURNING zid;",
+        topic=topic, descr=description)
+    if not zid:
+        raise RuntimeError("conversation insert returned no zid")
+    psql("INSERT INTO zinvites (zid, zinvite) VALUES (:'zid', :'zinvite');",
+         zid=zid, zinvite=zinvite)
     return zinvite
 
 
 def seed_featured_statements(conv_id: str, text_to_tid: dict) -> None:
     """Create FeaturedStatement + seeded Argument records in the Flask DB."""
-    from app import create_app
+    from app import app
     from db import Argument, Conversation, FeaturedStatement, db as flask_db
-
-    app = create_app()
     with app.app_context():
         conv = Conversation.query.filter_by(polis_id=conv_id).first()
         if not conv:
@@ -293,7 +422,7 @@ def seed_featured_statements(conv_id: str, text_to_tid: dict) -> None:
                     if not exists:
                         flask_db.session.add(Argument(
                             featured_statement_id=fs.id,
-                            proposer_id=None,
+                            proposer_pseudonym=None,   # NULL = admin-seeded
                             body=body,
                             side=side,
                         ))
@@ -305,10 +434,8 @@ def seed_featured_statements(conv_id: str, text_to_tid: dict) -> None:
 
 def register_in_flask(zinvite: str) -> None:
     """Register the conversation in the wiki-polis Flask DB directly via SQLAlchemy."""
-    from app import create_app
+    from app import app
     from db import Conversation, db as flask_db
-
-    app = create_app()
     base_slug = f"cats-vs-dogs-{zinvite[:6]}"
     with app.app_context():
         slug = base_slug
@@ -336,7 +463,7 @@ def register_in_flask(zinvite: str) -> None:
 
 # ── Main simulation ───────────────────────────────────────────────────────────
 
-def run_simulation(conv_id: str) -> None:
+def run_simulation(conv_id: str, n_derivatives: int = 0) -> None:
     """
     Realistic rolling simulation:
 
@@ -346,6 +473,8 @@ def run_simulation(conv_id: str) -> None:
        - Votes on all of them in a random order with group-consistent noise.
        - If assigned as a "submitter", inserts their follow-up at a random mid-vote
          point; the statement then becomes visible to all subsequent participants.
+       - Some submitters instead post a *derivative*: a reworded version of an
+         existing statement, linked to its parent in `statement_provenance`.
     """
     N = sum(GROUP_SIZES)
     print(f"\nConversation: {conv_id}")
@@ -362,6 +491,8 @@ def run_simulation(conv_id: str) -> None:
             pool.append((tid, i))
             print(f"  tid={tid}  {text}")
     print(f"  → {len(pool)} seed statements in pool")
+    tid_by_seed_idx = {votes_idx: tid for tid, votes_idx in pool}
+    derivative_tids: set[int] = set()
 
     # ── Step 2: rolling participants ──────────────────────────────────────────
     print(f"\n[2/2] Running {N} participants "
@@ -371,54 +502,75 @@ def run_simulation(conv_id: str) -> None:
     groups = [0]*GROUP_SIZES[0] + [1]*GROUP_SIZES[1] + [2]*GROUP_SIZES[2]
     random.shuffle(groups)
 
-    # Randomly assign 15 participant slots as submitters (one follow-up each)
-    submitter_slots = sorted(random.sample(range(N), len(FOLLOWUP_STATEMENTS)))
-    followup_for: dict[int, int] = {slot: idx for idx, slot in enumerate(submitter_slots)}
+    # Randomly assign submitter slots: one follow-up each, plus n_derivatives slots
+    # that post a reworded version of an existing statement instead.
+    n_derivatives = max(0, min(n_derivatives, len(DERIVATIVE_STATEMENTS)))
+    slots = random.sample(range(N), len(FOLLOWUP_STATEMENTS) + n_derivatives)
+    followup_for: dict[int, int] = {
+        slot: idx for idx, slot in enumerate(sorted(slots[:len(FOLLOWUP_STATEMENTS)]))}
+    derivative_for: dict[int, int] = {
+        slot: idx for idx, slot in enumerate(sorted(slots[len(FOLLOWUP_STATEMENTS):]))}
 
     total_votes   = 0
     total_skipped = 0
+    total_linked  = 0
 
     for p_idx in range(N):
         group_idx    = groups[p_idx]
-        cookie, csrf = new_session()
+        cookie, csrf = new_session(subject_for(conv_id, p_idx))
         snapshot     = list(pool)          # statements visible on arrival
+
+        # What this participant submits mid-vote, if anything:
+        #   (text, votes_row_index, parent_tid | None, parent_text | None)
+        submission = None
         followup_idx = followup_for.get(p_idx)
-
+        derivative_idx = derivative_for.get(p_idx)
         if followup_idx is not None:
-            # Split snapshot at a random point; submit the follow-up between the halves
-            random.shuffle(snapshot)
-            split   = random.randint(0, len(snapshot))
-            batch1  = snapshot[:split]
-            batch2  = snapshot[split:]
+            submission = (FOLLOWUP_STATEMENTS[followup_idx],
+                          len(SEED_STATEMENTS) + followup_idx, None, None)
+        elif derivative_idx is not None:
+            parent_seed_idx, text = DERIVATIVE_STATEMENTS[derivative_idx]
+            parent_tid = tid_by_seed_idx.get(parent_seed_idx)
+            if parent_tid is not None:
+                # A derivative restates its parent, so it inherits the parent's
+                # voting row — later arrivals vote on both the same way.
+                submission = (text, parent_seed_idx, parent_tid,
+                              SEED_STATEMENTS[parent_seed_idx])
 
-            for tid, votes_idx in batch1:
-                raw  = VOTES[votes_idx][group_idx] if votes_idx < len(VOTES) else 0
+        def vote_batch(batch):
+            nonlocal total_votes, total_skipped
+            for tid, votes_idx in batch:
+                raw = VOTES[votes_idx][group_idx] if votes_idx < len(VOTES) else 0
                 if cast_vote(cookie, csrf, conv_id, tid, add_noise(raw)):
                     total_votes += 1
                 else:
                     total_skipped += 1
 
-            text    = FOLLOWUP_STATEMENTS[followup_idx]
+        random.shuffle(snapshot)
+        if submission is None:
+            vote_batch(snapshot)
+        else:
+            # Split the snapshot at a random point and submit between the halves, so
+            # the new statement only exists for participants who arrive later.
+            text, votes_idx, parent_tid, parent_text = submission
+            split = random.randint(0, len(snapshot))
+            vote_batch(snapshot[:split])
+
             new_tid = submit_statement(cookie, csrf, conv_id, text)
             if new_tid is not None:
-                pool.append((new_tid, 10 + followup_idx))
-                print(f"  [p{p_idx+1:02d}] submitted tid={new_tid}  {text[:55]}")
-
-            for tid, votes_idx in batch2:
-                raw  = VOTES[votes_idx][group_idx] if votes_idx < len(VOTES) else 0
-                if cast_vote(cookie, csrf, conv_id, tid, add_noise(raw)):
-                    total_votes += 1
+                pool.append((new_tid, votes_idx))
+                if parent_tid is None:
+                    print(f"  [p{p_idx+1:02d}] submitted tid={new_tid}  {text[:55]}")
                 else:
-                    total_skipped += 1
+                    derivative_tids.add(new_tid)
+                    linked = record_provenance(conv_id, new_tid, parent_tid,
+                                               text, parent_text)
+                    total_linked += bool(linked)
+                    mark = "linked" if linked else "UNLINKED"
+                    print(f"  [p{p_idx+1:02d}] improved tid={parent_tid} → tid={new_tid} "
+                          f"({mark})  {text[:45]}")
 
-        else:
-            random.shuffle(snapshot)
-            for tid, votes_idx in snapshot:
-                raw  = VOTES[votes_idx][group_idx] if votes_idx < len(VOTES) else 0
-                if cast_vote(cookie, csrf, conv_id, tid, add_noise(raw)):
-                    total_votes += 1
-                else:
-                    total_skipped += 1
+            vote_batch(snapshot[split:])
 
         if (p_idx + 1) % 15 == 0:
             pct = (p_idx + 1) / N * 100
@@ -428,6 +580,9 @@ def run_simulation(conv_id: str) -> None:
     print(f"\n  → {total_votes} votes cast"
           + (f", {total_skipped} skipped" if total_skipped else "")
           + f", {len(pool)} statements total")
+    if derivative_tids:
+        print(f"  → {len(derivative_tids)} derivative statement(s), "
+              f"{total_linked} linked to a parent in statement_provenance")
 
     print(f"\n{'=' * 62}")
     print("Simulation complete.")
@@ -436,8 +591,12 @@ def run_simulation(conv_id: str) -> None:
     print("  (Polis math runs in the background — typically 30–60 s)")
 
     # Build text → tid mapping for the caller (used by seed_featured_statements).
+    # Derivatives share their parent's votes_idx, so they are skipped here — otherwise
+    # a derivative would claim its parent's text and get featured in its place.
     text_to_tid = {}
     for tid, votes_idx in pool:
+        if tid in derivative_tids:
+            continue
         if votes_idx < len(SEED_STATEMENTS):
             text_to_tid[SEED_STATEMENTS[votes_idx]] = tid
         else:
@@ -445,6 +604,101 @@ def run_simulation(conv_id: str) -> None:
             if fi < len(FOLLOWUP_STATEMENTS):
                 text_to_tid[FOLLOWUP_STATEMENTS[fi]] = tid
     return text_to_tid
+
+
+INFORMED_VOTERS = 30
+
+
+def _cast_informed_votes(p6_zinvite: str, tids: list[int], phase2_conv_id: str) -> None:
+    """Cast a batch of grouped informed votes on the Phase 6 statements so the round
+    has real cluster structure.
+
+    Writes Polis-native signs directly (-1=agree, +1=disagree, 0=pass): the convention
+    every other vote in the system uses, and the one `polis_admin.py` counts as agree.
+
+    The app's own informed-vote route currently writes the OPPOSITE sign — `app.py`
+    maps agree to +1 and nothing negates it downstream. That inversion is the bug
+    PR #328 fixes. Until #328 lands, a round cast here and a round cast by clicking
+    in the app disagree, which makes this a useful oracle rather than a trap: once
+    the fix is in, the two should match.
+    """
+    cast = 0
+    for v in range(INFORMED_VOTERS):
+        g = v % 3                         # three synthetic opinion groups
+        # The informed round is voted by the FIRST INFORMED_VOTERS people from Phase 2
+        # (same subjects → same uid), so the two rounds can be linked per person.
+        cookie, csrf = new_session(subject_for(phase2_conv_id, v))
+        for j, tid in enumerate(tids):
+            if g == 2:                    # group 2 is noisy/undecided
+                val = 0 if random.random() < 0.5 else random.choice((-1, 1))
+            else:                         # groups 0/1 take opposite stances per statement
+                base = -1 if ((j % 2 == 0) == (g == 0)) else 1
+                val = add_noise(base)
+            if cast_vote(cookie, csrf, p6_zinvite, tid, val):
+                cast += 1
+    print(f"  Cast {cast} informed votes across {INFORMED_VOTERS} participants")
+    # Say this on stdout, not only in a docstring the operator never opens: anyone
+    # comparing this round against one voted through the app needs to know the two
+    # currently disagree, or they will read the difference as a bug here.
+    print("  [signs] written Polis-native (-1=agree). The app's own Phase 6 route "
+          "writes +1 for agree, so a round cast here and one cast by clicking in "
+          "the app have OPPOSITE signs until that is fixed.")
+    print(f"  [counts] `votes` will hold {cast} rows plus one author agree per "
+          "statement — Polis adds those itself; see ref_polis-data-model.md.")
+
+
+def advance_to_phase6(conv_id: str) -> None:
+    """Advance the conversation into Phase 6 (informed voting).
+
+    Creates the dedicated Phase 6 Polis conversation, seeds it with the confirmed
+    featured statements (recording each phase6 tid onto the FeaturedStatement row),
+    wires the id onto the conversation, flips `phase_informed_voting`, and casts a
+    batch of informed votes. Follows the app's `_init_phase6` in outline, but via the
+    same raw-SQL + HTTP path the rest of this simulator uses, so it needs no Polis
+    admin credentials (which the local dev stack does not set).
+
+    That substitution has one measured consequence. `_init_phase6` seeds through the
+    moderator path (`add_seed_return_id`), which leaves a `vote: 0` author row per
+    statement; seeding through the participant endpoint as this does leaves a `-1`
+    (agree) instead. So a simulated Phase 6 round carries author agrees that
+    production does not — confirmed on production 2026-09-02, where the sole Phase 6
+    round held 11 author rows, all `vote=0`. See ref_polis-data-model.md."""
+    from app import app
+    from db import Conversation, FeaturedStatement, db as flask_db
+    with app.app_context():
+        conv = Conversation.query.filter_by(polis_id=conv_id).first()
+        if conv is None:
+            print("  [skip] conversation not found in Flask DB")
+            return
+        featured = (FeaturedStatement.query
+                    .filter_by(conversation_id=conv.id, confirmed_by_admin=True)
+                    .all())
+        if not featured:
+            print("  [skip] no confirmed featured statements to seed into Phase 6")
+            return
+
+        p6_zinvite = create_polis_conversation(
+            f"{conv.title} — Informed Voting",
+            "Informed voting round on the featured statements.")
+        print(f"  Phase 6 Polis conversation: {p6_zinvite}")
+
+        admin_cookie, admin_csrf = new_session()
+        p6_tids: list[int] = []
+        for fs in featured:
+            tid = submit_statement(admin_cookie, admin_csrf, p6_zinvite, fs.statement_text)
+            if tid is None:
+                print(f"  [warn] could not seed featured statement fs={fs.id}")
+                continue
+            fs.phase6_polis_statement_id = tid
+            p6_tids.append(tid)
+
+        conv.phase6_polis_conversation_id = p6_zinvite
+        conv.phase_informed_voting = True
+        flask_db.session.commit()
+        print(f"  Seeded {len(p6_tids)} statement(s); phase_informed_voting=True")
+
+        if p6_tids:
+            _cast_informed_votes(p6_zinvite, p6_tids, conv_id)
 
 
 def main():
@@ -456,14 +710,29 @@ def main():
                         help="Use an existing Polis conversation instead of creating one")
     parser.add_argument("--skip-flask", action="store_true",
                         help="Skip wiki-polis Flask DB registration")
+    parser.add_argument("--phase6", action="store_true",
+                        help="Also advance into Phase 6 (informed voting): create the "
+                             "dedicated Polis conversation, seed featured statements, flip "
+                             "the phase, and cast informed votes. Requires Flask registration.")
     parser.add_argument("--flask-url", metavar="URL", default=FLASK,
                         help=f"Base URL of the wiki-polis Flask app (default: {FLASK})")
     parser.add_argument("--particiapi-url", metavar="URL", default=PARTICIAPI,
                         help=f"Base URL of Particiapi (default: {PARTICIAPI})")
+    parser.add_argument("--derivatives", type=int, default=0,
+                        metavar="N",
+                        help="Submit N statements as declared improvements on an existing "
+                             "statement, recording each in statement_provenance "
+                             f"(max {len(DERIVATIVE_STATEMENTS)}). Requires Flask registration.")
     args = parser.parse_args()
 
     FLASK = args.flask_url.rstrip("/")
     PARTICIAPI = args.particiapi_url.rstrip("/")
+
+    # The default container name is whatever compose generated for *a*
+    # particiapp-docker checkout on this host, and POLIS_DB_CONTAINER can also come
+    # from v2/.env via load_dotenv. A run that writes into the wrong stack's Polis
+    # database otherwise looks identical on stdout to a correct one.
+    print(f"Polis DB container: {DB_CONTAINER}   ·   Particiapi: {PARTICIAPI}")
 
     conv_id = args.conversation_id
     if not conv_id:
@@ -486,8 +755,15 @@ def main():
             except Exception as e:
                 print(f"  Flask registration failed: {e} (continuing anyway)")
 
+    n_derivatives = args.derivatives
+    if n_derivatives and args.skip_flask:
+        print("\n[skip] --derivatives needs the Flask DB for provenance (drop --skip-flask)")
+        n_derivatives = 0
+
+    probe_stable_identity()
+
     try:
-        text_to_tid = run_simulation(conv_id)
+        text_to_tid = run_simulation(conv_id, n_derivatives=n_derivatives)
     except requests.ConnectionError:
         print(f"Error: cannot reach Particiapi at {PARTICIAPI}")
         print("Is the particiapp-docker stack running?  docker compose up")
@@ -499,6 +775,15 @@ def main():
             seed_featured_statements(conv_id, text_to_tid)
         except Exception as e:
             print(f"  Featured statement seeding failed: {e} (continuing anyway)")
+
+        if args.phase6:
+            print("\nAdvancing into Phase 6 (informed voting)...")
+            try:
+                advance_to_phase6(conv_id)
+            except Exception as e:
+                print(f"  Phase 6 setup failed: {e} (continuing anyway)")
+    elif args.phase6:
+        print("\n[skip] --phase6 requires Flask registration (drop --skip-flask)")
 
 
 if __name__ == "__main__":

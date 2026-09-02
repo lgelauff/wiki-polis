@@ -30,10 +30,15 @@ Agree = +1 in exports, but the raw table and the vote API use -1 = Agree.
 
 wiki-polis sends the **raw Polis sign** — `value: -1` for Agree, `value: 1` for Disagree,
 `0` for Pass — via Particiapi's `PUT /api/conversations/{id}/votes/{tid}`. **Particiapi does
-not translate it**; the value is written to `votes.vote` unmodified. Both write paths agree:
+not translate it**; the value is written to `votes.vote` unmodified. `polis_admin.py` counts
+`-1` as agree, which only reconciles under pass-through. Both write paths agree:
 `app.py:2212` (Explore) and `app.py:2337` (informed vote), with `services/explore.py` putting
 the value on the wire as given, and the legacy Jinja route at `app.py:6591` forwarding the
 client's raw `data-vote` attribute.
+
+Until #328 the informed-vote route sent agree as `+1`, disagreeing with the Explore path in
+the same file. Rows stored under that inversion on production were repaired 2026-09-02 —
+both `votes` and `votes_latest_unique`, excluding author rows.
 
 The **only** sign flip anywhere in the system is Polis's own CSV export (see above). If vote
 data looks inverted, that export flip is the explanation to check first — see
@@ -50,6 +55,44 @@ first statement or participant.
 wiki-polis fix: template guards use `{% if item.phase6_stmt_id is not none %}` not
 `{% if item.phase6_stmt_id %}`. The same care applies anywhere a Polis integer ID is
 checked for presence.
+
+### Submitting a statement casts a vote
+
+Submitting a statement through the participant endpoint
+(`POST /api/conversations/{id}/statements/`) writes a `votes` row for the author: an
+**agree (`-1`)** on their own `tid`, from the author's own `pid`. No client asks for it,
+and nothing in wiki-polis casts it — Polis records it as part of accepting the statement.
+
+The **moderator seed path** (`add_seed_return_id` → `/api/v3/comments`, used by
+`_init_phase6`) also writes an author row, but a **pass (`0`)** rather than an agree —
+its explicit `'vote': 0` takes effect. So the two paths differ:
+
+| path | author row |
+|------|------------|
+| participant `POST …/statements/` | agree (`-1`) |
+| moderator `add_seed_return_id` | pass (`0`) |
+
+Both leave one row per statement from the author's own `pid`. So a conversation's vote
+count is *participant votes + one per statement*, and on the participant path every
+statement starts with one agree it did not earn. Any count, tally or turnout figure
+derived from `votes` has to decide whether to exclude author votes; a per-participant
+average silently includes them. Identify them by joining `comments` on `(zid, tid)` and
+comparing `pid` — there is no flag.
+
+Reproduced on the local stack (2026-09-02): a fresh conversation with 0 votes, one
+statement submitted through `POST /api/conversations/{id}/statements/` and no vote call
+made, leaves exactly one row — `pid=0, tid=0, vote=-1` — whose `pid` equals the author's
+in `comments`. This is also why a simulated Phase 6 round of 30 voters over 5 statements
+lands 155 rows in `votes`, not 150.
+
+The moderator half was confirmed on production the same day: the one Phase 6 round there
+carried exactly 11 author rows, one per seeded statement, every one `pid=0, vote=0`.
+
+**This is a live divergence between the simulator and production.**
+`simulate_cats_vs_dogs.py --phase6` seeds Phase 6 through the *participant* endpoint
+(it has no Polis admin credentials), so local Phase 6 statements carry `-1` author rows
+where production carries `0`. Anything counting or clustering over a simulated Phase 6
+round sees agrees that production would not have.
 
 ### zinvite vs zid
 

@@ -196,6 +196,46 @@ uv run python simulate_cats_vs_dogs.py --particiapi-url http://127.0.0.1:8012
 
 The script also reads `PARTICIAPI_BASE_URL` from `v2/.env`.
 
+### Derivative statements
+
+`--derivatives N` makes N of the mid-run submissions **rewordings of an existing
+statement**, each recorded in `statement_provenance` via the app's own
+`record_statement_provenance()` — the same function the `/statements/new` route uses,
+so the rows and their similarity scores are the real thing. Simulated voters vote a
+rewording the way they voted its parent, so a lineage looks like a lineage in the
+vote matrix.
+
+```bash
+uv run python simulate_cats_vs_dogs.py --derivatives 6
+```
+
+Needed by anything that reads provenance: the derivative-statement analysis, the
+lineage-collapse counterfactual, and the near-duplicate grouping. Requires Flask
+registration, so it is skipped under `--skip-flask`.
+
+### Stable participant identity
+
+By default every simulated voter opens a fresh anonymous Particiapi session, so each
+one becomes a **different** Polis `uid`. That is fine for a single round, but it means
+a Phase 2 participant and a Phase 6 participant can never be recognised as the same
+person — which is exactly what a before/after comparison needs.
+
+Set `PARTICIAPI_SUB_SECRET` (matching Particiapi's `TRUSTED_SUB_SECRET`) and the
+simulator asserts a stable subject per synthetic person, the way Flask's proxy does in
+production — see [`ref_cross-device-identity.md`](ref_cross-device-identity.md).
+
+The script probes this at startup and says which mode it is in:
+
+```
+[identity] trusted-sub honoured — participants keep one uid across rounds
+[identity] trusted-sub NOT honoured (secret mismatch, or a Particiapi image
+           predating the feature) — participants will be anonymous
+```
+
+It asks the database rather than trusting the response, because an unset secret, a
+mismatched secret and an image without the feature all look identical from the
+client side: a session that silently falls back to anonymous.
+
 ## Dev Test Users
 
 Three generic test accounts let you switch between user identities without going through Wikimedia OAuth. Enable them by setting `DEV_FAKE_LOGIN=1` in `v2/.env`.
