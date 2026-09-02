@@ -653,9 +653,16 @@ def advance_to_phase6(conv_id: str) -> None:
     Creates the dedicated Phase 6 Polis conversation, seeds it with the confirmed
     featured statements (recording each phase6 tid onto the FeaturedStatement row),
     wires the id onto the conversation, flips `phase_informed_voting`, and casts a
-    batch of informed votes. Mirrors the app's `_init_phase6` but via the same
-    raw-SQL + HTTP path the rest of this simulator uses, so it needs no Polis admin
-    credentials (which the local dev stack does not set)."""
+    batch of informed votes. Follows the app's `_init_phase6` in outline, but via the
+    same raw-SQL + HTTP path the rest of this simulator uses, so it needs no Polis
+    admin credentials (which the local dev stack does not set).
+
+    That substitution has one measured consequence. `_init_phase6` seeds through the
+    moderator path (`add_seed_return_id`), which leaves a `vote: 0` author row per
+    statement; seeding through the participant endpoint as this does leaves a `-1`
+    (agree) instead. So a simulated Phase 6 round carries author agrees that
+    production does not — confirmed on production 2026-09-02, where the sole Phase 6
+    round held 11 author rows, all `vote=0`. See ref_polis-data-model.md."""
     from app import app
     from db import Conversation, FeaturedStatement, db as flask_db
     with app.app_context():
