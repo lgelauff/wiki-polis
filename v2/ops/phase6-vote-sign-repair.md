@@ -34,7 +34,24 @@ is a separate Polis conversation. Every phase-6 zinvite in this list needs repai
 (port 5442). A grepped name matches both. Confirm which you are on before any write — query
 `zinvites` for your phase-6 zinvite; a `zid` back means production, empty means staging.
 
+Every SQL block below runs inside that container:
+
+```bash
+docker exec -it particiapp-docker_postgres_1 psql -U polis -d polis   # production
+docker exec -it wiki-polis-staging_postgres_1 psql -U polis -d polis  # staging
+```
+
 ### The decisive check: cast one vote whose intent you know
+
+> ⚠️ **The round must not be paused, and the consultation must be active.** Both write
+> paths refuse otherwise — the API returns `409 Informed voting is not open.`, the legacy
+> route `403` — and a paused round is the state this runbook otherwise wants the tool in.
+> Record `active` and `paused` in step 1, unpause for this check and for step 7, and
+> restore the recorded state afterwards.
+>
+> This deliberately writes one genuinely inverted row, so do it **before** the repair,
+> never after. A vote cast between the repair and the deploy breaks step 5's uniformity
+> premise and leaves both conventions in one table.
 
 1. Open the phase 6 round as yourself and deliberately click **Agree** on one card.
 2. Read it back, newest first:
@@ -131,6 +148,11 @@ Each pair must match. This is also your real rollback: the pre-repair state surv
 
 ## 5. Repair — both tables, one transaction, counted
 
+> **Production was repaired on 2026-09-02.** Running this again on the same conversation
+> re-inverts it. The negation is an involution over this predicate — odd runs leave the
+> data repaired, even runs leave it broken — so if you are unsure whether it has already
+> run, do **not** re-run "to be safe". Check first with the known-intent vote from step 2.
+
 ⚠️ **Not idempotent.** Running it twice returns the data to broken. Run once, verify, do not
 re-run. The `NOT EXISTS` guard protects the *backup*, not this.
 
@@ -140,7 +162,7 @@ normally **differ**, since `votes` keeps every re-vote while `votes_latest_uniqu
 per (pid, tid):
 
 ```sql
-SELECT (SELECT count(*) FROM votes WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND vote <> 0) AS votes_expected, (SELECT count(*) FROM votes_latest_unique WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND vote <> 0) AS vlu_expected;
+SELECT (SELECT count(*) FROM votes v WHERE v.zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND v.vote <> 0 AND NOT EXISTS (SELECT 1 FROM comments c WHERE c.zid = v.zid AND c.tid = v.tid AND c.pid = v.pid)) AS votes_expected, (SELECT count(*) FROM votes_latest_unique v WHERE v.zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND v.vote <> 0 AND NOT EXISTS (SELECT 1 FROM comments c WHERE c.zid = v.zid AND c.tid = v.tid AND c.pid = v.pid)) AS vlu_expected;
 ```
 
 ```sql
@@ -148,12 +170,20 @@ BEGIN;
 ```
 
 ```sql
-UPDATE votes SET vote = -vote WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND vote <> 0;
-UPDATE votes_latest_unique SET vote = -vote WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND vote <> 0;
+UPDATE votes v SET vote = -v.vote WHERE v.zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND v.vote <> 0 AND NOT EXISTS (SELECT 1 FROM comments c WHERE c.zid = v.zid AND c.tid = v.tid AND c.pid = v.pid);
+UPDATE votes_latest_unique v SET vote = -v.vote WHERE v.zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') AND v.vote <> 0 AND NOT EXISTS (SELECT 1 FROM comments c WHERE c.zid = v.zid AND c.tid = v.tid AND c.pid = v.pid);
 ```
 
 Each must report exactly its own expected number. Passes (`vote = 0`) are excluded deliberately —
 negating zero is a no-op that would pad the counts and mask a mistake.
+
+**Author rows are excluded by identity, not by value.** Polis writes one vote from the
+statement's own author, and *that* row was never inverted — the app never sent it. On
+production it happens to be a `0` (the moderator seed path sends an explicit zero), so
+`vote <> 0` would exclude it by luck. It is `-1` when a round was seeded through the
+participant endpoint — which is what the local simulator does, i.e. exactly the stack this
+runbook tells you to rehearse on. The `NOT EXISTS` join against `comments` is what actually
+excludes them; keep `vote <> 0` only as the pass optimisation it claims to be.
 
 Verify before committing. Both distributions should mirror (`-1` and `+1` swapped, `0`
 unchanged), and this reads **both** tables so a divergence is visible *before* you commit:
@@ -167,6 +197,35 @@ perfectly mirrored distribution while every participant-facing number stays inve
 
 Then `COMMIT;` — or `ROLLBACK;` if anything is off.
 
+### 5b. Recompute the clusters — the repair is not finished without this
+
+The vote tables are now right and **every rendered opinion group is still wrong.** Polis
+serves clustering from `math_main`, computed from the old signs. A plain row rewrite adds
+no row, fires no rule and moves no timestamp, so nothing tells the math worker that
+anything changed. Step 7's tallies come straight from Postgres and will look correct while
+the groups beside them stay backwards — the one silent mis-display this repair does not fix
+by itself.
+
+Queue a recompute through the mechanism the app already uses (`queue_math_recompute` in
+`polis_admin.py`) — one row in `worker_tasks` of type `update_math`, carrying
+`{"zid": <zid>}`, bucketed on the zid, with `math_env` `'prod'`.
+
+**Then verify it was consumed. Do not assume it.** Record `math_tick` before, and read it
+back after:
+
+```sql
+SELECT zid, math_tick, to_timestamp(last_vote_timestamp/1000) AS last_vote FROM math_main WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>');
+```
+
+`math_tick` must advance. **No movement is a failure, not a pass.** Two known reasons:
+
+- `math_env` is hardcoded `'prod'`, so on a staging or local stack the task is never claimed.
+- The worker may not be draining the queue at all. On 2026-09-02 a task queued on production
+  sat at `attempts = 0` beside one from 2026-08-05, with `math_tick` frozen at 1356 —
+  polismath was running but had computed nothing for a month. If that is the state, the
+  clusters cannot be refreshed here; that is its own incident, and the repair should be
+  reported as vote-data-only rather than complete.
+
 Repeat **one conversation at a time** through steps 4 and 5, verifying each. A wrong row count is
 recoverable when it is the only conversation in the transaction.
 
@@ -177,8 +236,12 @@ recoverable when it is the only conversation in the transaction.
 Only now, with every conversation repaired:
 
 ```bash
-bash ~/wiki-polis/deploy.sh main
+bash ~/wiki-polis/deploy.sh main --expect <sha of the merge commit that carries the fix>
 ```
+
+`--expect` fails closed before installing or restarting. Without it a moved ref puts
+unfixed code in front of freshly repaired data, and the commit-stamp check below catches
+it only once the tool is already serving.
 
 `deploy.sh` ends with `toolforge webservice restart`, so this returns the tool to service. It is
 `set -euo pipefail`, so a failed frontend build exits **before** the restart and leaves the tool
@@ -213,7 +276,7 @@ the only copy of what the bug wrote.
 
 ## Why not #285's script
 
-`v2/ops/migrate_phase6_vote_signs.py` (208 lines) does this with discovery, dry-run and a
+#285's migration script (`migrate_phase6_vote_signs.py`, on that PR's branch — it is not in this tree) does this with discovery, dry-run and a
 run-log. Good work, but its idempotency guard is a **local JSON file** — its own docstring says
 *"Keep that log; do not run on a second machine."* It also only ever touched `votes`, so it would
 have hit the same silent-no-op described in step 4. With a handful of phase-6 rows and the tool

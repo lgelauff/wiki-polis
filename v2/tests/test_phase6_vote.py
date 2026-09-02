@@ -54,6 +54,10 @@ def test_phase6_vote_reuses_session_across_votes(auth_client, participant):
     assert r2.status_code == 200
     assert post.call_count == 1   # session bootstrap happens once, then is reused
     assert put.call_count == 2    # both votes forwarded
+    # The legacy route forwards the client's integer UNCHANGED (app.py, `_put`).
+    # Nothing else asserts that, so a server-side negation added here later — the
+    # most plausible shape of a future "re-fix" — would pass every other test.
+    assert [c.kwargs['json'] for c in put.call_args_list] == [{'value': -1}, {'value': 1}]
 
 
 def test_phase6_bootstrap_shared_across_sessions_same_participant(app, participant):
@@ -122,7 +126,7 @@ def test_both_phase6_surfaces_send_the_polis_agree_sign():
     template = (root / 'templates' / 'conversation.html').read_text()
     # Only the phase-6 deck uses btn-p6-vote; phase 2 has its own vote controls.
     buttons = re.findall(
-        r'btn-p6-vote"\s+data-vote="(-?\d)"\s*>\s*'
+        r'btn-p6-vote"\s+data-vote="(-?\d)"[^>]*>\s*'
         r'<span class="vote-dot vote-dot--(\w+)"></span>(\w+)',
         template,
     )
@@ -130,6 +134,21 @@ def test_both_phase6_surfaces_send_the_polis_agree_sign():
     mapping = {label: int(value) for value, _dot, label in buttons}
     assert mapping == {'Agree': -1, 'Pass': 0, 'Disagree': 1}, mapping
 
-    app_src = (root / 'app.py').read_text()
-    assert app_src.count("polis_values = {'agree': -1, 'pass': 0, 'disagree': 1}") == 2, \
-        'both the Explore and informed-vote API paths must map agree to -1'
+    # The badge the participant reads after voting is built from the same integer,
+    # in inline JS no test touched. Flip those two lines and every legacy voter is
+    # told the opposite of what was stored, with the suite still green. Derive both
+    # sides and compare, so formatting drift cannot silently disable this.
+    labels = re.search(
+        r"var label = vote === (-?\d) \? 'Agreed' : vote === (-?\d) \? 'Disagreed'",
+        template,
+    )
+    assert labels, 'could not find the phase-6 badge label map in conversation.html'
+    assert int(labels.group(1)) == mapping['Agree'], (
+        'the badge says "Agreed" for a different integer than the Agree button sends')
+    assert int(labels.group(2)) == mapping['Disagree'], (
+        'the badge says "Disagreed" for a different integer than the Disagree button sends')
+
+    # The API path's mapping is asserted behaviourally, per choice, in
+    # test_informed_voting_api.py::test_informed_vote_sends_polis_signs_for_every_choice.
+    # A source-string count was tried here and removed: it passed if both maps moved
+    # into dead code, and failed on a reformat.

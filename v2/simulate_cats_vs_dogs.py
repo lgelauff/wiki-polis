@@ -616,11 +616,11 @@ def _cast_informed_votes(p6_zinvite: str, tids: list[int], phase2_conv_id: str) 
     Writes Polis-native signs directly (-1=agree, +1=disagree, 0=pass): the convention
     every other vote in the system uses, and the one `polis_admin.py` counts as agree.
 
-    The app's own informed-vote route currently writes the OPPOSITE sign — `app.py`
-    maps agree to +1 and nothing negates it downstream. That inversion is the bug
-    PR #328 fixes. Until #328 lands, a round cast here and a round cast by clicking
-    in the app disagree, which makes this a useful oracle rather than a trap: once
-    the fix is in, the two should match.
+    The app's informed-vote route wrote the OPPOSITE sign until #328 — agree as +1,
+    with nothing negating it downstream — so rounds cast here and rounds cast by
+    clicking in the app disagreed. #328 corrected the route and the stored rows on
+    production were repaired 2026-09-02, so the two now match. If they ever diverge
+    again, this function is the reference: it has always written Polis-native.
     """
     cast = 0
     for v in range(INFORMED_VOTERS):
@@ -640,9 +640,9 @@ def _cast_informed_votes(p6_zinvite: str, tids: list[int], phase2_conv_id: str) 
     # Say this on stdout, not only in a docstring the operator never opens: anyone
     # comparing this round against one voted through the app needs to know the two
     # currently disagree, or they will read the difference as a bug here.
-    print("  [signs] written Polis-native (-1=agree). The app's own Phase 6 route "
-          "writes +1 for agree, so a round cast here and one cast by clicking in "
-          "the app have OPPOSITE signs until that is fixed.")
+    print("  [signs] written Polis-native (-1=agree) — the same convention the app's "
+          "Phase 6 route uses since #328, so a round cast here and one cast by "
+          "clicking in the app now agree.")
     print(f"  [counts] `votes` will hold {cast} rows plus one author agree per "
           "statement — Polis adds those itself; see ref_polis-data-model.md.")
 

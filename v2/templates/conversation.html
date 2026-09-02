@@ -931,13 +931,16 @@
 
           {% if item.phase6_stmt_id is not none %}
           <div class="vote-choice-row p6-vote-row">
-            <button class="vote-choice btn-p6-vote" data-vote="-1">
+            {# aria-pressed carries the recorded choice. Without it the selection is
+               conveyed only by opacity, which no assistive technology reports. The JS
+               below keeps it in step with the .p6-voted class. #}
+            <button class="vote-choice btn-p6-vote" data-vote="-1" aria-pressed="false">
               <span class="vote-dot vote-dot--agree"></span>Agree
             </button>
-            <button class="vote-choice btn-p6-vote" data-vote="0">
+            <button class="vote-choice btn-p6-vote" data-vote="0" aria-pressed="false">
               <span class="vote-dot vote-dot--pass"></span>Pass
             </button>
-            <button class="vote-choice btn-p6-vote" data-vote="1">
+            <button class="vote-choice btn-p6-vote" data-vote="1" aria-pressed="false">
               <span class="vote-dot vote-dot--disagree"></span>Disagree
             </button>
           </div>
@@ -1259,7 +1262,9 @@
               badge.removeAttribute('hidden');
               badge.innerHTML = '<span aria-hidden="true">✓</span> ' + label;
               row.querySelectorAll('.btn-p6-vote').forEach(function (b) {
-                b.classList.toggle('p6-voted', b.dataset.vote === String(vote));
+                var picked = b.dataset.vote === String(vote);
+                b.classList.toggle('p6-voted', picked);
+                b.setAttribute('aria-pressed', picked ? 'true' : 'false');
               });
               card.classList.add('p6-card--voted');
               markTerminal(card);

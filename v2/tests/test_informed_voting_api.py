@@ -3,6 +3,8 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from db import (Argument, Conversation, ConversationBan, FeaturedStatement,
                 Participation, db)
 from services.informed_voting import build_informed_voting_state
@@ -165,6 +167,35 @@ def test_informed_vote_is_idempotent_put_and_translates_phase6_sign(
     # Verified against a live Polis: an agree in each phase now stores -1 in both.
     assert put.call_args.kwargs['json'] == {'value': -1}
     assert put.call_args.kwargs['cookies'] == {'session': 'phase6-cookie'}
+
+
+@pytest.mark.parametrize('choice, polis_value', [
+    ('agree', -1),
+    ('pass', 0),
+    ('disagree', 1),
+])
+def test_informed_vote_sends_polis_signs_for_every_choice(
+    auth_client, participant, choice, polis_value,
+):
+    """Lock all three mappings, not just agree.
+
+    With only `agree` asserted, mapping `disagree` to -1 as well would pass — the
+    map would be wrong and no test would notice. These are the signs Polis stores
+    and `polis_admin.py` counts, and they must match the Explore path exactly.
+    """
+    conversation, participation, first, _second = _fixture(participant)
+    with auth_client.session_transaction() as browser_session:
+        browser_session['_p6_pa'] = 'phase6-cookie'
+        browser_session['_p6_csrf'] = 'phase6-csrf'
+
+    with patch('app.polis_http.put', return_value=_response({})) as put:
+        response = auth_client.put(
+            f'/api/v1/conversations/informed-api/featured-statements/{first.id}/informed-vote',
+            json={'choice': choice},
+        )
+
+    assert response.status_code == 200
+    assert put.call_args.kwargs['json'] == {'value': polis_value}
     db.session.refresh(participation)
     assert participation.last_engagement is not None
 

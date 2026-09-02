@@ -112,6 +112,9 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
         }, 400);
       }
     },
+    // Clear any previous failure before the new attempt, so a retry that succeeds
+    // does not leave the error badge standing.
+    onMutate: () => setNetworkErrorId(null),
     onError: (_error, variables) => setNetworkErrorId(variables.card.featuredStatementId),
   });
 
@@ -125,13 +128,19 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
         <div tabIndex={-1} data-focus-anchor className="sr-only" />
         <div className="p6-card-header">
           <span className="stmt-meta-left"><span className="stmt-dot" />INFORMED VOTE · {index + 1} of {data.cards.length}</span>
-          <span className={`p6-voted-badge${selected ? ` p6-voted-badge--${selected}` : ''}`} role="alert" hidden={!selected && !error}>{selected ? <><span aria-hidden="true">✓</span> {selected === 'agree' ? 'Agreed' : selected === 'disagree' ? 'Disagreed' : 'Passed'}</> : 'Network error — try again'}</span>
+          {/* Error branch first. `selected` survives a failed re-vote, so testing it
+              first makes the error unreachable once a card has been voted — and a
+              rejected re-vote (a 409 on a paused round, which is the state the repair
+              runbook puts the tool in) would silently keep showing the old choice. */}
+          <span className={`p6-voted-badge${!error && selected ? ` p6-voted-badge--${selected}` : ''}`} role="alert" hidden={!selected && !error}>{error ? 'Vote not recorded — try again' : <><span aria-hidden="true">✓</span> {selected === 'agree' ? 'Agreed' : selected === 'disagree' ? 'Disagreed' : 'Passed'}</>}</span>
         </div>
         <div className="p6-card-inner">
           <div className="p6-statement-col">
             <p className="p6-statement-text">{card.statement}</p>
             {card.canVote && <div className="vote-choice-row p6-vote-row">
-              {voteValues.map((item) => <button type="button" className={`vote-choice btn-p6-vote${selected === item.choice ? ' p6-voted' : ''}`} data-vote={item.value} disabled={vote.isPending && vote.variables?.card.featuredStatementId === card.featuredStatementId} onClick={() => vote.mutate({card, choice: item.choice})} key={item.choice}><span className={`vote-dot vote-dot--${item.choice}`} />{item.label}</button>)}
+              {/* aria-pressed carries the recorded choice: without it the selection is
+                  conveyed only by opacity, which no assistive technology reports. */}
+              {voteValues.map((item) => <button type="button" className={`vote-choice btn-p6-vote${selected === item.choice ? ' p6-voted' : ''}`} data-vote={item.value} aria-pressed={selected === item.choice} disabled={vote.isPending && vote.variables?.card.featuredStatementId === card.featuredStatementId} onClick={() => vote.mutate({card, choice: item.choice})} key={item.choice}><span className={`vote-dot vote-dot--${item.choice}`} />{item.label}</button>)}
             </div>}
           </div>
           <div className="p6-args-panel">
