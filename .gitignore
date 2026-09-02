@@ -9,6 +9,18 @@ tmp/
 .dev-session
 audit/
 
+# Analysis pipeline. The code is tracked so the reported numbers can be
+# re-derived and checked; nothing it reads or writes is. Bundles and built
+# reports carry participant-authored statement text, and the export salt and
+# sub-secret are credentials.
+private/*
+!private/analysis/
+private/analysis/*
+!private/analysis/*.py
+!private/analysis/*.ipynb
+!private/analysis/*.md
+!private/analysis/*.sh
+
 # Design handoff (local reference only)
 design_handoff_propose_and_arguments/
 
