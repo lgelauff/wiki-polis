@@ -39,7 +39,9 @@ load_dotenv(Path(__file__).with_name(".env"))
 
 PARTICIAPI  = os.environ.get("PARTICIAPI_BASE_URL", "http://127.0.0.1:8002").rstrip("/")
 FLASK       = os.environ.get("WIKI_POLIS_FLASK_URL", "http://127.0.0.1:5001").rstrip("/")
-DB_CONTAINER = "particiapp-docker-postgres-1"
+# Overridable: container names collide across stacks on a shared host, and psql()
+# below writes. Pin it explicitly rather than trusting the default to be local.
+DB_CONTAINER = os.environ.get("POLIS_DB_CONTAINER", "particiapp-docker-postgres-1")
 
 # Trusted-subject secret. When set (and honoured by the Particiapi image), each
 # simulated person keeps ONE Polis uid across sessions and across the Phase 2 and
@@ -267,11 +269,19 @@ def add_noise(vote: int, flip_prob: float = 0.12, pass_prob: float = 0.08) -> in
     return vote
 
 
-def psql(sql: str) -> str:
-    """Run a SQL statement in the Polis PostgreSQL container. Returns first result row."""
+def psql(sql: str, **params: str) -> str:
+    """Run a SQL statement in the Polis PostgreSQL container. Returns first result row.
+
+    Pass caller-supplied values as keyword arguments and reference them as :\'name\'
+    in `sql`; psql quotes them itself, so text that arrived on the command line never
+    has to be trusted (`--conversation-id` reaches this function).
+    """
+    var_args: list[str] = []
+    for name, value in params.items():
+        var_args += ["-v", f"{name}={value}"]
     r = subprocess.run(
         ["docker", "exec", DB_CONTAINER,
-         "psql", "-U", "polis", "polis", "-t", "-c", sql],
+         "psql", "-U", "polis", "polis", "-t", *var_args, "-c", sql],
         capture_output=True, text=True,
     )
     if r.returncode != 0:
@@ -281,7 +291,7 @@ def psql(sql: str) -> str:
     return lines[0] if lines else ""
 
 
-def probe_stable_identity(conv_id: str) -> bool:
+def probe_stable_identity() -> bool:
     """Check whether this Particiapi honours X-Particiapi-Sub, and set STABLE_IDENTITY.
 
     Opens one session with a throwaway subject and looks for the resulting
@@ -296,12 +306,16 @@ def probe_stable_identity(conv_id: str) -> bool:
         STABLE_IDENTITY = False
         return False
 
-    probe = f"sim-{conv_id}-probe"
+    # Fixed, not per-conversation: the probe casts no votes, so a per-run subject
+    # would leave one orphan row per run in the table the Phase 2 / Phase 6
+    # identity join reads, each looking like a participant who never voted.
+    probe = "sim-identity-probe"
     try:
         requests.post(f"{PARTICIAPI}/api/session?create=true",
                       headers={"X-Particiapi-Sub": probe,
                                "X-Particiapi-Sub-Secret": SUB_SECRET}).raise_for_status()
-        found = psql(f"SELECT COUNT(*) FROM particiapi_users WHERE subject = '{probe}';")
+        found = psql("SELECT COUNT(*) FROM particiapi_users WHERE subject = :'s';",
+                     s=probe)
         STABLE_IDENTITY = found.strip() not in ("", "0")
     except Exception as e:
         print(f"  [identity] probe failed ({e}) — falling back to anonymous sessions")
@@ -578,9 +592,17 @@ INFORMED_VOTERS = 30
 
 def _cast_informed_votes(p6_zinvite: str, tids: list[int], phase2_conv_id: str) -> None:
     """Cast a batch of grouped informed votes on the Phase 6 statements so the round
-    has real cluster structure. Uses Polis-native signs directly (-1=agree, +1=disagree,
-    0=pass) — the same signs the app's phase6_vote route writes after its `-vote`
-    negation, so the resulting `votes` rows match production."""
+    has real cluster structure.
+
+    Writes Polis-native signs directly (-1=agree, +1=disagree, 0=pass): the convention
+    every other vote in the system uses, and the one `polis_admin.py` counts as agree.
+
+    The app's own informed-vote route currently writes the OPPOSITE sign — `app.py`
+    maps agree to +1 and nothing negates it downstream. That inversion is the bug
+    PR #328 fixes. Until #328 lands, a round cast here and a round cast by clicking
+    in the app disagree, which makes this a useful oracle rather than a trap: once
+    the fix is in, the two should match.
+    """
     cast = 0
     for v in range(INFORMED_VOTERS):
         g = v % 3                         # three synthetic opinion groups
@@ -698,7 +720,7 @@ def main():
         print("\n[skip] --derivatives needs the Flask DB for provenance (drop --skip-flask)")
         n_derivatives = 0
 
-    probe_stable_identity(conv_id)
+    probe_stable_identity()
 
     try:
         text_to_tid = run_simulation(conv_id, n_derivatives=n_derivatives)
