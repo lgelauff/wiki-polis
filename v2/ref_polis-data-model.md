@@ -28,9 +28,14 @@ vote SMALLINT   -- -1 = Agree, 1 = Disagree, 0 = Pass/Unsure
 This is **opposite to the intuitive sign**. The CSV export negates every vote so that
 Agree = +1 in exports, but the raw table and the vote API use -1 = Agree.
 
-wiki-polis sends `value: 1` for Agree and `value: -1` for Disagree via Particiapi's
-`PUT /api/conversations/{id}/votes/{tid}`. Particiapi translates these before writing to
-Polis. Verify Particiapi's translation if vote data looks inverted.
+wiki-polis sends the raw Polis signs unchanged via Particiapi's
+`PUT /api/conversations/{id}/votes/{tid}` — `value: -1` for Agree, `1` for Disagree, `0`
+for Pass. **Particiapi passes the value straight through; there is no translation step.**
+`polis_admin.py` counts `-1` as agree, which only reconciles under pass-through.
+
+The one exception today is the Phase 6 informed-vote route (`app.py`, the second
+`polis_values` map), which sends the inverted sign — agree as `+1`. That is a known bug,
+not a convention: it disagrees with the explore path in the same file.
 
 ### tid and pid start at 0
 
@@ -45,9 +50,14 @@ checked for presence.
 
 ### Submitting a statement casts a vote
 
-Submitting a statement writes a `votes` row for the author: an **agree (`-1`)** on their
-own `tid`, from the author's own `pid`. No client asks for it, and nothing in wiki-polis
-casts it — Polis records it as part of accepting the statement.
+Submitting a statement through the participant endpoint
+(`POST /api/conversations/{id}/statements/`) writes a `votes` row for the author: an
+**agree (`-1`)** on their own `tid`, from the author's own `pid`. No client asks for it,
+and nothing in wiki-polis casts it — Polis records it as part of accepting the statement.
+
+Whether the **moderator seed path** (`add_seed_return_id` → `/api/v3/comments`, used by
+`_init_phase6`) does the same is **unverified** — it sends an explicit `'vote': 0`, which
+suggests it may not. Confirm before relying on either behaviour for seeded statements.
 
 So a conversation's vote count is *participant votes + one per statement*, and every
 statement starts with one agree it did not earn. Any count, tally or turnout figure

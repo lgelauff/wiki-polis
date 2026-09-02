@@ -29,6 +29,7 @@ import random
 import re
 import string
 import subprocess
+import uuid
 import sys
 from pathlib import Path
 
@@ -273,8 +274,10 @@ def psql(sql: str, **params: str) -> str:
     """Run a SQL statement in the Polis PostgreSQL container. Returns first result row.
 
     Pass caller-supplied values as keyword arguments and reference them as :\'name\'
-    in `sql`; psql quotes them itself, so text that arrived on the command line never
-    has to be trusted (`--conversation-id` reaches this function).
+    in `sql`; psql quotes them itself. The text that actually needs this is the
+    conversation topic and description below — under --phase6 the topic is built
+    from `conv.title`, which an admin edits, and a `$$` in it would otherwise
+    terminate the dollar quote it used to be pasted into.
     """
     var_args: list[str] = []
     for name, value in params.items():
@@ -282,9 +285,16 @@ def psql(sql: str, **params: str) -> str:
     # The SQL goes in on stdin, not as -c: psql only interpolates :\'name\' while
     # lexing input it reads, and silently does not do it for -c (which fails with
     # "syntax error at or near \":\"" instead).
+    #
+    # ON_ERROR_STOP is what makes reading from stdin safe. Without it psql reports
+    # a failed statement on stderr and still exits 0, so the returncode check below
+    # never fires and the caller reads "" as though it were a value. Measured
+    # against postgres:18-trixie: a bad statement via -c exits 1, via stdin exits
+    # 0, via stdin with ON_ERROR_STOP exits 3. It goes ahead of *var_args so a
+    # caller's parameter cannot shadow it.
     r = subprocess.run(
         ["docker", "exec", "-i", DB_CONTAINER,
-         "psql", "-U", "polis", "polis", "-t", *var_args],
+         "psql", "-U", "polis", "polis", "-t", "-v", "ON_ERROR_STOP=1", *var_args],
         input=sql, capture_output=True, text=True,
     )
     if r.returncode != 0:
@@ -309,10 +319,13 @@ def probe_stable_identity() -> bool:
         STABLE_IDENTITY = False
         return False
 
-    # Fixed, not per-conversation: the probe casts no votes, so a per-run subject
-    # would leave one orphan row per run in the table the Phase 2 / Phase 6
-    # identity join reads, each looking like a participant who never voted.
-    probe = "sim-identity-probe"
+    # Unique per run. A fixed subject is satisfied by a row that some earlier run
+    # left behind, so the probe would keep reporting success after the secret was
+    # rotated or the image swapped for one without trusted-sub — and since a
+    # mismatched secret degrades to an anonymous session with a 200, nothing else
+    # would catch it either. The row this leaves behind has no participants or
+    # votes rows, so it joins to nothing.
+    probe = f"sim-identity-probe-{uuid.uuid4().hex[:12]}"
     try:
         requests.post(f"{PARTICIAPI}/api/session?create=true",
                       headers={"X-Particiapi-Sub": probe,
@@ -363,9 +376,12 @@ def create_polis_conversation(topic: str, description: str) -> str:
     zid = psql(
         "INSERT INTO conversations "
         "(topic, description, owner, is_active, is_public, write_type, vis_type) "
-        "VALUES ($$%s$$, $$%s$$, 1, true, true, 1, 1) RETURNING zid;" % (topic, description)
-    )
-    psql(f"INSERT INTO zinvites (zid, zinvite) VALUES ({zid}, '{zinvite}');")
+        "VALUES (:'topic', :'descr', 1, true, true, 1, 1) RETURNING zid;",
+        topic=topic, descr=description)
+    if not zid:
+        raise RuntimeError("conversation insert returned no zid")
+    psql("INSERT INTO zinvites (zid, zinvite) VALUES (:'zid', :'zinvite');",
+         zid=zid, zinvite=zinvite)
     return zinvite
 
 
@@ -621,6 +637,14 @@ def _cast_informed_votes(p6_zinvite: str, tids: list[int], phase2_conv_id: str) 
             if cast_vote(cookie, csrf, p6_zinvite, tid, val):
                 cast += 1
     print(f"  Cast {cast} informed votes across {INFORMED_VOTERS} participants")
+    # Say this on stdout, not only in a docstring the operator never opens: anyone
+    # comparing this round against one voted through the app needs to know the two
+    # currently disagree, or they will read the difference as a bug here.
+    print("  [signs] written Polis-native (-1=agree). The app's own Phase 6 route "
+          "writes +1 for agree, so a round cast here and one cast by clicking in "
+          "the app have OPPOSITE signs until that is fixed.")
+    print(f"  [counts] `votes` will hold {cast} rows plus one author agree per "
+          "statement — Polis adds those itself; see ref_polis-data-model.md.")
 
 
 def advance_to_phase6(conv_id: str) -> None:
@@ -696,6 +720,12 @@ def main():
 
     FLASK = args.flask_url.rstrip("/")
     PARTICIAPI = args.particiapi_url.rstrip("/")
+
+    # The default container name is whatever compose generated for *a*
+    # particiapp-docker checkout on this host, and POLIS_DB_CONTAINER can also come
+    # from v2/.env via load_dotenv. A run that writes into the wrong stack's Polis
+    # database otherwise looks identical on stdout to a correct one.
+    print(f"Polis DB container: {DB_CONTAINER}   ·   Particiapi: {PARTICIAPI}")
 
     conv_id = args.conversation_id
     if not conv_id:
