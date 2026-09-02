@@ -88,35 +88,38 @@ FOLLOWUP_STATEMENTS = [
 
 # ── Voting patterns ────────────────────────────────────────────────────────────
 # One tuple per statement: (cat_group, dog_group, neutral_group)
-# 1=agree, -1=disagree, 0=pass
+# Polis-native signs: -1=agree, 1=disagree, 0=pass. These go to Particiapi verbatim
+# (cast_vote does not translate, and neither does Particiapi), so they must be written
+# in the convention Polis stores — the same one _cast_informed_votes uses. Authoring
+# them the intuitive way round is how phase 2 came to store every agree as a disagree.
 VOTES = [
     # Seed statements
-    ( 1, -1,  0),  #  0  cats better companions
-    (-1,  1,  0),  #  1  dogs more loyal
-    ( 1, -1,  1),  #  2  cats easier to care for
-    (-1,  1,  1),  #  3  dogs better for families
-    ( 1, -1,  1),  #  4  cats cleaner
-    (-1,  1,  0),  #  5  dogs better emotional support
-    ( 1, -1,  1),  #  6  cats more independent
-    (-1,  1,  1),  #  7  dogs motivate exercise
-    ( 1, -1,  1),  #  8  cats for apartments
-    (-1,  1,  0),  #  9  dogs more affectionate
+    (-1,  1,  0),  #  0  cats better companions
+    ( 1, -1,  0),  #  1  dogs more loyal
+    (-1,  1, -1),  #  2  cats easier to care for
+    ( 1, -1, -1),  #  3  dogs better for families
+    (-1,  1, -1),  #  4  cats cleaner
+    ( 1, -1,  0),  #  5  dogs better emotional support
+    (-1,  1, -1),  #  6  cats more independent
+    ( 1, -1, -1),  #  7  dogs motivate exercise
+    (-1,  1, -1),  #  8  cats for apartments
+    ( 1, -1,  0),  #  9  dogs more affectionate
     # Follow-up statements
-    ( 1,  1,  1),  # 10  both can be loving (consensus)
-    ( 1, -1,  0),  # 11  dogs require too much time
-    ( 1, -1,  0),  # 12  cats more intelligent
-    ( 1, -1,  1),  # 13  dogs need garden
-    ( 1, -1,  0),  # 14  dogs smell/mess
-    (-1,  1,  1),  # 15  dogs better trained
-    ( 1,  0,  1),  # 16  cats healthier/longer
-    (-1,  1,  1),  # 17  dogs make you social
-    ( 1,  0,  1),  # 18  cats less expensive
-    (-1,  1,  1),  # 19  dogs for security
-    ( 1, -1,  1),  # 20  cats for long work hours
-    (-1,  1,  0),  # 21  dogs for mental health
-    ( 1,  0,  1),  # 22  cats entertaining
-    (-1,  1,  0),  # 23  dogs show empathy
-    ( 1,  1,  1),  # 24  pet type matters less (consensus)
+    (-1, -1, -1),  # 10  both can be loving (consensus)
+    (-1,  1,  0),  # 11  dogs require too much time
+    (-1,  1,  0),  # 12  cats more intelligent
+    (-1,  1, -1),  # 13  dogs need garden
+    (-1,  1,  0),  # 14  dogs smell/mess
+    ( 1, -1, -1),  # 15  dogs better trained
+    (-1,  0, -1),  # 16  cats healthier/longer
+    ( 1, -1, -1),  # 17  dogs make you social
+    (-1,  0, -1),  # 18  cats less expensive
+    ( 1, -1, -1),  # 19  dogs for security
+    (-1,  1, -1),  # 20  cats for long work hours
+    ( 1, -1,  0),  # 21  dogs for mental health
+    (-1,  0, -1),  # 22  cats entertaining
+    ( 1, -1,  0),  # 23  dogs show empathy
+    (-1, -1, -1),  # 24  pet type matters less (consensus)
 ]
 
 GROUP_SIZES = [35, 30, 10]   # cat people, dog people, neutral
