@@ -54,6 +54,10 @@ def test_phase6_vote_reuses_session_across_votes(auth_client, participant):
     assert r2.status_code == 200
     assert post.call_count == 1   # session bootstrap happens once, then is reused
     assert put.call_count == 2    # both votes forwarded
+    # The legacy route forwards the client's integer UNCHANGED (app.py, `_put`).
+    # Nothing else asserts that, so a server-side negation added here later — the
+    # most plausible shape of a future "re-fix" — would pass every other test.
+    assert [c.kwargs['json'] for c in put.call_args_list] == [{'value': -1}, {'value': 1}]
 
 
 def test_phase6_bootstrap_shared_across_sessions_same_participant(app, participant):
@@ -101,3 +105,50 @@ def test_phase6_vote_rebootstraps_on_stale_token(auth_client, participant):
     assert r.status_code == 200
     assert post.call_count == 1   # the stale reused token 403s -> exactly one re-bootstrap
     assert put.call_count == 2    # first PUT 403, retry PUT 200
+
+
+def test_both_phase6_surfaces_send_the_polis_agree_sign():
+    """Guard the sign at BOTH phase-6 write sites.
+
+    Polis stores -1 = agree (polis_admin.py:211, guide_runbook.md). The API route
+    maps `choice` server-side; the legacy Jinja route forwards the client's raw
+    data-vote attribute unchanged (app.py:6591), so for that surface the template
+    IS the contract. A divergence writes both signs into one votes table depending
+    only on whether the participant is on the SPA or ?spa_only=0 — worse than the
+    original bug, because the rows become indistinguishable. Nothing else in the
+    suite covers the legacy attribute.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+
+    template = (root / 'templates' / 'conversation.html').read_text()
+    # Only the phase-6 deck uses btn-p6-vote; phase 2 has its own vote controls.
+    buttons = re.findall(
+        r'btn-p6-vote"\s+data-vote="(-?\d)"[^>]*>\s*'
+        r'<span class="vote-dot vote-dot--(\w+)"></span>(\w+)',
+        template,
+    )
+    assert len(buttons) == 3, f'expected 3 phase-6 vote buttons, found {len(buttons)}'
+    mapping = {label: int(value) for value, _dot, label in buttons}
+    assert mapping == {'Agree': -1, 'Pass': 0, 'Disagree': 1}, mapping
+
+    # The badge the participant reads after voting is built from the same integer,
+    # in inline JS no test touched. Flip those two lines and every legacy voter is
+    # told the opposite of what was stored, with the suite still green. Derive both
+    # sides and compare, so formatting drift cannot silently disable this.
+    labels = re.search(
+        r"var label = vote === (-?\d) \? 'Agreed' : vote === (-?\d) \? 'Disagreed'",
+        template,
+    )
+    assert labels, 'could not find the phase-6 badge label map in conversation.html'
+    assert int(labels.group(1)) == mapping['Agree'], (
+        'the badge says "Agreed" for a different integer than the Agree button sends')
+    assert int(labels.group(2)) == mapping['Disagree'], (
+        'the badge says "Disagreed" for a different integer than the Disagree button sends')
+
+    # The API path's mapping is asserted behaviourally, per choice, in
+    # test_informed_voting_api.py::test_informed_vote_sends_polis_signs_for_every_choice.
+    # A source-string count was tried here and removed: it passed if both maps moved
+    # into dead code, and failed on a reformat.

@@ -28,14 +28,22 @@ vote SMALLINT   -- -1 = Agree, 1 = Disagree, 0 = Pass/Unsure
 This is **opposite to the intuitive sign**. The CSV export negates every vote so that
 Agree = +1 in exports, but the raw table and the vote API use -1 = Agree.
 
-wiki-polis sends the raw Polis signs unchanged via Particiapi's
-`PUT /api/conversations/{id}/votes/{tid}` — `value: -1` for Agree, `1` for Disagree, `0`
-for Pass. **Particiapi passes the value straight through; there is no translation step.**
-`polis_admin.py` counts `-1` as agree, which only reconciles under pass-through.
+wiki-polis sends the **raw Polis sign** — `value: -1` for Agree, `value: 1` for Disagree,
+`0` for Pass — via Particiapi's `PUT /api/conversations/{id}/votes/{tid}`. **Particiapi does
+not translate it**; the value is written to `votes.vote` unmodified. `polis_admin.py` counts
+`-1` as agree, which only reconciles under pass-through. Both write paths agree:
+`app.py:2212` (Explore) and `app.py:2337` (informed vote), with `services/explore.py` putting
+the value on the wire as given, and the legacy Jinja route at `app.py:6591` forwarding the
+client's raw `data-vote` attribute.
 
-The one exception today is the Phase 6 informed-vote route (`app.py`, the second
-`polis_values` map), which sends the inverted sign — agree as `+1`. That is a known bug,
-not a convention: it disagrees with the explore path in the same file.
+Until #328 the informed-vote route sent agree as `+1`, disagreeing with the Explore path in
+the same file. Rows stored under that inversion on production were repaired 2026-09-02 —
+both `votes` and `votes_latest_unique`, excluding author rows.
+
+The **only** sign flip anywhere in the system is Polis's own CSV export (see above). If vote
+data looks inverted, that export flip is the explanation to check first — see
+`guide_runbook.md:159-170`. Do not go looking for a translation layer inside Particiapi; there
+isn't one, and assuming there was is what caused the Phase 6 inversion fixed in #328.
 
 ### tid and pid start at 0
 

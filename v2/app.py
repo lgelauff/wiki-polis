@@ -2334,7 +2334,7 @@ def _informed_vote_api_payload(
         abort(404, description='Featured statement is not available in this round.')
     gateway, key = _phase6_gateway(conv, participant)
     try:
-        polis_values = {'agree': 1, 'pass': 0, 'disagree': -1}
+        polis_values = {'agree': -1, 'pass': 0, 'disagree': 1}
         gateway.vote(
             conv.phase6_polis_conversation_id,
             featured.phase6_polis_statement_id,
