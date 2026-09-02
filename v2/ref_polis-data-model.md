@@ -43,6 +43,23 @@ wiki-polis fix: template guards use `{% if item.phase6_stmt_id is not none %}` n
 `{% if item.phase6_stmt_id %}`. The same care applies anywhere a Polis integer ID is
 checked for presence.
 
+### Submitting a statement casts a vote
+
+Submitting a statement writes a `votes` row for the author: an **agree (`-1`)** on their
+own `tid`, from the author's own `pid`. No client asks for it, and nothing in wiki-polis
+casts it — Polis records it as part of accepting the statement.
+
+So a conversation's vote count is *participant votes + one per statement*, and every
+statement starts with one agree it did not earn. Any count, tally or turnout figure
+derived from `votes` has to decide whether to exclude author votes; a per-participant
+average silently includes them.
+
+Reproduced on the local stack (2026-09-02): a fresh conversation with 0 votes, one
+statement submitted through `POST /api/conversations/{id}/statements/` and no vote call
+made, leaves exactly one row — `pid=0, tid=0, vote=-1` — whose `pid` equals the author's
+in `comments`. This is also why a simulated Phase 6 round of 30 voters over 5 statements
+lands 155 rows in `votes`, not 150.
+
 ### zinvite vs zid
 
 wiki-polis stores and uses the `zinvite` (the opaque string like `6tpsckec8u`), not the

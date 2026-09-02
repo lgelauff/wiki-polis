@@ -279,10 +279,13 @@ def psql(sql: str, **params: str) -> str:
     var_args: list[str] = []
     for name, value in params.items():
         var_args += ["-v", f"{name}={value}"]
+    # The SQL goes in on stdin, not as -c: psql only interpolates :\'name\' while
+    # lexing input it reads, and silently does not do it for -c (which fails with
+    # "syntax error at or near \":\"" instead).
     r = subprocess.run(
-        ["docker", "exec", DB_CONTAINER,
-         "psql", "-U", "polis", "polis", "-t", *var_args, "-c", sql],
-        capture_output=True, text=True,
+        ["docker", "exec", "-i", DB_CONTAINER,
+         "psql", "-U", "polis", "polis", "-t", *var_args],
+        input=sql, capture_output=True, text=True,
     )
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip())
