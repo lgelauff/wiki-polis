@@ -2260,12 +2260,20 @@ def _phase6_gateway(conv: Conversation, participant: Participant):
         cookie=session.get('_p6_pa'),
         csrf_token=session.get('_p6_csrf'),
     )
+    # Bind the participant's identity, exactly as _explore_gateway does. The subject is
+    # keyed on conv.id, so Phase 2 and Phase 6 resolve to the SAME Polis uid for one
+    # person — which is what _conversation_subject was written for and says it does.
+    # Leaving this as None minted a throwaway anonymous uid per Phase 6 session, so the
+    # two rounds could not be joined per participant and no before/after comparison was
+    # possible. Confirmed on staging 2026-09-03: of 8 Phase 6 voters, 0 had a bound
+    # subject, against 3 of 14 in the same conversation's Phase 2 round.
+    subject_secret = current_app.config.get('PARTICIAPI_SUB_SECRET')
     gateway = ExploreGateway(
         base_url=current_app.config['PARTICIAPI_BASE'],
         transport=polis_http,
         state=state,
-        subject=None,
-        subject_secret=None,
+        subject=_conversation_subject(participant.xid, conv) if subject_secret else None,
+        subject_secret=subject_secret,
     )
     if not (state.cookie and state.csrf_token):
         with _p6_bootstrap_lock(key):
@@ -6551,11 +6559,23 @@ def phase6_vote(slug):
         the Flask session and the process-local share cache. Returns (pa, csrf_token);
         aborts 502 on failure."""
         prior = session.get('_p6_pa')
+        # Bind identity exactly as _phase6_gateway and _explore_gateway do. This route
+        # and the API route share _p6_session_cache, so if only one of them bound, an
+        # anonymous session cached by this path would be handed to the other and the
+        # binding would be silently defeated. The bound call deliberately drops
+        # `create=true` and the prior cookie: the subject, not the cookie, selects the uid.
+        subject_secret = current_app.config.get('PARTICIAPI_SUB_SECRET')
+        binding = bool(subject_secret)
+        headers = {
+            'X-Particiapi-Sub': _conversation_subject(participant.xid, conv),
+            'X-Particiapi-Sub-Secret': subject_secret,
+        } if binding else {}
         try:
             r = polis_http.post(
                 f'{base}/api/session',
-                cookies={'session': prior} if prior else {},
-                params={'create': 'true'},
+                cookies={} if binding else ({'session': prior} if prior else {}),
+                params={} if binding else {'create': 'true'},
+                headers=headers,
                 timeout=5,
             )
         except requests.RequestException:
