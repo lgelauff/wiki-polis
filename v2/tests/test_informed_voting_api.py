@@ -1,5 +1,7 @@
 """Informed-voting read and command API contract tests."""
 
+import hashlib
+import hmac
 import json
 from unittest.mock import MagicMock, patch
 
@@ -291,3 +293,33 @@ def test_openapi_documents_informed_voting_contract(client):
     assert read['operationId'] == 'getInformedVoting'
     assert vote['operationId'] == 'putInformedVote'
     assert 'Idempotent' in vote['description']
+
+
+def test_informed_vote_api_binds_the_same_identity_explore_uses(app, auth_client, participant):
+    """The API write path must bind identity too, to the SAME subject Phase 2 uses.
+
+    There are two Phase 6 write paths — this one and the legacy Jinja route — and they
+    share `_p6_session_cache`. If only one bound, an anonymous session cached by the other
+    would be handed straight to it and the binding would be silently defeated, so both
+    need locking. See test_phase6_vote.py for the legacy half.
+    """
+    secret = 'shared-upstream-secret'
+    app.config['PARTICIAPI_SUB_SECRET'] = secret
+    conversation, _participation, first, _second = _fixture(participant)
+    conv_id, xid = conversation.id, participant.xid
+
+    # Deliberately do NOT pre-seed _p6_pa/_p6_csrf: the bootstrap must actually run.
+    session_resp = _response({'csrf_token': 'tok'}, cookies={'session': 'pa-cookie'})
+    with patch('app.polis_http.post', return_value=session_resp) as post, \
+         patch('app.polis_http.put', return_value=_response({})):
+        response = auth_client.put(
+            f'/api/v1/conversations/informed-api/featured-statements/{first.id}/informed-vote',
+            json={'choice': 'agree'},
+        )
+
+    assert response.status_code == 200
+    headers = post.call_args.kwargs['headers']
+    assert headers['X-Particiapi-Sub-Secret'] == secret
+    expected = hmac.new(secret.encode(), f'{xid}:{conv_id}'.encode(), hashlib.sha256).hexdigest()
+    assert headers['X-Particiapi-Sub'] == expected
+    assert headers['X-Particiapi-Sub'] != xid
