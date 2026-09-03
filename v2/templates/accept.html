@@ -136,6 +136,25 @@
       </details>
     </div>
 
+    {# ── What happens to what you write ──
+       Stated before the consent box rather than inside it: the checkbox has to
+       stay short enough to read, and a licence nobody reads is not consent. #}
+    <div class="accept-section" id="accept-licence-note">
+      <h2>What you write</h2>
+      <p>
+        Statements and arguments you write here are released under
+        <a href="https://creativecommons.org/publicdomain/zero/1.0/"
+           target="_blank" rel="noopener">CC0<span class="sr-only"> (opens in a new tab)</span></a>,
+        which places them in the public domain. That is what lets the results be
+        published as a report, quoted in a discussion, and reused by anyone.
+      </p>
+      <p class="muted">
+        This covers what you write, not who wrote it: contributions are published
+        under your pseudonym, and CC0 does not require anyone to credit you.
+        Your votes are not covered — a vote is a fact, not a work.
+      </p>
+    </div>
+
     {# ── Consent ── #}
     <label class="consent-label" id="consent-label" for="consent-check" style="margin-top:1.25rem">
       <input type="checkbox"
@@ -146,7 +165,8 @@
              aria-required="true">
       <span>
         I understand my votes and arguments are recorded with this pseudonym,
-        and ProtoWiki keeps an internal username link while this consultation runs.
+        ProtoWiki keeps an internal username link while this consultation runs,
+        and what I write is released under CC0.
       </span>
     </label>
 
