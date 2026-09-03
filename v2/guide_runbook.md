@@ -241,6 +241,45 @@ To check a recompute actually happened, read `math_tick` in `math_main` for that
 and after — it must advance. To force one, see the routes in
 [`ops/phase6-vote-sign-repair.md`](ops/phase6-vote-sign-repair.md) step 5b.
 
+### Is math keeping up?
+
+```bash
+bash ~/wiki-polis/v2/ops/check_math_freshness.sh particiapp-docker_postgres_1
+```
+
+Read-only. Per conversation it compares the newest vote math has incorporated
+(`math_main.last_vote_timestamp`) against the newest vote that actually exists, and flags
+anything behind by more than five minutes. Exit 1 if any conversation is behind, so it
+works as a cron check as well as by hand.
+
+This is the check to use, because the obvious-looking ones do not work: `finished_time` is
+never set for `update_math` tasks on any deployment, and `attempts` is written by no code
+in polis at all.
+
+**Its limit is worth knowing.** It detects *math is behind*. It cannot detect *math
+recomputed from stale cached values*, which is what happens when votes are changed in place
+rather than added — the repair case. From the outside that looks identical to a healthy
+recompute. Only the test below distinguishes them.
+
+### Testing that a restart actually applies an in-place repair
+
+```bash
+bash ~/wiki-polis/v2/ops/test_math_cold_load.sh --zid <ZID> --confirm
+```
+
+**Destructive, and it refuses to run against production by name** — local, `polis-repro`
+or staging only, and only with `--confirm`.
+
+It flips the vote signs for one conversation, waits to show a warm poll does *not* pick the
+change up, restarts the math container to force a cold load, and then asserts both that
+`math_tick` advanced **and** that the clustering payload actually changed. It restores the
+signs afterwards.
+
+That second assertion is the point. A tick that advances while the payload is byte-identical
+means the recompute ran from a cached vote matrix and the repair was not applied — which
+would pass every check the runbook otherwise tells you to make. Run this before trusting a
+restart to apply a vote-sign repair.
+
 If rows are absent and the admin stats panel is blank, fix `POLIS_DATABASE_URL` first.
 
 If rows are absent and Flask logs `queue_math_recompute lacks worker_tasks privileges`,
