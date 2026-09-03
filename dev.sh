@@ -140,5 +140,22 @@ export PARTICIAPI_BASE_URL="http://127.0.0.1:$PARTICIAPI_PORT"
 export POLIS_SERVER_URL="http://127.0.0.1:$POLIS_PORT"
 export POLIS_DATABASE_URL="postgresql://polis:polis@127.0.0.1:$POSTGRES_PORT/polis"
 
+# The app serves `/` and every `/c/<slug>` from static/spa/index.html, so a checkout
+# without a built frontend answers 404 on almost everything while /health stays green.
+# That reads like a database or routing problem and is neither, so build it here.
+if [ ! -f "$FLASK_DIR/static/spa/index.html" ]; then
+  if command -v npm >/dev/null 2>&1; then
+    echo "→ static/spa is empty — building the frontend"
+    (
+      cd "$FLASK_DIR/frontend"
+      [ -d node_modules ] || npm ci
+      npm run build
+    )
+  else
+    echo "!! static/spa/index.html is missing and npm was not found."
+    echo "!! Flask will 404 on / and every /c/<slug>; /health will still say ok."
+  fi
+fi
+
 uv run flask --app app init-db
 exec uv run flask --app app run --host 127.0.0.1 --port "$FLASK_PORT"
