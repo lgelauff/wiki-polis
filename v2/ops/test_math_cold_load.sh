@@ -30,18 +30,25 @@ ZID=""
 CONFIRM=0
 RESTORE=1
 
+POLL_DAYS="${POLL_FROM_DAYS_AGO:-10}"
+CREATE_IF_NEEDED=0
+MIN_VOTES=50
+MIN_PIDS=7
+
 while [ $# -gt 0 ]; do
   case "$1" in
-    --zid)             ZID="${2:-}"; shift 2 ;;
-    --container)       CONTAINER="${2:-}"; shift 2 ;;
-    --math-container)  MATH_CONTAINER="${2:-}"; shift 2 ;;
-    --confirm)         CONFIRM=1; shift ;;
-    --no-restore)      RESTORE=0; shift ;;
-    *) echo "usage: $0 --zid N [--container NAME] [--math-container NAME] --confirm [--no-restore]" >&2; exit 2 ;;
+    --zid)               ZID="${2:-}"; shift 2 ;;
+    --container)         CONTAINER="${2:-}"; shift 2 ;;
+    --math-container)    MATH_CONTAINER="${2:-}"; shift 2 ;;
+    --confirm)           CONFIRM=1; shift ;;
+    --no-restore)        RESTORE=0; shift ;;
+    --create-if-needed)  CREATE_IF_NEEDED=1; shift ;;
+    *) echo "usage: $0 [--zid N] [--container NAME] [--math-container NAME] --confirm" >&2
+       echo "            [--no-restore] [--create-if-needed]" >&2
+       echo "  --zid omitted: pick the densest conversation with a vote in the last ${POLL_DAYS} days" >&2
+       exit 2 ;;
   esac
 done
-
-[ -z "$ZID" ] && { echo "ERROR: --zid is required." >&2; exit 2; }
 
 # ── refuse anything that is not a known throwaway ─────────────────────────────
 case "$CONTAINER" in
@@ -57,7 +64,13 @@ case "$CONTAINER" in
 esac
 
 if [ "$CONFIRM" -ne 1 ]; then
-  echo "This will flip every non-author vote sign for zid=$ZID in '$CONTAINER'."
+  if [ -n "$ZID" ]; then
+    echo "This will flip every non-author vote sign for zid=$ZID in '$CONTAINER'."
+  else
+    echo "This will flip every non-author vote sign in '$CONTAINER', for whichever"
+    echo "conversation it selects (the densest with a vote in the last ${POLL_DAYS} days)."
+  fi
+  echo "The flip is reversed at the end; negation is its own inverse."
   echo "Re-run with --confirm once you are sure that is a throwaway stack."
   exit 2
 fi
@@ -68,6 +81,59 @@ fi
 [ -z "$MATH_CONTAINER" ] && { echo "ERROR: no polis-math container found; pass --math-container." >&2; exit 2; }
 
 psql_q() { printf '%s' "$1" | docker exec -i "$CONTAINER" psql -U polis -d polis -t -A -v ON_ERROR_STOP=1; }
+
+# ── pick a conversation if one was not named ──────────────────────────────────
+# Needs three things: a math_main row to compare against; at least one vote inside the
+# poller's window, since that is what makes a restart emit a batch for it at all; and
+# enough votes and distinct participants that math produces real clusters. A sparse
+# conversation can yield a degenerate result that looks identical before and after,
+# turning a genuine PASS into something unreadable.
+select_zid() {
+  psql_q "
+    SELECT m.zid
+    FROM math_main m
+    WHERE (SELECT max(created) FROM votes WHERE zid = m.zid)
+          > (EXTRACT(EPOCH FROM now())*1000 - ${POLL_DAYS}*86400000)
+      AND (SELECT count(*)           FROM votes WHERE zid = m.zid) >= ${MIN_VOTES}
+      AND (SELECT count(DISTINCT pid) FROM votes WHERE zid = m.zid) >= ${MIN_PIDS}
+    ORDER BY (SELECT count(*) FROM votes WHERE zid = m.zid) DESC
+    LIMIT 1;" | tr -d '[:space:]'
+}
+
+if [ -z "$ZID" ]; then
+  echo "no --zid given; looking for a suitable conversation…"
+  ZID="$(select_zid)"
+  if [ -z "$ZID" ]; then
+    echo "  none found (needs a math_main row, a vote in the last ${POLL_DAYS} days,"
+    echo "  >= ${MIN_VOTES} votes and >= ${MIN_PIDS} participants)."
+    if [ "$CREATE_IF_NEEDED" -eq 1 ]; then
+      echo "  --create-if-needed given: building one with the simulator…"
+      SIM_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+      PARTICIAPI_PORT="${PARTICIAPI_PORT:-8002}"
+      # Pass --particiapi-url explicitly: the simulator reads v2/.env at import, and a
+      # value there beats the default, failing with a port nobody chose.
+      ( cd "$SIM_DIR" && uv run python simulate_cats_vs_dogs.py \
+          --particiapi-url "http://127.0.0.1:${PARTICIAPI_PORT}" ) || {
+        echo "ERROR: simulator failed; cannot provision a conversation." >&2; exit 2; }
+      echo "  waiting up to 5 min for math to produce a first result…"
+      DEADLINE=$(( $(date +%s) + 300 ))
+      while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+        ZID="$(select_zid)"; [ -n "$ZID" ] && break
+        sleep 15
+      done
+      [ -z "$ZID" ] && { echo "ERROR: conversation created but math produced no result yet." >&2
+                         echo "Re-run this script in a few minutes." >&2; exit 2; }
+    else
+      echo
+      echo "Create one first (from v2/):"
+      echo "  uv run python simulate_cats_vs_dogs.py --particiapi-url http://127.0.0.1:8002"
+      echo "or re-run this script with --create-if-needed to do that automatically."
+      exit 2
+    fi
+  fi
+  DETAIL="$(psql_q "SELECT (SELECT count(*) FROM votes WHERE zid=$ZID) || ' votes, ' || (SELECT count(DISTINCT pid) FROM votes WHERE zid=$ZID) || ' participants';")"
+  echo "  selected zid=$ZID ($DETAIL)"
+fi
 
 snapshot() {  # tick + a hash of the clustering payload, which is what actually matters
   psql_q "SELECT math_tick || '|' || md5(COALESCE(math_main::text,'')) FROM math_main WHERE zid=$ZID;"
