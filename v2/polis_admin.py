@@ -1000,8 +1000,18 @@ class PolisServerClient:
 
         The return value therefore means "the row was written", not "a recompute will
         happen" — the caller cannot distinguish the two. Verified 2026-09-02 by reading
-        `system.clj` inside the running image; two orphaned rows were found on production,
-        the older dating from 2026-08-05.
+        `system.clj` inside the deployed image, which is byte-identical to upstream for
+        that file.
+
+        Scope this carefully when debugging: recomputes still happen constantly via the
+        vote and moderation pollers in the same process, and the process restarts every
+        four hours. So absent results are NOT by themselves evidence that this row was the
+        problem. What this row cannot do is force one on demand.
+
+        The queue table also cannot confirm any of it. Nothing in polis writes `attempts`
+        (schema default), and no `update_math` dispatch path sets `finished_time`, so a
+        consumed row and an ignored one are indistinguishable. Check `math_tick` in
+        `math_main` instead.
 
         Returns True if the task was queued, False if unavailable or failed. No-op when
         db_url is absent.

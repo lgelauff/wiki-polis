@@ -229,7 +229,19 @@ docker exec -it $CID psql -U polis -d polis -c \
    ORDER BY created DESC LIMIT 5;"
 ```
 
-If `finished_time` is set, the worker processed it. If rows are absent and the admin stats panel is blank, fix `POLIS_DATABASE_URL` first.
+⚠️ **That query cannot tell you whether the worker ran.** No code in polis writes
+`attempts` (it is the schema default), and no `update_math` dispatch path sets
+`finished_time` — so both columns look identical whether the row was consumed or ignored.
+Worse, on our deployment nothing consumes it at all: the math container runs polismath's
+`full` mode, and only `tasks` mode instantiates the poller that reads this table. Use the
+query to confirm the row was *written* (which is what the privilege grant below is about),
+never to conclude it was *processed*.
+
+To check a recompute actually happened, read `math_tick` in `math_main` for that zid before
+and after — it must advance. To force one, see the routes in
+[`ops/phase6-vote-sign-repair.md`](ops/phase6-vote-sign-repair.md) step 5b.
+
+If rows are absent and the admin stats panel is blank, fix `POLIS_DATABASE_URL` first.
 
 If rows are absent and Flask logs `queue_math_recompute lacks worker_tasks privileges`,
 the `POLIS_DATABASE_URL` role can read Polis stats but cannot enqueue math work. Grant the
@@ -246,7 +258,8 @@ minimum additional privileges on the VPS:
 ```
 
 Then reload `/c/<slug>` after the 10-minute recompute cooldown or clear the cooldown by
-restarting the Flask pod. A successful trigger creates a fresh `worker_tasks` row.
+restarting the Flask pod. A successful trigger creates a fresh `worker_tasks` row — which
+confirms the grant works, and nothing more.
 
 ## Migration fails with "Duplicate column" (alembic drift)
 

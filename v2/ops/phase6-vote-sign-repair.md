@@ -211,19 +211,41 @@ fault.** `queue_math_recompute` writes a `worker_tasks` row, but only polismath'
 run mode consumes that table, and our container runs `full`. In `system.clj`,
 `full-system` merges `poller-system` alone — the vote and moderation pollers — while the
 `TaskPoller` lives in `task-system`; upstream carries the merge of the two as
-commented-out code. Verified 2026-09-02 by reading `system.clj` inside the running image.
-Two orphaned rows sit on production as evidence, the older from 2026-08-05.
+commented-out code. Verified 2026-09-02 by reading `system.clj` inside the deployed image,
+which is byte-identical to upstream `edge` for that file.
 
-So use one of these instead:
+> **The queue table cannot tell you whether a task ran.** No code in polis writes
+> `attempts` — it is the schema default — and no `update_math` dispatch path sets
+> `finished_time`. A healthy `tasks`-mode deployment that consumed a row leaves it looking
+> exactly like an ignored one. Do not read either column as evidence in any direction.
 
-1. **Give the vote poller something to see.** It polls votes by `:created`, so a real vote
-   in the conversation triggers a recompute of that conversation. Least invasive if a
-   throwaway vote is acceptable; note it becomes a real row you may then want to remove.
-2. **Run the task poller.** Start a math process in `tasks` mode alongside the existing
-   one (`clojure -M:run tasks` in the math container), which instantiates the `TaskPoller`
-   and drains `worker_tasks`. This is the only route that makes `queue_math_recompute`
-   behave as its name implies.
-3. **Accept stale clustering and say so.** Report the repair as vote-data-only, and record
+**The reason this matters here is subtler than "no recompute happens".** The vote and
+moderation pollers in the same process recompute constantly. The problem is *which values*
+a recompute reads. A conversation already loaded in the math process holds a cached vote
+matrix, and an incoming batch is merged into that cache. Only a **cold load** rebuilds the
+matrix from the database. An in-place `UPDATE` changes no `created` timestamp, so it never
+appears in any batch — which means a warm recompute will bump `math_tick`, pass the check
+below, and still cluster on the pre-repair signs.
+
+So use one of these, in order:
+
+1. **Recompute that one conversation directly.** In the math container:
+   `clojure -M:run update -z <zid>`. Targeted, one-shot, no restart, no throwaway vote, no
+   queue, no time window. Allow ten minutes or more for JVM start-up and run it under
+   `nohup` or `tmux` — an interactive `docker exec` that appears to hang is usually still
+   loading. **Verify this one on `polis-repro` before trusting it on production**; it is
+   the best route on paper and has not been exercised here.
+2. **Restart the math container.** This wipes the in-memory conversation map, so the next
+   poll forces a cold load that rebuilds from current values — which is what picks up an
+   in-place repair. Two caveats: it only reaches conversations with a vote in the trailing
+   ten days (`poll-from-days-ago`, default 10), and it is the *heaviest* option, since it
+   recomputes every recent conversation rather than yours.
+3. **Run the task poller.** `clojure -M:run tasks` alongside the existing process
+   instantiates the `TaskPoller`. Two things to know: it only sees rows created within the
+   last ten days, so **queue the row after starting it**, not before (`POLL_FROM_DAYS_AGO=60`
+   raises the floor); and the recompute is only value-refreshing for the first task per
+   conversation per process, for the caching reason above.
+4. **Accept stale clustering and say so.** Report the repair as vote-data-only, and record
    that the groups still derive from pre-repair signs.
 
 **Whichever you choose, verify — do not assume.** Record `math_tick` before, and read it
@@ -238,6 +260,11 @@ is a counter, not a timestamp — do not wrap it in `to_timestamp()`, which yiel
 meaningless 1970 date. `last_vote_timestamp` is the newest vote math has incorporated;
 if it already matches the conversation's newest vote, math is current with respect to
 vote *arrivals* and simply cannot see an in-place repair.
+
+**An advancing tick is necessary but not sufficient**, per the caching note above: a warm
+recompute advances it while still using pre-repair values. The only check that settles it
+is the participant-facing one — open the Phase 6 results and read one opinion group against
+a statement whose direction you know from step 2.
 
 Repeat **one conversation at a time** through steps 4 and 5, verifying each. A wrong row count is
 recoverable when it is the only conversation in the transaction.
