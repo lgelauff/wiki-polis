@@ -104,9 +104,9 @@ docker exec wiki-polis-staging_postgres_1 psql -U polis -d polis -tAc \
 # VPS backend health:
 docker stats --no-stream            # polismath / postgres CPU + RSS
 docker logs --since 5m wiki-polis-staging_polis-math-1 | grep -iE 'GC|OOM|error'
-# polismath recompute lag:
-docker exec wiki-polis-staging_postgres_1 psql -U polis -d polis -tAc \
-  "SELECT max(finished_time-created) FROM worker_tasks WHERE created > now()-interval '5 min';"
+# polismath recompute lag: REMOVED — this always returned NULL and measured nothing.
+# `finished_time` is never set for update_math tasks, and `created` is epoch-millis so it
+# cannot be compared to now() anyway. Read math_tick in math_main before/after instead.
 
 # Ingress 503s (Toolforge front proxy saturation — absent from the app log):
 grep -a ' 503 ' /data/project/wiki-polis-dev/uwsgi.log | tail   # and compare to app-logged 5xx

@@ -223,7 +223,11 @@ Use this role in the `POLIS_DATABASE_URL` Toolforge envvar: `postgresql://wiki_p
 > **Use the numeric IP, not the hostname.** Toolforge pods cannot resolve the WMCS internal hostname (`*.wikimedia.cloud`) — the DSN must use the VPS's private IP address directly (e.g. `172.16.19.44`). For staging, use the same IP with port `5442`.
 
 The same role also enqueues math recomputes by inserting into Polis'
-`worker_tasks` table when results are empty. Grant only that extra write surface:
+`worker_tasks` table when results are empty. Note that nothing consumes those rows on this
+deployment — the math container runs polismath's `full` mode, which does not instantiate
+the task poller — so the grant prevents an error, it does not cause a recompute. See
+[`ops/phase6-vote-sign-repair.md`](ops/phase6-vote-sign-repair.md) step 5b for routes that
+do. Grant only that extra write surface:
 
 ```bash
 ~/wiki-polis/v2/ops/grant_polis_worker_tasks.sh \

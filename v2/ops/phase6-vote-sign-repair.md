@@ -206,25 +206,65 @@ anything changed. Step 7's tallies come straight from Postgres and will look cor
 the groups beside them stay backwards — the one silent mis-display this repair does not fix
 by itself.
 
-Queue a recompute through the mechanism the app already uses (`queue_math_recompute` in
-`polis_admin.py`) — one row in `worker_tasks` of type `update_math`, carrying
-`{"zid": <zid>}`, bucketed on the zid, with `math_env` `'prod'`.
+⚠️ **Queueing a task does not work on our deployment, and this is not a transient
+fault.** `queue_math_recompute` writes a `worker_tasks` row, but only polismath's `tasks`
+run mode consumes that table, and our container runs `full`. In `system.clj`,
+`full-system` merges `poller-system` alone — the vote and moderation pollers — while the
+`TaskPoller` lives in `task-system`; upstream carries the merge of the two as
+commented-out code. Verified 2026-09-02 by reading `system.clj` inside the deployed image,
+which is byte-identical to upstream `edge` for that file.
 
-**Then verify it was consumed. Do not assume it.** Record `math_tick` before, and read it
+> **The queue table cannot tell you whether a task ran.** No code in polis writes
+> `attempts` — it is the schema default — and no `update_math` dispatch path sets
+> `finished_time`. A healthy `tasks`-mode deployment that consumed a row leaves it looking
+> exactly like an ignored one. Do not read either column as evidence in any direction.
+
+**The reason this matters here is subtler than "no recompute happens".** The vote and
+moderation pollers in the same process recompute constantly. The problem is *which values*
+a recompute reads. A conversation already loaded in the math process holds a cached vote
+matrix, and an incoming batch is merged into that cache. Only a **cold load** rebuilds the
+matrix from the database. An in-place `UPDATE` changes no `created` timestamp, so it never
+appears in any batch — which means a warm recompute will bump `math_tick`, pass the check
+below, and still cluster on the pre-repair signs.
+
+So use one of these, in order:
+
+1. **Recompute that one conversation directly.** In the math container:
+   `clojure -M:run update -z <zid>`. Targeted, one-shot, no restart, no throwaway vote, no
+   queue, no time window. Allow ten minutes or more for JVM start-up and run it under
+   `nohup` or `tmux` — an interactive `docker exec` that appears to hang is usually still
+   loading. **Verify this one on `polis-repro` before trusting it on production**; it is
+   the best route on paper and has not been exercised here.
+2. **Restart the math container.** This wipes the in-memory conversation map, so the next
+   poll forces a cold load that rebuilds from current values — which is what picks up an
+   in-place repair. Two caveats: it only reaches conversations with a vote in the trailing
+   ten days (`poll-from-days-ago`, default 10), and it is the *heaviest* option, since it
+   recomputes every recent conversation rather than yours.
+3. **Run the task poller.** `clojure -M:run tasks` alongside the existing process
+   instantiates the `TaskPoller`. Two things to know: it only sees rows created within the
+   last ten days, so **queue the row after starting it**, not before (`POLL_FROM_DAYS_AGO=60`
+   raises the floor); and the recompute is only value-refreshing for the first task per
+   conversation per process, for the caching reason above.
+4. **Accept stale clustering and say so.** Report the repair as vote-data-only, and record
+   that the groups still derive from pre-repair signs.
+
+**Whichever you choose, verify — do not assume.** Record `math_tick` before, and read it
 back after:
 
 ```sql
 SELECT zid, math_tick, to_timestamp(last_vote_timestamp/1000) AS last_vote FROM math_main WHERE zid = (SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>');
 ```
 
-`math_tick` must advance. **No movement is a failure, not a pass.** Two known reasons:
+`math_tick` must advance. **No movement is a failure, not a pass.** Note that `math_tick`
+is a counter, not a timestamp — do not wrap it in `to_timestamp()`, which yields a
+meaningless 1970 date. `last_vote_timestamp` is the newest vote math has incorporated;
+if it already matches the conversation's newest vote, math is current with respect to
+vote *arrivals* and simply cannot see an in-place repair.
 
-- `math_env` is hardcoded `'prod'`, so on a staging or local stack the task is never claimed.
-- The worker may not be draining the queue at all. On 2026-09-02 a task queued on production
-  sat at `attempts = 0` beside one from 2026-08-05, with `math_tick` frozen at 1356 —
-  polismath was running but had computed nothing for a month. If that is the state, the
-  clusters cannot be refreshed here; that is its own incident, and the repair should be
-  reported as vote-data-only rather than complete.
+**An advancing tick is necessary but not sufficient**, per the caching note above: a warm
+recompute advances it while still using pre-repair values. The only check that settles it
+is the participant-facing one — open the Phase 6 results and read one opinion group against
+a statement whose direction you know from step 2.
 
 Repeat **one conversation at a time** through steps 4 and 5, verifying each. A wrong row count is
 recoverable when it is the only conversation in the transaction.

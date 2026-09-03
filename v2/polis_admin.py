@@ -991,9 +991,30 @@ class PolisServerClient:
     def queue_math_recompute(self, zinvite: str) -> bool:
         """Insert a worker_tasks row to trigger a polismath recompute for one conversation.
 
-        Polismath polls worker_tasks continuously (1 s interval) and processes the task
-        within seconds. Returns True if the task was queued, False if unavailable or failed.
-        No-op when db_url is absent.
+        ⚠️ **Only the `tasks` run mode consumes these rows, and our math container runs
+        `full`.** In polismath's `system.clj`, `full-system` merges `poller-system` alone
+        — the vote and moderation pollers — while the `TaskPoller` that reads
+        `worker_tasks` belongs to `task-system`. Upstream carries the merge of the two as
+        commented-out code. So against a `full`-mode container this queues a row that is
+        never claimed: `attempts` stays 0 forever and no recompute happens.
+
+        The return value therefore means "the row was written", not "a recompute will
+        happen" — the caller cannot distinguish the two. Verified 2026-09-02 by reading
+        `system.clj` inside the deployed image, which is byte-identical to upstream for
+        that file.
+
+        Scope this carefully when debugging: recomputes still happen constantly via the
+        vote and moderation pollers in the same process, and the process restarts every
+        four hours. So absent results are NOT by themselves evidence that this row was the
+        problem. What this row cannot do is force one on demand.
+
+        The queue table also cannot confirm any of it. Nothing in polis writes `attempts`
+        (schema default), and no `update_math` dispatch path sets `finished_time`, so a
+        consumed row and an ignored one are indistinguishable. Check `math_tick` in
+        `math_main` instead.
+
+        Returns True if the task was queued, False if unavailable or failed. No-op when
+        db_url is absent.
         """
         if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
             return False

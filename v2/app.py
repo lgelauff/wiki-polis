@@ -599,6 +599,13 @@ def _load_intermediate_results(conv) -> tuple[dict | None, dict | None, bool]:
         now = time.monotonic()
         last = _math_recompute_last.get(conv.id, 0)
         if now - last > _MATH_RECOMPUTE_COOLDOWN:
+            # NOTE: this reports "recomputing" on the strength of the row being written,
+            # which is not the same as a recompute happening — our math container runs
+            # polismath's `full` mode, and only `tasks` mode consumes worker_tasks (see
+            # queue_math_recompute). The banner is shown on this response only, at most
+            # once per cooldown per worker, and only on a results-page load with empty
+            # results. So it is a message that is untrue when it appears, not a stuck
+            # state; and an empty results tab has other, more likely causes.
             if _polis_server_client().queue_math_recompute(conv.polis_id):
                 _math_recompute_last[conv.id] = now
                 recomputing = True
