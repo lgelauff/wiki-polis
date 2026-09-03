@@ -599,6 +599,11 @@ def _load_intermediate_results(conv) -> tuple[dict | None, dict | None, bool]:
         now = time.monotonic()
         last = _math_recompute_last.get(conv.id, 0)
         if now - last > _MATH_RECOMPUTE_COOLDOWN:
+            # NOTE: this reports "recomputing" on the strength of the row being written,
+            # which is not the same as a recompute happening. Our math container runs
+            # polismath's `full` mode, and only its `tasks` mode consumes worker_tasks —
+            # see queue_math_recompute. Where results are genuinely missing, this shows
+            # "recomputing" indefinitely and queues a fresh dead row every cooldown.
             if _polis_server_client().queue_math_recompute(conv.polis_id):
                 _math_recompute_last[conv.id] = now
                 recomputing = True
