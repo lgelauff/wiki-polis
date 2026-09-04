@@ -25,6 +25,43 @@ import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
 
 type Lifecycle = components['schemas']['AdminLifecycle'];
+type PhaseTransitionReceipt = components['schemas']['AdminPhaseAdvanceReceipt']['transition'];
+
+/** Message shown when Polis rejected the results-visibility update after a phase move.
+ *
+ * This is a data-integrity signal, not a cosmetic confirmation: the local phase moved
+ * but upstream Polis still gates ``GET /results/`` on the old vis_type, so results can
+ * silently fail to appear. It must never be folded into a plain success. */
+const VISIBILITY_DESYNC_ADVANCE =
+  'Phase moved, but updating results visibility in Polis failed.';
+const VISIBILITY_DESYNC_PHASES =
+  'Phases saved, but updating results visibility in Polis failed — '
+  + 'results may not appear until you save phases again.';
+
+/** Collapse a phase-advance receipt into one toast, keeping the worst severity.
+ *
+ * The receipt can carry up to three independent notices (visibility desync, a Phase 6
+ * re-seed message, and the move confirmation). The toast surface shows one message at a
+ * time, so they are concatenated in server order and the category is the most severe of
+ * them — a partial failure must never render as a green success. */
+export function phaseTransitionToast(
+  transition: PhaseTransitionReceipt,
+): {category: LegacyToastMessage['category']; message: string} {
+  const parts: string[] = [];
+  let category: LegacyToastMessage['category'] = 'success';
+  if (!transition.visibilitySynced) {
+    category = 'error';
+    parts.push(VISIBILITY_DESYNC_ADVANCE);
+  }
+  if (transition.phase6SyncMessage) {
+    if (category !== 'error' && transition.phase6SyncMessage.includes('check manually')) {
+      category = 'warning';
+    }
+    parts.push(transition.phase6SyncMessage);
+  }
+  parts.push(`Moved to: ${transition.targetLabel}.`);
+  return {category, message: parts.join(' ')};
+}
 type Settings = components['schemas']['AdminSettings'];
 type RoleRoster = components['schemas']['AdminRoleRoster'];
 type Role = 'moderator' | 'organizer';
@@ -240,10 +277,10 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
   function setLifecycle(lifecycle: Lifecycle) {queryClient.setQueryData(lifecycleOptions.queryKey, lifecycle);}
   function refreshSupporting() {void queryClient.invalidateQueries({queryKey: settingsOptions.queryKey}); void queryClient.invalidateQueries({queryKey: rolesOptions.queryKey}); void queryClient.invalidateQueries({queryKey: lifecycleOptions.queryKey});}
 
-  const phaseMutation = useMutation({mutationFn: () => putAdminPhase(conversationId, {confirmedPreconditionIds: phaseChecks}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); setPhaseChecks([]);}, onError: fail});
+  const phaseMutation = useMutation({mutationFn: () => putAdminPhase(conversationId, {confirmedPreconditionIds: phaseChecks}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); setPhaseChecks([]); const receipt = phaseTransitionToast(result.transition); notify(receipt.category, receipt.message);}, onError: fail});
   const pauseMutation = useMutation({mutationFn: () => putAdminPause(conversationId, {paused: data.conversation.status !== 'paused'}, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
   const scheduleMutation = useMutation({mutationFn: (body: components['schemas']['AdminScheduleRequest']) => putAdminSchedule(conversationId, body, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
-  const phasesMutation = useMutation({mutationFn: () => putAdminPhases(conversationId, {activeKeys: advancedKeys}, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
+  const phasesMutation = useMutation({mutationFn: () => putAdminPhases(conversationId, {activeKeys: advancedKeys}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); if (!result.visibilitySynced) notify('error', VISIBILITY_DESYNC_PHASES);}, onError: fail});
   const initialization = useMutation({mutationFn: () => createAdminPhase6Initialization(conversationId, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
 
   const isAdmin = data.capabilities.useAdvancedPhases;

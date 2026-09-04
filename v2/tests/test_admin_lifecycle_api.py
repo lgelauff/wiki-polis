@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 from db import AdminRole, AuditEvent, FeaturedStatement, db
+from polis_admin import PolisServerError
 from tests.conftest import login
 from services.admin_lifecycle import (
     Phase6InitializationSaveFailed, PhaseTransitionSaveFailed,
@@ -252,6 +253,52 @@ def test_phase_advance_api_returns_receipt_and_refreshed_lifecycle(
     assert data['transition']['targetKey'] == 'submission'
     assert data['transition']['visibilitySynced'] is True
     assert data['lifecycle']['phase']['steps'][1]['state'] == 'current'
+
+
+def test_phase_advance_api_reports_a_failed_polis_visibility_sync(
+    admin_client, conversation,
+):
+    """A phase move whose upstream vis_type update fails must still say so.
+
+    The move itself succeeds locally, so the endpoint returns 200 — but Polis keeps
+    gating GET /results/ on the old vis_type, which is a data-integrity signal the
+    operator has to see. The receipt is the only channel that carries it.
+    """
+    before = admin_client.get(
+        f'/api/v1/admin/conversations/{conversation.id}',
+    ).get_json()['data']
+    ids = [row['id'] for row in before['phase']['transition']['preconditions']]
+
+    with patch(
+        'app.PolisServerClient.set_vis_type',
+        side_effect=PolisServerError('vis_type rejected'),
+    ):
+        response = admin_client.put(
+            f'/api/v1/admin/conversations/{conversation.id}/phase',
+            json={'confirmedPreconditionIds': ids},
+        )
+
+    assert response.status_code == 200
+    transition = response.get_json()['data']['transition']
+    assert transition['visibilitySynced'] is False
+    assert transition['targetLabel']
+
+
+def test_advanced_phase_api_reports_a_failed_polis_visibility_sync(
+    admin_client, conversation,
+):
+    """Same signal on the advanced (non-guided) phase save."""
+    with patch(
+        'app.PolisServerClient.set_vis_type',
+        side_effect=PolisServerError('vis_type rejected'),
+    ):
+        response = admin_client.put(
+            f'/api/v1/admin/conversations/{conversation.id}/phases',
+            json={'activeKeys': ['public_results']},
+        )
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['visibilitySynced'] is False
 
 
 def test_phase_advance_api_reports_missing_and_machine_blocked_checks(
