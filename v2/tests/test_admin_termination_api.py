@@ -34,6 +34,7 @@ def test_delete_api_rechecks_then_hides_and_deletes_empty_conversation(
     admin_client, conversation,
 ):
     conversation_id = conversation.id
+    polis_id = conversation.polis_id
     server = MagicMock()
     server.get_valid_vote_count.return_value = 0
     with patch('app._polis_server_client', return_value=server):
@@ -48,7 +49,10 @@ def test_delete_api_rechecks_then_hides_and_deletes_empty_conversation(
         'links': {'admin': '/admin'},
     }
     assert db.session.get(Conversation, conversation_id) is None
-    server.close_and_hide_conversation.assert_called_once()
+    # Pin the argument, not just the call: hiding *a* conversation upstream is not
+    # the contract, hiding *this* one is. An unpinned assert_called_once() passes
+    # just as happily when the wrong Polis conversation is taken down.
+    server.close_and_hide_conversation.assert_called_once_with(polis_id)
     event = AuditEvent.query.filter_by(operation='conversation.delete').one()
     assert event.conversation_id is None
     assert event.target_id == str(conversation_id)

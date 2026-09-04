@@ -283,6 +283,13 @@ def test_phase_advance_api_reports_a_failed_polis_visibility_sync(
     assert transition['visibilitySynced'] is False
     assert transition['targetLabel']
 
+    # The other half of the contract, and the reason this returns 200 at all: the
+    # local move is *committed* despite the upstream failure. Without this the
+    # endpoint could satisfy the assertions above by rolling the move back, which
+    # is precisely the behaviour the receipt is claiming did not happen.
+    db.session.refresh(conversation)
+    assert conversation.phase_submission is True
+
 
 def test_advanced_phase_api_reports_a_failed_polis_visibility_sync(
     admin_client, conversation,
