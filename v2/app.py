@@ -8,7 +8,6 @@ import dataclasses
 import functools
 import hashlib
 import hmac
-import ipaddress
 import os
 import random
 import re
@@ -23,19 +22,18 @@ import nh3
 import requests
 from dotenv import load_dotenv
 from flask import (Flask, abort, current_app, flash, g, jsonify,
-                   has_request_context, make_response, redirect, request, send_from_directory, session, url_for)
+                   has_request_context, redirect, request, send_from_directory, session, url_for)
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_wtf.csrf import CSRFProtect, validate_csrf
+from flask_wtf.csrf import CSRFProtect
 from sqlalchemy import text as _sa_text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
-from wtforms.validators import ValidationError
 
-from db import (ACCESS_POLICIES, AdminRole, Argument,
+from db import (AdminRole, Argument,
                 ArgumentSideState, ArgumentVote, AuditEvent, ContentFlag, Conversation,
                 ConversationBan, ConversationInvite, FeaturedStatement, Participant,
                 Participation, StatementProvenance, StatementSimilarityScore, db)
@@ -722,23 +720,6 @@ def _advance_target_index(conv) -> int | None:
     return target if target > i and target <= last else None
 
 
-def _advance_confirm_message(conv) -> str:
-    """Plain-language confirmation describing what the next forward move does
-    to participants in this specific conversation."""
-    i = _current_stage_index(conv)
-    target = _advance_target_index(conv)
-    if target is None:
-        return ''
-    sequence = _phase_sequence_for(conv)
-    nxt = sequence[target]
-    cur = sequence[i]
-    parts = [f'Move to “{nxt["label"]}”? Participants: {nxt["effect"]}.']
-    if cur['flag']:
-        parts.append(f'This closes the current phase ({cur["effect"]}).')
-    parts.append('This cannot be undone here — only a site admin can change it back.')
-    return ' '.join(parts)
-
-
 # Guided phase transitions (#156). Keyed by the TARGET stage. Each transition lists
 # the preconditions the organizer must affirm (one checkbox each) before the "Move on"
 # button enables. `check` (optional) names a machine-verifiable predicate, shown met/
@@ -1379,20 +1360,6 @@ def _valid_polis_id(v: str) -> bool:
 
 def _valid_slug(v: str) -> bool:
     return bool(_SLUG_RE.match(v or ''))
-
-
-def _parse_conversation_form() -> dict:
-    raw_policy = request.form.get('access_policy', 'public').strip()
-    eligibility_event_id = request.form.get('eligibility_event_id', '').strip()
-    eligibility_label = request.form.get('eligibility_label', '').strip()
-    return {
-        'title':         request.form.get('title', '').strip(),
-        'intro_text':    _sanitise_text(request.form.get('intro_text', '')),
-        'outro_text':    _sanitise_text(request.form.get('outro_text', '')),
-        'access_policy': raw_policy if raw_policy in ACCESS_POLICIES else 'public',
-        'eligibility_event_id': eligibility_event_id[:80] or None,
-        'eligibility_label': eligibility_label[:255] or None,
-    }
 
 
 def _current_participant() -> 'Participant | None':
@@ -3910,90 +3877,7 @@ def _check_conversation_access(conversation, participant) -> None:
         abort(403)
 
 
-# ── Particiapi proxy ──────────────────────────────────────────────────────────
-
-def _validate_same_origin(*, allow_missing_provenance: bool = False):
-    """Abort 403 if the request does not appear to be same-origin.
-    Used as a compensating control on CSRF-exempt endpoints."""
-    sec_fetch = request.headers.get('Sec-Fetch-Site')
-    if sec_fetch:
-        if sec_fetch != 'same-origin':
-            abort(403)
-        return
-    origin = request.headers.get('Origin')
-    if origin:
-        if urlparse(origin).netloc != urlparse(request.host_url).netloc:
-            abort(403)
-        return
-    if allow_missing_provenance:
-        return
-    abort(403)
-
-
-def _validate_fetch_csrf():
-    """Validate Flask-WTF CSRF for JSON/fetch routes on the exempt proxy blueprint."""
-    if not current_app.config.get('WTF_CSRF_ENABLED', True):
-        return False
-    token = (request.headers.get('X-CSRFToken')
-             or request.headers.get('X-CSRF-Token')
-             or request.form.get('csrf_token'))
-    try:
-        validate_csrf(token)
-    except ValidationError:
-        abort(400)
-    return True
-
-
-def _demo_proxy_allowed(pa_path: str, method: str) -> bool:
-    conv_id = _demo_bound_conversation_id()
-    if conv_id is None:
-        return False
-    conv = db.session.get(Conversation, conv_id)
-    if conv is None or conv.access_policy != 'demo':
-        return False
-    if pa_path == 'api/session' and method in ('GET', 'POST'):
-        return True
-    prefix = f'api/conversations/{conv.polis_id}/'
-    if method == 'GET' and pa_path.startswith(prefix):
-        return True
-    if method == 'PUT' and pa_path.startswith(prefix + 'votes/'):
-        return True
-    # Demo conversations run the full flow (#293), so a demo session may also
-    # create statements — scoped to its own bound conversation.
-    if method == 'POST' and pa_path.startswith(prefix + 'statements'):
-        return True
-    return False
-
-
-def _proxy_auth_response(pa_path: str):
-    if 'username' in session:
-        return None
-    if _is_demo_session():
-        if _demo_proxy_allowed(pa_path, request.method):
-            return None
-        abort(403)
-    if not request.path.startswith('/proxy/'):
-        session['next'] = request.path
-    return redirect(url_for('login'))
-
-
-def _is_secure_pa_transport(base_url: str) -> bool:
-    """True if the sub-secret can be sent safely: HTTPS, or HTTP to loopback only.
-
-    X-Particiapi-Sub-Secret is a long-lived master credential; combined with an
-    enumerable xid, a wire-capture of it lets an attacker forge any user's identity.
-    Used only to emit a loud warning when it would traverse a cleartext non-loopback
-    link (#245 review) — the actual fix is encrypting that hop.
-    """
-    u = urlparse(base_url)
-    if u.scheme == 'https':
-        return True
-    host = (u.hostname or '').strip('[]')
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return host == 'localhost'
-
+# ── Per-conversation Polis identity ───────────────────────────────────────────
 
 def _conversation_subject(xid: str, conv) -> str:
     """Conversation-scoped participant subject for Particiapi's trusted-sub binding.
@@ -4006,169 +3890,6 @@ def _conversation_subject(xid: str, conv) -> str:
     """
     secret = current_app.config.get('PARTICIAPI_SUB_SECRET') or current_app.config['SECRET_KEY']
     return hmac.new(str(secret).encode(), f'{xid}:{conv.id}'.encode(), hashlib.sha256).hexdigest()
-
-
-def _proxy_to_particiapi(pa_path: str, conv=None):
-    """
-    Proxy a browser request to Particiapi and return the response.
-
-    When ``conv`` is given (the per-conversation proxy route), the asserted identity is
-    **conversation-scoped** and the ``pa_session`` cookie is **path-scoped to that
-    conversation**, so each conversation gets its own session/uid (no cross-conversation
-    chain). The legacy unscoped route passes ``conv=None`` (bare-xid subject, root cookie).
-
-    Browser ↔ Flask proxy ↔ Particiapi:
-    - The browser stores a 'pa_session' cookie (Particiapi's session, renamed to
-      avoid colliding with Flask's own 'session' cookie).
-    - On each request we map pa_session → session when forwarding to Particiapi.
-    - When Particiapi sets a new session cookie we rename it pa_session before
-      sending it back to the browser.
-    - CSRF tokens pass through unchanged via the X-CSRF-Token header.
-    - This route is CSRF-exempt (the web component uses its own token scheme);
-      Sec-Fetch-Site / Origin validation is the compensating control.
-    """
-    # Origin validation as compensating control for CSRF exemption.
-    if request.method not in ('GET', 'HEAD'):
-        _validate_same_origin()
-
-    # CRIT-1: Reject path traversal and non-API paths.
-    if '..' in pa_path.split('/') or not pa_path.startswith('api/'):
-        abort(404)
-
-    url = f"{current_app.config['PARTICIAPI_BASE']}/{pa_path}"
-
-    forwarded_cookies = {}
-    pa_cookie = request.cookies.get('pa_session')
-
-    # Identity binding: on the session-create call, if the user is logged in and the
-    # shared secret is configured, assert their stable identity (xid) to Particiapi so
-    # they keep the same Polis uid across devices instead of a new anonymous uid each
-    # session. Scoped to POST /api/session only — Particiapi consults the headers
-    # nowhere else, so sending the secret on other requests is pure exposure surplus.
-    _xid = session.get('xid')
-    _sub_secret = current_app.config.get('PARTICIAPI_SUB_SECRET')
-    # Conversation-scope the subject when we know the conversation, so the participant gets
-    # a different uid per conversation (no chain) while staying stable across devices in it.
-    _sub = _conversation_subject(_xid, conv) if (_xid and conv is not None) else _xid
-    _bind_identity = (
-        # Privacy invariant (#246): only ever bind on the conversation-scoped route.
-        # With conv=None (legacy unscoped route) `_sub` is the bare xid, which would
-        # re-link the participant across conversations — never assert that as identity.
-        conv is not None
-        and pa_path == 'api/session' and request.method == 'POST'
-        and bool(_sub) and bool(_sub_secret)
-    )
-
-    # Loud warning (#245 review): the sub-secret is a master credential. If the transport
-    # to Particiapi is cleartext non-loopback, a wire-capture forges any user's identity.
-    # We still bind (the link is firewalled-private in prod) but surface it on every bind
-    # so an unencrypted hop can't stay invisible. The real fix is encrypting the hop.
-    if _bind_identity and not _is_secure_pa_transport(current_app.config['PARTICIAPI_BASE']):
-        current_app.logger.warning(
-            'PARTICIAPI_SUB_SECRET is being sent over a cleartext non-loopback transport '
-            '(%s); encrypt the Toolforge<->VPS hop (WireGuard/TLS)',
-            current_app.config['PARTICIAPI_BASE'])
-
-    # On a bind we deliberately do NOT forward any existing pa_session cookie: a stale
-    # (possibly anonymous) session would make Particiapi skip the bind path and pin the
-    # user to a throwaway uid forever. Dropping it forces a clean re-bind to the xid.
-    if pa_cookie and not _bind_identity:
-        forwarded_cookies['session'] = pa_cookie
-
-    # HIGH-5: Only forward known safe query parameters to Particiapi.
-    _ALLOWED_PARAMS = frozenset({'create', 'zinvite', 'conversation_id', 'tid'})
-    params = {k: v for k, v in request.args.items() if k in _ALLOWED_PARAMS}
-    # If the web component calls POST /api/session with no existing session (and we're
-    # not binding a stable identity), Particiapi 403s unless we add ?create=true.
-    if (pa_path == 'api/session' and request.method == 'POST'
-            and not pa_cookie and not _bind_identity):
-        params['create'] = 'true'
-
-    interaction_match = re.match(r'^api/conversations/([^/]+)/(votes(?:/\d+)?|statements/?)(?:/)?$', pa_path)
-    if request.method in ('POST', 'PUT') and interaction_match:
-        participant = _current_participant()
-        conv = Conversation.query.filter_by(polis_id=interaction_match.group(1)).first()
-        if conv:
-            _abort_if_banned(conv, participant)
-
-    headers = {}
-    if request.method in ('POST', 'PUT'):
-        csrf = request.headers.get('X-CSRF-Token')
-        if csrf:
-            headers['X-CSRF-Token'] = csrf
-        if request.content_type:
-            headers['Content-Type'] = request.content_type
-
-    if _bind_identity:
-        headers['X-Particiapi-Sub'] = _sub
-        headers['X-Particiapi-Sub-Secret'] = _sub_secret
-
-    try:
-        upstream = polis_http.request(
-            method=request.method,
-            url=url,
-            params=params,
-            headers=headers,
-            cookies=forwarded_cookies,
-            json=request.get_json(silent=True),
-            data=request.form if not request.is_json else None,
-            timeout=10,
-            # A proxy must hand 3xx back to the browser, never follow them itself:
-            # `requests` preserves custom headers across cross-host redirects (it only
-            # strips Authorization/Cookie), so following one could replay
-            # X-Particiapi-Sub-Secret to a redirect-chosen host.
-            allow_redirects=False,
-        )
-    except requests.RequestException:
-        current_app.logger.exception('Particiapi proxy error')
-        abort(502)
-
-    # Particiapi returns 403 on /results/ when math hasn't run yet (no clusters).
-    # The web component treats any 403 as a fatal error and clears the UI.
-    # Convert to 200 with empty body so the component stays in a usable state.
-    if upstream.status_code == 403 and pa_path.endswith('/results/'):
-        flask_resp = make_response('{}', 200)
-        flask_resp.headers['Content-Type'] = 'application/json'
-        return flask_resp
-
-    vote_match = re.match(r'^api/conversations/([^/]+)/votes(?:/\d+)?/?$', pa_path)
-    # `upstream.ok` (status < 400) also covers 3xx; with allow_redirects=False a
-    # redirect is a reachable terminal response here, so require an actual 2xx
-    # before crediting engagement for a vote that was never confirmed applied.
-    if upstream.status_code < 300 and request.method in ('POST', 'PUT') and vote_match:
-        participant = _current_participant()
-        if participant:
-            conv = Conversation.query.filter_by(polis_id=vote_match.group(1)).first()
-            if conv:
-                part = Participation.query.filter_by(
-                    participant_id=participant.id,
-                    conversation_id=conv.id,
-                ).first()
-                _touch_last_engagement(part, commit=True)
-
-    flask_resp = make_response(upstream.content, upstream.status_code)
-    flask_resp.headers['Content-Type'] = upstream.headers.get(
-        'Content-Type', 'application/json')
-    if 'Location' in upstream.headers:
-        # allow_redirects=False means a 3xx reaches here verbatim; forward Location
-        # too or the browser gets a redirect status with nowhere to go (#245 follow-up).
-        flask_resp.headers['Location'] = upstream.headers['Location']
-
-    if 'session' in upstream.cookies:
-        # Path-scope the session cookie to this conversation's proxy base, so the browser
-        # only returns it on that conversation's calls — each conversation keeps its own
-        # session/uid (#246). The legacy unscoped route keeps the root path.
-        _cookie_path = f'/c/{conv.slug}/proxy/particiapi' if conv is not None else '/'
-        flask_resp.set_cookie(
-            'pa_session',
-            upstream.cookies['session'],
-            path=_cookie_path,
-            httponly=True,
-            samesite='Lax',
-            secure=not current_app.debug,
-        )
-
-    return flask_resp
 
 
 # ── App factory ───────────────────────────────────────────────────────────────
