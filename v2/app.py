@@ -1182,8 +1182,9 @@ def _phase_tiles(conv, key, polis_stats, phase6_stats=None,
     """Stat tiles for a single phase `key` (#165). Each tile is {value, label, unit?, note?}.
 
     Polis-derived tiles (vote/participant counts) are omitted when polis_stats is
-    None — the template shows a loud warning instead. Flask-derived tiles (featured
-    statements, arguments) always render, since they don't depend on Polis PG.
+    None; the payload signals that separately as `statistics.upstreamUnavailable`,
+    so a missing tile is never mistaken for a zero. Flask-derived tiles (featured
+    statements, arguments) are always present, since they don't depend on Polis PG.
 
     `get_featured_counts` / `get_argument_stats` are optional accessors so a multi-phase
     caller can memoize those DB aggregates across phases (several active phases reuse the
@@ -1251,11 +1252,14 @@ def _phase_tiles(conv, key, polis_stats, phase6_stats=None,
 
 def _phase_stat_groups(conv, polis_stats, phase6_stats=None):
     """One stat group per *active* phase, in sequence order; each is
-    {key, label, tiles}. In simple/linear mode this is a single group (the template
-    renders it flat). In advanced mode several phases can be on at once, so the
-    control box shows a group per phase — its name plus the tiles relevant to it —
-    rather than only the furthest-along phase. Groups with no tiles are kept here and
-    skipped by the template.
+    {key, label, tiles}. In simple/linear mode that is a single group. In advanced mode
+    several phases can be on at once, so the caller gets a group per phase — its name
+    plus the tiles relevant to it — rather than only the furthest-along phase.
+
+    Groups with no tiles are kept rather than dropped: this builds the
+    `statistics.groups` array of a JSON payload, and the set of active phases is part
+    of what that payload reports. Presenting an empty group is the client's decision,
+    not ours.
 
     The featured/argument DB aggregates are memoized across phases here: in advanced
     mode several active phases (e.g. argument_mapping + cleanup + informed_voting) each

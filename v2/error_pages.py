@@ -6,15 +6,15 @@ These pages exist for the case where the deploy is broken. ``_SPA_BUILD_DIR``
 (``v2/static/spa``) is gitignored and produced at deploy time by
 ``v2/bin/build-spa.sh``; if that build is missing, stale or half-written, every
 canonical path 404s out of ``send_from_directory``. That is precisely when the
-error page has to work, so it must not need the SPA bundle, ``base.html``, the
-Jinja loader, a context processor, or a stylesheet fetched over the network.
+error page has to work, so it must not need the SPA bundle, a template loader, a
+context processor, or a stylesheet fetched over the network.
 
-A template under ``templates/`` would satisfy the letter of that today and fail
-it later: the directory is scheduled for deletion, and a template is one
-``{% extends %}`` away from depending on the thing that is broken. A module-level
-string is imported once at process start and has no loader between the exception
-and the bytes. The cost is that the markup lives in Python; the payoff is that
-there is no configuration under which it can fail to render.
+Writing these as templates was rejected when ``templates/`` still existed, on the
+grounds that a template is one ``{% extends %}`` away from depending on the thing
+that is broken. That directory has since been deleted outright, which settles the
+question. A module-level string is imported once at process start and has no loader
+between the exception and the bytes. The cost is that the markup lives in Python;
+the payoff is that there is no configuration under which it can fail to render.
 
 Everything here is static — no request data is interpolated — so the page cannot
 leak internals and needs no escaping. Werkzeug's own ``description`` is
