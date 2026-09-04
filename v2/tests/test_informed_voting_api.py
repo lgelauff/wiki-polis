@@ -296,12 +296,14 @@ def test_openapi_documents_informed_voting_contract(client):
 
 
 def test_informed_vote_api_binds_the_same_identity_explore_uses(app, auth_client, participant):
-    """The API write path must bind identity too, to the SAME subject Phase 2 uses.
+    """The API write path must bind identity, to the SAME subject Phase 2 uses.
 
-    There are two Phase 6 write paths — this one and the legacy Jinja route — and they
-    share `_p6_session_cache`. If only one bound, an anonymous session cached by the other
-    would be handed straight to it and the binding would be silently defeated, so both
-    need locking. See test_phase6_vote.py for the legacy half.
+    This is now the only Phase 6 write path; the legacy Jinja route that shared
+    `_p6_session_cache` with it is gone. The binding still has to be asserted here,
+    because an unbound bootstrap would cache an anonymous session that every later
+    vote reuses. Asserting the exact subject rather than merely "a header was sent"
+    is the point — a Phase 6 subject that differs from Phase 2's would still look
+    bound while leaving the two rounds just as unjoinable.
     """
     secret = 'shared-upstream-secret'
     app.config['PARTICIAPI_SUB_SECRET'] = secret
