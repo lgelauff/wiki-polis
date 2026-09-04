@@ -146,7 +146,11 @@ export function LegacyShell({
 
       <main className="legacy-main" id="main" tabIndex={-1}>{children}</main>
       <div id="toast-container">{toast}</div>
-      <footer style={{textAlign: 'right', padding: '.5rem 1rem', fontSize: 11, color: 'var(--muted)'}}>
+      <footer style={{display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '.5rem 1rem', fontSize: 11, color: 'var(--muted)'}}>
+        <span>
+          {'Statements and arguments are released under '}
+          <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener" style={{color: 'inherit'}}>CC0<span className="sr-only"> (opens in a new tab)</span></a>.
+        </span>
         <code>{session.gitVersion}</code>
       </footer>
     </>
