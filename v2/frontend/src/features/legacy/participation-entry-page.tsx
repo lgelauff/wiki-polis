@@ -145,7 +145,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
           Pick the name you will use in this consultation.
         </p>
 
-        <form id="accept-form" aria-labelledby="accept-title" aria-describedby={`pseudonym-help accept-privacy-note${formError ? ' accept-error' : ''}`} onSubmit={submit}>
+        <form id="accept-form" aria-labelledby="accept-title" aria-describedby={`pseudonym-help accept-privacy-note accept-licence-note${formError ? ' accept-error' : ''}`} onSubmit={submit}>
           <input type="hidden" name="csrf_token" value={csrfToken} />
           <div className="pseudonym-card" role="radiogroup" aria-labelledby="pseudonym-title" aria-describedby="pseudonym-help pseudonym-status">
             <div className="pseudonym-card-header">
@@ -193,18 +193,6 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
             </label>
           </div>
 
-          <div className="accept-section" id="accept-licence-note">
-            <h2>What you write</h2>
-            <p>
-              {'Statements and arguments you write here are released under '}
-              <InternalLink href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0<span className="sr-only"> (opens in a new tab)</span></InternalLink>
-              {', which places them in the public domain, the same as a wiki edit. That is what lets the results be published as a report, quoted in a discussion, and reused by anyone.'}
-            </p>
-            <p className="muted">
-              This covers what you write, not who wrote it: contributions are published under your pseudonym, and CC0 does not require anyone to credit you. Your votes are not covered — a vote is a fact, not a work. CC0 cannot be withdrawn once given, the same as any wiki edit.
-            </p>
-          </div>
-
           <div className="accept-section" id="accept-privacy-note">
             <h2>Privacy summary</h2>
             <p>Public records use your pseudonym. ProtoWiki keeps the username link internally for login, access checks, notifications, moderation, and privacy controls.</p>
@@ -216,6 +204,18 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
                 <p>Between <strong>{data.reveal.cooldownDays}</strong> and <strong>{`${data.reveal.windowEndDays} days`}</strong> after close, you may optionally and permanently link your username to your pseudonym in the public record. This is irreversible during that window.</p>
               </div>
             </details>
+          </div>
+
+          <div className="accept-section" id="accept-licence-note">
+            <h2>What you write</h2>
+            <p>
+              {'Statements and arguments you write here are released under '}
+              <InternalLink href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0<span className="sr-only"> (opens in a new tab)</span></InternalLink>
+              {', which places them in the public domain, the same as a wiki edit. That is what lets the results be published as a report, quoted in a discussion, and reused by anyone.'}
+            </p>
+            <p className="muted">
+              This covers what you write, not who wrote it: contributions are published under your pseudonym, and CC0 does not require anyone to credit you. Your votes are not covered — a vote is a fact, not a work. CC0 cannot be withdrawn once given, the same as any wiki edit.
+            </p>
           </div>
 
           <label className="consent-label" id="consent-label" htmlFor="consent-check" style={{marginTop: '1.25rem'}}>
