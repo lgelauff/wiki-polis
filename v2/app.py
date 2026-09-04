@@ -3371,6 +3371,12 @@ def _admin_featured_api_payload(conv_id: int) -> dict:
                 if hasattr(argument.side, 'value') else str(argument.side)
             ),
         )
+    # Heal rows whose statement_text was never stored. The Jinja featured page
+    # did this on every view; _sync_phase6_featured seeds Round 6 only for rows
+    # with a persisted text, so without this a legacy empty row renders fine in
+    # the admin UI (the response falls back to a live fetch below) while being
+    # silently dropped from the informed-vote round.
+    _backfill_statement_texts(conv, confirmed)
     confirmed_tids = {row.polis_statement_id for row in confirmed}
     candidates = _polis_server_client().get_featured_candidates(conv.polis_id)
     if candidates is not None:
