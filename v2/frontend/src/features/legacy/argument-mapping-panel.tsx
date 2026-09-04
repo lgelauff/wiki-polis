@@ -79,7 +79,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
         <div className="contribute-composer-header">
           <span className="contribute-glyph filled">{copy.sign}</span>
           <span className="contribute-composer-label" id={`contribute-label-${featuredId}-${side}`}>Your {copy.adjective}-argument · one sentence, one claim</span>
-          <InternalLink className="contribute-help-link" href="/help/arguments">Argument tips</InternalLink>
+          <InternalLink className="contribute-help-link" href="/help/arguments" target="_blank" rel="noopener">Argument tips<span className="sr-only"> (opens in a new tab)</span></InternalLink>
           <span className="contribute-charcount"><span className="cc-len">{body.length}</span> / 280</span>
         </div>
         <textarea ref={textareaRef} className="contribute-textarea" maxLength={280} rows={3} aria-labelledby={`contribute-label-${featuredId}-${side}`} placeholder={`Add a short ${copy.adjective}-argument (one sentence, max 280 characters)…`} value={body} onChange={(event) => setBody(event.target.value)} />
