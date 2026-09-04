@@ -1573,29 +1573,7 @@ def login_required(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         if 'username' not in session:
-            if not request.path.startswith('/proxy/'):
-                session['next'] = request.path
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return wrapper
-
-
-def login_or_demo_required(f):
-    """Like login_required, but also admits an active demo session.
-
-    Demo conversations are genuine demonstration conversations (#293): an
-    anonymous visitor plays through the full flow — vote, suggest statements,
-    arguments — on a synthetic participant, and it records as usual. The demo
-    session is bound to a single conversation (demo_conversation_id), and each
-    route still runs its own access check (_check_conversation_access / the
-    demo participation lookup), so this only widens *who may reach* the route,
-    not *which conversation* they may act on.
-    """
-    @functools.wraps(f)
-    def wrapper(*args, **kwargs):
-        if 'username' not in session and not _is_demo_session():
-            if not request.path.startswith('/proxy/'):
-                session['next'] = request.path
+            session['next'] = request.path
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return wrapper
@@ -4046,21 +4024,6 @@ def _build_featured_data(conv, participation, can_mod=False):
     random.Random(pid).shuffle(result)
     return result
 
-def _require_arg_participation(slug):
-    """Return (conv, participation) or abort. Checks active + argument phase."""
-    conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    if not conv.active or conv.paused or not conv.phase_argument_mapping:
-        abort(403)
-    participant = _current_participant()
-    if not participant:
-        abort(403)
-    part = Participation.query.filter_by(
-        participant_id=participant.id,
-        conversation_id=conv.id,
-    ).first_or_404()
-    _abort_if_banned(conv, participant)
-    return conv, part
-
 def _backfill_statement_texts(conv, confirmed: list) -> bool:
     """Fetch and store statement_text for any confirmed FS that is missing it."""
     missing = [fs for fs in confirmed if not fs.statement_text]
@@ -4079,13 +4042,6 @@ def _backfill_statement_texts(conv, confirmed: list) -> bool:
     if changed:
         db.session.commit()
     return changed
-
-def _fetch_statement_text(conv_polis_id: str, tid: int) -> str:
-    try:
-        return _statement_text_map(conv_polis_id).get(tid, '')
-    except PolisParticipantError:
-        return ''
-
 
 # nh3 tag allowlist for CSV import sanitisation — no HTML tags permitted.
 _NH3_NO_TAGS: frozenset[str] = frozenset()
