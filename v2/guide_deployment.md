@@ -484,6 +484,16 @@ https://wiki-polis.toolforge.org/login     → redirects to Wikimedia OAuth
 
 ## Ongoing deploys
 
+> **Budget four to five minutes.** `deploy.sh` is not instant and gives little output
+> while it works, so it reads as hung when it is not. Most of the time is the React
+> build: on a Toolforge bastion there is no `npm`, so the script opens an ephemeral
+> `node20` runtime shell and runs `npm ci` plus `npm run build` inside it. Dependency
+> sync, `toolforge jobs load` and the webservice restart account for the rest.
+>
+> Wait it out rather than interrupting — a deploy killed midway can leave dependencies
+> synced against a revision whose assets were never built. The `--expect` guard only
+> protects the start of the run, not the middle.
+
 ```bash
 # On Toolforge bastion as wiki-polis user:
 cd ~/wiki-polis && git pull
