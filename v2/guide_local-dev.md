@@ -220,9 +220,15 @@ one becomes a **different** Polis `uid`. That is fine for a single round, but it
 a Phase 2 participant and a Phase 6 participant can never be recognised as the same
 person — which is exactly what a before/after comparison needs.
 
-Set `PARTICIAPI_SUB_SECRET` (matching Particiapi's `TRUSTED_SUB_SECRET`) and the
-simulator asserts a stable subject per synthetic person, the way Flask's proxy does in
-production — see [`ref_cross-device-identity.md`](ref_cross-device-identity.md).
+Set `PARTICIAPI_SUB_SECRET` in `v2/.env` and the simulator asserts a stable subject per
+synthetic person, the way Flask's proxy does in production — see
+[`ref_cross-device-identity.md`](ref_cross-device-identity.md).
+
+`dev.sh` passes that same value to the Particiapi container as `TRUSTED_SUB_SECRET`, so
+one setting covers both sides and they cannot drift apart. It prints which mode it started
+in. (Before this was wired, the two variables had to be set separately and nothing carried
+the value to the container — so the local stack could not exercise trusted-sub at all, and
+identity behaviour observed locally meant nothing.)
 
 The script probes this at startup and says which mode it is in:
 
