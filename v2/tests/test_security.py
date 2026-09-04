@@ -22,12 +22,12 @@ def test_security_headers_on_every_response(client):
     assert "frame-ancestors 'none'" in csp
 
 
-def test_flash_toasts_do_not_inject_messages_with_innerhtml():
-    base_template = Path(__file__).resolve().parents[1] / 'templates' / 'base.html'
-    source = base_template.read_text()
-
-    assert 'el.innerHTML' not in source
-    assert 'msg.textContent = message' in source
+# Removed with the Jinja frontend: test_flash_toasts_do_not_inject_messages_with_innerhtml
+# asserted templates/base.html built flash toasts with textContent, not innerHTML.
+# Both the template and the toast mechanism are gone. The equivalent surviving sink
+# is the SPA's dangerouslySetInnerHTML on descriptionHtml/outroHtml, which is fed
+# server-sanitised text (_sanitise_text -> nh3, app.py) and stays covered by
+# test_admin_settings_api.py's '<script' assertion on introHtml.
 
 
 def test_safe_redirect_blocks_absolute_external(app):
@@ -87,20 +87,14 @@ def test_production_requires_trusted_hosts(tmp_path):
             })
 
 
-def test_admin_role_redirect_to_cannot_escape(app, admin_client, admin_participant, participant):
-    """redirect_to field in role forms is sanitised through _safe_redirect."""
-    conv = Conversation(slug='sec-conv', polis_id='sec1234567',
-                        title='Security Test Conv', active=True, access_policy='public')
-    db.session.add(conv)
-    db.session.commit()
-    resp = admin_client.post('/admin/roles/add', data={
-        'participant_id': participant.id,
-        'conversation_id': conv.id,
-        'role': 'moderator',
-        'redirect_to': '//evil.com',
-    })
-    assert resp.status_code == 302
-    assert 'evil.com' not in resp.headers['Location']
+# Removed with the Jinja frontend: test_admin_role_redirect_to_cannot_escape drove
+# POST /admin/roles/add with a hostile redirect_to. The roles API that replaced it
+# (PUT /api/v1/admin/conversations/<id>/roles/<pid>) takes JSON and returns JSON -- it
+# has no redirect target to poison, and no /api/v1 route accepts one. The
+# _safe_redirect guard itself is still live on the OAuth login return path and is
+# still covered by the three unit tests above; its only input there is
+# session['next'], which login_required sets from request.path, not from anything
+# an attacker supplies.
 
 
 def test_dev_db_isolation_refuses_non_sqlite(tmp_path):
@@ -332,7 +326,6 @@ def test_test_config_may_disable_distributed_ratelimit_storage(tmp_path):
     assert 'RATELIMIT_STORAGE_URI' not in a.config
 
 
-def test_proxy_delete_method_not_allowed(auth_client):
-    """DELETE is not in the allowed proxy methods."""
-    resp = auth_client.delete('/proxy/particiapi/api/conversations/')
-    assert resp.status_code == 405
+# Removed with proxy_bp: test_proxy_delete_method_not_allowed asserted that DELETE
+# fell outside the proxy's method allowlist. The blueprint is gone -- no /proxy/* rule
+# is registered at all -- so the allowlist has no surface left to guard.

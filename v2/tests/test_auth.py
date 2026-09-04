@@ -157,9 +157,30 @@ def test_logout_clears_session(auth_client):
         assert 'username' not in sess
 
 
-def test_login_required_redirects_unauthenticated(client):
-    """Protected routes redirect to /login when not authenticated."""
-    for path in ['/accept/foo', '/c/foo', '/admin']:
+def test_protected_api_denies_unauthenticated_and_leaks_nothing(client, conversation):
+    """Unauthenticated callers get no protected data.
+
+    The Jinja version of this test asserted a 302 to /login on /accept/<slug>,
+    /c/<slug> and /admin. Those are canonical SPA paths now: the shell is served
+    from a before-request hook ahead of route dispatch, so every one of them
+    returns 200 for anyone and the redirect is no longer observable there. The
+    property itself is unchanged and still load-bearing — it is simply enforced
+    at the API, which is where the SPA actually fetches data, so that is where
+    it is now asserted.
+    """
+    expected = {
+        # /admin — site administration surface
+        '/api/v1/admin': 403,
+        f'/api/v1/admin/conversations/{conversation.id}': 403,
+        # /accept/<slug> — the invitation/join surface
+        '/api/v1/conversations/test-conv/participation-entry': 401,
+        # /c/<slug> — the conversation surface
+        '/api/v1/conversations/test-conv/workspace': 401,
+        '/api/v1/conversations/test-conv/explore': 401,
+    }
+    for path, status in expected.items():
         resp = client.get(path)
-        assert resp.status_code == 302
-        assert '/login' in resp.headers['Location'], path
+        assert resp.status_code == status, path
+        # The denial must not carry the payload it denied.
+        assert b'Test Conversation' not in resp.data, path
+        assert b'abc1234567' not in resp.data, path
