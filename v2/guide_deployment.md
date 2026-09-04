@@ -485,6 +485,34 @@ https://wiki-polis.toolforge.org/login     → redirects to Wikimedia OAuth
 
 ---
 
+## Recording what is running
+
+The stack has no single version number. Polis arrives as container images tagged
+`:latest`, built by a third party from a pinned upstream commit; Particiapi may be a
+locally built image; the app is a git checkout. Nothing in that records which combination
+was live on a given day — which is exactly what you need when results look wrong months
+later and you are trying to work out what changed.
+
+So capture it. Occasionally, and after any deploy that changes the backend:
+
+```bash
+bash ~/wiki-polis/v2/ops/capture_stack_overview.sh production
+```
+
+Run it on **each host** that holds part of an environment — the Cloud VPS sees the
+container images, Toolforge sees the app — and use `staging` or `local` as appropriate.
+It rewrites `v2/ops/stack-overview-<env>.md` and appends one line to
+`v2/ops/stack-history.jsonl`. **Commit both.** They are deliberately public: digests,
+commit SHAs and dates, no secrets, no hostnames, no paths.
+
+Environments drift apart, and staging and production will usually sit one or more cycles
+behind local. That is expected. The value is that the gap becomes visible instead of
+guessed.
+
+> It is not run automatically from `deploy.sh` on purpose: `deploy.sh` operates inside a
+> checkout it also pulls into, and writing tracked files there would collide with the next
+> deploy.
+
 ## Ongoing deploys
 
 > **Budget four to five minutes.** `deploy.sh` is not instant and gives little output
