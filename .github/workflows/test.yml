@@ -44,11 +44,6 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v10.0.1
 
-      - name: Set up Node (for the inline-JS syntax gate)
-        uses: actions/setup-node@v7
-        with:
-          node-version: "24"
-
       - name: Install dependencies
         run: uv sync --locked
 
@@ -61,7 +56,7 @@ jobs:
       - name: Lint (ruff — pyflakes; catches undefined names / unused)
         run: uvx ruff check .
 
-      - name: Tests + inline-template-JS syntax gate
+      - name: Tests
         # No .env in CI, and app.py instantiates the app at import, so the
         # production startup checks need these supplied. FLASK_DEBUG=1 bypasses
         # the web-server-only guards; the security tests override it per-test.
