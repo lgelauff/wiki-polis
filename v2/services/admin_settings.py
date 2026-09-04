@@ -18,6 +18,11 @@ def build_admin_settings(
             'phaseRoute': conversation.phase_route,
             'phaseRouteLabel': phase_route_label,
             'polisId': conversation.polis_id,
+            # Organizer/global-admin only — moderators without organizer rights can
+            # read the rest of this payload (build_admin_settings is called behind
+            # _require_mod_for_conv) but must not see notes. null, not '', signals
+            # "you don't have access" distinctly from "no notes written yet".
+            'adminNotes': conversation.admin_notes or '' if can_edit else None,
         },
         'recommendations': {
             'tier': recommendation_profile['tier'],
@@ -64,7 +69,7 @@ def update_recommendation_tier(
 def update_conversation_settings(
     *, conversation, title: str, intro_html: str, outro_html: str,
     access_policy: str, eligibility_event_id: str, eligibility_label: str,
-    tier: str, sanitise, session, audit,
+    tier: str, admin_notes: str, sanitise, session, audit,
 ) -> SettingsUpdateResult:
     desired = {
         'title': title.strip(),
@@ -74,6 +79,10 @@ def update_conversation_settings(
         'eligibility_event_id': eligibility_event_id.strip() or None,
         'eligibility_label': eligibility_label.strip() or None,
         'recommended_quantities': {'tier': tier},
+        # Deliberately NOT sanitised as HTML: plain text, organizer-only, never
+        # rendered to participants — sanitise() strips tags meant for HTML output,
+        # which would mangle a note like "check <the old export> before reusing".
+        'admin_notes': admin_notes.strip() or None,
     }
     changed_fields = sorted(
         field for field, value in desired.items()

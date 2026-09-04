@@ -152,7 +152,7 @@ function ConfigurationSection({conversationId, csrfToken, settings, refresh, fai
   const [eligibilityLabel, setEligibilityLabel] = useState(settings.eligibility.label ?? '');
   const [tier, setTier] = useState(settings.recommendations.tier);
   const settingsMutation = useMutation({
-    mutationFn: () => putAdminSettings(conversationId, {title, introHtml, outroHtml, accessPolicy, eligibilityEventId: eventId, eligibilityLabel, recommendationTier: settings.recommendations.tier}, csrfToken),
+    mutationFn: () => putAdminSettings(conversationId, {title, introHtml, outroHtml, accessPolicy, eligibilityEventId: eventId, eligibilityLabel, recommendationTier: settings.recommendations.tier, adminNotes: settings.conversation.adminNotes ?? ''}, csrfToken),
     onSuccess: refresh,
     onError: fail,
   });
