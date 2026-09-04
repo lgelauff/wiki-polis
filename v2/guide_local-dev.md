@@ -224,7 +224,7 @@ Set `PARTICIAPI_SUB_SECRET` in `v2/.env` and the simulator asserts a stable subj
 synthetic person, the way Flask's proxy does in production — see
 [`ref_cross-device-identity.md`](ref_cross-device-identity.md).
 
-`dev.sh` passes that same value to the Particiapi container as `TRUSTED_SUB_SECRET`, so
+`dev.sh` passes that same value to the container as `PARTICIAPI_TRUSTED_SUB_SECRET`, so
 one setting covers both sides and they cannot drift apart. It prints which mode it started
 in. (Before this was wired, the two variables had to be set separately and nothing carried
 the value to the container — so the local stack could not exercise trusted-sub at all, and
