@@ -197,14 +197,26 @@ perfectly mirrored distribution while every participant-facing number stays inve
 
 Then `COMMIT;` — or `ROLLBACK;` if anything is off.
 
-### 5b. Recompute the clusters — the repair is not finished without this
+### 5b. Recompute the clusters — usually this happens on its own
 
-The vote tables are now right and **every rendered opinion group is still wrong.** Polis
-serves clustering from `math_main`, computed from the old signs. A plain row rewrite adds
-no row, fires no rule and moves no timestamp, so nothing tells the math worker that
-anything changed. Step 7's tallies come straight from Postgres and will look correct while
-the groups beside them stay backwards — the one silent mis-display this repair does not fix
-by itself.
+The vote tables are now right while **every rendered opinion group is still computed from
+the old signs.** Polis serves clustering from `math_main`. A plain row rewrite adds no row,
+fires no rule and moves no timestamp, so nothing tells the math worker anything changed.
+Step 7's tallies come straight from Postgres and will look correct while the groups beside
+them stay backwards.
+
+> **What actually happened on production, 2026-09-02 to 09-04.** Nothing below was run, and
+> math caught up by itself within two days: `math_tick` moved 1356 → 1388 and
+> `last_vote_timestamp` advanced to the newest vote. Two things do this for you. The math
+> process is recycled every four hours by its own watchdog (`bin/run` wraps it in
+> `timeout -s KILL 14400`), and on each start the vote poller replays every conversation
+> with a vote inside `poll-from-days-ago` (default 10). A restarted process holds no cached
+> matrix, so that replay is a **cold load** — it rebuilds from the database at current
+> values, which is exactly what an in-place repair needs.
+>
+> **So check before acting.** If the conversation has a vote within the last ten days, wait
+> a few hours and re-read `math_tick`. The routes below are for when it has not moved, when
+> the conversation is outside that window, or when you cannot wait.
 
 ⚠️ **Queueing a task does not work on our deployment, and this is not a transient
 fault.** `queue_math_recompute` writes a `worker_tasks` row, but only polismath's `tasks`
