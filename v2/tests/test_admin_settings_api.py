@@ -55,6 +55,7 @@ def test_organizer_replaces_settings_idempotently(
         'eligibilityEventId': 'extended-confirmed',
         'eligibilityLabel': 'Extended-confirmed editors',
         'recommendationTier': 'complex',
+        'adminNotes': '  Pre-dates the CC0 notice.  ',
     }
 
     first = client.put(endpoint, json=body)
@@ -70,6 +71,11 @@ def test_organizer_replaces_settings_idempotently(
     assert settings['eligibility']['eventId'] == ''
     assert settings['eligibility']['label'] is None
     assert settings['recommendations']['tier'] == 'complex'
+    # Plain text, not HTML: leading/trailing whitespace stripped like other free
+    # text fields, but NOT run through the HTML sanitiser that introHtml/outroHtml
+    # get — this is never rendered as HTML, and sanitising it would mangle a note
+    # containing '<' or '>' that the organizer meant literally.
+    assert settings['conversation']['adminNotes'] == 'Pre-dates the CC0 notice.'
     assert AuditEvent.query.filter_by(
         operation='conversation.settings.update',
         conversation_id=conversation.id,
@@ -83,13 +89,14 @@ def test_settings_update_returns_field_errors(admin_client, conversation):
             'title': '', 'introHtml': '', 'outroHtml': '',
             'accessPolicy': 'secret', 'eligibilityEventId': 'x' * 81,
             'eligibilityLabel': 'y' * 256, 'recommendationTier': 'enormous',
+            'adminNotes': 'z' * 4001,
         },
     )
 
     assert response.status_code == 400
     assert set(response.get_json()['error']['details']['fields']) == {
         'title', 'accessPolicy', 'eligibilityEventId', 'eligibilityLabel',
-        'recommendationTier',
+        'recommendationTier', 'adminNotes',
     }
 
 
@@ -110,10 +117,14 @@ def test_moderator_can_read_but_not_change_settings(
         'title': conversation.title, 'introHtml': '', 'outroHtml': '',
         'accessPolicy': 'public', 'eligibilityEventId': '',
         'eligibilityLabel': '', 'recommendationTier': 'medium',
+        'adminNotes': '',
     })
 
     assert readable.status_code == 200
     assert readable.get_json()['data']['capabilities']['edit'] is False
+    # Private to organizer/global-admin. A moderator who can read the rest of
+    # this payload must not see notes meant to stay off their radar.
+    assert readable.get_json()['data']['conversation']['adminNotes'] is None
     assert denied.status_code == 403
 
 
@@ -156,6 +167,7 @@ def test_organizer_updates_explicit_gated_settings(
         'eligibilityEventId': '',
         'eligibilityLabel': '',
         'recommendationTier': 'medium',
+        'adminNotes': '',
     })
 
     assert response.status_code == 200
@@ -196,6 +208,7 @@ def test_gated_settings_lock_after_explore_starts(
             'eligibilityEventId': '',
             'eligibilityLabel': '',
             'recommendationTier': 'medium',
+            'adminNotes': '',
         },
     )
 
@@ -229,6 +242,7 @@ def test_migrated_unconfigured_gate_can_choose_provider_after_explore(
             'eligibilityEventId': 'legacy-event',
             'eligibilityLabel': 'Legacy eligibility',
             'recommendationTier': 'medium',
+            'adminNotes': '',
         },
     )
 

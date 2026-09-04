@@ -281,6 +281,7 @@ def register_admin_routes(
         legacy_expected = {
             'title', 'introHtml', 'outroHtml', 'accessPolicy',
             'eligibilityEventId', 'eligibilityLabel', 'recommendationTier',
+            'adminNotes',
         }
         access_expected = legacy_expected | {
             'gated', 'gatingType', 'announce', 'information',
@@ -299,13 +300,15 @@ def register_admin_routes(
         if (not isinstance(body['title'], str) or not body['title'].strip()
                 or len(body['title'].strip()) > 255):
             fields['title'] = ['Write a title up to 255 characters.']
-        for key in ('introHtml', 'outroHtml', 'eligibilityEventId', 'eligibilityLabel'):
+        for key in ('introHtml', 'outroHtml', 'eligibilityEventId', 'eligibilityLabel', 'adminNotes'):
             if not isinstance(body[key], str):
                 fields[key] = ['Use text.']
         if isinstance(body['eligibilityEventId'], str) and len(body['eligibilityEventId']) > 80:
             fields['eligibilityEventId'] = ['Use at most 80 characters.']
         if isinstance(body['eligibilityLabel'], str) and len(body['eligibilityLabel']) > 255:
             fields['eligibilityLabel'] = ['Use at most 255 characters.']
+        if isinstance(body['adminNotes'], str) and len(body['adminNotes']) > 4000:
+            fields['adminNotes'] = ['Use at most 4000 characters.']
         access_policy = body.get('accessPolicy')
         if access_policy is not None and access_policy not in {
             'public', 'invite_only', 'demo',
