@@ -13,6 +13,5 @@ afterEach(() => {
   if (typeof globalThis.localStorage?.clear === 'function') {
     globalThis.localStorage.clear();
   }
-  document.cookie = 'wiki-polis-spa-only=; Path=/; Max-Age=0; SameSite=Lax';
 });
 afterAll(() => server.close());
