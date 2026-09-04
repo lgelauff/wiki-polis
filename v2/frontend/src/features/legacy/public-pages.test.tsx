@@ -38,7 +38,6 @@ test('renders server-projected developer login shortcuts without environment log
       user: null,
       capabilities: {administerSite: false},
       csrfToken: 'test-csrf-token',
-      developerMode: true,
       developerLogins: [
         {username: 'dev-user-1', href: '/dev/login/dev-user-1'},
         {username: 'dev-user-2', href: '/dev/login/dev-user-2'},

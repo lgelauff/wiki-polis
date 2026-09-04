@@ -19,17 +19,8 @@ def test_session_contract_for_anonymous_browser(client):
     assert data['user'] is None
     assert data['capabilities'] == {'administerSite': False}
     assert data['csrfToken']
-    assert data['developerMode'] is False
     assert data['developerLogins'] == []
     assert data['links'] == {'login': '/login', 'logout': '/logout'}
-
-
-def test_session_contract_exposes_local_development_mode(app, client):
-    app.config['DEBUG'] = True
-
-    data = client.get('/api/v1/session').get_json()['data']
-
-    assert data['developerMode'] is True
 
 
 def test_session_contract_exposes_deployed_git_version(monkeypatch, client):

@@ -1,6 +1,30 @@
+"""The server's SPA route table, and the guard that keeps it from drifting.
+
+With the Jinja frontend gone there is no fallback: a canonical path is answered
+with the React shell, and anything outside the table 404s (see test_error_pages).
+That is a deliberate choice over a catch-all — it is what keeps the branded 404
+reachable — but an explicit table can drift out of step with the React router,
+which is how #310 shipped three React routes with no server counterpart.
+
+test_every_react_route_has_a_server_counterpart is the fix: it reads the route
+table straight out of frontend/src/app.tsx, so adding a React route without
+adding it to _SPA_ROUTE_PATTERNS fails here instead of 404ing in production.
+"""
+
+import re
+from pathlib import Path
+
 import pytest
 
 import app as app_module
+
+APP_TSX = Path(__file__).resolve().parents[1] / 'frontend' / 'src' / 'app.tsx'
+
+# React path params -> a concrete path segment the server table should accept.
+_SAMPLE_SEGMENTS = {
+    'conversationId': '42',
+    'outputKey': 'report',
+}
 
 
 @pytest.fixture(autouse=True)
@@ -11,7 +35,19 @@ def spa_build_fixture(app, tmp_path, monkeypatch):
         '<!doctype html><div id="root"></div>', encoding='utf-8',
     )
     monkeypatch.setattr(app_module, '_SPA_BUILD_DIR', str(build_dir))
-    app.config['SPA_DEFAULT_ENABLED'] = True
+
+
+def _react_route_paths() -> list[str]:
+    source = APP_TSX.read_text(encoding='utf-8')
+    return re.findall(r'<Route\s+path="([^"]+)"', source)
+
+
+def _as_concrete_path(route: str) -> str:
+    """Turn a React route pattern into one example path a browser could request."""
+    return '/'.join(
+        _SAMPLE_SEGMENTS.get(part[1:], 'sample-slug') if part.startswith(':') else part
+        for part in route.split('/')
+    )
 
 
 def test_canonical_route_serves_react_by_default(client, conversation):
@@ -21,95 +57,35 @@ def test_canonical_route_serves_react_by_default(client, conversation):
     assert b'<div id="root"></div>' in response.data
 
 
-def test_explicit_jinja_fallback_reaches_legacy_route(client, conversation):
-    response = client.get(f'/c/{conversation.slug}?spa_only=0')
-
-    assert response.status_code == 302
-    assert '/login' in response.headers['Location']
-    assert 'wiki-polis-spa-only=0' in response.headers['Set-Cookie']
-
-
-@pytest.mark.parametrize('page', ['settings', 'termination', 'roles'])
-def test_react_only_admin_route_has_authorized_jinja_fallback(
-    admin_client, conversation, page,
-):
-    response = admin_client.get(
-        f'/admin/conversations/{conversation.id}/{page}?spa_only=0',
-    )
-
-    assert response.status_code == 302
-    assert response.headers['Location'] == f'/admin/conversations/{conversation.id}'
-
-
-@pytest.mark.parametrize('page', ['settings', 'termination', 'roles'])
-def test_react_only_admin_fallback_preserves_permissions(
-    auth_client, conversation, page,
-):
-    response = auth_client.get(
-        f'/admin/conversations/{conversation.id}/{page}?spa_only=0',
-    )
-
-    assert response.status_code == 403
-
-
-def test_spa_only_query_serves_react_shell_on_canonical_route(client, conversation):
-    response = client.get(f'/c/{conversation.slug}?spa_only=1')
+def test_admin_route_with_no_view_function_still_serves_the_shell(client, conversation):
+    """These paths have no Flask endpoint at all — the before-request hook owns them."""
+    response = client.get(f'/admin/conversations/{conversation.id}/settings')
 
     assert response.status_code == 200
     assert b'<div id="root"></div>' in response.data
-    assert 'wiki-polis-spa-only=1' in response.headers['Set-Cookie']
 
 
-def test_spa_only_cookie_persists_and_can_be_disabled(client):
-    enabled = client.get('/admin?spa_only=1')
-    assert b'<div id="root"></div>' in enabled.data
+@pytest.mark.parametrize('route', sorted(set(_react_route_paths())))
+def test_every_react_route_has_a_server_counterpart(client, route):
+    """Guard against the #310 failure: a React route the server does not know."""
+    if route == '*':
+        pytest.skip('client-side catch-all, not a server path')
+    path = _as_concrete_path(route)
 
-    persisted = client.get('/consultations')
-    assert b'<div id="root"></div>' in persisted.data
+    # /app/* is served by the spa_shell view rather than the canonical table.
+    if path.startswith('/app'):
+        assert client.get(path).status_code == 200
+        return
 
-    disabled = client.get('/consultations?spa_only=0')
-    assert b'<div id="root"></div>' not in disabled.data
-    assert 'wiki-polis-spa-only=0' in disabled.headers['Set-Cookie']
-
-    persisted_fallback = client.get('/admin')
-    assert b'<div id="root"></div>' not in persisted_fallback.data
-
-
-def test_spa_only_cookie_is_long_lived(client):
-    response = client.get('/consultations?spa_only=1')
-
-    assert 'Max-Age=31536000' in response.headers['Set-Cookie']
-
-
-def test_jinja_header_offers_spa_toggle_only_in_local_debug(app, client):
-    app.config['DEBUG'] = True
-
-    response = client.get('/consultations?spa_only=0')
-
-    assert b'role="switch"' in response.data
-    assert b'SPA only <span>off</span>' in response.data
-
-
-def test_jinja_header_offers_spa_toggle_on_toolforge_staging(monkeypatch, client):
-    monkeypatch.setenv('TOOL_NAME', 'wiki-polis-dev')
-    monkeypatch.setenv(
-        'TOOL_TOOLFORGE_API_URL',
-        'https://api.svc.tools.eqiad1.wikimedia.cloud',
+    assert app_module._is_canonical_spa_path(path), (
+        f'{route} is routed by app.tsx but not by _SPA_ROUTE_PATTERNS in app.py'
     )
-
-    response = client.get('/consultations?spa_only=0')
-
-    assert b'role="switch"' in response.data
-    assert b'SPA only <span>off</span>' in response.data
+    assert client.get(path).status_code == 200
 
 
-def test_jinja_header_hides_spa_toggle_in_toolforge_production(monkeypatch, client):
-    monkeypatch.setenv('TOOL_NAME', 'wiki-polis')
-    monkeypatch.setenv(
-        'TOOL_TOOLFORGE_API_URL',
-        'https://api.svc.tools.eqiad1.wikimedia.cloud',
-    )
+def test_a_path_outside_the_table_is_not_served_the_shell(client):
+    """The other half of the bargain: unknown paths must stay 404, not 200."""
+    response = client.get('/c/some-slug/not-a-real-tab')
 
-    response = client.get('/consultations?spa_only=0')
-
-    assert b'SPA only <span>off</span>' not in response.data
+    assert response.status_code == 404
+    assert b'<div id="root"></div>' not in response.data

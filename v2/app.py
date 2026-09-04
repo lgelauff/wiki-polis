@@ -16,15 +16,14 @@ import secrets
 import threading
 import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlencode, urlparse, urljoin
+from urllib.parse import quote, urlencode, urlparse, urljoin
 
 import coolname
 import nh3
 import requests
 from dotenv import load_dotenv
-from flask import (Blueprint, Flask, abort, current_app, flash, g, jsonify,
-                   has_request_context, make_response, redirect, render_template,
-                   request, send_from_directory, session, url_for)
+from flask import (Flask, abort, current_app, flash, g, jsonify,
+                   has_request_context, make_response, redirect, request, send_from_directory, session, url_for)
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
@@ -36,7 +35,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from wtforms.validators import ValidationError
 
-from db import (ACCESS_POLICIES, ADMIN_ROLES, AdminRole, Argument,
+from db import (ACCESS_POLICIES, AdminRole, Argument,
                 ArgumentSideState, ArgumentVote, AuditEvent, ContentFlag, Conversation,
                 ConversationBan, ConversationInvite, FeaturedStatement, Participant,
                 Participation, StatementProvenance, StatementSimilarityScore, db)
@@ -44,8 +43,7 @@ from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError,
                          polis_server_config_error)
 from http_pool import session as polis_http
-from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
-                      RowError, strip_formula_prefixes)
+from seed_csv import (MAX_ROWS, MAX_TEXT_CHARS, strip_formula_prefixes)
 from logging_setup import configure_logging
 from error_pages import render_error_page
 from api.v1 import (
@@ -54,26 +52,22 @@ from api.v1 import (
 )
 from services.identity import reconcile_participant_login
 from services.identity_reveal import (
-    REVEAL_COOLDOWN_DAYS, REVEAL_WINDOW_DAYS, RevealUnavailable,
-    build_reveal_context as _reveal_context,
+    REVEAL_COOLDOWN_DAYS, REVEAL_WINDOW_DAYS, build_reveal_context as _reveal_context,
     reveal_identity as reveal_identity_command,
 )
 from services.informed_voting import build_informed_voting_state
 from services.results_report import build_results_report
 from services.intermediate_results import build_intermediate_results
 from services.invites import (
-    InvitationNotInConversation, InviteBatchSaveError,
-    add_conversation_invites, build_invitation_roster,
+    InvitationNotInConversation, add_conversation_invites, build_invitation_roster,
     remove_conversation_invite,
 )
 from services.conversation_about import build_conversation_about
-from services.conversation_lanes import (build_conversation_lane,
-                                         scheduled_transition)
+from services.conversation_lanes import (build_conversation_lane)
 from services.conversation_workspace import (
     InviteOnlyWorkspaceAccess, build_conversation_workspace,
 )
-from services.participations import (EligibilityDenied, InvalidPseudonym,
-                                     PseudonymUnavailable, join_conversation)
+from services.participations import (join_conversation)
 from services.participation_entry import build_participation_entry
 from services.explore import (ExploreGateway, ParticiapiSessionState,
                               ExploreUpstreamError, build_explore_state,
@@ -81,12 +75,10 @@ from services.explore import (ExploreGateway, ParticiapiSessionState,
 from services.explore_votes import update_pass_signal
 from services.argument_mapping import build_argument_mapping_state
 from services.argument_commands import (
-    ContributionGateClosed, ExistingArgumentConflict, HiddenArgument,
-    InvalidArgument, PrioritizationUnavailable, PriorityBudgetExceeded,
     set_argument_priority, skip_argument_contribution,
     submit_argument as submit_argument_command,
 )
-from services.content_flags import InvalidFlag, submit_content_flag
+from services.content_flags import submit_content_flag
 from services.admin_participants import (
     ParticipantNotInConversation, build_admin_participant_roster,
     set_participant_access,
@@ -102,16 +94,14 @@ from services.admin_settings import (build_admin_settings,
                                      update_conversation_settings,
                                      update_recommendation_tier)
 from services.admin_termination import (
-    DeletionBlockedByVotes, DeletionOutcomeUnknown, DeletionUpstreamFailed,
-    DeletionVerificationUnavailable, build_termination_state,
+    build_termination_state,
     delete_empty_conversation,
 )
 from services.admin_statements import (
-    LastFeaturedStatementProtected, StatementModerationUpstreamFailed,
+    StatementModerationUpstreamFailed,
     ModerationPolicySaveFailed, ModerationPolicyUpstreamFailed,
     ModerationPolicyVerificationUnavailable,
-    SeedImportValidationFailed, SeedStatementParentNotFound,
-    SeedStatementUpstreamFailed, SeedStatementValidationFailed,
+    SeedImportValidationFailed, SeedStatementValidationFailed,
     add_seed_statement, build_statement_workspace, import_seed_statements,
     moderate_statement, resolved_moderation_policy, set_statement_moderation_policy,
 )
@@ -127,11 +117,6 @@ from services.admin_catalog import (
     set_global_admin,
 )
 from services.admin_lifecycle import (
-    Phase6InitializationConflict, Phase6InitializationSaveFailed,
-    Phase6InitializationUnavailable,
-    PhasePreparationFailed, PhaseReadinessBlocked,
-    PhaseReadinessUnconfirmed, PhaseTransitionConflict,
-    PhaseTransitionSaveFailed, PhaseTransitionUnavailable,
     ScheduleInPast,
     advance_conversation_phase, build_admin_lifecycle, initialize_phase6,
     publish_final_report, set_advanced_phases, set_conversation_archived,
@@ -1150,8 +1135,8 @@ def _output_ready(conv, key: str) -> bool:
 
 def _output_href(conv, key: str) -> str:
     if key == 'report':
-        return url_for('participant.conversation_report', slug=conv.slug)
-    return url_for('participant.conversation_output', slug=conv.slug, output_key=key)
+        return _path_conversation(conv.slug, page='report')
+    return _path_conversation_output(conv.slug, key)
 
 
 def _output_items(conv) -> list[dict]:
@@ -1719,44 +1704,101 @@ def _polis_server_client() -> PolisServerClient:
     )
 
 
+# ── Public URL paths ──────────────────────────────────────────────────────────
+# These paths are the SPA's, not Flask's: no view function answers them by name,
+# the before-request SPA handler serves the shell for anything in
+# _SPA_ROUTE_PATTERNS below. url_for() therefore cannot build them, so the API's
+# link payloads build them literally here. Keep the two lists in step — the
+# drift test in test_spa_canonical_routes.py checks them against app.tsx.
+
+def _url_segment(value) -> str:
+    return quote(str(value), safe='')
+
+
+def _path_conversation(slug, *, page: str | None = None) -> str:
+    base = f'/c/{_url_segment(slug)}'
+    return f'{base}/{page}' if page else base
+
+
+def _path_conversation_output(slug, output_key) -> str:
+    return f'/c/{_url_segment(slug)}/outputs/{_url_segment(output_key)}'
+
+
+def _path_accept(slug) -> str:
+    return f'/accept/{_url_segment(slug)}'
+
+
+def _path_admin() -> str:
+    return '/admin'
+
+
+def _path_admin_conversation(conv_id, *, page: str | None = None) -> str:
+    base = f'/admin/conversations/{int(conv_id)}'
+    return f'{base}/{page}' if page else base
+
+
 def _conversation_client_link(slug: str, *, tab: str | None = None) -> str:
-    path = url_for('participant.conversation', slug=slug)
+    path = _path_conversation(slug)
     return f'{path}#tab-{tab}' if tab else path
 
 
 def _admin_client_link(conversation_id: int, page: str | None = None) -> str:
-    base = url_for('admin.admin_conversation_detail', conv_id=conversation_id)
+    base = _path_admin_conversation(conversation_id)
     return f'{base}/{page}' if page else base
 
 
-_SPA_ONLY_COOKIE = 'wiki-polis-spa-only'
-_SPA_ONLY_MAX_AGE = 365 * 24 * 60 * 60
+# ── SPA route table ───────────────────────────────────────────────────────────
+# The React bundle owns every HTML route, so the server has to decide which paths
+# it answers with the SPA shell. Two designs were weighed:
+#
+#   (a) A catch-all — serve index.html for any non-API, non-static GET. Rejected:
+#       nothing would ever 404, so the branded 404 page becomes unreachable for
+#       HTML (test_error_pages.py asserts /no-such-page renders it), every typo
+#       and stale inbound link returns 200 with an empty shell, and uptime
+#       monitoring loses the one signal that says a path is wrong.
+#
+#   (b) An explicit allowlist — kept. Its real cost was drift: #310 shipped three
+#       React routes with no server counterpart because this table and the React
+#       router were maintained by hand, independently of each other. The fix is
+#       not to abandon the allowlist but to stop it drifting — the table below is
+#       the single declaration, and test_spa_canonical_routes.py parses every
+#       <Route path=…> out of frontend/src/app.tsx and asserts this table covers
+#       it. Adding a React route without a server counterpart now fails the suite
+#       instead of 404ing in production.
+#
+# Paths are anchored (fullmatch). /app and /app/<path:spa_path> are served by
+# their own route and deliberately stay out of this table.
+_SPA_ROUTE_PATTERNS: tuple[str, ...] = (
+    r'/',
+    r'/demo',
+    r'/consultations',
+    r'/help/statements',
+    r'/help/arguments',
+    r'/accept/[^/]+',
+    r'/c/[^/]+',
+    r'/c/[^/]+/about',
+    r'/c/[^/]+/moderation-log',
+    r'/c/[^/]+/outputs/[^/]+',
+    r'/c/[^/]+/report',
+    r'/c/[^/]+/reveal',
+    r'/admin',
+    r'/admin/conversations/\d+',
+    r'/admin/conversations/\d+/settings',
+    r'/admin/conversations/\d+/termination',
+    r'/admin/conversations/\d+/statements',
+    r'/admin/conversations/\d+/featured',
+    r'/admin/conversations/\d+/participants',
+    r'/admin/conversations/\d+/flags',
+    r'/admin/conversations/\d+/invites',
+    r'/admin/conversations/\d+/roles',
+)
 
-
-def _spa_developer_controls_enabled() -> bool:
-    """Expose migration controls on local debug and the isolated staging tool."""
-    local_debug = bool(
-        current_app.debug
-        and not os.environ.get('TOOL_TOOLFORGE_API_URL')
-    )
-    return local_debug or _is_staging_toolforge_app(current_app)
+_SPA_ROUTE_RE = re.compile('|'.join(f'(?:{pattern})' for pattern in _SPA_ROUTE_PATTERNS))
 
 
 def _is_canonical_spa_path(path: str) -> bool:
-    if path in {
-        '/', '/demo', '/consultations', '/help/statements', '/help/arguments', '/admin',
-    }:
-        return True
-    if re.fullmatch(r'/accept/[^/]+', path):
-        return True
-    if re.fullmatch(
-        r'/c/[^/]+(?:/(?:about|moderation-log|report|reveal|outputs/[^/]+))?', path,
-    ):
-        return True
-    return re.fullmatch(
-        r'/admin/conversations/\d+(?:/(?:participants|flags|invites|statements|featured|settings|termination|roles))?',
-        path,
-    ) is not None
+    """Whether this path is owned by the React router (and so gets the SPA shell)."""
+    return _SPA_ROUTE_RE.fullmatch(path) is not None
 
 
 def _conversation_lane_api_payload(demo: bool) -> dict:
@@ -1775,12 +1817,12 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
     )
     return lane.to_api(
         conversation_link=_conversation_client_link,
-        about_link=lambda slug: url_for('participant.conversation_about', slug=slug),
+        about_link=lambda slug: _path_conversation(slug, page='about'),
         explore_link=_conversation_client_link,
         arguments_link=lambda slug: _conversation_client_link(slug, tab='arguments'),
         informed_voting_link=lambda slug: _conversation_client_link(slug, tab='informed-voting'),
-        results_link=lambda slug: url_for('participant.conversation_report', slug=slug),
-        reveal_link=lambda slug: url_for('participant.reveal_identity', slug=slug),
+        results_link=lambda slug: _path_conversation(slug, page='report'),
+        reveal_link=lambda slug: _path_conversation(slug, page='reveal'),
         admin_link=_admin_client_link,
     )
 
@@ -1808,7 +1850,7 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
     if access_denial == 'invite_only':
         can_moderate = _can_moderate(conv, participant)
         access_links = {
-            'home': url_for('index'),
+            'home': '/',
         }
         if can_moderate:
             access_links['invitations'] = _admin_client_link(conv.id, 'invites')
@@ -1850,9 +1892,9 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
 
     links = {
         'self': url_for('api_v1.get_conversation_workspace', slug=slug),
-        'conversation': url_for('participant.conversation', slug=slug),
-        'about': url_for('participant.conversation_about', slug=slug),
-        'join': url_for('participant.accept', slug=slug),
+        'conversation': _path_conversation(slug),
+        'about': _path_conversation(slug, page='about'),
+        'join': _path_accept(slug),
     }
     if conv.phase_submission:
         links['explore'] = url_for('api_v1.get_explore_state', slug=slug)
@@ -1868,9 +1910,7 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
         )
         links['results'] = url_for('api_v1.get_results_report', slug=slug)
     if can_moderate:
-        links['manage'] = url_for(
-            'admin.admin_conversation_detail', conv_id=conv.id,
-        )
+        links['manage'] = _path_admin_conversation(conv.id)
 
     reveal = _reveal_context(conv, participation) if participation else None
     return build_conversation_workspace(
@@ -1912,10 +1952,8 @@ def _conversation_about_api_payload(slug: str) -> dict:
     _check_conversation_access(conv, participant)
     return _conversation_about_model(conv, participant).to_api(
         self_link=url_for('api_v1.get_conversation_about', slug=slug),
-        conversation_link=url_for('participant.conversation', slug=slug),
-        moderation_log_link=url_for(
-            'participant.conversation_moderation_log', slug=slug,
-        ),
+        conversation_link=_path_conversation(slug),
+        moderation_log_link=_path_conversation(slug, page='moderation-log'),
     )
 
 
@@ -1944,8 +1982,8 @@ def _moderation_log_api_payload(slug: str) -> dict:
         ],
         'links': {
             'self': url_for('api_v1.get_moderation_log', slug=slug),
-            'conversation': url_for('participant.conversation', slug=slug),
-            'about': url_for('participant.conversation_about', slug=slug),
+            'conversation': _path_conversation(slug),
+            'about': _path_conversation(slug, page='about'),
         },
     }
 
@@ -1978,8 +2016,8 @@ def _conversation_output_api_payload(slug: str, output_key: str) -> dict:
             'self': url_for(
                 'api_v1.get_conversation_output', slug=slug, output_key=output_key,
             ),
-            'conversation': url_for('participant.conversation', slug=slug),
-            'about': url_for('participant.conversation_about', slug=slug),
+            'conversation': _path_conversation(slug),
+            'about': _path_conversation(slug, page='about'),
         },
     }
 
@@ -2029,8 +2067,8 @@ def _identity_reveal_dto(conv, participant, participation) -> dict:
         'capabilities': {'revealIdentity': reveal['state'] == 'open'},
         'links': {
             'self': url_for('api_v1.get_identity_reveal', slug=conv.slug),
-            'conversation': url_for('participant.conversation', slug=conv.slug),
-            'about': url_for('participant.conversation_about', slug=conv.slug),
+            'conversation': _path_conversation(conv.slug),
+            'about': _path_conversation(conv.slug, page='about'),
         },
     }
 
@@ -2079,11 +2117,9 @@ def _participation_entry_read_model(slug: str):
 def _participation_entry_api_payload(slug: str) -> dict:
     entry = _participation_entry_read_model(slug)
     return entry.to_api(
-        conversation_link=url_for('participant.conversation', slug=slug),
-        home_link=url_for('index'),
-        manage_invites_link=url_for(
-            'admin.admin_conversation_invites', conv_id=entry.conversation.id,
-        ),
+        conversation_link=_path_conversation(slug),
+        home_link='/',
+        manage_invites_link=_path_admin_conversation(entry.conversation.id, page='invites'),
     )
 
 
@@ -2120,8 +2156,8 @@ def _join_conversation_api_payload(slug: str, body: dict) -> tuple[dict, int]:
         },
         'eligibilityStatus': participation.eligibility_status,
         'links': {
-            'conversation': url_for('participant.conversation', slug=slug),
-            'about': url_for('participant.conversation_about', slug=slug),
+            'conversation': _path_conversation(slug),
+            'about': _path_conversation(slug, page='about'),
         },
     }, 201 if result.created else 200)
 
@@ -2180,8 +2216,8 @@ def _explore_state_payload(conv: Conversation, participant: Participant,
     )
     links = {
         'self': url_for('api_v1.get_explore_state', slug=conv.slug),
-        'about': url_for('participant.conversation_about', slug=conv.slug),
-        'conversation': url_for('participant.conversation', slug=conv.slug),
+        'about': _path_conversation(conv.slug, page='about'),
+        'conversation': _path_conversation(conv.slug),
     }
     if conv.phase_argument_mapping:
         links['arguments'] = _conversation_client_link(conv.slug, tab='arguments')
@@ -2319,15 +2355,15 @@ def _informed_voting_api_payload(slug: str) -> dict:
         )
         links = {
             'self': url_for('api_v1.get_informed_voting', slug=slug),
-            'about': url_for('participant.conversation_about', slug=slug),
-            'conversation': url_for('participant.conversation', slug=slug),
+            'about': _path_conversation(slug, page='about'),
+            'conversation': _path_conversation(slug),
         }
         if conv.phase_submission:
             links['explore'] = _conversation_client_link(slug)
         if conv.phase_argument_mapping:
             links['arguments'] = _conversation_client_link(slug, tab='arguments')
         if conv.phase_public_results or conv.phase_personal_results:
-            links['results'] = url_for('participant.conversation_report', slug=slug)
+            links['results'] = _path_conversation(slug, page='report')
         return {
             'slug': conv.slug,
             'title': conv.title,
@@ -2407,10 +2443,10 @@ def _results_report_api_payload(slug: str) -> dict:
         participation=participation,
         reveal_state=reveal['state'] if reveal else None,
         self_link=url_for('api_v1.get_results_report', slug=slug),
-        conversation_link=url_for('participant.conversation', slug=slug),
-        about_link=url_for('participant.conversation_about', slug=slug),
+        conversation_link=_path_conversation(slug),
+        about_link=_path_conversation(slug, page='about'),
         identity_reveal_link=(
-            url_for('participant.reveal_identity', slug=slug)
+            _path_conversation(slug, page='reveal')
             if reveal else None
         ),
     )
@@ -2431,8 +2467,8 @@ def _intermediate_results_api_payload(slug: str) -> dict:
         polis_stats=polis_stats,
         recomputing=recomputing,
         self_link=url_for('api_v1.get_intermediate_results', slug=slug),
-        conversation_link=url_for('participant.conversation', slug=slug),
-        about_link=url_for('participant.conversation_about', slug=slug),
+        conversation_link=_path_conversation(slug),
+        about_link=_path_conversation(slug, page='about'),
     )
 
 
@@ -2443,8 +2479,8 @@ def _argument_mapping_api_payload(slug: str) -> dict:
     can_moderate = _can_moderate(conv)
     links = {
         'self': url_for('api_v1.get_argument_mapping', slug=slug),
-        'about': url_for('participant.conversation_about', slug=slug),
-        'conversation': url_for('participant.conversation', slug=slug),
+        'about': _path_conversation(slug, page='about'),
+        'conversation': _path_conversation(slug),
     }
     if conv.phase_submission:
         links['explore'] = _conversation_client_link(slug)
@@ -2599,7 +2635,7 @@ def _submit_content_flag_api_payload(slug: str, body: dict) -> tuple[dict, int]:
         'status': 'open',
         'created': result.created,
         'links': {
-            'conversation': url_for('participant.conversation', slug=slug),
+            'conversation': _path_conversation(slug),
         },
     }, 201 if result.created else 200)
 
@@ -3089,7 +3125,7 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
         can_administer=_is_global_admin(participant),
         links={
             'self': url_for('api_v1.get_admin_conversation_lifecycle', conversation_id=conv.id),
-            'participantView': url_for('participant.conversation', slug=conv.slug),
+            'participantView': _path_conversation(conv.slug),
             'participants': _admin_client_link(conv.id, 'participants'),
             'moderation': _admin_client_link(conv.id, 'flags'),
             'invitations': _admin_client_link(conv.id, 'invites'),
@@ -3563,7 +3599,7 @@ def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
     return {
         'conversationId': result.conversation_id,
         'deleted': True,
-        'links': {'admin': url_for('admin.admin')},
+        'links': {'admin': _path_admin()},
     }
 
 
@@ -3863,17 +3899,15 @@ def _conversation_access_denial(conversation, participant) -> str | None:
 
 
 def _check_conversation_access(conversation, participant) -> None:
-    denial = _conversation_access_denial(conversation, participant)
-    if denial is None:
-        return
-    if denial == 'invite_only' and not request.path.startswith('/api/v1/'):
-        can_mod = _can_moderate(conversation, participant)
-        abort(make_response(render_template(
-            'forbidden_invite_only.html',
-            conversation=conversation,
-            can_moderate=can_mod,
-        ), 403))
-    abort(403)
+    """Abort 403 when this participant may not see this conversation.
+
+    Every remaining caller is an /api/v1 payload builder, so the response shape is
+    the API's JSON envelope (InviteOnlyWorkspaceAccess -> 403 in api/v1.py). The
+    branded invite-only HTML page this used to raise belonged to the Jinja
+    frontend; the SPA renders that state from the 403 itself.
+    """
+    if _conversation_access_denial(conversation, participant) is not None:
+        abort(403)
 
 
 # ── Particiapi proxy ──────────────────────────────────────────────────────────
@@ -4326,232 +4360,8 @@ def _fetch_statement_text(conv_polis_id: str, tid: int) -> str:
         return ''
 
 
-# ── Particiapi proxy + participant statement submit ──────────────────────────
-# The generic Particiapi proxy is CSRF-exempt with _validate_same_origin() as the
-# compensating control and bridges the browser's renamed 'pa_session' cookie to
-# Particiapi's 'session'. First-party statement submission lives on
-# participant_bp so Flask-WTF validates CSRF normally, while the same-origin
-# provenance check remains as an extra browser-request guard.
-proxy_bp = Blueprint('proxy', __name__)
-admin_bp = Blueprint('admin', __name__)
-participant_bp = Blueprint('participant', __name__)
-
-@participant_bp.post('/c/<slug>/statements/new')
-@login_or_demo_required
-@limiter.limit('20 per minute')
-def conversation_statement_new(slug):
-    """Submit an entirely new statement; enforces per-participant quota and
-    records the Polis statement ID for novelty tracking."""
-    # Statement submit is on participant_bp, so Flask-WTF validates CSRF; we also
-    # re-check the token here so the same-origin guard can relax the provenance
-    # requirement when a valid CSRF token is present (#129).
-    csrf_validated = _validate_fetch_csrf()
-    _validate_same_origin(allow_missing_provenance=csrf_validated)
-
-    conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    if not conv.active or conv.paused or not conv.phase_submission:
-        abort(403)
-    participant = _current_participant()
-    if not participant:
-        abort(401)
-
-    _abort_if_banned(conv, participant)
-
-    body = request.get_json(silent=True) or {}
-    text = (body.get('text') or '').strip()
-    derived_from = body.get('derived_from')
-    if derived_from in ('', None):
-        derived_from = None
-
-    if not text or len(text) > 280:
-        abort(400)
-    if derived_from is not None and not isinstance(derived_from, int):
-        abort(400)
-
-    new_stmt_max = conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3
-
-    # Optimistic quota fast-fail (unlocked read): reject an over-quota submit before the
-    # upstream statement fetch + similarity work. The authoritative check runs under the
-    # lock below, right before the submit, so the quota stays race-safe. Wording
-    # suggestions (derived_from set) are exempt — only genuinely new statements count
-    # against the quota (#296 / spec_functional-design.md).
-    part = Participation.query.filter_by(
-        participant_id=participant.id, conversation_id=conv.id,
-    ).first_or_404()
-    if derived_from is None and len(part.new_stmt_ids or []) >= new_stmt_max:
-        return jsonify({'error': 'quota_exceeded'}), 403
-
-    # Derivative gate — statement fetch + similarity + threshold. Read-only w.r.t. the
-    # participation row, and a rejection here means we never submit, so it runs OFF the
-    # quota lock (keeping the lock's held time off the statement fetch and the similarity
-    # sidecar). `scores` is reused for provenance below — computed once, not twice.
-    parent_text = None
-    scores = None
-    if derived_from is not None:
-        try:
-            text_map = _statement_text_map(conv.polis_id)
-        except PolisParticipantError:
-            current_app.logger.exception('could not load statements for derivative parent')
-            abort(502)
-        parent_text = text_map.get(derived_from)
-        if parent_text is None:
-            return jsonify({'error': 'unknown_parent_statement'}), 400
-        scores = _statement_similarity_scores(text, parent_text)
-        model, score = _preferred_similarity_score(scores)
-        threshold = _derivative_similarity_threshold()
-        if threshold and score is not None and score < threshold:
-            return jsonify({
-                'error': 'derivative_similarity_too_low',
-                'message': 'This looks like a different claim. Revise it closer to the original, or submit it as a new statement instead.',
-                'model': model,
-                'similarity': score,
-                'threshold': threshold,
-            }), 409
-
-    try:
-        policy = _ensure_statement_moderation_policy(conv)
-    except (
-        ModerationPolicyVerificationUnavailable,
-        ModerationPolicyUpstreamFailed,
-        ModerationPolicySaveFailed,
-    ):
-        current_app.logger.exception('statement moderation baseline unavailable')
-        return jsonify({'error': 'moderation_policy_unavailable'}), 502
-
-    # Establish the Particiapi session + CSRF token BEFORE taking the row lock, so the
-    # ~5s session-create round-trip does not run while holding the FOR UPDATE lock (#275
-    # M3) — that keeps the lock's held time down to just the submit + append. Only the
-    # submit must stay atomic with the quota recheck (so a rejected submit never orphans
-    # a Polis statement); the session bootstrap does not.
-    pa_cookie = request.cookies.get('pa_session')
-    forwarded = {'session': pa_cookie} if pa_cookie else {}
-    base = current_app.config['PARTICIAPI_BASE']
-    try:
-        sess_resp = polis_http.post(
-            f'{base}/api/session',
-            cookies=forwarded,
-            params={'create': 'true'},
-            timeout=5,
-        )
-        if not sess_resp.ok:
-            current_app.logger.error('Particiapi session error: %s', sess_resp.status_code)
-            abort(502)
-        csrf_token = sess_resp.json().get('csrf_token', '')
-        new_pa_cookie = sess_resp.cookies.get('session')
-        submit_cookies = {'session': new_pa_cookie or pa_cookie} if (new_pa_cookie or pa_cookie) else {}
-    except requests.RequestException:
-        current_app.logger.exception('Particiapi error in conversation_statement_new')
-        abort(502)
-
-    # Authoritative quota check under a row lock, held through the submit + append so two
-    # concurrent submits from the same participant can't both pass. (Per-participation
-    # lock — only serialises one participant's own concurrent submits, not the
-    # conversation.) The submit stays inside the lock so a quota-rejected request never
-    # creates an orphaned Polis statement.
-    #
-    # populate_existing() is REQUIRED: the optimistic read above already loaded this row
-    # into the session identity map, so without it the locking SELECT returns the stale
-    # cached instance (SQLAlchemy does not refresh an already-loaded object on
-    # with_for_update) and the recheck below would run on pre-lock data — defeating the
-    # lock entirely.
-    part = Participation.query.filter_by(
-        participant_id=participant.id, conversation_id=conv.id,
-    ).populate_existing().with_for_update().first_or_404()
-    if derived_from is None and len(part.new_stmt_ids or []) >= new_stmt_max:
-        return jsonify({'error': 'quota_exceeded'}), 403
-
-    try:
-        stmt_resp = polis_http.post(
-            f'{base}/api/conversations/{conv.polis_id}/statements/',
-            json={'text': text},
-            cookies=submit_cookies,
-            headers={'X-CSRF-Token': csrf_token},
-            timeout=10,
-        )
-    except requests.RequestException:
-        current_app.logger.exception('Particiapi error in conversation_statement_new')
-        abort(502)
-
-    if stmt_resp.status_code == 201:
-        stmt_id = stmt_resp.json().get('id')
-        moderation_failed = False
-        if stmt_id is not None:
-            if derived_from is None:
-                ids = list(part.new_stmt_ids or [])
-                ids.append(stmt_id)
-                part.new_stmt_ids = ids
-            else:
-                record_statement_provenance(conv.id, stmt_id, derived_from,
-                                            parent_text=parent_text, new_text=text,
-                                            scores=scores)
-            if policy == 'auto_approve':
-                try:
-                    _polis_server_client().moderate(conv.polis_id, stmt_id, 1)
-                except PolisServerError:
-                    moderation_failed = True
-                    current_app.logger.exception(
-                        'statement %s was created but auto-approval failed', stmt_id,
-                    )
-        _touch_last_engagement(part)
-        db.session.commit()
-        if stmt_id is not None:
-            record_audit(
-                'statement.creation_moderation', conv_id=conv.id,
-                target_type='statement', target_id=stmt_id,
-                decision=1 if policy == 'auto_approve' else 0,
-                policy=policy,
-                outcome='upstream_failed' if moderation_failed else 'ok',
-            )
-        flask_resp = make_response(
-            jsonify({'error': 'command_outcome_unknown'}) if moderation_failed
-            else stmt_resp.content,
-            502 if moderation_failed else 201,
-        )
-        flask_resp.headers['Content-Type'] = 'application/json'
-    else:
-        current_app.logger.error('Particiapi statement error: %s', stmt_resp.status_code)
-        flask_resp = make_response(jsonify({'error': 'upstream_error'}), 502)
-
-    if new_pa_cookie:
-        flask_resp.set_cookie('pa_session', new_pa_cookie, httponly=True,
-                              samesite='Lax', secure=not current_app.debug)
-    return flask_resp
-
-@proxy_bp.route('/proxy/particiapi/<path:pa_path>',
-                methods=['GET', 'POST', 'PUT'])
-@limiter.limit('180 per minute')
-def proxy_particiapi(pa_path):
-    auth_resp = _proxy_auth_response(pa_path)
-    if auth_resp is not None:
-        return auth_resp
-    return _proxy_to_particiapi(pa_path)
-
-
-@proxy_bp.route('/c/<slug>/proxy/particiapi/<path:pa_path>',
-                methods=['GET', 'POST', 'PUT'])
-@limiter.limit('180 per minute')
-def proxy_particiapi_scoped(slug, pa_path):
-    """Per-conversation proxy: conversation-scoped identity + path-scoped session cookie,
-    so a participant gets a different Polis uid per conversation (#246). Uses the global
-    proxy's demo-aware auth (_proxy_auth_response) rather than @login_required so demo
-    sessions work through the scoped proxy too. (admin_bp is defined above on this branch.)"""
-    auth_resp = _proxy_auth_response(pa_path)
-    if auth_resp is not None:
-        return auth_resp
-    conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    return _proxy_to_particiapi(pa_path, conv=conv)
 # nh3 tag allowlist for CSV import sanitisation — no HTML tags permitted.
 _NH3_NO_TAGS: frozenset[str] = frozenset()
-
-
-@participant_bp.get('/help/statements')
-def statement_guidance():
-    return render_template('guidance_statement.html')
-
-
-@participant_bp.get('/help/arguments')
-def argument_guidance():
-    return render_template('guidance_argument.html')
 
 
 _FLAG_CATEGORY_LABELS = {
@@ -4560,154 +4370,6 @@ _FLAG_CATEGORY_LABELS = {
     'off_topic': 'Off-topic',
     'other': 'Other',
 }
-
-
-def _parse_seed_text_lines(raw_text: str) -> ParseResult:
-    """Parse textarea seed import: one non-empty line per candidate statement."""
-    result = ParseResult()
-    seen: set[str] = set()
-    non_empty_rows: list[tuple[int, str]] = [
-        (idx, line.strip())
-        for idx, line in enumerate((raw_text or '').splitlines(), start=1)
-        if line.strip()
-    ]
-    if len(non_empty_rows) > MAX_ROWS:
-        for idx, _line in non_empty_rows[MAX_ROWS:]:
-            result.errors.append(RowError(
-                idx,
-                f'skipped — import limit of {MAX_ROWS} rows reached',
-                limit_skipped=True,
-            ))
-        non_empty_rows = non_empty_rows[:MAX_ROWS]
-
-    for idx, text in non_empty_rows:
-        if len(text) > MAX_TEXT_CHARS:
-            result.errors.append(RowError(
-                idx,
-                f'text is too long ({len(text)} characters; max {MAX_TEXT_CHARS})',
-            ))
-            continue
-        if text in seen:
-            result.errors.append(RowError(idx, 'duplicate — already added from an earlier row'))
-            continue
-        seen.add(text)
-        result.texts.append(text)
-    return result
-
-
-def _reject_seed_import_parse_errors(result: ParseResult, source_label: str) -> bool:
-    """Flash parse errors and return True when an import should stop before Polis I/O."""
-    limit_skipped = [e for e in result.errors if e.limit_skipped]
-    if limit_skipped:
-        total_rows = len(result.texts) + len(result.errors)
-        current_app.logger.warning(
-            '%s import rejected — row limit exceeded: %d rows, max %d',
-            source_label,
-            total_rows,
-            MAX_ROWS,
-        )
-        flash(
-            f'✗ Import rejected — nothing was imported. {source_label} contains '
-            f'{total_rows} lines, maximum is {MAX_ROWS}. Reduce it and try again. '
-            f'(Parse errors may also be present — fix everything before retrying.)',
-            'import_result',
-        )
-        return True
-
-    parse_errors = [e for e in result.errors if not e.limit_skipped]
-    if parse_errors:
-        for err in parse_errors:
-            flash(f'Row {err.row}: {err.reason}.', 'import_row_error')
-        # All-or-nothing: a single invalid line rejects the whole import so the admin
-        # never ends up with a silently partial paste.
-        flash('✗ Import rejected — nothing was added. One invalid line rejects the '
-              'whole import; fix the lines listed above and try again.', 'import_result')
-        return True
-    return False
-
-
-def _import_seed_statement_texts(conv: Conversation, texts: list[str]) -> dict:
-    """Shared post-parse seed import pipeline: sanitize, dedup, bulk-add, report."""
-    seen_sanitised: set[str] = set()
-    sanitised_texts: list[str] = []
-    for raw_text in texts:
-        san = nh3.clean(raw_text, tags=_NH3_NO_TAGS)
-        # Re-apply formula-prefix stripping: nh3 decodes HTML entities (e.g.
-        # &equals; -> =) which can reintroduce leading formula chars.
-        san = strip_formula_prefixes(san).strip()
-        san_key = san.casefold()
-        if not san or san_key in seen_sanitised:
-            continue  # drop empty-after-nh3 and nh3-induced within-batch dupes
-        seen_sanitised.add(san_key)
-        sanitised_texts.append(san)
-
-    existing_texts: set[str] = set()
-    dedup_check_failed = False
-    try:
-        rows = _polis_server_client().get_statements(conv.polis_id)
-        if rows is not None:
-            pending, approved, hidden = rows
-            for stmt in pending + approved + hidden:
-                existing_texts.add(stmt['txt'].strip().casefold())
-    except Exception:
-        current_app.logger.exception('Could not fetch existing statements for dedup check')
-        dedup_check_failed = True
-
-    dedup_errors = []
-    clean_texts = []
-    for sanitised in sanitised_texts:
-        if sanitised.casefold() in existing_texts:
-            dedup_errors.append(
-                f'"{sanitised[:60]}{"…" if len(sanitised) > 60 else ""}" — already exists in this conversation'
-            )
-        else:
-            clean_texts.append(sanitised)
-
-    successes = 0
-    polis_skipped = []  # Polis rejected these — likely already exist
-    polis_errors = []  # Polis login or unexpected failure
-    if clean_texts:
-        try:
-            successes, failures = _polis_server_client().bulk_add_seeds(conv.polis_id, clean_texts)
-            for text, exc in failures:
-                current_app.logger.warning('Polis rejected imported row (%s, may already exist): %s',
-                                           type(exc).__name__, exc)
-                polis_skipped.append(f'"{text[:60]}{"…" if len(text) > 60 else ""}"')
-        except PolisServerError as exc:
-            current_app.logger.exception('Polis login failed during bulk import')
-            polis_errors = [f'"{t[:60]}{"…" if len(t) > 60 else ""}"' for t in clean_texts]
-            polis_failure_message = exc.admin_message
-        else:
-            polis_failure_message = None
-    else:
-        polis_failure_message = None
-
-    if dedup_check_failed:
-        flash('Could not check for existing statements — some may be duplicates. Check server logs.', 'warning')
-
-    for msg in dedup_errors:
-        flash(f'Skipped — {msg}.', 'warning')
-    for msg in polis_skipped:
-        flash(f'Already in Polis, skipped: {msg}.', 'warning')
-    for msg in polis_errors:
-        flash(f'Could not send to Polis: {msg}.', 'error')
-    if not successes and not dedup_errors and not polis_skipped and not polis_errors:
-        flash('No statements were imported — there were no valid rows.', 'warning')
-
-    n_skipped = len(dedup_errors) + len(polis_skipped)
-    n_errors = len(polis_errors)
-    if successes and not n_skipped:
-        flash(f'✓ {successes} statement{"s" if successes != 1 else ""} imported', 'import_result')
-    elif successes:
-        flash(f'✓ {successes} imported — ⚠ {n_skipped} skipped', 'import_result')
-    elif n_errors:
-        flash(f'✗ Import failed — {polis_failure_message}', 'import_result')
-    elif n_skipped:
-        flash(f'⚠ 0 imported — {n_skipped} already existed in Polis', 'import_result')
-    else:
-        flash('⚠ 0 imported — Polis returned no result', 'import_result')
-
-    return {'successes': successes, 'skipped': n_skipped, 'errors': n_errors}
 
 
 def _seed_statement_lock_reason(conv: Conversation) -> str | None:
@@ -4878,400 +4540,6 @@ def _conversation_ban_log_rows(conv: Conversation) -> list[dict]:
         })
     return rows
 
-# ── Admin ─────────────────────────────────────────────────────────────────
-
-@admin_bp.get('/admin')
-@login_required
-@admin_required
-def admin():
-    conversations  = (Conversation.query
-                      .order_by(Conversation.created_at.desc()).all())
-    participants   = (Participant.query
-                      .order_by(Participant.mw_username).all())
-    global_admins  = (Participant.query
-                      .filter_by(is_global_admin=True)
-                      .order_by(Participant.mw_username).all())
-    return render_template('admin.html',
-                           conversations=conversations,
-                           participants=participants,
-                           global_admins=global_admins,
-                           phase_routes=PHASE_ROUTES,
-                           )
-
-@admin_bp.get('/admin/conversations/<int:conv_id>')
-@login_required
-def admin_conversation_detail(conv_id):
-    conv       = _require_mod_for_conv(conv_id)
-    phase_sequence = _phase_sequence_for(conv)
-    conv_roles = (AdminRole.query
-                   .filter_by(conversation_id=conv_id)
-                   .all())
-    can_manage_roles  = _is_global_admin()
-    participants      = (
-        Participant.query.order_by(Participant.mw_username).all()
-        if can_manage_roles else []
-    )
-    invite_count      = ConversationInvite.query.filter_by(conversation_id=conv_id).count()
-    participant_count = Participation.query.filter_by(conversation_id=conv_id).count()
-    open_flag_count   = ContentFlag.query.filter_by(
-        conversation_id=conv_id,
-        status='open',
-    ).count()
-    can_organize      = _can_organize(conv)
-    client            = _polis_server_client()
-    polis_stats       = client.get_polis_stats(conv.polis_id)
-    delete_vote_count = client.get_valid_vote_count(conv.polis_id) if _is_global_admin() else None
-    # Informed-voting round-2 tiles render whenever that phase is active (its flag is
-    # on) — including alongside other phases in advanced mode — so fetch the phase-6
-    # stats and gate the warning on the flag itself.
-    phase6_stats      = (client.get_polis_stats(conv.phase6_polis_conversation_id)
-                         if (conv.phase_informed_voting or _in_cleanup_window(conv))
-                         and conv.phase6_polis_conversation_id
-                         else None)
-    # Loud warning only when Polis PG is configured but unreachable — never when it is
-    # deliberately not wired (local/dev), where None is expected. Unavailable if the
-    # round-1 fetch failed, or — when informed voting is active — the round-2 (phase-6)
-    # fetch failed (without that a phase-6 outage would drop the round-2 tiles silently).
-    polis_pg_configured     = bool(current_app.config.get('POLIS_DATABASE_URL'))
-    polis_stats_unavailable = polis_pg_configured and (
-        polis_stats is None
-        or ((conv.phase_informed_voting or _in_cleanup_window(conv))
-            and conv.phase6_polis_conversation_id
-            and phase6_stats is None))
-    phase6_results    = (_build_phase6_results(conv, participation=None)
-                         if (conv.phase_informed_voting or _in_cleanup_window(conv))
-                         and conv.phase6_polis_conversation_id
-                         else None)
-    reveal            = _reveal_context(conv, participation=None)
-    return render_template('admin_conversation.html',
-                           conversation=conv,
-                           conv_roles=conv_roles,
-                           participants=participants,
-                           invite_count=invite_count,
-                           participant_count=participant_count,
-                           open_flag_count=open_flag_count,
-                           polis_stats=polis_stats,
-                           phase_stat_groups=_phase_stat_groups(conv, polis_stats, phase6_stats),
-                           polis_stats_unavailable=polis_stats_unavailable,
-                           phase6_results=phase6_results,
-                           reveal=reveal,
-                           delete_vote_count=delete_vote_count,
-                           admin_roles=ADMIN_ROLES,
-                           can_manage_roles=can_manage_roles,
-                           can_organize=can_organize,
-                           role_label=_conversation_role_label(conv),
-                           phase_sequence=phase_sequence,
-                           current_stage_index=_current_stage_index(conv),
-                           active_stage_indices=[i for i, s in enumerate(phase_sequence)
-                                                  if s['key'] in _active_phases(conv)],
-                           linear_phase_state=_is_linear_phase_state(conv),
-                           advance_target_index=_advance_target_index(conv),
-                           transition=_transition_context(conv),
-                           phase_routes=PHASE_ROUTES,
-                           recommendation_tiers=_RECOMMENDATION_TIERS,
-                           recommendation_labels=_RECOMMENDATION_LABELS,
-                           recommendation_profile=_recommendation_profile(conv),
-                           schedule=_schedule_context(conv),
-                           cleanup_window=_in_cleanup_window(conv))
-
-
-@admin_bp.get('/admin/conversations/<int:conv_id>/settings')
-@admin_bp.get('/admin/conversations/<int:conv_id>/termination')
-@admin_bp.get('/admin/conversations/<int:conv_id>/roles')
-@login_required
-def admin_conversation_spa_fallback(conv_id):
-    """Keep React-only admin URLs usable when the Jinja fallback is active."""
-    _require_mod_for_conv(conv_id)
-    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-
-@admin_bp.get('/admin/conversations/<int:conv_id>/participants')
-@login_required
-def admin_conversation_participants(conv_id):
-    conv = _require_mod_for_conv(conv_id)
-    roster = _admin_participant_roster_model(conv)
-
-    return render_template(
-        'admin_participants.html',
-        conversation=conv,
-        rows=roster.rows,
-        statement_progress_unavailable=roster.statement_progress_unavailable,
-    )
-
-
-@admin_bp.get('/admin/conversations/<int:conv_id>/flags')
-@login_required
-def admin_conversation_flags(conv_id):
-    conv = _require_mod_for_conv(conv_id)
-    queue = _admin_flag_queue_model(conv)
-    return render_template(
-        'admin_flags.html',
-        conversation=conv,
-        rows=[{
-            'flag': row.flag,
-            'category_label': row.category_label,
-            'target_label': row.target_label,
-            'target_text': row.target_text,
-        } for row in queue.rows],
-        open_count=queue.open_count,
-    )
-
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/flags/<int:flag_id>/resolve')
-@login_required
-def admin_flag_resolve(conv_id, flag_id):
-    conv = _require_mod_for_conv(conv_id)
-    try:
-        result = resolve_content_flag(
-            conversation=conv,
-            flag_id=flag_id,
-            note=request.form.get('resolution_note'),
-            actor=_current_participant(),
-            audit=record_audit,
-        )
-    except FlagNotInConversation:
-        abort(404)
-    flash(
-        'Flag marked resolved.' if result.changed else 'Flag was already resolved.',
-        'success' if result.changed else 'warning',
-    )
-    return redirect(url_for('admin.admin_conversation_flags', conv_id=conv.id))
-
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/participants/<int:participant_id>/ban')
-@login_required
-def admin_participant_ban(conv_id, participant_id):
-    conv = _require_mod_for_conv(conv_id)
-    try:
-        result = set_participant_access(
-            conversation=conv,
-            participant_id=participant_id,
-            banned=True,
-            summary=request.form.get('summary'),
-            actor=_current_participant(),
-            audit=record_audit,
-        )
-    except ParticipantNotInConversation:
-        abort(404)
-    if not result.changed:
-        flash('Participant is already banned from this conversation.', 'warning')
-        return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
-    flash('Participant banned from this conversation.', 'success')
-    return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
-
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/participants/<int:participant_id>/unban')
-@login_required
-def admin_participant_unban(conv_id, participant_id):
-    conv = _require_mod_for_conv(conv_id)
-    try:
-        result = set_participant_access(
-            conversation=conv,
-            participant_id=participant_id,
-            banned=False,
-            summary=request.form.get('summary'),
-            actor=_current_participant(),
-            audit=record_audit,
-        )
-    except ParticipantNotInConversation:
-        abort(404)
-    if not result.changed:
-        flash('Participant is already allowed in this conversation.', 'warning')
-        return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
-    flash('Participant unbanned from this conversation.', 'success')
-    return redirect(url_for('admin.admin_conversation_participants', conv_id=conv_id))
-
-@admin_bp.post('/admin/conversations/new')
-@login_required
-@admin_required
-def admin_conversation_new():
-    slug   = request.form.get('slug', '').strip().lower()
-    fields = _parse_conversation_form()
-    phase_route = _valid_phase_route(request.form.get('phase_route'))
-
-    if not fields['title']:
-        flash('Title is required.', 'error')
-        return redirect(url_for('admin.admin'))
-    if not _valid_slug(slug):
-        flash(
-            'Invalid slug — use lowercase letters, numbers, and hyphens only, '
-            'no spaces or special characters (e.g. climate-2026).',
-            'error',
-        )
-        return redirect(url_for('admin.admin'))
-
-    polis_configured = all(current_app.config.get(k) for k in (
-        'POLIS_SERVER_URL', 'POLIS_ADMIN_EMAIL', 'POLIS_ADMIN_PASSWORD'))
-    if polis_configured:
-        try:
-            # Polis stays strict permanently; wiki-polis records the desired decision
-            # on each new statement instead of relying on retroactive read semantics.
-            polis_id = _polis_server_client().create_conversation(
-                fields['title'], strict_moderation=True,
-            )
-        except PolisServerError:
-            current_app.logger.exception('Polis conversation creation failed')
-            flash('Could not create the Polis conversation. Check server logs for details.', 'error')
-            return redirect(url_for('admin.admin'))
-    else:
-        # Fallback: accept manually supplied polis_id (local dev / misconfigured prod)
-        polis_id = request.form.get('polis_id', '').strip()
-        if not _valid_polis_id(polis_id):
-            return redirect(url_for('admin.admin', error=(
-                'POLIS_SERVER_URL / POLIS_ADMIN_EMAIL / POLIS_ADMIN_PASSWORD not configured. '
-                'Pass a polis_id manually or set the env vars.'
-            )))
-
-    conv = Conversation(slug=slug, active=True, polis_id=polis_id,
-                        statement_moderation_policy='moderate',
-                        phase_route=phase_route, **fields)
-    db.session.add(conv)
-    db.session.commit()
-    record_audit('conversation.create', conv_id=conv.id, slug=slug)
-    return redirect(url_for('admin.admin'))
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/edit')
-@login_required
-def admin_conversation_edit(conv_id):
-    conv   = _require_organizer_for_conv(conv_id)
-    fields = _parse_conversation_form()
-
-    if not fields['title']:
-        flash('Title is required.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    conv.title         = fields['title']
-    conv.intro_text    = fields['intro_text']
-    conv.outro_text    = fields['outro_text']
-    # Access policy is freely switchable, including to/from demo (#293): demo
-    # conversations are genuine demonstration conversations that record as usual,
-    # so designating an existing conversation as a demo (or back) is allowed.
-    # Existing participations are untouched; new visitors follow the new policy.
-    # (_parse_conversation_form clamps this to ACCESS_POLICIES.)
-    conv.access_policy = fields['access_policy']
-    db.session.commit()
-    record_audit('conversation.edit', conv_id=conv.id)
-    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/pause')
-@login_required
-@admin_required
-def admin_conversation_pause(conv_id):
-    conv = Conversation.query.get_or_404(conv_id)
-    if not conv.active:
-        abort(400)
-    conv.paused = not conv.paused
-    db.session.commit()
-    record_audit('conversation.pause', conv_id=conv.id, paused=conv.paused)
-    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/close')
-@login_required
-@admin_required
-def admin_conversation_close(conv_id):
-    conv = Conversation.query.get_or_404(conv_id)
-    if not conv.active:
-        abort(400)
-    if _in_cleanup_window(conv):
-        required = {
-            'cleanup_reviewed_results',
-            'cleanup_moderated_flagged',
-            'cleanup_reviewed_exclusions',
-            'cleanup_report_intro',
-        }
-        if any(request.form.get(field) != 'on' for field in required):
-            flash('Complete every cleanup checklist item before publishing the final report.', 'error')
-            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-        if _route_has_phase(conv, 'informed_voting') and not conv.phase6_polis_conversation_id:
-            flash('Phase 6 must be initialised before publishing the final report.', 'error')
-            return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    filt = _publish_final_report(conv)
-    db.session.commit()
-    _invalidate_phase6_results_cache(conv)  # report view must reflect the close immediately
-    record_audit('conversation.close', conv_id=conv.id,
-                 excluded_tids=len(filt.excluded_tids),
-                 excluded_pids=len(filt.excluded_pids))
-    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/recommendations')
-@login_required
-def admin_conversation_recommendations(conv_id):
-    conv = _require_organizer_for_conv(conv_id)
-    tier = request.form.get('tier', _DEFAULT_RECOMMENDATION_TIER)
-    if tier not in _RECOMMENDATION_TIERS:
-        tier = _DEFAULT_RECOMMENDATION_TIER
-    conv.recommended_quantities = {'tier': tier}
-    db.session.commit()
-    record_audit('recommendations.set', conv_id=conv.id, tier=tier)
-    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/phase/schedule')
-@login_required
-@admin_required
-def admin_conversation_phase_schedule(conv_id):
-    conv = Conversation.query.get_or_404(conv_id)
-    action = request.form.get('action', 'set')
-    if action == 'cancel':
-        _clear_scheduled_transition(conv)
-        db.session.commit()
-        record_audit('phase.schedule.cancel', conv_id=conv.id)
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    if action in ('freeze', 'unfreeze') and conv.scheduled_transition_at:
-        conv.scheduled_transition_frozen = action == 'freeze'
-        db.session.commit()
-        record_audit(f'phase.schedule.{action}', conv_id=conv.id,
-                     target_type='phase',
-                     target_id=conv.scheduled_transition_target)
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-    ctx = _transition_context(conv)
-    if not _is_schedulable_transition(ctx):
-        flash('Only active-to-passive wind-down transitions can be scheduled.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    scheduled_at = _parse_utc_timestamp(request.form.get('scheduled_at', ''))
-    if scheduled_at is None:
-        flash('Enter a valid UTC timestamp.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    if scheduled_at <= datetime.now(timezone.utc):
-        flash('Scheduled transition time must be in the future.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    conv.scheduled_transition_at = scheduled_at
-    conv.scheduled_transition_target = ctx['target']['key']
-    conv.scheduled_transition_frozen = False
-    db.session.commit()
-    record_audit('phase.schedule.set', conv_id=conv.id,
-                 target_type='phase', target_id=ctx['target']['key'])
-    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/delete')
-@login_required
-@admin_required
-def admin_conversation_delete(conv_id):
-    try:
-        _delete_admin_conversation_api_payload(conv_id)
-    except DeletionVerificationUnavailable:
-        flash('Cannot delete this conversation because Polis vote data could not be verified.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    except DeletionBlockedByVotes as exc:
-        flash(
-            f'Cannot delete this conversation because it has {exc.count} valid vote'
-            f'{"s" if exc.count != 1 else ""}. Archive it instead.',
-            'error',
-        )
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    except DeletionUpstreamFailed:
-        current_app.logger.exception('Polis conversation close/hide failed')
-        flash('Could not hide the Polis conversation. Nothing was deleted.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    except DeletionOutcomeUnknown:
-        current_app.logger.exception('Local deletion failed after Polis hide')
-        flash('The voting service was hidden but local deletion failed. Do not retry until an administrator checks the record.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    flash('Conversation deleted.', 'success')
-    return redirect(url_for('admin.admin'))
-
 def _sync_vis_type(conv) -> bool:
     """Mirror the results phases onto Polis's vis_type, which gates GET /results/
     (off by default — otherwise the Results tab stays empty no matter how many votes
@@ -5292,131 +4560,6 @@ def _sync_vis_type(conv) -> bool:
     except PolisServerError as exc:
         current_app.logger.warning('vis_type update failed for %s: %s', conv.slug, exc)
         return False
-
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/phases')
-@login_required
-@admin_required
-def admin_conversation_phases(conv_id):
-    # Advanced mode: independent toggles, out of order, NO readiness checks — the admin
-    # is responsible for the resulting state (the guided flow enforces preconditions like
-    # ≥1 featured statement before argument mapping; this route deliberately does not, so
-    # a single rejected toggle never silently discards the whole save).
-    conv = Conversation.query.get_or_404(conv_id)
-    form_to_key = {
-        stage['flag']: stage['key']
-        for stage in _phase_sequence_for(conv) if stage['flag']
-    }
-    result = _set_admin_phases_api_payload(conv_id, {
-        'activeKeys': [
-            key for field, key in form_to_key.items() if request.form.get(field)
-        ],
-    })
-    if not result['visibilitySynced']:
-        flash('Phases saved, but updating results visibility in Polis failed — '
-              'results may not appear until you save phases again.', 'error')
-    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/phase/advance')
-@login_required
-def admin_conversation_advance(conv_id):
-    """Guided 'Move on' phase transition (#156). The organizer must affirm every
-    precondition (one checkbox each) before this is accepted; the route re-enforces
-    that server-side and re-runs machine-checkable preconditions.
-
-    Exclusive: the target stage's flag is set and the current stage's flag cleared.
-    Active conversation → one step forward; closed → jump to public results. Backward
-    / custom-state repair is an advanced-mode action, so a non-linear state is refused.
-    The Informed-voting transition runs Phase 6 init atomically; the Public-results
-    transition to Report ends participant activity and enters the cleanup window;
-    the separate publish action stamps closed_at and starts the identity-reveal window.
-    """
-    conv = _require_organizer_for_conv(conv_id)
-    redirect_to = redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    try:
-        result = _advance_admin_phase_command(
-            conv,
-            {key for key, value in request.form.items() if value == 'on'},
-        )
-    except PhaseTransitionUnavailable as exc:
-        flash(
-            'Phases are in a custom state — use Advanced controls to adjust.'
-            if exc.nonlinear else 'Already at the final phase (public results).',
-            'error',
-        )
-        return redirect_to
-    except PhaseReadinessUnconfirmed:
-        flash('Confirm every readiness check before moving on.', 'error')
-        return redirect_to
-    except PhaseReadinessBlocked:
-        flash('A readiness condition is not met yet — fix it before moving on.', 'error')
-        return redirect_to
-    except PhasePreparationFailed as exc:
-        flash(exc.message, 'error')
-        return redirect_to
-    except PhaseTransitionConflict:
-        flash('Could not move on — the conversation changed at the same time. '
-              'Reload and try again.', 'error')
-        return redirect_to
-    except PhaseTransitionSaveFailed as exc:
-        if exc.outcome_unknown:
-            flash('Could not complete the move — a database error occurred, and a '
-                  'linked Polis conversation may already have been created. Do not '
-                  'simply retry; check with a site admin first.', 'error')
-        else:
-            flash('Could not move on — a database error occurred. Please try again.', 'error')
-        return redirect_to
-
-    if not result.visibility_synced:
-        flash('Phase moved, but updating results visibility in Polis failed.', 'error')
-    if result.sync_message:
-        flash(
-            result.sync_message,
-            'warning' if 'check manually' in result.sync_message else 'success',
-        )
-    flash(f'Moved to: {result.target_label}.', 'success')
-    return redirect_to
-
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/phase6/init')
-@login_required
-def admin_phase6_init(conv_id):
-    """Initialise Phase 6: create a dedicated Polis conversation, seed all confirmed
-    featured statements into it, and store the resulting IDs atomically.
-
-    All-or-nothing: phase6_polis_conversation_id is only committed once every seed
-    succeeds. If any seed fails the Polis conversation is abandoned (logged for manual
-    cleanup) and the admin can retry from scratch.
-
-    The DB-level UNIQUE constraint on phase6_polis_conversation_id converts a
-    concurrent double-submit into a loud IntegrityError rather than a silent overwrite.
-    """
-    # Allows conversation moderators (not just global admins) to initialise Phase 6.
-    conv = _require_mod_for_conv(conv_id)
-
-    try:
-        result = _initialize_admin_phase6_command(conv)
-    except Phase6InitializationUnavailable as exc:
-        messages = {
-            'inactive': 'Cannot initialise Phase 6 on a closed or paused conversation.',
-            'phase_disabled': 'Enable the Informed voting toggle first, then initialise.',
-            'already_initialized': 'Phase 6 already initialised.',
-        }
-        flash(messages[exc.reason], 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    except PhasePreparationFailed as exc:
-        flash(exc.message, 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    except Phase6InitializationConflict:
-        flash('Phase 6 was already initialised by a concurrent request.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    except Phase6InitializationSaveFailed:
-        flash('Phase 6 initialisation failed due to a database error. '
-              'Contact a site admin — the Polis conversation id has been logged.', 'error')
-        return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
-    flash(result.message, 'success')
-    return redirect(url_for('admin.admin_conversation_detail', conv_id=conv_id))
 
 
 def _init_phase6(conv) -> tuple[bool, str]:
@@ -5469,21 +4612,6 @@ def _init_phase6(conv) -> tuple[bool, str]:
 def _norm(text) -> str:
     """Case/space-insensitive key for matching statement text across systems."""
     return (text or '').strip().casefold()
-
-
-def _resync_phase6_if_live(conv) -> bool:
-    """Keep an already-running Informed Vote round in sync with the featured set:
-    call after staging (not committing) a confirm/add/remove of a FeaturedStatement.
-    On failure this rolls back the staged change and flashes the error, so a broken
-    Polis sync never leaves a featured-set edit half-applied. Returns whether the
-    caller should proceed to commit."""
-    if not (conv.phase_informed_voting and conv.phase6_polis_conversation_id):
-        return True
-    ok, msg = _sync_phase6_featured(conv)
-    if not ok:
-        db.session.rollback()
-        flash(msg, 'error')
-    return ok
 
 
 def _sync_phase6_featured(conv) -> tuple[bool, str]:
@@ -5572,1074 +4700,6 @@ def _sync_phase6_featured(conv) -> tuple[bool, str]:
     except PolisServerError as exc:
         current_app.logger.error('Round 6 re-sync failed: %s', exc)
         return False, f'Could not re-sync round 6 with the featured set: {exc}'
-
-
-@admin_bp.post('/admin/global-admins/add')
-@login_required
-@admin_required
-def admin_global_admin_add():
-    mw_username = (request.form.get('mw_username') or '').strip()
-    if not mw_username:
-        flash('Enter a Wikimedia username.', 'error')
-        return redirect(url_for('admin.admin'))
-    p = Participant.query.filter_by(mw_username=mw_username).first()
-    if not p:
-        flash(f'No account found for "{mw_username}". They must log in at least once first.', 'error')
-        return redirect(url_for('admin.admin'))
-    p.is_global_admin = True
-    db.session.commit()
-    record_audit('global_admin.grant', target_type='participant', target_id=p.id)
-    return redirect(url_for('admin.admin'))
-
-@admin_bp.post('/admin/global-admins/<int:participant_id>/remove')
-@login_required
-@admin_required
-def admin_global_admin_remove(participant_id):
-    p = Participant.query.get_or_404(participant_id)
-    p.is_global_admin = False
-    db.session.commit()
-    record_audit('global_admin.revoke', target_type='participant', target_id=p.id)
-    return redirect(url_for('admin.admin'))
-
-@admin_bp.post('/admin/roles/add')
-@login_required
-@admin_required
-def admin_role_add():
-    participant_id  = request.form.get('participant_id', type=int)
-    conversation_id = request.form.get('conversation_id', type=int)
-    role            = request.form.get('role', '').strip()
-
-    if role not in ADMIN_ROLES or not conversation_id:
-        abort(400)
-    Participant.query.get_or_404(participant_id)
-    Conversation.query.get_or_404(conversation_id)
-
-    existing = AdminRole.query.filter_by(
-        participant_id=participant_id,
-        conversation_id=conversation_id,
-        role=role,
-    ).first()
-    if not existing:
-        grantor = _current_participant()
-        db.session.add(AdminRole(
-            participant_id=participant_id,
-            conversation_id=conversation_id,
-            role=role,
-            granted_by=grantor.id if grantor else None,
-        ))
-        db.session.commit()
-        record_audit('role.grant', conv_id=conversation_id, target_type='participant',
-                     target_id=participant_id, role=role)
-    return redirect(_safe_redirect(request.form.get('redirect_to', ''), url_for('admin.admin')))
-
-@admin_bp.post('/admin/roles/<int:role_id>/remove')
-@login_required
-@admin_required
-def admin_role_remove(role_id):
-    role = AdminRole.query.get_or_404(role_id)
-    conv_id, pid, role_name = role.conversation_id, role.participant_id, role.role
-    db.session.delete(role)
-    db.session.commit()
-    record_audit('role.revoke', conv_id=conv_id, target_type='participant',
-                 target_id=pid, role=role_name)
-    return redirect(_safe_redirect(request.form.get('redirect_to', ''), url_for('admin.admin')))
-
-@admin_bp.get('/admin/conversations/<int:conv_id>/invites')
-@login_required
-def admin_conversation_invites(conv_id):
-    conv    = _require_mod_for_conv(conv_id)
-    invites = (ConversationInvite.query
-               .filter_by(conversation_id=conv_id)
-               .order_by(ConversationInvite.mw_username)
-               .all())
-    return render_template('admin_invites.html',
-                           conversation=conv, invites=invites)
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/invites/add')
-@login_required
-def admin_invite_add(conv_id):
-    _require_mod_for_conv(conv_id)
-    raw = [line.strip() for line in
-           request.form.get('mw_usernames', '').splitlines() if line.strip()]
-    usernames = [u for u in raw if 1 <= len(u) <= 255]
-    if not usernames:
-        return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
-    try:
-        result = add_conversation_invites(
-            db.session,
-            conversation_id=conv_id,
-            usernames=usernames,
-        )
-    except InviteBatchSaveError:
-        current_app.logger.exception('invite batch save failed for conversation %s', conv_id)
-        flash("Couldn't save invites — please review the list and retry.", 'error')
-        return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
-
-    if result.added:
-        record_audit('invite.add', conv_id=conv_id,
-                     count=result.added)  # counts only — no usernames (PII)
-
-    summary = [f'{result.added} added']
-    if result.already_present:
-        summary.append(f'{result.already_present} already present')
-    if result.duplicate_inputs:
-        summary.append(f'{result.duplicate_inputs} duplicate input')
-    if result.concurrent_conflicts:
-        summary.append(f'{result.concurrent_conflicts} added concurrently by another moderator')
-    flash('Invites: ' + '; '.join(summary) + '.',
-          'info' if result.concurrent_conflicts else 'success')
-    return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/invites/<int:invite_id>/remove')
-@login_required
-def admin_invite_remove(conv_id, invite_id):
-    _require_mod_for_conv(conv_id)
-    try:
-        remove_conversation_invite(
-            db.session, conversation_id=conv_id, invite_id=invite_id,
-        )
-    except InvitationNotInConversation:
-        abort(404)
-    record_audit('invite.remove', conv_id=conv_id, target_type='invite', target_id=invite_id)
-    return redirect(url_for('admin.admin_conversation_invites', conv_id=conv_id))
-
-# ── Admin: Polis statement moderation ─────────────────────────────────────
-
-@admin_bp.get('/admin/conversations/<int:conv_id>/statements')
-@login_required
-def admin_conversation_statements(conv_id):
-    conv     = _require_mod_for_conv(conv_id)
-    pending = approved = hidden = []
-    settings = {}
-    # Prefer Postgres for accurate mod state; fall back to Particiapi when unavailable.
-    result = _polis_server_client().get_statements(conv.polis_id)
-    if result is not None:
-        pending, approved, hidden = result
-    else:
-        try:
-            pending, approved, hidden = PolisParticipantClient(
-                current_app.config['PARTICIAPI_BASE']
-            ).get_statements(conv.polis_id)
-        except PolisParticipantError:
-            current_app.logger.exception('get_statements failed')
-            flash('Could not load statements. Check server logs.', 'error')
-    try:
-        settings = PolisParticipantClient(
-            current_app.config['PARTICIAPI_BASE']
-        ).get_settings(conv.polis_id)
-    except PolisParticipantError:
-        pass
-    featured_tids = {
-        fs.polis_statement_id
-        for fs in FeaturedStatement.query.filter_by(conversation_id=conv_id).all()
-    }
-    # Provenance (#143): which listed statements are recorded derivatives → {tid: row}.
-    all_tids = [s['tid'] for s in (list(pending) + list(approved) + list(hidden))]
-    provenance_map = _provenance_map(conv_id, all_tids)
-    seed_lock_reason = _seed_statement_lock_reason(conv)
-    return render_template('admin_statements.html',
-                           conversation=conv,
-                           pending=pending,
-                           approved=approved,
-                           hidden=hidden,
-                           settings=settings,
-                           featured_tids=featured_tids,
-                           provenance_map=provenance_map,
-                           phase_active=conv.phase_argument_mapping,
-                           seed_import_allowed=seed_lock_reason is None,
-                           seed_import_lock_reason=seed_lock_reason,
-                           polis_public_url=current_app.config.get('POLIS_PUBLIC_URL') or 'https://pol.is',
-                           max_import_rows=MAX_ROWS,
-                           max_import_chars=MAX_TEXT_CHARS)
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/statements/<int:tid>/moderate')
-@login_required
-def admin_statement_moderate(conv_id, tid):
-    mod  = request.form.get('mod', type=int)
-    if mod not in (-1, 0, 1):
-        abort(400)
-    try:
-        _moderate_admin_statement_api_payload(
-            conv_id, tid,
-            {'status': {-1: 'hidden', 0: 'pending', 1: 'approved'}[mod]},
-        )
-    except LastFeaturedStatementProtected:
-        flash(
-            'Cannot hide or move the last featured statement to pending while argument mapping is active. Disable the argument mapping phase first.',
-            'error',
-        )
-    except StatementModerationUpstreamFailed:
-        current_app.logger.exception('moderate failed')
-        flash('Moderation action failed. Check server logs for details.', 'error')
-    return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed')
-@login_required
-def admin_statement_seed(conv_id):
-    derived_from = request.form.get('derived_from', type=int)
-    try:
-        result = _add_admin_seed_statement_api_payload(conv_id, {
-            'text': request.form.get('txt', ''),
-            'derivedFromId': derived_from,
-        })
-        if result['provenanceRecorded'] is False:
-            flash('Seed statement added, but the correction link could not be recorded.', 'warning')
-        elif derived_from is not None:
-            flash(f'Seed statement added (recorded as a correction of #{derived_from}).', 'success')
-        else:
-            flash('Seed statement added.', 'success')
-    except SeedStatementValidationFailed as exc:
-        if str(exc):
-            flash(str(exc), 'error')
-        else:
-            abort(400)
-    except SeedStatementParentNotFound as exc:
-        flash(f'Statement #{exc.statement_id} was not found in this conversation — '
-              'fix the "corrects" number and try again. Nothing was added.', 'error')
-    except SeedStatementUpstreamFailed as exc:
-        current_app.logger.exception('add_seed failed')
-        flash(exc.message, 'error')
-    return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/statements/seed/import-text')
-@login_required
-@limiter.limit('5 per minute')
-def admin_statement_seed_import_text(conv_id):
-    conv = _require_mod_for_conv(conv_id)
-    redirect_target = url_for('admin.admin_conversation_statements', conv_id=conv_id)
-    lock_reason = _seed_statement_lock_reason(conv)
-    if lock_reason:
-        flash(lock_reason, 'error')
-        return redirect(redirect_target)
-    raw_text = request.form.get('statement_texts', '')
-    # Pre-parse size guard, mirroring the CSV path's MAX_FILE_BYTES cap (#238).
-    # The textarea has a client-side maxlength, but that is trivially bypassed by
-    # a crafted POST, so bound the raw payload server-side before parsing.
-    if len(raw_text.encode('utf-8')) > MAX_FILE_BYTES:
-        flash(f'Too much text — maximum is {MAX_FILE_BYTES // 1024} KB.', 'error')
-        return redirect(redirect_target)
-    result = _parse_seed_text_lines(raw_text)
-    if _reject_seed_import_parse_errors(result, 'Text import'):
-        return redirect(redirect_target)
-
-    summary = _import_seed_statement_texts(conv, result.texts)
-    if summary['successes']:
-        record_audit('statement.seed_import_text', conv_id=conv_id,
-                     imported=summary['successes'], skipped=summary['skipped'],
-                     errors=summary['errors'])
-    return redirect(redirect_target)
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/strict-moderation')
-@login_required
-def admin_conversation_strict_moderation(conv_id):
-    _require_mod_for_conv(conv_id)
-    enabled = request.form.get('strict_moderation') == '1'
-    try:
-        _set_admin_statement_policy_api_payload(
-            conv_id, {'mode': 'moderate' if enabled else 'auto_approve'},
-        )
-    except ModerationPolicyVerificationUnavailable:
-        flash('Could not verify the current moderation state. Try again later.', 'error')
-    except ModerationPolicyUpstreamFailed:
-        current_app.logger.exception('statement moderation policy update failed')
-        flash('Could not update moderation settings. Check server logs for details.', 'error')
-    except ModerationPolicySaveFailed as exc:
-        flash(
-            'The voting service may have been updated, but the local policy could not be saved. '
-            'Do not retry until a site admin checks it.' if exc.outcome_unknown else
-            'Could not save the moderation policy. Try again later.',
-            'error',
-        )
-    return redirect(url_for('admin.admin_conversation_statements', conv_id=conv_id))
-
-# ── Featured statements ───────────────────────────────────────────────────
-
-@admin_bp.get('/admin/conversations/<int:conv_id>/featured')
-@login_required
-def admin_conversation_featured(conv_id):
-    conv        = _require_mod_for_conv(conv_id)
-    confirmed   = (FeaturedStatement.query
-                   .filter_by(conversation_id=conv_id)
-                   .options(joinedload(FeaturedStatement.arguments))
-                   .order_by(FeaturedStatement.created_at).all())
-    for fs in confirmed:
-        fs.arguments.sort(key=lambda a: a.side if isinstance(a.side, str) else a.side.value or '')
-    _backfill_statement_texts(conv, confirmed)
-    confirmed_tids = {fs.polis_statement_id for fs in confirmed}
-    candidates   = _polis_server_client().get_featured_candidates(conv.polis_id)
-    if candidates is not None:
-        candidates = [c for c in candidates if c['tid'] not in confirmed_tids]
-    candidate_tids = [c['tid'] for c in candidates] if candidates else []
-    provenance_map = _provenance_map(conv_id, list(confirmed_tids) + candidate_tids)
-    return render_template('admin_featured.html',
-                           conversation=conv,
-                           confirmed=confirmed,
-                           candidates=candidates,
-                           provenance_map=provenance_map,
-                           phase_active=conv.phase_argument_mapping)
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/featured/confirm')
-@login_required
-def admin_featured_confirm(conv_id):
-    conv = _require_mod_for_conv(conv_id)
-    tid  = request.form.get('tid', type=int)
-    if tid is None:
-        abort(400)
-    if not FeaturedStatement.query.filter_by(
-            conversation_id=conv_id, polis_statement_id=tid).first():
-        db.session.add(FeaturedStatement(
-            conversation_id=conv_id,
-            polis_statement_id=tid,
-            statement_text=_fetch_statement_text(conv.polis_id, tid),
-            suggested_by_system=request.form.get('system_suggested') == '1',
-            confirmed_by_admin=True,
-        ))
-        if not _resync_phase6_if_live(conv):
-            return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
-        db.session.commit()
-        record_audit('featured.confirm', conv_id=conv_id, target_type='statement', target_id=tid)
-    return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/featured/add')
-@login_required
-def admin_featured_add(conv_id):
-    conv = _require_mod_for_conv(conv_id)
-    tid  = request.form.get('tid', type=int)
-    if tid is None or tid < 0:
-        abort(400)
-    if not FeaturedStatement.query.filter_by(
-            conversation_id=conv_id, polis_statement_id=tid).first():
-        db.session.add(FeaturedStatement(
-            conversation_id=conv_id,
-            polis_statement_id=tid,
-            statement_text=_fetch_statement_text(conv.polis_id, tid),
-            suggested_by_system=False,
-            confirmed_by_admin=True,
-        ))
-        if not _resync_phase6_if_live(conv):
-            return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
-        db.session.commit()
-        record_audit('featured.add', conv_id=conv_id, target_type='statement', target_id=tid)
-    return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/featured/<int:fs_id>/remove')
-@login_required
-def admin_featured_remove(conv_id, fs_id):
-    conv = _require_mod_for_conv(conv_id)
-    fs = FeaturedStatement.query.filter_by(
-        id=fs_id, conversation_id=conv_id).first_or_404()
-    if conv.phase_argument_mapping:
-        remaining = FeaturedStatement.query.filter_by(conversation_id=conv_id).with_for_update().count()
-        if remaining <= 1:
-            flash('Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first.', 'error')
-            return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
-    db.session.delete(fs)
-    if not _resync_phase6_if_live(conv):
-        return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
-    db.session.commit()
-    record_audit('featured.remove', conv_id=conv_id, target_type='featured', target_id=fs_id)
-    return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/arguments/<int:arg_id>/delete')
-@login_required
-def admin_argument_delete(conv_id, arg_id):
-    try:
-        _delete_admin_featured_argument_api_payload(conv_id, arg_id)
-    except ArgumentNotInFeaturedWorkspace:
-        abort(404)
-    return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
-
-@admin_bp.post('/admin/conversations/<int:conv_id>/arguments/<int:arg_id>/moderate')
-@login_required
-def admin_argument_moderate(conv_id, arg_id):
-    try:
-        _set_admin_featured_argument_api_payload(
-            conv_id, arg_id, {'hidden': request.form.get('hidden') == '1'},
-        )
-    except ArgumentNotInFeaturedWorkspace:
-        abort(404)
-    return redirect(url_for('admin.admin_conversation_featured', conv_id=conv_id))
-
-
-# ── Accept ───────────────────────────────────────────────────────────────
-
-@participant_bp.get('/accept/<slug>')
-@login_required
-def accept(slug):
-    entry = _participation_entry_read_model(slug)
-    conv = entry.conversation
-    if entry.state == 'redirect':
-        return redirect(url_for('participant.conversation', slug=slug))
-    if entry.state == 'invite_denied':
-        return make_response(render_template(
-            'forbidden_invite_only.html',
-            conversation=conv,
-            can_moderate=entry.can_moderate,
-        ), 403)
-    return render_template('accept.html', conversation=conv,
-                           emailable=entry.emailable, pseudonyms=entry.pseudonyms,
-                           reveal_cooldown=entry.reveal_cooldown_days,
-                           reveal_window_end=entry.reveal_window_end_days)
-
-@participant_bp.post('/accept/<slug>')
-@login_required
-@limiter.limit('10 per minute')
-def accept_post(slug):
-    conv        = Conversation.query.filter_by(slug=slug).first_or_404()
-    if conv.access_policy == 'demo':
-        return redirect(url_for('participant.conversation', slug=slug))
-    participant = _current_participant()
-    if participant is None:
-        abort(404)
-    _check_conversation_access(conv, participant)
-
-    pseudonym = request.form.get('pseudonym', '').strip()
-    emailable = session.get('emailable', False)
-    try:
-        join_conversation(
-            conversation=conv,
-            participant=participant,
-            pseudonym=pseudonym,
-            notify_email=bool(request.form.get('notify_email')),
-            notify_talk_page=bool(request.form.get('notify_talk_page')),
-            emailable=bool(emailable),
-            check_eligibility=_check_join_eligibility,
-        )
-    except InvalidPseudonym:
-        abort(400)
-    except EligibilityDenied as exc:
-        return make_response(render_template(
-            'forbidden_eligibility.html',
-            conversation=conv,
-            status=exc.status,
-            detail=exc.detail,
-        ), 403)
-    except PseudonymUnavailable:
-        pseudonyms = _generate_pseudonyms(5)
-        return render_template('accept.html', conversation=conv,
-                               emailable=emailable, pseudonyms=pseudonyms,
-                               error='That pseudonym was just taken — please choose another.')
-    return redirect(url_for('participant.conversation', slug=slug))
-
-@participant_bp.get('/accept/<slug>/pseudonyms')
-@login_required
-@limiter.limit('30 per minute')
-def accept_pseudonyms(slug):
-    Conversation.query.filter_by(slug=slug).first_or_404()
-    return jsonify({'pseudonyms': _generate_pseudonyms(5)})
-
-# ── Argument helpers ──────────────────────────────────────────────────────
-
-# ── Conversation ─────────────────────────────────────────────────────────
-
-@participant_bp.get('/c/<slug>')
-@limiter.limit('120 per minute')
-def conversation(slug):
-    conv        = Conversation.query.filter_by(slug=slug).first()
-    if conv is None:
-        if 'username' not in session and not _is_demo_session():
-            session['next'] = request.path
-            return redirect(url_for('login'))
-        abort(404)
-    if conv.access_policy == 'demo':
-        participation = _ensure_demo_participation(conv)
-        participant = participation.participant
-    else:
-        if _is_demo_session():
-            # Leaving the demo for a real consultation: don't forbid — exit the
-            # demo, then follow the normal flow (#293). The space-mismatch banner
-            # below carries the "this is live" warning; `space` stays 'demo' so it
-            # still fires once we render the real conversation.
-            _exit_demo_session()
-        if 'username' not in session:
-            session['next'] = request.path
-            return redirect(url_for('login'))
-        participant = _current_participant()
-    _check_conversation_access(conv, participant)
-
-    participation = locals().get('participation')
-    if participation is None and participant:
-        participation = Participation.query.filter_by(
-            participant_id=participant.id,
-            conversation_id=conv.id,
-        ).first()
-
-    if participation is None:
-        return redirect(url_for('participant.accept', slug=slug))
-
-    can_mod = _can_moderate(conv, participant)
-
-    # Demo/real space state model (#293): warn once when the viewer lands on a
-    # conversation whose space they didn't explicitly choose (e.g. a deep link,
-    # or crossing demo->real directly). Admin-access users are exempt — we expect
-    # them to know what they're doing. Viewing then adopts the conversation's
-    # space, so the warning fires once and normal navigation stays silent.
-    conv_space = 'demo' if conv.access_policy == 'demo' else 'real'
-    has_admin_access = _is_global_admin(participant) or bool(
-        participant and AdminRole.query.filter_by(participant_id=participant.id).first())
-    space_warning = conv_space if (
-        not has_admin_access and session.get('space') != conv_space) else None
-    session['space'] = conv_space
-
-    # Phase 2 clustering shared with the typed intermediate-results endpoint.
-    results, polis_stats, recomputing = _load_intermediate_results(conv)
-
-    # Reveal-window timeline for closed conversations (#70).
-    reveal          = _reveal_context(conv, participation)
-    reveal_state    = reveal['state'] if reveal else None
-    reveal_opens_at = reveal['opens_at'] if reveal else None
-
-    featured_data = []
-    if conv.phase_argument_mapping and participation:
-        featured_data = _build_featured_data(conv, participation, can_mod=can_mod)
-
-    # Phase 6 — build card data: each confirmed featured statement with its
-    # top-10 visible arguments per side, sorted by usefulness vote count.
-    # Eager-load arguments + votes to avoid N+1 queries.
-    phase6_data = []
-    if conv.phase_informed_voting and conv.phase6_polis_conversation_id and participation:
-        p6_stmts = (FeaturedStatement.query
-                    .filter_by(conversation_id=conv.id, confirmed_by_admin=True)
-                    .options(joinedload(FeaturedStatement.arguments)
-                             .joinedload(Argument.votes))
-                    .all())
-
-        # Stable per-participant random order — set once on first visit.
-        # Same pattern as ArgumentSideState.argument_order.
-        fs_by_id = {fs.id: fs for fs in p6_stmts}
-        if participation.phase6_card_order is None:
-            order = [fs.id for fs in p6_stmts]
-            random.shuffle(order)
-            participation.phase6_card_order = order
-            db.session.commit()
-        ordered = [fs_by_id[fid] for fid in participation.phase6_card_order
-                   if fid in fs_by_id]
-        # Append any confirmed statements added after the order was set
-        ordered_ids = set(participation.phase6_card_order)
-        ordered += [fs for fs in p6_stmts if fs.id not in ordered_ids]
-
-        for fs in ordered:
-            text = fs.statement_text or ''
-            if not text:
-                continue
-            visible_args = [a for a in fs.arguments if not a.hidden]
-            pro = sorted(
-                [a for a in visible_args if a.side == 'pro'],
-                key=lambda a: len(a.votes), reverse=True)[:10]
-            con = sorted(
-                [a for a in visible_args if a.side == 'con'],
-                key=lambda a: len(a.votes), reverse=True)[:10]
-            phase6_data.append({
-                'fs': fs,
-                'text': text,
-                'pro': pro,
-                'con': con,
-                'phase6_stmt_id': fs.phase6_polis_statement_id,
-            })
-
-    # Phase 6 results — built when the results tab is visible or Phase 6 is active.
-    # Surface A (preliminary) is shown inside the results tab while the round is live.
-    phase6_results = None
-    if (conv.phase_informed_voting or conv.phase_personal_results or conv.phase_public_results) \
-            and conv.phase6_polis_conversation_id:
-        phase6_results = _build_phase6_results(conv, participation)
-
-    return render_template('conversation.html',
-                           header_mode='conversation',
-                           space_warning=space_warning,
-                           conversation=conv,
-                           participation=participation,
-                           can_moderate=can_mod,
-                           results=results,
-                           recomputing=recomputing,
-                           polis_stats=polis_stats,
-                           reveal_state=reveal_state,
-                           reveal_opens_at=reveal_opens_at,
-                           reveal=reveal,
-                           demo_mode=conv.access_policy == 'demo',
-                           featured_data=featured_data,
-                           new_stmt_unlock_at=conv.argument_vote_data.get('new_stmt_unlock_at', 10) if conv.argument_vote_data else 10,
-                           new_stmt_max=conv.argument_vote_data.get('new_stmt_max', 3) if conv.argument_vote_data else 3,
-                           new_stmt_ids=participation.new_stmt_ids if participation else [],
-                           phase6_data=phase6_data,
-                           phase6_results=phase6_results,
-                           scheduled_transition=scheduled_transition(conv),
-                           output_items=_output_items(conv))
-
-
-@participant_bp.get('/c/<slug>/about')
-@limiter.limit('120 per minute')
-def conversation_about(slug):
-    conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    participant = _current_participant()
-    _check_conversation_access(conv, participant)
-    about = _conversation_about_model(conv, participant)
-    return render_template(
-        'conversation_about.html',
-        header_mode='conversation',
-        **about.template_context(),
-    )
-
-
-@participant_bp.get('/c/<slug>/outputs/<output_key>')
-@login_or_demo_required
-def conversation_output(slug, output_key):
-    conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    participant = _current_participant()
-    _check_conversation_access(conv, participant)
-    participation = Participation.query.filter_by(
-        participant_id=participant.id,
-        conversation_id=conv.id,
-    ).first()
-    if participation is None:
-        return redirect(url_for('participant.accept', slug=slug))
-    definition = _output_definition(output_key)
-    if definition is None:
-        abort(404)
-    items = _output_items(conv)
-    output = next(item for item in items if item['key'] == output_key)
-    return render_template('output.html',
-                           conversation=conv,
-                           participation=participation,
-                           output=output,
-                           output_items=items)
-
-
-@participant_bp.get('/c/<slug>/moderation-log')
-def conversation_moderation_log(slug):
-    conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    _check_conversation_access(conv, _current_participant())
-    return render_template(
-        'moderation_log.html',
-        conversation=conv,
-        rows=_conversation_ban_log_rows(conv),
-    )
-
-# ── Arguments ────────────────────────────────────────────────────────────
-
-@participant_bp.post('/c/<slug>/arguments/<int:fs_id>/submit')
-@login_or_demo_required
-def argument_submit_legacy(slug, fs_id):
-    return redirect(url_for('participant.argument_submit', slug=slug, fs_id=fs_id),
-                    code=307)
-
-@participant_bp.post('/c/<slug>/featured-statements/<int:fs_id>/arguments')
-@login_or_demo_required
-@limiter.limit('20 per minute')
-def argument_submit(slug, fs_id):
-    conv, part = _require_arg_participation(slug)
-    side = request.form.get('side', '').strip()
-    body = request.form.get('body', '')
-    try:
-        result = submit_argument_command(
-            conversation=conv,
-            participation=part,
-            featured_statement_id=fs_id,
-            side=side,
-            body=body,
-            touch=_touch_last_engagement,
-        )
-    except InvalidArgument:
-        abort(400)
-    except ExistingArgumentConflict:
-        # Preserve the legacy form's first-write-wins behavior. The API returns
-        # a typed conflict so SPA clients never mistake changed text for a replay.
-        argument = Argument.query.filter_by(
-            proposer_pseudonym=part.pseudonym,
-            featured_statement_id=fs_id,
-            side=side,
-        ).one()
-        if request.headers.get('X-Requested-With') == 'fetch':
-            return jsonify({
-                'ok': True,
-                'id': argument.id,
-                'body': argument.body,
-                'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=argument.id),
-                'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=argument.id),
-            })
-        return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
-    arg = result.argument
-    if request.headers.get('X-Requested-With') == 'fetch':
-        return jsonify({
-            'ok': True,
-            'id': arg.id,
-            'body': arg.body,
-            'vote_url': url_for('participant.argument_vote', slug=slug, arg_id=arg.id),
-            'unvote_url': url_for('participant.argument_unvote', slug=slug, arg_id=arg.id),
-        })
-    return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
-
-@participant_bp.post('/c/<slug>/arguments/<int:fs_id>/<side>/skip')
-@login_or_demo_required
-def argument_skip_legacy(slug, fs_id, side):
-    return redirect(url_for('participant.argument_skip', slug=slug, fs_id=fs_id, side=side),
-                    code=307)
-
-@participant_bp.post('/c/<slug>/featured-statements/<int:fs_id>/skip/<side>')
-@login_or_demo_required
-def argument_skip(slug, fs_id, side):
-    conv, part = _require_arg_participation(slug)
-    try:
-        skip_argument_contribution(
-            conversation=conv,
-            participation=part,
-            featured_statement_id=fs_id,
-            side=side,
-            touch=_touch_last_engagement,
-        )
-    except InvalidArgument:
-        abort(400)
-    except ExistingArgumentConflict:
-        pass
-    if request.headers.get('X-Requested-With') == 'fetch':
-        return jsonify({'ok': True})
-    return redirect(url_for('participant.conversation', slug=slug) + f'#fs-{fs_id}')
-
-@participant_bp.post('/c/<slug>/arguments/<int:arg_id>/vote')
-@login_or_demo_required
-def argument_vote(slug, arg_id):
-    conv, part = _require_arg_participation(slug)
-    is_ajax = request.headers.get('X-Requested-With') == 'fetch'
-    try:
-        set_argument_priority(
-            conversation=conv,
-            participation=part,
-            argument_id=arg_id,
-            selected=True,
-            touch=_touch_last_engagement,
-        )
-    except ContributionGateClosed:
-        if is_ajax:
-            return jsonify({'ok': False, 'reason': 'gate'}), 403
-        abort(403)
-    except PrioritizationUnavailable:
-        if is_ajax:
-            return jsonify({'ok': False, 'reason': 'volume'}), 409
-        abort(409)
-    except PriorityBudgetExceeded:
-        if is_ajax:
-            return jsonify({'ok': False, 'reason': 'cap'}), 409
-        abort(409)
-    except HiddenArgument:
-        if is_ajax:
-            return jsonify({'ok': False, 'reason': 'hidden'}), 403
-        abort(403)
-    if is_ajax:
-        return jsonify({'ok': True})
-    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
-
-@participant_bp.post('/c/<slug>/arguments/<int:arg_id>/unvote')
-@login_or_demo_required
-def argument_unvote(slug, arg_id):
-    conv, part = _require_arg_participation(slug)
-    set_argument_priority(
-        conversation=conv,
-        participation=part,
-        argument_id=arg_id,
-        selected=False,
-        touch=_touch_last_engagement,
-    )
-    if request.headers.get('X-Requested-With') == 'fetch':
-        return jsonify({'ok': True})
-    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
-
-@participant_bp.post('/c/<slug>/arguments/<int:arg_id>/hide')
-@login_required
-def argument_hide(slug, arg_id):
-    conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    if not _can_moderate(conv):
-        abort(403)
-    arg = Argument.query.filter_by(id=arg_id).first_or_404()
-    FeaturedStatement.query.filter_by(
-        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-    arg.hidden = True
-    db.session.commit()
-    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
-
-@participant_bp.post('/c/<slug>/arguments/<int:arg_id>/unhide')
-@login_required
-def argument_unhide(slug, arg_id):
-    conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    if not _can_moderate(conv):
-        abort(403)
-    arg = Argument.query.filter_by(id=arg_id).first_or_404()
-    FeaturedStatement.query.filter_by(
-        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-    arg.hidden = False
-    db.session.commit()
-    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
-
-
-@participant_bp.post('/c/<slug>/arguments/<int:arg_id>/flag')
-@login_or_demo_required
-@limiter.limit('10 per minute')
-def argument_flag(slug, arg_id):
-    conv, part = _require_arg_participation(slug)
-    arg = Argument.query.filter_by(id=arg_id).first_or_404()
-    FeaturedStatement.query.filter_by(
-        id=arg.featured_statement_id, conversation_id=conv.id).first_or_404()
-    if arg.hidden:
-        if request.headers.get('X-Requested-With') == 'fetch':
-            return jsonify({'ok': True, 'already_reviewed': True})
-        flash('This argument is already under moderator review.', 'info')
-        return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
-    try:
-        submit_content_flag(
-            conversation=conv, participation=part,
-            content_type='argument', target_id=arg.id,
-            category=(request.form.get('category') or '').strip(),
-            detail=request.form.get('detail'), audit=record_audit,
-        )
-    except InvalidFlag:
-        abort(400, description='Choose a valid reason and explain Other.')
-    if request.headers.get('X-Requested-With') == 'fetch':
-        return jsonify({'ok': True})
-    flash('Thanks - this has been sent to the moderator for review.', 'success')
-    return redirect(url_for('participant.conversation', slug=slug) + '#tab-arguments')
-
-
-@participant_bp.post('/c/<slug>/statements/<int:tid>/flag')
-@login_or_demo_required
-@limiter.limit('10 per minute')
-def statement_flag(slug, tid):
-    conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    if not conv.active or conv.paused:
-        abort(403)
-    participant = _current_participant()
-    if participant is None:
-        abort(403)
-    part = Participation.query.filter_by(
-        participant_id=participant.id,
-        conversation_id=conv.id,
-    ).first_or_404()
-    _abort_if_banned(conv, participant)
-
-    statements = _polis_server_client().get_statements(conv.polis_id)
-    if statements is not None:
-        all_statements = [s for group in statements for s in group]
-        matching = [s for s in all_statements if s.get('tid') == tid]
-        if not matching:
-            abort(404)
-        # Seed statements (organizer-authored) are just as flaggable as any other —
-        # a moderator's own wording can still need review. Previously excluded here
-        # with no test coverage and no documented rationale; caused every flag on a
-        # featured (often seed-derived) statement to 400.
-
-    try:
-        submit_content_flag(
-            conversation=conv, participation=part,
-            content_type='statement', target_id=tid,
-            category=(request.form.get('category') or '').strip(),
-            detail=request.form.get('detail'), audit=record_audit,
-        )
-    except InvalidFlag:
-        abort(400, description='Choose a valid reason and explain Other.')
-    if request.headers.get('X-Requested-With') == 'fetch':
-        return jsonify({'ok': True})
-    flash('Thanks - this has been sent to the moderator for review.', 'success')
-    return redirect(url_for('participant.conversation', slug=slug) + '#tab-vote')
-
-# ── Identity reveal ───────────────────────────────────────────────────────
-
-@participant_bp.get('/c/<slug>/reveal')
-@login_required
-def reveal_identity(slug):
-    conv        = Conversation.query.filter_by(slug=slug).first_or_404()
-    participant = _current_participant()
-    if participant is None:
-        abort(404)
-    participation = Participation.query.filter_by(
-        participant_id=participant.id,
-        conversation_id=conv.id,
-    ).first_or_404()
-    if not conv.closed_at:
-        abort(404)
-
-    # Single source of truth: the displayed timeline and these gate flags both come
-    # from _reveal_context, so the page can never show "open" while the POST rejects.
-    reveal = _reveal_context(conv, participation)
-    return render_template('reveal.html',
-                           conversation=conv,
-                           participation=participation,
-                           window_open=reveal['state'] in ('open', 'revealed'),
-                           window_closed=reveal['state'] == 'expired',
-                           opens_at=reveal['opens_at'],
-                           reveal=reveal)
-
-@participant_bp.post('/c/<slug>/reveal')
-@login_required
-@limiter.limit('5 per minute')
-def reveal_identity_post(slug):
-    conv        = Conversation.query.filter_by(slug=slug).first_or_404()
-    participant = _current_participant()
-    if participant is None:
-        abort(404)
-    participation = Participation.query.filter_by(
-        participant_id=participant.id,
-        conversation_id=conv.id,
-    ).first_or_404()
-
-    if not conv.closed_at:
-        abort(400)
-
-    if request.form.get('confirm') != '1':
-        return redirect(url_for('participant.reveal_identity', slug=slug))
-    try:
-        reveal_identity_command(
-            conversation=conv,
-            participation=participation,
-            wikimedia_username=participant.mw_username,
-        )
-    except RevealUnavailable:
-        abort(400)
-    return redirect(url_for('participant.conversation', slug=slug))
-
-
-# ── Phase 6 vote ──────────────────────────────────────────────────────────────
-
-@participant_bp.post('/c/<slug>/phase6/vote')
-@limiter.limit('30 per minute')
-def phase6_vote(slug):
-    """Submit a Phase 6 (informed voting) vote for a featured statement.
-
-    The client sends {fs_id, vote} — never pid/tid. The server resolves the Polis
-    conversation ID and statement ID from the DB, verifies the participant is a member
-    of this conversation, and forwards the vote to Particiapi via the same cookie-rename
-    proxy pattern used by proxy_particiapi.
-
-    This route is on participant_bp (CSRF-enabled) so Flask-WTF validates X-CSRFToken.
-    """
-    conv = Conversation.query.filter_by(slug=slug).first_or_404()
-
-    # Only accept votes on active, unpaused consultations.
-    if not conv.active or conv.paused:
-        abort(403)
-
-    if _is_demo_session():
-        if _demo_bound_conversation_id() != conv.id or conv.access_policy != 'demo':
-            abort(403)
-    elif 'username' not in session:
-        abort(403)
-
-    participant = _current_participant()
-    if participant is None:
-        abort(403)
-
-    # Membership check — participant must have joined this conversation.
-    participation = Participation.query.filter_by(
-        participant_id=participant.id,
-        conversation_id=conv.id,
-    ).first()
-    if not participation:
-        abort(403)
-    _abort_if_banned(conv, participant)
-
-    if not conv.phase_informed_voting or not conv.phase6_polis_conversation_id:
-        abort(404)
-
-    data = request.get_json(silent=True) or {}
-    fs_id = data.get('fs_id')
-    vote  = data.get('vote')
-    # Validate types explicitly — non-integer fs_id causes an unhandled 500 in the DB query.
-    # isinstance check on vote prevents False/True (Python bool subclasses int, False==0).
-    if not isinstance(fs_id, int) or isinstance(vote, bool) or vote not in (1, -1, 0):
-        abort(400)
-
-    fs = FeaturedStatement.query.filter_by(
-        id=fs_id, conversation_id=conv.id, confirmed_by_admin=True,
-    ).first_or_404()
-    if fs.phase6_polis_statement_id is None:
-        abort(404)
-
-    # Resolve conversation/statement IDs server-side — never trust the client.
-    polis_conv_id = conv.phase6_polis_conversation_id
-    tid           = fs.phase6_polis_statement_id
-
-    base = current_app.config['PARTICIAPI_BASE']
-
-    # Manage the Phase 6 Particiapi session entirely server-side, in the Flask
-    # session, and reuse its CSRF token across votes — instead of bootstrapping a
-    # fresh session (two upstream calls) on every vote. Kept out of the browser's
-    # `pa_session` cookie so it never collides with the Phase 2 web component's
-    # session. We re-bootstrap only when it is missing or a vote is rejected as a
-    # session/CSRF failure (stale token).
-    p6_key = (session.get('xid'), conv.id)
-
-    def _bootstrap():
-        """(Re)establish the Phase 6 Particiapi session + CSRF token, storing both in
-        the Flask session and the process-local share cache. Returns (pa, csrf_token);
-        aborts 502 on failure."""
-        prior = session.get('_p6_pa')
-        # Bind identity exactly as _phase6_gateway and _explore_gateway do. This route
-        # and the API route share _p6_session_cache, so if only one of them bound, an
-        # anonymous session cached by this path would be handed to the other and the
-        # binding would be silently defeated. The bound call deliberately drops
-        # `create=true` and the prior cookie: the subject, not the cookie, selects the uid.
-        subject_secret = current_app.config.get('PARTICIAPI_SUB_SECRET')
-        binding = bool(subject_secret)
-        headers = {
-            'X-Particiapi-Sub': _conversation_subject(participant.xid, conv),
-            'X-Particiapi-Sub-Secret': subject_secret,
-        } if binding else {}
-        try:
-            r = polis_http.post(
-                f'{base}/api/session',
-                cookies={} if binding else ({'session': prior} if prior else {}),
-                params={} if binding else {'create': 'true'},
-                headers=headers,
-                timeout=5,
-            )
-        except requests.RequestException:
-            current_app.logger.exception('Particiapi session bootstrap failed in phase6_vote')
-            abort(502)
-        if not r.ok:
-            current_app.logger.error('Particiapi session error in phase6_vote: %s', r.status_code)
-            abort(502)
-        session['_p6_pa']   = r.cookies.get('session') or prior
-        session['_p6_csrf'] = r.json().get('csrf_token', '')
-        _p6_session_cache[p6_key] = (session['_p6_pa'], session['_p6_csrf'])
-        return session['_p6_pa'], session['_p6_csrf']
-
-    pa = session.get('_p6_pa')
-    csrf_token = session.get('_p6_csrf')
-    bootstrapped = False
-    if not (pa and csrf_token):
-        # Serialize the first bootstrap per (participant, conversation) within this
-        # worker so concurrent first votes reuse one Polis session instead of minting
-        # two uids (#275). See the _p6_session_cache note above.
-        with _p6_bootstrap_lock(p6_key):
-            shared = _p6_session_cache.get(p6_key)
-            if shared:
-                session['_p6_pa'], session['_p6_csrf'] = shared
-                pa, csrf_token = shared
-            else:
-                pa, csrf_token = _bootstrap()
-                bootstrapped = True
-
-    def _put(cookie_val, token):
-        try:
-            return polis_http.put(
-                f'{base}/api/conversations/{polis_conv_id}/votes/{tid}',
-                json={'value': vote},
-                cookies={'session': cookie_val} if cookie_val else {},
-                headers={'X-CSRF-Token': token},
-                timeout=10,
-            )
-        except requests.RequestException:
-            current_app.logger.exception('Particiapi error in phase6_vote')
-            abort(502)
-
-    upstream = _put(pa, csrf_token)
-    # A reused token can be stale (the session expired). If a vote we did NOT just
-    # bootstrap for is rejected, refresh the session once and retry.
-    if upstream.status_code in (401, 403) and not bootstrapped:
-        pa, csrf_token = _bootstrap()
-        upstream = _put(pa, csrf_token)
-
-    resp = make_response('', upstream.status_code)
-    if upstream.ok:
-        _touch_last_engagement(participation, commit=True)
-    return resp
 
 
 # Accepted shape for a reused inbound X-Request-Id (only honoured behind a trusted proxy).
@@ -6914,7 +4974,6 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['SESSION_COOKIE_HTTPONLY']    = True
     app.config['SESSION_COOKIE_SAMESITE']    = 'Lax'
     app.config['SESSION_COOKIE_SECURE']      = not app.debug
-    app.config['SPA_DEFAULT_ENABLED']        = True
 
     app.config['OAUTH_CLIENT_ID']     = _read_secret('oauth-client-id')
     app.config['OAUTH_CLIENT_SECRET'] = _read_secret('oauth-client-secret')
@@ -7118,46 +5177,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         # Route dispatch normally triggers it later, but this before-request SPA
         # response intentionally bypasses route dispatch.
         _ = request.host
-        requested = request.args.get('spa_only')
-        stored = request.cookies.get(_SPA_ONLY_COOKIE)
-        if requested in {'0', '1'}:
-            enabled = requested == '1'
-        elif stored in {'0', '1'}:
-            enabled = stored == '1'
-        else:
-            enabled = bool(current_app.config['SPA_DEFAULT_ENABLED'])
-        if enabled:
-            return send_from_directory(_SPA_BUILD_DIR, 'index.html')
-        return None
-
-    @app.context_processor
-    def _inject_globals():
-        participant = _current_participant()
-        return {
-            'is_admin':   _is_global_admin(participant),
-            'username':   session.get('username'),
-            'csp_nonce':  g.get('csp_nonce', ''),
-            'git_version': _GIT_VERSION,
-            'spa_developer_controls': _spa_developer_controls_enabled(),
-            # Header mode drives the demo/real switch + demo theme (#293).
-            # Pages override this via render_template kwargs; default keeps the
-            # switch off on pages outside the fork/lanes (e.g. admin).
-            'header_mode': None,
-        }
+        return send_from_directory(_SPA_BUILD_DIR, 'index.html')
 
     @app.after_request
     def _security_headers(response):
-        requested_spa_mode = request.args.get('spa_only')
-        if requested_spa_mode == '1':
-            response.set_cookie(
-                _SPA_ONLY_COOKIE, '1', max_age=_SPA_ONLY_MAX_AGE,
-                path='/', samesite='Lax',
-            )
-        elif requested_spa_mode == '0':
-            response.set_cookie(
-                _SPA_ONLY_COOKIE, '0', max_age=_SPA_ONLY_MAX_AGE,
-                path='/', samesite='Lax',
-            )
         nonce = g.get('csp_nonce', '')
         csp = (
             "default-src 'self'; "
@@ -7203,11 +5226,6 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     _register_routes(app)
 
-    # Generic Particiapi proxy: CSRF-exempt with _validate_same_origin() as the
-    # compensating control; first-party statement submission is on participant_bp.
-    app.register_blueprint(proxy_bp)
-    app.register_blueprint(admin_bp)
-    app.register_blueprint(participant_bp)
     app.register_blueprint(create_api_v1_blueprint(
         resolve_participant=_current_participant,
         resolve_global_admin=_is_global_admin,
@@ -7218,7 +5236,6 @@ def create_app(test_config: dict | None = None) -> Flask:
             }
             for user in current_app.config.get('DEV_TEST_USERS', [])
         ],
-        resolve_developer_mode=_spa_developer_controls_enabled,
         resolve_git_version=lambda: _GIT_VERSION,
         resolve_conversation_lane=_conversation_lane_api_payload,
         resolve_conversation_workspace=_conversation_workspace_api_payload,
@@ -7281,7 +5298,6 @@ def create_app(test_config: dict | None = None) -> Flask:
     ))
     register_api_error_handlers(app)
     _register_branded_error_pages(app)
-    csrf.exempt(proxy_bp)
 
     # Startup fingerprint — config-only, no secrets, no live probe. Answers
     # "is this environment configured as expected" before chasing a phantom bug.
@@ -7300,56 +5316,6 @@ def create_app(test_config: dict | None = None) -> Flask:
                'git_version': _GIT_VERSION})
 
     return app
-
-
-# ── Phase 6 final report ──────────────────────────────────────────────────────
-
-@participant_bp.get('/c/<slug>/report')
-def conversation_report(slug):
-    """Phase 6 final results report — aggregate only, no personal votes.
-
-    Accessible once the conversation is closed (conv.closed_at is set).
-    Requires login when phase_personal_results is set; public when
-    phase_public_results is set.
-
-    Surface B: post-close, post-organizer-cleanup. Marked 'Final report'.
-    For the preliminary in-round view see the Results tab on the conversation page.
-    """
-    conv = Conversation.query.filter_by(slug=slug).first_or_404()
-    participant = _current_participant()
-    participation = (
-        Participation.query.filter_by(
-            conversation_id=conv.id,
-            participant_id=participant.id,
-        ).first()
-        if participant else None
-    )
-    _check_conversation_access(conv, participant)
-
-    if not conv.closed_at:
-        # Conversation still open — redirect to the results tab.
-        return redirect(url_for('participant.conversation', slug=slug) + '#tab-results')
-
-    if not (conv.phase_public_results or conv.phase_personal_results):
-        return redirect(url_for('participant.conversation', slug=slug))
-
-    if conv.phase_personal_results and not conv.phase_public_results and not participant:
-        return redirect(url_for('login') + f'?next={request.path}')
-
-    report_filter = Phase6ResultsFilter.from_snapshot(conv.report_filter_snapshot)
-    phase6_results = _build_phase6_results(
-        conv, participation=None, results_filter=report_filter)  # aggregate only
-
-    reveal = _reveal_context(conv, participation)
-    return render_template(
-        'report.html',
-        conversation=conv,
-        participation=participation,
-        phase6_results=phase6_results,
-        output_context=next(item for item in _output_items(conv) if item['key'] == 'report'),
-        reveal=reveal,
-        reveal_state=reveal['state'] if reveal else None,
-    )
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -7386,7 +5352,7 @@ def _register_routes(app: Flask) -> None:
             session['username']  = username
             session['xid']       = participant.xid
             session['emailable'] = _is_emailable(username)
-            return redirect(url_for('index'))
+            return redirect('/')
 
     # ── Dev test users (DEV_FAKE_LOGIN=1) ────────────────────────────────────
     # Hardcoded test accounts with negative mw_user_ids so they can never
@@ -7436,65 +5402,56 @@ def _register_routes(app: Flask) -> None:
             session['username']  = username
             session['xid']       = participant.xid
             session['emailable'] = False
-            return redirect(url_for('index'))
+            return redirect('/')
 
-    # ── Home ─────────────────────────────────────────────────────────────────
+    # ── Error-page self-test (staging/local only) ─────────────────────────────
+    # The branded 404/403/500 pages exist for the moment a deploy is broken, which
+    # is exactly when unit tests are no proof. This is the Sentry /sentry-debug
+    # pattern: a deliberately failing endpoint so the real pages can be seen on a
+    # real deployment.
+    #
+    # It covers BOTH ways a status is reached, because they do not travel the same
+    # path through Flask:
+    #   ?mode=abort  -> abort(code) raises an HTTPException, which api/v1.py's
+    #                   generic HTTPException handler can claim before the branded
+    #                   per-status handler ever runs;
+    #   ?mode=raise  -> an uncaught exception, which is what an actual bug looks
+    #                   like and the only way to reach the 500 handler honestly.
+    # Testing only the first proves less than it appears to.
+    #
+    # NOTE: with FLASK_DEBUG=1 a raising route shows Werkzeug's interactive
+    # debugger instead of the branded page, so ?mode=raise only demonstrates
+    # anything with debug OFF — i.e. on staging, not on a local dev server.
+    #
+    # Gating reuses the audited STAGING_DEV_LOGIN / DEV_FAKE_LOGIN switches rather
+    # than adding a new flag: both are off on the production Toolforge tool, and
+    # the route is not registered at all when they are.
+    if _fake_login_enabled or _staging_dev_login_enabled:
+        @app.get('/dev/error-page-check/<int:code>')
+        @login_required
+        @admin_required
+        @limiter.limit('20 per minute')
+        def dev_error_page_check(code: int):
+            if code not in {403, 404, 500}:
+                abort(400)
+            # 500 defaults to a genuine uncaught exception; ?mode=abort forces the
+            # HTTPException route for the same status so both can be compared.
+            # Raising is only meaningful for 500 — abort(403) already *is* a raised
+            # Forbidden, so 403/404 have nothing else to demonstrate.
+            if code == 500 and request.args.get('mode') != 'abort':
+                raise RuntimeError('deliberate error-page self-test')
+            abort(code)
 
-    @app.get('/')
-    def index():
-        # The homepage is an explicit fork between the demo sandbox and real
-        # consultations (#293), so a visitor who only wants to try things can
-        # never drift into a live consultation by accident. Shown every visit.
-        dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
-        return render_template('fork.html',
-                               header_mode='fork',
-                               dev_test_users=dev_test_users)
+    # ── SPA shell ─────────────────────────────────────────────────────────────
+    # Canonical paths (/, /demo, /c/<slug>, /admin/...) are answered by the
+    # _serve_canonical_spa_request before-request hook, so they need no view
+    # function. This route covers the /app/* mirror the React router also owns.
 
     @app.get('/app')
     @app.get('/app/<path:spa_path>')
     def spa_shell(spa_path: str = ''):
         """Serve the built React shell; client routing owns the remaining path."""
         return send_from_directory(_SPA_BUILD_DIR, 'index.html')
-
-    def _render_lane(*, demo: bool, header_mode: str):
-        """Render the home listing for one space (#293).
-
-        The demo and real lanes share the SAME interface (home.html) — same tabs,
-        same cards — and differ only in the set of conversations shown (demo vs
-        real) and the page background (the demo blue wash, via header_mode). This
-        keeps one listing implementation instead of a bespoke demo page.
-        """
-        dev_test_users = current_app.config.get('DEV_TEST_USERS', [])
-        participant = _current_participant()
-        lane = build_conversation_lane(
-            demo=demo,
-            username=session.get('username'),
-            participant=participant,
-            global_admin=_is_global_admin(participant),
-            active_phases=_active_phases,
-            output_items=_output_items,
-            reveal_context=_reveal_context,
-            polis_client=_polis_server_client(),
-        )
-        return render_template(
-            'home.html',
-            header_mode=header_mode,
-            dev_test_users=dev_test_users,
-            **lane.template_context(),
-        )
-
-    @app.get('/demo')
-    def demo_lane():
-        # The demo lane: the same listing UI as the real lane, filtered to demo
-        # conversations and tinted (#293). Available logged in or out.
-        session['space'] = 'demo'
-        return _render_lane(demo=True, header_mode='demo')
-
-    @app.get('/consultations')
-    def consultations():
-        # The real lane: the shared listing UI, filtered to real conversations (#293).
-        session['space'] = 'real'
-        return _render_lane(demo=False, header_mode='real')
 
 
     # ── OAuth ─────────────────────────────────────────────────────────────────
@@ -7538,7 +5495,7 @@ def _register_routes(app: Flask) -> None:
         code          = request.args.get('code', '')
         code_verifier = session.pop('oauth_code_verifier', '')
         if not code:
-            return redirect(url_for('index'))
+            return redirect('/')
 
         try:
             token_resp = requests.post(
@@ -7567,12 +5524,12 @@ def _register_routes(app: Flask) -> None:
             identity = profile_resp.json()
         except Exception as exc:
             app.logger.warning('OAuth callback failed: %s', exc)
-            return redirect(url_for('index'))
+            return redirect('/')
 
         username   = identity.get('username', '').strip()
         mw_user_id = identity.get('sub')
         if not username or not mw_user_id:
-            return redirect(url_for('index'))
+            return redirect('/')
 
         xid = _derive_xid(f'mw:{mw_user_id}')
 
@@ -7593,13 +5550,13 @@ def _register_routes(app: Flask) -> None:
         session['xid']        = participant.xid
         session['emailable']  = _is_emailable(username)
 
-        return redirect(_safe_redirect(next_url or '', url_for('index')))
+        return redirect(_safe_redirect(next_url or '', '/'))
 
     @app.post('/logout')
     @login_required
     def logout():
         session.clear()
-        return redirect(url_for('index'))
+        return redirect('/')
 
     # ── Health ────────────────────────────────────────────────────────────────
 

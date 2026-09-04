@@ -36,7 +36,7 @@ def test_canonical_spa_path_serves_a_branded_404_when_the_build_is_missing(
     client, no_spa_build,
 ):
     """The case the handlers exist for: SPA on, bundle gone."""
-    response = client.get('/consultations?spa_only=1')
+    response = client.get('/consultations')
 
     _assert_branded(response, 404, 'Page not found')
 
