@@ -230,6 +230,22 @@ in. (Before this was wired, the two variables had to be set separately and nothi
 the value to the container — so the local stack could not exercise trusted-sub at all, and
 identity behaviour observed locally meant nothing.)
 
+**The secret alone is not enough.** The published
+`registry.gitlab.com/particiapp/particiapi/particiapi:latest` image predates the
+trusted-sub feature. An image without it accepts the header, ignores it, and returns
+`200` — indistinguishable from working, and `particiapi_users` simply stays empty.
+`dev.sh` now checks the image and says so rather than letting you discover it from an
+empty table. To get an image that does support it, build from the submodule, which
+carries the feature:
+
+```bash
+docker build -t registry.gitlab.com/particiapp/particiapi/particiapi:latest \
+  ../particiapp-docker/subprojects/particiapi
+```
+
+Then `dev.sh` again. Confirm with `SELECT count(*) FROM particiapi_users;` after voting —
+a non-zero count is the only proof that binding is live.
+
 The script probes this at startup and says which mode it is in:
 
 ```

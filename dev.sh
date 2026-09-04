@@ -111,6 +111,24 @@ until docker exec particiapp-docker-postgres-1 pg_isready -U polis -q 2>/dev/nul
 done
 session_set POSTGRES_STATUS ready
 
+# Setting the secret is not enough: the published particiapi image predates the
+# trusted-sub feature, and an image without it accepts the header, ignores it, and
+# returns 200. Nothing downstream can tell that apart from working — so check the
+# image itself rather than trusting the configuration.
+if [ -n "$PARTICIAPI_SUB_SECRET" ]; then
+  if docker exec particiapp-docker-particiapi-1 sh -c \
+       'grep -rqs "X-Particiapi-Sub" /app' 2>/dev/null; then
+    echo "→ trusted-sub: image supports it, participants will get a stable identity"
+  else
+    echo "!! PARTICIAPI_SUB_SECRET is set, but this particiapi image does NOT implement"
+    echo "!! trusted-sub. Identity binding will silently do nothing: subjects are ignored,"
+    echo "!! every participant stays anonymous, and particiapi_users stays empty."
+    echo "!! Build an image from subprojects/particiapi (which has the feature) and retag it:"
+    echo "!!   docker build -t registry.gitlab.com/particiapp/particiapi/particiapi:latest \\"
+    echo "!!     \"\$PARTICIAPP_DOCKER_DIR/subprojects/particiapi\""
+  fi
+fi
+
 session_set PARTICIAPI_STATUS waiting
 echo "Waiting for particiapi on :$PARTICIAPI_PORT..."
 until curl -o /dev/null -sf -w "%{http_code}" "http://127.0.0.1:$PARTICIAPI_PORT/" 2>/dev/null | grep -qE "^[2345]"; do
