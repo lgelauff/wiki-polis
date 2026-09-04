@@ -62,6 +62,20 @@ COMPOSE+=(
   -f "$FLASK_DIR/docker-compose.wiki-polis.local.yaml"
 )
 
+# Trusted-sub secret. The app and the Particiapi container must share one value, or
+# Particiapi ignores the asserted subject and every participant is anonymous — silently,
+# since a mismatched secret still returns 200. Read it from v2/.env when the shell does
+# not already provide one. Unset is fine and means anonymous, exactly as before.
+if [ -z "${PARTICIAPI_SUB_SECRET:-}" ] && [ -f "$FLASK_DIR/.env" ]; then
+  PARTICIAPI_SUB_SECRET="$(grep -E '^PARTICIAPI_SUB_SECRET=' "$FLASK_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\042\047')"
+fi
+export PARTICIAPI_SUB_SECRET="${PARTICIAPI_SUB_SECRET:-}"
+if [ -n "$PARTICIAPI_SUB_SECRET" ]; then
+  echo "→ trusted-sub enabled: participants get a stable identity across rounds"
+else
+  echo "→ trusted-sub NOT set (PARTICIAPI_SUB_SECRET absent) — participants will be anonymous"
+fi
+
 compose() {
   env \
     POSTGRES_HOST_PORT="$POSTGRES_PORT" \
@@ -69,6 +83,7 @@ compose() {
     POLIS_HOST_PORT="$POLIS_PORT" \
     FLASK_HOST_PORT="$FLASK_PORT" \
     WIKI_POLIS_DIR="$SCRIPT_DIR" \
+    PARTICIAPI_SUB_SECRET="$PARTICIAPI_SUB_SECRET" \
     "${COMPOSE[@]}" "$@"
 }
 
