@@ -21,7 +21,7 @@ import coolname
 import nh3
 import requests
 from dotenv import load_dotenv
-from flask import (Flask, abort, current_app, flash, g, jsonify,
+from flask import (Flask, abort, current_app, g, jsonify,
                    has_request_context, redirect, request, send_from_directory, session, url_for)
 from flask_migrate import Migrate
 from flask_session import Session
@@ -5172,7 +5172,11 @@ def _register_routes(app: Flask) -> None:
     def oauth_callback():
         if request.args.get('state') != session.pop('oauth_state', None):
             app.logger.warning('OAuth callback: state mismatch (likely duplicate login tab or expired session)')
-            flash('Login failed — please try again.', 'error')
+            # The failure is currently unreported to the user: they are bounced
+            # back to /login with no explanation. base.html was the only consumer
+            # of get_flashed_messages, so the flash that used to live here reached
+            # nobody once the templates went. Surfacing this through the session
+            # contract the SPA reads is open work.
             return redirect(url_for('login'))
 
         code          = request.args.get('code', '')
