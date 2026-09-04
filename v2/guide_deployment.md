@@ -401,7 +401,10 @@ toolforge envvars create PARTICIAPI_SUB_SECRET
 
 > ⚠️ **`PARTICIAPI_SUB_SECRET` is a long-lived master credential.** It lets the proxy
 > assert any logged-in user's identity to Particiapi (cross-device stable participant).
-> It must match Particiapi's `TRUSTED_SUB_SECRET`, and it is sent to `PARTICIAPI_BASE_URL`
+> It must match Particiapi's config key `TRUSTED_SUB_SECRET` — which is set from the
+> environment variable **`PARTICIAPI_TRUSTED_SUB_SECRET`**, since the image loads config
+> via `from_prefixed_env("PARTICIAPI")` and strips the prefix. Setting the bare name does
+> nothing, silently. It is sent to `PARTICIAPI_BASE_URL`
 > on every identity bind — so that link **must be encrypted (WireGuard/TLS) or loopback**.
 > A wire-capture of this secret, combined with the enumerable xid, would let an attacker
 > forge any user's identity — so do not set it until the Toolforge↔VPS hop is encrypted
@@ -743,7 +746,7 @@ export DATABASE_URL
 | `OAUTH_CLIENT_SECRET` | yes (prod) | Wikimedia OAuth consumer secret |
 | `OAUTH_REDIRECT_URI` | yes (prod) | Must match registered callback URL |
 | `PARTICIAPI_BASE_URL` | yes | Internal URL of Particiapi (e.g. `http://10.x.x.x:8000`) — **must be encrypted (TLS) or loopback if `PARTICIAPI_SUB_SECRET` is set** |
-| `PARTICIAPI_SUB_SECRET` | no | Shared master secret for cross-device identity binding; must match Particiapi's `TRUSTED_SUB_SECRET`. Unset → anonymous-per-session. Only set it when the transport is encrypted (TLS) or loopback |
+| `PARTICIAPI_SUB_SECRET` | no | Shared master secret for cross-device identity binding; must be set on Particiapi as env var `PARTICIAPI_TRUSTED_SUB_SECRET` (config key `TRUSTED_SUB_SECRET`; the bare env name is ignored). Unset → anonymous-per-session. Only set it when the transport is encrypted (TLS) or loopback |
 | `DATABASE_URL` | yes (prod) | SQLAlchemy DB URL; defaults to `sqlite:///dev.db` |
 | `POLIS_SERVER_URL` | yes | Direct Polis server URL (e.g. `http://10.x.x.x:8001`) — required for conversation creation |
 | `POLIS_ADMIN_EMAIL` | yes | Email of the Polis system account (created once on VPS) |

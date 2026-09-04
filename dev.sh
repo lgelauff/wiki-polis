@@ -62,6 +62,20 @@ COMPOSE+=(
   -f "$FLASK_DIR/docker-compose.wiki-polis.local.yaml"
 )
 
+# Trusted-sub secret. The app and the Particiapi container must share one value, or
+# Particiapi ignores the asserted subject and every participant is anonymous — silently,
+# since a mismatched secret still returns 200. Read it from v2/.env when the shell does
+# not already provide one. Unset is fine and means anonymous, exactly as before.
+if [ -z "${PARTICIAPI_SUB_SECRET:-}" ] && [ -f "$FLASK_DIR/.env" ]; then
+  PARTICIAPI_SUB_SECRET="$(grep -E '^PARTICIAPI_SUB_SECRET=' "$FLASK_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\042\047')"
+fi
+export PARTICIAPI_SUB_SECRET="${PARTICIAPI_SUB_SECRET:-}"
+if [ -n "$PARTICIAPI_SUB_SECRET" ]; then
+  echo "→ trusted-sub enabled: participants get a stable identity across rounds"
+else
+  echo "→ trusted-sub NOT set (PARTICIAPI_SUB_SECRET absent) — participants will be anonymous"
+fi
+
 compose() {
   env \
     POSTGRES_HOST_PORT="$POSTGRES_PORT" \
@@ -69,6 +83,7 @@ compose() {
     POLIS_HOST_PORT="$POLIS_PORT" \
     FLASK_HOST_PORT="$FLASK_PORT" \
     WIKI_POLIS_DIR="$SCRIPT_DIR" \
+    PARTICIAPI_SUB_SECRET="$PARTICIAPI_SUB_SECRET" \
     "${COMPOSE[@]}" "$@"
 }
 
@@ -95,6 +110,24 @@ until docker exec particiapp-docker-postgres-1 pg_isready -U polis -q 2>/dev/nul
   sleep 2
 done
 session_set POSTGRES_STATUS ready
+
+# Setting the secret is not enough: the published particiapi image predates the
+# trusted-sub feature, and an image without it accepts the header, ignores it, and
+# returns 200. Nothing downstream can tell that apart from working — so check the
+# image itself rather than trusting the configuration.
+if [ -n "$PARTICIAPI_SUB_SECRET" ]; then
+  if docker exec particiapp-docker-particiapi-1 sh -c \
+       'grep -rqs "X-Particiapi-Sub" /app' 2>/dev/null; then
+    echo "→ trusted-sub: image supports it, participants will get a stable identity"
+  else
+    echo "!! PARTICIAPI_SUB_SECRET is set, but this particiapi image does NOT implement"
+    echo "!! trusted-sub. Identity binding will silently do nothing: subjects are ignored,"
+    echo "!! every participant stays anonymous, and particiapi_users stays empty."
+    echo "!! Build an image from subprojects/particiapi (which has the feature) and retag it:"
+    echo "!!   docker build -t registry.gitlab.com/particiapp/particiapi/particiapi:latest \\"
+    echo "!!     \"\$PARTICIAPP_DOCKER_DIR/subprojects/particiapi\""
+  fi
+fi
 
 session_set PARTICIAPI_STATUS waiting
 echo "Waiting for particiapi on :$PARTICIAPI_PORT..."
