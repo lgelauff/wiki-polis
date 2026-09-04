@@ -19,7 +19,13 @@ services:
       # failing. That is how the Phase 6 identity binding reached production having
       # never run locally. Set PARTICIAPI_SUB_SECRET in v2/.env and the app and the
       # image share one secret; leave it unset and behaviour is exactly as before.
-      TRUSTED_SUB_SECRET: "${PARTICIAPI_SUB_SECRET:-}"
+      #
+      # The PARTICIAPI_ prefix is required, not cosmetic. The image reads its config
+      # via Flask's from_prefixed_env(prefix="PARTICIAPI"), which strips the prefix —
+      # so this lands as TRUSTED_SUB_SECRET in app.config. Passing the bare name is
+      # silently discarded: the variable is visibly set inside the container, the
+      # image has the feature, and nothing binds.
+      PARTICIAPI_TRUSTED_SUB_SECRET: "${PARTICIAPI_SUB_SECRET:-}"
     ports: !override
       - "127.0.0.1:${PARTICIAPI_HOST_PORT:-8002}:5000"
 
