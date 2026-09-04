@@ -393,9 +393,14 @@ def test_dedup_fails_closed_when_polis_fetch_fails(admin_client, conv):
     whole import with 503 and writes nothing.
 
     This is the strictly safer direction -- an unverified import can silently
-    duplicate live statements -- but it is a behaviour change that has not been
-    confirmed by the owner, and it converts a degraded-but-working import into a
-    hard outage whenever Polis PG is unreachable. Flagged in the port notes.
+    duplicate live statements -- and it looks deliberate: the API suite carries a
+    purpose-written twin,
+    test_admin_statements_api.py::test_seed_import_fails_closed_when_dedup_source_is_unavailable.
+    It is still a user-visible behaviour change that converts a
+    degraded-but-working import into a hard outage whenever Polis PG is
+    unreachable, so it is flagged in the port notes for confirmation. Kept here as
+    well as in the API suite because this is where the old, opposite behaviour was
+    asserted, and the contrast is the point.
     """
     with _mock_polis(existing_statements=None) as mock:
         resp = _import(admin_client, conv.id, ['Statement one', 'Statement two'])
