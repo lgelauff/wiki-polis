@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from flask import g as flask_g
 
 import i18n
 
@@ -88,6 +89,27 @@ def test_all_messages_fallback_and_qqx(tmp_path):
 def test_uselang_cookie_persists_choice(client):
     resp = client.get('/?uselang=en')
     assert any('uselang=en' in c for c in resp.headers.getlist('Set-Cookie'))
+
+
+def test_qqx_is_available_without_being_an_enabled_locale(app, client):
+    # qqx is a QA locale, never offered to users — it must bypass ENABLED_LOCALES.
+    assert 'qqx' not in app.config['ENABLED_LOCALES']
+    with app.test_request_context('/?uselang=qqx'):
+        app.preprocess_request()
+        assert flask_g.locale == 'qqx'
+        assert flask_g.dir == 'ltr'
+
+
+def test_locale_falls_back_to_default_when_not_enabled(app):
+    # A locale that exists in the catalogue but is not enabled must not be selected.
+    with app.test_request_context('/?uselang=fr'):
+        app.preprocess_request()
+        assert flask_g.locale == app.config['DEFAULT_LOCALE']
+
+
+def test_unenabled_locale_is_not_persisted_as_a_cookie(client):
+    resp = client.get('/?uselang=fr')
+    assert not any('uselang=' in c for c in resp.headers.getlist('Set-Cookie'))
 
 
 # ── CI coverage guards on the real message catalogue ─────────────────────────
