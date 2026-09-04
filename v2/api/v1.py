@@ -634,25 +634,45 @@ def create_api_v1_blueprint(
     return bp
 
 
+_HTTP_ERROR_CODES = {
+    400: 'bad_request',
+    401: 'unauthorized',
+    403: 'forbidden',
+    404: 'not_found',
+    405: 'method_not_allowed',
+    409: 'conflict',
+}
+
+
+def is_api_request() -> bool:
+    """Whether the current request must be answered as JSON rather than HTML.
+
+    The single definition of the API/HTML boundary. The branded HTML error pages
+    registered in ``app.py`` are per-status handlers, which Flask prefers over the
+    generic ``HTTPException`` handler below, so they consult this to hand API paths
+    back to :func:`http_exception_json`.
+    """
+    return request.path.startswith('/api/v1/')
+
+
+def http_exception_json(exc: HTTPException):
+    """Render an HTTPException as the API's machine-readable error envelope."""
+    return error_response(
+        _HTTP_ERROR_CODES.get(exc.code, 'http_error'), exc.description, exc.code,
+    )
+
+
 def register_api_error_handlers(app: Flask) -> None:
     """Keep all API failures machine-readable, including routing and CSRF errors."""
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(exc):
-        if request.path.startswith('/api/v1/'):
+        if is_api_request():
             return error_response('csrf_failed', exc.description, 400)
         return exc
 
     @app.errorhandler(HTTPException)
     def handle_http_error(exc):
-        if not request.path.startswith('/api/v1/'):
+        if not is_api_request():
             return exc
-        codes = {
-            400: 'bad_request',
-            401: 'unauthorized',
-            403: 'forbidden',
-            404: 'not_found',
-            405: 'method_not_allowed',
-            409: 'conflict',
-        }
-        return error_response(codes.get(exc.code, 'http_error'), exc.description, exc.code)
+        return http_exception_json(exc)

@@ -47,7 +47,11 @@ from http_pool import session as polis_http
 from seed_csv import (MAX_FILE_BYTES, MAX_ROWS, MAX_TEXT_CHARS, ParseResult,
                       RowError, strip_formula_prefixes)
 from logging_setup import configure_logging
-from api.v1 import create_api_v1_blueprint, register_api_error_handlers
+from error_pages import render_error_page
+from api.v1 import (
+    create_api_v1_blueprint, http_exception_json, is_api_request,
+    register_api_error_handlers,
+)
 from services.identity import reconcile_participant_login
 from services.identity_reveal import (
     REVEAL_COOLDOWN_DAYS, REVEAL_WINDOW_DAYS, RevealUnavailable,
@@ -6814,6 +6818,30 @@ def _lineage_group(conv_id, tid):
     return chain
 
 
+def _register_branded_error_pages(app) -> None:
+    """Serve a self-contained branded page for 404/403/500 on HTML routes.
+
+    Registered after :func:`register_api_error_handlers`. Flask resolves a
+    status-code handler before the generic ``HTTPException`` one, so these take
+    precedence for 403/404/500 and must hand ``/api/v1/*`` back to the JSON
+    envelope themselves — that is what :func:`is_api_request` is for. Every other
+    status (400, 401, 405, 409, CSRF) still falls through to the API handlers.
+
+    The page deliberately depends on nothing: not the SPA bundle (``static/spa`` is
+    gitignored and built at deploy time, so a missing build is exactly the failure
+    these handlers cover), not ``base.html``, not a stylesheet. See error_pages.py.
+    """
+
+    @app.errorhandler(403)
+    @app.errorhandler(404)
+    @app.errorhandler(500)
+    def _branded_error_page(exc):
+        if is_api_request():
+            return http_exception_json(exc)
+        code = getattr(exc, 'code', 500) or 500
+        return render_error_page(code), code
+
+
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
 
@@ -7252,6 +7280,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         submit_statement=_statement_api_payload,
     ))
     register_api_error_handlers(app)
+    _register_branded_error_pages(app)
     csrf.exempt(proxy_bp)
 
     # Startup fingerprint — config-only, no secrets, no live probe. Answers
