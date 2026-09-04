@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {useMutation, useSuspenseQuery} from '@tanstack/react-query';
+import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
 import {informedVotingQuery, putInformedVote} from '../../api/queries';
@@ -71,12 +71,28 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
   onSelectPreliminary: () => void;
 }) {
   const {data} = useSuspenseQuery(informedVotingQuery(workspace.slug));
-  const [currentIndex, setCurrentIndex] = useState(0);
+  // Seed from the server projection so a reload resumes where the participant
+  // left off. `cards[].voted` reflects the upstream Polis vote record, so this
+  // survives a new browser session, not just a re-render.
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    const next = data.cards.findIndex((card) => !card.voted);
+    return next < 0 ? 0 : next;
+  });
+  // `votes` stays empty on load: the projection reports THAT a card was voted,
+  // not which way, so the choice badge cannot be restored from the contract.
   const [votes, setVotes] = useState<Record<number, Choice>>({});
-  const [terminalIds, setTerminalIds] = useState<Set<number>>(() => new Set());
+  const [terminalIds, setTerminalIds] = useState<Set<number>>(
+    () => new Set(data.cards.filter((card) => card.voted).map((card) => card.featuredStatementId)),
+  );
   const [networkErrorId, setNetworkErrorId] = useState<number | null>(null);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(() => data.progress.allDone);
+  // Whether the deck was ALREADY finished on arrival, as distinct from being
+  // finished during this visit. Only the former should hide the cards: when the
+  // last vote lands in-session the card must stay up for the 400ms confirmation
+  // badge at :141-149 before the panel scrolls to the completion block.
+  const [arrivedComplete] = useState(() => data.progress.allDone);
   const advanceTimer = useRef<number | null>(null);
+  const queryClient = useQueryClient();
   const current = data.cards[currentIndex];
 
   useEffect(() => () => {
@@ -101,6 +117,10 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
       setVotes((existing) => ({...existing, [receipt.featuredStatementId]: receipt.choice}));
       setTerminalIds(nextTerminal);
       setNetworkErrorId(null);
+      // Without this the cache keeps voted:false for the card just answered, so
+      // a later remount (tab switch, client-side nav) reseeds from stale data
+      // and drops the participant back onto it. Matches the admin pages.
+      void queryClient.invalidateQueries({queryKey: informedVotingQuery(workspace.slug).queryKey});
       if (nextTerminal.size === data.cards.length) setDone(true);
       const forward = data.cards.findIndex((card, index) => index > currentIndex && !nextTerminal.has(card.featuredStatementId));
       const wrapped = forward < 0 ? data.cards.findIndex((card) => !nextTerminal.has(card.featuredStatementId)) : forward;
@@ -121,7 +141,7 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
   if (data.cards.length === 0) return <div className="landing-section"><p className="muted">No statements are available for informed voting yet.</p></div>;
 
   return <>
-    {data.cards.map((card, index) => {
+    {!arrivedComplete && data.cards.map((card, index) => {
       const selected = votes[card.featuredStatementId];
       const error = networkErrorId === card.featuredStatementId;
       return <div className={`p6-card${index !== currentIndex ? ' p6-card--hidden' : ''}${selected ? ' p6-card--voted' : ''}${terminalIds.has(card.featuredStatementId) ? ' p6-card--done' : ''}`} data-fs-id={card.featuredStatementId} key={card.featuredStatementId}>
