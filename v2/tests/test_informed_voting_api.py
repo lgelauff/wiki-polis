@@ -205,7 +205,17 @@ def test_informed_vote_sends_polis_signs_for_every_choice(
 def test_informed_vote_rejects_featured_statement_from_another_round(
     auth_client, participant,
 ):
-    _fixture(participant)
+    """404 for a statement outside this round — and 200 for one inside it.
+
+    The negative half alone is vacuous: it would pass just as well if the route did
+    not exist at all, which is how a whole-suite mutation of the /api/v1/ prefix left
+    this test green. The positive probe on the same endpoint is what makes the 404
+    mean 'rejects this resource' rather than 'no such route'.
+    """
+    _conversation, _participation, first, _second = _fixture(participant)
+    with auth_client.session_transaction() as browser_session:
+        browser_session['_p6_pa'] = 'phase6-cookie'
+        browser_session['_p6_csrf'] = 'phase6-csrf'
 
     with patch('app.polis_http.put') as put:
         response = auth_client.put(
@@ -215,6 +225,16 @@ def test_informed_vote_rejects_featured_statement_from_another_round(
 
     assert response.status_code == 404
     put.assert_not_called()
+
+    with patch('app.polis_http.put', return_value=_response({})) as put:
+        accepted = auth_client.put(
+            f'/api/v1/conversations/informed-api/featured-statements/{first.id}'
+            f'/informed-vote',
+            json={'choice': 'pass'},
+        )
+
+    assert accepted.status_code == 200
+    put.assert_called_once()
 
 
 def test_informed_voting_empty_round_is_not_reported_complete(participant):
