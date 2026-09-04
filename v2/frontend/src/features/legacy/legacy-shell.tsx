@@ -149,7 +149,7 @@ export function LegacyShell({
       <footer style={{display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '.5rem 1rem', fontSize: 11, color: 'var(--muted)'}}>
         <span>
           {'Statements and arguments are released under '}
-          <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener" style={{color: 'inherit'}}>CC0<span className="sr-only"> (opens in a new tab)</span></a>.
+          <InternalLink href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener" style={{color: 'inherit'}}>CC0<span className="sr-only"> (opens in a new tab)</span></InternalLink>.
         </span>
         <code>{session.gitVersion}</code>
       </footer>
