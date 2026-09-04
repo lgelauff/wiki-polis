@@ -154,3 +154,86 @@ def test_placeholders_and_plurals_are_well_formed():
             if not pl.startswith('$') or '|' not in pl:
                 problems.append(f'{key}: malformed PLURAL {{{{PLURAL:{pl}}}}}')
     assert not problems, 'malformed messages: ' + '; '.join(problems)
+
+
+# ── The catalogue endpoint (GET /api/v1/i18n/<locale>) ───────────────────────
+# This is what makes the catalogue consumable by the React SPA, and it is why the
+# message map is NOT inlined into every HTML response.
+
+def test_catalogue_endpoint_serves_the_full_english_map(client):
+    resp = client.get('/api/v1/i18n/en')
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body == _load('en.json')
+    assert '@metadata' not in body
+
+
+def test_catalogue_endpoint_falls_back_to_english_for_an_unknown_locale(client):
+    # Mirrors the resolver's locale -> en chain: a locale with no file is not a 404.
+    resp = client.get('/api/v1/i18n/nl')
+    assert resp.status_code == 200
+    assert resp.get_json() == _load('en.json')
+
+
+def test_catalogue_endpoint_serves_qqx_keys(client):
+    body = client.get('/api/v1/i18n/qqx').get_json()
+    assert body['base-skip-to-content'] == '(base-skip-to-content)'
+
+
+def test_catalogue_endpoint_is_cacheable_only_when_the_build_is_pinned(client):
+    # Same ?v=<git-sha> contract as the static assets (see _security_headers in app.py).
+    assert client.get('/api/v1/i18n/en').headers['Cache-Control'] == 'no-store'
+    pinned = client.get('/api/v1/i18n/en?v=deadbeef')
+    assert pinned.headers['Cache-Control'] == 'public, max-age=604800'
+
+
+# ── Key-existence guard: a typo'd key must fail CI, not ship as ⧼key⧽ ────────
+
+_V2_ROOT = _I18N_DIR.parent
+
+# msg('key') in Jinja, _('key') in Python. The literal must be followed directly by ','
+# or ')', which excludes keys assembled at runtime — _('phase-label-' + stage['key']) —
+# that a static scan cannot resolve. Those are guarded by their prefix, not here.
+_CALL_SITE_RE = _re.compile(r"""\b(?:msg|_)\(\s*(['"])([A-Za-z0-9][A-Za-z0-9._-]*)\1\s*[,)]""")
+
+_SCAN_GLOBS = ('*.py', 'api/*.py', 'services/*.py', 'templates/**/*.html')
+
+
+def _scan_text(text):
+    return [m.group(2) for m in _CALL_SITE_RE.finditer(text)]
+
+
+def _message_call_sites():
+    """{key: 'path:line'} for every statically resolvable message reference in v2/."""
+    found = {}
+    for pattern in _SCAN_GLOBS:
+        for path in sorted(_V2_ROOT.glob(pattern)):
+            if 'tests' in path.parts or '.venv' in path.parts or 'node_modules' in path.parts:
+                continue
+            for line_no, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                for key in _scan_text(line):
+                    found.setdefault(key, f'{path.relative_to(_V2_ROOT)}:{line_no}')
+    return found
+
+
+def test_call_site_scanner_reads_literals_and_skips_runtime_built_keys():
+    # Guards the guard: if this regex stops matching, the test below silently passes.
+    assert _scan_text("{{ msg('base-log-out') }}") == ['base-log-out']
+    assert _scan_text('{{ msg("base-log-out") }}') == ['base-log-out']
+    assert _scan_text("msg('home-card-join-aria', c.title)") == ['home-card-join-aria']
+    assert _scan_text("flash(_('flash-banned'), 'success')") == ['flash-banned']
+    assert _scan_text("_('phase-label-' + stage['key'])") == []      # runtime-built: skipped
+    assert _scan_text("thing_('not-a-message')") == []               # not a message call
+
+
+def test_every_message_key_referenced_in_code_exists_in_en_json():
+    en = _load('en.json')
+    missing = sorted(
+        f'{key} (at {where})'
+        for key, where in _message_call_sites().items()
+        if key not in en
+    )
+    assert not missing, (
+        'message keys referenced in code but absent from i18n/en.json — these would '
+        'render as ⧼key⧽ at runtime: ' + '; '.join(missing)
+    )

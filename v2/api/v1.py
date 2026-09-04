@@ -12,6 +12,7 @@ from flask import Blueprint, Flask, jsonify, request, session, url_for
 from flask_wtf.csrf import CSRFError, generate_csrf
 from werkzeug.exceptions import HTTPException
 
+import i18n
 from api.admin_routes import register_admin_routes
 from db import Participant
 from services.participations import (EligibilityDenied, InvalidPseudonym,
@@ -40,6 +41,23 @@ _OPENAPI_SPEC = json.loads(
 def _no_store(response):
     response.headers['Cache-Control'] = 'no-store'
     response.headers['Vary'] = 'Cookie'
+    return response
+
+
+def _static_asset_cache(response):
+    """Cache like a static asset, on the same ?v=<git-sha> contract.
+
+    Static assets get ``public, max-age=604800`` because their URLs carry ``?v=<git-sha>``,
+    so a deploy busts the cache (see ``_security_headers`` in app.py). The message catalogue
+    is the same kind of payload — immutable for a given build, identical for every caller,
+    no cookie dependence — so it gets the same treatment when the caller pins a version.
+    An unversioned request is deliberately ``no-store``: a client that did not pin a build
+    must not be handed a week-old catalogue.
+    """
+    if request.args.get('v'):
+        response.headers['Cache-Control'] = 'public, max-age=604800'
+    else:
+        response.headers['Cache-Control'] = 'no-store'
     return response
 
 
@@ -160,6 +178,20 @@ def create_api_v1_blueprint(
     @bp.get('/openapi.json')
     def openapi_spec():
         return _no_store(jsonify(_OPENAPI_SPEC))
+
+    @bp.get('/i18n/<locale>')
+    def get_messages(locale):
+        """Full UI message catalogue for ``locale``, in translatewiki.net banana format.
+
+        A flat ``{key: text}`` map (not the ``{"data": ...}`` envelope) because that is
+        exactly what ``banana-i18n`` takes as a message store. English-filled, so a partly
+        translated locale is complete; ``@metadata`` is excluded.
+
+        An unknown locale is not an error — it falls back to the English map, mirroring the
+        resolver's ``locale -> en -> ⧼key⧽`` chain. ``qqx`` returns ``(key)`` for every key.
+        Public and unauthenticated: the catalogue is the same for every caller.
+        """
+        return _static_asset_cache(jsonify(i18n.all_messages(locale)))
 
     register_admin_routes(
         bp,

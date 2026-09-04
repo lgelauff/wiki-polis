@@ -4,6 +4,40 @@ UI strings for wiki-polis, in the **translatewiki.net (TWN) "banana" JSON** form
 `en.json` is the **source** (English); `qqq.json` documents each message for translators;
 `<code>.json` files are translations **delivered by TWN** — do not edit those by hand.
 
+## Status — what is wired up today
+
+The catalogue and the resolver are in place; **no surface reads them yet.**
+
+| Piece | State |
+|---|---|
+| `en.json` + `qqq.json` (885 keys, 100% documented) | ✅ committed |
+| `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
+| Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
+| `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
+| React SPA reads it via `banana-i18n` | ⬜ next |
+| Jinja templates wrapped in `msg()` | ⬜ after the SPA |
+| Locales offered to users (`ENABLED_LOCALES`) | English only |
+
+`ENABLED_LOCALES` defaults to `en`, so nothing here is user-visible yet. The keys are the
+durable asset: they were authored against the Jinja UI but ~75% of them match strings the
+React SPA renders today, so the same namespace serves both surfaces.
+
+## Who consumes this
+
+**The React SPA in `v2/frontend` is the primary consumer.** It is what users actually reach:
+`SPA_DEFAULT_ENABLED` is on and the canonical routes serve the React shell. The SPA fetches
+`/api/v1/i18n/<locale>` once and feeds the map to `banana-i18n`, which parses this exact format
+and brings real CLDR plural rules.
+
+**The Jinja templates in `v2/templates` are the `?spa_only=0` fallback.** They still render
+every page, and are still reachable by appending `?spa_only=0` (or holding the `spa_only=0`
+cookie), but they are not the default path for any route the SPA covers. They have their own
+`msg()` handle in the Jinja context and no wrapped strings yet; wrapping them is a later phase
+and may not happen at all if the legacy deck is retired.
+
+Both surfaces read the same `en.json`. That is the point of freezing the key namespace before
+TWN onboarding: renaming keys after translators start costs them their work.
+
 ## For translators
 
 Translate on **translatewiki.net**, not here. `qqq.json` gives the context for each message.
@@ -12,24 +46,63 @@ by the number in `$1` — use the plural forms your language needs.
 
 ## For maintainers — adding or changing a UI string
 
-1. Add a key to **`en.json`** (English text) and a one-line context note to **`qqq.json`**.
-   Never leave a message in `en.json` without a `qqq.json` entry.
-2. Use it:
-   - **Templates:** `{{ msg('surface-key') }}` (params: `{{ msg('key', var) }}`).
-   - **Python:** `flash(_('surface-key', var))` (the `_()` helper in `app.py`).
-   - **Inline JS:** `wpI18n.msg('surface-key', var)` (messages are shipped to the browser via
-     the island in `base.html`).
-3. **Key convention:** `surface-subkey`, lowercase-hyphenated, grouped by page/area — e.g.
+1. **Reuse before you mint.** Search `en.json` for the English text first. A large fraction of
+   the SPA's copy already has a key here under a name derived from the Jinja page it came
+   from. Reusing it keeps one message for translators instead of two.
+2. Add a key to **`en.json`** (English text) and a one-line context note to **`qqq.json`**.
+   Never leave a message in `en.json` without a `qqq.json` entry — CI fails on it.
+3. Use it:
+   - **React (primary):** through the `banana-i18n` store loaded from
+     `GET /api/v1/i18n/<locale>`.
+   - **Jinja (fallback):** `{{ msg('surface-key') }}` (params: `{{ msg('key', var) }}`).
+     The handle is injected by the context processor in `create_app()`.
+   - **Python:** there is no `_()` helper on `main` yet. Server-rendered `flash()` copy and
+     API error strings are wrapped in a later phase.
+4. **Key convention:** `surface-subkey`, lowercase-hyphenated, grouped by page/area — e.g.
    `base-log-out`, `home-open-consultations`, `conversation-vote-agree`,
    `guidance-statement-heading`, `import-n-imported`.
-4. **Plurals / counts:** `"import-n-imported": "$1 {{PLURAL:$1|statement|statements}} imported"`.
-5. **Never** hardcode user-facing English in a template, `flash()`, or JS again.
+5. **Plurals / counts:** `"import-n-imported": "$1 {{PLURAL:$1|statement|statements}} imported"`.
+6. **Never** hardcode user-facing English in a component, template, `flash()`, or API error
+   payload once that surface has been converted.
+
+## The endpoint
+
+```
+GET /api/v1/i18n/<locale>          -> {"base-log-out": "Log out", ...}
+GET /api/v1/i18n/<locale>?v=<sha>  -> same, Cache-Control: public, max-age=604800
+```
+
+A flat `{key: text}` map — **not** the `{"data": ...}` envelope the rest of API v1 uses,
+because that flat map is what `banana-i18n` takes as a message store. English-filled, so a
+partly translated locale is still complete. `@metadata` is excluded. An unknown locale falls
+back to English rather than 404ing, mirroring the resolver's `locale -> en -> ⧼key⧽` chain.
+`qqx` returns `(key)` for every key.
+
+Pin `?v=<gitVersion>` (the SPA already has `gitVersion` from `GET /api/v1/session`) to get the
+cacheable response; the same `?v=<git-sha>` contract the static assets use, so a deploy busts
+the cache. Unversioned requests are `no-store` on purpose — a client that did not pin a build
+must not be handed a week-old catalogue.
+
+The catalogue is deliberately **not** inlined into HTML responses. Doing so costs ~61 KB on
+every page load and cannot be cached.
+
+## Locale negotiation
+
+`create_app()` resolves the UI locale once per request, before route dispatch:
+
+`?uselang=` → `uselang` cookie → `Accept-Language` best match → `DEFAULT_LOCALE`
+
+Only codes in `ENABLED_LOCALES` are eligible. An explicit `?uselang=` choice is persisted as a
+one-year `SameSite=Lax` cookie. The result lands on `g.locale` and `g.dir`.
+
+`qqx` bypasses the enabled list so the coverage check below always works.
 
 ## Coverage check
 
 Append **`?uselang=qqx`** to any page: every externalised string renders as its key
 (`(base-log-out)`). Any real English still visible = a string that still needs extracting.
-A missing key renders loudly as `⧼key⧽`.
+A missing key renders loudly as `⧼key⧽`. Today every page is entirely un-externalised, so this
+is a tool for the conversion phases rather than a passing check.
 
 ## Scope — the interface / content split
 
@@ -42,16 +115,6 @@ consultation's topic or language. Buttons, labels, headings, help/onboarding cop
 headers, status badges, tab names, `aria-label`/`title`/`placeholder` attributes, screen-reader
 announcements, and `flash()` notices. This is what TWN volunteers translate.
 
-Where it lives, and how it's externalised:
-
-| Interface source | Mechanism | Status |
-|---|---|---|
-| Template literal text | `{{ msg('key') }}` | ✅ all 19 templates |
-| Template attrs (aria/title/placeholder) | `{{ msg('key') }}` | ✅ |
-| Inline JS UI strings | `wpI18n.msg('key')` (island) | ✅ |
-| Python `flash()` messages | `flash(_('key'), 'cat')` | ✅ 61 done |
-| Python display labels in data structures | per-request localizers (see below) | ✅ done |
-
 **Interpolating content into an interface frame is still interface.** A message like
 `"$1 — join consultation"` is translated; the `$1` value passed in (a consultation title, a
 pseudonym, a statement) is *content* and is **not** translated — it's substituted verbatim and
@@ -61,7 +124,7 @@ value.
 ### Content (never translate — always renders as `{{ data }}`)
 
 Participant- and organizer-authored material, in the consultation's own `Conversation.language`.
-Auditied clean — none of these is wrapped in `msg()`:
+Audited clean — none of these is wrapped in `msg()`:
 
 - `conversation.title`, `conversation.intro_text`, `conversation.outro_text`
 - statement text (`item.text`, `s.text`, `stmt.text`, `txt`)
@@ -77,26 +140,22 @@ web component (`particiapp-web-components.js`, vendored at deploy) which carries
 ### Interface strings defined in Python data structures
 
 A class of genuinely-*interface* strings is defined in **module-level Python data structures**
-and reaches templates as `{{ x.label }}` / `{{ x.effect }}` / `{{ output.tooltip }}`. Because
-those constants are evaluated once at import, `_()` can't wrap the literals in place — it would
-resolve to the source locale forever. Instead they are localised **per request at the context
-boundary**, keying off each item's stable `key`/`id`:
+(`PHASE_SEQUENCE`, `PHASE_ROUTES`, `PHASE_TRANSITIONS`, `OUTPUT_DEFINITIONS`, the recommendation
+tiers) and reaches the UI as `label` / `effect` / `tooltip` fields. Because those constants are
+evaluated once at import, `_()` cannot wrap the literals in place — it would resolve to the
+source locale forever. They have to be localised **per request at the context boundary**,
+keying off each item's stable `key`/`id`, so that all logic branching on those identifiers is
+unaffected.
 
-- **`PHASE_SEQUENCE`** — `phase-label-<key>` + `phase-effect-<key>`. Localised by `_localize_stage()`,
-  applied in the admin_conversation render, `_transition_context()` (which also feeds
-  `consequence.opens/closes`), and `_phase_stat_groups()`.
-- **Phase routes** (`PHASE_ROUTES`) — `phase-route-<key>`, via `_localized_phase_routes()`.
-- **Readiness preconditions** (`PHASE_TRANSITIONS`) — `precond-<id>`, localised in
-  `_transition_context()`. (Precondition *notes* stay data — they're runtime counts.)
-- **Output items** (`OUTPUT_DEFINITIONS`) — `output-<key>-{label,tooltip,pending,phase,method}` +
-  `output-status-<value>`, localised inside `_output_items()` (a per-request builder).
-- **Recommendations** — `rec-tier-<key>` + `rec-field-<key>`, via `_localized_recommendation_*()`.
-- **Role bar** — `role-{global-admin,organizer,moderator}`, in `_conversation_role_label()`.
-- **`_vote_label()`** values (`Agreed/Disagreed/Passed`) → `conv-p6-mine-*` in the p6-results
-  "Yours" cell.
+Keys for this are already in the catalogue — `phase-label-<key>`, `phase-effect-<key>`,
+`phase-route-<key>`, `precond-<id>`, `output-<key>-{label,tooltip,pending,phase,method}`,
+`output-status-<value>`, `rec-tier-<key>`, `rec-field-<key>`, `role-{global-admin,organizer,
+moderator}` — generated by introspecting the live structures. **The localizers themselves are
+not written yet.** They belong wherever these structures are consumed, which since the service
+extraction is largely `v2/services/`, not `app.py`.
 
-The stable `key`/`id`/`flag` fields are preserved through localisation, so all logic that
-branches on them is unaffected. Keys were generated by introspecting the live structures.
+These keys are built by concatenation, so the CI key-existence guard cannot verify them
+statically; it skips runtime-assembled keys by design.
 
 ## Enabling a locale
 
@@ -106,18 +165,27 @@ offered.
 
 ### Before enabling a non-English locale — two tracked follow-ups
 
-1. **CLDR plural rules.** Server-side `{{PLURAL:}}` (and the client mirror in `static/i18n.js`)
-   currently use the English rule (`n == 1` → singular, else plural). Languages with more than
-   two plural forms (Arabic, Polish, Russian, …) need their CLDR rule wired into
-   `i18n._plural_index` before their counts read correctly.
+1. **CLDR plural rules.** Server-side `{{PLURAL:}}` currently uses the English rule (`n == 1` →
+   singular, else plural). Languages with more than two plural forms (Arabic, Polish, Russian,
+   …) need their CLDR rule wired into `i18n._plural_index` before their counts read correctly.
+   (The client side gets this for free: `banana-i18n` applies CLDR rules itself.)
 2. **RTL CSS audit.** `<html dir>` is already driven by `i18n.text_direction(locale)`, so RTL
    locales render right-to-left today — but `static/style.css` / `static/redesign.css` still use
    a handful of *physical* properties (`margin-left`, `text-align:left`, `left:`) that should be
    *logical* (`margin-inline-start`, `text-align:start`, `inset-inline-start`). Convert those and
    verify against a pseudo-RTL locale before offering an RTL language.
 
-## Coverage guard (CI)
+## Coverage guards (CI)
 
-`tests/test_i18n.py` fails CI if a message in `en.json` has no `qqq.json` doc, if `qqq.json`
-documents a key not in `en.json`, or if a `{{PLURAL:}}`/placeholder is malformed. Add both the
-`en.json` value **and** the `qqq.json` line in the same change and the guard stays green.
+`tests/test_i18n.py` fails CI if:
+
+- a message in `en.json` has no `qqq.json` doc;
+- `qqq.json` documents a key not in `en.json`;
+- a `{{PLURAL:}}` or placeholder is malformed;
+- **a key referenced in code does not exist in `en.json`** — a typo would otherwise ship and
+  render as `⧼key⧽` at runtime. The scan reads `msg('key')` and `_('key')` literals across
+  `v2/*.py`, `v2/api/`, `v2/services/` and `v2/templates/`; keys assembled at runtime are
+  skipped, since a static scan cannot resolve them.
+
+Add both the `en.json` value **and** the `qqq.json` line in the same change and the guards
+stay green.
