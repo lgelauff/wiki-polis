@@ -1384,6 +1384,7 @@ export interface components {
             eligibilityLabel: string;
             /** @enum {string} */
             recommendationTier: "simple" | "medium" | "complex";
+            adminNotes: string;
         };
         AdminSettingsUpdateResponse: {
             data: {
@@ -1414,6 +1415,8 @@ export interface components {
                 phaseRoute: string;
                 phaseRouteLabel: string;
                 polisId: string;
+                /** @description Organizer/global-admin-only free text. null when the viewer cannot organize this conversation; never shown to participants. */
+                adminNotes: string | null;
             };
             recommendations: components["schemas"]["AdminRecommendations"];
             eligibility: {

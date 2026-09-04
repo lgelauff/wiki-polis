@@ -23,10 +23,11 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   const [eligibilityEventId, setEligibilityEventId] = useState(data.eligibility.eventId);
   const [eligibilityLabel, setEligibilityLabel] = useState(data.eligibility.label ?? '');
   const [tier, setTier] = useState<Tier>(data.recommendations.tier);
+  const [adminNotes, setAdminNotes] = useState(data.conversation.adminNotes ?? '');
   const mutation = useMutation({
     mutationFn: () => putAdminSettings(conversationId, {
       title, introHtml, outroHtml, accessPolicy, eligibilityEventId,
-      eligibilityLabel, recommendationTier: tier,
+      eligibilityLabel, recommendationTier: tier, adminNotes,
     }, csrfToken),
     onSuccess: (receipt) => queryClient.setQueryData<Settings>(
       options.queryKey, receipt.settings,
@@ -81,6 +82,18 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
             </label>
           ))}</fieldset>
         </section>
+        {data.conversation.adminNotes !== null && <section aria-labelledby="settings-notes">
+          <header><span>04</span><div><h2 id="settings-notes">Notes</h2>
+            <p>Organizer/global-admin only. Never shown to participants or moderators without
+              organizer rights — use it for things like recording that a round predates the
+              CC0 consent notice, so nobody assumes it applies retroactively.</p></div></header>
+          <label>
+            <span className="sr-only">Notes about this conversation</span>
+            <textarea value={adminNotes} maxLength={4000} rows={4}
+              placeholder="Notes about this conversation…"
+              onChange={(event) => setAdminNotes(event.target.value)} />
+          </label>
+        </section>}
         {data.capabilities.edit ? <footer>
           <button type="submit" disabled={mutation.isPending}>{mutation.isPending ? 'Saving…' : 'Save settings'}</button>
           {mutation.data && <p role="status">{mutation.data.changed ? 'Settings saved.' : 'Settings already up to date.'}</p>}

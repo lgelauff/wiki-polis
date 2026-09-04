@@ -82,6 +82,12 @@ class Conversation(db.Model):
     phase_route   = db.Column(db.String(32), nullable=False, default='default_7',
                               server_default='default_7')
     recommended_quantities = db.Column(db.JSON, nullable=True, default=dict)
+    # Freeform organizer/global-admin notes about this conversation — e.g. "no CC0
+    # consent obtained; predates the licence notice" for a legacy round. Never shown
+    # to participants or moderators, and must never be added to an analysis export
+    # allowlist (see private/analysis/export_app_bundle.py's CONVERSATION_COLUMNS) —
+    # it exists specifically to hold things that are NOT meant to leave this table.
+    admin_notes  = db.Column(db.Text, nullable=True)
     scheduled_transition_at = db.Column(db.DateTime, nullable=True)
     scheduled_transition_target = db.Column(db.String(32), nullable=True)
     scheduled_transition_frozen = db.Column(db.Boolean, nullable=False, default=False,

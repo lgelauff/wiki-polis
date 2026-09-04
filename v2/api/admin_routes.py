@@ -279,6 +279,7 @@ def register_admin_routes(
         expected = {
             'title', 'introHtml', 'outroHtml', 'accessPolicy',
             'eligibilityEventId', 'eligibilityLabel', 'recommendationTier',
+            'adminNotes',
         }
         fields = {}
         if not isinstance(body, dict) or set(body) != expected:
@@ -289,13 +290,15 @@ def register_admin_routes(
         if (not isinstance(body['title'], str) or not body['title'].strip()
                 or len(body['title'].strip()) > 255):
             fields['title'] = ['Write a title up to 255 characters.']
-        for key in ('introHtml', 'outroHtml', 'eligibilityEventId', 'eligibilityLabel'):
+        for key in ('introHtml', 'outroHtml', 'eligibilityEventId', 'eligibilityLabel', 'adminNotes'):
             if not isinstance(body[key], str):
                 fields[key] = ['Use text.']
         if isinstance(body['eligibilityEventId'], str) and len(body['eligibilityEventId']) > 80:
             fields['eligibilityEventId'] = ['Use at most 80 characters.']
         if isinstance(body['eligibilityLabel'], str) and len(body['eligibilityLabel']) > 255:
             fields['eligibilityLabel'] = ['Use at most 255 characters.']
+        if isinstance(body['adminNotes'], str) and len(body['adminNotes']) > 4000:
+            fields['adminNotes'] = ['Use at most 4000 characters.']
         if body['accessPolicy'] not in {'public', 'invite_only', 'demo'}:
             fields['accessPolicy'] = ['Choose public, invite_only, or demo.']
         if body['recommendationTier'] not in {'simple', 'medium', 'complex'}:
