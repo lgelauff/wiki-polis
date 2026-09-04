@@ -40,7 +40,7 @@
         action="{{ url_for('participant.accept_post', slug=conversation.slug) }}"
         id="accept-form"
         aria-labelledby="accept-title"
-        aria-describedby="pseudonym-help accept-privacy-note{% if error %} accept-error{% endif %}">
+        aria-describedby="pseudonym-help accept-privacy-note accept-licence-note{% if error %} accept-error{% endif %}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     {# ── Pseudonym card ── #}
@@ -145,13 +145,15 @@
         Statements and arguments you write here are released under
         <a href="https://creativecommons.org/publicdomain/zero/1.0/"
            target="_blank" rel="noopener">CC0<span class="sr-only"> (opens in a new tab)</span></a>,
-        which places them in the public domain. That is what lets the results be
-        published as a report, quoted in a discussion, and reused by anyone.
+        which places them in the public domain, the same as a wiki edit. That is
+        what lets the results be published as a report, quoted in a discussion,
+        and reused by anyone.
       </p>
       <p class="muted">
         This covers what you write, not who wrote it: contributions are published
         under your pseudonym, and CC0 does not require anyone to credit you.
-        Your votes are not covered — a vote is a fact, not a work.
+        Your votes are not covered — a vote is a fact, not a work. CC0 cannot be
+        withdrawn once given, the same as any wiki edit.
       </p>
     </div>
 

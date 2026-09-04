@@ -21,7 +21,9 @@ We never see or store your email address.
 
 Statements and arguments you write are released under
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), which places them in the
-public domain. You agree to this when you join a consultation.
+public domain. You agree to this on the join screen for a consultation you take part
+in directly. It does not cover a logged-in user who ends up authoring content by way
+of a demo conversation's frictionless auto-join — see #340 for closing that gap.
 
 This is what makes the results shareable: a consultation only has a point if its outcome
 can be published, quoted in a community discussion, and reused by anyone who wants to
