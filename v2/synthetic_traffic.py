@@ -85,7 +85,7 @@ load_dotenv(Path(__file__).with_name(".env"))
 
 DEFAULT_BASE = os.environ.get("WIKI_POLIS_FLASK_URL", "http://127.0.0.1:5001").rstrip("/")
 DEV_USERS = ["dev-user-1", "dev-user-2", "dev-user-3"]  # /dev/login/<username> (DEV_FAKE_LOGIN=1)
-VOTE_VALUES = [-1, 0, 1]                                 # disagree / pass / agree
+VOTE_VALUES = [-1, 0, 1]                                 # agree / pass / disagree (Polis-native)
 PSEUDONYM_RE = re.compile(r"^[a-z]+-[a-z]+$")            # matches the app's _PSEUDONYM_RE shape
 CONV_ID_RE = re.compile(r'data-conversation-id="([^"]+)"')
 CSRF_RE = re.compile(r'name="csrf_token"[^>]*value="([^"]+)"')

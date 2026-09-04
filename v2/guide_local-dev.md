@@ -194,6 +194,17 @@ If you changed the Particiapi port:
 uv run python simulate_cats_vs_dogs.py --particiapi-url http://127.0.0.1:8012
 ```
 
+**Pass `--particiapi-url` whenever `v2/.env` sets `PARTICIAPI_BASE_URL`.** The simulator
+calls `load_dotenv` at import, so a value there wins over the built-in default and the
+run fails with *"cannot reach Particiapi"* naming a port you did not choose. `dev.sh`
+exports the port it actually bound; give the simulator the same one.
+
+**Do not reuse a conversation generated before the phase-2 vote-sign fix.** Those runs
+wrote every agree as a disagree (the `VOTES` table was authored the intuitive way round),
+so an old cats-vs-dogs conversation holds inverted phase-2 votes that cannot be repaired
+in place — its phase 6 round, if it has one, was written correctly, so the database mixes
+both conventions. Generate a fresh conversation instead.
+
 The script also reads `PARTICIAPI_BASE_URL` from `v2/.env`.
 
 ### Derivative statements

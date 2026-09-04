@@ -63,9 +63,10 @@ Submitting a statement through the participant endpoint
 **agree (`-1`)** on their own `tid`, from the author's own `pid`. No client asks for it,
 and nothing in wiki-polis casts it — Polis records it as part of accepting the statement.
 
-The **moderator seed path** (`add_seed_return_id` → `/api/v3/comments`, used by
-`_init_phase6`) also writes an author row, but a **pass (`0`)** rather than an agree —
-its explicit `'vote': 0` takes effect. So the two paths differ:
+The **moderator seed path** also writes an author row, but a **pass (`0`)** rather than
+an agree — its explicit `'vote': 0` takes effect. Both of its entry points behave this
+way: `add_seed` for an ordinary seeded statement and `add_seed_return_id` for a derived
+one, since both go through `_post_seed`. So the two paths differ:
 
 | path | author row |
 |------|------------|
@@ -89,10 +90,11 @@ The moderator half was confirmed on production the same day: the one Phase 6 rou
 carried exactly 11 author rows, one per seeded statement, every one `pid=0, vote=0`.
 
 **This is a live divergence between the simulator and production.**
-`simulate_cats_vs_dogs.py --phase6` seeds Phase 6 through the *participant* endpoint
-(it has no Polis admin credentials), so local Phase 6 statements carry `-1` author rows
-where production carries `0`. Anything counting or clustering over a simulated Phase 6
-round sees agrees that production would not have.
+`simulate_cats_vs_dogs.py` seeds **both** rounds through the *participant* endpoint — it
+has no Polis admin credentials — so every locally seeded statement, Phase 2 as well as
+Phase 6, carries a `-1` author row where production carries `0`. Anything counting or
+clustering over a simulated round sees agrees that production would not have, and the
+count is one per statement in each round, not just the featured five.
 
 ### zinvite vs zid
 
