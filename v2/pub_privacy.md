@@ -17,6 +17,30 @@ we collect, how your participation is kept private, and how long we keep it.
 
 We never see or store your email address.
 
+## What you write, and who may reuse it
+
+Statements and arguments you write are released under
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), which places them in the
+public domain. You agree to this on the join screen for a consultation you take part
+in directly. It does not cover a logged-in user who ends up authoring content by way
+of a demo conversation's frictionless auto-join — see #340 for closing that gap.
+
+This is what makes the results shareable: a consultation only has a point if its outcome
+can be published, quoted in a community discussion, and reused by anyone who wants to
+build on it — without having to track down every contributor for permission first.
+
+What this does and does not mean:
+
+- **It covers what you write, not who wrote it.** Contributions are published under your
+  pseudonym. CC0 waives the requirement to credit you, so nobody has to name even that.
+- **Votes are not covered.** A vote is a fact rather than a work, and facts are not
+  copyrightable in the first place.
+- **It cannot be withdrawn.** CC0 is irrevocable. Deleting your account later does not
+  un-license text that has already been published — the same as any wiki edit.
+- **It does not change what is public.** Whether a statement is shown at all is governed
+  by moderation and by the sections above; the licence only governs reuse of what does
+  get published.
+
 ## How your opinions stay private
 
 While a conversation is collecting opinions, no one can see who voted what — not other
