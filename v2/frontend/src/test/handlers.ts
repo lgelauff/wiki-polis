@@ -59,6 +59,30 @@ export function adminCatalogFixture(
   };
 }
 
+/** Receipt returned by a successful guided phase advance.
+ *
+ * `transition` overrides let a test model a partial failure (for example a Polis
+ * results-visibility desync) without restating the whole lifecycle payload. */
+export function phaseAdvanceFixture(
+  transition: Partial<components['schemas']['AdminPhaseAdvanceReceipt']['transition']> = {},
+): components['schemas']['AdminPhaseAdvanceReceipt'] {
+  const receipt = {
+      transition: {sourceKey: 'preparation', targetKey: 'submission', targetLabel: 'Explore', phase6Created: false, phase6SyncMessage: null, visibilitySynced: true},
+      lifecycle: {
+        conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', publication: 'not_applicable', closedAt: null, identityReveal: null},
+        operator: {roleLabel: 'Global admin'},
+        phase: {linear: true, currentIndex: 1, activeKeys: ['submission'], steps: [{key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'completed'}, {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'current'}, {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'}], transition: null, phase6Setup: null, advancedControls: [{key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', active: true, requiresInitialization: false, initialized: true}]},
+        schedule: {canSchedule: true, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
+        publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
+        statistics: {upstreamUnavailable: false, groups: [{key: 'submission', label: 'Explore', tiles: []}], informedVoting: null},
+        counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
+        capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
+        links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/admin/conversations/7/participants', moderation: '/admin/conversations/7/flags', invitations: '/admin/conversations/7/invites', roles: '/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
+      },
+  } as components['schemas']['AdminPhaseAdvanceReceipt'];
+  return {...receipt, transition: {...receipt.transition, ...transition}};
+}
+
 export const handlers = [
   http.get(new URL('/api/v1/admin', globalThis.location.origin).toString(), () => HttpResponse.json({data: adminCatalogFixture()})),
   http.post(new URL('/api/v1/admin/conversations', globalThis.location.origin).toString(), () => HttpResponse.json({data: {conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'}, links: {manage: '/admin/conversations/7', catalog: '/api/v1/admin'}}}, {status: 201})),
@@ -182,20 +206,7 @@ export const handlers = [
     lifecycle.capabilities.initializePhase6 = false;
     return HttpResponse.json({data: {initialized: true, lifecycle}}, {status: 201});
   }),
-  http.put(new URL('/api/v1/admin/conversations/7/phase', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
-    transition: {sourceKey: 'preparation', targetKey: 'submission', targetLabel: 'Explore', phase6Created: false, phase6SyncMessage: null, visibilitySynced: true},
-    lifecycle: {
-      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public', status: 'active', publication: 'not_applicable', closedAt: null, identityReveal: null},
-      operator: {roleLabel: 'Global admin'},
-      phase: {linear: true, currentIndex: 1, activeKeys: ['submission'], steps: [{key: 'preparation', label: 'Preparation', effect: 'Configure and seed the conversation.', state: 'completed'}, {key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', state: 'current'}, {key: 'public_results', label: 'Report', effect: 'Prepare and publish final results.', state: 'upcoming'}], transition: null, phase6Setup: null, advancedControls: [{key: 'submission', label: 'Explore', effect: 'Participants submit and vote on statements.', active: true, requiresInitialization: false, initialized: true}]},
-      schedule: {canSchedule: true, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
-      publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
-      statistics: {upstreamUnavailable: false, groups: [{key: 'submission', label: 'Explore', tiles: []}], informedVoting: null},
-      counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
-      capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
-      links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/admin/conversations/7/participants', moderation: '/admin/conversations/7/flags', invitations: '/admin/conversations/7/invites', roles: '/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
-    },
-  }})),
+  http.put(new URL('/api/v1/admin/conversations/7/phase', globalThis.location.origin).toString(), () => HttpResponse.json({data: phaseAdvanceFixture()})),
   http.get(new URL('/api/v1/admin/conversations/7/roles', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     assignments: [{participantId: 23, username: 'Example editor', roles: ['moderator'], grantedAt: ['2026-08-01T10:00:00Z']}],
@@ -323,7 +334,6 @@ export const handlers = [
         user: {username: 'Example editor', emailable: true},
         capabilities: {administerSite: false},
         csrfToken: 'test-csrf-token',
-        developerMode: true,
         developerLogins: [],
         gitVersion: 'test-version',
         links: {login: '/login', logout: '/logout'},

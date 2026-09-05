@@ -120,47 +120,6 @@ def test_phase6_session_is_not_shared_across_conversations(app, auth_client, par
     assert subjects == [_subject(xid, a_id), _subject(xid, b_id)]
     assert subjects[0] != subjects[1], 'one Polis uid spanned both conversations'
     assert xid not in subjects
-
-
-def test_legacy_phase6_route_does_not_share_a_session_across_conversations(
-    app, auth_client, participant,
-):
-    """Same regression on the legacy Jinja ``/c/<slug>/phase6/vote`` route.
-
-    It manipulates ``_p6_pa`` directly and shares ``_p6_session_cache`` with the API path,
-    so fixing only one surface would leave the other leaking — and, because the cache is
-    shared, would let the broken surface hand a wrongly-scoped session to the fixed one.
-    """
-    app.config['PARTICIAPI_SUB_SECRET'] = SECRET
-    conv_a, fs_a = _p6_conversation(
-        participant, 'p6-gamma', polis_id='gamma-p2', phase6_id='gamma-p6')
-    conv_b, fs_b = _p6_conversation(
-        participant, 'p6-delta', polis_id='delta-p2', phase6_id='delta-p6')
-    xid, a_id, b_id = participant.xid, conv_a.id, conv_b.id
-
-    with patch.object(app_module.polis_http, 'post', side_effect=[
-        _session_response('cookie-A', 'csrf-A'),
-        _session_response('cookie-B', 'csrf-B'),
-    ]) as post, patch.object(
-        app_module.polis_http, 'put', return_value=_response({}),
-    ) as put:
-        first = auth_client.post('/c/p6-gamma/phase6/vote',
-                                 json={'fs_id': fs_a.id, 'vote': -1})
-        second = auth_client.post('/c/p6-delta/phase6/vote',
-                                  json={'fs_id': fs_b.id, 'vote': -1})
-
-    assert first.status_code == 200
-    assert second.status_code == 200
-    assert post.call_count == 2, (
-        'the legacy route reused the first conversation\'s Phase 6 session'
-    )
-    assert [c.kwargs['cookies']['session'] for c in put.call_args_list] == [
-        'cookie-A', 'cookie-B',
-    ]
-    subjects = [c.kwargs['headers']['X-Particiapi-Sub'] for c in post.call_args_list]
-    assert subjects == [_subject(xid, a_id), _subject(xid, b_id)]
-
-
 def test_stale_global_phase6_session_is_discarded_not_migrated(
     app, auth_client, participant,
 ):

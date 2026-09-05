@@ -4,7 +4,6 @@ import type {ReactNode} from 'react';
 
 import {sessionQuery} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
-import {SpaModeToggle} from '../../strict-spa-mode';
 import {AdminAccessBoundary} from './admin-access-boundary';
 import {AdminCatalogPage} from './admin-catalog-page';
 import {AdminFeaturedPage} from './admin-featured-page';
@@ -37,7 +36,6 @@ function AdminHeader() {
           <span>Wiki Polis</span>
           <span className="brand__beta">prototype</span>
         </InternalLink>
-        <SpaModeToggle developerMode={session.developerMode} />
         <nav className="admin-mode" aria-label="Workspace">
           <strong><InternalLink href="/admin">Admin workspace</InternalLink></strong>
           <InternalLink href="/consultations">Participant view</InternalLink>

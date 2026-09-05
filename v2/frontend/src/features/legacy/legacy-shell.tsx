@@ -3,7 +3,6 @@ import {useSuspenseQuery} from '@tanstack/react-query';
 
 import {sessionQuery} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
-import {SpaModeToggle} from '../../strict-spa-mode';
 
 type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'admin' | 'plain';
 
@@ -99,7 +98,6 @@ export function LegacyShell({
           </div>
 
           <div className="header-right">
-            <SpaModeToggle developerMode={session.developerMode} />
             {headerMode !== 'plain' && headerMode !== 'admin' && (
               headerMode === 'conversation-demo' ? (
                 <span className="mode-lock mode-lock--demo">
@@ -148,7 +146,11 @@ export function LegacyShell({
 
       <main className="legacy-main" id="main" tabIndex={-1}>{children}</main>
       <div id="toast-container">{toast}</div>
-      <footer style={{textAlign: 'right', padding: '.5rem 1rem', fontSize: 11, color: 'var(--muted)'}}>
+      <footer style={{display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '.5rem 1rem', fontSize: 11, color: 'var(--muted)'}}>
+        <span>
+          {'Statements and arguments are released under '}
+          <InternalLink href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener" style={{color: 'inherit'}}>CC0<span className="sr-only"> (opens in a new tab)</span></InternalLink>.
+        </span>
         <code>{session.gitVersion}</code>
       </footer>
     </>

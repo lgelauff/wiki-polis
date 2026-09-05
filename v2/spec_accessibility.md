@@ -8,7 +8,11 @@ developer guidance so a Wikimedia-ecosystem tool stays idiomatic, and aligned wi
 It is opinionated where WCAG is neutral and has already resolved several controversies (notably
 rejecting off-screen-text hiding and favouring progressive enhancement); we follow it.
 
-Enforcement arm: rendered-markup regression guards in `tests/test_a11y_markup.py`.
+**There is currently no enforcement arm.** `tests/test_a11y_markup.py` held rendered-markup
+regression guards against the Jinja templates; it went with them, and nothing replaced it. The
+SPA has no `axe`, no `jest-axe`, and no accessibility assertions in the Vitest suite. Everything
+below is therefore convention held up by review alone — treat it as such until a guard for the
+React surface exists.
 
 ---
 
@@ -79,7 +83,8 @@ Enforcement arm: rendered-markup regression guards in `tests/test_a11y_markup.py
 ## Testing
 - Keyboard-only sweep (Tab / Shift-Tab / Enter / Space / Esc / arrows).
 - VoiceOver (⌘F5) + rotor (headings, landmarks, links); remember iOS VoiceOver is *positional*.
-- axe / Lighthouse for automated catches; `tests/test_a11y_markup.py` for CI regression guards.
+- axe / Lighthouse for automated catches, run by hand — there are no CI regression guards for
+  accessibility any more (see above), so the manual sweeps in this section are the only check.
 - Contrast checker for new colours; toggle `prefers-reduced-motion` and RTL where layout is non-trivial.
 
 ## See also

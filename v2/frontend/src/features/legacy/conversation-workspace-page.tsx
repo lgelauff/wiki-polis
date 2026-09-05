@@ -162,7 +162,7 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
       <div className="v2-composer-header">
         <div>
           <div className="v2-composer-title" id={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'}>{title}</div>
-          <div className="v2-composer-helper" id={helperId}>{suggest ? 'Stays close to the same idea — just a clearer or fairer phrasing. ' : 'A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool. '}<InternalLink href="/help/statements">Writing tips</InternalLink></div>
+          <div className="v2-composer-helper" id={helperId}>{suggest ? 'Stays close to the same idea — just a clearer or fairer phrasing. ' : 'A different angle entirely. One claim, one sentence. Goes to moderation, then into the same pool. '}<InternalLink href="/help/statements" target="_blank" rel="noopener">Writing tips<span className="sr-only"> (opens in a new tab)</span></InternalLink></div>
         </div>
         <span className="propose-charcount"><span>{text.length}</span> / 280</span>
       </div>

@@ -138,23 +138,32 @@ def test_invited_participant_can_view_about(
     ))
     db.session.commit()
 
-    response = auth_client.get('/c/test-conv/about')
+    response = auth_client.get('/api/v1/conversations/test-conv/about')
 
     assert response.status_code == 200
-    assert b'About Test Conversation' in response.data
+    assert response.get_json()['data']['title'] == 'Test Conversation'
 
 
 def test_main_conversation_persistently_links_about_not_moderation_log(
     auth_client, participant, conversation,
 ):
+    """The conversation surface offers About; the moderation log hangs off About.
+
+    The page asserted this as nav markup. The same routing decision is made by the
+    server: the workspace payload carries an About link and no moderation-log link,
+    and the moderation log is reachable only from the About payload.
+    """
     _join(participant, conversation)
 
-    response = auth_client.get('/c/test-conv')
+    workspace = auth_client.get('/api/v1/conversations/test-conv/workspace')
+    assert workspace.status_code == 200
+    links = workspace.get_json()['data']['links']
 
-    assert response.status_code == 200
-    assert b'href="/c/test-conv/about"' in response.data
-    assert b'>About</a>' in response.data
-    assert b'Moderation log' not in response.data
+    assert links['about'] == '/c/test-conv/about'
+    assert not any('moderation-log' in href for href in links.values())
+
+    about = auth_client.get('/api/v1/conversations/test-conv/about')
+    assert about.get_json()['data']['moderation']['href'] == '/c/test-conv/moderation-log'
 
 
 def test_openapi_describes_conversation_about(client):

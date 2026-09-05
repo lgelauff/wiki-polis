@@ -115,7 +115,7 @@ def test_lineage_group_cycle_safe(app):
         assert chain[0] == 5 and len(chain) <= 3     # terminates, no infinite loop
 
 
-# ── Seed route writes provenance + audit when derived_from is given ──────────
+# ── Admin seed writes provenance + audit when derivedFromId is given ─────────
 
 def test_seed_derivative_route_records_provenance_and_audit(client, app):
     from unittest.mock import patch
@@ -125,9 +125,9 @@ def test_seed_derivative_route_records_provenance_and_audit(client, app):
     conv_id = _conv(app, 'provseed')
     with patch('app.PolisServerClient.add_seed_return_id', return_value=99) as add_id, \
          patch('app._statement_text_map', return_value={11: 'parent text'}):
-        r = client.post(f'/admin/conversations/{conv_id}/statements/seed',
-                        data={'txt': 'a corrected statement', 'derived_from': '11'})
-    assert r.status_code in (302, 303)
+        r = client.post(f'/api/v1/admin/conversations/{conv_id}/statements',
+                        json={'text': 'a corrected statement', 'derivedFromId': 11})
+    assert r.status_code == 201
     add_id.assert_called_once()                       # used the id-returning seed
     with app.app_context():
         prov = StatementProvenance.query.filter_by(conversation_id=conv_id, polis_statement_id=99).one()
@@ -138,14 +138,18 @@ def test_seed_derivative_route_records_provenance_and_audit(client, app):
 
 
 def test_seed_derivative_unknown_tid_is_rejected(client, app):
-    """A derived_from tid not in this conversation → reject, seed nothing, record nothing."""
+    """A derivedFromId not in this conversation → reject, seed nothing, record nothing."""
     from unittest.mock import patch
     _login_admin(client, app)
     conv_id = _conv(app, 'provbad')
     with patch('app._statement_text_map', return_value={5: 'a real one'}), \
          patch('app.PolisServerClient.add_seed_return_id') as add_id:
-        client.post(f'/admin/conversations/{conv_id}/statements/seed',
-                    data={'txt': 'x', 'derived_from': '999'})
+        resp = client.post(f'/api/v1/admin/conversations/{conv_id}/statements',
+                           json={'text': 'x', 'derivedFromId': 999})
+    # Checking the rejection is what keeps the two negative assertions below
+    # meaningful: without it they also hold when the request never routes at all.
+    assert resp.status_code == 404
+    assert resp.get_json()['error']['code'] == 'derived_statement_not_found'
     add_id.assert_not_called()                        # nothing seeded
     with app.app_context():
         assert StatementProvenance.query.filter_by(conversation_id=conv_id).count() == 0
@@ -156,7 +160,9 @@ def test_plain_seed_route_writes_no_provenance(client, app):
     _login_admin(client, app)
     conv_id = _conv(app, 'provplain')
     with patch('app.PolisServerClient.add_seed'):
-        client.post(f'/admin/conversations/{conv_id}/statements/seed', data={'txt': 'just a new one'})
+        resp = client.post(f'/api/v1/admin/conversations/{conv_id}/statements',
+                           json={'text': 'just a new one', 'derivedFromId': None})
+    assert resp.status_code == 201                    # the seed really was accepted
     with app.app_context():
         assert StatementProvenance.query.filter_by(conversation_id=conv_id).count() == 0
 
@@ -166,10 +172,10 @@ def test_plain_seed_route_writes_no_provenance(client, app):
 def _fake_upstream(status_code=200, content=b'{}', cookies=None):
     m = MagicMock()
     m.status_code = status_code
+    m.ok = status_code < 400
     m.content = content
     m.headers = {'Content-Type': 'application/json'}
     m.cookies = cookies or {}
-    m.ok = status_code < 400
     return m
 
 
@@ -183,24 +189,28 @@ def _login_participant_for_submission(client, app):
         db.session.add(Participation(participant_id=p.id, conversation_id=c.id,
                                      pseudonym='submit-fox'))
         db.session.commit()
+        conv_id = c.id
     with client.session_transaction() as s:
         s['xid'] = 'b' * 64
         s['username'] = 'Submitter'
+        # Pre-seed the upstream session so a submit makes exactly one Particiapi
+        # call, the way the API tests in test_explore_api.py do.
+        s['particiapi_api_sessions'] = {
+            str(conv_id): {'cookie': 'existing-cookie', 'csrfToken': 'existing-csrf'},
+        }
 
 
 def test_participant_derivative_submission_records_provenance(client, app):
     _login_participant_for_submission(client, app)
-    sess_resp = _fake_upstream(cookies={'session': 'NEWPA'})
-    sess_resp.json = lambda: {'csrf_token': 'TOK'}
     stmt_resp = _fake_upstream(status_code=201, content=b'{"id":777}')
     stmt_resp.json = lambda: {'id': 777}
 
     with patch('app._statement_text_map', return_value={12: 'parent statement'}), \
-         patch('app.polis_http.post', side_effect=[sess_resp, stmt_resp]):
-        resp = client.post('/c/subderiv/statements/new',
-                           headers={'Sec-Fetch-Site': 'same-origin'},
+         patch('app.polis_http.post', return_value=stmt_resp):
+        resp = client.post('/api/v1/conversations/subderiv/statements',
+                           headers={'Idempotency-Key': 'prov-key-777'},
                            json={'text': 'parent statement improved',
-                                 'derived_from': 12})
+                                 'derivedFromStatementId': 12})
 
     assert resp.status_code == 201
     with app.app_context():
@@ -214,16 +224,16 @@ def test_participant_derivative_submission_rejects_below_similarity_bound(client
     app.config['STATEMENT_DERIVATIVE_MIN_SIMILARITY'] = 0.8
 
     with patch('app._statement_text_map', return_value={12: 'cats are good'}), \
-         patch('app.requests.post') as post:
-        resp = client.post('/c/subderiv/statements/new',
-                           headers={'Sec-Fetch-Site': 'same-origin'},
+         patch('app.polis_http.post') as post:
+        resp = client.post('/api/v1/conversations/subderiv/statements',
+                           headers={'Idempotency-Key': 'prov-key-low'},
                            json={'text': 'unrelated policy claim',
-                                 'derived_from': 12})
+                                 'derivedFromStatementId': 12})
 
     assert resp.status_code == 409
-    data = resp.get_json()
-    assert data['error'] == 'derivative_similarity_too_low'
-    assert data['model'] == 'char'
+    error = resp.get_json()['error']
+    assert error['code'] == 'derivative_similarity_too_low'
+    assert error['details']['model'] == 'char'
     post.assert_not_called()
     with app.app_context():
         assert StatementProvenance.query.count() == 0
@@ -233,17 +243,16 @@ def test_derivative_submission_scores_similarity_once(client, app):
     """A6 dedupe: the gate scores the pair, and provenance reuses those scores rather
     than recomputing (which would repeat the similarity sidecar call)."""
     _login_participant_for_submission(client, app)
-    sess_resp = _fake_upstream(cookies={'session': 'NEWPA'})
-    sess_resp.json = lambda: {'csrf_token': 'TOK'}
     stmt_resp = _fake_upstream(status_code=201, content=b'{"id":778}')
     stmt_resp.json = lambda: {'id': 778}
 
     with patch('app._statement_text_map', return_value={12: 'parent statement'}), \
          patch('app._statement_similarity_scores', return_value={'char': 0.9}) as sim, \
-         patch('app.polis_http.post', side_effect=[sess_resp, stmt_resp]):
-        resp = client.post('/c/subderiv/statements/new',
-                           headers={'Sec-Fetch-Site': 'same-origin'},
-                           json={'text': 'parent statement improved', 'derived_from': 12})
+         patch('app.polis_http.post', return_value=stmt_resp):
+        resp = client.post('/api/v1/conversations/subderiv/statements',
+                           headers={'Idempotency-Key': 'prov-key-778'},
+                           json={'text': 'parent statement improved',
+                                 'derivedFromStatementId': 12})
 
     assert resp.status_code == 201
     assert sim.call_count == 1   # scored once for the gate, reused for provenance
@@ -262,10 +271,12 @@ def test_quota_exceeded_rejects_before_upstream(client, app):
         db.session.commit()
 
     with patch('app.polis_http.post') as post:
-        resp = client.post('/c/subderiv/statements/new',
-                           headers={'Sec-Fetch-Site': 'same-origin'},
+        resp = client.post('/api/v1/conversations/subderiv/statements',
+                           headers={'Idempotency-Key': 'prov-key-quota'},
                            json={'text': 'one more statement'})
 
-    assert resp.status_code == 403
-    assert resp.get_json()['error'] == 'quota_exceeded'
+    # The JSON API reports the exhausted quota as 409 statement_quota_exceeded,
+    # where the Jinja route answered 403 quota_exceeded.
+    assert resp.status_code == 409
+    assert resp.get_json()['error']['code'] == 'statement_quota_exceeded'
     post.assert_not_called()   # rejected before any Particiapi submit

@@ -1,11 +1,6 @@
 import {lazy, Suspense, useDeferredValue} from 'react';
 import {Navigate, Route, Routes, useLocation} from 'react-router-dom';
 
-import {
-  MissingSpaRoute,
-  StrictSpaBoundary,
-  useStrictSpaMode,
-} from './strict-spa-mode';
 import {ForkPage} from './features/legacy/public-pages';
 import {ConversationLanePage} from './features/legacy/conversation-lane-page';
 import {ConversationWorkspacePage} from './features/legacy/conversation-workspace-page';
@@ -39,8 +34,9 @@ const AdminInvitationsRoute = lazy(() => loadAdminRoutes().then((module) => ({de
 const AdminRolesRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminRolesRoute})));
 
 function UnmatchedRoute() {
-  const {enabled} = useStrictSpaMode();
-  return enabled ? <MissingSpaRoute /> : <Navigate to="/consultations" replace />;
+  // The server 404s any path outside its SPA route table, so this only fires for
+  // a client-side path the router does not know (e.g. under /app/*).
+  return <Navigate to="/consultations" replace />;
 }
 
 function DeferredRoutes() {
@@ -102,11 +98,11 @@ function DeferredRoutes() {
 
 export function App() {
   return (
-    <StrictSpaBoundary>
+    <>
       <a className="skip-link" href="#main">Skip to main content</a>
       <Suspense fallback={<p className="loading-state" role="status">Loading conversations…</p>}>
         <DeferredRoutes />
       </Suspense>
-    </StrictSpaBoundary>
+    </>
   );
 }

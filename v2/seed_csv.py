@@ -1,8 +1,10 @@
 """Shared validation constants and helpers for bulk seed statement import.
 
 Stdlib-only — no Flask dependency so this can be unit-tested in isolation. The
-bulk import is text-area only (the CSV upload was removed per the #236 review);
-the textarea parser lives in app._parse_seed_text_lines and reuses these.
+bulk import is text-area only (the CSV upload was removed per the #236 review).
+Parsing moved to the client with the Jinja frontend: POST /api/v1/admin/
+conversations/<id>/statement-imports takes an already-split `statements` array,
+and services/admin_statements.py validates it against these constants.
 """
 from dataclasses import dataclass, field
 
