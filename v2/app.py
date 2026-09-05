@@ -4982,6 +4982,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         submit_content_flag=_submit_content_flag_api_payload,
         submit_explore_vote=_explore_vote_api_payload,
         submit_statement=_statement_api_payload,
+        limiter=limiter,
     ))
     register_api_error_handlers(app)
     _register_branded_error_pages(app)
