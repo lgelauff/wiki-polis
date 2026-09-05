@@ -93,10 +93,13 @@ def test_phase6_vote_rebootstraps_on_stale_token(auth_client, participant):
     db.session.add(Participation(participant_id=participant.id, conversation_id=c.id,
                                  pseudonym='p6-fox'))
     db.session.commit()
-    # Prime the session with a stored (now-stale) Phase 6 session + token.
+    # Prime the session with a stored (now-stale) Phase 6 session + token, under this
+    # conversation's key — Phase 6 sessions are per conversation, not per browser
+    # session (see test_phase6_session_scope.py).
     with auth_client.session_transaction() as sess:
-        sess['_p6_pa'] = 'OLD'
-        sess['_p6_csrf'] = 'STALE'
+        sess['phase6_api_sessions'] = {
+            str(c.id): {'cookie': 'OLD', 'csrfToken': 'STALE'},
+        }
 
     with patch.object(app_module.polis_http, 'post',
                       return_value=_session_resp('FRESH', 'NEW')) as post, \

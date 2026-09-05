@@ -2261,12 +2261,41 @@ def _require_informed_voting_api_context(
     return conv, participant, participation
 
 
+_PHASE6_SESSION_KEY = 'phase6_api_sessions'
+# The pre-fix global Phase 6 session scalars. Dropped on sight, never migrated: a stored
+# value is either unbound or bound to a DIFFERENT conversation's subject, so carrying it
+# forward under a per-conversation key would preserve exactly the bug below. Dropping it
+# costs one extra session bootstrap and re-binds the participant correctly.
+_PHASE6_LEGACY_SESSION_KEYS = ('_p6_pa', '_p6_csrf')
+
+
+def _phase6_session_states() -> dict:
+    """Per-conversation Phase 6 Particiapi sessions, keyed by ``str(conv.id)``.
+
+    Mirrors Phase 2's ``particiapi_api_sessions``, but as its OWN dict: the two rounds are
+    separate Polis conversations (``conv.polis_id`` vs ``conv.phase6_polis_conversation_id``)
+    and must never hand each other a session. A separate dict makes that structurally
+    impossible instead of resting on a key-naming convention one round could get wrong.
+
+    Phase 6 previously stored ONE cookie per browser session in ``_p6_pa``/``_p6_csrf``.
+    Both write paths bootstrap only when that cookie is missing, and ``ensure_session`` is
+    the only place ``X-Particiapi-Sub`` is sent — so the first Phase 6 round a participant
+    entered minted and bound the session, and every later round reused it, never binding
+    its own subject. Those votes went to an unbound uid, and a single Polis uid spanned
+    every Phase 6 round that participant entered: the cross-conversation linkage chain
+    ``_conversation_subject`` is keyed on ``conv.id`` to prevent (#246). The process-local
+    ``_p6_session_cache`` beside it was already keyed ``(xid, conv.id)``, which is the tell
+    that the global scalars were an oversight rather than a decision.
+    """
+    for legacy_key in _PHASE6_LEGACY_SESSION_KEYS:
+        session.pop(legacy_key, None)
+    return dict(session.get(_PHASE6_SESSION_KEY) or {})
+
+
 def _phase6_gateway(conv: Conversation, participant: Participant):
     key = (participant.xid, conv.id)
-    state = ParticiapiSessionState(
-        cookie=session.get('_p6_pa'),
-        csrf_token=session.get('_p6_csrf'),
-    )
+    states = _phase6_session_states()
+    state = ParticiapiSessionState.from_dict(states.get(str(conv.id)))
     # Bind the participant's identity, exactly as _explore_gateway does. The subject is
     # keyed on conv.id, so Phase 2 and Phase 6 resolve to the SAME Polis uid for one
     # person — which is what _conversation_subject was written for and says it does.
@@ -2290,12 +2319,14 @@ def _phase6_gateway(conv: Conversation, participant: Participant):
             else:
                 gateway.ensure_session()
                 _p6_session_cache[key] = (state.cookie, state.csrf_token)
-    return gateway, key
+    return gateway, key, states
 
 
-def _save_phase6_gateway(gateway: ExploreGateway, key) -> None:
-    session['_p6_pa'] = gateway.state.cookie
-    session['_p6_csrf'] = gateway.state.csrf_token
+def _save_phase6_gateway(
+    conv: Conversation, gateway: ExploreGateway, key, states: dict,
+) -> None:
+    states[str(conv.id)] = gateway.state.to_dict()
+    session[_PHASE6_SESSION_KEY] = states
     _p6_session_cache[key] = (gateway.state.cookie, gateway.state.csrf_token)
 
 
@@ -2303,7 +2334,7 @@ def _informed_voting_api_payload(slug: str) -> dict:
     conv, participant, participation = _require_informed_voting_api_context(
         slug, allow_banned_read=True,
     )
-    gateway, key = _phase6_gateway(conv, participant)
+    gateway, key, states = _phase6_gateway(conv, participant)
     try:
         participant_payload = gateway.read_participant(
             conv.phase6_polis_conversation_id,
@@ -2333,7 +2364,7 @@ def _informed_voting_api_payload(slug: str) -> dict:
             'links': links,
         }
     finally:
-        _save_phase6_gateway(gateway, key)
+        _save_phase6_gateway(conv, gateway, key, states)
 
 
 def _informed_vote_api_payload(
@@ -2347,7 +2378,7 @@ def _informed_vote_api_payload(
     ).first()
     if featured is None or featured.phase6_polis_statement_id is None:
         abort(404, description='Featured statement is not available in this round.')
-    gateway, key = _phase6_gateway(conv, participant)
+    gateway, key, states = _phase6_gateway(conv, participant)
     try:
         polis_values = {'agree': -1, 'pass': 0, 'disagree': 1}
         gateway.vote(
@@ -2367,7 +2398,7 @@ def _informed_vote_api_payload(
             },
         }
     finally:
-        _save_phase6_gateway(gateway, key)
+        _save_phase6_gateway(conv, gateway, key, states)
 
 
 def _results_report_api_payload(slug: str) -> dict:
@@ -6559,13 +6590,26 @@ def phase6_vote(slug):
     # `pa_session` cookie so it never collides with the Phase 2 web component's
     # session. We re-bootstrap only when it is missing or a vote is rejected as a
     # session/CSRF failure (stale token).
+    #
+    # Scoped PER CONVERSATION, like Phase 2 and like _p6_session_cache — see
+    # _phase6_session_states(). A single browser-session-wide session let the first
+    # Phase 6 round a participant entered bind the identity for every later round.
     p6_key = (session.get('xid'), conv.id)
+    p6_states = _phase6_session_states()
+    p6_conv_key = str(conv.id)
+    stored = ParticiapiSessionState.from_dict(p6_states.get(p6_conv_key))
 
-    def _bootstrap():
-        """(Re)establish the Phase 6 Particiapi session + CSRF token, storing both in
-        the Flask session and the process-local share cache. Returns (pa, csrf_token);
-        aborts 502 on failure."""
-        prior = session.get('_p6_pa')
+    def _store(cookie_val, token):
+        p6_states[p6_conv_key] = ParticiapiSessionState(
+            cookie=cookie_val, csrf_token=token,
+        ).to_dict()
+        session[_PHASE6_SESSION_KEY] = p6_states
+        _p6_session_cache[p6_key] = (cookie_val, token)
+
+    def _bootstrap(prior):
+        """(Re)establish the Phase 6 Particiapi session + CSRF token, storing both under
+        this conversation's key in the Flask session and in the process-local share
+        cache. Returns (pa, csrf_token); aborts 502 on failure."""
         # Bind identity exactly as _phase6_gateway and _explore_gateway do. This route
         # and the API route share _p6_session_cache, so if only one of them bound, an
         # anonymous session cached by this path would be handed to the other and the
@@ -6591,13 +6635,13 @@ def phase6_vote(slug):
         if not r.ok:
             current_app.logger.error('Particiapi session error in phase6_vote: %s', r.status_code)
             abort(502)
-        session['_p6_pa']   = r.cookies.get('session') or prior
-        session['_p6_csrf'] = r.json().get('csrf_token', '')
-        _p6_session_cache[p6_key] = (session['_p6_pa'], session['_p6_csrf'])
-        return session['_p6_pa'], session['_p6_csrf']
+        fresh_pa = r.cookies.get('session') or prior
+        fresh_csrf = r.json().get('csrf_token', '')
+        _store(fresh_pa, fresh_csrf)
+        return fresh_pa, fresh_csrf
 
-    pa = session.get('_p6_pa')
-    csrf_token = session.get('_p6_csrf')
+    pa = stored.cookie
+    csrf_token = stored.csrf_token
     bootstrapped = False
     if not (pa and csrf_token):
         # Serialize the first bootstrap per (participant, conversation) within this
@@ -6606,10 +6650,10 @@ def phase6_vote(slug):
         with _p6_bootstrap_lock(p6_key):
             shared = _p6_session_cache.get(p6_key)
             if shared:
-                session['_p6_pa'], session['_p6_csrf'] = shared
                 pa, csrf_token = shared
+                _store(pa, csrf_token)
             else:
-                pa, csrf_token = _bootstrap()
+                pa, csrf_token = _bootstrap(pa)
                 bootstrapped = True
 
     def _put(cookie_val, token):
@@ -6629,7 +6673,7 @@ def phase6_vote(slug):
     # A reused token can be stale (the session expired). If a vote we did NOT just
     # bootstrap for is rejected, refresh the session once and retry.
     if upstream.status_code in (401, 403) and not bootstrapped:
-        pa, csrf_token = _bootstrap()
+        pa, csrf_token = _bootstrap(pa)
         upstream = _put(pa, csrf_token)
 
     resp = make_response('', upstream.status_code)
