@@ -1619,7 +1619,7 @@
       },
       "Session": {
         "type": "object",
-        "required": ["state", "user", "capabilities", "csrfToken", "developerMode", "developerLogins", "gitVersion", "links"],
+        "required": ["state", "user", "capabilities", "csrfToken", "developerLogins", "gitVersion", "links"],
         "additionalProperties": false,
         "properties": {
           "state": {"type": "string", "enum": ["anonymous", "authenticated", "demo"]},
@@ -1631,7 +1631,6 @@
           },
           "capabilities": {"$ref": "#/components/schemas/SiteCapabilities"},
           "csrfToken": {"type": "string", "minLength": 1},
-          "developerMode": {"type": "boolean"},
           "developerLogins": {
             "type": "array",
             "items": {"$ref": "#/components/schemas/DeveloperLogin"}

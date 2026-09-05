@@ -73,7 +73,6 @@ def create_api_v1_blueprint(
     resolve_participant: Callable[[], Participant | None],
     resolve_global_admin: Callable[[Participant | None], bool],
     resolve_developer_logins: Callable[[], list[dict]],
-    resolve_developer_mode: Callable[[], bool],
     resolve_git_version: Callable[[], str],
     resolve_conversation_lane: Callable[[bool], dict],
     resolve_conversation_workspace: Callable[[str], dict],
@@ -133,8 +132,15 @@ def create_api_v1_blueprint(
     submit_content_flag: Callable[[str, dict], tuple[dict, int]],
     submit_explore_vote: Callable[[str, int, str, str | None], dict],
     submit_statement: Callable[[str, dict, str], tuple[dict, int]],
+    limiter,
 ) -> Blueprint:
-    """Build API v1 with explicit dependencies on the current auth context."""
+    """Build API v1 with explicit dependencies on the current auth context.
+
+    ``limiter`` is the app's :class:`flask_limiter.Limiter`, injected rather than
+    imported because ``app.py`` imports this module -- importing back would be
+    circular. It follows the same dependency-injection contract as every other
+    argument here.
+    """
     bp = Blueprint('api_v1', __name__, url_prefix='/api/v1')
 
     @bp.get('/session')
@@ -164,7 +170,6 @@ def create_api_v1_blueprint(
                     'administerSite': bool(resolve_global_admin(participant)),
                 },
                 'csrfToken': generate_csrf(),
-                'developerMode': resolve_developer_mode(),
                 'developerLogins': resolve_developer_logins(),
                 'gitVersion': resolve_git_version(),
                 'links': {
@@ -197,6 +202,7 @@ def create_api_v1_blueprint(
         bp,
         no_store=_no_store,
         error_response=error_response,
+        limiter=limiter,
         resolve_admin_catalog=resolve_admin_catalog,
         create_admin_conversation=create_admin_conversation,
         grant_global_admin=grant_global_admin,
@@ -250,12 +256,14 @@ def create_api_v1_blueprint(
         }))
 
     @bp.get('/conversations/<slug>/about')
+    @limiter.limit('120 per minute')
     def get_conversation_about(slug: str):
         return _no_store(jsonify({
             'data': resolve_conversation_about(slug),
         }))
 
     @bp.get('/conversations/<slug>/workspace')
+    @limiter.limit('120 per minute')
     def get_conversation_workspace(slug: str):
         try:
             data = resolve_conversation_workspace(slug)
@@ -291,6 +299,7 @@ def create_api_v1_blueprint(
         }))
 
     @bp.post('/conversations/<slug>/identity-reveal')
+    @limiter.limit('5 per minute')
     def create_identity_reveal(slug: str):
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or body != {'confirm': True}:
@@ -318,12 +327,14 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({'data': resolve_participation_entry(slug)}))
 
     @bp.get('/conversations/<slug>/pseudonym-suggestions')
+    @limiter.limit('30 per minute')
     def get_pseudonym_suggestions(slug: str):
         return _no_store(jsonify({
             'data': {'pseudonyms': resolve_pseudonym_suggestions(slug)},
         }))
 
     @bp.post('/conversations/<slug>/participation')
+    @limiter.limit('10 per minute')
     def create_participation(slug: str):
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
@@ -383,6 +394,7 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({'data': data})), status
 
     @bp.get('/conversations/<slug>/explore')
+    @limiter.limit('180 per minute')
     def get_explore_state(slug: str):
         try:
             data = resolve_explore_state(slug)
@@ -395,12 +407,14 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({'data': data}))
 
     @bp.get('/conversations/<slug>/arguments')
+    @limiter.limit('120 per minute')
     def get_argument_mapping(slug: str):
         return _no_store(jsonify({
             'data': resolve_argument_mapping(slug),
         }))
 
     @bp.get('/conversations/<slug>/informed-voting')
+    @limiter.limit('120 per minute')
     def get_informed_voting(slug: str):
         try:
             data = resolve_informed_voting(slug)
@@ -412,18 +426,21 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({'data': data}))
 
     @bp.get('/conversations/<slug>/results')
+    @limiter.limit('120 per minute')
     def get_results_report(slug: str):
         return _no_store(jsonify({
             'data': resolve_results_report(slug),
         }))
 
     @bp.get('/conversations/<slug>/intermediate-results')
+    @limiter.limit('120 per minute')
     def get_intermediate_results(slug: str):
         return _no_store(jsonify({
             'data': resolve_intermediate_results(slug),
         }))
 
     @bp.put('/conversations/<slug>/featured-statements/<int:featured_statement_id>/informed-vote')
+    @limiter.limit('30 per minute')
     def put_informed_vote(slug: str, featured_statement_id: int):
         body = request.get_json(silent=True)
         if (not isinstance(body, dict) or set(body) != {'choice'}
@@ -446,6 +463,7 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({'data': data}))
 
     @bp.post('/conversations/<slug>/featured-statements/<int:featured_statement_id>/arguments')
+    @limiter.limit('20 per minute')
     def create_argument(slug: str, featured_statement_id: int):
         body = request.get_json(silent=True)
         if (not isinstance(body, dict)
@@ -522,6 +540,7 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({'data': data}))
 
     @bp.post('/conversations/<slug>/flags')
+    @limiter.limit('10 per minute')
     def create_content_flag(slug: str):
         body = request.get_json(silent=True)
         allowed = {'contentType', 'targetId', 'category', 'detail'}
@@ -579,6 +598,7 @@ def create_api_v1_blueprint(
         return _no_store(jsonify({'data': data}))
 
     @bp.post('/conversations/<slug>/statements')
+    @limiter.limit('20 per minute')
     def create_statement(slug: str):
         body = request.get_json(silent=True)
         fields = {}
@@ -666,25 +686,46 @@ def create_api_v1_blueprint(
     return bp
 
 
+_HTTP_ERROR_CODES = {
+    400: 'bad_request',
+    401: 'unauthorized',
+    403: 'forbidden',
+    404: 'not_found',
+    405: 'method_not_allowed',
+    409: 'conflict',
+    429: 'rate_limited',
+}
+
+
+def is_api_request() -> bool:
+    """Whether the current request must be answered as JSON rather than HTML.
+
+    The single definition of the API/HTML boundary. The branded HTML error pages
+    registered in ``app.py`` are per-status handlers, which Flask prefers over the
+    generic ``HTTPException`` handler below, so they consult this to hand API paths
+    back to :func:`http_exception_json`.
+    """
+    return request.path.startswith('/api/v1/')
+
+
+def http_exception_json(exc: HTTPException):
+    """Render an HTTPException as the API's machine-readable error envelope."""
+    return error_response(
+        _HTTP_ERROR_CODES.get(exc.code, 'http_error'), exc.description, exc.code,
+    )
+
+
 def register_api_error_handlers(app: Flask) -> None:
     """Keep all API failures machine-readable, including routing and CSRF errors."""
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(exc):
-        if request.path.startswith('/api/v1/'):
+        if is_api_request():
             return error_response('csrf_failed', exc.description, 400)
         return exc
 
     @app.errorhandler(HTTPException)
     def handle_http_error(exc):
-        if not request.path.startswith('/api/v1/'):
+        if not is_api_request():
             return exc
-        codes = {
-            400: 'bad_request',
-            401: 'unauthorized',
-            403: 'forbidden',
-            404: 'not_found',
-            405: 'method_not_allowed',
-            409: 'conflict',
-        }
-        return error_response(codes.get(exc.code, 'http_error'), exc.description, exc.code)
+        return http_exception_json(exc)

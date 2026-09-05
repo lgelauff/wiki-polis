@@ -145,8 +145,13 @@ def test_informed_vote_is_idempotent_put_and_translates_phase6_sign(
 ):
     conversation, participation, first, _second = _fixture(participant)
     with auth_client.session_transaction() as browser_session:
-        browser_session['_p6_pa'] = 'phase6-cookie'
-        browser_session['_p6_csrf'] = 'phase6-csrf'
+        # Phase 6 sessions are keyed per conversation, exactly like Phase 2's
+        # `particiapi_api_sessions` (see test_phase6_session_scope.py).
+        browser_session['phase6_api_sessions'] = {
+            str(conversation.id): {
+                'cookie': 'phase6-cookie', 'csrfToken': 'phase6-csrf',
+            },
+        }
 
     with patch('app.polis_http.put', return_value=_response({})) as put:
         response = auth_client.put(
@@ -187,8 +192,13 @@ def test_informed_vote_sends_polis_signs_for_every_choice(
     """
     conversation, participation, first, _second = _fixture(participant)
     with auth_client.session_transaction() as browser_session:
-        browser_session['_p6_pa'] = 'phase6-cookie'
-        browser_session['_p6_csrf'] = 'phase6-csrf'
+        # Phase 6 sessions are keyed per conversation, exactly like Phase 2's
+        # `particiapi_api_sessions` (see test_phase6_session_scope.py).
+        browser_session['phase6_api_sessions'] = {
+            str(conversation.id): {
+                'cookie': 'phase6-cookie', 'csrfToken': 'phase6-csrf',
+            },
+        }
 
     with patch('app.polis_http.put', return_value=_response({})) as put:
         response = auth_client.put(
@@ -205,7 +215,21 @@ def test_informed_vote_sends_polis_signs_for_every_choice(
 def test_informed_vote_rejects_featured_statement_from_another_round(
     auth_client, participant,
 ):
-    _fixture(participant)
+    """404 for a statement outside this round — and 200 for one inside it.
+
+    The negative half alone is vacuous: it would pass just as well if the route did
+    not exist at all, which is how a whole-suite mutation of the /api/v1/ prefix left
+    this test green. The positive probe on the same endpoint is what makes the 404
+    mean 'rejects this resource' rather than 'no such route'.
+    """
+    conversation, _participation, first, _second = _fixture(participant)
+    with auth_client.session_transaction() as browser_session:
+        # Phase 6 sessions are keyed per conversation (see test_phase6_session_scope.py).
+        browser_session['phase6_api_sessions'] = {
+            str(conversation.id): {
+                'cookie': 'phase6-cookie', 'csrfToken': 'phase6-csrf',
+            },
+        }
 
     with patch('app.polis_http.put') as put:
         response = auth_client.put(
@@ -215,6 +239,16 @@ def test_informed_vote_rejects_featured_statement_from_another_round(
 
     assert response.status_code == 404
     put.assert_not_called()
+
+    with patch('app.polis_http.put', return_value=_response({})) as put:
+        accepted = auth_client.put(
+            f'/api/v1/conversations/informed-api/featured-statements/{first.id}'
+            f'/informed-vote',
+            json={'choice': 'pass'},
+        )
+
+    assert accepted.status_code == 200
+    put.assert_called_once()
 
 
 def test_informed_voting_empty_round_is_not_reported_complete(participant):
@@ -296,12 +330,14 @@ def test_openapi_documents_informed_voting_contract(client):
 
 
 def test_informed_vote_api_binds_the_same_identity_explore_uses(app, auth_client, participant):
-    """The API write path must bind identity too, to the SAME subject Phase 2 uses.
+    """The API write path must bind identity, to the SAME subject Phase 2 uses.
 
-    There are two Phase 6 write paths — this one and the legacy Jinja route — and they
-    share `_p6_session_cache`. If only one bound, an anonymous session cached by the other
-    would be handed straight to it and the binding would be silently defeated, so both
-    need locking. See test_phase6_vote.py for the legacy half.
+    This is now the only Phase 6 write path; the legacy Jinja route that shared
+    `_p6_session_cache` with it is gone. The binding still has to be asserted here,
+    because an unbound bootstrap would cache an anonymous session that every later
+    vote reuses. Asserting the exact subject rather than merely "a header was sent"
+    is the point — a Phase 6 subject that differs from Phase 2's would still look
+    bound while leaving the two rounds just as unjoinable.
     """
     secret = 'shared-upstream-secret'
     app.config['PARTICIAPI_SUB_SECRET'] = secret

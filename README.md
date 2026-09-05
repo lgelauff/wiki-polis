@@ -27,7 +27,7 @@ Hosted on [Toolforge](https://wikitech.wikimedia.org/wiki/Portal:Toolforge) at `
 
 | Directory | Contents |
 |---|---|
-| `v2/` | **The live application** — Flask app, models, templates, tests, and v2 docs |
+| `v2/` | **The live application** — Flask app, models, React SPA (`v2/frontend/`), tests, and v2 docs |
 | `v2/reference/` | Reference notes on the Particiapi API |
 | `guidance/` | Organizer and participant guides, plus statement-writing help |
 | `docs/` | Documentation index (`docs/README.md`) and background research syntheses |
@@ -40,8 +40,8 @@ Hosted on [Toolforge](https://wikitech.wikimedia.org/wiki/Portal:Toolforge) at `
 wiki-polis/
   wsgi.py         — WSGI entry point (loads the v2 app)
   deploy.sh       — Toolforge deploy script (deploys v2)
-  v2/             — the live application: Flask app, models, templates, tests, docs
+  v2/             — the live application: Flask app, models, React SPA (v2/frontend/), tests, docs
   guidance/       — organizer & participant guides, statement-writing help
   docs/           — documentation index (docs/README.md) + research syntheses
-  app.py, db.py, templates/, static/  — legacy pre-v2 app code, superseded by v2/ (not deployed)
+  static/         — legacy pre-v2 assets, superseded by v2/ (not deployed)
 ```

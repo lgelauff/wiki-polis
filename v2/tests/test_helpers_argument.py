@@ -1,17 +1,20 @@
 """Unit characterization of the argument-tab helpers that issue #90 lifted to module
-level (`_get_or_create_side_state`, `_build_featured_data`, `_require_arg_participation`).
+level (`_get_or_create_side_state`, `_build_featured_data`).
 
-Promoted from #90's scratch suite after the senior + security review. Includes two
-gap-fillers the reviewers asked for: the post-visit hide path (the production path that
+Promoted from #90's scratch suite after the senior + security review. Includes the
+gap-filler the reviewers asked for: the post-visit hide path, the production path that
 enforces hidden-argument confidentiality once a participant's side-state already
-exists) and the paused / phase-off authorization branches of the participation gate.
+exists.
+
+The participation gate this file also used to cover, `_require_arg_participation`, was
+removed with the Jinja argument routes; the API gate that replaced it,
+`_require_argument_api_context`, is exercised through the endpoints in
+tests/test_argument_api.py (closed phase -> 409, banned participant -> read-only).
 """
 import pytest
-from werkzeug.exceptions import Forbidden
 
 from app import (_backfill_statement_texts, _build_featured_data,
-                 _fetch_statement_text, _get_or_create_side_state,
-                 _require_arg_participation, _statement_text_map)
+                 _get_or_create_side_state, _statement_text_map)
 from db import (Argument, ArgumentSideState, ArgumentVote, Conversation,
                 FeaturedStatement, Participation, db)
 from polis_admin import PolisParticipantError
@@ -180,40 +183,6 @@ def test_build_featured_data_reflects_votes(part, fs, conv):
     assert pro[0].id in entry['voted_ids']
 
 
-# ── _require_arg_participation (authorization gate) ─────────────────────────────
-
-def test_require_arg_participation_gate_branches(app, participant, conv, part):
-    """Happy path returns (conv, participation); paused or phase-off must abort 403."""
-    from flask import session
-
-    # Active + in the argument phase + participating → returns the pair.
-    with app.test_request_context():
-        session['username'] = participant.mw_username
-        session['xid'] = participant.xid
-        got_conv, got_part = _require_arg_participation(conv.slug)
-        assert got_conv.id == conv.id
-        assert got_part.participant_id == participant.id
-
-    # Paused conversation → 403.
-    conv.paused = True
-    db.session.commit()
-    with app.test_request_context():
-        session['username'] = participant.mw_username
-        session['xid'] = participant.xid
-        with pytest.raises(Forbidden):
-            _require_arg_participation(conv.slug)
-
-    # Not in the argument-mapping phase → 403.
-    conv.paused = False
-    conv.phase_argument_mapping = False
-    db.session.commit()
-    with app.test_request_context():
-        session['username'] = participant.mw_username
-        session['xid'] = participant.xid
-        with pytest.raises(Forbidden):
-            _require_arg_participation(conv.slug)
-
-
 # ── _statement_text_map (#89 — unified tid -> text source) ──────────────────────
 
 def test_statement_text_map_key_conventions(app, monkeypatch):
@@ -242,17 +211,6 @@ def test_statement_text_map_propagates_fetch_error(app, monkeypatch):
     monkeypatch.setattr('app.PolisParticipantClient', _FailingClient)
     with pytest.raises(PolisParticipantError):
         _statement_text_map('conv-1')
-
-
-def test_fetch_statement_text_hit_miss_error(app, monkeypatch):
-    """_fetch_statement_text: matching tid -> text; missing tid -> ''; fetch error -> ''."""
-    monkeypatch.setattr('app.PolisParticipantClient',
-                        _fake_statements_client([{'tid': 7, 'text': 'lucky'}]))
-    assert _fetch_statement_text('c', 7) == 'lucky'      # hit
-    assert _fetch_statement_text('c', 999) == ''         # miss
-
-    monkeypatch.setattr('app.PolisParticipantClient', _FailingClient)
-    assert _fetch_statement_text('c', 7) == ''           # error degrades to ''
 
 
 def test_backfill_statement_texts_fills_missing_and_noops(app, monkeypatch, conv):

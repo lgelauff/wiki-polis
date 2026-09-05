@@ -94,7 +94,7 @@ def test_uselang_cookie_persists_choice(client):
 def test_qqx_is_available_without_being_an_enabled_locale(app, client):
     # qqx is a QA locale, never offered to users — it must bypass ENABLED_LOCALES.
     assert 'qqx' not in app.config['ENABLED_LOCALES']
-    with app.test_request_context('/?uselang=qqx'):
+    with app.test_request_context('/api/v1/session?uselang=qqx'):
         app.preprocess_request()
         assert flask_g.locale == 'qqx'
         assert flask_g.dir == 'ltr'
@@ -102,7 +102,7 @@ def test_qqx_is_available_without_being_an_enabled_locale(app, client):
 
 def test_locale_falls_back_to_default_when_not_enabled(app):
     # A locale that exists in the catalogue but is not enabled must not be selected.
-    with app.test_request_context('/?uselang=fr'):
+    with app.test_request_context('/api/v1/session?uselang=fr'):
         app.preprocess_request()
         assert flask_g.locale == app.config['DEFAULT_LOCALE']
 

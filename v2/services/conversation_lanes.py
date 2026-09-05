@@ -83,19 +83,6 @@ class ConversationLane:
     pseudonym_map: dict[int, Participation] = field(default_factory=dict)
     signals_map: dict[int, dict] = field(default_factory=dict)
 
-    def template_context(self) -> dict:
-        return {
-            'public_conversations': self.public_conversations,
-            'attention_joined': self.attention_joined,
-            'caught_up_joined': self.caught_up_joined,
-            'inactive_joined': self.inactive_joined,
-            'archived_joined': self.archived_joined,
-            'available': self.available,
-            'moderating': self.moderating,
-            'pseudonym_map': self.pseudonym_map,
-            'signals_map': self.signals_map,
-        }
-
     def to_api(self, *, conversation_link: Callable[[str], str],
                about_link: Callable[[str], str],
                explore_link: Callable[[str], str],

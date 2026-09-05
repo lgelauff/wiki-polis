@@ -1,14 +1,20 @@
 {
-  "_comment": "Per-project config for the pr-check skill. Copy to .claude/pr-check.json in the consuming repo and adjust. This example is the wiki-polis (Flask v2) binding.",
+  "_comment": "Per-project config for the pr-check skill. Copy to .claude/pr-check.json in the consuming repo and adjust. This example is the wiki-polis (Flask v2 + React SPA) binding.",
+  "_scope_comment": "The UI now lives in v2/frontend/src as .tsx, not in v2/templates as Jinja. Scope globs are listed in both fnmatch ('*' crosses '/') and pathlib ('**') forms so the SPA is matched whichever way the skill globs; without a glob that reaches v2/frontend/src a React-only PR matched no scope at all and drew senior-engineer alone — no accessibility or usability reviewer on the entire user-facing surface.",
   "base_ref": "origin/main",
   "test_command": "cd v2 && DATABASE_URL=\"sqlite:///:memory:\" SECRET_KEY=\"00000000000000000000000000000000\" FLASK_DEBUG=1 uv run pytest -q",
   "scope": {
-    "TEMPLATES_CSS": [
-      "v2/templates/*.html",
-      "v2/static/*.css"
+    "SPA": [
+      "v2/frontend/src/*",
+      "v2/frontend/src/**",
+      "v2/frontend/src/**/*.ts",
+      "v2/frontend/src/**/*.tsx",
+      "v2/frontend/index.html"
     ],
-    "JS": [
-      "*.js"
+    "CSS": [
+      "v2/static/*.css",
+      "v2/frontend/src/*.css",
+      "v2/frontend/src/**/*.css"
     ],
     "DB": [
       "v2/migrations/*",
@@ -24,8 +30,9 @@
       "v2/*.py"
     ],
     "RUNTIME": [
-      "v2/templates/conversation.html",
-      "v2/templates/reveal.html",
+      "v2/frontend/src/app.tsx",
+      "v2/frontend/src/features/legacy/conversation-workspace-page.tsx",
+      "v2/frontend/src/features/legacy/identity-reveal-page.tsx",
       "v2/polis_admin.py"
     ]
   },
@@ -45,12 +52,14 @@
     "_always": [
       "senior-engineer"
     ],
-    "TEMPLATES_CSS": [
+    "SPA": [
+      "accessibility",
+      "usability",
+      "frontend-js"
+    ],
+    "CSS": [
       "accessibility",
       "usability"
-    ],
-    "JS": [
-      "frontend-js"
     ],
     "DB": [
       "database"

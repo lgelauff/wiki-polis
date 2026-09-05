@@ -1,8 +1,28 @@
-"""Flask integration tests for POST /admin/conversations/<id>/statements/seed/import-text.
+"""Flask integration tests for POST /api/v1/admin/conversations/<id>/statement-imports.
 
-The bulk seed import is text-area only (the redundant CSV upload was removed per the
-#236 review). These cover the shared post-parse pipeline — dedup-vs-Polis, Polis-failure
-handling, row/byte limits, sanitisation — through the text endpoint.
+Ported from the deleted text-area route
+(POST /admin/conversations/<id>/statements/seed/import-text). The client now sends
+a JSON array of statements instead of a newline-separated paste, so the textarea
+parser and its byte cap are gone; everything after parsing -- dedup-vs-Polis,
+Polis-failure handling, the row limit, sanitisation -- is unchanged and is what
+these cover. The response is an outcome object rather than a flash banner:
+{'imported', 'skippedExisting', 'skippedDuplicateInput', 'failedUpstream'}.
+
+Three behaviours genuinely changed with the move, and the tests were rewritten to
+the new behaviour rather than forced back to the old one:
+
+  * A duplicate within one paste used to reject the whole batch. It is now
+    skipped and counted in skippedDuplicateInput; the rest of the batch imports.
+  * A line that sanitises to an empty string used to be dropped silently. It is
+    now a 400 that names the offending statement.
+  * If the existing-statement fetch fails, the import used to proceed WITHOUT
+    dedup and show a warning. It now FAILS CLOSED with 503 and imports nothing.
+    See test_dedup_fails_closed_when_polis_fetch_fails.
+
+One test was dropped outright: test_text_import_over_byte_limit_rejected. The
+#238 cap it covered was a pre-parse guard on the raw textarea body; MAX_FILE_BYTES
+is now referenced by no production code and no MAX_CONTENT_LENGTH replaces it.
+That is a lost guard, not a lost test -- see the port notes.
 """
 from unittest.mock import MagicMock, patch
 
@@ -10,7 +30,7 @@ import pytest
 
 from db import Conversation, db
 from polis_admin import POLIS_NOT_CONFIGURED_MESSAGE, PolisServerError
-from tests.conftest import login
+from seed_csv import MAX_ROWS, MAX_TEXT_CHARS
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -26,16 +46,40 @@ def conv(app):
     return c
 
 
-def _text_import(client, conv_id, text: str):
+_UNSET = object()
+
+
+def _import(client, conv_id, statements):
+    """POST a statement import. `statements` is the JSON array the SPA sends."""
     return client.post(
-        f'/admin/conversations/{conv_id}/statements/seed/import-text',
-        data={'statement_texts': text},
-        follow_redirects=True,
+        f'/api/v1/admin/conversations/{conv_id}/statement-imports',
+        json={'statements': statements},
     )
 
 
-def _mock_polis(add_seed_side_effect=None, existing_statements=None):
-    """Return a context manager that patches _polis_server_client."""
+def _outcome(resp):
+    assert resp.status_code == 200, resp.get_json()
+    return resp.get_json()['data']['outcome']
+
+
+def _error(resp, status):
+    assert resp.status_code == status, resp.get_json()
+    return resp.get_json()['error']
+
+
+def _sent(mock):
+    """The list of texts actually forwarded to Polis, or None if never called."""
+    call = mock.return_value.bulk_add_seeds.call_args
+    return None if call is None else call[0][1]
+
+
+def _mock_polis(add_seed_side_effect=None, existing_statements=_UNSET):
+    """Patch _polis_server_client (and the participant-client fallback).
+
+    `existing_statements=None` simulates the dedup source being unavailable from
+    BOTH the server client and the participant fallback, which is what makes
+    import_seed_statements fail closed.
+    """
     mock_client = MagicMock()
 
     # Simulate bulk_add_seeds: run add_seed_side_effect once per text.
@@ -55,47 +99,72 @@ def _mock_polis(add_seed_side_effect=None, existing_statements=None):
         return successes, failures
 
     mock_client.bulk_add_seeds.side_effect = _bulk_add_seeds
-
-    if existing_statements is not None:
-        mock_client.get_statements.return_value = existing_statements
-    else:
+    if existing_statements is _UNSET:
         mock_client.get_statements.return_value = ([], [], [])
-    return patch('app._polis_server_client', return_value=mock_client)
+    else:
+        mock_client.get_statements.return_value = existing_statements
+
+    from polis_admin import PolisParticipantError
+
+    participant_client = MagicMock()
+    participant_client.return_value.get_settings.return_value = {}
+    if existing_statements is None:
+        # The fallback must fail too, or it would supply the buckets instead.
+        participant_client.return_value.get_statements.side_effect = (
+            PolisParticipantError('unavailable')
+        )
+    else:
+        participant_client.return_value.get_statements.return_value = (
+            ([], [], []) if existing_statements is _UNSET else existing_statements
+        )
+
+    server_patch = patch('app._polis_server_client', return_value=mock_client)
+    participant_patch = patch('app.PolisParticipantClient', participant_client)
+
+    class _Both:
+        def __enter__(self):
+            started = server_patch.start()
+            participant_patch.start()
+            return started        # .return_value is mock_client
+
+        def __exit__(self, *exc):
+            participant_patch.stop()
+            server_patch.stop()
+            return False
+
+    return _Both()
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
-def test_unauthenticated_redirects_to_login(client, conv):
-    resp = client.post(
-        f'/admin/conversations/{conv.id}/statements/seed/import-text',
-        data={'statement_texts': 'hello'},
-    )
-    assert resp.status_code in (302, 301)
-    assert 'login' in resp.headers['Location'].lower()
+def test_unauthenticated_is_refused(client, conv):
+    """The Jinja route redirected to /login; the API refuses outright."""
+    resp = _import(client, conv.id, ['hello'])
+    assert resp.status_code == 403
+    assert resp.get_json()['error']['code'] == 'forbidden'
 
 
 def test_non_admin_forbidden(auth_client, conv):
-    resp = auth_client.post(
-        f'/admin/conversations/{conv.id}/statements/seed/import-text',
-        data={'statement_texts': 'hello'},
-    )
+    resp = _import(auth_client, conv.id, ['hello'])
     assert resp.status_code == 403
 
 
 # ── Happy path ────────────────────────────────────────────────────────────────
 
-def test_text_imports_statements(admin_client, conv):
+def test_imports_statements(admin_client, conv):
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, 'Statement one\nStatement two')
-    assert b'2 statements imported' in resp.data
-    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
-    assert len(texts_sent) == 2
+        outcome = _outcome(_import(admin_client, conv.id,
+                                   ['Statement one', 'Statement two']))
+    assert outcome['imported'] == 2
+    assert len(_sent(mock)) == 2
 
 
-def test_single_statement_grammar(admin_client, conv):
+def test_single_statement_is_counted_as_one(admin_client, conv):
+    # The page said "1 statement imported" vs "2 statements imported"; the
+    # grammar is the SPA's, the count is the server's.
     with _mock_polis():
-        resp = _text_import(admin_client, conv.id, 'Only one')
-    assert b'1 statement imported' in resp.data
+        outcome = _outcome(_import(admin_client, conv.id, ['Only one']))
+    assert outcome['imported'] == 1
 
 
 def test_bulk_seed_surfaces_same_safe_polis_configuration_error(admin_client, conv):
@@ -105,23 +174,29 @@ def test_bulk_seed_surfaces_same_safe_polis_configuration_error(admin_client, co
     )
     with _mock_polis() as mock:
         mock.return_value.bulk_add_seeds.side_effect = error
-        resp = _text_import(admin_client, conv.id, 'A seed statement')
+        resp = _import(admin_client, conv.id, ['A seed statement'])
 
-    assert POLIS_NOT_CONFIGURED_MESSAGE.encode() in resp.data
+    error_body = _error(resp, 502)
+    assert error_body['code'] == 'upstream_unavailable'
+    assert error_body['message'] == POLIS_NOT_CONFIGURED_MESSAGE
+    # The internal detail must not leak to the admin, on any surface.
     assert b'internal configuration detail' not in resp.data
 
 
-def test_text_imports_one_statement_per_non_empty_line(admin_client, conv):
+def test_blank_and_padded_entries_are_trimmed_and_dropped(admin_client, conv):
+    # The textarea split on newlines and dropped blank lines; the array form keeps
+    # the same normalisation for blank and padded entries.
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, 'One\n\nTwo\n  Three  ')
-    assert b'3 statements imported' in resp.data
-    assert mock.return_value.bulk_add_seeds.call_args[0][1] == ['One', 'Two', 'Three']
+        outcome = _outcome(_import(admin_client, conv.id,
+                                   ['One', '', 'Two', '  Three  ']))
+    assert outcome['imported'] == 3
+    assert _sent(mock) == ['One', 'Two', 'Three']
 
 
 def test_seed_import_allowed_in_preparation(admin_client, conv):
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, 'Prep seed')
-    assert resp.status_code == 200
+        outcome = _outcome(_import(admin_client, conv.id, ['Prep seed']))
+    assert outcome['imported'] == 1
     mock.return_value.bulk_add_seeds.assert_called_once()
 
 
@@ -129,8 +204,8 @@ def test_seed_import_allowed_during_submission(admin_client, conv):
     conv.phase_submission = True
     db.session.commit()
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, 'Submission seed')
-    assert resp.status_code == 200
+        outcome = _outcome(_import(admin_client, conv.id, ['Submission seed']))
+    assert outcome['imported'] == 1
     mock.return_value.bulk_add_seeds.assert_called_once()
 
 
@@ -138,18 +213,18 @@ def test_seed_import_locked_after_submission_phase(admin_client, conv):
     conv.phase_personal_results = True
     db.session.commit()
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, 'Too late')
-    assert b'statement submission has ended' in resp.data.lower()
-    assert mock.return_value.bulk_add_seeds.call_args is None
+        resp = _import(admin_client, conv.id, ['Too late'])
+    assert 'statement submission has ended' in _error(resp, 400)['message'].lower()
+    assert _sent(mock) is None
 
 
 def test_seed_import_locked_in_argument_phase(admin_client, conv):
     conv.phase_argument_mapping = True
     db.session.commit()
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, 'Too late')
-    assert b'statement submission has ended' in resp.data.lower()
-    assert mock.return_value.bulk_add_seeds.call_args is None
+        resp = _import(admin_client, conv.id, ['Too late'])
+    assert 'statement submission has ended' in _error(resp, 400)['message'].lower()
+    assert _sent(mock) is None
 
 
 def test_single_seed_locked_when_conversation_closed(admin_client, conv):
@@ -157,176 +232,194 @@ def test_single_seed_locked_when_conversation_closed(admin_client, conv):
     db.session.commit()
     with _mock_polis() as mock:
         resp = admin_client.post(
-            f'/admin/conversations/{conv.id}/statements/seed',
-            data={'txt': 'Closed seed'},
-            follow_redirects=True,
+            f'/api/v1/admin/conversations/{conv.id}/statements',
+            json={'text': 'Closed seed', 'derivedFromId': None},
         )
-    assert b'permanently closed' in resp.data.lower()
+    assert 'permanently closed' in _error(resp, 400)['message'].lower()
     mock.return_value.add_seed.assert_not_called()
 
 
-def test_statements_page_hides_seed_forms_when_locked(admin_client, conv):
+def test_statements_read_reports_the_seed_lock(admin_client, conv):
+    """The page hid the seed forms when locked; the server publishes the lock.
+
+    Replaces test_statements_page_hides_seed_forms_when_locked, which asserted the
+    absence of the form markup. The decision it depended on is in the payload.
+    """
     conv.phase_cleanup = True
     db.session.commit()
     with _mock_polis():
-        resp = admin_client.get(f'/admin/conversations/{conv.id}/statements')
-    assert b'Seed statements locked' in resp.data
-    assert b'Add seed statement</button>' not in resp.data
-    assert b'name="statement_texts"' not in resp.data
+        resp = admin_client.get(
+            f'/api/v1/admin/conversations/{conv.id}/statements',
+        )
+    data = resp.get_json()['data']
+    assert resp.status_code == 200
+    assert data['capabilities']['seed'] is False
+    assert data['seeding']['allowed'] is False
+    assert 'statement submission has ended' in data['seeding']['lockReason'].lower()
 
 
-def test_statements_page_describes_actual_seed_behavior(admin_client, conv):
+def test_statements_read_publishes_the_import_limits(admin_client, conv):
+    """The limits the form used to hard-code are served, so the client cannot drift."""
     with _mock_polis():
-        resp = admin_client.get(f'/admin/conversations/{conv.id}/statements')
+        data = admin_client.get(
+            f'/api/v1/admin/conversations/{conv.id}/statements',
+        ).get_json()['data']
+    assert data['seeding']['allowed'] is True
+    assert data['seeding']['maxStatementsPerImport'] == MAX_ROWS
+    assert data['seeding']['maxCharactersPerStatement'] == MAX_TEXT_CHARS
 
-    assert (
-        b'Adds a seed-marked statement that appears early in the voting sequence '
-        b'for participants.'
-    ) in resp.data
-    assert b'not seed-marked' not in resp.data
+
+# Deleted with the Jinja frontend: test_statements_page_describes_actual_seed_behavior
+# asserted the exact help sentence on the statements page ("Adds a seed-marked
+# statement that appears early in the voting sequence for participants.") and that
+# the contradictory "not seed-marked" wording was absent. That copy is the SPA's;
+# no server field carries it.
 
 
-def test_text_import_empty_input_imports_nothing(admin_client, conv):
+def test_empty_input_imports_nothing(admin_client, conv):
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, '   \n  \n')
-    assert b'No statements were imported' in resp.data
-    assert mock.return_value.bulk_add_seeds.call_args is None
+        resp = _import(admin_client, conv.id, ['   ', '  '])
+    assert _error(resp, 400)['code'] == 'validation_failed'
+    assert _sent(mock) is None
 
 
-# ── Row / byte limits and per-row error reporting ─────────────────────────────
+# ── Row limits and per-row error reporting ────────────────────────────────────
 
-def test_text_import_rejects_overlong_line(admin_client, conv):
-    long_text = 'x' * 281
+def test_rejects_overlong_statement(admin_client, conv):
+    long_text = 'x' * (MAX_TEXT_CHARS + 1)
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, f'Good\n{long_text}')
-    assert b'Row 2' in resp.data
-    assert b'too long' in resp.data.lower()
+        resp = _import(admin_client, conv.id, ['Good', long_text])
+    message = _error(resp, 400)['message']
+    assert 'Statement 2' in message                  # names the offending row
+    assert str(MAX_TEXT_CHARS) in message
     assert mock.return_value.bulk_add_seeds.call_count == 0
 
 
-def test_text_import_duplicate_within_paste_rejects_batch(admin_client, conv):
-    # A duplicate line within the paste rejects the whole batch (all-or-nothing).
+def test_duplicate_within_one_import_is_skipped_not_rejected(admin_client, conv):
+    """CHANGED BEHAVIOUR (was test_text_import_duplicate_within_paste_rejects_batch).
+
+    The textarea route rejected the entire batch on an in-paste duplicate, naming
+    the offending row. The API skips the duplicate, counts it, and imports the
+    rest. Asserted here as the new intended behaviour.
+    """
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, 'hello\nhello\nworld')
-    assert b'Row 2' in resp.data
-    assert b'duplicate' in resp.data.lower()
-    assert b'rejected' in resp.data.lower()
-    assert mock.return_value.bulk_add_seeds.call_count == 0
+        outcome = _outcome(_import(admin_client, conv.id,
+                                   ['hello', 'hello', 'world']))
+    assert outcome['imported'] == 2
+    assert outcome['skippedDuplicateInput'] == 1
+    assert _sent(mock) == ['hello', 'world']
 
 
-def test_text_import_enforces_row_limit(admin_client, conv):
-    from seed_csv import MAX_ROWS
-    rows = '\n'.join(f'Statement {i}' for i in range(MAX_ROWS + 1))
+def test_enforces_row_limit(admin_client, conv):
+    rows = [f'Statement {i}' for i in range(MAX_ROWS + 1)]
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, rows)
-    assert b'rejected' in resp.data.lower()
-    assert b'maximum is' in resp.data.lower()
-    assert str(MAX_ROWS + 1).encode() in resp.data
-    assert mock.return_value.bulk_add_seeds.call_args is None
+        resp = _import(admin_client, conv.id, rows)
+    message = _error(resp, 400)['message']
+    assert str(MAX_ROWS) in message
+    assert _sent(mock) is None
 
 
-def test_text_import_exactly_max_rows_accepted(admin_client, conv):
-    """Exactly MAX_ROWS valid lines should import without rejection."""
-    from seed_csv import MAX_ROWS
-    rows = '\n'.join(f'Statement {i}' for i in range(MAX_ROWS))
+def test_exactly_max_rows_accepted(admin_client, conv):
+    """Exactly MAX_ROWS valid statements import without rejection."""
+    rows = [f'Statement {i}' for i in range(MAX_ROWS)]
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, rows)
-    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
-    assert len(texts_sent) == MAX_ROWS
-    assert b'rejected' not in resp.data.lower()
+        outcome = _outcome(_import(admin_client, conv.id, rows))
+    assert outcome['imported'] == MAX_ROWS
+    assert len(_sent(mock)) == MAX_ROWS
 
 
-def test_text_import_over_byte_limit_rejected(admin_client, conv):
-    """The text-area path enforces MAX_FILE_BYTES before parsing (#238), mirroring
-    the old CSV upload's pre-read byte cap — a crafted POST cannot bypass it."""
-    from seed_csv import MAX_FILE_BYTES
-    big = 'a' * (MAX_FILE_BYTES + 1)
+def test_row_limit_fires_before_per_row_validation(admin_client, conv):
+    """When the import exceeds MAX_ROWS AND contains an invalid row, the limit is
+    reported first — the admin is told the batch is too big before being told
+    about individual rows, so they fix the size problem once."""
+    overlong = 'a' * (MAX_TEXT_CHARS + 1)
+    rows = [overlong] + [f'Statement {i}' for i in range(MAX_ROWS + 1)]
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, big)
-    assert b'too much text' in resp.data.lower()
-    assert mock.return_value.bulk_add_seeds.call_args is None
-
-
-def test_mixed_parse_errors_and_row_limit_limit_fires_first(admin_client, conv):
-    """When the paste exceeds MAX_ROWS AND has a parse error, the limit rejection
-    fires first and the flash hints that parse errors may also be present so the
-    admin fixes everything at once."""
-    from seed_csv import MAX_ROWS
-    overlong = 'a' * 281
-    # First line is overlong (a parse error within the kept rows), followed by
-    # enough lines to overflow the row limit.
-    lines = [overlong] + [f'Statement {i}' for i in range(MAX_ROWS + 1)]
-    with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, '\n'.join(lines))
-    assert mock.return_value.bulk_add_seeds.call_args is None
-    assert b'rejected' in resp.data.lower()
-    assert b'maximum is' in resp.data.lower()
-    assert b'parse error' in resp.data.lower()
+        resp = _import(admin_client, conv.id, rows)
+    message = _error(resp, 400)['message']
+    assert str(MAX_ROWS) in message
+    assert 'Statement 1' not in message              # the row error did not win
+    assert _sent(mock) is None
 
 
 # ── Deduplication against existing Polis statements ──────────────────────────
 
-def test_text_import_sanitizes_and_deduplicates(admin_client, conv):
-    existing = [{'txt': 'Already there', 'mod': 1, 'is_seed': True,
-                 'tid': 1, 'agree_count': 0, 'disagree_count': 0, 'pass_count': 0}]
-    with _mock_polis(existing_statements=([], existing, [])) as mock:
-        resp = _text_import(
-            admin_client,
-            conv.id,
-            '<b>Hello</b>\nHello\n&equals;SUM(A1)\nAlready there',
-        )
-    assert b'already exists' in resp.data.lower()
-    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
-    assert texts_sent == ['Hello', 'SUM(A1)']
+def _existing(*texts):
+    return ([], [
+        {'txt': text, 'mod': 1, 'is_seed': True, 'tid': index,
+         'agree_count': 0, 'disagree_count': 0, 'pass_count': 0}
+        for index, text in enumerate(texts, start=1)
+    ], [])
+
+
+def test_sanitizes_and_deduplicates(admin_client, conv):
+    with _mock_polis(existing_statements=_existing('Already there')) as mock:
+        outcome = _outcome(_import(admin_client, conv.id, [
+            '<b>Hello</b>', 'Hello', '&equals;SUM(A1)', 'Already there',
+        ]))
+    assert _sent(mock) == ['Hello', 'SUM(A1)']
+    assert outcome['imported'] == 2
+    assert outcome['skippedExisting'] == 1           # 'Already there'
+    assert outcome['skippedDuplicateInput'] == 1     # '<b>Hello</b>' vs 'Hello'
 
 
 def test_skips_statements_already_in_polis(admin_client, conv):
-    existing = [{'txt': 'Already there', 'mod': 1, 'is_seed': True,
-                 'tid': 1, 'agree_count': 0, 'disagree_count': 0, 'pass_count': 0}]
-    with _mock_polis(existing_statements=([], existing, [])) as mock:
-        resp = _text_import(admin_client, conv.id, 'Already there\nNew one')
-    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
-    assert len(texts_sent) == 1
-    assert b'already exists' in resp.data.lower()
-    assert b'1 imported' in resp.data
+    with _mock_polis(existing_statements=_existing('Already there')) as mock:
+        outcome = _outcome(_import(admin_client, conv.id,
+                                   ['Already there', 'New one']))
+    assert _sent(mock) == ['New one']
+    assert outcome['imported'] == 1
+    assert outcome['skippedExisting'] == 1
 
 
 def test_dedup_is_case_insensitive(admin_client, conv):
-    existing = [{'txt': 'Hello', 'mod': 1, 'is_seed': True,
-                 'tid': 1, 'agree_count': 0, 'disagree_count': 0, 'pass_count': 0}]
-    with _mock_polis(existing_statements=([], existing, [])) as mock:
-        _text_import(admin_client, conv.id, 'hello\nHello\nHELLO')
-    # All three are case-fold duplicates of 'Hello' — none should be sent.
-    assert mock.return_value.bulk_add_seeds.call_args is None or \
-           mock.return_value.bulk_add_seeds.call_args[0][1] == []
+    with _mock_polis(existing_statements=_existing('Hello')) as mock:
+        outcome = _outcome(_import(admin_client, conv.id,
+                                   ['hello', 'Hello', 'HELLO']))
+    # All three are case-fold duplicates of the existing 'Hello', so nothing is
+    # sent at all. Asserting the outcome (not just "bulk wasn't called") is what
+    # keeps this honest: the old version passed even when the route had vanished.
+    assert _sent(mock) is None
+    assert outcome['imported'] == 0
+    assert outcome['skippedExisting'] == 1
+    assert outcome['skippedDuplicateInput'] == 2
 
 
-def test_dedup_continues_when_polis_fetch_fails(admin_client, conv):
-    """If get_statements raises, import proceeds without dedup and shows a warning."""
-    with _mock_polis() as mock:
-        # First call (import route) raises; second call (redirect view) succeeds.
-        mock.return_value.get_statements.side_effect = [
-            Exception('db down'),
-            ([], [], []),
-        ]
-        resp = _text_import(admin_client, conv.id, 'Statement one\nStatement two')
-    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
-    assert len(texts_sent) == 2
-    assert b'Could not check for existing statements' in resp.data
+def test_dedup_fails_closed_when_polis_fetch_fails(admin_client, conv):
+    """CHANGED BEHAVIOUR (was test_dedup_continues_when_polis_fetch_fails).
+
+    The Jinja route imported anyway when the existing-statement fetch failed,
+    warning the admin that duplicates could not be checked. The API refuses the
+    whole import with 503 and writes nothing.
+
+    This is the strictly safer direction -- an unverified import can silently
+    duplicate live statements -- and it looks deliberate: the API suite carries a
+    purpose-written twin,
+    test_admin_statements_api.py::test_seed_import_fails_closed_when_dedup_source_is_unavailable.
+    It is still a user-visible behaviour change that converts a
+    degraded-but-working import into a hard outage whenever Polis PG is
+    unreachable, so it is flagged in the port notes for confirmation. Kept here as
+    well as in the API suite because this is where the old, opposite behaviour was
+    asserted, and the contrast is the point.
+    """
+    with _mock_polis(existing_statements=None) as mock:
+        resp = _import(admin_client, conv.id, ['Statement one', 'Statement two'])
+
+    assert _error(resp, 503)['code'] == 'verification_unavailable'
+    assert _sent(mock) is None                       # nothing was imported
 
 
 # ── Polis API failures ────────────────────────────────────────────────────────
 
 def test_polis_api_failure_reported(admin_client, conv):
-    """Per-statement Polis rejections (e.g. duplicates) show as 'Already in Polis, skipped'."""
+    """When every statement is rejected upstream, the import reports the failure."""
     with _mock_polis(add_seed_side_effect=PolisServerError('timeout')):
-        resp = _text_import(admin_client, conv.id, 'Statement one\nStatement two')
-    assert b'already in polis' in resp.data.lower()
-    assert b'0 imported' in resp.data.lower() or b'already existed' in resp.data.lower()
+        resp = _import(admin_client, conv.id, ['Statement one', 'Statement two'])
+    assert _error(resp, 502)['code'] == 'upstream_unavailable'
 
 
 def test_partial_polis_failure_still_imports_others(admin_client, conv):
-    """When some statements succeed and others are Polis-rejected, show partial success."""
+    """When some statements succeed and others are Polis-rejected, both are counted."""
     results = [None, PolisServerError('nope')]
 
     def side_effect(*a, **kw):
@@ -335,66 +428,76 @@ def test_partial_polis_failure_still_imports_others(admin_client, conv):
             raise r
 
     with _mock_polis(add_seed_side_effect=side_effect):
-        resp = _text_import(admin_client, conv.id, 'Good one\nBad one')
-    assert b'1 imported' in resp.data
-    assert b'already in polis' in resp.data.lower()
+        outcome = _outcome(_import(admin_client, conv.id, ['Good one', 'Bad one']))
+    assert outcome['imported'] == 1
+    assert outcome['failedUpstream'] == 1
 
 
-def test_banner_shows_skipped_count_when_mixed_with_successes(admin_client, conv):
-    """When some statements succeed and one is Polis-rejected, the banner shows
-    the correct counts and the per-statement flash explains the Polis skip."""
+def test_outcome_counts_successes_and_upstream_skips_together(admin_client, conv):
+    """The banner read "2 imported - 1 skipped"; those two numbers are the outcome."""
     def bulk_side_effect(conv_id, texts):
         return len(texts) - 1, [(texts[-1], PolisServerError('already exists'))]
 
     with _mock_polis() as mock:
         mock.return_value.bulk_add_seeds.side_effect = bulk_side_effect
-        resp = _text_import(admin_client, conv.id, 'Good one\nAlso good\nBad one')
-    # Banner: "✓ 2 imported — ⚠ 1 skipped"
-    assert b'2 imported' in resp.data
-    assert b'1 skipped' in resp.data
-    assert b'already in polis' in resp.data.lower()
+        outcome = _outcome(_import(admin_client, conv.id,
+                                   ['Good one', 'Also good', 'Bad one']))
+    assert outcome['imported'] == 2
+    assert outcome['failedUpstream'] == 1
 
 
 # ── Security ─────────────────────────────────────────────────────────────────
 
-def test_xss_in_statement_text_is_escaped(admin_client, conv):
-    with _mock_polis():
-        resp = _text_import(admin_client, conv.id, '<script>alert(1)</script>')
+def test_xss_in_statement_text_never_reaches_polis(admin_client, conv):
+    """A script payload is stripped to nothing and the import is refused.
+
+    The Jinja version asserted only that '<script>' was absent from the rendered
+    page, which the empty SPA shell satisfied for free. What matters is that the
+    payload never reaches Polis: nh3 removes the script element and its contents,
+    leaving an empty statement, which the import then rejects outright.
+    """
+    with _mock_polis() as mock:
+        resp = _import(admin_client, conv.id, ['<script>alert(1)</script>'])
+    assert 'empty after sanitization' in _error(resp, 400)['message'].lower()
+    assert _sent(mock) is None
     assert b'<script>' not in resp.data
 
 
 def test_formula_injection_stripped_before_add_seed(admin_client, conv):
     with _mock_polis() as mock:
-        _text_import(admin_client, conv.id, '=DANGEROUS')
-    texts_sent = mock.return_value.bulk_add_seeds.call_args[0][1]
-    assert texts_sent and not texts_sent[0].startswith('=')
+        _outcome(_import(admin_client, conv.id, ['=DANGEROUS']))
+    assert _sent(mock) == ['DANGEROUS']
 
 
 def test_html_entity_formula_injection_stripped(admin_client, conv):
-    # &equals; is the HTML entity for '=' — nh3 decodes it, so we must
-    # re-strip formula prefixes after sanitisation.
+    # &equals; is the HTML entity for '=' — nh3 decodes it, so the formula prefix
+    # must be stripped again after sanitisation.
     with _mock_polis() as mock:
-        resp = _text_import(admin_client, conv.id, '&equals;SUM(A1)')
-    # &equals; decodes to '=' via nh3; second-pass strip_formula_prefixes must remove it.
-    assert mock.return_value.bulk_add_seeds.call_args is None or \
-           all(not t.startswith('=') for t in mock.return_value.bulk_add_seeds.call_args[0][1])
+        _outcome(_import(admin_client, conv.id, ['&equals;SUM(A1)']))
+    assert _sent(mock) == ['SUM(A1)']
 
 
-def test_all_tags_text_produces_empty_string_and_is_not_sent(admin_client, conv):
-    # A line that is only HTML tags becomes '' after nh3.clean — must not be
-    # sent to Polis as an empty seed statement.
+def test_text_that_sanitizes_to_nothing_is_rejected(admin_client, conv):
+    """CHANGED BEHAVIOUR (was test_all_tags_text_produces_empty_string_and_is_not_sent).
+
+    '<b></b>' becomes '' after nh3.clean. The textarea route dropped such a line
+    silently; the API rejects the import and names the statement. Either way it
+    must never reach Polis as an empty seed.
+    """
     with _mock_polis() as mock:
-        _text_import(admin_client, conv.id, '<b></b>')
-    call_args = mock.return_value.bulk_add_seeds.call_args
-    assert call_args is None or call_args[0][1] == []
+        resp = _import(admin_client, conv.id, ['<b></b>'])
+    message = _error(resp, 400)['message']
+    assert 'Statement 1' in message
+    assert 'empty after sanitization' in message.lower()
+    assert _sent(mock) is None
 
 
 def test_nh3_induced_duplicate_sent_only_once(admin_client, conv):
     # '<b>Hello</b>' and 'Hello' both sanitize to 'Hello' — only one
     # should reach Polis.
     with _mock_polis() as mock:
-        _text_import(admin_client, conv.id, '<b>Hello</b>\nHello')
-    call_args = mock.return_value.bulk_add_seeds.call_args
-    assert call_args is not None, "bulk_add_seeds should have been called"
-    texts_sent = call_args[0][1]
+        outcome = _outcome(_import(admin_client, conv.id, ['<b>Hello</b>', 'Hello']))
+    texts_sent = _sent(mock)
+    assert texts_sent is not None, 'bulk_add_seeds should have been called'
     assert texts_sent.count('Hello') == 1
+    assert outcome['skippedDuplicateInput'] == 1

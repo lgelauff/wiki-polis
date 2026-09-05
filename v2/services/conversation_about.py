@@ -57,19 +57,6 @@ class ConversationAbout:
     moderation_log_count: int
     can_moderate: bool
 
-    def template_context(self) -> dict:
-        return {
-            'conversation': self.conversation,
-            'participation': self.participation,
-            'phases': self.phases,
-            'outputs': self.outputs,
-            'statistics': self.statistics,
-            'personal': self.personal,
-            'moderation_log_count': self.moderation_log_count,
-            'can_moderate': self.can_moderate,
-            'scheduled_transition': scheduled_transition(self.conversation),
-        }
-
     def to_api(self, *, self_link: str, conversation_link: str,
                moderation_log_link: str) -> dict:
         return {

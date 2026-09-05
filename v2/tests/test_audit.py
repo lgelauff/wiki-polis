@@ -59,14 +59,24 @@ def test_audit_row_target_id_none_stays_none(app):
 # ── A real admin route produces an audit row ────────────────────────────────
 
 def test_close_route_writes_audit_row(client, app):
+    from unittest.mock import patch
+
     pid = _login(client, app)
     with app.app_context():
-        conv = Conversation(slug='auditc', title='Audit C', active=True, polis_id='p1')
+        conv = Conversation(slug='auditc', title='Audit C', active=True, polis_id='p1',
+                            phase_public_results=True,
+                            phase6_polis_conversation_id='p6-private')
         db.session.add(conv)
         db.session.commit()
         conv_id = conv.id
-    r = client.post(f'/admin/conversations/{conv_id}/close')
-    assert r.status_code in (302, 303)
+    confirmed = [
+        'cleanup_reviewed_results', 'cleanup_moderated_flagged',
+        'cleanup_reviewed_exclusions', 'cleanup_report_intro',
+    ]
+    with patch('app.PolisServerClient.get_statements', return_value=([], [], [])):
+        r = client.post(f'/api/v1/admin/conversations/{conv_id}/publication',
+                        json={'confirmedPreconditionIds': confirmed})
+    assert r.status_code == 201
     with app.app_context():
         rows = AuditEvent.query.filter_by(operation='conversation.close').all()
         assert len(rows) == 1
@@ -88,14 +98,20 @@ def test_audit_rows_carry_no_pii_or_content(client, app):
     with app.app_context():
         conv = Conversation(slug='auditp', title='Audit P', active=True, polis_id='p2')
         db.session.add(conv)
+        # The grant must actually change something, or no audit row is written and
+        # the 'global_admin.grant' assertion below would be vacuous.
+        db.session.add(Participant(mw_user_id=1234, mw_username='GranteeUser',
+                                   xid='e' * 64))
         db.session.commit()
         conv_id = conv.id
     secret_text = 'THE QUICK BROWN FOX statement body'
     with patch('app.PolisServerClient.add_seed'):          # seed path now commits a row
-        r = client.post(f'/admin/conversations/{conv_id}/statements/seed',
-                        data={'txt': secret_text})
-        assert r.status_code in (302, 303)
-    client.post('/admin/global-admins/add', data={'mw_username': 'AdminUser'})
+        r = client.post(f'/api/v1/admin/conversations/{conv_id}/statements',
+                        json={'text': secret_text, 'derivedFromId': None})
+        assert r.status_code == 201
+    grant = client.post('/api/v1/admin/global-admin-grants',
+                        json={'username': 'GranteeUser'})
+    assert grant.status_code == 201                        # 201 == actually changed
 
     with app.app_context():
         ops = {row.operation for row in AuditEvent.query.all()}
@@ -104,5 +120,6 @@ def test_audit_rows_carry_no_pii_or_content(client, app):
         for row in AuditEvent.query.all():
             blob = f'{row.target_type} {row.target_id} {row.detail}'
             assert secret_text not in blob                 # statement text never stored
-            assert 'AdminUser' not in blob                 # username never stored
+            assert 'AdminUser' not in blob                 # actor username never stored
+            assert 'GranteeUser' not in blob               # target username never stored
             assert 'f' * 64 not in blob                    # xid never present

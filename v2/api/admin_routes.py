@@ -49,6 +49,7 @@ def register_admin_routes(
     *,
     no_store: Callable,
     error_response: Callable,
+    limiter,
     resolve_admin_catalog: Callable[[], dict],
     create_admin_conversation: Callable[[dict], dict],
     grant_global_admin: Callable[[dict], dict],
@@ -415,6 +416,7 @@ def register_admin_routes(
         return _no_store(jsonify({'data': data}))
 
     @bp.post('/admin/conversations/<int:conversation_id>/statement-imports')
+    @limiter.limit('5 per minute')
     def post_admin_statement_import(conversation_id: int):
         body = request.get_json(silent=True)
         if (not isinstance(body, dict) or set(body) != {'statements'}

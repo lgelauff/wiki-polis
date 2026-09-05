@@ -1,9 +1,17 @@
 """Tests for phase-specific statistics in the admin conversation window (#165).
 
-Covers the per-phase tile selection in _phase_stats() and the loud warning shown
+Covers the per-phase tile selection in _phase_tiles() and the loud warning raised
 when Polis PG is configured but unreachable.
+
+Ported off the Jinja admin page onto GET /api/v1/admin/conversations/<id>, which
+exposes the same computation as ``statistics.groups[].tiles[]`` plus the
+``statistics.upstreamUnavailable`` flag. What is deliberately *not* asserted here
+any more is the rendering: the tile markup, the ``aria-labelledby`` wiring and the
+warning/header copy ("Live statistics unavailable", "Multiple phases active",
+"... shown below") are the SPA's, not the server's. The server decides which
+groups exist, which tiles they carry, what those tiles read, and whether the
+upstream is flagged as down — and that is what these tests hold.
 """
-import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -30,17 +38,38 @@ def _participant(uid, name):
     return p
 
 
-def _tile_value(html, label):
-    """Return the tile value rendered next to the given phase-stat label, or None.
+def _lifecycle(admin_client, conv):
+    resp = admin_client.get(f'/api/v1/admin/conversations/{conv.id}')
+    assert resp.status_code == 200
+    return resp.get_json()['data']
 
-    The negative lookahead keeps the captured value within the same tile — it must
-    not skip across an intervening phase-stat-value div to reach the label.
+
+def _stats(admin_client, conv):
+    return _lifecycle(admin_client, conv)['statistics']
+
+
+def _tile(stats, label):
+    """The tile carrying `label`, from whichever group holds it, or None."""
+    for group in stats['groups']:
+        for tile in group['tiles']:
+            if tile['label'] == label:
+                return tile
+    return None
+
+
+def _tile_value(stats, label):
+    tile = _tile(stats, label)
+    return tile['value'] if tile else None
+
+
+def _tiled_group_labels(stats):
+    """Labels of the groups that actually carry tiles.
+
+    A group with no tiles rendered no block in the old page, so it is excluded
+    here too — that is what 'Explore yields no tiles, so it gets no group block'
+    used to mean.
     """
-    m = re.search(
-        r'phase-stat-value">([^<]*)<(?:(?!phase-stat-value).)*?phase-stat-label">'
-        + re.escape(label) + '<',
-        html, re.DOTALL)
-    return m.group(1).strip() if m else None
+    return [g['label'] for g in stats['groups'] if g['tiles']]
 
 
 # ── Featured-selection phase ────────────────────────────────────────────────────
@@ -54,9 +83,9 @@ def test_featured_selection_shows_selected_vs_recommended(admin_client, conv):
                                      confirmed_by_admin=False))   # not confirmed
     db.session.commit()
 
-    page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
-    assert _tile_value(page, 'featured selected') == '3'
-    assert 'recommended' in page                  # advisory note rendered
+    stats = _stats(admin_client, conv)
+    assert _tile_value(stats, 'featured selected') == 3
+    assert 'recommended' in _tile(stats, 'featured selected')['note']   # advisory note
 
 
 # ── Argument-mapping phase ──────────────────────────────────────────────────────
@@ -87,12 +116,12 @@ def test_argument_mapping_counts_pro_con_contributors_raters(admin_client, conv)
     db.session.add(ArgumentVote(argument_id=con1.id, participant_id=rater.id))
     db.session.commit()
 
-    page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+    stats = _stats(admin_client, conv)
     # Seeds (NULL proposer) and hidden args are excluded from the counts.
-    assert _tile_value(page, 'pro arguments') == '2'
-    assert _tile_value(page, 'con arguments') == '1'
-    assert _tile_value(page, 'contributors') == '2'      # p1, p2 — distinct
-    assert _tile_value(page, 'rating arguments') == '1'  # one distinct rater
+    assert _tile_value(stats, 'pro arguments') == 2
+    assert _tile_value(stats, 'con arguments') == 1
+    assert _tile_value(stats, 'contributors') == 2      # p1, p2 — distinct
+    assert _tile_value(stats, 'rating arguments') == 1  # one distinct rater
 
 
 def test_argument_mapping_raters_exclude_hidden_only_voters(admin_client, conv):
@@ -117,9 +146,9 @@ def test_argument_mapping_raters_exclude_hidden_only_voters(admin_client, conv):
     db.session.add(ArgumentVote(argument_id=hidden.id, participant_id=hidden_rater.id))
     db.session.commit()
 
-    page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+    stats = _stats(admin_client, conv)
     # Only the visible-arg rater counts; the hidden-only rater is excluded.
-    assert _tile_value(page, 'rating arguments') == '1'
+    assert _tile_value(stats, 'rating arguments') == 1
 
 
 # ── Informed-voting phase ───────────────────────────────────────────────────────
@@ -142,12 +171,12 @@ def test_informed_voting_shows_round2_stats(admin_client, conv):
     server = MagicMock()
     server.get_polis_stats.side_effect = stats_for
     with patch('app._polis_server_client', return_value=server):
-        page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+        stats = _stats(admin_client, conv)
 
-    assert _tile_value(page, 'statements seeded') == '1/1'
-    assert _tile_value(page, 'voted this round') == '7'
-    assert _tile_value(page, 'informed votes') == '21'
-    assert _tile_value(page, 'round 1 participants') == '12'
+    assert _tile_value(stats, 'statements seeded') == '1/1'
+    assert _tile_value(stats, 'voted this round') == 7
+    assert _tile_value(stats, 'informed votes') == 21
+    assert _tile_value(stats, 'round 1 participants') == 12
 
 
 def test_informed_voting_warns_when_phase6_fetch_fails(app, admin_client, conv):
@@ -170,19 +199,18 @@ def test_informed_voting_warns_when_phase6_fetch_fails(app, admin_client, conv):
     server = MagicMock()
     server.get_polis_stats.side_effect = stats_for
     with patch('app._polis_server_client', return_value=server):
-        page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+        stats = _stats(admin_client, conv)
 
-    assert 'phase-stats-warning' in page
-    assert 'Live statistics unavailable' in page
-    # Round-2 tiles are absent (no phase6_stats); the warning explains why.
-    assert _tile_value(page, 'voted this round') is None
+    assert stats['upstreamUnavailable'] is True
+    # Round-2 tiles are absent (no phase6_stats); the flag explains why.
+    assert _tile_value(stats, 'voted this round') is None
 
 
 # ── Multiple phases active at once (advanced mode) ──────────────────────────────
 
 def test_multi_phase_renders_a_group_per_active_phase(admin_client, conv):
-    # Two phase flags on → the box names every active phase and renders a labelled
-    # stat group per phase, each with its own tiles (not just the furthest-along one).
+    # Two phase flags on → every active phase is reported, each as its own labelled
+    # stat group with its own tiles (not just the furthest-along one).
     conv.phase_argument_mapping = True
     conv.phase_informed_voting = True
     conv.phase6_polis_conversation_id = 'p6conv1234'
@@ -204,25 +232,29 @@ def test_multi_phase_renders_a_group_per_active_phase(admin_client, conv):
     server = MagicMock()
     server.get_polis_stats.side_effect = stats_for
     with patch('app._polis_server_client', return_value=server):
-        page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+        data = _lifecycle(admin_client, conv)
+    stats = data['statistics']
 
-    assert 'Multiple phases active' in page
-    # A labelled group for each active phase, in sequence order.
-    assert 'phase-stats-group-label">Arguments' in page
-    assert 'phase-stats-group-label">Informed vote' in page
-    # Tiles from both groups render.
-    assert _tile_value(page, 'pro arguments') == '1'
-    assert _tile_value(page, 'statements seeded') == '1/1'
-    assert _tile_value(page, 'voted this round') == '7'
+    assert len(data['phase']['activeKeys']) > 1          # more than one phase active
+    assert data['phase']['linear'] is False
+    # A labelled group for each active phase.
+    assert _tiled_group_labels(stats) == ['Arguments', 'Informed vote']
+    # Tiles from both groups are present.
+    assert _tile_value(stats, 'pro arguments') == 1
+    assert _tile_value(stats, 'statements seeded') == '1/1'
+    assert _tile_value(stats, 'voted this round') == 7
 
 
-def test_single_phase_renders_flat_without_group_label(admin_client, conv):
-    # One active phase → flat readout, no per-phase heading (simple-mode look preserved).
+def test_single_phase_reports_one_group_and_no_multi_phase_state(admin_client, conv):
+    # One active phase → a single group, and the server does not report the
+    # multi-phase (non-linear) state the page used to headline.
     conv.phase_argument_mapping = True
     db.session.commit()
-    page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
-    assert 'phase-stats-group-label' not in page
-    assert 'Multiple phases active' not in page
+    data = _lifecycle(admin_client, conv)
+
+    assert data['phase']['activeKeys'] == ['argument_mapping']
+    assert data['phase']['linear'] is True
+    assert _tiled_group_labels(data['statistics']) == ['Arguments']
 
 
 def test_multi_phase_informed_voting_warns_on_phase6_outage(app, admin_client, conv):
@@ -244,47 +276,45 @@ def test_multi_phase_informed_voting_warns_on_phase6_outage(app, admin_client, c
     server = MagicMock()
     server.get_polis_stats.side_effect = stats_for
     with patch('app._polis_server_client', return_value=server):
-        page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
+        data = _lifecycle(admin_client, conv)
 
-    assert 'phase-stats-warning' in page
-    assert 'Live statistics unavailable' in page
-    assert 'Multiple phases active' in page
+    assert data['statistics']['upstreamUnavailable'] is True
+    assert len(data['phase']['activeKeys']) > 1
 
 
 def test_multi_phase_lone_tiled_group_is_still_labelled(admin_client, conv):
     # Non-linear with two phases named, but only one currently has data: Explore is
     # Polis-only (no tiles while PG is down) and Arguments has Flask-derived tiles. The
-    # single rendered group must still carry its phase label — otherwise the header names
+    # single tiled group must still carry its phase label — otherwise the header names
     # two phases over one anonymous block and the reader can't tell whose numbers these are.
     conv.phase_submission = True            # Explore — polis_basic() → [] (no polis stats)
     conv.phase_argument_mapping = True      # Arguments — Flask tiles always render
     db.session.commit()
 
-    page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
-    assert 'Multiple phases active' in page
-    assert 'Explore + Arguments' in page                  # header names both active phases
-    # The lone tiled group is labelled and the <dl> is associated with it for screen readers.
-    assert 'phase-stats-group-label">Arguments' in page
-    assert 'aria-labelledby="psg-1"' in page
-    # Explore yields no tiles, so it gets no group block of its own.
-    assert 'phase-stats-group-label">Explore' not in page
-    assert 'Statistics for the phases with available data are shown below' in page
+    data = _lifecycle(admin_client, conv)
+    stats = data['statistics']
+    # The header names both active phases.
+    assert sorted(data['phase']['activeKeys']) == ['argument_mapping', 'submission']
+    assert [g['label'] for g in stats['groups']] == ['Explore', 'Arguments']
+    # Explore yields no tiles, so it contributes no tiled block of its own; the one
+    # block that does render is labelled.
+    assert _tiled_group_labels(stats) == ['Arguments']
 
 
-def test_multi_phase_all_polis_only_omits_shown_below_copy(admin_client, conv):
+def test_multi_phase_all_polis_only_yields_no_tiled_group(admin_client, conv):
     # Two Polis-only phases active with no Polis stats (PG unconfigured → no warning):
-    # neither yields tiles. The header still names them, but the "...shown below" promise
-    # must be dropped rather than left dangling over an empty stats area.
+    # neither yields tiles. The phases are still named, but nothing is left to show, so
+    # the page had to drop its "...shown below" promise rather than leave it dangling.
     conv.phase_submission = True            # Explore — polis-only
     conv.phase_public_results = True        # Report  — polis-only
     db.session.commit()
 
-    page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
-    assert 'Multiple phases active' in page
-    assert 'Explore + Report' in page
-    assert 'Statistics for the phases with available data are shown below' not in page
-    assert 'phase-stats-group-label' not in page          # no group renders
-    assert 'phase-stats-warning' not in page              # PG unconfigured — None is expected
+    data = _lifecycle(admin_client, conv)
+    stats = data['statistics']
+    assert len(data['phase']['activeKeys']) > 1
+    assert [g['label'] for g in stats['groups']] == ['Explore', 'Report']
+    assert _tiled_group_labels(stats) == []               # nothing to show below
+    assert stats['upstreamUnavailable'] is False          # PG unconfigured — None is expected
 
 
 def test_multi_phase_stepper_marks_every_active_step_current(admin_client, conv):
@@ -295,9 +325,10 @@ def test_multi_phase_stepper_marks_every_active_step_current(admin_client, conv)
     conv.phase_argument_mapping = True      # index 3 (non-contiguous)
     db.session.commit()
 
-    page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
-    assert page.count('journey-step--current') == 2       # both active steps marked current
-    assert 'journey-step--done' not in page               # nothing collapsed to "done"
+    steps = _lifecycle(admin_client, conv)['phase']['steps']
+    states = [s['state'] for s in steps]
+    assert states.count('current') == 2                   # both active steps marked current
+    assert 'done' not in states                           # nothing collapsed to "done"
 
 
 # ── Loud warning when Polis PG is configured but down ───────────────────────────
@@ -307,9 +338,8 @@ def test_warning_when_pg_configured_but_unavailable(app, admin_client, conv):
     server = MagicMock()
     server.get_polis_stats.return_value = None        # PG unreachable
     with patch('app._polis_server_client', return_value=server):
-        page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
-    assert 'phase-stats-warning' in page
-    assert 'Live statistics unavailable' in page
+        stats = _stats(admin_client, conv)
+    assert stats['upstreamUnavailable'] is True
 
 
 def test_no_warning_when_pg_not_configured(admin_client, conv):
@@ -317,5 +347,5 @@ def test_no_warning_when_pg_not_configured(admin_client, conv):
     server = MagicMock()
     server.get_polis_stats.return_value = None
     with patch('app._polis_server_client', return_value=server):
-        page = admin_client.get(f'/admin/conversations/{conv.id}').get_data(as_text=True)
-    assert 'phase-stats-warning' not in page
+        stats = _stats(admin_client, conv)
+    assert stats['upstreamUnavailable'] is False

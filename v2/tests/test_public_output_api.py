@@ -116,13 +116,29 @@ def test_output_contract_projects_ready_context(
 def test_output_contract_rejects_unknown_output(
     auth_client, participant, conversation,
 ):
+    """404 for an unknown output key — and 200 for a known one on the same route.
+
+    The negative half alone is vacuous: it would pass just as well if the endpoint
+    had been deleted, which is how a whole-suite mutation of the /api/v1/ prefix
+    left this test green. The positive probe is what distinguishes 'rejects this
+    output key' from 'route absent'.
+    """
     _join(conversation, participant)
+    conversation.phase_argument_mapping = True
+    db.session.commit()
 
     response = auth_client.get(
         '/api/v1/conversations/test-conv/outputs/not-real',
     )
 
     assert response.status_code == 404
+
+    known = auth_client.get(
+        '/api/v1/conversations/test-conv/outputs/initial-clustering',
+    )
+
+    assert known.status_code == 200
+    assert known.get_json()['data']['output']['key'] == 'initial-clustering'
 
 
 def test_openapi_describes_public_read_operations(client):

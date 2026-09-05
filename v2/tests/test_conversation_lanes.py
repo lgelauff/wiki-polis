@@ -40,6 +40,20 @@ def test_classify_joined_conversation(values, expected):
     assert classify_joined_conversation(**values) == expected
 
 
+def _lanes(client):
+    resp = client.get('/api/v1/conversations')
+    assert resp.status_code == 200
+    return resp.get_json()['data']['groups']
+
+
+def _slugs(groups, lane):
+    return [c['slug'] for c in groups[lane]]
+
+
+def _entry(groups, lane, slug):
+    return next(c for c in groups[lane] if c['slug'] == slug)
+
+
 def test_joined_paused_conversation_is_not_presented_as_active(
     auth_client, joined_conversation,
 ):
@@ -47,11 +61,11 @@ def test_joined_paused_conversation_is_not_presented_as_active(
     joined_conversation.phase_submission = True
     db.session.commit()
 
-    page = auth_client.get('/consultations').data.decode()
+    groups = _lanes(auth_client)
 
-    assert 'Inactive / paused' in page
-    assert 'Test Conversation' in page
-    assert 'Needs attention' not in page
+    assert _slugs(groups, 'inactive') == ['test-conv']
+    assert _entry(groups, 'inactive', 'test-conv')['title'] == 'Test Conversation'
+    assert _slugs(groups, 'needsAttention') == []
 
 
 def test_joined_participant_with_no_explore_votes_left_is_caught_up(
@@ -66,10 +80,12 @@ def test_joined_participant_with_no_explore_votes_left_is_caught_up(
         'app.PolisServerClient.get_statements_remaining_bulk',
         return_value={joined_conversation.polis_id: 0},
     ):
-        page = auth_client.get('/consultations').data.decode()
+        groups = _lanes(auth_client)
 
-    assert 'Caught up' in page
-    assert 'Test Conversation' in page
+    assert _slugs(groups, 'caughtUp') == ['test-conv']
+    entry = _entry(groups, 'caughtUp', 'test-conv')
+    assert entry['title'] == 'Test Conversation'
+    assert entry['participantState'] == 'caught_up'
 
 
 def test_joined_participant_with_explore_work_needs_attention(
@@ -84,10 +100,12 @@ def test_joined_participant_with_explore_work_needs_attention(
         'app.PolisServerClient.get_statements_remaining_bulk',
         return_value={joined_conversation.polis_id: 3},
     ):
-        page = auth_client.get('/consultations').data.decode()
+        groups = _lanes(auth_client)
 
-    assert 'Needs attention' in page
-    assert '3 to vote' in page
+    assert _slugs(groups, 'needsAttention') == ['test-conv']
+    entry = _entry(groups, 'needsAttention', 'test-conv')
+    assert entry['participantState'] == 'needs_attention'
+    assert entry['statementsRemaining'] == 3          # the "3 to vote" the page showed
 
 
 def test_dashboard_shows_scheduled_transition_target_and_semantic_time(
@@ -98,8 +116,12 @@ def test_dashboard_shows_scheduled_transition_target_and_semantic_time(
     joined_conversation.scheduled_transition_target = 'argument_mapping'
     db.session.commit()
 
-    page = auth_client.get('/consultations').data.decode()
+    groups = _lanes(auth_client)
 
-    assert 'Next: Arguments' in page
-    assert 'datetime="2026-08-20T14:30:00Z"' in page
-    assert 'data-local-datetime' in page
+    # The page rendered "Next: Arguments" inside a <time datetime=...> the client
+    # localised. The label and the machine-readable UTC instant are the server's
+    # half of that; the <time> element and data-local-datetime hook are the SPA's.
+    scheduled = _entry(groups, 'needsAttention', 'test-conv')['scheduledTransition']
+    assert scheduled['target'] == 'argument_mapping'
+    assert scheduled['targetLabel'] == 'Arguments'
+    assert scheduled['at'] == '2026-08-20T14:30:00Z'
