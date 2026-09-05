@@ -70,7 +70,10 @@ def test_trusted_hosts_rejects_unexpected_host(tmp_path):
         db.create_all()
     client = a.test_client()
 
-    assert client.get('/', headers={'Host': 'wiki-polis.test'}).status_code == 200
+    # `/` is the SPA shell and 404s when no frontend build is present, which is
+    # the case in the backend CI job. Host validation is what this test is for,
+    # so assert the trusted host is not *rejected* rather than pinning a status.
+    assert client.get('/', headers={'Host': 'wiki-polis.test'}).status_code != 400
     assert client.get('/', headers={'Host': 'evil.test'}).status_code == 400
 
 
