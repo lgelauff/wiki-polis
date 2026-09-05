@@ -191,12 +191,18 @@ def test_catalogue_endpoint_is_cacheable_only_when_the_build_is_pinned(client):
 
 _V2_ROOT = _I18N_DIR.parent
 
-# msg('key') in Jinja, _('key') in Python. The literal must be followed directly by ','
+# _('key') in Python, msg('key') in the SPA. The literal must be followed directly by ','
 # or ')', which excludes keys assembled at runtime — _('phase-label-' + stage['key']) —
 # that a static scan cannot resolve. Those are guarded by their prefix, not here.
 _CALL_SITE_RE = _re.compile(r"""\b(?:msg|_)\(\s*(['"])([A-Za-z0-9][A-Za-z0-9._-]*)\1\s*[,)]""")
 
-_SCAN_GLOBS = ('*.py', 'api/*.py', 'services/*.py', 'templates/**/*.html')
+# The React SPA is the only surface, so frontend/src is the half that matters. The Python
+# globs stay because server-side copy may yet be keyed. There is no templates/ glob: the
+# Jinja frontend was deleted, and a glob that matches nothing reads like coverage.
+_SCAN_GLOBS = (
+    '*.py', 'api/*.py', 'services/*.py',
+    'frontend/src/**/*.ts', 'frontend/src/**/*.tsx',
+)
 
 
 def _scan_text(text):
@@ -227,6 +233,9 @@ def test_call_site_scanner_reads_literals_and_skips_runtime_built_keys():
 
 
 def test_every_message_key_referenced_in_code_exists_in_en_json():
+    # NOTE: no surface calls msg()/_() yet — the SPA wiring is the next phase — so this
+    # currently asserts over an empty set and cannot fail. That is why the scanner has its
+    # own test above: it keeps the regex honest until there are call sites to catch.
     en = _load('en.json')
     missing = sorted(
         f'{key} (at {where})'

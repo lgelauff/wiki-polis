@@ -1,6 +1,6 @@
-# wiki-polis i18n messages
+# ProtoWiki i18n messages
 
-UI strings for wiki-polis, in the **translatewiki.net (TWN) "banana" JSON** format.
+UI strings for ProtoWiki, in the **translatewiki.net (TWN) "banana" JSON** format.
 `en.json` is the **source** (English); `qqq.json` documents each message for translators;
 `<code>.json` files are translations **delivered by TWN** — do not edit those by hand.
 
@@ -10,33 +10,33 @@ The catalogue and the resolver are in place; **no surface reads them yet.**
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (885 keys, 100% documented) | ✅ committed |
+| `en.json` + `qqq.json` (851 keys, 100% documented) | ✅ committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
 | React SPA reads it via `banana-i18n` | ⬜ next |
-| Jinja templates wrapped in `msg()` | ⬜ after the SPA |
 | Locales offered to users (`ENABLED_LOCALES`) | English only |
 
 `ENABLED_LOCALES` defaults to `en`, so nothing here is user-visible yet. The keys are the
-durable asset: they were authored against the Jinja UI but ~75% of them match strings the
-React SPA renders today, so the same namespace serves both surfaces.
+durable asset: they were authored against the Jinja UI, which has since been deleted, but
+**562 of the SPA's 785 distinct strings (72%) already have an equivalent here** — 495 exact
+matches plus 67 that JSX splits around inline markup. So wiring the SPA is mostly mapping
+existing keys, not authoring a second catalogue.
 
 ## Who consumes this
 
-**The React SPA in `v2/frontend` is the primary consumer.** It is what users actually reach:
-`SPA_DEFAULT_ENABLED` is on and the canonical routes serve the React shell. The SPA fetches
-`/api/v1/i18n/<locale>` once and feeds the map to `banana-i18n`, which parses this exact format
-and brings real CLDR plural rules.
+**The React SPA in `v2/frontend` is the only consumer.** The Jinja frontend these messages
+were originally written against was deleted in #351 — there is no second surface, no
+`?spa_only=0` fallback, and no Jinja `msg()` handle. The SPA fetches `/api/v1/i18n/<locale>`
+once and feeds the map to `banana-i18n`, which parses this exact format and brings real CLDR
+plural rules.
 
-**The Jinja templates in `v2/templates` are the `?spa_only=0` fallback.** They still render
-every page, and are still reachable by appending `?spa_only=0` (or holding the `spa_only=0`
-cookie), but they are not the default path for any route the SPA covers. They have their own
-`msg()` handle in the Jinja context and no wrapped strings yet; wrapping them is a later phase
-and may not happen at all if the legacy deck is retired.
+Freeze the key namespace before TWN onboarding: renaming keys after translators start costs
+them their work.
 
-Both surfaces read the same `en.json`. That is the point of freezing the key namespace before
-TWN onboarding: renaming keys after translators start costs them their work.
+**Server-side copy is deliberately not keyed.** 122 user-visible English strings live in
+`error_response(...)` and `abort(description=...)`. The SPA maps `error.code` to its own copy
+rather than rendering the server's `message`, so those strings stay developer-facing.
 
 ## For translators
 
@@ -47,23 +47,22 @@ by the number in `$1` — use the plural forms your language needs.
 ## For maintainers — adding or changing a UI string
 
 1. **Reuse before you mint.** Search `en.json` for the English text first. A large fraction of
-   the SPA's copy already has a key here under a name derived from the Jinja page it came
+   the SPA's copy already has a key here under a name derived from the page it came
    from. Reusing it keeps one message for translators instead of two.
 2. Add a key to **`en.json`** (English text) and a one-line context note to **`qqq.json`**.
    Never leave a message in `en.json` without a `qqq.json` entry — CI fails on it.
 3. Use it:
    - **React (primary):** through the `banana-i18n` store loaded from
      `GET /api/v1/i18n/<locale>`.
-   - **Jinja (fallback):** `{{ msg('surface-key') }}` (params: `{{ msg('key', var) }}`).
-     The handle is injected by the context processor in `create_app()`.
-   - **Python:** there is no `_()` helper on `main` yet. Server-rendered `flash()` copy and
-     API error strings are wrapped in a later phase.
+   - **Python:** there is no `_()` helper yet, and server-side copy is deliberately not
+     keyed — the SPA maps `error.code` to its own message rather than rendering the API's
+     English `message`.
 4. **Key convention:** `surface-subkey`, lowercase-hyphenated, grouped by page/area — e.g.
-   `base-log-out`, `home-open-consultations`, `conversation-vote-agree`,
-   `guidance-statement-heading`, `import-n-imported`.
-5. **Plurals / counts:** `"import-n-imported": "$1 {{PLURAL:$1|statement|statements}} imported"`.
-6. **Never** hardcode user-facing English in a component, template, `flash()`, or API error
-   payload once that surface has been converted.
+   `base-log-out`, `home-open-consultations`, `conv-vote-agree`, `guidance-statement-heading`.
+   (Every example here is a real key; check before copying one into a new message.)
+5. **Plurals / counts:** `"reveal-tl-days": "$1 {{PLURAL:$1|day|days}}"`.
+6. **Never** hardcode user-facing English in a component once that surface has been
+   converted.
 
 ## The endpoint
 
@@ -106,7 +105,7 @@ is a tool for the conversion phases rather than a passing check.
 
 ## Scope — the interface / content split
 
-wiki-polis has **two language surfaces**, and only one is translated here.
+ProtoWiki has **two language surfaces**, and only one is translated here.
 
 ### Interface (translate — this catalogue)
 
@@ -184,8 +183,10 @@ offered.
 - a `{{PLURAL:}}` or placeholder is malformed;
 - **a key referenced in code does not exist in `en.json`** — a typo would otherwise ship and
   render as `⧼key⧽` at runtime. The scan reads `msg('key')` and `_('key')` literals across
-  `v2/*.py`, `v2/api/`, `v2/services/` and `v2/templates/`; keys assembled at runtime are
-  skipped, since a static scan cannot resolve them.
+  `v2/*.py`, `v2/api/`, `v2/services/` and `v2/frontend/src/`; keys assembled at runtime are
+  skipped, since a static scan cannot resolve them. **No surface calls either helper yet**,
+  so this guard is inert until the SPA is wired — it is in place so the first typo'd key
+  fails CI rather than shipping.
 
 Add both the `en.json` value **and** the `qqq.json` line in the same change and the guards
 stay green.

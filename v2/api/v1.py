@@ -185,6 +185,7 @@ def create_api_v1_blueprint(
         return _no_store(jsonify(_OPENAPI_SPEC))
 
     @bp.get('/i18n/<locale>')
+    @limiter.limit('120 per minute')
     def get_messages(locale):
         """Full UI message catalogue for ``locale``, in translatewiki.net banana format.
 
