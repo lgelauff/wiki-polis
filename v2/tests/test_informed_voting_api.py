@@ -145,8 +145,13 @@ def test_informed_vote_is_idempotent_put_and_translates_phase6_sign(
 ):
     conversation, participation, first, _second = _fixture(participant)
     with auth_client.session_transaction() as browser_session:
-        browser_session['_p6_pa'] = 'phase6-cookie'
-        browser_session['_p6_csrf'] = 'phase6-csrf'
+        # Phase 6 sessions are keyed per conversation, exactly like Phase 2's
+        # `particiapi_api_sessions` (see test_phase6_session_scope.py).
+        browser_session['phase6_api_sessions'] = {
+            str(conversation.id): {
+                'cookie': 'phase6-cookie', 'csrfToken': 'phase6-csrf',
+            },
+        }
 
     with patch('app.polis_http.put', return_value=_response({})) as put:
         response = auth_client.put(
@@ -187,8 +192,13 @@ def test_informed_vote_sends_polis_signs_for_every_choice(
     """
     conversation, participation, first, _second = _fixture(participant)
     with auth_client.session_transaction() as browser_session:
-        browser_session['_p6_pa'] = 'phase6-cookie'
-        browser_session['_p6_csrf'] = 'phase6-csrf'
+        # Phase 6 sessions are keyed per conversation, exactly like Phase 2's
+        # `particiapi_api_sessions` (see test_phase6_session_scope.py).
+        browser_session['phase6_api_sessions'] = {
+            str(conversation.id): {
+                'cookie': 'phase6-cookie', 'csrfToken': 'phase6-csrf',
+            },
+        }
 
     with patch('app.polis_http.put', return_value=_response({})) as put:
         response = auth_client.put(
@@ -212,10 +222,14 @@ def test_informed_vote_rejects_featured_statement_from_another_round(
     this test green. The positive probe on the same endpoint is what makes the 404
     mean 'rejects this resource' rather than 'no such route'.
     """
-    _conversation, _participation, first, _second = _fixture(participant)
+    conversation, _participation, first, _second = _fixture(participant)
     with auth_client.session_transaction() as browser_session:
-        browser_session['_p6_pa'] = 'phase6-cookie'
-        browser_session['_p6_csrf'] = 'phase6-csrf'
+        # Phase 6 sessions are keyed per conversation (see test_phase6_session_scope.py).
+        browser_session['phase6_api_sessions'] = {
+            str(conversation.id): {
+                'cookie': 'phase6-cookie', 'csrfToken': 'phase6-csrf',
+            },
+        }
 
     with patch('app.polis_http.put') as put:
         response = auth_client.put(

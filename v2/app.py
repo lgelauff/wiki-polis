@@ -2250,12 +2250,41 @@ def _require_informed_voting_api_context(
     return conv, participant, participation
 
 
+_PHASE6_SESSION_KEY = 'phase6_api_sessions'
+# The pre-fix global Phase 6 session scalars. Dropped on sight, never migrated: a stored
+# value is either unbound or bound to a DIFFERENT conversation's subject, so carrying it
+# forward under a per-conversation key would preserve exactly the bug below. Dropping it
+# costs one extra session bootstrap and re-binds the participant correctly.
+_PHASE6_LEGACY_SESSION_KEYS = ('_p6_pa', '_p6_csrf')
+
+
+def _phase6_session_states() -> dict:
+    """Per-conversation Phase 6 Particiapi sessions, keyed by ``str(conv.id)``.
+
+    Mirrors Phase 2's ``particiapi_api_sessions``, but as its OWN dict: the two rounds are
+    separate Polis conversations (``conv.polis_id`` vs ``conv.phase6_polis_conversation_id``)
+    and must never hand each other a session. A separate dict makes that structurally
+    impossible instead of resting on a key-naming convention one round could get wrong.
+
+    Phase 6 previously stored ONE cookie per browser session in ``_p6_pa``/``_p6_csrf``.
+    Both write paths bootstrap only when that cookie is missing, and ``ensure_session`` is
+    the only place ``X-Particiapi-Sub`` is sent — so the first Phase 6 round a participant
+    entered minted and bound the session, and every later round reused it, never binding
+    its own subject. Those votes went to an unbound uid, and a single Polis uid spanned
+    every Phase 6 round that participant entered: the cross-conversation linkage chain
+    ``_conversation_subject`` is keyed on ``conv.id`` to prevent (#246). The process-local
+    ``_p6_session_cache`` beside it was already keyed ``(xid, conv.id)``, which is the tell
+    that the global scalars were an oversight rather than a decision.
+    """
+    for legacy_key in _PHASE6_LEGACY_SESSION_KEYS:
+        session.pop(legacy_key, None)
+    return dict(session.get(_PHASE6_SESSION_KEY) or {})
+
+
 def _phase6_gateway(conv: Conversation, participant: Participant):
     key = (participant.xid, conv.id)
-    state = ParticiapiSessionState(
-        cookie=session.get('_p6_pa'),
-        csrf_token=session.get('_p6_csrf'),
-    )
+    states = _phase6_session_states()
+    state = ParticiapiSessionState.from_dict(states.get(str(conv.id)))
     # Bind the participant's identity, exactly as _explore_gateway does. The subject is
     # keyed on conv.id, so Phase 2 and Phase 6 resolve to the SAME Polis uid for one
     # person — which is what _conversation_subject was written for and says it does.
@@ -2279,12 +2308,14 @@ def _phase6_gateway(conv: Conversation, participant: Participant):
             else:
                 gateway.ensure_session()
                 _p6_session_cache[key] = (state.cookie, state.csrf_token)
-    return gateway, key
+    return gateway, key, states
 
 
-def _save_phase6_gateway(gateway: ExploreGateway, key) -> None:
-    session['_p6_pa'] = gateway.state.cookie
-    session['_p6_csrf'] = gateway.state.csrf_token
+def _save_phase6_gateway(
+    conv: Conversation, gateway: ExploreGateway, key, states: dict,
+) -> None:
+    states[str(conv.id)] = gateway.state.to_dict()
+    session[_PHASE6_SESSION_KEY] = states
     _p6_session_cache[key] = (gateway.state.cookie, gateway.state.csrf_token)
 
 
@@ -2292,7 +2323,7 @@ def _informed_voting_api_payload(slug: str) -> dict:
     conv, participant, participation = _require_informed_voting_api_context(
         slug, allow_banned_read=True,
     )
-    gateway, key = _phase6_gateway(conv, participant)
+    gateway, key, states = _phase6_gateway(conv, participant)
     try:
         participant_payload = gateway.read_participant(
             conv.phase6_polis_conversation_id,
@@ -2322,7 +2353,7 @@ def _informed_voting_api_payload(slug: str) -> dict:
             'links': links,
         }
     finally:
-        _save_phase6_gateway(gateway, key)
+        _save_phase6_gateway(conv, gateway, key, states)
 
 
 def _informed_vote_api_payload(
@@ -2336,7 +2367,7 @@ def _informed_vote_api_payload(
     ).first()
     if featured is None or featured.phase6_polis_statement_id is None:
         abort(404, description='Featured statement is not available in this round.')
-    gateway, key = _phase6_gateway(conv, participant)
+    gateway, key, states = _phase6_gateway(conv, participant)
     try:
         polis_values = {'agree': -1, 'pass': 0, 'disagree': 1}
         gateway.vote(
@@ -2356,7 +2387,7 @@ def _informed_vote_api_payload(
             },
         }
     finally:
-        _save_phase6_gateway(gateway, key)
+        _save_phase6_gateway(conv, gateway, key, states)
 
 
 def _results_report_api_payload(slug: str) -> dict:
