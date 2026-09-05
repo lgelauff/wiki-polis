@@ -133,12 +133,6 @@
 
 <div class="container home-container">
 
-  <div class="home-banner">
-    Prototype in active development — things may change.
-    <a href="https://github.com/lgelauff/wiki-polis/issues/new"
-       target="_blank" rel="noopener">Open an issue<span class="sr-only"> (opens in a new tab)</span></a> if you find a bug.
-  </div>
-
 {% if not username %}
 
   {# ── Unauthenticated landing (demo or real lane — same UI, tinted background) ── #}
@@ -205,9 +199,7 @@
   <h1 class="sr-only">Consultations</h1>
 
   {# ── Flow diagram ─────────────────────────────────────────────────────── #}
-  <img src="{{ url_for('static', filename='wiki-polis-flow.svg') }}"
-       alt="How a ProtoWiki conversation works"
-       style="width:100%;max-width:900px;display:block;margin:0 auto 1.5rem">
+  {% include '_conversation_flow.html' %}
 
   {# ── Phase journey legend ──────────────────────────────────────────────── #}
   <div class="phase-legend" role="img" aria-label="Consultation phases: Explore, Arguments, Informed vote, Report">

@@ -191,7 +191,7 @@ function ArgumentColumn({mapping, slug, csrfToken, card, side}: {
       <Contribution slug={slug} csrfToken={csrfToken} featuredId={card.id} side={side} value={value.contribution} />
       {!gate && value.arguments.length === 0 && <p className="at-col-note">Other arguments appear here once you've added yours or skipped — so you form your own view first.</p>}
       {value.arguments.map((item) => <ArgumentCard key={item.id} mapping={mapping} slug={slug} csrfToken={csrfToken} side={side} item={item} prioritization={value.prioritization} />)}
-      {card.contributionsComplete && !voteReady && <div className="at-volnote" id={`volnote-${side}-${card.id}`}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01" /><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /></svg><span>Prioritising unlocks once there are more than {value.prioritization.selectionBudget} {copy.adjective}-arguments ({value.arguments.length} so far).</span></div>}
+      {card.contributionsComplete && !voteReady && <div className="at-volnote" id={`volnote-${side}-${card.id}`}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3.5 22.5 20.5h-21z" /><path d="M12 10v4.5" /><circle cx="12" cy="17.8" r="1.05" fill="currentColor" stroke="none" /></svg><span>Prioritising unlocks once there are more than {value.prioritization.selectionBudget} {copy.adjective}-arguments ({value.arguments.length} so far).</span></div>}
     </div>
   );
 }

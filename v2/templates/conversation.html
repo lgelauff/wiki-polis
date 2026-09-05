@@ -734,7 +734,7 @@
 
           {% if both_gate and not pro_vote_ready %}
           <div class="at-volnote" id="volnote-pro-{{ fs.id }}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 22.5 20.5h-21z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.8" r="1.05" fill="currentColor" stroke="none"/></svg>
             <span>Prioritising unlocks once there are more than {{ item.k }} for-arguments ({{ item.pro_args | length }} so far).</span>
           </div>
           {% endif %}
@@ -865,7 +865,7 @@
 
           {% if both_gate and not con_vote_ready %}
           <div class="at-volnote" id="volnote-con-{{ fs.id }}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 22.5 20.5h-21z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.8" r="1.05" fill="currentColor" stroke="none"/></svg>
             <span>Prioritising unlocks once there are more than {{ item.k }} against-arguments ({{ item.con_args | length }} so far).</span>
           </div>
           {% endif %}

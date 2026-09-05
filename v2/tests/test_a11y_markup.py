@@ -48,6 +48,16 @@ def test_skip_link_and_main_landmark(client, conv):
     assert b'<main id="main" tabindex="-1">' in resp.data
 
 
+def test_site_notice_is_global_and_dismissible(client, conv):
+    """The development notice precedes site navigation and exposes a named control."""
+    resp = client.get('/')
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert html.index('id="site-notice"') < html.index('<header class="site-header')
+    assert 'aria-label="Dismiss site notice"' in html
+    assert "localStorage.setItem(key, 'dismissed')" in html
+
+
 # ── Page headings (1.3.1 / 2.4.6) ──────────────────────────────────────────────
 
 def test_home_has_h1_logged_out(client, conv):
@@ -89,6 +99,16 @@ def test_anonymous_lane_uses_functional_consultations_heading(client, conv):
 def test_authenticated_lane_uses_same_functional_heading(auth_client, conv):
     authenticated = auth_client.get('/consultations').get_data(as_text=True)
     assert '<h1 class="sr-only">Consultations</h1>' in authenticated
+
+
+def test_authenticated_lane_exposes_editable_flow_as_semantic_content(auth_client, conv):
+    html = auth_client.get('/consultations').get_data(as_text=True)
+    assert '<section class="flow-rebuild" aria-labelledby="flow-rebuild-title">' in html
+    assert '<h2 id="flow-rebuild-title">How a ProtoWiki conversation works</h2>' in html
+    assert html.count('<article class="flow-rebuild__card">') == 3
+    assert 'aria-controls="flow-rebuild-content"' in html
+    assert "localStorage.setItem(key, collapsed ? 'collapsed' : 'expanded')" in html
+    assert 'wiki-polis-flow.svg' not in html
 
 
 # ── No hidden API-proxy controls (4.1.2 / #159) ───────────────────────────────

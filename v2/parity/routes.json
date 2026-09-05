@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "goal": "100% route, feature, behavior, permission-state, accessibility, and visual parity with the Jinja frontend",
   "statusValues": ["missing", "partial", "implemented-unverified", "parity"],
-  "sharedTemplates": ["_reveal_timeline.html", "base.html", "forbidden_eligibility.html", "forbidden_invite_only.html"],
+  "sharedTemplates": ["_conversation_flow.html", "_reveal_timeline.html", "base.html", "forbidden_eligibility.html", "forbidden_invite_only.html"],
   "conditionalEndpoints": ["dev_login", "dev_fake_login"],
   "serverSupportEndpoints": ["login", "logout", "oauth_callback", "dev_login", "dev_fake_login"],
   "pages": [

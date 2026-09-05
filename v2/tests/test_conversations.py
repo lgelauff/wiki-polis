@@ -39,7 +39,7 @@ def test_index_shows_fork_between_demo_and_real(client):
     # The homepage is the explicit demo/real fork (#293).
     resp = client.get('/')
     assert resp.status_code == 200
-    assert b'Try out the platform' in resp.data
+    assert b'Try the playground' in resp.data
     assert b'Participate in real consultations' in resp.data
 
 

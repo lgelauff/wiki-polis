@@ -22,9 +22,14 @@ test('renders the entry fork with the legacy shell and card contract', async () 
   renderRoute('/app/parity/fork');
 
   expect(await screen.findByRole('heading', {name: 'Where the community actually stands.'})).toBeVisible();
+  expect(screen.getByText(/Choose the playground to try the platform/)).toBeVisible();
   expect(screen.getByRole('link', {name: 'ProtoWiki'})).toHaveClass('header-logo');
-  expect(screen.getByRole('link', {name: /Try out the platform/})).toHaveClass('fork-card--demo');
+  expect(screen.getByRole('link', {name: /Try the platform in a playground/})).toHaveClass('fork-card--demo');
   expect(screen.getByRole('link', {name: /Participate in real consultations/})).toHaveClass('fork-card--real');
+  expect(Array.from(document.querySelectorAll('.fork-grid > .fork-card')).map((card) => card.className)).toEqual([
+    'fork-card fork-card--demo',
+    'fork-card fork-card--real',
+  ]);
   expect(screen.getByRole('link', {name: /Open an issue/})).toHaveAttribute('target', '_blank');
   expect(screen.getByText('test-version')).toBeVisible();
   expect(document.querySelector('link[data-react-legacy-styles]')).toBeNull();
