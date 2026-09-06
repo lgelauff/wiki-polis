@@ -83,6 +83,29 @@ export function phaseAdvanceFixture(
   return {...receipt, transition: {...receipt.transition, ...transition}};
 }
 
+/** Messages the wired surfaces need. Values are copied from v2/i18n/en.json --
+ *  a test asserting rendered text is then asserting the real English. */
+export const testMessages: Record<string, string> = {
+  'conv-tab-preliminary': 'Preliminary results',
+  'conv-p6-badge-prelim': 'Preliminary',
+  'conv-participant-count': '$1 {{PLURAL:$1|participant|participants}}',
+  'conv-p6-counts-unavailable': 'Detailed vote counts are not available right now.',
+  'conv-p6-table-aria': 'Preliminary informed voting results by statement',
+  'conv-col-statement': 'Statement',
+  'conv-col-initial-vote': 'Initial vote',
+  'conv-col-initial-title': 'Phase 2 — initial voting',
+  'conv-col-informed-vote': 'Informed vote',
+  'conv-col-informed-title': 'Phase 6 — informed voting',
+  'conv-col-shift': 'Shift',
+  'conv-col-shift-title': 'Change in agree rate',
+  'conv-col-yours': 'Yours',
+  'conv-bar-title': 'Agree $1% · Disagree $2% · Pass $3%',
+  'conv-bar-label': '$1% agree · $2% pass',
+  'conv-p6-mine-agreed': 'Agree',
+  'conv-p6-mine-disagreed': 'Disagree',
+  'conv-p6-mine-passed': 'Pass',
+};
+
 export const handlers = [
   http.get(new URL('/api/v1/admin', globalThis.location.origin).toString(), () => HttpResponse.json({data: adminCatalogFixture()})),
   http.post(new URL('/api/v1/admin/conversations', globalThis.location.origin).toString(), () => HttpResponse.json({data: {conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'}, links: {manage: '/admin/conversations/7', catalog: '/api/v1/admin'}}}, {status: 201})),
@@ -324,6 +347,21 @@ export const handlers = [
           links: {participants: '/api/v1/admin/conversations/7/participants'},
         },
       });
+    },
+  ),
+  // The message catalogue. Real keys and real English, so a component that renders a
+  // message asserts the same text a user sees. Only the keys the wired surfaces use --
+  // the full catalogue is 853 entries and fixtures should not carry it.
+  http.get(
+    new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
+    ({params}) => {
+      const locale = String(params.locale);
+      if (locale === 'qqx') {
+        return HttpResponse.json(Object.fromEntries(
+          Object.keys(testMessages).map((key) => [key, `(${key})`]),
+        ));
+      }
+      return HttpResponse.json(testMessages);
     },
   ),
   http.get(

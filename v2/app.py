@@ -43,6 +43,7 @@ from polis_admin import (PolisParticipantClient, PolisParticipantError,
 from http_pool import session as polis_http
 from seed_csv import (MAX_ROWS, MAX_TEXT_CHARS, strip_formula_prefixes)
 from logging_setup import configure_logging
+import i18n
 from error_pages import render_error_page
 from api.v1 import (
     create_api_v1_blueprint, http_exception_json, is_api_request,
@@ -4870,6 +4871,16 @@ def create_app(test_config: dict | None = None) -> Flask:
             f'{result["skipped"]} not due.'
         )
 
+    # UI locale config: which locales are offered (CSV) + the fallback. Defaults to English
+    # only, so there is no visible change until translatewiki.net delivers translations and
+    # a deploy opts into them.
+    _default_locale = os.environ.get('DEFAULT_LOCALE', '').strip() or i18n.SOURCE_LOCALE
+    _enabled_locales = _split_csv(os.environ.get('ENABLED_LOCALES', '')) or [i18n.SOURCE_LOCALE]
+    if _default_locale not in _enabled_locales:
+        _enabled_locales.append(_default_locale)
+    app.config['DEFAULT_LOCALE']  = _default_locale
+    app.config['ENABLED_LOCALES'] = _enabled_locales
+
     @app.before_request
     def _set_csp_nonce():
         g.csp_nonce = secrets.token_urlsafe(16)
@@ -4886,6 +4897,27 @@ def create_app(test_config: dict | None = None) -> Flask:
                 rid = inbound
         g.request_id = rid or secrets.token_urlsafe(8)
         g._t0 = time.perf_counter()
+
+    @app.before_request
+    def _negotiate_locale():
+        # Resolve the UI locale: ?uselang= (explicit) -> uselang cookie -> Accept-Language
+        # best match among enabled -> default. qqx (message keys) is always available for QA.
+        # Registered ahead of the SPA shell handler so the locale is settled even on requests
+        # that short-circuit before route dispatch.
+        enabled = app.config['ENABLED_LOCALES']
+        requested = (request.args.get('uselang') or '').strip()
+        persist = None
+        if requested == i18n.DEBUG_LOCALE:
+            locale = i18n.DEBUG_LOCALE
+        elif requested in enabled:
+            locale = persist = requested
+        elif (cookie := (request.cookies.get('uselang') or '').strip()) in enabled:
+            locale = cookie
+        else:
+            locale = request.accept_languages.best_match(enabled) or app.config['DEFAULT_LOCALE']
+        g.locale = locale
+        g.dir = i18n.text_direction(locale)
+        g._persist_locale = persist
 
     @app.before_request
     def _serve_canonical_spa_request():
@@ -4939,6 +4971,11 @@ def create_app(test_config: dict | None = None) -> Flask:
             # Prevent intermediary proxies from caching HTML pages; stale HTML pointing
             # to old ?v= URLs would cause users to load mismatched assets after a deploy.
             response.headers.setdefault('Cache-Control', 'no-store')
+
+        # Persist an explicit ?uselang= choice so the UI language sticks across requests.
+        if g.get('_persist_locale'):
+            response.set_cookie('uselang', g._persist_locale, max_age=31536000,
+                                path='/', samesite='Lax', secure=not app.debug)
 
         return response
 
