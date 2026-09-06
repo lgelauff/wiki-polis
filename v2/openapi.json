@@ -2288,15 +2288,13 @@
       },
       "InformedVotingCard": {
         "type": "object",
-        "required": ["featuredStatementId", "statement", "canVote", "voted", "choice", "arguments"],
+        "required": ["featuredStatementId", "statement", "canVote", "voted", "arguments"],
         "additionalProperties": false,
         "properties": {
           "featuredStatementId": {"type": "integer", "minimum": 1},
           "statement": {"type": "string", "minLength": 1},
           "canVote": {"type": "boolean"},
           "voted": {"type": "boolean"},
-          "choice": {"type": ["string", "null"], "enum": ["agree", "pass", "disagree", null],
-                     "description": "The participant's own recorded choice, or null when it is not known (a vote cast before choices were stored). `voted` remains the authority on whether a vote exists."},
           "arguments": {
             "type": "object",
             "required": ["for", "against"],

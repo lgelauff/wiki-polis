@@ -9,7 +9,7 @@ import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
 
 /** The informed-voting contract for a participant who already answered everything. */
-function answeredDeck(choice?: 'agree' | 'pass' | 'disagree') {
+function answeredDeck() {
   return http.get(
     new URL('/api/v1/conversations/community-strategy/informed-voting', globalThis.location.origin).toString(),
     () => HttpResponse.json({
@@ -22,7 +22,6 @@ function answeredDeck(choice?: 'agree' | 'pass' | 'disagree') {
           statement: 'Regional communities should share infrastructure funding.',
           canVote: true,
           voted: true,
-          choice: choice ?? null,
           arguments: {for: [], against: []},
         }],
         progress: {completed: 1, total: 1, remaining: 0, allDone: true},
@@ -66,26 +65,4 @@ test('a finished deck opens on its completion panel, not on card one', async () 
   renderDeck();
 
   expect(await screen.findByRole('heading', {name: "You've completed informed voting."})).toBeVisible();
-});
-
-test('a returning participant sees which way they voted, not just that they did', async () => {
-  // The harm this prevents: without the recorded choice the deck offered three
-  // identical buttons, so a considered vote could be silently overwritten by a
-  // stray click. Observed on staging -- a pass became a disagree that way.
-  server.use(answeredDeck('disagree'));
-  renderDeck();
-
-  const chosen = await screen.findByRole('button', {name: /Disagree/, pressed: true});
-  expect(chosen).toBeVisible();
-  expect(screen.getByRole('button', {name: /Agree/})).toHaveAttribute('aria-pressed', 'false');
-  expect(screen.getByText('Disagreed')).toBeVisible();
-});
-
-test('a vote recorded before choices were stored still reads as answered', async () => {
-  server.use(answeredDeck());
-  renderDeck();
-
-  const card = await screen.findByText('Regional communities should share infrastructure funding.');
-  expect(card.closest('.p6-card')).toHaveClass('p6-card--done');
-  expect(screen.getByText('Answered')).toBeVisible();
 });

@@ -149,11 +149,6 @@ class Participation(db.Model):
     # this participant. Set once on first visit to the informed-voting tab; stable across
     # reloads. Same pattern as ArgumentSideState.argument_order.
     phase6_card_order = db.Column(db.JSON, nullable=True)
-    # {featured_statement_id: 'agree'|'pass'|'disagree'} for this participant only.
-    # Polis remains the system of record for tallies; this exists because the read
-    # contract back from Particiapi carries statement ids without their values, so
-    # without it the interface cannot tell someone what they already chose.
-    phase6_choices    = db.Column(db.JSON, nullable=True)
     # Cached join-time eligibility verdict (#146). Only set when the conversation
     # has an eligibility_event_id; actions do not re-check after joining.
     eligibility_status     = db.Column(db.String(16), nullable=True)  # eligible|not_required

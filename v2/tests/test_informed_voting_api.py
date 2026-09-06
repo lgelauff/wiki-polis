@@ -140,60 +140,6 @@ def test_banned_participant_can_read_informed_round_but_cannot_vote(
     put.assert_not_called()
 
 
-def test_a_recorded_choice_survives_into_the_next_read(auth_client, participant):
-    """The vote's own value must come back on the next read.
-
-    Particiapi's /participant returns statement ids without their values, so before
-    this the read could say a card was answered but never which way. A participant
-    who could not see their own choice had no way to tell a considered vote from an
-    untouched card -- and on staging one silently overwrote a pass with a disagree.
-    """
-    conversation, participation, first, second = _fixture(participant)
-    with auth_client.session_transaction() as browser_session:
-        browser_session['phase6_api_sessions'] = {
-            str(conversation.id): {'cookie': 'phase6-cookie', 'csrfToken': 'phase6-csrf'},
-        }
-
-    with patch('app.polis_http.put', return_value=_response({})):
-        auth_client.put(
-            f'/api/v1/conversations/informed-api/featured-statements/{first.id}/informed-vote',
-            json={'choice': 'disagree'},
-        )
-
-    # Polis is still the authority on *whether* a vote exists, so the readback
-    # reports this statement as voted; the value comes from our own record.
-    with patch('app.polis_http.get', return_value=_response(
-        {'votes': [first.phase6_polis_statement_id]},
-    )):
-        cards = auth_client.get(
-            '/api/v1/conversations/informed-api/informed-voting',
-        ).get_json()['data']['cards']
-
-    by_id = {card['featuredStatementId']: card for card in cards}
-    assert by_id[first.id]['voted'] is True
-    assert by_id[first.id]['choice'] == 'disagree'
-    # Untouched cards must not inherit a neighbour's answer.
-    assert by_id[second.id]['voted'] is False
-    assert by_id[second.id]['choice'] is None
-
-
-def test_changing_a_vote_replaces_the_recorded_choice(auth_client, participant):
-    """Changing a vote is supported (plan_roadmap.md:65); the record must follow."""
-    conversation, participation, first, _second = _fixture(participant)
-    with auth_client.session_transaction() as browser_session:
-        browser_session['phase6_api_sessions'] = {
-            str(conversation.id): {'cookie': 'phase6-cookie', 'csrfToken': 'phase6-csrf'},
-        }
-
-    url = f'/api/v1/conversations/informed-api/featured-statements/{first.id}/informed-vote'
-    with patch('app.polis_http.put', return_value=_response({})):
-        auth_client.put(url, json={'choice': 'pass'})
-        auth_client.put(url, json={'choice': 'disagree'})
-
-    db.session.refresh(participation)
-    assert participation.phase6_choices == {str(first.id): 'disagree'}
-
-
 def test_informed_vote_is_idempotent_put_and_translates_phase6_sign(
     auth_client, participant,
 ):
@@ -364,7 +310,6 @@ def test_informed_voting_keeps_renderable_card_while_initialization_is_pending(
         'statement': 'Awaiting initialization',
         'canVote': False,
         'voted': False,
-        'choice': None,
         'arguments': {'for': [], 'against': []},
     }]
     assert data['progress'] == {
