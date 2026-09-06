@@ -128,6 +128,34 @@ conversations with distinct zinvites and vote sets. Joining them for comparison 
 `FeaturedStatement` as the bridge: `polis_statement_id` is the Phase 2 tid,
 `phase6_polis_statement_id` is the Phase 6 tid for the same logical statement.
 
+**Joining the two rounds per participant.** `_conversation_subject` is keyed on
+`conv.id`, not the zinvite, so one person asserts the *same subject* in both rounds and
+therefore resolves to the **same Polis `uid`** — different `zid`, different `pid`, one
+`uid`. Matched-round analysis is consequently a join inside Polis alone:
+
+```sql
+SELECT count(DISTINCT p2.uid) FROM participants p2
+JOIN participants p6 ON p6.uid = p2.uid
+WHERE p2.zid = <phase 2 zid> AND p6.zid = <phase 6 zid>
+```
+
+Verified on staging 2026-09-06: one participant voting in both rounds appeared once in
+`particiapi_users` with participant rows in both zids, as did four earlier participants.
+This is what `matched_participants` (`app.py`, currently hardcoded `None`) and the
+change-of-opinion figures in #230/#231 need, and **it requires no stored mapping on the
+Toolforge side** — see the boundary below.
+
+**Opinion content never enters ToolsDB.** Votes live in Polis under a Polis `uid`;
+identity and participation metadata live in ToolsDB. Neither database completes the link
+to a person on its own, and computing the subject additionally requires
+`PARTICIAPI_SUB_SECRET`. That three-way separation is what makes "no one can see who
+voted what" (`pub_privacy.md`) a structural property rather than a policy promise.
+
+So no column on `participations` (or any ToolsDB table) may hold a vote, choice, or other
+opinion content — `phase6_card_order` is display order and `last_engagement` is a
+timestamp, deliberately. Vote *values* may transit the app in memory to be rendered; they
+may not be persisted. `tests/test_privacy_boundary.py` enforces this.
+
 **Vote-sign convention (both conversations).** Raw Polis DB: `-1 = Agree, 1 = Disagree,
 0 = Pass`. The participant-facing CSV export negates this (agree = +1). wiki-polis always
 reads from `votes_latest_unique` using the raw sign. See `ref_polis-data-model.md`.
