@@ -6,9 +6,16 @@ import {sessionQuery} from '../api/queries';
 
 const SOURCE_LOCALE = 'en';
 
-/** The locale the server negotiated, from the `uselang` cookie it sets in after_request.
- *  That cookie is deliberately not HttpOnly so the client can read it here. */
+/** Mirrors the server's own precedence in `_negotiate_locale`: ?uselang= wins, then the
+ *  `uselang` cookie (deliberately not HttpOnly so the client can read it), then English.
+ *
+ *  The query parameter is not optional. `qqx` -- the QA locale that renders message keys,
+ *  and the only way to see which strings are still unwrapped -- bypasses ENABLED_LOCALES
+ *  and is deliberately never written to the cookie. Reading the cookie alone would leave
+ *  the SPA in English for the one locale whose entire purpose is to inspect the SPA. */
 export function readLocale(): string {
+  const requested = new URLSearchParams(window.location.search).get('uselang');
+  if (requested) return requested;
   const match = document.cookie.match(/(?:^|;\s*)uselang=([^;]+)/);
   return match?.[1] ? decodeURIComponent(match[1]) : SOURCE_LOCALE;
 }
