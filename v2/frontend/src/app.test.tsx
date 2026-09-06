@@ -6,7 +6,7 @@ import {expect, test, vi} from 'vitest';
 
 import {App} from './app';
 import {createQueryClient} from './query-client';
-import {adminCatalogFixture} from './test/handlers';
+import {adminCatalogFixture, testMessages} from './test/handlers';
 import {server} from './test/server';
 
 test('renders a conversation lane from the API contract', async () => {
@@ -648,6 +648,73 @@ test('routes preliminary results through the legacy workspace tab', async () => 
   expect(screen.getByRole('table', {name: 'Preliminary informed voting results by statement'})).toBeVisible();
   expect(screen.getByText('70.0% agree · 20.0% pass')).toBeVisible();
   expect(screen.getByText('Agree', {selector: '.p6-my-vote'})).toBeVisible();
+});
+
+test('renders preliminary results from the message catalogue, not from source literals', async () => {
+  // The decisive i18n test: serve deliberately different English for two keys. If the
+  // component were still holding literals, these assertions could not pass.
+  server.use(
+    http.get(
+      new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
+      () => HttpResponse.json({
+        ...testMessages,
+        'conv-p6-table-aria': 'CATALOGUE TABLE LABEL',
+        'conv-bar-label': '$1 pct agree and $2 pct pass',
+        'conv-participant-count': '$1 {{PLURAL:$1|voter|voters}}',
+      }),
+    ),
+    http.get(
+      new URL('/api/v1/conversations/community-strategy/results', globalThis.location.origin).toString(),
+      () => HttpResponse.json({data: {
+        slug: 'community-strategy', title: 'Community strategy',
+        publication: 'preliminary', resultsAvailable: true,
+        openedAt: '2026-05-01T12:00:00Z', closedAt: null,
+        context: {phase: 'Informed voting', status: 'provisional', method: 'Live comparison.'},
+        participation: {initialRound: 25, informedRound: 22, matchedRounds: null},
+        dataAvailability: {detailedCounts: true, opinionGroups: false},
+        moderation: {excludedStatements: 0, excludedParticipants: 0},
+        statements: [{
+          featuredStatementId: 31,
+          statement: 'Regional communities should share infrastructure funding.',
+          initial: {counts: {agree: 12, pass: 3, disagree: 5, voters: 20}, percentages: {agree: 60, pass: 15, disagree: 25}},
+          informed: {counts: {agree: 14, pass: 4, disagree: 2, voters: 20}, percentages: {agree: 70, pass: 20, disagree: 10}},
+          agreementShift: 10,
+          viewerChoice: 'agree',
+        }],
+        opinionGroups: [],
+        viewer: {participating: true, pseudonym: 'quiet-otter', revealState: null},
+        links: {self: '/api/v1/conversations/community-strategy/results', conversation: '/c/community-strategy', about: '/c/community-strategy/about'},
+      }}),
+    ),
+    http.get(
+      new URL('/api/v1/conversations/community-strategy/workspace', globalThis.location.origin).toString(),
+      () => HttpResponse.json({data: {
+        slug: 'community-strategy', title: 'Community strategy', space: 'real', status: 'open',
+        descriptionHtml: null, outroHtml: null,
+        viewer: {state: 'participant', pseudonym: 'quiet-otter'},
+        spaceWarning: null, scheduledTransition: null,
+        tabs: [
+          {key: 'informed-voting', label: 'Informed vote', dataHref: '/api/v1/conversations/community-strategy/informed-voting'},
+          {key: 'p6-results', label: 'Preliminary results', dataHref: '/api/v1/conversations/community-strategy/results'},
+        ],
+        defaultTab: 'informed-voting', reveal: null,
+        statementContribution: {unlockAfter: 10, quota: 3, used: 0},
+        capabilities: {participate: true, moderate: false},
+        links: {self: '/api/v1/conversations/community-strategy/workspace', conversation: '/c/community-strategy', about: '/c/community-strategy/about', join: '/accept/community-strategy', informedVoting: '/api/v1/conversations/community-strategy/informed-voting', results: '/api/v1/conversations/community-strategy/results'},
+      }}),
+    ),
+  );
+
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/conversations/community-strategy/results']}><App /></MemoryRouter></QueryClientProvider>);
+
+  expect(await screen.findByRole('tab', {name: 'Preliminary results'})).toBeVisible();
+  // aria-label resolved through the catalogue
+  expect(screen.getByRole('table', {name: 'CATALOGUE TABLE LABEL'})).toBeVisible();
+  // $1/$2 substitution, and the original English is gone
+  expect(screen.getByText('70.0 pct agree and 20.0 pct pass')).toBeVisible();
+  expect(screen.queryByText('70.0% agree · 20.0% pass')).not.toBeInTheDocument();
+  // {{PLURAL:}} selects the plural form for 22 participants
+  expect(screen.getByText('22 voters')).toBeVisible();
 });
 
 test('renders the legacy final report from the typed results contract', async () => {
