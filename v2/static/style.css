@@ -3102,6 +3102,25 @@ a { color: var(--pass); }
 .p6-card--voted .p6-statement-text { opacity: 0.6; }
 .p6-card--voted .vote-choice { opacity: 0.4; }
 .p6-card--voted .vote-choice.p6-voted { opacity: 1; }
+
+/* Answered in an earlier visit: the server says this card has a vote, but the read
+   contract cannot say which one (#327), so show that it is answered without claiming
+   a choice. Without this the card was indistinguishable from an untouched one and
+   participants re-voted. */
+.p6-card--done:not(.p6-card--voted) .p6-statement-text { opacity: 0.6; }
+.p6-card--done:not(.p6-card--voted) .p6-answered-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: var(--surface2);
+  color: var(--muted);
+}
+.p6-answered-note { display: none; }
 .p6-card--hidden { display: none; }
 
 /* Pagination nav */
