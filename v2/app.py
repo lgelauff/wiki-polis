@@ -2375,6 +2375,14 @@ def _informed_vote_api_payload(
             featured.phase6_polis_statement_id,
             polis_values[choice],
         )
+        # Record what was chosen, not merely that something was. Polis stays the
+        # system of record for tallies; this is the participant's own answer, kept
+        # because the read contract back from Particiapi carries statement ids
+        # without their values. Written in the same transaction as the engagement
+        # touch, on the only write path that exists.
+        choices = dict(participation.phase6_choices or {})
+        choices[str(featured.id)] = choice
+        participation.phase6_choices = choices
         _touch_last_engagement(participation)
         db.session.commit()
         return {

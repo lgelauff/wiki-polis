@@ -2270,6 +2270,11 @@ export interface components {
             statement: string;
             canVote: boolean;
             voted: boolean;
+            /**
+             * @description The participant's own recorded choice, or null when it is not known (a vote cast before choices were stored). `voted` remains the authority on whether a vote exists.
+             * @enum {string|null}
+             */
+            choice: "agree" | "pass" | "disagree" | null;
             arguments: {
                 for: components["schemas"]["InformedVotingArgument"][];
                 against: components["schemas"]["InformedVotingArgument"][];

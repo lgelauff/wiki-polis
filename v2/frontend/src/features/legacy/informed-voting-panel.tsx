@@ -72,7 +72,14 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
 }) {
   const {data} = useSuspenseQuery(informedVotingQuery(workspace.slug));
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [votes, setVotes] = useState<Record<number, Choice>>({});
+  // Seed the recorded choice, so a returning participant sees what they chose rather
+  // than only that they chose. Cards answered before choices were stored carry
+  // choice: null and fall back to the neutral "Answered" state below.
+  const [votes, setVotes] = useState<Record<number, Choice>>(
+    () => Object.fromEntries(
+      data.cards.filter((card) => card.choice).map((card) => [card.featuredStatementId, card.choice as Choice]),
+    ),
+  );
   // Seed from the server, not from an empty set. The API already reports which cards
   // this participant has answered; starting empty threw that away and rendered an
   // answered deck as untouched, which is how a returning participant ends up voting

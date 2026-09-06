@@ -30,6 +30,7 @@ def build_informed_voting_state(
         participation.phase6_card_order = effective_order
         db.session.commit()
 
+    stored_choices = participation.phase6_choices or {}
     voted_tids = {
         int(value) for value in participant_payload.get('votes', [])
         if isinstance(value, int) or (isinstance(value, str) and value.isdigit())
@@ -57,6 +58,11 @@ def build_informed_voting_state(
                 item.phase6_polis_statement_id is not None
                 and item.phase6_polis_statement_id in voted_tids
             ),
+            # What they chose, when we know it. Polis is authoritative for whether a
+            # vote exists (voted_tids above); this only reports the value, which the
+            # upstream read contract cannot carry. None for votes cast before this
+            # was recorded -- those still show as answered, just without the choice.
+            'choice': stored_choices.get(str(item.id)),
             'arguments': {'for': arguments('pro'), 'against': arguments('con')},
         })
 
