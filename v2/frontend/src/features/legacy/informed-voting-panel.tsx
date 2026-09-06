@@ -73,9 +73,18 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
   const {data} = useSuspenseQuery(informedVotingQuery(workspace.slug));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [votes, setVotes] = useState<Record<number, Choice>>({});
-  const [terminalIds, setTerminalIds] = useState<Set<number>>(() => new Set());
+  // Seed from the server, not from an empty set. The API already reports which cards
+  // this participant has answered; starting empty threw that away and rendered an
+  // answered deck as untouched, which is how a returning participant ends up voting
+  // twice. The choice itself is not seeded because the read contract cannot carry it
+  // (#327) -- Particiapi's /participant returns vote ids only, not their values.
+  const [terminalIds, setTerminalIds] = useState<Set<number>>(
+    () => new Set(data.cards.filter((card) => card.voted).map((card) => card.featuredStatementId)),
+  );
   const [networkErrorId, setNetworkErrorId] = useState<number | null>(null);
-  const [done, setDone] = useState(false);
+  // Likewise: a deck the participant already finished should open on its completion
+  // panel rather than on card 1 of 3 with no sign anything happened.
+  const [done, setDone] = useState(() => data.cards.length > 0 && data.cards.every((card) => card.voted));
   const advanceTimer = useRef<number | null>(null);
   const current = data.cards[currentIndex];
 
@@ -133,6 +142,9 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
               rejected re-vote (a 409 on a paused round, which is the state the repair
               runbook puts the tool in) would silently keep showing the old choice. */}
           <span className={`p6-voted-badge${!error && selected ? ` p6-voted-badge--${selected}` : ''}`} role="alert" hidden={!selected && !error}>{error ? 'Vote not recorded — try again' : <><span aria-hidden="true">✓</span> {selected === 'agree' ? 'Agreed' : selected === 'disagree' ? 'Disagreed' : 'Passed'}</>}</span>
+          {/* Answered before this visit. The badge above needs a known choice; this one
+              only claims that a vote exists, which is all the read contract supports. */}
+          <span className="p6-answered-note" hidden={!!selected || error}><span aria-hidden="true">✓</span> Answered</span>
         </div>
         <div className="p6-card-inner">
           <div className="p6-statement-col">
