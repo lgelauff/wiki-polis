@@ -1,5 +1,5 @@
 import Banana from 'banana-i18n';
-import {queryOptions, useSuspenseQuery} from '@tanstack/react-query';
+import {queryOptions, useQuery, useSuspenseQuery} from '@tanstack/react-query';
 import {createContext, useContext, useMemo, type ReactNode} from 'react';
 
 import {sessionQuery} from '../api/queries';
@@ -49,13 +49,24 @@ const MessageContext = createContext<Message | null>(null);
 
 export function MessageProvider({children, locale = readLocale()}: {children: ReactNode; locale?: string}) {
   const {data: session} = useSuspenseQuery(sessionQuery());
-  const {data: messages} = useSuspenseQuery(messagesQuery(locale, session.gitVersion ?? ''));
+  // Deliberately not useSuspenseQuery. The catalogue wraps every route, and a suspense
+  // query that exhausts its retries with no error boundary above it leaves the whole app
+  // stuck on the loading fallback forever -- observed on staging by failing this endpoint.
+  // The interface must survive a missing catalogue: banana returns the key for an unknown
+  // message, so a failure degrades to visible keys on the wired surfaces rather than
+  // taking the product down.
+  const {data: messages, isPending} = useQuery(messagesQuery(locale, session.gitVersion ?? ''));
 
   const msg = useMemo<Message>(() => {
-    const banana = new Banana(locale, {messages: {[locale]: messages}});
+    const banana = new Banana(locale, {messages: {[locale]: messages ?? {}}});
     return (key, ...params) => banana.i18n(key, ...params);
   }, [locale, messages]);
 
+  // Hold the first paint until the catalogue resolves one way or the other, so wired
+  // strings never flash as keys on the happy path.
+  if (isPending) {
+    return <p className="loading-state" role="status">Loading…</p>;
+  }
   return <MessageContext.Provider value={msg}>{children}</MessageContext.Provider>;
 }
 

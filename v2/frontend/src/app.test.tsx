@@ -650,6 +650,27 @@ test('routes preliminary results through the legacy workspace tab', async () => 
   expect(screen.getByText('Agree', {selector: '.p6-my-vote'})).toBeVisible();
 });
 
+test('stays usable when the message catalogue is unavailable', async () => {
+  // The catalogue wraps every route. If a failure there could block, a rate-limited or
+  // briefly-broken endpoint would take the whole product down rather than degrade it.
+  server.use(
+    http.get(
+      new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
+      () => new HttpResponse('rate limited', {status: 429}),
+    ),
+  );
+
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/conversations']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  // The lane still renders from its own contract; only catalogue-sourced strings degrade.
+  expect(await screen.findByRole('heading', {name: 'Needs attention'}, {timeout: 5000})).toBeVisible();
+  expect(screen.queryByText('Loading conversations…')).not.toBeInTheDocument();
+});
+
 test('renders preliminary results from the message catalogue, not from source literals', async () => {
   // The decisive i18n test: serve deliberately different English for two keys. If the
   // component were still holding literals, these assertions could not pass.
