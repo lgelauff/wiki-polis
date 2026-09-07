@@ -7,13 +7,6 @@ type Report = components['schemas']['ResultsReport'];
 type Statement = components['schemas']['ResultsStatement'];
 type Tally = components['schemas']['VoteTally'];
 
-/** The group-position badge. A literal map rather than an interpolated key, so the
- *  key-existence guard in tests/test_i18n.py can see both names statically. */
-const GROUP_BADGE_KEY: Record<'agree' | 'disagree', string> = {
-  agree: 'report-badge-agree',
-  disagree: 'report-badge-disagree',
-};
-
 /** Three messages on this page carry inline markup that is part of the sentence
  *  (<strong>Shift</strong>, <em>Phase 6 agree% − Phase 2 agree%</em>, <code>votes_latest_unique</code>).
  *  Splitting them into fragments would make them untranslatable, so they are rendered as
@@ -82,9 +75,9 @@ function ProcessTimeline({report}: {report: Report}) {
         <span className="report-timeline-label">{msg('report-process-opened')}</span>
         <span className="report-timeline-value">{shortDate(report.openedAt)}</span>
       </div>
-      {['report-process-submission', 'report-process-argmap', 'report-process-informed'].map((key) => (
-        <div className="report-timeline-item report-timeline-item--placeholder" key={key}>
-          <span className="report-timeline-label">{msg(key)}</span>
+      {[msg('report-process-submission'), msg('report-process-argmap'), msg('report-process-informed')].map((label) => (
+        <div className="report-timeline-item report-timeline-item--placeholder" key={label}>
+          <span className="report-timeline-label">{label}</span>
           <span className="report-timeline-value report-placeholder-inline">{msg('report-process-dates-tbd')}</span>
         </div>
       ))}
@@ -182,7 +175,7 @@ function OpinionGroups({report}: {report: Report}) {
     {report.opinionGroups.map((group) => <div className="results-block" style={{marginBottom: '1rem'}} key={group.label}>
       <p className="results-group-heading">{`\n        ${group.label}\n        `}{!!group.memberCount && <span className="muted" style={{fontWeight: 400, fontSize: 12}}>{msg('report-group-members', group.memberCount)}</span>}{'\n      '}</p>
       {group.positions.map((position, index) => <div className="results-row" key={`${position.choice}-${index}`}>
-        <span className={`results-badge results-${position.choice}`}>{msg(GROUP_BADGE_KEY[position.choice])}</span>
+        <span className={`results-badge results-${position.choice}`}>{position.choice === 'agree' ? msg('report-badge-agree') : msg('report-badge-disagree')}</span>
         <span className="results-text">{`"${position.statement}"`}</span>
         {!!position.percentage && <span className="results-pct">{`${Math.trunc(position.percentage)}%`}</span>}
       </div>)}
