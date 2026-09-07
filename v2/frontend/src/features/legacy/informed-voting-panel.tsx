@@ -133,6 +133,10 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
     {data.cards.map((card, index) => {
       const selected = votes[card.featuredStatementId];
       const error = networkErrorId === card.featuredStatementId;
+      // Answered in an earlier visit: the server says there is a vote, but the read
+      // contract cannot say which (#327). Distinct from `selected`, which is this
+      // session's own choice and does carry a value.
+      const answeredEarlier = !selected && !error && terminalIds.has(card.featuredStatementId);
       return <div className={`p6-card${index !== currentIndex ? ' p6-card--hidden' : ''}${selected ? ' p6-card--voted' : ''}${terminalIds.has(card.featuredStatementId) ? ' p6-card--done' : ''}`} data-fs-id={card.featuredStatementId} key={card.featuredStatementId}>
         <div tabIndex={-1} data-focus-anchor className="sr-only" />
         <div className="p6-card-header">
@@ -143,16 +147,24 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
               runbook puts the tool in) would silently keep showing the old choice. */}
           <span className={`p6-voted-badge${!error && selected ? ` p6-voted-badge--${selected}` : ''}`} role="alert" hidden={!selected && !error}>{error ? 'Vote not recorded — try again' : <><span aria-hidden="true">✓</span> {selected === 'agree' ? 'Agreed' : selected === 'disagree' ? 'Disagreed' : 'Passed'}</>}</span>
           {/* Answered before this visit. The badge above needs a known choice; this one
-              only claims that a vote exists, which is all the read contract supports. */}
-          <span className="p6-answered-note" hidden={!!selected || error}><span aria-hidden="true">✓</span> Answered</span>
+              only claims that a vote exists, which is all the read contract supports.
+              Gated here rather than in CSS: the stylesheet is not loaded under test, so a
+              CSS-only gate is both untestable and one typo away from claiming every
+              untouched card is answered. */}
+          <span className="p6-answered-note" id={`answered-${card.featuredStatementId}`}
+                hidden={!answeredEarlier}><span aria-hidden="true">✓</span> Already voted</span>
         </div>
         <div className="p6-card-inner">
           <div className="p6-statement-col">
             <p className="p6-statement-text">{card.statement}</p>
-            {card.canVote && <div className="vote-choice-row p6-vote-row">
+            {answeredEarlier && <p className="p6-answered-hint">
+              Your earlier choice isn&rsquo;t shown here. Choosing again will replace it.
+            </p>}
+            {card.canVote && <div className="vote-choice-row p6-vote-row"
+                 aria-describedby={answeredEarlier ? `answered-${card.featuredStatementId}` : undefined}>
               {/* aria-pressed carries the recorded choice: without it the selection is
                   conveyed only by opacity, which no assistive technology reports. */}
-              {voteValues.map((item) => <button type="button" className={`vote-choice btn-p6-vote${selected === item.choice ? ' p6-voted' : ''}`} data-vote={item.value} aria-pressed={selected === item.choice} disabled={vote.isPending && vote.variables?.card.featuredStatementId === card.featuredStatementId} onClick={() => vote.mutate({card, choice: item.choice})} key={item.choice}><span className={`vote-dot vote-dot--${item.choice}`} />{item.label}</button>)}
+              {voteValues.map((item) => <button type="button" className={`vote-choice btn-p6-vote${selected === item.choice ? ' p6-voted' : ''}`} data-vote={item.value} aria-pressed={selected ? selected === item.choice : undefined} disabled={vote.isPending && vote.variables?.card.featuredStatementId === card.featuredStatementId} onClick={() => vote.mutate({card, choice: item.choice})} key={item.choice}><span className={`vote-dot vote-dot--${item.choice}`} />{item.label}</button>)}
             </div>}
           </div>
           <div className="p6-args-panel">

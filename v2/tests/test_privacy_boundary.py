@@ -1,17 +1,21 @@
-"""Opinion content must never enter ToolsDB.
+"""Tripwire on one known path: an opinion-worded column on a mapped model.
 
-Votes live in Polis under a Polis uid; identity and participation metadata live in
-ToolsDB. Neither database completes the link to a person on its own, and computing the
-subject additionally needs PARTICIAPI_SUB_SECRET. That separation is what makes "no one
-can see who voted what" (pub_privacy.md) structural rather than a promise.
+Scope, stated plainly because the docstring this replaced overclaimed. This catches the
+mistake that was actually made -- a `phase6_choices` JSON column on `participations`,
+added to show a participant their own vote and reverted because it put opinion content
+next to identity. It catches nothing adjacent.
 
-A column holding a participant's vote on our side collapses it: one join from
-participations to participants.mw_username turns ToolsDB alone into a record of who holds
-which opinion. This was added once, in a change that passed the entire suite, ruff and
-four CI jobs -- every one of which asks whether the code works, and none of which asked
-whether the data belonged there. Hence this file.
+It cannot see a table whose columns are innocuous but whose rows are the opinion
+(`statement_pass_signals`, `argument_votes`), data written into an existing JSON column
+(`participations.phase6_card_order` is already nullable JSON on the right table, so the
+reverted change could be redone with no schema change and no signal here), anything
+reached by a join rather than stored directly, anything added by a raw migration without a
+model change, or anything persisted outside the ORM -- the ToolsDB `sessions` table, logs,
+exports, caches.
 
-See ref_data-model.md, "Opinion content never enters ToolsDB".
+The direction it guards, and the exceptions that already exist, are in ref_data-model.md
+under "Keeping opinions away from identity". Read that before adding a column; this file
+will not stop you.
 """
 import db as db_module
 
@@ -29,12 +33,10 @@ ALLOWED = {
     ('conversations', 'argument_vote_data'),
 }
 
-# NOT allow-listed, and deliberately out of this guard's reach: `argument_votes` links
-# participant_id to an argument with a rating value (db.py). Its column names carry no
-# opinion word, so a name-based check cannot see it. That table is a pre-existing
-# instance of the same shape this file guards against -- who rated which argument, on the
-# identity side, one join from mw_username. Whether that is intended is a product
-# decision, not one to settle by editing a list here.
+# Deliberately out of reach, and filed rather than allow-listed. `argument_votes` links
+# participant_id to an argument with a rating value; `statement_pass_signals` is a row
+# whose presence *is* a vote value, keyed to participant_id. Neither carries an opinion
+# word in its column names, so a name-based check cannot see either. See #359 and #287.
 
 
 def _tables():
