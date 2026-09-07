@@ -24,25 +24,10 @@ import {LegacyShell} from '../legacy/legacy-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
+import {escapeHtml, richHtml} from '../../i18n/rich-html';
 
 type Lifecycle = components['schemas']['AdminLifecycle'];
 type PhaseTransitionReceipt = components['schemas']['AdminPhaseAdvanceReceipt']['transition'];
-
-/** Four messages on this page carry inline markup that is part of the sentence
- *  (<strong>Live statistics unavailable.</strong>, <strong>not</strong> started,
- *  <strong>Advanced.</strong>, <code>/c/slug/report</code>). Splitting them into
- *  fragments would make them untranslatable, so they are rendered as HTML. The source is
- *  v2/i18n/*.json -- repo- and translatewiki-controlled, never participant input. */
-function richHtml(text: string) {
-  return {__html: text};
-}
-
-/** The one such message that takes a parameter interpolates a URL path. banana-i18n
- *  substitutes parameters verbatim, so the value is escaped before it reaches innerHTML. */
-function escapeHtml(value: string) {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
-}
 
 /** Collapse a phase-advance receipt into one toast, keeping the worst severity.
  *

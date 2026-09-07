@@ -2,19 +2,11 @@ import type {components} from '../../api/schema';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
+import {escapeHtml, richHtml} from '../../i18n/rich-html';
 
 type Report = components['schemas']['ResultsReport'];
 type Statement = components['schemas']['ResultsStatement'];
 type Tally = components['schemas']['VoteTally'];
-
-/** Three messages on this page carry inline markup that is part of the sentence
- *  (<strong>Shift</strong>, <em>Phase 6 agree% − Phase 2 agree%</em>, <code>votes_latest_unique</code>).
- *  Splitting them into fragments would make them untranslatable, so they are rendered as
- *  HTML. The source is v2/i18n/*.json -- repo- and translatewiki-controlled, never
- *  participant input, which is always rendered as text. */
-function richHtml(text: string) {
-  return {__html: text};
-}
 
 function truncated(value: string, length: number) {
   return value.length > length ? `${value.slice(0, length - 1)}…` : value;
@@ -258,7 +250,7 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
       <ProcessTimeline report={report} />
       <ResultsBody report={report} />
       {report.viewer.revealState === 'open' && report.viewer.participating && <div className="reveal-callout" style={{marginTop: '2rem'}}>
-        <p className="reveal-callout-text">{msg('reveal-callout-open-text')} <strong>{report.viewer.pseudonym}</strong>.</p>
+        <p className="reveal-callout-text" dangerouslySetInnerHTML={richHtml(msg('reveal-callout-open-text', escapeHtml(report.viewer.pseudonym ?? '')))} />
         <InternalLink className="reveal-callout-link" href={report.links.identityReveal}>{msg('reveal-callout-link')} <span aria-hidden="true">→</span></InternalLink>
       </div>}
     </div>
