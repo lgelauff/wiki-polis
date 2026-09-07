@@ -58,23 +58,29 @@ test('a healthy phase move confirms as a success toast, never an alert', async (
 });
 
 test('phaseTransitionToast keeps the worst severity and the server ordering', () => {
+  // Severity must follow the receipt, not the copy, so this stub returns catalogue-shaped
+  // English without going near a provider.
+  const msg = (key: string, ...params: (string | number)[]) => ({
+    'flash-move-sync-failed': 'Phase moved, but updating results visibility in Polis failed.',
+    'flash-moved-to': `Moved to: ${String(params[0])}.`,
+  }[key] ?? key);
   const base = {
     sourceKey: 'preparation', targetKey: 'submission', targetLabel: 'Explore',
     phase6Created: false, phase6SyncMessage: null as string | null,
     visibilitySynced: true,
   };
 
-  expect(phaseTransitionToast(base))
+  expect(phaseTransitionToast(msg, base))
     .toEqual({category: 'success', message: 'Moved to: Explore.'});
-  expect(phaseTransitionToast({...base, phase6SyncMessage: 'Seeded 3 statements.'}))
+  expect(phaseTransitionToast(msg, {...base, phase6SyncMessage: 'Seeded 3 statements.'}))
     .toEqual({category: 'success', message: 'Seeded 3 statements. Moved to: Explore.'});
-  expect(phaseTransitionToast({
+  expect(phaseTransitionToast(msg, {
     ...base, phase6SyncMessage: 'Two statements failed — check manually.',
   })).toEqual({
     category: 'warning',
     message: 'Two statements failed — check manually. Moved to: Explore.',
   });
-  expect(phaseTransitionToast({
+  expect(phaseTransitionToast(msg, {
     ...base, visibilitySynced: false,
     phase6SyncMessage: 'Two statements failed — check manually.',
   })).toEqual({

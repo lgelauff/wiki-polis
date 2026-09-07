@@ -23,35 +23,46 @@ import {
 import {LegacyShell} from '../legacy/legacy-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
+import {useMessage, type Message} from '../../i18n/messages';
 
 type Lifecycle = components['schemas']['AdminLifecycle'];
 type PhaseTransitionReceipt = components['schemas']['AdminPhaseAdvanceReceipt']['transition'];
 
-/** Message shown when Polis rejected the results-visibility update after a phase move.
- *
- * This is a data-integrity signal, not a cosmetic confirmation: the local phase moved
- * but upstream Polis still gates ``GET /results/`` on the old vis_type, so results can
- * silently fail to appear. It must never be folded into a plain success. */
-const VISIBILITY_DESYNC_ADVANCE =
-  'Phase moved, but updating results visibility in Polis failed.';
-const VISIBILITY_DESYNC_PHASES =
-  'Phases saved, but updating results visibility in Polis failed — '
-  + 'results may not appear until you save phases again.';
+/** Four messages on this page carry inline markup that is part of the sentence
+ *  (<strong>Live statistics unavailable.</strong>, <strong>not</strong> started,
+ *  <strong>Advanced.</strong>, <code>/c/slug/report</code>). Splitting them into
+ *  fragments would make them untranslatable, so they are rendered as HTML. The source is
+ *  v2/i18n/*.json -- repo- and translatewiki-controlled, never participant input. */
+function richHtml(text: string) {
+  return {__html: text};
+}
+
+/** The one such message that takes a parameter interpolates a URL path. banana-i18n
+ *  substitutes parameters verbatim, so the value is escaped before it reaches innerHTML. */
+function escapeHtml(value: string) {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
 
 /** Collapse a phase-advance receipt into one toast, keeping the worst severity.
  *
  * The receipt can carry up to three independent notices (visibility desync, a Phase 6
  * re-seed message, and the move confirmation). The toast surface shows one message at a
  * time, so they are concatenated in server order and the category is the most severe of
- * them — a partial failure must never render as a green success. */
+ * them — a partial failure must never render as a green success.
+ *
+ * Severity is decided by `visibilitySynced` and by the server's own `phase6SyncMessage`,
+ * never by the localised copy: translating `flash-move-sync-failed` cannot turn a partial
+ * failure green. */
 export function phaseTransitionToast(
+  msg: Message,
   transition: PhaseTransitionReceipt,
 ): {category: LegacyToastMessage['category']; message: string} {
   const parts: string[] = [];
   let category: LegacyToastMessage['category'] = 'success';
   if (!transition.visibilitySynced) {
     category = 'error';
-    parts.push(VISIBILITY_DESYNC_ADVANCE);
+    parts.push(msg('flash-move-sync-failed'));
   }
   if (transition.phase6SyncMessage) {
     if (category !== 'error' && transition.phase6SyncMessage.includes('check manually')) {
@@ -59,7 +70,7 @@ export function phaseTransitionToast(
     }
     parts.push(transition.phase6SyncMessage);
   }
-  parts.push(`Moved to: ${transition.targetLabel}.`);
+  parts.push(msg('flash-moved-to', transition.targetLabel));
   return {category, message: parts.join(' ')};
 }
 type Settings = components['schemas']['AdminSettings'];
@@ -70,8 +81,10 @@ function legacyTruncate(value: string, length = 34, leeway = 5): string {
   return value.length <= length + leeway ? value : `${value.slice(0, length - 1)}…`;
 }
 
-function message(error: Error, fallback = 'The command could not be completed.'): string {
-  return error instanceof ApiContractError ? error.message : fallback;
+/** The server's own error copy is deliberately not keyed (see v2/i18n/README.md), so a
+ *  contract error is shown verbatim; only the fallback comes from the catalogue. */
+function message(msg: Message, error: Error): string {
+  return error instanceof ApiContractError ? error.message : msg('adminconv-command-failed');
 }
 
 function useRedesignStyles() {
@@ -85,13 +98,17 @@ function useRedesignStyles() {
   }, []);
 }
 
-function countdown(value: string): string {
+function countdown(msg: Message, value: string): string {
   let seconds = Math.max(0, Math.floor((new Date(value).getTime() - Date.now()) / 1000));
-  if (!seconds) return 'due now';
+  if (!seconds) return msg('adminconv-due-now');
   const days = Math.floor(seconds / 86400); seconds -= days * 86400;
   const hours = Math.floor(seconds / 3600); seconds -= hours * 3600;
   const minutes = Math.floor(seconds / 60);
-  return [days && `${days}d`, hours && `${hours}h`, minutes && `${minutes}m`].filter(Boolean).join(' ') || '<1m';
+  return [
+    days && msg('adminconv-countdown-days', days),
+    hours && msg('adminconv-countdown-hours', hours),
+    minutes && msg('adminconv-countdown-minutes', minutes),
+  ].filter(Boolean).join(' ') || msg('adminconv-countdown-lt1m');
 }
 
 function shortDate(value: string): string {
@@ -100,16 +117,21 @@ function shortDate(value: string): string {
   });
 }
 
-function advancedPhaseLabel(key: string, fallback: string): string {
-  const labels: Record<string, string> = {
-    submission: 'Statement submission (Explore)',
-    featured_selection: 'Personal results',
-    argument_mapping: 'Argument mapping',
-    cleanup: 'Cleanup',
-    informed_voting: 'Informed voting',
-    public_results: 'Public results',
-  };
-  return labels[key] ?? fallback;
+/** Advanced-toggle names, which are deliberately more explicit than the phase labels the
+ *  server sends for the guided stepper. A literal map rather than an interpolated key, so
+ *  every message name stays greppable from the catalogue. */
+const ADVANCED_PHASE_KEY: Record<string, string> = {
+  submission: 'adminconv-phase-submission',
+  featured_selection: 'adminconv-phase-personal',
+  argument_mapping: 'adminconv-phase-argmap',
+  cleanup: 'adminconv-phase-cleanup',
+  informed_voting: 'adminconv-phase-informed',
+  public_results: 'adminconv-phase-public',
+};
+
+function advancedPhaseLabel(msg: Message, key: string, fallback: string): string {
+  const messageKey = ADVANCED_PHASE_KEY[key];
+  return messageKey ? msg(messageKey) : fallback;
 }
 
 function utcInput(value: string | null): string {
@@ -119,12 +141,11 @@ function utcInput(value: string | null): string {
 function PhaseStatistics({data}: {data: Lifecycle}) {
   const shown = data.statistics.groups.filter((group) => group.tiles.length);
   const summary = data.statistics.informedVoting;
+  const msg = useMessage();
   return <>
     {data.statistics.upstreamUnavailable && <div className="phase-stats-warning" role="status">
       <span aria-hidden="true">⚠️</span>
-      <span><strong>Live statistics unavailable.</strong> Vote and participant counts may be
-        {' '}missing or stale — the Polis statistics database may be unreachable, or this
-        {' '}conversation may not yet be registered in Polis. Check the server logs.</span>
+      <span dangerouslySetInnerHTML={richHtml(msg('adminconv-stats-warning'))} />
     </div>}
     {shown.map((group, groupIndex) => <Fragment key={group.key}>
       {!data.phase.linear && <div id={`psg-${groupIndex + 1}`} className="phase-stats-group-label">{group.label}</div>}
@@ -136,13 +157,13 @@ function PhaseStatistics({data}: {data: Lifecycle}) {
       </dl>
     </Fragment>)}
     {summary && <div className="phase-stats phase-stats--p6" style={{marginTop: '.75rem', paddingTop: '.75rem', borderTop: '1px solid var(--hairline)'}}>
-      <div><div className="phase-stat-label" style={{marginBottom: 3}}>Informed voting</div>
-        {summary.participants !== null ? <div><div className="phase-stat-value">{summary.participants}</div><div className="phase-stat-label">participants in round 6</div></div> : <div className="muted" style={{fontSize: 12}}>participant count unavailable</div>}
+      <div><div className="phase-stat-label" style={{marginBottom: 3}}>{msg('adminconv-informed-voting-label')}</div>
+        {summary.participants !== null ? <div><div className="phase-stat-value">{summary.participants}</div><div className="phase-stat-label">{msg('adminconv-participants-round6')}</div></div> : <div className="muted" style={{fontSize: 12}}>{msg('adminconv-participant-count-unavailable')}</div>}
       </div>
-      {summary.statementCount > 0 && <><div><div className="phase-stat-value">{summary.statementCount}</div><div className="phase-stat-label">statements voted on</div></div>
-        {summary.largestShift && <div style={{gridColumn: '1/-1', marginTop: '.25rem'}}><div className="phase-stat-label" style={{marginBottom: 3}}>Largest shift</div><span style={{fontSize: 13}}>“{summary.largestShift.text.length > 65 ? `${summary.largestShift.text.slice(0, 59)}…` : summary.largestShift.text}”</span><span className={`p6-shift ${summary.largestShift.shift > 0 ? 'p6-shift--up' : summary.largestShift.shift < 0 ? 'p6-shift--down' : ''}`} style={{marginLeft: '.4rem'}}>{summary.largestShift.shift > 0 && '+'}{summary.largestShift.shift}%</span></div>}
+      {summary.statementCount > 0 && <><div><div className="phase-stat-value">{summary.statementCount}</div><div className="phase-stat-label">{msg('adminconv-statements-voted-on')}</div></div>
+        {summary.largestShift && <div style={{gridColumn: '1/-1', marginTop: '.25rem'}}><div className="phase-stat-label" style={{marginBottom: 3}}>{msg('adminconv-largest-shift')}</div><span style={{fontSize: 13}}>“{summary.largestShift.text.length > 65 ? `${summary.largestShift.text.slice(0, 59)}…` : summary.largestShift.text}”</span><span className={`p6-shift ${summary.largestShift.shift > 0 ? 'p6-shift--up' : summary.largestShift.shift < 0 ? 'p6-shift--down' : ''}`} style={{marginLeft: '.4rem'}}>{summary.largestShift.shift > 0 && '+'}{summary.largestShift.shift}%</span></div>}
       </>}
-      {(summary.excludedStatementCount > 0 || summary.excludedParticipantCount > 0) && <div style={{gridColumn: '1/-1', fontSize: 11, color: 'var(--muted)'}}>Moderation: {summary.excludedStatementCount > 0 && `${summary.excludedStatementCount} stmt excluded`} {summary.excludedParticipantCount > 0 && `· ${summary.excludedParticipantCount} participant excluded`}</div>}
+      {(summary.excludedStatementCount > 0 || summary.excludedParticipantCount > 0) && <div style={{gridColumn: '1/-1', fontSize: 11, color: 'var(--muted)'}}>{msg('adminconv-moderation')} {summary.excludedStatementCount > 0 && msg('adminconv-stmt-excluded', summary.excludedStatementCount)} {summary.excludedParticipantCount > 0 && msg('adminconv-participant-excluded', summary.excludedParticipantCount)}</div>}
     </div>}
   </>;
 }
@@ -151,6 +172,7 @@ function RoleSection({conversationId, csrfToken, roster, refresh, fail}: {
   conversationId: number; csrfToken: string; roster: RoleRoster;
   refresh: () => void; fail: (error: Error) => void;
 }) {
+  const msg = useMessage();
   const [participantId, setParticipantId] = useState('');
   const [role, setRole] = useState<Role>('moderator');
   const mutation = useMutation({
@@ -160,18 +182,18 @@ function RoleSection({conversationId, csrfToken, roster, refresh, fail}: {
   });
   const roleCount = roster.assignments.reduce((total, row) => total + row.roles.length, 0);
   return <div className="console-section">
-    <div className="console-section-label">Conversation roles</div>
+    <div className="console-section-label">{msg('adminconv-roles-label')}</div>
     <details className="phase-advanced">
-      <summary>Roles{roleCount > 0 && ` (${roleCount})`}</summary>
-      {roleCount > 0 ? <table className="admin-table" style={{marginTop: '.75rem'}}><thead><tr><th>Participant</th><th>Role</th><th /></tr></thead><tbody>
+      <summary>{roleCount > 0 ? msg('adminconv-roles-summary-count', roleCount) : msg('adminconv-roles-summary')}</summary>
+      {roleCount > 0 ? <table className="admin-table" style={{marginTop: '.75rem'}}><thead><tr><th>{msg('admin-th-participant')}</th><th>{msg('adminconv-th-role')}</th><th /></tr></thead><tbody>
         {roster.assignments.flatMap((assignment) => assignment.roles.map((assignedRole) => <tr key={`${assignment.participantId}-${assignedRole}`}>
-          <td>{assignment.username}</td><td>{assignedRole}</td><td>{roster.capabilities.manageRoles && <form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); mutation.mutate({id: assignment.participantId, roles: assignment.roles.filter((item) => item !== assignedRole) as Role[]});}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className="btn-small btn-danger">remove</button></form>}</td>
+          <td>{assignment.username}</td><td>{assignedRole}</td><td>{roster.capabilities.manageRoles && <form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); mutation.mutate({id: assignment.participantId, roles: assignment.roles.filter((item) => item !== assignedRole) as Role[]});}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className="btn-small btn-danger">{msg('admin-btn-remove')}</button></form>}</td>
         </tr>))}
-      </tbody></table> : <p className="muted" style={{margin: '.75rem 0', fontSize: 14}}>No conversation roles assigned.</p>}
+      </tbody></table> : <p className="muted" style={{margin: '.75rem 0', fontSize: 14}}>{msg('adminconv-no-roles')}</p>}
       {roster.capabilities.manageRoles && <form style={{marginTop: '.5rem'}} onSubmit={(event) => {event.preventDefault(); const id = Number(participantId); if (!id) return; const current = roster.assignments.find((item) => item.participantId === id)?.roles ?? []; mutation.mutate({id, roles: [...new Set([...current, role])] as Role[]});}}>
         <input type="hidden" name="csrf_token" value={csrfToken} />
-        <div className="edit-row-fields"><label>Participant<select required value={participantId} onChange={(event) => setParticipantId(event.target.value)}><option value="">— select —</option>{roster.candidates.map((candidate) => <option key={candidate.participantId} value={candidate.participantId}>{candidate.username}</option>)}</select></label><label>Role<select value={role} onChange={(event) => setRole(event.target.value as Role)}>{roster.availableRoles.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></div>
-        <button type="submit">Add role</button>
+        <div className="edit-row-fields"><label>{msg('adminconv-label-participant')}<select required value={participantId} onChange={(event) => setParticipantId(event.target.value)}><option value="">{msg('adminconv-select-placeholder')}</option>{roster.candidates.map((candidate) => <option key={candidate.participantId} value={candidate.participantId}>{candidate.username}</option>)}</select></label><label>{msg('adminconv-label-role')}<select value={role} onChange={(event) => setRole(event.target.value as Role)}>{roster.availableRoles.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></div>
+        <button type="submit">{msg('adminconv-add-role')}</button>
       </form>}
     </details>
   </div>;
@@ -181,6 +203,7 @@ function ConfigurationSection({conversationId, csrfToken, settings, refresh, fai
   conversationId: number; csrfToken: string; settings: Settings;
   refresh: () => void; fail: (error: Error) => void;
 }) {
+  const msg = useMessage();
   const [title, setTitle] = useState(settings.conversation.title);
   const [introHtml, setIntroHtml] = useState(settings.conversation.introHtml);
   const [outroHtml, setOutroHtml] = useState(settings.conversation.outroHtml);
@@ -199,49 +222,54 @@ function ConfigurationSection({conversationId, csrfToken, settings, refresh, fai
     onError: fail,
   });
   return <div className="console-section">
-    <div className="console-section-label">Configuration</div>
-    <details className="phase-advanced"><summary>Settings — title, intro/outro, access policy</summary>
+    <div className="console-section-label">{msg('adminconv-config-label')}</div>
+    <details className="phase-advanced"><summary>{msg('adminconv-settings-summary')}</summary>
       <form className="panel" style={{marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); settingsMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} />
         <div className="edit-row-fields">
-          <label>Title<input type="text" required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-          <label>Route (locked after launch)<input type="text" readOnly value={settings.conversation.phaseRouteLabel} style={{background: '#f5f5f5', color: '#666'}} /></label>
-          <label>Polis ID (zinvite, read-only)<input type="text" readOnly value={settings.conversation.polisId} style={{background: '#f5f5f5', color: '#666'}} /></label>
-          <label>Access policy<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as typeof accessPolicy)}><option value="public">public</option><option value="invite_only">invite_only</option><option value="demo">demo</option></select></label>
-          <label>Eligibility event ID<input type="text" maxLength={80} value={eventId} onChange={(event) => setEventId(event.target.value)} /></label>
-          <label>Eligibility label<input type="text" maxLength={255} value={eligibilityLabel} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
+          <label>{msg('admin-label-title')}<input type="text" required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+          <label>{msg('adminconv-label-route-locked')}<input type="text" readOnly value={settings.conversation.phaseRouteLabel} style={{background: '#f5f5f5', color: '#666'}} /></label>
+          <label>{msg('adminconv-label-polis-id')}<input type="text" readOnly value={settings.conversation.polisId} style={{background: '#f5f5f5', color: '#666'}} /></label>
+          <label>{msg('admin-label-access')}<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as typeof accessPolicy)}><option value="public">public</option><option value="invite_only">invite_only</option><option value="demo">demo</option></select></label>
+          <label>{msg('admin-label-elig-event')}<input type="text" maxLength={80} value={eventId} onChange={(event) => setEventId(event.target.value)} /></label>
+          <label>{msg('admin-label-elig-label')}<input type="text" maxLength={255} value={eligibilityLabel} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
         </div>
-        <div className="edit-row-texts"><label>Intro text (HTML, optional)<textarea rows={4} value={introHtml} onChange={(event) => setIntroHtml(event.target.value)} /></label><label>Outro text (HTML, optional)<textarea rows={4} value={outroHtml} onChange={(event) => setOutroHtml(event.target.value)} /></label></div>
-        <button type="submit">Save settings</button>
+        <div className="edit-row-texts"><label>{msg('admin-label-intro')}<textarea rows={4} value={introHtml} onChange={(event) => setIntroHtml(event.target.value)} /></label><label>{msg('admin-label-outro')}<textarea rows={4} value={outroHtml} onChange={(event) => setOutroHtml(event.target.value)} /></label></div>
+        <button type="submit">{msg('adminconv-save-settings')}</button>
       </form>
     </details>
-    <details className="phase-advanced"><summary>Recommended quantities</summary>
-      <form className="panel" style={{marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); recommendationMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><p className="section-help">These numbers are advisory. They appear in readiness checks and stats so organizers can judge whether the consultation has enough material to move on.</p>
-        <div className="edit-row-fields"><label>Complexity tier<select value={tier} onChange={(event) => setTier(event.target.value as typeof tier)}>{settings.recommendations.tiers.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>{Object.entries(settings.recommendations.tiers.find((item) => item.key === tier)?.quantities ?? {}).map(([key, value]) => <div className="recommendation-value" key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}</strong></div>)}</div>
-        <button type="submit">Save recommendations</button>
+    <details className="phase-advanced"><summary>{msg('adminconv-rec-summary')}</summary>
+      <form className="panel" style={{marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); recommendationMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><p className="section-help">{msg('adminconv-rec-help')}</p>
+        <div className="edit-row-fields"><label>{msg('adminconv-label-tier')}<select value={tier} onChange={(event) => setTier(event.target.value as typeof tier)}>{settings.recommendations.tiers.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>{Object.entries(settings.recommendations.tiers.find((item) => item.key === tier)?.quantities ?? {}).map(([key, value]) => <div className="recommendation-value" key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}</strong></div>)}</div>
+        <button type="submit">{msg('adminconv-save-rec')}</button>
       </form>
     </details>
   </div>;
 }
 
 function ClosedDescription({lifecycle}: {lifecycle: Lifecycle}) {
+  const msg = useMessage();
   const reveal = lifecycle.conversation.identityReveal;
   const closedAt = lifecycle.conversation.closedAt
     ? shortDate(lifecycle.conversation.closedAt) : null;
+  // The reveal-window sentences carry their own dates and counts as parameters rather
+  // than being assembled around them, so a translation can reorder inside each sentence.
+  const closed = msg('adminconv-closed-on', closedAt ?? '');
   if (reveal?.state === 'pending' && reveal.opensAt) {
-    return <>Closed {closedAt}. The identity-reveal window opens on {shortDate(reveal.opensAt)} ({reveal.daysLeft} day{reveal.daysLeft === 1 ? '' : 's'} away) — nothing to do until then.</>;
+    return <>{closed} {msg('adminconv-reveal-pending', shortDate(reveal.opensAt), reveal.daysLeft ?? 0)}</>;
   }
   if (reveal?.state === 'open' && reveal.closesAt) {
-    return <>Closed {closedAt}. The identity-reveal window is open until {shortDate(reveal.closesAt)}.</>;
+    return <>{closed} {msg('adminconv-reveal-open-date', shortDate(reveal.closesAt))}</>;
   }
   if (reveal?.state === 'expired') {
-    return <>Closed {closedAt}. The identity-reveal window has ended — records are permanently pseudonymous.</>;
+    return <>{closed} {msg('adminconv-reveal-ended')}</>;
   }
-  return <>Closed{closedAt && ` ${closedAt}`}. Cannot be reopened.</>;
+  return <>{closedAt ? closed : msg('adminconv-closed-undated')} {msg('adminconv-closed-cannot-reopen')}</>;
 }
 
 function DangerSection({conversationId, csrfToken, lifecycle, fail}: {
   conversationId: number; csrfToken: string; lifecycle: Lifecycle; fail: (error: Error) => void;
 }) {
+  const msg = useMessage();
   const {data} = useSuspenseQuery(adminTerminationQuery(conversationId));
   const deletion = useMutation({mutationFn: () => deleteAdminConversation(conversationId, csrfToken), onError: fail});
   const publication = useMutation({
@@ -251,14 +279,15 @@ function DangerSection({conversationId, csrfToken, lifecycle, fail}: {
   const [confirmed, setConfirmed] = useState<string[]>([]);
   const closed = lifecycle.conversation.status === 'closed';
   const cleanup = lifecycle.publicationReadiness.windowOpen;
-  return <div className="console-section"><div className="console-section-label" style={{color: 'var(--disagree)'}}>Ending the consultation</div><div className="danger-zone">
-    {closed ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">Permanently closed · <InternalLink href={`/c/${lifecycle.conversation.slug}/report`} style={{fontWeight: 400, fontSize: 13}}>View final report <span aria-hidden="true">→</span></InternalLink></div><div className="danger-row-desc"><ClosedDescription lifecycle={lifecycle} /></div></div></div> : <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">Publish final report</div><div className="danger-row-desc">{cleanup ? <>Irreversible. Publishes <code>/c/{lifecycle.conversation.slug}/report</code>, freezes moderation exclusions, and starts the identity-reveal window.</> : 'Available after informed voting has ended and the consultation is in the cleanup window.'}</div></div>{cleanup ? <form className="cleanup-publish-form" onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm('Publish the final report?\n\nThis freezes report exclusions, closes the consultation, and starts the identity reveal timeline.')) publication.mutate(confirmed);}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness cleanup-readiness">{lifecycle.publicationReadiness.preconditions.map((row) => <li key={row.id}>{row.met === null ? <label><input type="checkbox" checked={confirmed.includes(row.id)} onChange={() => setConfirmed((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /> <span className="readiness-label">{row.label}</span></label> : <span className="readiness-label">{row.label} {row.met ? <span className="readiness-note">(met)</span> : <span className="phase-check-unmet">not met yet</span>}</span>}</li>)}</ul><button type="submit" className="btn-small btn-danger">Publish final report</button></form> : <button type="button" className="btn-small btn-danger" disabled>Publish final report</button>}</div>}
-    <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">Delete empty consultation</div><div className="danger-row-desc">Deletes the local consultation after deactivating and hiding it in Polis. {data.deletion.state === 'unavailable' ? 'Disabled because Polis vote data could not be verified.' : data.deletion.validVoteCount === 0 ? 'Available because Polis has no valid votes for this consultation.' : `Disabled because Polis has ${data.deletion.validVoteCount} valid vote${data.deletion.validVoteCount === 1 ? '' : 's'}.`}</div></div><form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm('Delete this consultation?\n\nThis removes local ProtoWiki records after hiding the Polis conversation. This cannot be undone.')) deletion.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className="btn-small btn-danger" disabled={data.deletion.state !== 'eligible'} aria-disabled={data.deletion.state !== 'eligible'}>Delete consultation</button></form></div>
+  return <div className="console-section"><div className="console-section-label" style={{color: 'var(--disagree)'}}>{msg('adminconv-danger-label')}</div><div className="danger-zone">
+    {closed ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-perm-closed')} · <InternalLink href={`/c/${lifecycle.conversation.slug}/report`} style={{fontWeight: 400, fontSize: 13}}>{msg('adminconv-view-report')} <span aria-hidden="true">→</span></InternalLink></div><div className="danger-row-desc"><ClosedDescription lifecycle={lifecycle} /></div></div></div> : <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-publish-report')}</div>{cleanup ? <div className="danger-row-desc" dangerouslySetInnerHTML={richHtml(msg('adminconv-publish-irrev', escapeHtml(`/c/${lifecycle.conversation.slug}/report`)))} /> : <div className="danger-row-desc">{msg('adminconv-publish-unavailable')}</div>}</div>{cleanup ? <form className="cleanup-publish-form" onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm(msg('adminconv-confirm-publish'))) publication.mutate(confirmed);}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness cleanup-readiness">{lifecycle.publicationReadiness.preconditions.map((row) => <li key={row.id}>{row.met === null ? <label><input type="checkbox" checked={confirmed.includes(row.id)} onChange={() => setConfirmed((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /> <span className="readiness-label">{row.label}</span></label> : <span className="readiness-label">{row.label} {row.met ? <span className="readiness-note">({msg('adminconv-met')})</span> : <span className="phase-check-unmet">{msg('adminconv-not-met')}</span>}</span>}</li>)}</ul><button type="submit" className="btn-small btn-danger">{msg('adminconv-publish-report')}</button></form> : <button type="button" className="btn-small btn-danger" disabled>{msg('adminconv-publish-report')}</button>}</div>}
+    <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-delete-title')}</div><div className="danger-row-desc">{msg('adminconv-delete-desc')} {data.deletion.state === 'unavailable' ? msg('adminconv-delete-unverified') : data.deletion.validVoteCount === 0 ? msg('adminconv-delete-available') : msg('adminconv-delete-hasvotes', data.deletion.validVoteCount ?? 0)}</div></div><form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm(msg('adminconv-confirm-delete'))) deletion.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className="btn-small btn-danger" disabled={data.deletion.state !== 'eligible'} aria-disabled={data.deletion.state !== 'eligible'}>{msg('adminconv-delete-btn')}</button></form></div>
   </div></div>;
 }
 
 export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId: number; csrfToken: string}) {
   useRedesignStyles();
+  const msg = useMessage();
   const queryClient = useQueryClient();
   const lifecycleOptions = adminLifecycleQuery(conversationId);
   const settingsOptions = adminSettingsQuery(conversationId);
@@ -273,14 +302,14 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
   function notify(category: LegacyToastMessage['category'], text: string) {setToast({id: Date.now(), category, message: text});}
-  function fail(error: Error) {notify('error', message(error));}
+  function fail(error: Error) {notify('error', message(msg, error));}
   function setLifecycle(lifecycle: Lifecycle) {queryClient.setQueryData(lifecycleOptions.queryKey, lifecycle);}
   function refreshSupporting() {void queryClient.invalidateQueries({queryKey: settingsOptions.queryKey}); void queryClient.invalidateQueries({queryKey: rolesOptions.queryKey}); void queryClient.invalidateQueries({queryKey: lifecycleOptions.queryKey});}
 
-  const phaseMutation = useMutation({mutationFn: () => putAdminPhase(conversationId, {confirmedPreconditionIds: phaseChecks}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); setPhaseChecks([]); const receipt = phaseTransitionToast(result.transition); notify(receipt.category, receipt.message);}, onError: fail});
+  const phaseMutation = useMutation({mutationFn: () => putAdminPhase(conversationId, {confirmedPreconditionIds: phaseChecks}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); setPhaseChecks([]); const receipt = phaseTransitionToast(msg, result.transition); notify(receipt.category, receipt.message);}, onError: fail});
   const pauseMutation = useMutation({mutationFn: () => putAdminPause(conversationId, {paused: data.conversation.status !== 'paused'}, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
   const scheduleMutation = useMutation({mutationFn: (body: components['schemas']['AdminScheduleRequest']) => putAdminSchedule(conversationId, body, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
-  const phasesMutation = useMutation({mutationFn: () => putAdminPhases(conversationId, {activeKeys: advancedKeys}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); if (!result.visibilitySynced) notify('error', VISIBILITY_DESYNC_PHASES);}, onError: fail});
+  const phasesMutation = useMutation({mutationFn: () => putAdminPhases(conversationId, {activeKeys: advancedKeys}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); if (!result.visibilitySynced) notify('error', msg('flash-phases-saved-sync-failed'));}, onError: fail});
   const initialization = useMutation({mutationFn: () => createAdminPhase6Initialization(conversationId, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
 
   const isAdmin = data.capabilities.useAdvancedPhases;
@@ -292,34 +321,34 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
   const allChecked = Boolean(transition) && transition!.preconditions.every((row) => phaseChecks.includes(row.id));
   const roleCount = roles.assignments.reduce((total, row) => total + row.roles.length, 0);
 
-  return <LegacyShell headerMode="admin" title={`Manage ${data.conversation.title} — ProtoWiki`} headerCrumb={<nav className="header-crumb" aria-label="Admin breadcrumb"><span className="header-crumb-sep">/</span><Link to="/admin">Admin panel</Link><span className="header-crumb-sep">/</span><span>{legacyTruncate(data.conversation.title)}</span></nav>} toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}>
-    <div className="role-bar"><div className="role-bar-inner"><span className={`role-chip${isAdmin ? ' role-chip--admin' : ''}`} title="Your assigned role on this platform"><span className="role-chip-dot" />{data.operator.roleLabel}</span><span className="role-bar-context">managing&nbsp;<strong>{data.conversation.title}</strong></span><span className="role-bar-spacer" /><InternalLink className="view-as-btn" href={data.links.participantView}>View as participant →</InternalLink></div></div>
+  return <LegacyShell headerMode="admin" title={msg('adminconv-doc-title', data.conversation.title)} headerCrumb={<nav className="header-crumb" aria-label={msg('admin-crumb-aria')}><span className="header-crumb-sep">/</span><Link to="/admin">{msg('admin-nav-panel')}</Link><span className="header-crumb-sep">/</span><span>{legacyTruncate(data.conversation.title)}</span></nav>} toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}>
+    <div className="role-bar"><div className="role-bar-inner"><span className={`role-chip${isAdmin ? ' role-chip--admin' : ''}`} title={msg('adminconv-role-title')}><span className="role-chip-dot" />{data.operator.roleLabel}</span><span className="role-bar-context">{msg('adminconv-managing')}&nbsp;<strong>{data.conversation.title}</strong></span><span className="role-bar-spacer" /><InternalLink className="view-as-btn" href={data.links.participantView}>{msg('adminconv-view-as')}</InternalLink></div></div>
     <div className="console">
-      <div className="console-head"><h1 className="console-title">{data.conversation.title}</h1><span className={`status-pill status-pill--${!isActive ? 'closed' : data.conversation.status === 'paused' ? 'paused' : data.conversation.status === 'scheduled' ? 'scheduled' : 'active'}`}><span className="status-pill-dot" />{!isActive ? 'Closed' : data.conversation.status === 'paused' ? 'Paused' : data.conversation.status === 'scheduled' ? 'Scheduled' : 'Active'}</span></div>
-      <p className="console-sub"><code>/c/{data.conversation.slug}</code> &nbsp;·&nbsp; {data.conversation.accessPolicy} &nbsp;·&nbsp; {data.counts.participants} joined</p>
+      <div className="console-head"><h1 className="console-title">{data.conversation.title}</h1><span className={`status-pill status-pill--${!isActive ? 'closed' : data.conversation.status === 'paused' ? 'paused' : data.conversation.status === 'scheduled' ? 'scheduled' : 'active'}`}><span className="status-pill-dot" />{!isActive ? msg('adminconv-status-closed') : data.conversation.status === 'paused' ? msg('adminconv-status-paused') : data.conversation.status === 'scheduled' ? msg('adminconv-status-scheduled') : msg('adminconv-status-active')}</span></div>
+      <p className="console-sub"><code>/c/{data.conversation.slug}</code> &nbsp;·&nbsp; {data.conversation.accessPolicy} &nbsp;·&nbsp; {msg('adminconv-joined', data.counts.participants)}</p>
 
-      <div className="console-section" id="phaseControl" data-mode={advanced ? 'advanced' : 'simple'}><div className="phase-hero"><div className="phase-hero-top"><span className="phase-now-kicker">Phase control</span></div>
-        <ol className="journey phase-stepper" aria-label="Consultation phase progress">{data.phase.steps.map((step, index) => {const active = step.state === 'current'; const done = data.phase.linear && step.state === 'completed'; return <li key={step.key} className={`journey-step${active ? ' journey-step--current' : done ? ' journey-step--done' : ''}`} aria-current={active ? 'step' : undefined}><span className="journey-dot">{done ? '✓' : index + 1}</span><span className="journey-label">{step.label}</span><span className="sr-only">({active ? 'current phase' : done ? 'completed' : 'upcoming'})</span></li>;})}</ol>
-        {isAdmin && <div className="mode-switch-row"><span className="mode-switch" role="group" aria-label="Phase control mode"><button type="button" className="pc-guided" aria-pressed={!advanced} aria-controls="phaseControl" onClick={() => setAdvanced(false)}>Simple</button><button type="button" className="pc-advanced mode-adv" aria-pressed={advanced} aria-controls="phaseControl" onClick={() => setAdvanced(true)}>Advanced</button></span></div>}
-        <div className="phase-hero-body">{data.phase.linear ? <><div className="phase-now-head"><span className="phase-now-kicker">You are in phase {data.phase.currentIndex + 1} of {data.phase.steps.length}</span></div><div className="phase-now-head" style={{marginTop: 2}}><span className="phase-now-name">{current.label}</span>{current.key === 'public_results' && <span className={`status-pill status-pill--${data.conversation.closedAt ? 'closed' : 'paused'}`}><span className="status-pill-dot" />{data.conversation.closedAt ? 'Published' : 'Not yet published'}</span>}</div><p className="phase-now-desc">{current.key === 'public_results' && data.conversation.closedAt ? 'The final aggregate report is published and participant activity is closed.' : current.effect}</p></> : <><div className="phase-now-head"><span className="phase-now-kicker">Multiple phases active</span></div><div className="phase-now-head" style={{marginTop: 2}}><span className="phase-now-name">{data.statistics.groups.map((group) => group.label).join(' + ')}</span></div><p className="phase-now-desc">Several phases are open at once (advanced mode).{data.statistics.groups.some((group) => group.tiles.length) && ' Statistics for the phases with available data are shown below.'}</p></>}<PhaseStatistics data={data} /></div>
-        {isAdmin && isActive && <div className="phase-foot phase-pause-row"><form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); pauseMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className={`btn-small ${data.conversation.status === 'paused' ? 'btn-approve' : 'btn-pause'}`}>{data.conversation.status === 'paused' ? 'Resume' : 'Pause'}</button></form><span className="muted" style={{fontSize: 13}}>{data.conversation.status === 'paused' ? <>Paused — participants cannot vote. The identity-reveal clock has <strong>not</strong> started; resuming is possible.</> : 'Pause temporarily disables voting without starting the reveal timeline.'}</span></div>}
+      <div className="console-section" id="phaseControl" data-mode={advanced ? 'advanced' : 'simple'}><div className="phase-hero"><div className="phase-hero-top"><span className="phase-now-kicker">{msg('adminconv-phase-control')}</span></div>
+        <ol className="journey phase-stepper" aria-label={msg('adminconv-journey-aria')}>{data.phase.steps.map((step, index) => {const active = step.state === 'current'; const done = data.phase.linear && step.state === 'completed'; return <li key={step.key} className={`journey-step${active ? ' journey-step--current' : done ? ' journey-step--done' : ''}`} aria-current={active ? 'step' : undefined}><span className="journey-dot">{done ? '✓' : index + 1}</span><span className="journey-label">{step.label}</span><span className="sr-only">{active ? msg('adminconv-step-current') : done ? msg('adminconv-step-completed') : msg('adminconv-step-upcoming')}</span></li>;})}</ol>
+        {isAdmin && <div className="mode-switch-row"><span className="mode-switch" role="group" aria-label={msg('adminconv-mode-aria')}><button type="button" className="pc-guided" aria-pressed={!advanced} aria-controls="phaseControl" onClick={() => setAdvanced(false)}>{msg('adminconv-mode-simple')}</button><button type="button" className="pc-advanced mode-adv" aria-pressed={advanced} aria-controls="phaseControl" onClick={() => setAdvanced(true)}>{msg('adminconv-mode-advanced')}</button></span></div>}
+        <div className="phase-hero-body">{data.phase.linear ? <><div className="phase-now-head"><span className="phase-now-kicker">{msg('adminconv-you-are-in-phase', data.phase.currentIndex + 1, data.phase.steps.length)}</span></div><div className="phase-now-head" style={{marginTop: 2}}><span className="phase-now-name">{current.label}</span>{current.key === 'public_results' && <span className={`status-pill status-pill--${data.conversation.closedAt ? 'closed' : 'paused'}`}><span className="status-pill-dot" />{data.conversation.closedAt ? msg('adminconv-status-published') : msg('adminconv-status-unpublished')}</span>}</div><p className="phase-now-desc">{current.key === 'public_results' && data.conversation.closedAt ? msg('adminconv-phase-desc-published') : current.effect}</p></> : <><div className="phase-now-head"><span className="phase-now-kicker">{msg('adminconv-multiple-active')}</span></div><div className="phase-now-head" style={{marginTop: 2}}><span className="phase-now-name">{data.statistics.groups.map((group) => group.label).join(' + ')}</span></div><p className="phase-now-desc">{msg('adminconv-several-open')}{data.statistics.groups.some((group) => group.tiles.length) && ` ${msg('adminconv-stats-below')}`}</p></>}<PhaseStatistics data={data} /></div>
+        {isAdmin && isActive && <div className="phase-foot phase-pause-row"><form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); pauseMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className={`btn-small ${data.conversation.status === 'paused' ? 'btn-approve' : 'btn-pause'}`}>{data.conversation.status === 'paused' ? msg('adminconv-resume') : msg('adminconv-pause')}</button></form>{data.conversation.status === 'paused' ? <span className="muted" style={{fontSize: 13}} dangerouslySetInnerHTML={richHtml(msg('adminconv-paused-note'))} /> : <span className="muted" style={{fontSize: 13}}>{msg('adminconv-pause-note')}</span>}</div>}
       </div>
 
-      <div className="mode-guided-part">{transition ? canOrganize ? <><div className="phase-foot"><div className={`phase-foot-ready ${unmet ? 'phase-foot-ready--wait' : 'phase-foot-ready--go'}`}><span className="phase-foot-ready-icon" aria-hidden="true">{unmet ? '!' : '✓'}</span><span>{unmet ? `${unmet} readiness check${unmet === 1 ? '' : 's'} still need resolving before ${transition.target.label}` : `No blocking checks — confirm each item below to move on to ${transition.target.label}`}</span></div></div><div className="moveon phase-move-box"><div className="moveon-head"><span className="moveon-from">{transition.source.label}</span><span className="moveon-arrow" aria-hidden="true">→</span><span>{transition.target.label}</span></div><div className="moveon-body"><ul className="consequence"><li><span className="consequence-tag consequence-tag--opens">Opens</span><span>{transition.consequence.opens}</span></li>{transition.consequence.closes && <li><span className="consequence-tag consequence-tag--closes">Closes</span><span>{transition.consequence.closes}</span></li>}<li><span className="consequence-tag" style={{background: 'var(--surface2)', color: 'var(--muted)'}}>Undo</span><span>Reversible only by a site admin via advanced controls.</span></li></ul><div className="console-section-label" style={{marginBottom: 8}}>Readiness</div><form className="phase-move-form" onSubmit={(event) => {event.preventDefault(); phaseMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness">{transition.preconditions.map((row) => <li key={row.id}><label><input type="checkbox" className="phase-move-check moveon-check" checked={phaseChecks.includes(row.id)} onChange={() => setPhaseChecks((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /><span className="readiness-label">{row.label} {row.met === true && <span className="readiness-note">({row.note || 'met'})</span>}{row.met === false && <><span className="phase-check-unmet"><span aria-hidden="true">✗</span> not met yet</span>{row.note && <span className="readiness-note">({row.note})</span>}</>}</span></label></li>)}</ul><p className="phase-move-hint moveon-hint muted">Confirm every item above to enable “Move on”. Anything marked “not met yet” must be resolved first.</p><button type="submit" className="rd-btn-primary phase-move-submit" disabled={unmet > 0 || !allChecked}>Move on to {transition.target.label} →</button></form>{transition.showPauseGuidance && <p className="muted" style={{fontSize: 12, marginTop: 10}}>Need time to coordinate inviting people back? You can pause first.</p>}</div></div></> : <><p className="muted" style={{fontSize: 13, marginTop: 14}}>Only an organizer or site admin can change phases.</p><button type="button" className="btn-small" disabled title="Only an organizer or site admin can change phases">Move on to {transition.target.label} →</button></> : !data.phase.linear ? <p className="muted" style={{marginTop: 14, fontSize: 13}}><span aria-hidden="true">⚠️</span> Phases are in a custom state (more than one active). {isAdmin ? 'Use Advanced below to adjust.' : 'A site admin can adjust this.'}</p> : <p className="muted" style={{marginTop: 14, fontSize: 13}}>{data.conversation.closedAt ? <><strong>Final report published.</strong> The frozen aggregate results are open.</> : <><strong>Report phase reached — not yet published.</strong> Complete cleanup and use “Publish final report” below to open the frozen results.</>}</p>}
-        {isAdmin && data.schedule.canSchedule && <div className="schedule-card" style={{marginTop: 14}}><div className="schedule-main"><div className="schedule-title">Schedule wind-down to {data.schedule.targetLabel}</div><div className="schedule-when">{data.schedule.scheduledAt ? <>{new Date(data.schedule.scheduledAt).toISOString().slice(0, 16).replace('T', ' ')} <span className="schedule-utc">UTC</span> · <span className="countdown-mini">{countdown(data.schedule.scheduledAt)}</span>{data.schedule.frozen && ' · frozen'}</> : 'No scheduled transition set.'}</div></div><form className="schedule-actions" onSubmit={(event) => {event.preventDefault(); scheduleMutation.mutate({scheduledAt: new Date(`${scheduleAt}:00Z`).toISOString(), frozen: false});}}><input type="hidden" name="csrf_token" value={csrfToken} /><label className="sr-only" htmlFor="scheduled-at">UTC timestamp</label><input id="scheduled-at" type="datetime-local" aria-label="Scheduled transition time in UTC" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} /><span className="schedule-utc" aria-hidden="true">UTC</span><button type="submit" className="btn-ghost">{data.schedule.scheduledAt ? 'Edit' : 'Set'}</button></form>{data.schedule.scheduledAt && <><form className="schedule-actions" onSubmit={(event) => {event.preventDefault(); scheduleMutation.mutate({scheduledAt: data.schedule.scheduledAt, frozen: !data.schedule.frozen});}}><button type="submit" className="btn-ghost">{data.schedule.frozen ? 'Unfreeze' : 'Freeze'}</button></form><form className="schedule-actions" onSubmit={(event) => {event.preventDefault(); scheduleMutation.mutate({scheduledAt: null, frozen: false});}}><button type="submit" className="btn-ghost">Cancel</button></form></>}</div>}
-        {isAdmin && transition && !data.schedule.canSchedule && <div className="locked-control" style={{marginTop: 14}}><strong>Scheduling unavailable.</strong><span className="locked-why">Opening an active participant phase still requires the full manual checklist.</span></div>}
+      <div className="mode-guided-part">{transition ? canOrganize ? <><div className="phase-foot"><div className={`phase-foot-ready ${unmet ? 'phase-foot-ready--wait' : 'phase-foot-ready--go'}`}><span className="phase-foot-ready-icon" aria-hidden="true">{unmet ? '!' : '✓'}</span><span>{unmet ? msg('adminconv-readiness-unmet', unmet, transition.target.label) : msg('adminconv-no-blocking', transition.target.label)}</span></div></div><div className="moveon phase-move-box"><div className="moveon-head"><span className="moveon-from">{transition.source.label}</span><span className="moveon-arrow" aria-hidden="true">→</span><span>{transition.target.label}</span></div><div className="moveon-body"><ul className="consequence"><li><span className="consequence-tag consequence-tag--opens">{msg('adminconv-tag-opens')}</span><span>{transition.consequence.opens}</span></li>{transition.consequence.closes && <li><span className="consequence-tag consequence-tag--closes">{msg('adminconv-tag-closes')}</span><span>{transition.consequence.closes}</span></li>}<li><span className="consequence-tag" style={{background: 'var(--surface2)', color: 'var(--muted)'}}>{msg('adminconv-tag-undo')}</span><span>{msg('adminconv-undo-text')}</span></li></ul><div className="console-section-label" style={{marginBottom: 8}}>{msg('adminconv-readiness-label')}</div><form className="phase-move-form" onSubmit={(event) => {event.preventDefault(); phaseMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness">{transition.preconditions.map((row) => <li key={row.id}><label><input type="checkbox" className="phase-move-check moveon-check" checked={phaseChecks.includes(row.id)} onChange={() => setPhaseChecks((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /><span className="readiness-label">{row.label} {row.met === true && <span className="readiness-note">({row.note || msg('adminconv-met')})</span>}{row.met === false && <><span className="phase-check-unmet"><span aria-hidden="true">✗</span> {msg('adminconv-not-met')}</span>{row.note && <span className="readiness-note">({row.note})</span>}</>}</span></label></li>)}</ul><p className="phase-move-hint moveon-hint muted">{msg('adminconv-move-hint')}</p><button type="submit" className="rd-btn-primary phase-move-submit" disabled={unmet > 0 || !allChecked}>{msg('adminconv-move-on-to', transition.target.label)}</button></form>{transition.showPauseGuidance && <p className="muted" style={{fontSize: 12, marginTop: 10}}>{msg('adminconv-need-time')}</p>}</div></div></> : <><p className="muted" style={{fontSize: 13, marginTop: 14}}>{msg('adminconv-only-organizer')}</p><button type="button" className="btn-small" disabled title={msg('adminconv-only-organizer')}>{msg('adminconv-move-on-to', transition.target.label)}</button></> : !data.phase.linear ? <p className="muted" style={{marginTop: 14, fontSize: 13}}><span aria-hidden="true">⚠️</span> {msg('adminconv-custom-state')} {isAdmin ? msg('adminconv-use-advanced') : msg('adminconv-admin-can-adjust')}</p> : <p className="muted" style={{marginTop: 14, fontSize: 13}} dangerouslySetInnerHTML={richHtml(msg(data.conversation.closedAt ? 'adminconv-report-published-note' : 'adminconv-report-unpublished-note'))} />}
+        {isAdmin && data.schedule.canSchedule && <div className="schedule-card" style={{marginTop: 14}}><div className="schedule-main"><div className="schedule-title">{msg('adminconv-schedule-title', data.schedule.targetLabel ?? '')}</div><div className="schedule-when">{data.schedule.scheduledAt ? <>{new Date(data.schedule.scheduledAt).toISOString().slice(0, 16).replace('T', ' ')} <span className="schedule-utc">UTC</span> · <span className="countdown-mini">{countdown(msg, data.schedule.scheduledAt)}</span>{data.schedule.frozen && ` · ${msg('adminconv-frozen')}`}</> : msg('adminconv-no-schedule')}</div></div><form className="schedule-actions" onSubmit={(event) => {event.preventDefault(); scheduleMutation.mutate({scheduledAt: new Date(`${scheduleAt}:00Z`).toISOString(), frozen: false});}}><input type="hidden" name="csrf_token" value={csrfToken} /><label className="sr-only" htmlFor="scheduled-at">{msg('adminconv-utc-timestamp')}</label><input id="scheduled-at" type="datetime-local" aria-label={msg('adminconv-scheduled-aria')} value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} /><span className="schedule-utc" aria-hidden="true">UTC</span><button type="submit" className="btn-ghost">{data.schedule.scheduledAt ? msg('adminconv-edit') : msg('adminconv-set')}</button></form>{data.schedule.scheduledAt && <><form className="schedule-actions" onSubmit={(event) => {event.preventDefault(); scheduleMutation.mutate({scheduledAt: data.schedule.scheduledAt, frozen: !data.schedule.frozen});}}><button type="submit" className="btn-ghost">{data.schedule.frozen ? msg('adminconv-unfreeze') : msg('adminconv-freeze')}</button></form><form className="schedule-actions" onSubmit={(event) => {event.preventDefault(); scheduleMutation.mutate({scheduledAt: null, frozen: false});}}><button type="submit" className="btn-ghost">{msg('common-cancel')}</button></form></>}</div>}
+        {isAdmin && transition && !data.schedule.canSchedule && <div className="locked-control" style={{marginTop: 14}}><strong>{msg('adminconv-scheduling-unavailable')}</strong><span className="locked-why">{msg('adminconv-scheduling-why')}</span></div>}
       </div>
 
-      {isAdmin && <div className="mode-advanced-part"><div className="box-adv-note"><span aria-hidden="true">⚠️</span><span><strong>Advanced.</strong> These toggles act independently and out of order, with no readiness checks — for demos and recovery, not routine runs.</span></div><form className="phases-form" style={{flexWrap: 'wrap', gap: '.75rem', marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); phasesMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} />{data.phase.advancedControls.map((row) => <label key={row.key}><input type="checkbox" checked={advancedKeys.includes(row.key)} onChange={() => setAdvancedKeys((items) => items.includes(row.key) ? items.filter((item) => item !== row.key) : [...items, row.key])} /> {advancedPhaseLabel(row.key, row.label)}</label>)}<button type="submit" className="btn-small phases-save">Save phases</button></form>{data.phase.activeKeys.includes('informed_voting') && <div style={{marginTop: '1rem'}}><div className="console-section-label">Informed voting — setup</div>{data.phase.phase6Setup?.polisConversationId ? <p style={{fontSize: 13}}>Phase 6 Polis conversation: <code>{data.phase.phase6Setup.polisConversationId}</code> · {data.phase.phase6Setup.seededStatementCount} of {data.phase.phase6Setup.confirmedStatementCount} statements seeded.</p> : <><p style={{fontSize: 13, marginBottom: '.5rem'}}>Enabled but not initialised. Initialising creates a dedicated Polis conversation and seeds all confirmed featured statements.</p><form onSubmit={(event) => {event.preventDefault(); initialization.mutate();}}><button type="submit" className="btn-small">Initialise Phase 6</button></form></>}</div>}</div>}
+      {isAdmin && <div className="mode-advanced-part"><div className="box-adv-note"><span aria-hidden="true">⚠️</span><span dangerouslySetInnerHTML={richHtml(msg('adminconv-advanced-note'))} /></div><form className="phases-form" style={{flexWrap: 'wrap', gap: '.75rem', marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); phasesMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} />{data.phase.advancedControls.map((row) => <label key={row.key}><input type="checkbox" checked={advancedKeys.includes(row.key)} onChange={() => setAdvancedKeys((items) => items.includes(row.key) ? items.filter((item) => item !== row.key) : [...items, row.key])} /> {advancedPhaseLabel(msg, row.key, row.label)}</label>)}<button type="submit" className="btn-small phases-save">{msg('adminconv-save-phases')}</button></form>{data.phase.activeKeys.includes('informed_voting') && <div style={{marginTop: '1rem'}}><div className="console-section-label">{msg('adminconv-p6-setup-label')}</div>{data.phase.phase6Setup?.polisConversationId ? <p style={{fontSize: 13}}>{msg('adminconv-p6-conv')} <code>{data.phase.phase6Setup.polisConversationId}</code> · {msg('adminconv-p6-seeded', data.phase.phase6Setup.seededStatementCount, data.phase.phase6Setup.confirmedStatementCount)}</p> : <><p style={{fontSize: 13, marginBottom: '.5rem'}}>{msg('adminconv-p6-not-init')}</p><form onSubmit={(event) => {event.preventDefault(); initialization.mutate();}}><button type="submit" className="btn-small">{msg('adminconv-p6-init-btn')}</button></form></>}</div>}</div>}
       </div>
 
-      <div className="console-section"><div className="console-section-label">Content &amp; access</div><div className="manage-grid">
-        <Link className="manage-card" to={data.links.statements}><div className="manage-card-title">Statements</div><div className="manage-card-desc">Review, approve or hide statements; add seed statements</div></Link>
-        <Link className="manage-card" to={data.links.invitations}><div className="manage-card-top"><span className="manage-card-count">{data.counts.invitations} invite{data.counts.invitations === 1 ? '' : 's'}</span></div><div className="manage-card-title">Invites &amp; access</div><div className="manage-card-desc">Who can join this consultation</div></Link>
-        <Link className="manage-card" to={data.links.featuredStatements}><div className="manage-card-top"><span className="manage-card-count">{data.counts.featuredStatements} featured</span></div><div className="manage-card-title">Featured statements</div><div className="manage-card-desc">Curate the set for arguments &amp; informed voting</div></Link>
-        <Link className="manage-card" to={data.links.participants}><div className="manage-card-top"><span className="manage-card-count">{data.counts.participants} joined</span></div><div className="manage-card-title">Participants</div><div className="manage-card-desc">Review per-participant engagement and drop-off signals</div></Link>
-        <Link className="manage-card" to={data.links.moderation}><div className="manage-card-top"><span className="manage-card-count">{data.counts.openFlags} open</span></div><div className="manage-card-title">Moderation queue</div><div className="manage-card-desc">Review participant flags for statements and arguments</div></Link>
-        <Link className="manage-card" to={data.links.roles}><div className="manage-card-top"><span className="manage-card-count">{roleCount} assigned</span></div><div className="manage-card-title">Conversation roles</div><div className="manage-card-desc">Review moderator and organizer access</div></Link>
+      <div className="console-section"><div className="console-section-label">{msg('adminconv-content-access')}</div><div className="manage-grid">
+        <Link className="manage-card" to={data.links.statements}><div className="manage-card-title">{msg('adminconv-card-statements')}</div><div className="manage-card-desc">{msg('adminconv-card-statements-desc')}</div></Link>
+        <Link className="manage-card" to={data.links.invitations}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-invite-count', data.counts.invitations)}</span></div><div className="manage-card-title">{msg('adminconv-card-invites')}</div><div className="manage-card-desc">{msg('adminconv-card-invites-desc')}</div></Link>
+        <Link className="manage-card" to={data.links.featuredStatements}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-featured-count', data.counts.featuredStatements)}</span></div><div className="manage-card-title">{msg('adminconv-card-featured')}</div><div className="manage-card-desc">{msg('adminconv-card-featured-desc')}</div></Link>
+        <Link className="manage-card" to={data.links.participants}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-joined', data.counts.participants)}</span></div><div className="manage-card-title">{msg('adminconv-card-participants')}</div><div className="manage-card-desc">{msg('adminconv-card-participants-desc')}</div></Link>
+        <Link className="manage-card" to={data.links.moderation}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-open-count', data.counts.openFlags)}</span></div><div className="manage-card-title">{msg('adminconv-card-modqueue')}</div><div className="manage-card-desc">{msg('adminconv-card-modqueue-desc')}</div></Link>
+        <Link className="manage-card" to={data.links.roles}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-assigned-count', roleCount)}</span></div><div className="manage-card-title">{msg('adminconv-roles-label')}</div><div className="manage-card-desc">{msg('adminconv-card-roles-desc')}</div></Link>
       </div></div>
       <RoleSection conversationId={conversationId} csrfToken={csrfToken} roster={roles} refresh={refreshSupporting} fail={fail} />
       {canOrganize && <ConfigurationSection conversationId={conversationId} csrfToken={csrfToken} settings={settings} refresh={refreshSupporting} fail={fail} />}
