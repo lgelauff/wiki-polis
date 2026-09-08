@@ -23,5 +23,10 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     restoreMocks: true,
+    // Pin the timezone. Four components format dates with toLocale*, so any test
+    // asserting rendered date text silently depends on the machine's zone -- it
+    // passed locally in CEST and failed in CI on UTC, two hours apart. UTC matches
+    // what CI runs, so local and CI now agree.
+    env: {TZ: 'UTC'},
   },
 });

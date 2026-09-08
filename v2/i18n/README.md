@@ -6,15 +6,17 @@ UI strings for ProtoWiki, in the **translatewiki.net (TWN) "banana" JSON** forma
 
 ## Status — what is wired up today
 
-The catalogue and the resolver are in place; **no surface reads them yet.**
+The catalogue and the resolver are in place, and the SPA now reads them: three screens are
+converted — the preliminary results panel, the final report page, and the admin lifecycle
+console. The rest of the SPA is still hardcoded English.
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (851 keys, 100% documented) | ✅ committed |
+| `en.json` + `qqq.json` (865 keys, 100% documented) | ✅ committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
-| React SPA reads it via `banana-i18n` | ⬜ next |
+| React SPA reads it via `banana-i18n` | ✅ wired (3 screens converted) |
 | Locales offered to users (`ENABLED_LOCALES`) | English only |
 
 `ENABLED_LOCALES` defaults to `en`, so nothing here is user-visible yet. The keys are the
@@ -100,8 +102,9 @@ one-year `SameSite=Lax` cookie. The result lands on `g.locale` and `g.dir`.
 
 Append **`?uselang=qqx`** to any page: every externalised string renders as its key
 (`(base-log-out)`). Any real English still visible = a string that still needs extracting.
-A missing key renders loudly as `⧼key⧽`. Today every page is entirely un-externalised, so this
-is a tool for the conversion phases rather than a passing check.
+A missing key renders loudly as `⧼key⧽`. Only the three converted screens render as keys
+throughout today; everywhere else is still un-externalised, so this remains a tool for the
+conversion phases rather than a passing check.
 
 ## Scope — the interface / content split
 
@@ -184,9 +187,8 @@ offered.
 - **a key referenced in code does not exist in `en.json`** — a typo would otherwise ship and
   render as `⧼key⧽` at runtime. The scan reads `msg('key')` and `_('key')` literals across
   `v2/*.py`, `v2/api/`, `v2/services/` and `v2/frontend/src/`; keys assembled at runtime are
-  skipped, since a static scan cannot resolve them. **No surface calls either helper yet**,
-  so this guard is inert until the SPA is wired — it is in place so the first typo'd key
-  fails CI rather than shipping.
+  skipped, since a static scan cannot resolve them. **This guard is live**: it covers the
+  keys the converted screens reference, so a typo'd key fails CI rather than shipping.
 
 Add both the `en.json` value **and** the `qqq.json` line in the same change and the guards
 stay green.
