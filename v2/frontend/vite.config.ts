@@ -23,5 +23,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     restoreMocks: true,
+    // Leave room for several sequential 10s findBy* waits (see src/test/setup.ts)
+    // before vitest's own timer fires.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });
