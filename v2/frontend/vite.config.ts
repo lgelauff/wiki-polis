@@ -23,6 +23,10 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     restoreMocks: true,
+    // Leave room for several sequential 10s findBy* waits (see src/test/setup.ts)
+    // before vitest's own timer fires.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     // Pin the timezone. Four components format dates with toLocale*, so any test
     // asserting rendered date text silently depends on the machine's zone -- it
     // passed locally in CEST and failed in CI on UTC, two hours apart. UTC matches
