@@ -6,17 +6,17 @@ UI strings for ProtoWiki, in the **translatewiki.net (TWN) "banana" JSON** forma
 
 ## Status — what is wired up today
 
-The catalogue and the resolver are in place, and the SPA now reads them: three screens are
-converted — the preliminary results panel, the final report page, and the admin lifecycle
-console. The rest of the SPA is still hardcoded English.
+The catalogue and the resolver are in place, and the SPA now reads them: four screens are
+converted — the preliminary results panel, the final report page, the admin lifecycle
+console, and the conversation workspace. The rest of the SPA is still hardcoded English.
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (865 keys, 100% documented) | ✅ committed |
+| `en.json` + `qqq.json` (878 keys, 100% documented) | ✅ committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
-| React SPA reads it via `banana-i18n` | ✅ wired (3 screens converted) |
+| React SPA reads it via `banana-i18n` | ✅ wired (4 screens converted) |
 | Locales offered to users (`ENABLED_LOCALES`) | English only |
 
 `ENABLED_LOCALES` defaults to `en`, so nothing here is user-visible yet. The keys are the
@@ -102,7 +102,7 @@ one-year `SameSite=Lax` cookie. The result lands on `g.locale` and `g.dir`.
 
 Append **`?uselang=qqx`** to any page: every externalised string renders as its key
 (`(base-log-out)`). Any real English still visible = a string that still needs extracting.
-A missing key renders loudly as `⧼key⧽`. Only the three converted screens render as keys
+A missing key renders loudly as `⧼key⧽`. Only the four converted screens render as keys
 throughout today; everywhere else is still un-externalised, so this remains a tool for the
 conversion phases rather than a passing check.
 

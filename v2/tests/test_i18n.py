@@ -233,9 +233,9 @@ def test_call_site_scanner_reads_literals_and_skips_runtime_built_keys():
 
 
 def test_every_message_key_referenced_in_code_exists_in_en_json():
-    # NOTE: no surface calls msg()/_() yet — the SPA wiring is the next phase — so this
-    # currently asserts over an empty set and cannot fail. That is why the scanner has its
-    # own test above: it keeps the regex honest until there are call sites to catch.
+    # The converted screens give this real call sites to check. The scanner has its own
+    # test above regardless: it keeps the regex honest, so this cannot quietly go back to
+    # asserting over an empty set if the globs or the call syntax drift.
     en = _load('en.json')
     missing = sorted(
         f'{key} (at {where})'
