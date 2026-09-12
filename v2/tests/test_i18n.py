@@ -176,7 +176,7 @@ def _absent_locale():
     red -- a delivered translation must never break the build.
     """
     present = {p.stem for p in _I18N_DIR.glob('*.json')}
-    for candidate in ('zxx', 'xx', 'zz-test', 'und'):
+    for candidate in ('zxx', 'xx', 'qtz', 'und'):
         if candidate not in present:
             return candidate
     raise AssertionError(f'no absent locale left to test with; present: {sorted(present)}')
@@ -328,46 +328,51 @@ def test_spa_rtl_language_list_matches_the_resolver():
     )
 
 
-# ── Delivered translations: the sync bot's PRs must be able to go green ──────
+# ── Delivered translations: what the sync bot commits must not be able to break us ──
 
-def _delivered_locales():
-    """Locale files translatewiki delivers: everything except the source and its docs."""
-    return sorted(
-        p for p in _I18N_DIR.glob('*.json')
-        if p.stem not in {'en', 'qqq'}
-    )
+def test_a_malformed_delivered_file_falls_back_to_english_entirely(tmp_path):
+    """translatewiki commits `i18n/<code>.json` with no human in the loop.
 
-
-def test_delivered_translations_are_well_formed():
-    """Guards the translatewiki sync bot's pull requests.
-
-    The bot commits `i18n/<code>.json` straight into the repo, so these files arrive without
-    a human editing them and the PR has to be able to pass CI on its own. Skips cleanly while
-    no translation has been delivered yet.
+    `load()` skips a file it cannot parse, so the locale simply never exists and every lookup
+    falls through to English. Worth pinning: this is the property that makes an automated
+    delivery safe to merge, and it is cheaper than validating the bot's output in CI.
     """
-    for path in _delivered_locales():
-        data = json.loads(path.read_text(encoding='utf-8'))
-        assert isinstance(data, dict), f'{path.name} is not a JSON object'
-        for key, value in data.items():
-            if key == '@metadata':
-                continue
-            assert isinstance(value, str), f'{path.name}: {key} is not a string'
+    directory = _setup(tmp_path, {'en': {'greet': 'Hello', 'bye': 'Bye'}})
+    (directory / 'nl.json').write_text('{ this is not json', encoding='utf-8')
+    i18n.load(str(directory))
+
+    assert not i18n.has_locale('nl')
+    assert i18n.resolve('greet', 'nl') == 'Hello'
+    assert i18n.all_messages('nl') == {'greet': 'Hello', 'bye': 'Bye'}
 
 
-def test_delivered_translations_carry_no_keys_the_source_dropped():
-    """A translation for a message that no longer exists is stale, not a build failure.
+def test_a_non_string_value_in_a_delivered_file_is_ignored(tmp_path):
+    """Only strings are messages; anything else falls back rather than reaching a template."""
+    _setup(tmp_path, {
+        'en': {'greet': 'Hello', 'count': 'One'},
+        'nl': {'greet': 'Hallo', 'count': {'unexpected': 'object'}},
+    })
+    assert i18n.resolve('greet', 'nl') == 'Hallo'
+    assert i18n.resolve('count', 'nl') == 'One'          # not the dict, not a crash
 
-    Reported rather than asserted-away, because it is expected during the reconciliation of
-    the keys with no call site: translatewiki may still hold a message we deleted. The point
-    is that it surfaces here instead of silently inflating the catalogue.
+
+def test_a_translation_for_a_deleted_message_is_not_served(tmp_path):
+    """A stale translated key must be inert, not additive.
+
+    translatewiki keeps a translation until it next syncs, so after a key is deleted from
+    en.json the delivered file still carries it. English defines what exists and a translation
+    only supplies values, so the stale entry must not reach the client -- otherwise deleting a
+    key would mean waiting for translatewiki to catch up, or hand-editing a delivered file,
+    which `plan_i18n.md` rule 1 forbids.
     """
-    source = set(_load('en.json')) - {'@metadata'}
-    stale = {}
-    for path in _delivered_locales():
-        extra = set(json.loads(path.read_text(encoding='utf-8'))) - source - {'@metadata'}
-        if extra:
-            stale[path.name] = sorted(extra)
-    assert not stale, (
-        'delivered translations contain messages absent from en.json — either the message '
-        f'was deleted after translation, or a key was renamed: {stale}'
-    )
+    _setup(tmp_path, {
+        'en': {'greet': 'Hello'},
+        'nl': {'greet': 'Hallo', 'since-deleted': 'Verwijderd'},
+    })
+    served = i18n.all_messages('nl')
+
+    assert served == {'greet': 'Hallo'}
+    assert 'since-deleted' not in served
+    # The resolver may still answer for it; only the served catalogue is authoritative about
+    # which messages exist, and that is what the SPA loads.
+    assert set(served) == {'greet'}

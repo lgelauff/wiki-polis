@@ -132,9 +132,14 @@ def all_messages(locale: str) -> dict[str, str]:
     en = _MESSAGES.get(SOURCE_LOCALE, {})
     if locale == DEBUG_LOCALE:
         return {k: f'({k})' for k in en}
-    merged = dict(en)
-    merged.update(_MESSAGES.get(locale, {}))
-    return merged
+    # Project onto English's key set rather than dict.update()-ing the locale over it: a
+    # translation may still hold a message the source has since dropped (translatewiki keeps
+    # translating until it next syncs), and update() would serve that stale message to the
+    # client. English is the definition of what exists; a translation only supplies values.
+    # This is also what lets a key be deleted from en.json without waiting for translatewiki
+    # to catch up -- the stale entry becomes inert instead of leaking.
+    translated = _MESSAGES.get(locale, {})
+    return {key: translated.get(key, text) for key, text in en.items()}
 
 
 load()
