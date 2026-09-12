@@ -66,11 +66,15 @@ retention commitment (decision D-PRIV), pending legal/comms review.
   [#357](https://github.com/lgelauff/wiki-polis/pull/357),
   [#369](https://github.com/lgelauff/wiki-polis/pull/369)): an 872-key English catalogue in
   translatewiki format, the resolver, locale negotiation, `GET /api/v1/i18n/<locale>`, and
-  four screens wired. `ENABLED_LOCALES=en`, so nothing is user-visible yet. Remaining work
-  — ~370 literal strings across 26 components, and 551 catalogue keys that no code
-  references and must be wired or deleted before translators start — is sequenced in
-  [`plan_i18n.md`](plan_i18n.md). **translatewiki freezes key names once translators
-  begin**, so the reconciliation is cheap now and impossible afterwards.
+  four screens wired. **Dutch is wanted within a week of 2026-09-12**, and translatewiki
+  onboarding is being filed in parallel. Because only those four screens read the catalogue,
+  Dutch is a wiring problem before it is a translation one: 15 participant components carry
+  literal English and come first; the admin console is nice-to-have. Sequence, the catalogue's
+  551 unreferenced keys (298 of which an unwired component still needs), and the 38 English
+  strings currently shipped from Python are in [`plan_i18n.md`](plan_i18n.md).
+  **translatewiki freezes key names once translators begin**, so reconciliation happens after
+  wiring establishes what is reachable — and filing is deliberately separated from opening
+  the group.
 
 - **Voting** — ✅ "change vote" reopens + resubmits to Polis
   ([#69](https://github.com/lgelauff/wiki-polis/issues/69)), the three-action footer

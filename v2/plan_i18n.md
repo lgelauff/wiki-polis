@@ -1,155 +1,234 @@
 # Interface internationalisation plan
 
-> **Forward plan — active, 2026-09.** This records sequence, freeze criteria, and open
-> decisions, not shipped behaviour. For what is wired today see
-> [`i18n/README.md`](i18n/README.md), which is the status document and stays current;
-> this file is the plan and changes only when the plan changes.
+> **Forward plan — active, revised 2026-09-12.** Sequence, freeze criteria, and open
+> decisions; not shipped behaviour. For what is wired today see
+> [`i18n/README.md`](i18n/README.md) — that file is the status and stays current, this one
+> is the plan and changes only when the plan changes.
 
 ## Outcome
 
-The ProtoWiki interface can be translated on translatewiki.net by volunteer translators,
-with a key namespace stable enough that their work is never invalidated, and without any
-translator spending time on a message that renders nowhere.
+The ProtoWiki participant interface is available in Dutch, and the interface as a whole is
+translatable on translatewiki.net by volunteer translators, with a key namespace stable
+enough that their work is never invalidated.
+
+## Constraints driving this revision
+
+1. **Dutch is needed in about a week** (requested 2026-09-12). This is the binding
+   constraint and it reorders everything below.
+2. **translatewiki onboarding starts now**, in parallel, because it has a review queue and
+   nothing about filing is irreversible.
+3. **The participant interface is the deliverable. The admin console is nice-to-have.**
+
+These three change the ordering that held when there was no deadline. The earlier draft of
+this plan sequenced wiring cheapest-first; a Dutch deadline makes that wrong, because an
+admin console in Dutch is worth nothing to a Dutch-speaking participant.
 
 ## Where this stands — 2026-09-12
 
-The foundation is on `main` ([#357](https://github.com/lgelauff/wiki-polis/pull/357),
+Foundation on `main` ([#357](https://github.com/lgelauff/wiki-polis/pull/357),
 [#369](https://github.com/lgelauff/wiki-polis/pull/369)): an 872-key English catalogue in
-translatewiki "banana" format with 100% `qqq` coverage, a stdlib-only resolver, per-request
-locale negotiation, `GET /api/v1/i18n/<locale>`, and four screens reading from it.
-`ENABLED_LOCALES=en`, so none of it is user-visible.
+translatewiki "banana" format, 100% `qqq` coverage, a stdlib-only resolver with per-key
+English fallback, per-request locale negotiation, `GET /api/v1/i18n/<locale>`, and **four
+screens** reading from it. `ENABLED_LOCALES=en`.
 
-Two numbers define the remaining work, and they are not the same number:
+**Only those four screens read the catalogue.** The other 26 components hold literal English
+and will render English regardless of how complete a translation is. Dutch is therefore a
+wiring problem before it is a translation problem.
 
-| | Count |
-|---|---|
-| Catalogue keys | 872 |
-| …referenced by code | 321 |
-| …**referenced by nothing** | **551** |
-| Literal English strings still in components | ~370, across 26 components |
+### The catalogue, honestly
 
-The first three rows are exact. The last is a scan of JSX text nodes and the
-`aria-label`/`title`/`placeholder`/`alt` attributes, so read the per-component figures in
-stage 2 as relative sizes rather than counts to plan against.
+872 keys. 321 referenced by a static call site. The remaining 551 were authored against the
+19 Jinja templates deleted in [#351](https://github.com/lgelauff/wiki-polis/pull/351), and
+matching each against the English still on screen in unwired components splits them:
 
-The 551 are not a backlog of future keys. They were authored against the 19 Jinja templates
-deleted in [#351](https://github.com/lgelauff/wiki-polis/pull/351), so each one is either a
-message some remaining SPA surface still needs, or a message nothing will ever render.
-Roughly 70% of the remaining literal strings already have a key, so wiring consumes part of
-the 551 — but a substantial remainder will have no target and must be deleted rather than
-carried.
+| Orphan bucket | Count | Meaning |
+|---|---|---|
+| Claimed | 298 | an unwired component still shows this text — will be used by stage 2 |
+| Near-match | 13 | text drifted; needs a human call |
+| No match found | ≤240 | **candidates** for deletion, not a delete list |
 
-Deciding which is which is the bulk of this plan. It is cheap now and impossible later.
+The third bucket is not trustworthy and must not be actioned as-is. Spot-checking surfaced
+`phase-label-*`, `precond-*`, and `rec-field-*` — keys that look unreachable only because
+their consuming surface is unwired, or because the text they replace is currently shipped
+from Python (see stage 1). **Reconciliation therefore comes after wiring, not before**: the
+wiring is what establishes reachability.
+
+An earlier statement that "551 keys render nowhere" was wrong in a way worth recording, so
+nobody re-derives it: most of the 551 are pre-authored work awaiting their component.
+
+### Component scope
+
+Counts come from a heuristic scan of JSX text nodes, user-visible attributes, and string
+literals. It over-collects, so read the string totals as **upper bounds** and the
+already-keyed share as a floor. (`i18n/README.md` claims 72% of SPA copy has a key; the scan
+says ~51%. The scan is the pessimistic one because it counts non-copy strings that could
+never have a key.)
+
+**Participant — 15 components, ≤304 strings, 154 already keyed:**
+`argument-mapping-panel` (56/23 keyed), `conversation-lane-page` (38/19),
+`guidance-pages` (35/12), `conversation-read-pages` (34/22),
+`participation-entry-page` (33/28), `identity-reveal-page` (25/19),
+`informed-voting-panel` (23/16), `statement-composer` (14/0), `public-pages` (13/2),
+`content-flag-control` (11/2), `legacy-shell` (9/3), `intermediate-results-panel` (5/4),
+`legacy-content-flag` (5/3), `app.tsx` (2/1), `main.tsx` (1/0).
+
+**Admin — 11 components, ≤170 strings, 98 already keyed.** Deferred; see stage 5.
 
 ## Architectural rules
 
-These are settled. Changing one is a plan change, not an implementation detail.
+Settled. Changing one is a plan change, not an implementation detail.
 
-1. **`en.json` is the source; translations arrive only from translatewiki.** Never hand-edit
-   a `<code>.json` that is not `en` or `qqq`.
+1. **`en.json` is the source. Translations normally arrive only from translatewiki** — never
+   hand-edit a delivered `<code>.json`.
+   **Bootstrap exception, live now:** `nl.json` is authored in-repo ahead of translatewiki
+   onboarding, because a review queue cannot meet a one-week deadline. When the group comes
+   online, that file is handed to translatewiki as the seed for Dutch and TWN becomes
+   authoritative from that point. This exception covers Dutch only and ends at stage 6.
 2. **Every `en.json` message has a `qqq.json` entry.** CI fails otherwise.
-3. **Interface copy is keyed; participant-authored content never is.** Statements,
-   arguments, titles, and usernames pass through untranslated.
-4. **Server-side copy is deliberately not keyed.** The 112 distinct user-visible strings
-   across 138 `error_response(...)` and `abort(description=...)` call sites stay
-   developer-facing; the SPA maps `error.code` to its own keyed copy. (`i18n/README.md`
-   says 122; the two should be reconciled once, and one of them deleted so the figure has
-   a single home.)
-5. **One message per concept, not one per surface.** Reuse an existing key before minting a
-   new one; when two surfaces show the same words for the same thing they share the key, and
-   the `qqq` names every surface that uses it ([#369](https://github.com/lgelauff/wiki-polis/pull/369)).
+3. **Interface copy is keyed; participant-authored content never is.** Statements, arguments,
+   titles, and usernames pass through untranslated.
+4. **Server-side error copy is not keyed.** 112 distinct strings across 138
+   `error_response(...)` / `abort(description=...)` call sites stay developer-facing; the SPA
+   maps `error.code` to its own keyed copy. (`i18n/README.md` says 122 — reconcile once and
+   delete one of the two figures so it has a single home.)
+5. **One message per concept, not one per surface.** Reuse before minting; when two surfaces
+   show the same words for the same thing they share a key, and the `qqq` names every surface
+   ([#369](https://github.com/lgelauff/wiki-polis/pull/369)).
 6. **A UI label is never shipped from the server as English.** Presentation constants that
-   cross the API send a key or a stable identifier the SPA maps, never display text.
-7. **Key convention:** `surface-subkey`, lowercase-hyphenated, grouped by the screen it
-   belongs to. The name must not contradict its own text.
+   cross the API send a key or stable identifier the SPA maps, never display text.
+7. **Key convention:** `surface-subkey`, lowercase-hyphenated, grouped by screen. A key name
+   must not contradict its own text.
 
 ## The one-way door
 
-**translatewiki freezes key names once translators begin.** Renaming a key after that costs
-translators their work on it; deleting a translated message wastes work already done. Every
-stage below exists to get the namespace right *before* that point, and no stage after the
-freeze may rename or delete a key.
+**translatewiki freezes key names once translators begin work on the group.** Renaming a key
+after that costs translators their work; deleting a translated message wastes work already
+done.
 
-This is the only irreversible step in the plan. Treat reaching it as a decision, not a
-milestone that arrives on its own.
+Filing the support request is **not** the door. Configuration, licence review, and sync-bot
+setup are all reversible and change nothing about the namespace. The door is opening the
+group to translators, which is stage 6 and happens deliberately.
 
 ## Work sequence
 
-### 1. Close the server-English leak — small, unblocked
+### 0. translatewiki onboarding — start immediately, runs in parallel
 
-- `TAB_LABELS` in `services/conversation_workspace.py` ships five English tab labels to the
-  SPA as `tab.label`, rendered raw on an otherwise fully wired page. All five already have
+- Confirm the licence requirement: **GPL-3.0, detected by GitHub's licence API** on a public
+  repo. Satisfied.
+- File the support request referencing `i18n/translatewiki-group.yaml`, stating plainly that
+  the catalogue is undergoing a final reconciliation and the group should be configured but
+  **not announced to translators** yet.
+- Flag two things in the request: the `protowiki` group id against the `wiki-polis`
+  repository path ([#289](https://github.com/lgelauff/wiki-polis/issues/289)), so TWN does
+  not "correct" one to match the other; and ask **how the group handles key deletion before
+  launch**, rather than relying on the assumption that pre-launch deletion is free.
+- Ask whether an existing in-repo `nl.json` can seed the group (rule 1's exception).
+
+**Exit:** the group exists, the sync bot is configured, and no translator has been invited.
+
+### 1. Stop shipping English from the server — blocks Dutch on already-wired screens
+
+Twelve module-level display-text maps cross the API as English, **38 strings**, rendered raw
+by components that otherwise read the catalogue. These are untranslatable today even on the
+four finished screens, which makes this the first thing Dutch needs.
+
+- `services/conversation_workspace.py` — `TAB_LABELS`, 5 tab names. All five already have
   exact-matching keys (`conv-tab-vote`, `-results`, `-arguments`, `-informed`,
-  `-preliminary`); the SPA already receives `tab.key`.
-- Audit the API surface for any other display text crossing it, per rule 6.
+  `-preliminary`), and the SPA already receives `tab.key`.
+- `services/conversation_lanes.py:54` — 7 phase display names, rendered at
+  `admin-lifecycle-page.tsx:136`. The `phase-label-*` keys are their replacement.
+- `app.py` — flag reasons (4), phase-route names and descriptions (6), cleanup/closed
+  labels (2), vote-choice labels (3).
+- `error_pages.py` — three error pages, 9 strings. Weigh against rule 4: these are pages a
+  participant sees, not API error payloads, so they are interface copy and should be keyed.
+- Add a test that fails when a new display-text constant crosses the API.
 
-**Exit:** no user-visible English reaches the SPA from a Python constant, and rule 6 has a
-test that fails if one is reintroduced.
+**Exit:** no user-visible English reaches the SPA from a Python constant, and a
+reintroduction fails CI.
 
-### 2. Wire the remaining surfaces, cheapest first
+### 2. Wire the participant interface — the Dutch deliverable
 
-Order by existing key coverage, not by screen importance: components whose strings already
-have keys are pure mapping and mint nothing, so they shrink the 551 without touching the
-namespace.
+Fifteen components, in the order a participant meets them, so partial progress is always a
+coherent journey rather than scattered screens:
 
-- **Near-complete coverage** (mapping only): `participation-entry` (24/24),
-  `admin-featured` (21/21), `admin-participants` (15/15), `admin-invitations` (12/12),
-  `admin-moderation` (10/10), `admin-catalog` (24/26), `admin-statements` (22/24),
-  `conversation-lane` (22/23), `intermediate-results` (2/2).
-- **Partial coverage** (mapping plus some minting): `conversation-read-pages` (27/37),
-  `identity-reveal` (13/15), `guidance-pages` (13/32), `argument-mapping` (11/15),
-  `informed-voting` (10/11), `legacy-content-flag` (7/8), `admin-roles` (6/13).
-- **Mostly new copy** (real authoring, do last): `admin-termination` (1/17),
-  `admin-settings` (8/23), `content-flag-control` (2/11), `public-pages` (3/9),
-  `statement-composer` (2/6), `legacy-shell` (2/7), `admin-routes` (0/6).
+1. `public-pages`, `legacy-shell`, `app.tsx`, `main.tsx` — the frame and landing.
+2. `participation-entry-page` (33 strings, 28 keyed) — join, consent, licence.
+3. `conversation-lane-page` (38/19) and `conversation-read-pages` (34/22).
+4. `guidance-pages` (35/12) — the explainers before each task.
+5. `statement-composer` (14/0) and `argument-mapping-panel` (56/23) — the largest single
+   component, and the one with the most minting.
+6. `informed-voting-panel` (23/16), `intermediate-results-panel` (5/4).
+7. `identity-reveal-page` (25/19) — privacy-critical copy; review wording, do not just map.
+8. `content-flag-control` (11/2), `legacy-content-flag` (5/3).
 
-Cheapest-first is deliberate and cuts against intuition. Participant-facing screens matter
-more to a reader, but wiring them first mints keys against a namespace still full of
-unreconciled orphans, which is the expensive ordering.
+Reuse before minting (rule 5). Prove each wiring non-vacuously, per
+[#357](https://github.com/lgelauff/wiki-polis/pull/357) — a test that passes identically
+before and after has not tested the change.
 
-Batch by surface, in reviewable PRs, following [#357](https://github.com/lgelauff/wiki-polis/pull/357):
-prove each wiring non-vacuously — a test that passes identically before and after a change
-has not tested it.
+**Exit:** no user-visible literal English in any participant component, and the
+key-existence guard resolves call sites in each.
 
-**Exit:** `grep` finds no user-visible literal English in `frontend/src`, and the key-existence
-guard resolves call sites in every component.
+### 3. Dutch
 
-### 3. Reconcile the orphans
+- Author `i18n/nl.json` for the participant key set. Per-key English fallback means a partial
+  file degrades to English rather than breaking, so this can land incrementally and early.
+- `ENABLED_LOCALES=en,nl`.
+- Verify with a real locale, not `qqx`: plural forms, `$1` ordering where Dutch word order
+  differs from English, and the 30 messages containing inline HTML.
+- Walk the participant journey in Dutch end to end before announcing it.
 
-- Re-run the unreferenced-key count. Every remaining key is deleted or justified in writing;
-  "might be useful later" is not a justification, because the cost of keeping it is paid by
-  translators in every language.
-- The 20 surviving `flash-*` keys are settled by rule 4 and should go with the rest.
-- Add a CI guard reporting keys with no call site, so the count cannot silently grow again.
+**Exit:** a Dutch-speaking participant can join, vote, argue, and read results without
+meeting English.
 
-**Exit:** every key in `en.json` is referenced by code, or listed with a reason it is not.
+### 4. Reconcile the orphans
 
-### 4. Freeze and onboard
+Only meaningful once stage 2 has established what is reachable.
 
-- Freeze the namespace. Announce it in `i18n/README.md`.
-- Confirm the repo licence satisfies translatewiki (GPL-3.0, satisfied) and file the support
-  request using `i18n/translatewiki-group.yaml`. Flag the `protowiki` group id against the
-  `wiki-polis` repository path explicitly, so TWN does not "correct" one to match the other.
-- Enable the first non-English locale behind `ENABLED_LOCALES` and verify with a real
-  translation, not a synthetic one: plural forms, `$1` ordering, and an RTL locale for `g.dir`.
+- Re-run the orphan triage. The ≤240 no-match bucket shrinks as stages 1 and 2 land.
+- Go prefix by prefix, not in bulk. Each surviving key is deleted or justified in writing;
+  "might be useful later" is not a justification, because translators pay for it in every
+  language.
+- Resolve the 13 near-matches by hand.
+- Add a CI guard reporting keys with no call site, so the count cannot silently grow.
 
-**Exit:** a translator can complete a message on translatewiki and see it render in ProtoWiki.
+**Exit:** every key is referenced, or listed with a reason it is not.
+
+### 5. Admin console — nice-to-have
+
+Eleven components, ≤170 strings, 98 already keyed. Cheapest-first is the right order here,
+since there is no deadline: `admin-invitations` (5/4), `admin-moderation` (10/9),
+`admin-participants` (17/14), `admin-catalog` (25/18), `admin-statements` (39/27),
+`admin-featured` (19/12), then the authoring-heavy `admin-roles` (10/4),
+`admin-settings` (21/6), `admin-termination` (16/2), `admin-routes` (7/2),
+`admin-access-boundary` (1/0).
+
+**Exit:** as stage 2, for the admin surface.
+
+### 6. Freeze and open to translators
+
+- Freeze the namespace; announce in `i18n/README.md`.
+- Hand `nl.json` to translatewiki as the Dutch seed and retire rule 1's exception; TWN is
+  authoritative from here.
+- Open the group to translators.
+- Verify a delivered translation round-trips through the sync bot, and exercise an RTL locale
+  for `g.dir`.
+
+**Exit:** a translator completes a message on translatewiki and sees it render in ProtoWiki.
 
 ## Open decisions
 
-- **Which locale goes first, and who translates it.** Nothing downstream is designed until a
-  real language with real plural rules and a real RTL question is in hand.
+- **Who translates Dutch**, and whether they work in the repo or wait for translatewiki.
+  Stage 3 assumes in-repo.
+- **Whether `error_pages.py` copy is interface or error copy** — stage 1 argues interface,
+  which is a narrowing of rule 4 rather than an exception to it. Confirm before wiring.
 - **Whether rule 5 generalises.** Sharing one message across a button and a state label
-  removes a translator's ability to split them where a language genuinely needs it. Settled
-  for the vote labels; revisit if a translator asks.
-- **The `?uselang=` cookie's lifetime and interaction with a future account preference.**
+  removes a translator's ability to split them where a language needs it. Settled for the
+  vote labels; revisit when a translator asks.
+- **`?uselang=` cookie lifetime** and its interaction with a future account preference.
   Negotiation order is implemented; persistence policy is not decided.
-- **Whether server-side error copy stays unkeyed forever.** Rule 4 is right while the SPA is
-  the only consumer. A second consumer reopens it.
 
 ## Out of scope
 
 Content translation of participant-authored statements and arguments; machine translation of
-any kind; locale-specific clustering or results interpretation; and translating the admin
-console ahead of the participant interface, which stage 2 orders by cost rather than
-audience for the reasons given there.
+any kind; locale-specific clustering or results interpretation; and any renaming or deletion
+of keys after stage 6.
