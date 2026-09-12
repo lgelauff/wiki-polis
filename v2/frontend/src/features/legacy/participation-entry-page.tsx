@@ -44,7 +44,7 @@ type JoinEntry = Extract<ParticipationEntry, {state: 'join'}>;
 
 function InviteDeniedPage({data}: {data: InviteDeniedEntry}) {
   return (
-    <LegacyShell title="Access restricted — ProtoWiki">
+    <LegacyShell title="Access restricted — Proto">
       <div className="container" style={{maxWidth: 700, paddingTop: '3rem'}}>
         <h1 style={{fontSize: 24, fontWeight: 600, color: 'var(--ink)', margin: '0 0 .75rem'}}>
           This consultation is invite-only
@@ -195,7 +195,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
 
           <div className="accept-section" id="accept-privacy-note">
             <h2>Privacy summary</h2>
-            <p>Public records use your pseudonym. ProtoWiki keeps the username link internally for login, access checks, notifications, moderation, and privacy controls.</p>
+            <p>Public records use your pseudonym. Proto keeps the username link internally for login, access checks, notifications, moderation, and privacy controls.</p>
             <details className="privacy-details">
               <summary className="privacy-summary" aria-controls="privacy-details-body">Privacy &amp; data handling</summary>
               <div className="privacy-body" id="privacy-details-body">
@@ -220,7 +220,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
 
           <label className="consent-label" id="consent-label" htmlFor="consent-check" style={{marginTop: '1.25rem'}}>
             <input type="checkbox" name="consent" id="consent-check" value="1" required aria-required="true" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-            <span>I understand my votes and arguments are recorded with this pseudonym, ProtoWiki keeps an internal username link while this consultation runs, and what I write is released under CC0.</span>
+            <span>I understand my votes and arguments are recorded with this pseudonym, Proto keeps an internal username link while this consultation runs, and what I write is released under CC0.</span>
           </label>
           {formError && <p className="error" id="accept-error" role="alert">{formError}</p>}
           <div style={{display: 'flex', alignItems: 'center', gap: 16, marginTop: 22}}>
@@ -242,7 +242,7 @@ function EligibilityDeniedPage({data, error}: {data: JoinEntry; error: ApiContra
       ? 'The eligibility checker is unavailable right now. Try again later.'
       : 'Your account did not meet the configured criteria.');
   return (
-    <LegacyShell title={`Not eligible — ${data.conversation.title} — ProtoWiki`}>
+    <LegacyShell title={`Not eligible — ${data.conversation.title} — Proto`}>
       <div className="container">
         <div className="landing-section">
           <h1>Not eligible for this consultation</h1>

@@ -30,7 +30,7 @@ _PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{code} {title} — ProtoWiki</title>
+<title>{code} {title} — Proto</title>
 <link rel="icon" href="data:,">
 <style>
   :root {{
@@ -87,7 +87,7 @@ _PAGE = """<!doctype html>
       <ellipse cx="12" cy="12" rx="9" ry="3.5"/>
       <ellipse cx="12" cy="12" rx="3.5" ry="9"/>
     </svg>
-    <span>ProtoWiki</span>
+    <span>Proto</span>
   </a>
 </header>
 <main>

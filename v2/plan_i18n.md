@@ -7,7 +7,7 @@
 
 ## Outcome
 
-The ProtoWiki participant interface is available in Dutch, and the interface as a whole is
+The Proto participant interface is available in Dutch, and the interface as a whole is
 translatable on translatewiki.net by volunteer translators, with a key namespace stable
 enough that their work is never invalidated.
 
@@ -102,6 +102,14 @@ Settled. Changing one is a plan change, not an implementation detail.
    cross the API send a key or stable identifier the SPA maps, never display text.
 7. **Key convention:** `surface-subkey`, lowercase-hyphenated, grouped by screen. A key name
    must not contradict its own text.
+8. **The product is called Proto.** Settled 2026-09-12, and recorded here because two of its
+   consequences are hard to reverse: the translatewiki group id is `proto`, and a group id
+   freezes when translators start; and nine catalogue messages carry the name in their
+   English text, so a later rename means re-translating them in every language. The
+   repository stays `wiki-polis` ([#289](https://github.com/lgelauff/wiki-polis/issues/289))
+   — the `FILES` paths in `translatewiki-group.yaml` address a checkout directory, not the
+   product, and the divergence is deliberate. `{{msg-proto|…}}` cross-references in
+   `qqq.json` embed the group id too, so they move with it.
 
 ## Irreversible step: the key-name freeze
 
@@ -129,7 +137,7 @@ When filed:
 - Licence requirement is already confirmed: **GPL-3.0, detected by GitHub's licence API** on
   a public repo.
 - Reference `i18n/translatewiki-group.yaml`.
-- Flag the `protowiki` group id against the `wiki-polis` repository path
+- Flag the `proto` group id against the `wiki-polis` repository path
   ([#289](https://github.com/lgelauff/wiki-polis/issues/289)), so TWN does not "correct" one
   to match the other.
 - Ask whether the in-repo `nl.json` can seed the Dutch group, so that work is preserved and
@@ -224,7 +232,7 @@ is appropriate here because no deadline applies: `admin-invitations` (5/4), `adm
 - Verify a delivered translation round-trips through the sync bot, and exercise an RTL locale
   for `g.dir`.
 
-**Exit:** a translator completes a message on translatewiki and sees it render in ProtoWiki.
+**Exit:** a translator completes a message on translatewiki and sees it render in Proto.
 
 ## Open decisions
 

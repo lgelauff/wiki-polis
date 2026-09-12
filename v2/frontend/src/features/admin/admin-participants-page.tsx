@@ -141,7 +141,7 @@ export function AdminParticipantsPage({
   return (
     <LegacyShell
       headerMode="admin"
-      title={`Participants — ${title} — ProtoWiki`}
+      title={`Participants — ${title} — Proto`}
       headerCrumb={(
         <nav className="header-crumb" aria-label="Admin breadcrumb">
           <span className="header-crumb-sep">/</span>

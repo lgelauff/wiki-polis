@@ -246,7 +246,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
   return (
     <LegacyShell
       headerMode="admin"
-      title={`Featured statements — ${title} — ProtoWiki`}
+      title={`Featured statements — ${title} — Proto`}
       headerCrumb={(
         <nav className="header-crumb" aria-label="Admin breadcrumb">
           <span className="header-crumb-sep">/</span>

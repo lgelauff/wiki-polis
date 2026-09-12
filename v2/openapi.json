@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "ProtoWiki application API",
+    "title": "Proto application API",
     "version": "1.0.0",
     "description": "Same-origin API contract between the browser application and Flask. Polis and Particiapi remain behind Flask."
   },

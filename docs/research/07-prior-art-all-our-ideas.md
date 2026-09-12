@@ -1,4 +1,4 @@
-> **⚠️ Not fact-checked by this project. Did not inform wiki-polis / ProtoWiki's design.**
+> **⚠️ Not fact-checked by this project. Did not inform wiki-polis / Proto's design.**
 > This document reproduces an external research dossier about **All Our Ideas (AOI)**, an
 > earlier and unrelated Wikimedia experiment in community deliberation tooling
 > (2011, then piloted again in 2014). It was compiled independently by a third party

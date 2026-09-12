@@ -2,7 +2,7 @@ import {LegacyShell} from './legacy-shell';
 
 export function StatementGuidancePage() {
   return (
-    <LegacyShell crumb="statement guide" title="Writing good statements - ProtoWiki">
+    <LegacyShell crumb="statement guide" title="Writing good statements - Proto">
       <div className="container" style={{maxWidth: 760}}>
         <div className="landing-section">
           <h1 style={{fontSize: 28, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.2, margin: '0 0 12px'}}>Writing good statements</h1>
@@ -35,11 +35,11 @@ export function StatementGuidancePage() {
 
 export function ArgumentGuidancePage() {
   return (
-    <LegacyShell crumb="argument guide" title="Writing good arguments - ProtoWiki">
+    <LegacyShell crumb="argument guide" title="Writing good arguments - Proto">
       <div className="container" style={{maxWidth: 760}}>
         <div className="landing-section">
           <h1 style={{fontSize: 28, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.2, margin: '0 0 12px'}}>Writing good arguments</h1>
-          <p className="muted">Arguments are a ProtoWiki feature. They explain why someone might support or oppose a featured statement; they are read by people, not used by the clustering algorithm.</p>
+          <p className="muted">Arguments are a Proto feature. They explain why someone might support or oppose a featured statement; they are read by people, not used by the clustering algorithm.</p>
         </div>
         <div className="landing-section">
           <h2>Checklist</h2>

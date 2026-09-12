@@ -102,7 +102,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
   return (
     <LegacyShell
       headerMode="admin"
-      title="Admin panel — ProtoWiki"
+      title="Admin panel — Proto"
       headerCrumb={<nav className="header-crumb" aria-label="Admin breadcrumb"><span className="header-crumb-sep">/</span><span>Admin panel</span></nav>}
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
     >

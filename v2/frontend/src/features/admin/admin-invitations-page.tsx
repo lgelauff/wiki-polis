@@ -91,7 +91,7 @@ export function AdminInvitationsPage({
   return (
     <LegacyShell
       headerMode="admin"
-      title={`Invites — ${title} — ProtoWiki`}
+      title={`Invites — ${title} — Proto`}
       headerCrumb={(
         <nav className="header-crumb" aria-label="Admin breadcrumb">
           <span className="header-crumb-sep">/</span>

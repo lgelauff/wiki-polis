@@ -65,7 +65,7 @@ export function LegacyShell({
   headerCrumb,
   headerMode = 'plain',
   toast,
-  title = 'ProtoWiki',
+  title = 'Proto',
 }: {
   children: ReactNode;
   crumb?: string;
@@ -85,7 +85,7 @@ export function LegacyShell({
           <div className="header-left">
             <InternalLink href="/" className="header-logo">
               <OrbitMark />
-              <span className="header-title">ProtoWiki</span>
+              <span className="header-title">Proto</span>
             </InternalLink>
             {headerMode === 'admin' && <span className="header-mode-badge">Admin</span>}
             {headerCrumb}

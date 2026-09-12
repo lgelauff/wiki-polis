@@ -26,7 +26,7 @@ def _assert_branded(response, status: int, heading: str):
     assert response.status_code == status
     body = response.get_data(as_text=True)
     assert response.mimetype == 'text/html'
-    assert 'ProtoWiki' in body
+    assert 'Proto' in body
     assert heading in body
     assert f'Error {status}' in body
     return body
@@ -128,7 +128,7 @@ def test_api_v1_keeps_json_for_every_status_the_html_pages_now_claim(
     assert boom.status_code == 500
     assert boom.is_json
     assert boom.get_json()['error']['code'] == 'http_error'
-    assert 'ProtoWiki' not in boom.get_data(as_text=True)
+    assert 'Proto' not in boom.get_data(as_text=True)
 
 
 def test_unhandled_status_falls_back_to_the_server_error_page():

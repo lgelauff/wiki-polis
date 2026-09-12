@@ -437,7 +437,7 @@ export function ConversationLanePage({space}: {space: ConversationSpace}) {
           <AnonymousLane conversations={groups.available} developerLogins={session.developerLogins} loginHref={session.links.login} />
         ) : <>
           <h1 className="sr-only">Consultations</h1>
-          <img src="/static/wiki-polis-flow.svg" alt="How a ProtoWiki conversation works" style={{width: '100%', maxWidth: 900, display: 'block', margin: '0 auto 1.5rem'}} />
+          <img src="/static/wiki-polis-flow.svg" alt="How a Proto conversation works" style={{width: '100%', maxWidth: 900, display: 'block', margin: '0 auto 1.5rem'}} />
           <PhaseLegend />
           <div className="home-mode-toggle" role="group" aria-label="View mode">
             <button className={`home-mode-btn${mode === 'yours' ? ' home-mode-btn--active' : ''}`} data-target="yours" type="button" aria-pressed={mode === 'yours'} onClick={() => changeMode('yours')}>Your conversations</button>
