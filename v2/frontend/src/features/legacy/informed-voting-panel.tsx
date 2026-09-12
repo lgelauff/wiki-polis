@@ -73,9 +73,18 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
   const {data} = useSuspenseQuery(informedVotingQuery(workspace.slug));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [votes, setVotes] = useState<Record<number, Choice>>({});
-  const [terminalIds, setTerminalIds] = useState<Set<number>>(() => new Set());
+  // Seed from the server, not from an empty set. The API already reports which cards
+  // this participant has answered; starting empty threw that away and rendered an
+  // answered deck as untouched, which is how a returning participant ends up voting
+  // twice. The choice itself is not seeded because the read contract cannot carry it
+  // (#327) -- Particiapi's /participant returns vote ids only, not their values.
+  const [terminalIds, setTerminalIds] = useState<Set<number>>(
+    () => new Set(data.cards.filter((card) => card.voted).map((card) => card.featuredStatementId)),
+  );
   const [networkErrorId, setNetworkErrorId] = useState<number | null>(null);
-  const [done, setDone] = useState(false);
+  // Likewise: a deck the participant already finished should open on its completion
+  // panel rather than on card 1 of 3 with no sign anything happened.
+  const [done, setDone] = useState(() => data.cards.length > 0 && data.cards.every((card) => card.voted));
   const advanceTimer = useRef<number | null>(null);
   const current = data.cards[currentIndex];
 
@@ -124,6 +133,10 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
     {data.cards.map((card, index) => {
       const selected = votes[card.featuredStatementId];
       const error = networkErrorId === card.featuredStatementId;
+      // Answered in an earlier visit: the server says there is a vote, but the read
+      // contract cannot say which (#327). Distinct from `selected`, which is this
+      // session's own choice and does carry a value.
+      const answeredEarlier = !selected && !error && terminalIds.has(card.featuredStatementId);
       return <div className={`p6-card${index !== currentIndex ? ' p6-card--hidden' : ''}${selected ? ' p6-card--voted' : ''}${terminalIds.has(card.featuredStatementId) ? ' p6-card--done' : ''}`} data-fs-id={card.featuredStatementId} key={card.featuredStatementId}>
         <div tabIndex={-1} data-focus-anchor className="sr-only" />
         <div className="p6-card-header">
@@ -133,14 +146,25 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
               rejected re-vote (a 409 on a paused round, which is the state the repair
               runbook puts the tool in) would silently keep showing the old choice. */}
           <span className={`p6-voted-badge${!error && selected ? ` p6-voted-badge--${selected}` : ''}`} role="alert" hidden={!selected && !error}>{error ? 'Vote not recorded — try again' : <><span aria-hidden="true">✓</span> {selected === 'agree' ? 'Agreed' : selected === 'disagree' ? 'Disagreed' : 'Passed'}</>}</span>
+          {/* Answered before this visit. The badge above needs a known choice; this one
+              only claims that a vote exists, which is all the read contract supports.
+              Gated here rather than in CSS: the stylesheet is not loaded under test, so a
+              CSS-only gate is both untestable and one typo away from claiming every
+              untouched card is answered. */}
+          <span className="p6-answered-note" id={`answered-${card.featuredStatementId}`}
+                hidden={!answeredEarlier}><span aria-hidden="true">✓</span> Already voted</span>
         </div>
         <div className="p6-card-inner">
           <div className="p6-statement-col">
             <p className="p6-statement-text">{card.statement}</p>
-            {card.canVote && <div className="vote-choice-row p6-vote-row">
+            {answeredEarlier && <p className="p6-answered-hint">
+              Your earlier choice isn&rsquo;t shown here. Choosing again will replace it.
+            </p>}
+            {card.canVote && <div className="vote-choice-row p6-vote-row"
+                 aria-describedby={answeredEarlier ? `answered-${card.featuredStatementId}` : undefined}>
               {/* aria-pressed carries the recorded choice: without it the selection is
                   conveyed only by opacity, which no assistive technology reports. */}
-              {voteValues.map((item) => <button type="button" className={`vote-choice btn-p6-vote${selected === item.choice ? ' p6-voted' : ''}`} data-vote={item.value} aria-pressed={selected === item.choice} disabled={vote.isPending && vote.variables?.card.featuredStatementId === card.featuredStatementId} onClick={() => vote.mutate({card, choice: item.choice})} key={item.choice}><span className={`vote-dot vote-dot--${item.choice}`} />{item.label}</button>)}
+              {voteValues.map((item) => <button type="button" className={`vote-choice btn-p6-vote${selected === item.choice ? ' p6-voted' : ''}`} data-vote={item.value} aria-pressed={selected ? selected === item.choice : undefined} disabled={vote.isPending && vote.variables?.card.featuredStatementId === card.featuredStatementId} onClick={() => vote.mutate({card, choice: item.choice})} key={item.choice}><span className={`vote-dot vote-dot--${item.choice}`} />{item.label}</button>)}
             </div>}
           </div>
           <div className="p6-args-panel">

@@ -128,9 +128,60 @@ conversations with distinct zinvites and vote sets. Joining them for comparison 
 `FeaturedStatement` as the bridge: `polis_statement_id` is the Phase 2 tid,
 `phase6_polis_statement_id` is the Phase 6 tid for the same logical statement.
 
-**Vote-sign convention (both conversations).** Raw Polis DB: `-1 = Agree, 1 = Disagree,
-0 = Pass`. The participant-facing CSV export negates this (agree = +1). wiki-polis always
-reads from `votes_latest_unique` using the raw sign. See `ref_polis-data-model.md`.
+**Joining the two rounds per participant.** `_conversation_subject` is keyed on
+`conv.id`, not the zinvite, so one person asserts the *same subject* in both rounds and
+therefore resolves to the **same Polis `uid`** — different `zid`, different `pid`, one
+`uid`. Matched-round analysis is consequently a join inside Polis alone:
+
+```sql
+SELECT count(DISTINCT p2.uid) FROM participants p2
+JOIN participants p6 ON p6.uid = p2.uid
+WHERE p2.zid = <phase 2 zid> AND p6.zid = <phase 6 zid>
+```
+
+Verified on staging 2026-09-06: one participant voting in both rounds appeared once in
+`particiapi_users` with participant rows in both zids, as did four earlier participants.
+This is what `matched_participants` (`app.py`, currently hardcoded `None`) and the
+change-of-opinion figures in #230/#231 need, and **it requires no stored mapping on the
+Toolforge side** — see the boundary below.
+
+**Keeping opinions away from identity — a direction, with known exceptions.** The Phase-6
+subject mechanism is designed so that no single store links a person to a vote:
+`_conversation_subject` is computed per request and stored nowhere, votes live in Polis
+under a `uid`, and identity lives here. That holds for the Phase-6 vote path specifically.
+
+**It is not currently a property of the system, and this file should not be read as
+claiming it is.** Known places where opinion content or an identity join already lives on
+the ToolsDB side:
+
+| where | what | issue |
+|---|---|---|
+| `statement_pass_signals` | Row presence *is* the vote value — the row is created on a pass and deleted on any other choice (`services/explore_votes.py`) — keyed to `participant_id`, plus a `reason` that exists nowhere else. | #287 |
+| `arguments.proposer_pseudonym` | `pub_privacy.md` defines "opinions" to include arguments. `participations.pseudonym` is globally unique, so `arguments → participations → participants.mw_username` completes the join inside ToolsDB alone. | — |
+| `argument_votes`, `argument_side_states` | Which argument a participant approved, and which sides they skipped, keyed to `participant_id`. | #359 |
+| `participations.new_stmt_ids` | Polis statement ids this participant authored; joins to public statement text. | — |
+| `participants.xid` | Stored here **and** in Polis `xids.xid`, and used as a cross-database join key (`polis_admin.py`). So `PARTICIAPI_SUB_SECRET` is not a necessary third factor. `xid_key_version = 1` rows are plain `sha256(mw_user_id)` over a sequential public id space. | #96 |
+| server-side `sessions` | Stored in ToolsDB (`SESSION_TYPE = 'sqlalchemy'`), holding `_p6_pa` — a live Particiapi credential for that participant's bound Polis identity, for up to 30 days. | — |
+
+So the rule to apply when adding a column is **directional**: do not add opinion content to
+ToolsDB, and do not widen the existing exceptions. Adding one means widening the surface
+that a single database dump exposes.
+
+`tests/test_privacy_boundary.py` checks one narrow slice of this: it flags a **newly named
+column on a mapped model whose name contains an opinion word**. That is exactly the
+mistake that was made and reverted (`phase6_choices` on `participations`), and nothing
+adjacent to it. It cannot see:
+
+- a table whose columns are innocuous but whose **rows** are the opinion — every row above
+- data written into an **existing JSON column**: `participations.phase6_card_order`,
+  `conversations.report_filter_snapshot` and others are already nullable JSON on the right
+  tables, so the reverted change could be redone with **no schema change and no signal**
+- anything reached by a **join** rather than stored directly
+- anything added by a **raw migration** without a model change, since it reads
+  `db.metadata.tables`
+- anything persisted **outside the ORM** — the `sessions` table, logs, exports, caches
+
+Treat it as a tripwire on one known path, not as enforcement of the property above.
 
 ### `arguments`
 `id` PK · `featured_statement_id` FK (CASCADE) · `proposer_pseudonym` str(80) nullable
