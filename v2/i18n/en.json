@@ -790,6 +790,7 @@
     "phase-label-informed_voting": "Informed vote",
     "phase-effect-informed_voting": "participants vote again on featured statements (requires initialising Phase 6)",
     "phase-label-public_results": "Report",
+    "phase-label-closed": "Closed",
     "phase-effect-public_results": "everyone can see the full aggregate results",
     "phase-route-default_7": "Default 7-step path",
     "phase-route-no_informed_vote": "Arguments, no informed vote",

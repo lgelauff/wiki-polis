@@ -205,8 +205,22 @@ _SCAN_GLOBS = (
 )
 
 
+# Keys reached indirectly: server-labels.ts maps a server identifier to a message key, so
+# the only msg() call there passes a variable and _CALL_SITE_RE cannot see the keys. Scan the
+# map values instead, keyed on the `<id>: 'message-key',` shape those tables use. Without
+# this the explicit tables are exactly as invisible to the guard as the concatenated key they
+# were written to replace -- which is how the previous generation of these keys rotted.
+_MAP_KEY_RE = _re.compile(r"""^\s*'?[A-Za-z0-9_-]+'?\s*:\s*'([a-z0-9][a-z0-9._-]*)'\s*,""", _re.M)
+
+_INDIRECT_KEY_FILES = ('frontend/src/i18n/server-labels.ts',)
+
+
 def _scan_text(text):
     return [m.group(2) for m in _CALL_SITE_RE.finditer(text)]
+
+
+def _scan_map_values(text):
+    return _MAP_KEY_RE.findall(text)
 
 
 def _message_call_sites():
@@ -216,8 +230,12 @@ def _message_call_sites():
         for path in sorted(_V2_ROOT.glob(pattern)):
             if 'tests' in path.parts or '.venv' in path.parts or 'node_modules' in path.parts:
                 continue
+            indirect = str(path.relative_to(_V2_ROOT)) in _INDIRECT_KEY_FILES
             for line_no, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
-                for key in _scan_text(line):
+                keys = _scan_text(line)
+                if indirect:
+                    keys = keys + _scan_map_values(line)
+                for key in keys:
                     found.setdefault(key, f'{path.relative_to(_V2_ROOT)}:{line_no}')
     return found
 
@@ -230,6 +248,29 @@ def test_call_site_scanner_reads_literals_and_skips_runtime_built_keys():
     assert _scan_text("flash(_('flash-banned'), 'success')") == ['flash-banned']
     assert _scan_text("_('phase-label-' + stage['key'])") == []      # runtime-built: skipped
     assert _scan_text("thing_('not-a-message')") == []               # not a message call
+
+    # The indirect scan, guarded the same way: server-labels.ts reaches its keys through a
+    # map, and if this regex stops matching that shape the key check below silently stops
+    # covering those keys.
+    assert _scan_map_values("  vote: 'conv-tab-vote',") == ['conv-tab-vote']
+    assert _scan_map_values("  'informed-voting': 'conv-tab-informed',") == ['conv-tab-informed']
+    assert _scan_map_values("  cleanup_window: 'phase-label-cleanup',") == ['phase-label-cleanup']
+    assert _scan_map_values("import type {Message} from './messages';") == []
+    assert _scan_map_values("  const key = id ? table[id] : undefined;") == []
+
+
+def test_indirect_key_files_are_actually_scanned():
+    """The file named in _INDIRECT_KEY_FILES must exist and yield keys.
+
+    A typo'd path would make the scan vacuous without failing anything -- the same class of
+    silent hole as the deleted templates/ glob this scanner used to carry.
+    """
+    for relative in _INDIRECT_KEY_FILES:
+        path = _V2_ROOT / relative
+        assert path.exists(), f'_INDIRECT_KEY_FILES names a missing file: {relative}'
+        assert _scan_map_values(path.read_text(encoding='utf-8')), (
+            f'no message keys found in {relative} -- has its map shape changed?'
+        )
 
 
 def test_every_message_key_referenced_in_code_exists_in_en_json():
@@ -245,4 +286,29 @@ def test_every_message_key_referenced_in_code_exists_in_en_json():
     assert not missing, (
         'message keys referenced in code but absent from i18n/en.json — these would '
         'render as ⧼key⧽ at runtime: ' + '; '.join(missing)
+    )
+
+
+# ── The SPA duplicates two server-side tables; pin them together ─────────────
+
+def _ts_source(relative):
+    return (_I18N_DIR.parent / 'frontend' / 'src' / relative).read_text(encoding='utf-8')
+
+
+def test_spa_rtl_language_list_matches_the_resolver():
+    """A divergent list means `dir` disagrees with the server for some language.
+
+    The SPA owns the <html> attributes (one shell serves every locale, and ?uselang= can
+    change the locale without a new document), so it carries its own copy of _RTL_LANGS.
+    Hand-copying it dropped seven languages on the first attempt; this keeps the two honest.
+    """
+    listed = set(_re.findall(
+        r"'([a-z-]+)'",
+        _re.search(r'RTL_LANGS = new Set\(\[(.*?)\]\)',
+                   _ts_source('i18n/messages.tsx'), _re.S).group(1),
+    ))
+    assert listed == i18n._RTL_LANGS, (
+        'frontend/src/i18n/messages.tsx RTL_LANGS has drifted from i18n._RTL_LANGS: '
+        f'only in SPA={sorted(listed - i18n._RTL_LANGS)}, '
+        f'only in resolver={sorted(i18n._RTL_LANGS - listed)}'
     )

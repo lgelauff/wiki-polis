@@ -99,6 +99,23 @@ export const testMessages: Record<string, string> = {
   'conv-col-shift': 'Shift',
   'conv-col-shift-title': 'Change in agree rate',
   'conv-col-yours': 'Yours',
+
+  // Labels the server used to ship as English, now mapped from its stable identifiers
+  // by i18n/server-labels.ts. Values match i18n/en.json so assertions read as real copy.
+  'conv-tab-vote': 'Vote',
+  'conv-tab-results': 'Intermediate results',
+  'conv-tab-arguments': 'Arguments',
+  'conv-tab-informed': 'Informed vote',
+  'phase-label-preparation': 'Preparation',
+  'phase-label-submission': 'Explore',
+  'phase-label-featured_selection': 'Featured selection',
+  'phase-label-argument_mapping': 'Arguments',
+  'phase-label-cleanup': 'Cleanup',
+  'phase-label-informed_voting': 'Informed vote',
+  'phase-label-public_results': 'Report',
+  'phase-route-default_7': 'Default 7-step path',
+  'phase-route-no_informed_vote': 'Arguments, no informed vote',
+  'phase-route-short_results': 'Short path to report',
   'conv-bar-title': 'Agree $1% · Disagree $2% · Pass $3%',
   'conv-bar-label': '$1% agree · $2% pass',
 
