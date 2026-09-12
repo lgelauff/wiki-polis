@@ -5,13 +5,17 @@ import type {Message} from './messages';
  *  Several API reads still send both a stable identifier and a display label — the label
  *  predates the catalogue. The identifier is the translatable one, so map it here and
  *  ignore the label. Until those fields are dropped from the contract they stay available
- *  as a last-resort fallback: an identifier the catalogue does not know degrades to the
- *  server's English rather than to a visible message key.
+ *  as a fallback, for BOTH ways this can fail: an identifier the table does not know, and
+ *  a key the catalogue does not hold (the likelier case, and the reason `resolve()` below
+ *  compares the result against the key rather than trusting it).
  *
- *  These maps are deliberately explicit rather than built by string concatenation. A
- *  runtime-built key (`msg('phase-label-' + target)`) is invisible to the key-existence
- *  guard in `tests/test_i18n.py`, which is what let the previous generation of these keys
- *  rot unnoticed when the templates using them were deleted. */
+ *  The maps are explicit rather than built by string concatenation so that the keys are
+ *  greppable and reviewable. That alone does not make them visible to the key-existence
+ *  guard in `tests/test_i18n.py` — its scanner only matches literal `msg('...')` call
+ *  sites, and the sole call site here passes a variable. `_MAP_KEY_RE` in that file scans
+ *  this module's map values specifically; keep the `<id>: 'message-key',` shape so it
+ *  keeps matching. Without that scan these keys would rot exactly as the previous
+ *  generation did when the templates using them were deleted. */
 
 /** Phase identifiers as they appear in `scheduled_transition.target` and the phase DTOs. */
 const PHASE_MESSAGES: Record<string, string> = {
@@ -25,7 +29,7 @@ const PHASE_MESSAGES: Record<string, string> = {
   cleanup_window: 'phase-label-cleanup',
   informed_voting: 'phase-label-informed_voting',
   public_results: 'phase-label-public_results',
-  closed: 'adminconv-status-closed',
+  closed: 'phase-label-closed',
 };
 
 /** Workspace tab identifiers from `conversation_workspace.TAB_LABELS`. */
@@ -50,8 +54,17 @@ function resolve(
   id: string | null | undefined,
   serverLabel?: string | null,
 ): string {
-  const key = id ? table[id] : undefined;
-  if (key) return msg(key);
+  // Object.hasOwn, not a bare lookup: a bare lookup reaches Object.prototype, so an id of
+  // 'constructor' or 'toString' would hand a non-string to msg().
+  const key = id && Object.hasOwn(table, id) ? table[id] : undefined;
+  if (key) {
+    const text = msg(key);
+    // banana returns the key itself for a message it does not have, so an absent key or a
+    // catalogue that failed to load would otherwise render `conv-tab-vote` to the user --
+    // and for a tab, that string is its accessible name. Compare against the key rather
+    // than against emptiness so ?uselang=qqx ('(conv-tab-vote)') still wins.
+    if (text !== key) return text;
+  }
   return serverLabel ?? id ?? '';
 }
 

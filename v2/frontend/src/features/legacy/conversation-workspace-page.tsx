@@ -20,7 +20,7 @@ import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
 import {LegacyContentFlag} from './legacy-content-flag';
 import {useMessage, type Message} from '../../i18n/messages';
-import {tabLabel} from '../../i18n/server-labels';
+import {phaseLabel, tabLabel} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 
 type Workspace = components['schemas']['ConversationWorkspace'];
@@ -438,7 +438,7 @@ function WorkspaceBody({data, csrfToken, routeTab}: {data: Workspace; csrfToken:
       {data.spaceWarning && <SpaceWarning space={data.spaceWarning} />}
       {data.space === 'demo' && <div className="mode-lock mode-lock--demo" style={{marginBottom: '1rem'}}><span className="mode-lock-dot" aria-hidden="true" />{msg('conv-demo-mode-lock')}</div>}
       {data.descriptionHtml && <div className="intro-text" dangerouslySetInnerHTML={{__html: data.descriptionHtml}} />}
-      {data.scheduledTransition && <div className="landing-section output-context"><p className="muted" style={{margin: 0}} dangerouslySetInnerHTML={richHtml(msg('conv-scheduled-transition', escapeHtml(data.scheduledTransition.targetLabel), scheduledTime(msg, data.scheduledTransition.at)))} /></div>}
+      {data.scheduledTransition && <div className="landing-section output-context"><p className="muted" style={{margin: 0}} dangerouslySetInnerHTML={richHtml(msg('conv-scheduled-transition', escapeHtml(phaseLabel(msg, data.scheduledTransition.target, data.scheduledTransition.targetLabel)), scheduledTime(msg, data.scheduledTransition.at)))} /></div>}
       {data.status === 'closed' ? <ClosedWorkspace data={data} /> : data.status === 'paused' ? <div className="landing-section"><p className="muted">{msg('conv-paused')}</p></div> : data.tabs.length === 0 ? <div className="landing-section"><p className="muted">{msg('conv-nothing-available')}</p></div> : (
         <>
           {data.tabs.length > 1 && <div className="tab-bar" role="tablist" onKeyDown={keyDown}>{data.tabs.map((tab, index) => <button key={tab.key} ref={(element) => { tabRefs.current[index] = element; }} id={`tab-btn-${tab.key}`} className={`tab-btn${activeTab === tab.key ? ' tab-btn--active' : ''}`} role="tab" data-tab={`tab-${tab.key}`} aria-controls={`tab-${tab.key}`} aria-selected={activeTab === tab.key} tabIndex={activeTab === tab.key ? 0 : -1} onClick={() => setActiveTab(tab.key)}>{tabLabel(msg, tab.key, tab.label)}</button>)}</div>}

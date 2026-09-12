@@ -1,10 +1,23 @@
 import Banana from 'banana-i18n';
 import {queryOptions, useQuery, useSuspenseQuery} from '@tanstack/react-query';
-import {createContext, useContext, useMemo, type ReactNode} from 'react';
+import {createContext, useContext, useEffect, useMemo, type ReactNode} from 'react';
 
 import {sessionQuery} from '../api/queries';
 
 const SOURCE_LOCALE = 'en';
+
+/** Mirrors `i18n.py`'s `_RTL_LANGS` / `text_direction()`. Kept in the SPA as well as on the
+ *  server because the SPA owns the <html> attributes: the server renders one shell for every
+ *  locale, and `?uselang=` can change the locale without a new document. */
+const RTL_LANGS = new Set([
+  'ar', 'arc', 'ary', 'arz', 'azb', 'ckb', 'dv', 'fa', 'ha', 'he', 'khw', 'ks',
+  'ku', 'mzn', 'nqo', 'pnb', 'ps', 'sd', 'ug', 'ur', 'yi',
+]);
+
+export function textDirection(locale: string): 'rtl' | 'ltr' {
+  const base = (locale || '').split('-')[0] ?? '';
+  return RTL_LANGS.has(base.toLowerCase()) ? 'rtl' : 'ltr';
+}
 
 /** Mirrors the server's own precedence in `_negotiate_locale`: ?uselang= wins, then the
  *  `uselang` cookie (deliberately not HttpOnly so the client can read it), then English.
@@ -62,9 +75,23 @@ export function MessageProvider({children, locale = readLocale()}: {children: Re
     return (key, ...params) => banana.i18n(key, ...params);
   }, [locale, messages]);
 
+  // spec_accessibility.md: "Set `lang` (and `dir` where relevant) so screen readers pick the
+  // right voice." index.html hard-codes lang="en" for the shell, and ?uselang= can change the
+  // locale without a new document, so the attributes have to follow the negotiated locale
+  // here. Without this a translated interface -- including every aria-label and sr-only
+  // string -- is announced by an English synthesiser, which is worse than untranslated.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.lang = locale;
+    root.dir = textDirection(locale);
+  }, [locale]);
+
   // Hold the first paint until the catalogue resolves one way or the other, so wired
   // strings never flash as keys on the happy path.
   if (isPending) {
+    // Not translatable by construction: the catalogue this waits for is the thing that
+    // would translate it. lang is already set by the effect above, so a screen reader at
+    // least announces this one English word in the right voice.
     return <p className="loading-state" role="status">Loading…</p>;
   }
   return <MessageContext.Provider value={msg}>{children}</MessageContext.Provider>;

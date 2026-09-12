@@ -210,3 +210,52 @@ def test_viewer_choice_maps_every_raw_polis_vote():
     assert _choice(None) is None
     # Identifiers, never display text: the SPA translates these.
     assert {_choice(v) for v in (-1, 1, 0)} == {'agree', 'disagree', 'pass'}
+
+
+def test_row_keys_the_report_reads_are_keys_the_producer_emits():
+    """Tie the two halves of the row contract together statically.
+
+    Every test in this file patches `_build_phase6_results` and hand-writes its rows, so
+    nothing otherwise connects the keys the producer emits to the keys the consumer reads.
+    That gap is what hid the original bug: the fixture said 'my_p6_label': 'Agree', a value
+    the producer never emitted, and `_choice` silently returned None for every real vote.
+    Rename a row key today and the whole suite stays green while viewerChoice reverts to
+    always-null -- so check the contract itself rather than a fixture's idea of it.
+    """
+    import ast
+    import pathlib
+
+    v2 = pathlib.Path(__file__).resolve().parent.parent
+
+    # Producer: the keys of the dict literal appended inside _build_phase6_results.
+    producer = ast.parse((v2 / 'app.py').read_text(encoding='utf-8'))
+    emitted: set[str] = set()
+    for node in ast.walk(producer):
+        if isinstance(node, ast.FunctionDef) and node.name == '_build_phase6_results':
+            for inner in ast.walk(node):
+                if isinstance(inner, ast.Dict):
+                    emitted |= {
+                        k.value for k in inner.keys
+                        if isinstance(k, ast.Constant) and isinstance(k.value, str)
+                    }
+    assert 'my_p6_vote' in emitted, (
+        'guard is looking in the wrong place: _build_phase6_results no longer emits a dict '
+        'literal containing my_p6_vote'
+    )
+
+    # Consumer: every row.get('...') in build_results_report.
+    consumer = ast.parse((v2 / 'services' / 'results_report.py').read_text(encoding='utf-8'))
+    read: set[str] = set()
+    for node in ast.walk(consumer):
+        if (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute) and node.func.attr == 'get'
+                and isinstance(node.func.value, ast.Name) and node.func.value.id == 'row'
+                and node.args and isinstance(node.args[0], ast.Constant)):
+            read.add(node.args[0].value)
+    assert read, 'guard found no row.get(...) call sites in results_report.py'
+
+    missing = sorted(read - emitted)
+    assert not missing, (
+        'results_report reads row keys that _build_phase6_results does not emit — '
+        f'viewerChoice and friends will silently be None: {missing}'
+    )
