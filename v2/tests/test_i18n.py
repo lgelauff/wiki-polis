@@ -168,9 +168,23 @@ def test_catalogue_endpoint_serves_the_full_english_map(client):
     assert '@metadata' not in body
 
 
+def _absent_locale():
+    """A locale code with no file in i18n/, computed rather than hardcoded.
+
+    This test used to ask for 'nl'. That was fine until translatewiki delivered Dutch, at
+    which point the first translation the project ever received would have turned this test
+    red -- a delivered translation must never break the build.
+    """
+    present = {p.stem for p in _I18N_DIR.glob('*.json')}
+    for candidate in ('zxx', 'xx', 'zz-test', 'und'):
+        if candidate not in present:
+            return candidate
+    raise AssertionError(f'no absent locale left to test with; present: {sorted(present)}')
+
+
 def test_catalogue_endpoint_falls_back_to_english_for_an_unknown_locale(client):
     # Mirrors the resolver's locale -> en chain: a locale with no file is not a 404.
-    resp = client.get('/api/v1/i18n/nl')
+    resp = client.get(f'/api/v1/i18n/{_absent_locale()}')
     assert resp.status_code == 200
     assert resp.get_json() == _load('en.json')
 
@@ -311,4 +325,49 @@ def test_spa_rtl_language_list_matches_the_resolver():
         'frontend/src/i18n/messages.tsx RTL_LANGS has drifted from i18n._RTL_LANGS: '
         f'only in SPA={sorted(listed - i18n._RTL_LANGS)}, '
         f'only in resolver={sorted(i18n._RTL_LANGS - listed)}'
+    )
+
+
+# ── Delivered translations: the sync bot's PRs must be able to go green ──────
+
+def _delivered_locales():
+    """Locale files translatewiki delivers: everything except the source and its docs."""
+    return sorted(
+        p for p in _I18N_DIR.glob('*.json')
+        if p.stem not in {'en', 'qqq'}
+    )
+
+
+def test_delivered_translations_are_well_formed():
+    """Guards the translatewiki sync bot's pull requests.
+
+    The bot commits `i18n/<code>.json` straight into the repo, so these files arrive without
+    a human editing them and the PR has to be able to pass CI on its own. Skips cleanly while
+    no translation has been delivered yet.
+    """
+    for path in _delivered_locales():
+        data = json.loads(path.read_text(encoding='utf-8'))
+        assert isinstance(data, dict), f'{path.name} is not a JSON object'
+        for key, value in data.items():
+            if key == '@metadata':
+                continue
+            assert isinstance(value, str), f'{path.name}: {key} is not a string'
+
+
+def test_delivered_translations_carry_no_keys_the_source_dropped():
+    """A translation for a message that no longer exists is stale, not a build failure.
+
+    Reported rather than asserted-away, because it is expected during the reconciliation of
+    the keys with no call site: translatewiki may still hold a message we deleted. The point
+    is that it surfaces here instead of silently inflating the catalogue.
+    """
+    source = set(_load('en.json')) - {'@metadata'}
+    stale = {}
+    for path in _delivered_locales():
+        extra = set(json.loads(path.read_text(encoding='utf-8'))) - source - {'@metadata'}
+        if extra:
+            stale[path.name] = sorted(extra)
+    assert not stale, (
+        'delivered translations contain messages absent from en.json — either the message '
+        f'was deleted after translation, or a key was renamed: {stale}'
     )
