@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/i18n/{locale}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the UI message catalogue for a locale (translatewiki.net banana format)
+         * @description Flat {key: text} map, English-filled, @metadata excluded — the message store banana-i18n consumes directly. An unknown locale falls back to English rather than 404ing; the qqx debug locale returns (key) for every key. Public and unauthenticated. Pin ?v=<gitVersion> (from getSession) to receive a cacheable response.
+         */
+        get: operations["getMessages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin": {
         parameters: {
             query?: never;
@@ -1895,6 +1915,10 @@ export interface components {
                 participants: string;
             };
         };
+        /** @description Message key to translated text. Not wrapped in a data envelope: this is the banana-format store banana-i18n loads as-is. */
+        MessageCatalogueResponse: {
+            [key: string]: string;
+        };
         SessionResponse: {
             data: components["schemas"]["Session"];
         };
@@ -2699,6 +2723,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+        };
+    };
+    getMessages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Message catalogue */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageCatalogueResponse"];
                 };
             };
         };

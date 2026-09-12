@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "5.102.1",
+    "banana-i18n": "2.4.0",
     "openapi-fetch": "0.17.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",

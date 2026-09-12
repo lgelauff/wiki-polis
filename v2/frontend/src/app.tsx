@@ -1,4 +1,6 @@
 import {lazy, Suspense, useDeferredValue} from 'react';
+
+import {MessageProvider} from './i18n/messages';
 import {Navigate, Route, Routes, useLocation} from 'react-router-dom';
 
 import {ForkPage} from './features/legacy/public-pages';
@@ -101,7 +103,11 @@ export function App() {
     <>
       <a className="skip-link" href="#main">Skip to main content</a>
       <Suspense fallback={<p className="loading-state" role="status">Loading conversations…</p>}>
-        <DeferredRoutes />
+        {/* Inside the existing boundary on purpose: the catalogue fetch reuses this
+            fallback instead of adding a second async gate in front of every route. */}
+        <MessageProvider>
+          <DeferredRoutes />
+        </MessageProvider>
       </Suspense>
     </>
   );

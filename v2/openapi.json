@@ -30,6 +30,11 @@
         }
       }
     },
+    "/i18n/{locale}": {
+      "get": {"operationId": "getMessages", "summary": "Return the UI message catalogue for a locale (translatewiki.net banana format)", "description": "Flat {key: text} map, English-filled, @metadata excluded — the message store banana-i18n consumes directly. An unknown locale falls back to English rather than 404ing; the qqx debug locale returns (key) for every key. Public and unauthenticated. Pin ?v=<gitVersion> (from getSession) to receive a cacheable response.", "responses": {
+        "200": {"description": "Message catalogue", "headers": {"Cache-Control": {"schema": {"type": "string"}}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MessageCatalogueResponse"}}}}
+      }}
+    },
     "/admin": {
       "get": {"operationId": "getAdminCatalog", "summary": "Return site-wide conversation and administrator operations", "responses": {
         "200": {"description": "Admin catalog", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AdminCatalogResponse"}}}},
@@ -1598,6 +1603,11 @@
             "properties": {"participants": {"type": "string"}}
           }
         }
+      },
+      "MessageCatalogueResponse": {
+        "type": "object",
+        "description": "Message key to translated text. Not wrapped in a data envelope: this is the banana-format store banana-i18n loads as-is.",
+        "additionalProperties": {"type": "string"}
       },
       "SessionResponse": {
         "type": "object",
