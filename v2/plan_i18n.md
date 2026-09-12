@@ -15,8 +15,11 @@ enough that their work is never invalidated.
 
 1. **Dutch is needed in about a week** (requested 2026-09-12). This is the binding
    constraint and it reorders everything below.
-2. **translatewiki onboarding starts now**, in parallel, because it has a review queue and
-   nothing about filing is irreversible.
+2. **translatewiki onboarding is filed once the labels are under control** — deliberately
+   after stages 1, 2 and 4, not in parallel with them. Filing is reversible, so parallel was
+   defensible; waiting is better, because a catalogue that has already been reconciled makes
+   the request simpler and means no translator is ever offered a message that renders
+   nowhere. Nothing about Dutch depends on it (rule 1's exception).
 3. **The participant interface is the deliverable. The admin console is nice-to-have.**
 
 These three change the ordering that held when there was no deadline. The earlier draft of
@@ -111,20 +114,28 @@ group to translators, which is stage 6 and happens deliberately.
 
 ## Work sequence
 
-### 0. translatewiki onboarding — start immediately, runs in parallel
+### 0. translatewiki onboarding — filed after stage 4, not before
 
-- Confirm the licence requirement: **GPL-3.0, detected by GitHub's licence API** on a public
-  repo. Satisfied.
-- File the support request referencing `i18n/translatewiki-group.yaml`, stating plainly that
-  the catalogue is undergoing a final reconciliation and the group should be configured but
-  **not announced to translators** yet.
-- Flag two things in the request: the `protowiki` group id against the `wiki-polis`
-  repository path ([#289](https://github.com/lgelauff/wiki-polis/issues/289)), so TWN does
-  not "correct" one to match the other; and ask **how the group handles key deletion before
-  launch**, rather than relying on the assumption that pre-launch deletion is free.
-- Ask whether an existing in-repo `nl.json` can seed the group (rule 1's exception).
+Held deliberately until the catalogue is honest. The queue time is real but it buys nothing
+here, because Dutch does not come through translatewiki (rule 1's exception) and a
+reconciled catalogue makes for a shorter request.
 
-**Exit:** the group exists, the sync bot is configured, and no translator has been invited.
+Waiting also removes a question. Asking translatewiki *how it handles key deletion before
+launch* only matters while deletions are still pending; reconcile first and the question
+disappears.
+
+When filed:
+
+- Licence requirement is already confirmed: **GPL-3.0, detected by GitHub's licence API** on
+  a public repo.
+- Reference `i18n/translatewiki-group.yaml`.
+- Flag the `protowiki` group id against the `wiki-polis` repository path
+  ([#289](https://github.com/lgelauff/wiki-polis/issues/289)), so TWN does not "correct" one
+  to match the other.
+- Ask whether the in-repo `nl.json` can seed the Dutch group, so that work is preserved and
+  translators continue from it rather than starting over. By then it will be substantial.
+
+**Exit:** the group exists and the sync bot is configured.
 
 ### 1. Stop shipping English from the server — blocks Dutch on already-wired screens
 
