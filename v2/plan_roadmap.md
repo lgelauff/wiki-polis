@@ -62,6 +62,16 @@ retention commitment (decision D-PRIV), pending legal/comms review.
 
 ## 4. Product / UX
 
+- **Internationalisation** — the foundation shipped 2026-09-12 (PRs
+  [#357](https://github.com/lgelauff/wiki-polis/pull/357),
+  [#369](https://github.com/lgelauff/wiki-polis/pull/369)): an 872-key English catalogue in
+  translatewiki format, the resolver, locale negotiation, `GET /api/v1/i18n/<locale>`, and
+  four screens wired. `ENABLED_LOCALES=en`, so nothing is user-visible yet. Remaining work
+  — ~370 literal strings across 26 components, and 551 catalogue keys that no code
+  references and must be wired or deleted before translators start — is sequenced in
+  [`plan_i18n.md`](plan_i18n.md). **translatewiki freezes key names once translators
+  begin**, so the reconciliation is cheap now and impossible afterwards.
+
 - **Voting** — ✅ "change vote" reopens + resubmits to Polis
   ([#69](https://github.com/lgelauff/wiki-polis/issues/69)), the three-action footer
   ([#64](https://github.com/lgelauff/wiki-polis/issues/64)), and the slug-format hint on
