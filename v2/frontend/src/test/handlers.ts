@@ -101,9 +101,6 @@ export const testMessages: Record<string, string> = {
   'conv-col-yours': 'Yours',
   'conv-bar-title': 'Agree $1% · Disagree $2% · Pass $3%',
   'conv-bar-label': '$1% agree · $2% pass',
-  'conv-p6-mine-agreed': 'Agree',
-  'conv-p6-mine-disagreed': 'Disagree',
-  'conv-p6-mine-passed': 'Pass',
 
   // The admin lifecycle console.
   "admin-btn-remove": "remove",
