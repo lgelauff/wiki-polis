@@ -34,8 +34,9 @@ once and feeds the map to `banana-i18n`, which parses this exact format and brin
 plural rules.
 
 Freeze the key namespace before TWN onboarding: renaming keys after translators start costs
-them their work. The sequence for getting there — and the 551 keys no code yet references —
-is in [`../plan_i18n.md`](../plan_i18n.md). This file is the status; that one is the plan.
+them their work. The sequence for getting there — and the reconciliation of the 551 keys no
+call site references, most of which an unwired component still needs — is in
+[`../plan_i18n.md`](../plan_i18n.md). This file is the status; that one is the plan.
 
 **Server-side copy is deliberately not keyed.** 122 user-visible English strings live in
 `error_response(...)` and `abort(description=...)`. The SPA maps `error.code` to its own copy

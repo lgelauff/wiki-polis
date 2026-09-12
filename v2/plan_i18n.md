@@ -11,20 +11,21 @@ The ProtoWiki participant interface is available in Dutch, and the interface as 
 translatable on translatewiki.net by volunteer translators, with a key namespace stable
 enough that their work is never invalidated.
 
-## Constraints driving this revision
+## Constraints
 
 1. **Dutch is needed in about a week** (requested 2026-09-12). This is the binding
    constraint and it reorders everything below.
-2. **translatewiki onboarding is filed once the labels are under control** — deliberately
-   after stages 1, 2 and 4, not in parallel with them. Filing is reversible, so parallel was
-   defensible; waiting is better, because a catalogue that has already been reconciled makes
-   the request simpler and means no translator is ever offered a message that renders
-   nowhere. Nothing about Dutch depends on it (rule 1's exception).
+2. **translatewiki onboarding is filed once the labels are settled** — after stages 1, 2
+   and 4 rather than in parallel with them. Filing is reversible, so parallel filing was
+   defensible, but a reconciled catalogue makes for a simpler request and ensures no
+   translator is offered a message that renders nowhere. Dutch does not depend on it
+   (rule 1's exception).
 3. **The participant interface is the deliverable. The admin console is nice-to-have.**
 
-These three change the ordering that held when there was no deadline. The earlier draft of
-this plan sequenced wiring cheapest-first; a Dutch deadline makes that wrong, because an
-admin console in Dutch is worth nothing to a Dutch-speaking participant.
+These change the ordering that applied when there was no deadline. The earlier draft
+sequenced wiring by existing key coverage; under a Dutch deadline the participant interface
+takes precedence, since a translated admin console does not serve a Dutch-speaking
+participant.
 
 ## Where this stands — 2026-09-12
 
@@ -38,7 +39,7 @@ screens** reading from it. `ENABLED_LOCALES=en`.
 and will render English regardless of how complete a translation is. Dutch is therefore a
 wiring problem before it is a translation problem.
 
-### The catalogue, honestly
+### Catalogue state
 
 872 keys. 321 referenced by a static call site. The remaining 551 were authored against the
 19 Jinja templates deleted in [#351](https://github.com/lgelauff/wiki-polis/pull/351), and
@@ -47,17 +48,17 @@ matching each against the English still on screen in unwired components splits t
 | Orphan bucket | Count | Meaning |
 |---|---|---|
 | Claimed | 298 | an unwired component still shows this text — will be used by stage 2 |
-| Near-match | 13 | text drifted; needs a human call |
-| No match found | ≤240 | **candidates** for deletion, not a delete list |
+| Near-match | 13 | text has drifted; requires review |
+| No match found | ≤240 | deletion **candidates**, pending stage 4 review |
 
-The third bucket is not trustworthy and must not be actioned as-is. Spot-checking surfaced
+The third bucket is unreliable and must not be actioned as it stands. Spot-checking found
 `phase-label-*`, `precond-*`, and `rec-field-*` — keys that look unreachable only because
 their consuming surface is unwired, or because the text they replace is currently shipped
 from Python (see stage 1). **Reconciliation therefore comes after wiring, not before**: the
 wiring is what establishes reachability.
 
-An earlier statement that "551 keys render nowhere" was wrong in a way worth recording, so
-nobody re-derives it: most of the 551 are pre-authored work awaiting their component.
+The figure of "551 keys rendering nowhere" is inaccurate and should not be reused: most
+of the 551 are pre-authored copy awaiting the component that will use it.
 
 ### Component scope
 
@@ -102,27 +103,26 @@ Settled. Changing one is a plan change, not an implementation detail.
 7. **Key convention:** `surface-subkey`, lowercase-hyphenated, grouped by screen. A key name
    must not contradict its own text.
 
-## The one-way door
+## Irreversible step: the key-name freeze
 
 **translatewiki freezes key names once translators begin work on the group.** Renaming a key
 after that costs translators their work; deleting a translated message wastes work already
 done.
 
-Filing the support request is **not** the door. Configuration, licence review, and sync-bot
-setup are all reversible and change nothing about the namespace. The door is opening the
-group to translators, which is stage 6 and happens deliberately.
+Filing the support request does not trigger the freeze. Configuration, licence review, and
+sync-bot setup are reversible and change nothing about the namespace. The freeze begins when
+the group is opened to translators, at stage 6.
 
 ## Work sequence
 
-### 0. translatewiki onboarding — filed after stage 4, not before
+### 0. translatewiki onboarding — after stage 4
 
-Held deliberately until the catalogue is honest. The queue time is real but it buys nothing
-here, because Dutch does not come through translatewiki (rule 1's exception) and a
+Held until the catalogue has been reconciled. The review queue is real, but filing early
+buys nothing: Dutch does not arrive through translatewiki (rule 1's exception), and a
 reconciled catalogue makes for a shorter request.
 
-Waiting also removes a question. Asking translatewiki *how it handles key deletion before
-launch* only matters while deletions are still pending; reconcile first and the question
-disappears.
+Waiting also removes a question. How translatewiki handles key deletion before launch only
+matters while deletions are pending; reconciling first settles it.
 
 When filed:
 
@@ -137,7 +137,7 @@ When filed:
 
 **Exit:** the group exists and the sync bot is configured.
 
-### 1. Stop shipping English from the server — blocks Dutch on already-wired screens
+### 1. Server-shipped UI labels
 
 Twelve module-level display-text maps cross the API as English, **38 strings**, rendered raw
 by components that otherwise read the catalogue. These are untranslatable today even on the
@@ -157,10 +157,10 @@ four finished screens, which makes this the first thing Dutch needs.
 **Exit:** no user-visible English reaches the SPA from a Python constant, and a
 reintroduction fails CI.
 
-### 2. Wire the participant interface — the Dutch deliverable
+### 2. Participant interface wiring
 
-Fifteen components, in the order a participant meets them, so partial progress is always a
-coherent journey rather than scattered screens:
+Fifteen components, ordered as a participant encounters them, so that partial progress
+covers a continuous journey rather than scattered screens:
 
 1. `public-pages`, `legacy-shell`, `app.tsx`, `main.tsx` — the frame and landing.
 2. `participation-entry-page` (33 strings, 28 keyed) — join, consent, licence.
@@ -179,7 +179,7 @@ before and after has not tested the change.
 **Exit:** no user-visible literal English in any participant component, and the
 key-existence guard resolves call sites in each.
 
-### 3. Dutch
+### 3. Dutch translation
 
 - Author `i18n/nl.json` for the participant key set. Per-key English fallback means a partial
   file degrades to English rather than breaking, so this can land incrementally and early.
@@ -191,7 +191,7 @@ key-existence guard resolves call sites in each.
 **Exit:** a Dutch-speaking participant can join, vote, argue, and read results without
 meeting English.
 
-### 4. Reconcile the orphans
+### 4. Unreferenced-key reconciliation
 
 Only meaningful once stage 2 has established what is reachable.
 
@@ -204,10 +204,10 @@ Only meaningful once stage 2 has established what is reachable.
 
 **Exit:** every key is referenced, or listed with a reason it is not.
 
-### 5. Admin console — nice-to-have
+### 5. Admin console — deferred
 
-Eleven components, ≤170 strings, 98 already keyed. Cheapest-first is the right order here,
-since there is no deadline: `admin-invitations` (5/4), `admin-moderation` (10/9),
+Eleven components, ≤170 strings, 98 already keyed. Ordered by existing key coverage, which
+is appropriate here because no deadline applies: `admin-invitations` (5/4), `admin-moderation` (10/9),
 `admin-participants` (17/14), `admin-catalog` (25/18), `admin-statements` (39/27),
 `admin-featured` (19/12), then the authoring-heavy `admin-roles` (10/4),
 `admin-settings` (21/6), `admin-termination` (16/2), `admin-routes` (7/2),
@@ -215,7 +215,7 @@ since there is no deadline: `admin-invitations` (5/4), `admin-moderation` (10/9)
 
 **Exit:** as stage 2, for the admin surface.
 
-### 6. Freeze and open to translators
+### 6. Namespace freeze and translator onboarding
 
 - Freeze the namespace; announce in `i18n/README.md`.
 - Hand `nl.json` to translatewiki as the Dutch seed and retire rule 1's exception; TWN is
