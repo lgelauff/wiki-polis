@@ -137,7 +137,7 @@ export function AdminModerationPage({
   return (
     <LegacyShell
       headerMode="admin"
-      title={`Moderation queue — ${title} — ProtoWiki`}
+      title={`Moderation queue — ${title} — Proto`}
       headerCrumb={(
         <nav className="header-crumb" aria-label="Admin breadcrumb">
           <span className="header-crumb-sep">/</span>

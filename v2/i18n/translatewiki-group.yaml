@@ -1,4 +1,4 @@
-# DRAFT translatewiki.net message-group config for ProtoWiki.
+# DRAFT translatewiki.net message-group config for Proto.
 #
 # This is NOT read by wiki-polis — it is a reference to hand to translatewiki.net (TWN) staff
 # when requesting onboarding. TWN keeps the authoritative copy in their `translatewiki` config
@@ -10,14 +10,14 @@
 #
 # Docs: https://translatewiki.net/wiki/Translating:New_project
 
-# NOTE: the group id is `protowiki` (the product name) while the repository is still
+# NOTE: the group id is `proto` (the product name) while the repository is still
 # named `wiki-polis` (see #289). The FILES paths below therefore keep `wiki-polis`, because
 # they address the checkout directory, not the product. Flag this divergence in the support
 # request so TWN does not "correct" one to match the other -- the id is frozen once
 # translators start, the repo can still be renamed.
 BASIC:
-  id: protowiki
-  label: ProtoWiki
+  id: proto
+  label: Proto
   namespace: NS_TRANSLATIONS
   description: "Deliberation tool for the Wikimedia community (Toolforge)."
   sourcelanguage: en

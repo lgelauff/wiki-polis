@@ -81,7 +81,7 @@ def _assert_branded(response, status, heading):
     assert response.status_code == status
     body = response.get_data(as_text=True)
     assert response.mimetype == 'text/html'
-    assert 'ProtoWiki' in body
+    assert 'Proto' in body
     assert heading in body
 
 

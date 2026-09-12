@@ -1,6 +1,6 @@
-# ProtoWiki i18n messages
+# Proto i18n messages
 
-UI strings for ProtoWiki, in the **translatewiki.net (TWN) "banana" JSON** format.
+UI strings for Proto, in the **translatewiki.net (TWN) "banana" JSON** format.
 `en.json` is the **source** (English); `qqq.json` documents each message for translators;
 `<code>.json` files are translations **delivered by TWN** — do not edit those by hand.
 
@@ -110,7 +110,7 @@ conversion phases rather than a passing check.
 
 ## Scope — the interface / content split
 
-ProtoWiki has **two language surfaces**, and only one is translated here.
+Proto has **two language surfaces**, and only one is translated here.
 
 ### Interface (translate — this catalogue)
 

@@ -45,7 +45,7 @@ export function ConversationAboutLegacyPage() {
   return (
     <LegacyShell
       headerMode={data.space === 'demo' ? 'conversation-demo' : 'conversation-real'}
-      title={`About — ${data.title} — ProtoWiki`}
+      title={`About — ${data.title} — Proto`}
       headerCrumb={(
         <nav className="header-crumb" aria-label="Conversation context">
           <span className="header-crumb-sep">/</span>
@@ -132,7 +132,7 @@ export function ModerationLogPage() {
 
   return (
     <LegacyShell
-      title={`Moderation log — ${data.title} — ProtoWiki`}
+      title={`Moderation log — ${data.title} — Proto`}
       headerCrumb={(
         <nav className="header-crumb" aria-label="Conversation context">
           <span className="header-crumb-sep">/</span>

@@ -122,7 +122,7 @@ test('renders the voting workspace from the catalogue English', async () => {
   expect(document.querySelector('.output-context time'))
     .toHaveAttribute('title', 'Shown in your local timezone');
   // The document title is an interface frame around an untranslated content value.
-  expect(document.title).toBe('Community strategy — ProtoWiki');
+  expect(document.title).toBe('Community strategy — Proto');
   // Participant- and organizer-authored content is never routed through the catalogue.
   expect(document.querySelector('#statement-text')?.textContent)
     .toBe('Our movement should invest more in shared technical infrastructure.');

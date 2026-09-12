@@ -86,7 +86,7 @@ test('renders the admin console from the catalogue English', async () => {
   // Inline markup in a catalogue message stays markup rather than being escaped into text.
   expect(within(screen.getByText(/These toggles act independently/)).getByText('Advanced.').tagName).toBe('STRONG');
   // The document title is an interface frame around an untranslated content value.
-  expect(document.title).toBe('Manage Community strategy — ProtoWiki');
+  expect(document.title).toBe('Manage Community strategy — Proto');
   // Participant- and organizer-authored content is never routed through the catalogue.
   expect(screen.getByText('Regional communities should share infrastructure funding.', {exact: false})).toBeVisible();
   expect(screen.getByText('Every statement has been moderated', {exact: false})).toBeVisible();

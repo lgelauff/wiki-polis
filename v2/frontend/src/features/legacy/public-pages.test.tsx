@@ -22,7 +22,7 @@ test('renders the entry fork with the legacy shell and card contract', async () 
   renderRoute('/app/parity/fork');
 
   expect(await screen.findByRole('heading', {name: 'Where the community actually stands.'})).toBeVisible();
-  expect(screen.getByRole('link', {name: 'ProtoWiki'})).toHaveClass('header-logo');
+  expect(screen.getByRole('link', {name: 'Proto'})).toHaveClass('header-logo');
   expect(screen.getByRole('link', {name: /Try out the platform/})).toHaveClass('fork-card--demo');
   expect(screen.getByRole('link', {name: /Participate in real consultations/})).toHaveClass('fork-card--real');
   expect(screen.getByRole('link', {name: /Open an issue/})).toHaveAttribute('target', '_blank');
