@@ -28,9 +28,16 @@ def _tally(value: dict | None) -> dict | None:
     }
 
 
-def _choice(value: str | None) -> str | None:
-    normalized = str(value or '').strip().lower()
-    return normalized if normalized in {'agree', 'pass', 'disagree'} else None
+def _choice(vote: int | None) -> str | None:
+    """The viewer's own vote as a stable identifier, from the raw Polis value.
+
+    Polis encodes -1 = Agree, 1 = Disagree, 0 = Pass in the vote table and API (the data
+    export inverts the sign -- see ref_polis-data-model.md). This previously parsed the
+    English label instead, which silently returned None for every vote once the labels
+    read "Agreed"/"Disagreed"/"Passed": none of those match the identifiers below. The
+    SPA translates the identifier, so no display text crosses the API for it.
+    """
+    return {-1: 'agree', 1: 'disagree', 0: 'pass'}.get(vote)
 
 
 def _opinion_groups(groups: list | None) -> list[dict]:
@@ -79,7 +86,7 @@ def build_results_report(
             'informed': _tally(row.get('p6')) if detailed else None,
             'agreementShift': row.get('shift') if detailed else None,
             'viewerChoice': (
-                _choice(row.get('my_p6_label')) if participation else None
+                _choice(row.get('my_p6_vote')) if participation else None
             ),
         })
     result_filter = results.get('filter')

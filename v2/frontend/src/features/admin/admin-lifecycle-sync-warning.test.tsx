@@ -63,6 +63,9 @@ test('phaseTransitionToast keeps the worst severity and the server ordering', ()
   const msg = (key: string, ...params: (string | number)[]) => ({
     'flash-move-sync-failed': 'Phase moved, but updating results visibility in Polis failed.',
     'flash-moved-to': `Moved to: ${String(params[0])}.`,
+    // The phase name is now resolved from targetKey through the catalogue rather than
+    // taken from the server's targetLabel, so the stub has to carry it.
+    'phase-label-submission': 'Explore',
   }[key] ?? key);
   const base = {
     sourceKey: 'preparation', targetKey: 'submission', targetLabel: 'Explore',

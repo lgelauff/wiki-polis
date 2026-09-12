@@ -22,7 +22,7 @@ def _results(*, pg_available=True):
                 'pct_agree': 70.0, 'pct_pass': 20.0, 'pct_disagree': 10.0,
             },
             'shift': 10.0,
-            'my_p6_label': 'Agree',
+            'my_p6_vote': -1,          # raw Polis value: -1 = Agree
         }],
         'p2_participants': 25,
         'p6_participants': 22,
@@ -190,3 +190,23 @@ def test_openapi_documents_results_report_and_pass_counts(client):
     assert operation['operationId'] == 'getResultsReport'
     assert 'pass' in counts['required']
     assert 'pass' in counts['properties']
+
+
+def test_viewer_choice_maps_every_raw_polis_vote():
+    """Guards the bug this fixture used to hide.
+
+    `_build_phase6_results` emits the raw Polis vote; `_choice` used to parse an English
+    label instead and returned None for every real vote, so the "Yours" column rendered
+    an em dash for every statement. The fixture above hand-wrote 'Agree', a value the
+    producer never emits, so the suite agreed with itself. Pin the whole mapping.
+    """
+    from services.results_report import _choice
+
+    # ref_polis-data-model.md:147 -- the vote table and API use -1 = Agree, 1 = Disagree,
+    # 0 = Pass. The data export inverts the sign; this is not the export.
+    assert _choice(-1) == 'agree'
+    assert _choice(1) == 'disagree'
+    assert _choice(0) == 'pass'
+    assert _choice(None) is None
+    # Identifiers, never display text: the SPA translates these.
+    assert {_choice(v) for v in (-1, 1, 0)} == {'agree', 'disagree', 'pass'}

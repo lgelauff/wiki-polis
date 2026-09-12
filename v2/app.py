@@ -240,13 +240,6 @@ class Phase6ResultsFilter:
         )
 
 
-def _vote_label(vote: int | None) -> str | None:
-    """Human-readable label for a raw Polis vote value."""
-    if vote is None:
-        return None
-    return {-1: 'Agreed', 1: 'Disagreed', 0: 'Passed'}.get(vote)
-
-
 def _pct(n: int, total: int) -> float:
     return round(n / total * 100, 1) if total else 0.0
 
@@ -347,8 +340,6 @@ def _build_phase6_results(
                                      #   NOT individual-level delta — see 'matched_participants')
           'my_p2_vote': int | None,  # raw Polis vote; None if participation absent or PG unavail
           'my_p6_vote': int | None,
-          'my_p2_label': str | None,
-          'my_p6_label': str | None,
         }],
         'p6_participants': int | None,
         'p2_participants': int | None,
@@ -501,8 +492,6 @@ def _build_phase6_results(
             'shift':       shift,
             'my_p2_vote':  my_p2_votes.get(p2_tid),
             'my_p6_vote':  my_p6_votes.get(p6_tid),
-            'my_p2_label': _vote_label(my_p2_votes.get(p2_tid)),
-            'my_p6_label': _vote_label(my_p6_votes.get(p6_tid)),
         })
 
     # Sort by largest absolute shift first; statements with no shift data go last.
