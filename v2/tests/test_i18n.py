@@ -168,9 +168,23 @@ def test_catalogue_endpoint_serves_the_full_english_map(client):
     assert '@metadata' not in body
 
 
+def _absent_locale():
+    """A locale code with no file in i18n/, computed rather than hardcoded.
+
+    This test used to ask for 'nl'. That was fine until translatewiki delivered Dutch, at
+    which point the first translation the project ever received would have turned this test
+    red -- a delivered translation must never break the build.
+    """
+    present = {p.stem for p in _I18N_DIR.glob('*.json')}
+    for candidate in ('zxx', 'xx', 'qtz', 'und'):
+        if candidate not in present:
+            return candidate
+    raise AssertionError(f'no absent locale left to test with; present: {sorted(present)}')
+
+
 def test_catalogue_endpoint_falls_back_to_english_for_an_unknown_locale(client):
     # Mirrors the resolver's locale -> en chain: a locale with no file is not a 404.
-    resp = client.get('/api/v1/i18n/nl')
+    resp = client.get(f'/api/v1/i18n/{_absent_locale()}')
     assert resp.status_code == 200
     assert resp.get_json() == _load('en.json')
 
@@ -312,3 +326,53 @@ def test_spa_rtl_language_list_matches_the_resolver():
         f'only in SPA={sorted(listed - i18n._RTL_LANGS)}, '
         f'only in resolver={sorted(i18n._RTL_LANGS - listed)}'
     )
+
+
+# ── Delivered translations: what the sync bot commits must not be able to break us ──
+
+def test_a_malformed_delivered_file_falls_back_to_english_entirely(tmp_path):
+    """translatewiki commits `i18n/<code>.json` with no human in the loop.
+
+    `load()` skips a file it cannot parse, so the locale simply never exists and every lookup
+    falls through to English. Worth pinning: this is the property that makes an automated
+    delivery safe to merge, and it is cheaper than validating the bot's output in CI.
+    """
+    directory = _setup(tmp_path, {'en': {'greet': 'Hello', 'bye': 'Bye'}})
+    (directory / 'nl.json').write_text('{ this is not json', encoding='utf-8')
+    i18n.load(str(directory))
+
+    assert not i18n.has_locale('nl')
+    assert i18n.resolve('greet', 'nl') == 'Hello'
+    assert i18n.all_messages('nl') == {'greet': 'Hello', 'bye': 'Bye'}
+
+
+def test_a_non_string_value_in_a_delivered_file_is_ignored(tmp_path):
+    """Only strings are messages; anything else falls back rather than reaching a template."""
+    _setup(tmp_path, {
+        'en': {'greet': 'Hello', 'count': 'One'},
+        'nl': {'greet': 'Hallo', 'count': {'unexpected': 'object'}},
+    })
+    assert i18n.resolve('greet', 'nl') == 'Hallo'
+    assert i18n.resolve('count', 'nl') == 'One'          # not the dict, not a crash
+
+
+def test_a_translation_for_a_deleted_message_is_not_served(tmp_path):
+    """A stale translated key must be inert, not additive.
+
+    translatewiki keeps a translation until it next syncs, so after a key is deleted from
+    en.json the delivered file still carries it. English defines what exists and a translation
+    only supplies values, so the stale entry must not reach the client -- otherwise deleting a
+    key would mean waiting for translatewiki to catch up, or hand-editing a delivered file,
+    which `plan_i18n.md` rule 1 forbids.
+    """
+    _setup(tmp_path, {
+        'en': {'greet': 'Hello'},
+        'nl': {'greet': 'Hallo', 'since-deleted': 'Verwijderd'},
+    })
+    served = i18n.all_messages('nl')
+
+    assert served == {'greet': 'Hallo'}
+    assert 'since-deleted' not in served
+    # The resolver may still answer for it; only the served catalogue is authoritative about
+    # which messages exist, and that is what the SPA loads.
+    assert set(served) == {'greet'}
