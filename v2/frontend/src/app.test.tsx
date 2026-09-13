@@ -537,7 +537,9 @@ test('votes in Explore through the wiki-polis API contract', async () => {
 
   fireEvent.click(await screen.findByRole('button', {name: 'Agree'}));
 
-  expect(await screen.findByText('AGREE', {selector: '#voted-label'})).toBeVisible();
+  // text-transform is visual only, so the DOM text -- and what a screen reader reads -- is
+  // sentence case. Asserting on it keeps the casing a CSS concern, not a message one.
+  expect(await screen.findByText('You voted: Agree', {selector: '#voted-label'})).toBeVisible();
   expect(screen.getByRole('button', {name: /Move on/})).toBeVisible();
 });
 
@@ -552,7 +554,7 @@ test('records a pass and opens the legacy post-vote choices', async () => {
 
   fireEvent.click(await screen.findByRole('button', {name: 'Pass'}));
 
-  expect(await screen.findByText('PASS', {selector: '#voted-label'})).toBeVisible();
+  expect(await screen.findByText('You voted: Pass', {selector: '#voted-label'})).toBeVisible();
   expect(screen.getByText('What now?')).toBeVisible();
   expect(screen.getByRole('button', {name: /Suggest different wording/})).toBeVisible();
 });
@@ -774,7 +776,7 @@ test('submits clearer wording through the idempotent statement contract', async 
   fireEvent.change(text, {target: {value: 'Invest together in shared technical infrastructure.'}});
   fireEvent.click(screen.getByRole('button', {name: 'Submit & next'}));
 
-  expect(await screen.findByText('PROPOSED — heading to moderation')).toBeVisible();
+  expect(await screen.findByText('Proposed — heading to moderation')).toBeVisible();
 });
 
 test('submits a new statement from the Explore loop', async () => {
@@ -793,7 +795,7 @@ test('submits a new statement from the Explore loop', async () => {
   });
   fireEvent.click(screen.getByRole('button', {name: 'Submit & next'}));
 
-  expect(await screen.findByText('PROPOSED — heading to moderation')).toBeVisible();
+  expect(await screen.findByText('Proposed — heading to moderation')).toBeVisible();
 });
 
 test('freezes a statement attempt when the upstream outcome is unknown', async () => {

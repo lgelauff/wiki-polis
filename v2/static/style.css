@@ -869,6 +869,7 @@ h3.conv-card-title-wrap {
   letter-spacing: 0.05em;
   background: rgba(31,138,91,0.1);
   color: var(--agree);
+  text-transform: uppercase;
 }
 
 .voted-badge[data-type="neutral"]  { background: rgba(61,109,186,0.1); color: var(--pass); }
@@ -1137,6 +1138,7 @@ h3.conv-card-title-wrap {
   font-size: 12.5px;
   letter-spacing: 0.04em;
   color: var(--spot);
+  text-transform: uppercase;
 }
 
 .propose-next-btn {
