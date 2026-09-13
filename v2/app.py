@@ -20,6 +20,8 @@ from urllib.parse import quote, urlencode, urlparse, urljoin
 
 import coolname
 import nh3
+from urllib.parse import unquote
+
 import requests
 from dotenv import load_dotenv
 from flask import (Flask, abort, current_app, g, jsonify,
@@ -162,7 +164,19 @@ _SPA_BOOTSTRAP_MESSAGES = {
 # Matched structurally, not as a literal: v2/static/spa is gitignored and built at deploy
 # time, so a build tool that emits <html lang=en> or reorders attributes would silently turn
 # this whole feature off. A miss is logged rather than passing quietly.
-_HTML_OPEN_TAG_RE = re.compile(r'<html\b[^>]*>', re.I)
+_HTML_OPEN_TAG_RE = re.compile(r'<html\b([^>]*)>', re.I)
+# Attributes this stamp owns. Anything else on the tag — a build's class or
+# data-build, a framework hook — is carried through untouched: replacing the whole
+# tag would drop it silently, with count==1 reporting success.
+_STAMPED_ATTR_RE = re.compile(r'\s*\b(?:lang|dir|data-msg-[a-z-]+)\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)', re.I)
+# A ?uselang value reaches banana-i18n on the client, which throws on anything that is not a
+# well-formed language tag — inside the provider that wraps every route, with no error
+# boundary above it, so the page goes blank. `en_US` is exactly what someone reaching for the
+# inspection door types. Gate the shape here and identically on the client (USELANG_RE in
+# i18n/messages.tsx), so both ends reject the same inputs; this is stricter than banana's own
+# check, which makes the crash unreachable while leaving qqx, he and pt-br through.
+_USELANG_RE = re.compile(r'^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8}){0,3}$')
+
 _spa_shell_cache: dict = {}
 
 
@@ -196,16 +210,16 @@ def _spa_shell_response():
     attrs = [
         f'lang="{html.escape(locale, quote=True)}"',
         f'dir="{html.escape(g.get("dir") or "ltr", quote=True)}"',
-        # The client cannot re-derive this: readLocale() has no Accept-Language step, so
-        # without it the SPA would compute a different locale than the document was stamped
-        # with and reset <html lang> after first paint.
-        f'data-locale="{html.escape(locale, quote=True)}"',
     ]
     for name, (key, english) in _SPA_BOOTSTRAP_MESSAGES.items():
         text = _spa_bootstrap_text(key, english, locale)
         attrs.append(f'data-msg-{name}="{html.escape(text, quote=True)}"')
 
-    stamped, count = _HTML_OPEN_TAG_RE.subn(lambda _: f'<html {" ".join(attrs)}>', document, count=1)
+    def _stamp(match):
+        kept = _STAMPED_ATTR_RE.sub('', match.group(1)).strip()
+        return f'<html {" ".join(attrs)}{" " + kept if kept else ""}>'
+
+    stamped, count = _HTML_OPEN_TAG_RE.subn(_stamp, document, count=1)
     if not count:
         current_app.logger.warning(
             'SPA shell has no <html> tag to stamp; serving it unlocalised (locale=%s)', locale)
@@ -218,7 +232,7 @@ def _spa_shell_response():
     # React and re-announce the loading status. Vary covers the negotiation inputs, and the
     # ETag is computed over the stamped body so it is already locale-specific.
     response.headers['Cache-Control'] = 'private, no-cache'
-    response.headers['Vary'] = 'Accept-Language, Cookie'
+    response.headers['Vary'] = 'Cookie'
     response.add_etag()
     return response.make_conditional(request)
 
@@ -4979,21 +4993,38 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.before_request
     def _negotiate_locale():
-        # Resolve the UI locale: ?uselang= (explicit) -> uselang cookie -> Accept-Language
-        # best match among enabled -> default. qqx (message keys) is always available for QA.
-        # Registered ahead of the SPA shell handler so the locale is settled even on requests
-        # that short-circuit before route dispatch.
+        # Resolve the UI locale: ?uselang= (explicit) -> uselang cookie -> default. qqx
+        # (message keys) is always available for QA. Registered ahead of the SPA shell handler
+        # so the locale is settled even on requests that short-circuit before route dispatch.
+        #
+        # Deliberately no Accept-Language step. The SPA has to compute the same locale as the
+        # server — it decides which catalogue to fetch — and it cannot reproduce a best_match
+        # against ENABLED_LOCALES, which it does not know. Keeping a step only one end can
+        # perform means the document says one language and the content is another. It also
+        # means a browser header could hand someone a partly-translated interface they never
+        # asked for; the language switcher in the header makes that an explicit choice, and
+        # the choice persists in the cookie set below.
         enabled = app.config['ENABLED_LOCALES']
         requested = (request.args.get('uselang') or '').strip()
+        if requested and not _USELANG_RE.match(requested):
+            requested = ''
         persist = None
-        if requested == i18n.DEBUG_LOCALE:
-            locale = i18n.DEBUG_LOCALE
-        elif requested in enabled:
-            locale = persist = requested
-        elif (cookie := (request.cookies.get('uselang') or '').strip()) in enabled:
+        if requested:
+            # Any locale, not only an enabled one. ENABLED_LOCALES says what the switcher
+            # offers; ?uselang= is the inspection door, which is how qqx has always worked
+            # and is what lets a translator see their language — or an RTL layout — before it
+            # is switched on. Untranslated messages fall back to English per key, so the page
+            # renders in the requested language's direction with English text, which is the
+            # familiar MediaWiki behaviour. Only an *enabled* locale is remembered below, so
+            # a forced preview is deliberately not sticky.
+            locale = requested
+            persist = requested if requested in enabled else None
+        elif (cookie := unquote((request.cookies.get('uselang') or '').strip())) in enabled:
+            # Decoded before comparing, because the client decodes it too: a "%6El" cookie
+            # would otherwise be rejected here and accepted as "nl" there.
             locale = cookie
         else:
-            locale = request.accept_languages.best_match(enabled) or app.config['DEFAULT_LOCALE']
+            locale = app.config['DEFAULT_LOCALE']
         g.locale = locale
         g.dir = i18n.text_direction(locale)
         g._persist_locale = persist

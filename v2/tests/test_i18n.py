@@ -100,16 +100,33 @@ def test_qqx_is_available_without_being_an_enabled_locale(app, client):
         assert flask_g.dir == 'ltr'
 
 
-def test_locale_falls_back_to_default_when_not_enabled(app):
-    # A locale that exists in the catalogue but is not enabled must not be selected.
+def test_an_unenabled_locale_can_be_forced_but_is_not_remembered(app):
+    """ENABLED_LOCALES governs the switcher, not what ?uselang= may reach.
+
+    Forcing a locale renders the page in that language's direction with English filling
+    whatever is untranslated — the familiar MediaWiki behaviour, and how a translator or an
+    operator previews a language, or an RTL layout, before switching it on. This test used to
+    assert the opposite; the change is deliberate, and the guarantee that replaced it is the
+    one below: a preview is never persisted, so it cannot follow the next reader.
+    """
     with app.test_request_context('/api/v1/session?uselang=fr'):
         app.preprocess_request()
-        assert flask_g.locale == app.config['DEFAULT_LOCALE']
+        assert flask_g.locale == 'fr'
+        assert flask_g.get('_persist_locale') is None
 
 
 def test_unenabled_locale_is_not_persisted_as_a_cookie(client):
     resp = client.get('/?uselang=fr')
     assert not any('uselang=' in c for c in resp.headers.getlist('Set-Cookie'))
+
+
+def test_a_remembered_locale_is_dropped_once_it_stops_being_offered(app):
+    """The cookie is the one path ENABLED_LOCALES still gates — otherwise withdrawing a
+    locale would strand returning readers on it."""
+    app.config['ENABLED_LOCALES'] = ['en']
+    with app.test_request_context('/api/v1/session', headers={'Cookie': 'uselang=fr'}):
+        app.preprocess_request()
+        assert flask_g.locale == app.config['DEFAULT_LOCALE']
 
 
 # ── CI coverage guards on the real message catalogue ─────────────────────────
@@ -376,3 +393,85 @@ def test_a_translation_for_a_deleted_message_is_not_served(tmp_path):
     # The resolver may still answer for it; only the served catalogue is authoritative about
     # which messages exist, and that is what the SPA loads.
     assert set(served) == {'greet'}
+
+
+# ── The language switcher's data ─────────────────────────────────────────────
+
+def test_the_session_offers_the_enabled_locales_with_their_own_names(client, app):
+    """The switcher shows autonyms: someone looking for Dutch scans for "Nederlands"."""
+    app.config['ENABLED_LOCALES'] = ['en', 'nl']
+    data = client.get('/api/v1/session').get_json()['data']
+    assert data['locales']['current'] == 'en'
+    assert data['locales']['available'] == [
+        {'code': 'en', 'name': 'English'},
+        {'code': 'nl', 'name': 'Nederlands'},
+    ]
+
+
+def test_the_session_reports_the_locale_this_request_negotiated(client, app):
+    app.config['ENABLED_LOCALES'] = ['en', 'nl']
+    data = client.get('/api/v1/session?uselang=nl').get_json()['data']
+    assert data['locales']['current'] == 'nl'
+
+
+def test_an_unnamed_locale_degrades_to_its_code_rather_than_blank():
+    """Autonyms are added alongside each translation, so a new code may arrive first."""
+    assert i18n.language_name('en') == 'English'
+    assert i18n.language_name('zxx') == 'zxx'
+
+
+def test_a_malformed_uselang_is_ignored_on_both_ends(app):
+    """banana-i18n throws on a code that is not a well-formed tag.
+
+    It is constructed in the render body of the provider wrapping every route, with no error
+    boundary above it, so an unfiltered ?uselang blanks the page — and `en_US` is exactly what
+    someone reaching for the inspection door types. The gate here must stay identical to
+    USELANG_RE in frontend/src/i18n/messages.tsx, or the two ends reject different inputs.
+    """
+    for bad in ('en_US', 'en US', '  ', '<script>', 'e', 'toolongcode', 'nl%E4'):
+        with app.test_request_context(f'/api/v1/session?uselang={bad}'):
+            app.preprocess_request()
+            assert flask_g.locale == app.config['DEFAULT_LOCALE'], bad
+    for good in ('en', 'he', 'qqx', 'pt-br', 'he-IL'):
+        with app.test_request_context(f'/api/v1/session?uselang={good}'):
+            app.preprocess_request()
+            assert flask_g.locale == good, good
+
+
+def test_the_uselang_gate_matches_the_one_the_spa_uses():
+    """Same inputs rejected on both ends, or a crafted link reaches banana on one of them."""
+    import re as _re
+    from pathlib import Path
+    import app as app_module
+
+    source = (Path(__file__).resolve().parents[1] / 'frontend' / 'src' / 'i18n' / 'messages.tsx'
+              ).read_text(encoding='utf-8')
+    spa = _re.search(r'const USELANG_RE = /\^(.+)\$/;', source)
+    assert spa, 'USELANG_RE not found in messages.tsx — has it been renamed?'
+    assert spa.group(1) == app_module._USELANG_RE.pattern.strip('^$'), (
+        'the SPA and the server gate ?uselang differently; they must reject the same inputs'
+    )
+
+
+def test_a_percent_encoded_cookie_is_read_the_same_way_the_spa_reads_it(app):
+    """The client decodes the cookie, so the server must too.
+
+    Otherwise `uselang=%6El` is rejected here and accepted as `nl` there — a disagreement on
+    the one path both ends are supposed to gate identically.
+    """
+    app.config['ENABLED_LOCALES'] = ['en', 'nl']
+    with app.test_request_context('/api/v1/session', headers={'Cookie': 'uselang=%6El'}):
+        app.preprocess_request()
+        assert flask_g.locale == 'nl'
+
+
+def test_a_qqx_cookie_is_refused(app):
+    """?uselang=qqx works; a qqx cookie is something the server never writes.
+
+    Honouring one on the client would guarantee a disagreement: the page saying one language
+    while every wired string renders as (message-key).
+    """
+    app.config['ENABLED_LOCALES'] = ['en', 'nl']
+    with app.test_request_context('/api/v1/session', headers={'Cookie': 'uselang=qqx'}):
+        app.preprocess_request()
+        assert flask_g.locale == app.config['DEFAULT_LOCALE']

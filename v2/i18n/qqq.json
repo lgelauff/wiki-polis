@@ -884,6 +884,7 @@
     "fork-real-sub": "Subtitle under {{msg-proto|fork-real-title}}: the point of difference from the demo card.",
     "fork-real-cta": "Call to action on the real-consultations card. The arrow is decorative.",
     "fork-real-aria": "Accessible name for the whole real-consultations card, which is one link.",
+    "base-language-label": "Accessible name for the language switcher in the site header. The options are language autonyms and are never translated — a reader looking for Dutch scans for \"Nederlands\".",
     "base-loading-conversations": "Shown while the app is still fetching. It renders before the message catalogue has loaded, so the server stamps it into the page; see {{msg-proto|base-skip-to-content}}, which is delivered the same way.",
     "errorpage-code": "Small label above the heading on a server error page. $1 is the HTTP status code, e.g. 404.",
     "errorpage-404-title": "Heading of the 404 page.",

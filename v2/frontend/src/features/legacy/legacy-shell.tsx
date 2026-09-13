@@ -1,9 +1,10 @@
 import {useLayoutEffect, type ReactNode} from 'react';
 import {useSuspenseQuery} from '@tanstack/react-query';
+import {useLocation} from 'react-router-dom';
 
 import {sessionQuery} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
-import {useMessage} from '../../i18n/messages';
+import {useLocale, useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 
 type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'admin' | 'plain';
@@ -61,6 +62,61 @@ function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
   }, [demo, title]);
 }
 
+
+/** Language switcher.
+ *
+ *  Links carrying `?uselang=`, not a <select> with an onChange: the parameter is the
+ *  interface, so a link is shareable, works without JavaScript, survives a middle-click, and
+ *  needs no state. The server persists the choice to the `uselang` cookie, so it outlives the
+ *  query string.
+ *
+ *  `reloadDocument` because a language change has to be a full navigation, not a client-side
+ *  route change. The server re-negotiates, sets the cookie, and re-stamps <html lang> and the
+ *  pre-catalogue strings; MessageProvider reads the locale once at mount, so a soft navigation
+ *  would leave the document claiming the old language while the content changed underneath.
+ *
+ *  Option labels are autonyms and are deliberately NOT translated — someone looking for Dutch
+ *  is scanning for "Nederlands". Only the group's accessible name is a message.
+ *
+ *  Hidden until a second language exists, so it is not a dead control on every page;
+ *  `aria-current` marks the active one rather than styling alone. */
+/** The current URL with `uselang` set, keeping everything else.
+ *
+ *  A bare "?uselang=nl" href is resolved against the path but drops the rest of the query
+ *  and the fragment — and the fragment carries the workspace tab (#tab-arguments), so a
+ *  reader switching language would lose their place. */
+function localeHref(location: {pathname: string; search: string; hash: string}, code: string) {
+  const params = new URLSearchParams(location.search);
+  params.set('uselang', code);
+  return `${location.pathname}?${params.toString()}${location.hash}`;
+}
+
+function LanguageSwitcher({locales, active, msg}: {
+  locales: {current: string; available: {code: string; name: string}[]};
+  active: string;
+  msg: Message;
+}) {
+  const location = useLocation();
+  // One language is not a choice. ENABLED_LOCALES ships as ['en'], so without this every
+  // page would carry a landmark holding a single link to the page you are already on.
+  if (locales.available.length < 2) return null;
+  return (
+    <nav className="lang-switch" aria-label={msg('base-language-label')}>
+      {locales.available.map((locale) => (
+        <InternalLink
+          key={locale.code}
+          className={`lang-switch-opt${locale.code === active ? ' is-active' : ''}`}
+          href={localeHref(location, locale.code)}
+          hrefLang={locale.code}
+          lang={locale.code}
+          aria-current={locale.code === active ? 'true' : undefined}
+          reloadDocument
+        >{locale.name}</InternalLink>
+      ))}
+    </nav>
+  );
+}
+
 export function LegacyShell({
   children,
   crumb,
@@ -77,6 +133,7 @@ export function LegacyShell({
   title?: string;
 }) {
   const msg = useMessage();
+  const activeLocale = useLocale();
   const {data: session} = useSuspenseQuery(sessionQuery());
   const authenticated = session.state === 'authenticated';
   useLegacyDocument({demo: headerMode === 'demo' || headerMode === 'conversation-demo', title});
@@ -126,6 +183,7 @@ export function LegacyShell({
                 >{msg('base-mode-real')}</InternalLink>
               </div>
             )}
+            <LanguageSwitcher locales={session.locales} active={activeLocale} msg={msg} />
             {authenticated ? (
               <>
                 <span className="header-user-chip">

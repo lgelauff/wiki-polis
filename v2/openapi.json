@@ -1619,7 +1619,7 @@
       },
       "Session": {
         "type": "object",
-        "required": ["state", "user", "capabilities", "csrfToken", "developerLogins", "gitVersion", "links"],
+        "required": ["state", "user", "capabilities", "csrfToken", "developerLogins", "gitVersion", "locales", "links"],
         "additionalProperties": false,
         "properties": {
           "state": {"type": "string", "enum": ["anonymous", "authenticated", "demo"]},
@@ -1636,7 +1636,31 @@
             "items": {"$ref": "#/components/schemas/DeveloperLogin"}
           },
           "gitVersion": {"type": "string", "minLength": 1},
+          "locales": {"$ref": "#/components/schemas/SessionLocales"},
           "links": {"$ref": "#/components/schemas/SessionLinks"}
+        }
+      },
+      "SessionLocales": {
+        "type": "object",
+        "description": "Languages the interface is offered in, for the language switcher.",
+        "required": ["current", "available"],
+        "additionalProperties": false,
+        "properties": {
+          "current": {"type": "string", "minLength": 1, "description": "Locale negotiated for this request."},
+          "available": {
+            "type": "array",
+            "description": "Offered locales, in configured order.",
+            "items": {"$ref": "#/components/schemas/OfferedLocale"}
+          }
+        }
+      },
+      "OfferedLocale": {
+        "type": "object",
+        "required": ["code", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "code": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1, "description": "The language's own name (autonym); never translated."}
         }
       },
       "DeveloperLogin": {

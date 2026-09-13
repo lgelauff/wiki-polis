@@ -1930,7 +1930,20 @@ export interface components {
             csrfToken: string;
             developerLogins: components["schemas"]["DeveloperLogin"][];
             gitVersion: string;
+            locales: components["schemas"]["SessionLocales"];
             links: components["schemas"]["SessionLinks"];
+        };
+        /** @description Languages the interface is offered in, for the language switcher. */
+        SessionLocales: {
+            /** @description Locale negotiated for this request. */
+            current: string;
+            /** @description Offered locales, in configured order. */
+            available: components["schemas"]["OfferedLocale"][];
+        };
+        OfferedLocale: {
+            code: string;
+            /** @description The language's own name (autonym); never translated. */
+            name: string;
         };
         DeveloperLogin: {
             username: string;

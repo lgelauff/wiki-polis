@@ -4499,3 +4499,22 @@ body[data-demo] {
   white-space: nowrap;
 }
 .space-warn-ok:hover { background: rgba(0, 0, 0, 0.05); }
+
+/* Language switcher in the site header. One option today; laid out so a second does not
+   need a redesign. Autonyms are never translated, so they may be any script — hence no
+   text-transform and a direction-neutral gap rather than margins. */
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.lang-switch-opt {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.lang-switch-opt:hover,
+.lang-switch-opt:focus-visible { color: var(--ink); background: var(--surface2); }
+.lang-switch-opt.is-active { color: var(--ink); font-weight: 600; }
