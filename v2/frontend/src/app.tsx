@@ -98,11 +98,23 @@ function DeferredRoutes() {
   );
 }
 
+/** Messages that render before <MessageProvider> exists.
+ *
+ *  The provider suspends on the session query and then waits on the catalogue fetch, so
+ *  anything above it — the skip link, and the fallback shown while it suspends — cannot call
+ *  msg(). The server stamps them onto <html> as data-msg-* while serving the shell, because
+ *  it already knows the negotiated locale. English here is the last resort for a shell served
+ *  from somewhere that does not stamp them, e.g. a bare static preview of the build. */
+function bootstrapMessage(name: 'skip' | 'loading', fallback: string) {
+  if (typeof document === 'undefined') return fallback;
+  return document.documentElement.dataset[name === 'skip' ? 'msgSkip' : 'msgLoading'] || fallback;
+}
+
 export function App() {
   return (
     <>
-      <a className="skip-link" href="#main">Skip to main content</a>
-      <Suspense fallback={<p className="loading-state" role="status">Loading conversations…</p>}>
+      <a className="skip-link" href="#main">{bootstrapMessage('skip', 'Skip to main content')}</a>
+      <Suspense fallback={<p className="loading-state" role="status">{bootstrapMessage('loading', 'Loading conversations…')}</p>}>
         {/* Inside the existing boundary on purpose: the catalogue fetch reuses this
             fallback instead of adding a second async gate in front of every route. */}
         <MessageProvider>

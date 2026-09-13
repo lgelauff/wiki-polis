@@ -20,7 +20,8 @@ export function textDirection(locale: string): 'rtl' | 'ltr' {
 }
 
 /** Mirrors the server's own precedence in `_negotiate_locale`: ?uselang= wins, then the
- *  `uselang` cookie (deliberately not HttpOnly so the client can read it), then English.
+ *  `uselang` cookie (deliberately not HttpOnly so the client can read it), then whatever the
+ *  server negotiated, then English.
  *
  *  Both ends must reach the same answer — the server stamps <html lang> and the pre-catalogue
  *  strings, the client picks which catalogue to fetch — so neither may consult anything the
@@ -31,12 +32,20 @@ export function textDirection(locale: string): 'rtl' | 'ltr' {
  *  The query parameter is not optional. `qqx` -- the QA locale that renders message keys,
  *  and the only way to see which strings are still unwrapped -- bypasses ENABLED_LOCALES
  *  and is deliberately never written to the cookie. Reading the cookie alone would leave
- *  the SPA in English for the one locale whose entire purpose is to inspect the SPA. */
+ *  the SPA in English for the one locale whose entire purpose is to inspect the SPA.
+ *
+ *  The `data-locale` step is what keeps the two ends agreeing. The server's last resort is
+ *  Accept-Language, which the browser does not expose to script, so without it a visitor
+ *  whose header says `nl` gets a document stamped `lang="nl"` and then a SPA that computes
+ *  `en`, fetches the English catalogue and resets `lang` after first paint -- leaving the
+ *  server-stamped skip link stranded in the other language. Read the attribute the server
+ *  stamped rather than `documentElement.lang`, which the effect below also writes. */
 export function readLocale(): string {
   const requested = new URLSearchParams(window.location.search).get('uselang');
   if (requested) return requested;
   const match = document.cookie.match(/(?:^|;\s*)uselang=([^;]+)/);
-  return match?.[1] ? decodeURIComponent(match[1]) : SOURCE_LOCALE;
+  if (match?.[1]) return decodeURIComponent(match[1]);
+  return document.documentElement.dataset.locale || SOURCE_LOCALE;
 }
 
 /** The catalogue is a bare `{key: text}` map, not the `{data: ...}` envelope the rest of
