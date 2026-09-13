@@ -48,3 +48,18 @@ def test_document_navigation_is_confined_to_the_server_redirect_boundary():
             navigation_sources.append(source.relative_to(SPA_SOURCE))
 
     assert sorted(navigation_sources) == [Path('features/legacy/external-redirect.tsx')]
+
+
+def test_the_shell_source_has_an_html_tag_the_server_can_stamp():
+    """Pin the contract where index.html is actually owned.
+
+    The server rewrites the <html> tag to carry the negotiated locale. It matches the tag
+    structurally so a reordered or unquoted attribute still works, and logs a miss — but a
+    build tool that dropped the tag entirely would turn the feature off with only a log line
+    to show for it. This is the cheap place to notice.
+    """
+    from pathlib import Path
+    import re
+
+    source = (Path(__file__).resolve().parents[1] / 'frontend' / 'index.html').read_text(encoding='utf-8')
+    assert re.search(r'<html\b[^>]*>', source, re.I), 'frontend/index.html has no <html> tag'

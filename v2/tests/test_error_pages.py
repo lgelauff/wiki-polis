@@ -135,3 +135,45 @@ def test_unhandled_status_falls_back_to_the_server_error_page():
     from error_pages import render_error_page
 
     assert 'Something went wrong' in render_error_page(418)
+
+
+def test_the_error_page_carries_the_text_direction(app):
+    """Without dir an RTL locale renders left-to-right, and this is the page that renders
+    when the SPA — which would otherwise fix it — is the thing that is broken."""
+    import error_pages
+    with app.test_request_context('/'):
+        from flask import g
+        g.locale, g.dir = 'he', 'rtl'
+        page = error_pages.render_error_page(404)
+    assert '<html lang="he" dir="rtl">' in page
+
+
+def test_catalogue_text_cannot_inject_markup_into_the_error_page(app, tmp_path):
+    """The copy now comes from a catalogue that translatewiki also writes to."""
+    import error_pages, i18n
+    directory = tmp_path / 'messages'
+    directory.mkdir()
+    (directory / 'en.json').write_text(
+        '{"errorpage-404-title": "</title><script>alert(1)</script>"}', encoding='utf-8')
+    i18n.load(str(directory))
+    try:
+        page = error_pages.render_error_page(404)
+        assert '<script>alert(1)</script>' not in page
+        assert '&lt;script&gt;' in page
+    finally:
+        i18n.load()
+
+
+def test_the_error_page_still_renders_with_no_catalogue_at_all(tmp_path):
+    """The guarantee the module exists for: it must not gain a new way to fail."""
+    import error_pages, i18n
+    empty = tmp_path / 'empty'
+    empty.mkdir()
+    i18n.load(str(empty))
+    try:
+        page = error_pages.render_error_page(403)
+        assert 'Not allowed' in page
+        assert 'ask an organizer' in page
+        assert i18n._MISSING_L not in page
+    finally:
+        i18n.load()
