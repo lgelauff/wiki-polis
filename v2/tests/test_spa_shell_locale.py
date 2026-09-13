@@ -102,18 +102,18 @@ def test_a_stamped_message_cannot_break_out_of_the_attribute(client, shell, tmp_
         # And the tag still has exactly the attributes we put on it.
         import re as _re
         assert sorted(_re.findall(r'(\b[a-z-]+)="', tag)) == [
-            'data-locale', 'data-msg-loading', 'data-msg-skip', 'dir', 'lang']
+            'data-msg-loading', 'data-msg-skip', 'dir', 'lang']
     finally:
         i18n.load()
 
 
-def test_accept_language_reaches_the_client_through_data_locale(client, shell, app, tmp_path):
-    """The bug this attribute exists for.
+def test_a_browser_header_does_not_choose_the_language(client, shell, app, tmp_path):
+    """Both ends must reach the same locale, and only the server could see Accept-Language.
 
-    The server's last resort is Accept-Language, which the browser does not expose to script.
-    Without a stamped locale the SPA computes its own, disagrees with the document it was
-    served, and resets <html lang> after first paint — stranding the server-stamped skip link
-    in the other language.
+    A step only one end can perform shows up as a document that says one language while its
+    content is another — the SPA fetches the catalogue for whatever *it* computed. It is also
+    a surprise: a header set from an operating-system preference would hand someone a
+    partly-translated interface they never asked for. The switcher makes it a choice.
     """
     directory = tmp_path / 'messages'
     directory.mkdir()
@@ -127,8 +127,11 @@ def test_accept_language_reaches_the_client_through_data_locale(client, shell, a
     try:
         tag = _html_tag(client.get('/', headers={'Accept-Language': 'nl,en;q=0.5'})
                         .get_data(as_text=True))
+        assert 'lang="en"' in tag
+        assert 'data-msg-skip="Skip to main content"' in tag
+        # Asking explicitly still works, and that is what the switcher's links do.
+        tag = _html_tag(client.get('/?uselang=nl').get_data(as_text=True))
         assert 'lang="nl"' in tag
-        assert 'data-locale="nl"' in tag          # what readLocale() reads back
         assert 'data-msg-skip="Ga naar de inhoud"' in tag
     finally:
         i18n.load()
@@ -163,7 +166,9 @@ def test_the_shell_revalidates_rather_than_forbidding_storage(client, shell):
     """no-store would make the page bfcache-ineligible, so Back would cold-boot the SPA."""
     response = client.get('/')
     assert response.headers['Cache-Control'] == 'private, no-cache'
-    assert 'Accept-Language' in response.headers['Vary']
+    # Cookie only: the locale comes from ?uselang (part of the URL) or the uselang cookie.
+    # Accept-Language is deliberately not consulted, so it must not appear here either.
+    assert response.headers['Vary'] == 'Cookie'
     assert response.headers.get('ETag')
     # The ETag covers the stamped body, so it is locale-specific and conditional GET works.
     again = client.get('/', headers={'If-None-Match': response.headers['ETag']})
@@ -176,3 +181,87 @@ def test_a_shell_that_is_not_valid_utf8_does_not_take_the_hook_down(client, shel
     import app as app_module
     app_module._spa_shell_cache.clear()
     assert client.get('/').status_code in (200, 404, 500)   # handled, not an unhandled crash
+
+
+@pytest.mark.parametrize(('query', 'cookie', 'enabled', 'default', 'expected'), [
+    ('?uselang=nl', None, ['en', 'nl'], 'en', 'nl'),      # explicit and offered
+    ('?uselang=fr', None, ['en', 'nl'], 'en', 'fr'),      # explicit: honoured, not offered
+    ('', 'nl', ['en', 'nl'], 'en', 'nl'),                 # remembered choice
+    ('', 'nl', ['en'], 'en', 'en'),                       # remembered, since withdrawn
+    ('', None, ['en', 'nl'], 'en', 'en'),                 # nothing asked
+    ('', None, ['en', 'nl'], 'nl', 'nl'),                 # site default is not English
+])
+def test_the_shell_and_the_session_never_disagree(
+    client, shell, app, query, cookie, enabled, default, expected,
+):
+    """The property the whole arrangement rests on, which nothing else asserted.
+
+    Every other test here checks one end alone, which is how three divergent paths sat
+    green: the server stamps <html lang> and the pre-catalogue strings, while the client
+    picks the catalogue. If those disagree the page says one language and reads as another.
+    """
+    app.config['ENABLED_LOCALES'] = enabled
+    app.config['DEFAULT_LOCALE'] = default
+    if cookie:
+        client.set_cookie('uselang', cookie)
+    try:
+        tag = _html_tag(client.get(f'/{query}').get_data(as_text=True))
+        reported = client.get(f'/api/v1/session{query}').get_json()['data']['locales']['current']
+        assert f'lang="{expected}"' in tag, tag
+        assert reported == expected
+    finally:
+        client.delete_cookie('uselang')
+
+
+def test_forcing_a_locale_by_url_previews_it_without_remembering_it(client, app, tmp_path):
+    """?uselang= is the inspection door, and ENABLED_LOCALES governs the switcher.
+
+    Forcing a locale that is not switched on renders the page in that language's direction
+    with English filling the gaps — the familiar MediaWiki behaviour, and how a translator or
+    an operator checks an RTL layout before enabling anything. It is deliberately not
+    remembered: only an enabled locale is written to the cookie, so a preview does not follow
+    the next reader on a shared machine or survive the query string.
+    """
+    directory = tmp_path / 'messages'
+    directory.mkdir()
+    (directory / 'en.json').write_text('{"greet": "Hello"}', encoding='utf-8')
+    (directory / 'he.json').write_text('{"greet": "\u05e9\u05dc\u05d5\u05dd"}', encoding='utf-8')
+    i18n.load(str(directory))
+    app.config['ENABLED_LOCALES'] = ['en']
+    try:
+        forced = client.get('/?uselang=he')
+        assert 'uselang' not in forced.headers.get('Set-Cookie', '')
+        assert client.get('/api/v1/i18n/he').get_json()['greet'] == '\u05e9\u05dc\u05d5\u05dd'
+        assert client.get('/api/v1/session?uselang=he').get_json()['data']['locales']['current'] == 'he'
+
+        app.config['ENABLED_LOCALES'] = ['en', 'he']
+        chosen = client.get('/?uselang=he')
+        assert 'uselang=he' in chosen.headers.get('Set-Cookie', '')
+    finally:
+        client.delete_cookie('uselang')
+        i18n.load()
+
+
+def test_a_remembered_locale_is_dropped_once_it_stops_being_offered(client, app):
+    """The cookie is the one path ENABLED_LOCALES still gates, on both ends."""
+    app.config['ENABLED_LOCALES'] = ['en', 'nl']
+    client.set_cookie('uselang', 'nl')
+    try:
+        assert 'lang="nl"' in _html_tag(client.get('/').get_data(as_text=True))
+        app.config['ENABLED_LOCALES'] = ['en']
+        assert 'lang="en"' in _html_tag(client.get('/').get_data(as_text=True))
+    finally:
+        client.delete_cookie('uselang')
+
+
+def test_the_stamp_keeps_attributes_the_build_put_on_the_tag(client, shell):
+    """Replacing the whole tag would drop them silently, with count==1 reporting success."""
+    (shell / 'index.html').write_text(
+        '<!doctype html>\n<html lang="en" class="no-js" data-build="abc">\n<body></body>\n</html>\n',
+        encoding='utf-8')
+    import app as app_module
+    app_module._spa_shell_cache.clear()
+    tag = _html_tag(client.get('/').get_data(as_text=True))
+    assert 'class="no-js"' in tag
+    assert 'data-build="abc"' in tag
+    assert tag.count('lang=') == 1          # ours replaced theirs rather than joining it

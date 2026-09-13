@@ -100,16 +100,33 @@ def test_qqx_is_available_without_being_an_enabled_locale(app, client):
         assert flask_g.dir == 'ltr'
 
 
-def test_locale_falls_back_to_default_when_not_enabled(app):
-    # A locale that exists in the catalogue but is not enabled must not be selected.
+def test_an_unenabled_locale_can_be_forced_but_is_not_remembered(app):
+    """ENABLED_LOCALES governs the switcher, not what ?uselang= may reach.
+
+    Forcing a locale renders the page in that language's direction with English filling
+    whatever is untranslated — the familiar MediaWiki behaviour, and how a translator or an
+    operator previews a language, or an RTL layout, before switching it on. This test used to
+    assert the opposite; the change is deliberate, and the guarantee that replaced it is the
+    one below: a preview is never persisted, so it cannot follow the next reader.
+    """
     with app.test_request_context('/api/v1/session?uselang=fr'):
         app.preprocess_request()
-        assert flask_g.locale == app.config['DEFAULT_LOCALE']
+        assert flask_g.locale == 'fr'
+        assert flask_g.get('_persist_locale') is None
 
 
 def test_unenabled_locale_is_not_persisted_as_a_cookie(client):
     resp = client.get('/?uselang=fr')
     assert not any('uselang=' in c for c in resp.headers.getlist('Set-Cookie'))
+
+
+def test_a_remembered_locale_is_dropped_once_it_stops_being_offered(app):
+    """The cookie is the one path ENABLED_LOCALES still gates — otherwise withdrawing a
+    locale would strand returning readers on it."""
+    app.config['ENABLED_LOCALES'] = ['en']
+    with app.test_request_context('/api/v1/session', headers={'Cookie': 'uselang=fr'}):
+        app.preprocess_request()
+        assert flask_g.locale == app.config['DEFAULT_LOCALE']
 
 
 # ── CI coverage guards on the real message catalogue ─────────────────────────

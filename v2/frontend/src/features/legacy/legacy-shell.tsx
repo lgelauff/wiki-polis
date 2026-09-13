@@ -1,5 +1,6 @@
 import {useLayoutEffect, type ReactNode} from 'react';
 import {useSuspenseQuery} from '@tanstack/react-query';
+import {useLocation} from 'react-router-dom';
 
 import {sessionQuery} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
@@ -77,20 +78,34 @@ function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
  *  Option labels are autonyms and are deliberately NOT translated — someone looking for Dutch
  *  is scanning for "Nederlands". Only the group's accessible name is a message.
  *
- *  Rendered even with one language, so the control exists and is testable before a second
- *  locale is delivered; `aria-current` marks the active one rather than styling alone. */
+ *  Hidden until a second language exists, so it is not a dead control on every page;
+ *  `aria-current` marks the active one rather than styling alone. */
+/** The current URL with `uselang` set, keeping everything else.
+ *
+ *  A bare "?uselang=nl" href is resolved against the path but drops the rest of the query
+ *  and the fragment — and the fragment carries the workspace tab (#tab-arguments), so a
+ *  reader switching language would lose their place. */
+function localeHref(location: {pathname: string; search: string; hash: string}, code: string) {
+  const params = new URLSearchParams(location.search);
+  params.set('uselang', code);
+  return `${location.pathname}?${params.toString()}${location.hash}`;
+}
+
 function LanguageSwitcher({locales, msg}: {
   locales: {current: string; available: {code: string; name: string}[]};
   msg: Message;
 }) {
-  if (!locales.available.length) return null;
+  const location = useLocation();
+  // One language is not a choice. ENABLED_LOCALES ships as ['en'], so without this every
+  // page would carry a landmark holding a single link to the page you are already on.
+  if (locales.available.length < 2) return null;
   return (
     <nav className="lang-switch" aria-label={msg('base-language-label')}>
       {locales.available.map((locale) => (
         <InternalLink
           key={locale.code}
           className={`lang-switch-opt${locale.code === locales.current ? ' is-active' : ''}`}
-          href={`?uselang=${encodeURIComponent(locale.code)}`}
+          href={localeHref(location, locale.code)}
           hrefLang={locale.code}
           lang={locale.code}
           aria-current={locale.code === locales.current ? 'true' : undefined}

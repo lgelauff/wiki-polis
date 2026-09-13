@@ -93,10 +93,24 @@ every page load and cannot be cached.
 
 `create_app()` resolves the UI locale once per request, before route dispatch:
 
-`?uselang=` → `uselang` cookie → `Accept-Language` best match → `DEFAULT_LOCALE`
+`?uselang=` → `uselang` cookie → `DEFAULT_LOCALE`
 
-Only codes in `ENABLED_LOCALES` are eligible. An explicit `?uselang=` choice is persisted as a
-one-year `SameSite=Lax` cookie. The result lands on `g.locale` and `g.dir`.
+`ENABLED_LOCALES` says what the **language switcher offers**, not what `?uselang=` may reach.
+Forcing any locale by URL renders the page in that language's direction with English filling
+whatever is untranslated — the familiar MediaWiki behaviour, and how a translator or operator
+previews a language, or an RTL layout, before switching it on. Only an **enabled** locale is
+persisted as a one-year `SameSite=Lax` cookie, so a forced preview is not sticky, and a
+remembered locale is dropped once it stops being offered. The result lands on `g.locale` and `g.dir`, and is stamped
+onto the `<html>` tag of the SPA shell along with the few messages that render before the
+catalogue loads.
+
+**There is deliberately no `Accept-Language` step.** The SPA has to reach the same locale as
+the server — it chooses which catalogue to fetch — and it cannot match a browser header
+against `ENABLED_LOCALES`, which it does not know. A step only one end can perform produces a
+document that says one language while its content is another. Readers choose instead, through
+the language switcher in the site header; `session.locales` tells the SPA what to offer and
+which locale this request resolved to, and `MessageProvider` clamps the requested locale to
+that list.
 
 `qqx` bypasses the enabled list so the coverage check below always works.
 

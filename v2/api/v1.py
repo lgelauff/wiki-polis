@@ -205,6 +205,12 @@ def create_api_v1_blueprint(
 
         An unknown locale is not an error — it falls back to the English map, mirroring the
         resolver's ``locale -> en -> ⧼key⧽`` chain. ``qqx`` returns ``(key)`` for every key.
+
+        Any locale is served, including one outside ``ENABLED_LOCALES``, because ``?uselang=``
+        is honoured verbatim and the shell is stamped with it — this endpoint has to be able
+        to answer for whatever the document says it is. That makes the setting a statement
+        about the switcher rather than a lock, and forcing a locale by URL is the inspection
+        door for a translation that is not switched on yet.
         Public and unauthenticated: the catalogue is the same for every caller.
         """
         return _static_asset_cache(jsonify(i18n.all_messages(locale)))
