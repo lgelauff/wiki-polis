@@ -60,6 +60,17 @@ def _server_label_tables():
     }
 
 
+def _server_label_helpers():
+    """(helper, table) for each exported helper in server-labels.ts, read from the source.
+
+    This was a hand-written list of three, so a fourth table added there reached no audience
+    and its keys were offered to translators by default rather than because a participant
+    screen uses them -- the right answer for the wrong reason, until an admin-only table.
+    """
+    source = (_SRC / 'i18n' / 'server-labels.ts').read_text(encoding='utf-8')
+    return re.findall(r'export const (\w+) = [^\n]*\n\s*resolve\((\w+_MESSAGES),', source)
+
+
 def audiences():
     """(participant, admin_only) over every key in en.json."""
     catalogue = {k for k in json.loads((_V2 / 'i18n' / 'en.json').read_text(encoding='utf-8'))
@@ -73,9 +84,7 @@ def audiences():
     # server-labels.ts maps an identifier to a key, so attribute each table to the audience
     # of whoever calls its helper.
     tables = _server_label_tables()
-    for helper, table in (('phaseLabel', 'PHASE_MESSAGES'),
-                          ('tabLabel', 'TAB_MESSAGES'),
-                          ('routeLabel', 'ROUTE_MESSAGES')):
+    for helper, table in _server_label_helpers():
         seen = {'admin' if 'features/admin/' in p.as_posix() else 'participant'
                 for p in _source_files('.tsx')
                 if re.search(rf'\b{helper}\(', p.read_text(encoding='utf-8'))}
@@ -122,6 +131,15 @@ def test_the_help_pages_are_held_back_while_their_copy_is_unsettled():
     assert guidance, 'no guidance-* messages found; has the namespace been renamed?'
     assert guidance <= deferred
     assert guidance <= _deferred_from_config()
+
+
+def test_every_server_label_table_is_attributed_to_an_audience():
+    helpers = dict(_server_label_helpers())
+    assert set(helpers.values()) == set(_server_label_tables()), (
+        'a *_MESSAGES table in server-labels.ts has no exported helper this scan recognises, '
+        'so its keys reach no audience'
+    )
+    assert {'phaseLabel', 'tabLabel', 'routeLabel', 'outputLabel'} <= set(helpers)
 
 
 def test_the_split_is_not_vacuous():

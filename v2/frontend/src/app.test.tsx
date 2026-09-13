@@ -668,8 +668,10 @@ test('stays usable when the message catalogue is unavailable', async () => {
     </QueryClientProvider>,
   );
 
-  // The lane still renders from its own contract; only catalogue-sourced strings degrade.
-  expect(await screen.findByRole('heading', {name: 'Needs attention'}, {timeout: 5000})).toBeVisible();
+  // The lane still renders from its own contract; its copy degrades to visible keys, which
+  // is ugly but usable -- the alternative is a page stuck on a loading state.
+  expect(await screen.findByRole('heading', {name: 'home-section-needs-attention'}, {timeout: 5000})).toBeVisible();
+  expect(screen.getByRole('link', {name: /Community strategy/})).toHaveAttribute('href', '/c/community-strategy');
   expect(screen.queryByText('Loading conversations…')).not.toBeInTheDocument();
 });
 
