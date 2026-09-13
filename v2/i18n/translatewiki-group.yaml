@@ -45,17 +45,25 @@ INSERTABLES:
   - class: FlatPluralInsertablesSuggester
 
 # ── Held back from translators for now ──────────────────────────────────────
-# The admin console is not ready to be translated: it needs product work first, and it is
-# about a third of the catalogue's words while serving a handful of organisers per
-# consultation. Holding it back is a configuration choice only — every key, call site and
-# qqq entry stays exactly as it is, so releasing it later is deleting this list.
+# Two groups, for different reasons, released independently:
 #
-# A message reachable from a participant screen is NEVER listed here, even when the admin
-# console also shows it: participants win a tie. That is why phase-label-* is absent (it
-# renders in the participant scheduled-transition banner) while phase-route-* is present.
+#   * The admin console. It needs product work before it is worth a volunteer's time, and
+#     it is about a third of the catalogue's words while serving a handful of organisers
+#     per consultation.
+#   * The help pages (guidance-*). Their copy is still being worked on and may be expanded
+#     or dropped. Key names freeze once translators start, so churning the text behind a
+#     frozen key spends volunteer effort twice. These are participant-facing and come back
+#     as soon as the content settles.
 #
-# Generated from the audience split in tests/test_i18n_audience.py, which fails if this
-# list drifts. Do not hand-edit; re-run the test to see the expected contents.
+# Holding either back is configuration only — every key, call site and qqq entry stays, so
+# releasing one is deleting its lines from this list.
+#
+# A message reachable from a participant screen is never held back for the admin console's
+# sake: participants win a tie. That is why phase-label-* is absent (it renders in the
+# participant scheduled-transition banner) while phase-route-* is present.
+#
+# Generated from tests/test_i18n_audience.py, which fails if this list drifts. Do not
+# hand-edit; re-run the test to see the expected contents.
 #
 # NOTE for translatewiki staff: please confirm TAGS: ignored: is the right mechanism for
 # "not yet, but keep the messages" — the intent is that these are not offered for
@@ -298,6 +306,35 @@ TAGS:
     - flash-move-sync-failed
     - flash-moved-to
     - flash-phases-saved-sync-failed
+    - guidance-argument-check-claim
+    - guidance-argument-check-direction
+    - guidance-argument-check-one-point
+    - guidance-argument-check-reason
+    - guidance-argument-check-specific
+    - guidance-argument-crumb
+    - guidance-argument-doc-title
+    - guidance-argument-heading
+    - guidance-argument-intro
+    - guidance-argument-moderation-body
+    - guidance-argument-moderation-heading
+    - guidance-argument-strong-body
+    - guidance-argument-strong-label
+    - guidance-argument-weak-body
+    - guidance-argument-weak-label
+    - guidance-statement-check-neutral
+    - guidance-statement-check-one-claim
+    - guidance-statement-check-specific
+    - guidance-statement-check-statement
+    - guidance-statement-crumb
+    - guidance-statement-doc-title
+    - guidance-statement-heading
+    - guidance-statement-intro
+    - guidance-statement-pass-body
+    - guidance-statement-pass-heading
+    - guidance-statement-questions-body
+    - guidance-statement-questions-label
+    - guidance-statement-split-body
+    - guidance-statement-split-label
     - invites-access-policy
     - invites-add-heading
     - invites-crumb

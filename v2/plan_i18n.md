@@ -106,16 +106,24 @@ Settled. Changing one is a plan change, not an implementation detail.
    cross the API send a key or stable identifier the SPA maps, never display text.
 7. **Key convention:** `surface-subkey`, lowercase-hyphenated, grouped by screen. A key name
    must not contradict its own text.
-8. **Participant-facing and admin-facing messages are different audiences, and only the
-   participant half is offered to translators for now.** The admin console needs product work
-   before it is worth volunteer time, and it is about a third of the catalogue's words while
-   serving a handful of organisers per consultation. Holding it back is a translatewiki
-   configuration choice: every key, call site and `qqq` entry stays, so releasing it later is
-   deleting a list. **A message reachable from a participant screen is never held back, even
-   when the admin console shows it too** — under-translating a participant string is a
-   user-facing defect, over-translating an admin one costs a little volunteer time. The split
-   is computed, not hand-listed, in `tests/test_i18n_audience.py`, which fails if the config
-   drifts from it.
+8. **Only messages that are both participant-facing and settled are offered to translators.**
+   Two groups are held back, for different reasons, tracked separately so either can be
+   released without the other:
+
+   - **The admin console** — it needs product work before it is worth volunteer time, and it
+     is about a third of the catalogue's words while serving a handful of organisers per
+     consultation.
+   - **The help pages** (`guidance-*`) — their copy is still being worked on and may be
+     expanded or dropped. Key names freeze once translators start, so churning the text
+     behind a frozen key spends volunteer effort twice. Participant-facing, so they return as
+     soon as the content settles.
+
+   Holding either back is a translatewiki configuration choice: every key, call site and
+   `qqq` entry stays, so releasing one is deleting its lines from a list. **A message
+   reachable from a participant screen is never held back for the admin console's sake** —
+   under-translating a participant string is a user-facing defect, over-translating an admin
+   one costs a little volunteer time. The split is computed, not hand-listed, in
+   `tests/test_i18n_audience.py`, which fails if the config drifts from it.
 9. **The product is called Proto.** Settled 2026-09-12, and recorded here because two of its
    consequences are hard to reverse: the translatewiki group id is `proto`, and a group id
    freezes when translators start; and nine catalogue messages carry the name in their
