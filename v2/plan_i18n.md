@@ -68,7 +68,11 @@ already-keyed share as a floor. (`i18n/README.md` claims 72% of SPA copy has a k
 says ~51%. The scan is the pessimistic one because it counts non-copy strings that could
 never have a key.)
 
-**Participant — 15 components, ≤304 strings, 154 already keyed:**
+**Participant — 15 components, ≤304 strings, 154 already keyed.** These carry the 514
+messages offered for translation; the other 356 are the admin console, held back under
+rule 8.
+
+**Participant components:**
 `argument-mapping-panel` (56/23 keyed), `conversation-lane-page` (38/19),
 `guidance-pages` (35/12), `conversation-read-pages` (34/22),
 `participation-entry-page` (33/28), `identity-reveal-page` (25/19),
@@ -102,7 +106,17 @@ Settled. Changing one is a plan change, not an implementation detail.
    cross the API send a key or stable identifier the SPA maps, never display text.
 7. **Key convention:** `surface-subkey`, lowercase-hyphenated, grouped by screen. A key name
    must not contradict its own text.
-8. **The product is called Proto.** Settled 2026-09-12, and recorded here because two of its
+8. **Participant-facing and admin-facing messages are different audiences, and only the
+   participant half is offered to translators for now.** The admin console needs product work
+   before it is worth volunteer time, and it is about a third of the catalogue's words while
+   serving a handful of organisers per consultation. Holding it back is a translatewiki
+   configuration choice: every key, call site and `qqq` entry stays, so releasing it later is
+   deleting a list. **A message reachable from a participant screen is never held back, even
+   when the admin console shows it too** — under-translating a participant string is a
+   user-facing defect, over-translating an admin one costs a little volunteer time. The split
+   is computed, not hand-listed, in `tests/test_i18n_audience.py`, which fails if the config
+   drifts from it.
+9. **The product is called Proto.** Settled 2026-09-12, and recorded here because two of its
    consequences are hard to reverse: the translatewiki group id is `proto`, and a group id
    freezes when translators start; and nine catalogue messages carry the name in their
    English text, so a later rename means re-translating them in every language. The
