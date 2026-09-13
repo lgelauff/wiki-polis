@@ -3,6 +3,8 @@ import {useSuspenseQuery} from '@tanstack/react-query';
 
 import {sessionQuery} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
+import {useMessage} from '../../i18n/messages';
+import {escapeHtml, richHtml} from '../../i18n/rich-html';
 
 type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'admin' | 'plain';
 
@@ -74,6 +76,7 @@ export function LegacyShell({
   toast?: ReactNode;
   title?: string;
 }) {
+  const msg = useMessage();
   const {data: session} = useSuspenseQuery(sessionQuery());
   const authenticated = session.state === 'authenticated';
   useLegacyDocument({demo: headerMode === 'demo' || headerMode === 'conversation-demo', title});
@@ -87,7 +90,7 @@ export function LegacyShell({
               <OrbitMark />
               <span className="header-title">Proto</span>
             </InternalLink>
-            {headerMode === 'admin' && <span className="header-mode-badge">Admin</span>}
+            {headerMode === 'admin' && <span className="header-mode-badge">{msg('base-admin-badge')}</span>}
             {headerCrumb}
             {!headerCrumb && crumb && (
               <span className="header-crumb">
@@ -101,26 +104,26 @@ export function LegacyShell({
             {headerMode !== 'plain' && headerMode !== 'admin' && (
               headerMode === 'conversation-demo' ? (
                 <span className="mode-lock mode-lock--demo">
-                  <span className="mode-lock-dot" aria-hidden="true" />Demo
+                  <span className="mode-lock-dot" aria-hidden="true" />{msg('conv-demo-label')}
                 </span>
               ) : headerMode === 'conversation-real' ? (
                 <span className="mode-lock mode-lock--real">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                     <rect x="5" y="11" width="14" height="10" rx="2" />
                     <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-                  </svg>Real consultation
+                  </svg>{msg('base-lock-real')}
                 </span>
-              ) : <div className="mode-switch" role="group" aria-label="Choose demo or real mode">
+              ) : <div className="mode-switch" role="group" aria-label={msg('base-mode-switch-aria')}>
                 <InternalLink
                   href="/demo"
                   className={`mode-switch-opt mode-switch-opt--demo${headerMode === 'demo' ? ' is-active' : ''}`}
                   aria-current={headerMode === 'demo' ? 'true' : undefined}
-                >Try it out</InternalLink>
+                >{msg('base-mode-demo')}</InternalLink>
                 <InternalLink
                   href="/consultations"
                   className={`mode-switch-opt mode-switch-opt--real${headerMode === 'real' ? ' is-active' : ''}`}
                   aria-current={headerMode === 'real' ? 'true' : undefined}
-                >Real</InternalLink>
+                >{msg('base-mode-real')}</InternalLink>
               </div>
             )}
             {authenticated ? (
@@ -131,14 +134,14 @@ export function LegacyShell({
                 </span>
                 <form method="post" action={session.links.logout} style={{display: 'inline'}}>
                   <input type="hidden" name="csrf_token" value={session.csrfToken} />
-                  <button type="submit" className="header-logout">log out</button>
+                  <button type="submit" className="header-logout">{msg('base-log-out')}</button>
                 </form>
                 {session.capabilities.administerSite && (
-                  <InternalLink href="/admin" className="header-admin-link">admin</InternalLink>
+                  <InternalLink href="/admin" className="header-admin-link">{msg('base-admin-link')}</InternalLink>
                 )}
               </>
             ) : (
-              <InternalLink href={session.links.login} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>log in</InternalLink>
+              <InternalLink href={session.links.login} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>{msg('base-log-in')}</InternalLink>
             )}
           </div>
         </div>
@@ -147,10 +150,9 @@ export function LegacyShell({
       <main className="legacy-main" id="main" tabIndex={-1}>{children}</main>
       <div id="toast-container">{toast}</div>
       <footer style={{display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '.5rem 1rem', fontSize: 11, color: 'var(--muted)'}}>
-        <span>
-          {'Statements and arguments are released under '}
-          <InternalLink href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener" style={{color: 'inherit'}}>CC0<span className="sr-only"> (opens in a new tab)</span></InternalLink>.
-        </span>
+        <span dangerouslySetInnerHTML={richHtml(msg('base-footer-licence',
+          `<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener" style="color:inherit">`
+          + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only">${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
         <code>{session.gitVersion}</code>
       </footer>
     </>

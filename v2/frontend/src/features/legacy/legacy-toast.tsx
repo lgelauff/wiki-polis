@@ -1,5 +1,7 @@
 import {useEffect} from 'react';
 
+import {useMessage} from '../../i18n/messages';
+
 export type LegacyToastMessage = {
   id: number;
   category: 'error' | 'import_result' | 'import_row_error' | 'info' | 'success' | 'warning';
@@ -22,6 +24,7 @@ export function LegacyToast({
   toast: LegacyToastMessage | null;
   onDismiss: () => void;
 }) {
+  const msg = useMessage();
   useEffect(() => {
     if (!toast) return undefined;
     const timer = window.setTimeout(onDismiss, durations[toast.category]);
@@ -35,7 +38,7 @@ export function LegacyToast({
   return (
     <div className={`toast toast--${toast.category}`} role={role}>
       <span className="toast__msg">{toast.message}</span>
-      <button className="toast__close" type="button" aria-label="Dismiss" onClick={onDismiss}>×</button>
+      <button className="toast__close" type="button" aria-label={msg('base-dismiss')} onClick={onDismiss}>×</button>
     </div>
   );
 }
