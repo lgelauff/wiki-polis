@@ -20,6 +20,8 @@ from urllib.parse import quote, urlencode, urlparse, urljoin
 
 import coolname
 import nh3
+from urllib.parse import unquote
+
 import requests
 from dotenv import load_dotenv
 from flask import (Flask, abort, current_app, g, jsonify,
@@ -167,6 +169,14 @@ _HTML_OPEN_TAG_RE = re.compile(r'<html\b([^>]*)>', re.I)
 # data-build, a framework hook — is carried through untouched: replacing the whole
 # tag would drop it silently, with count==1 reporting success.
 _STAMPED_ATTR_RE = re.compile(r'\s*\b(?:lang|dir|data-msg-[a-z-]+)\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)', re.I)
+# A ?uselang value reaches banana-i18n on the client, which throws on anything that is not a
+# well-formed language tag — inside the provider that wraps every route, with no error
+# boundary above it, so the page goes blank. `en_US` is exactly what someone reaching for the
+# inspection door types. Gate the shape here and identically on the client (USELANG_RE in
+# i18n/messages.tsx), so both ends reject the same inputs; this is stricter than banana's own
+# check, which makes the crash unreachable while leaving qqx, he and pt-br through.
+_USELANG_RE = re.compile(r'^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8}){0,3}$')
+
 _spa_shell_cache: dict = {}
 
 
@@ -4996,6 +5006,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         # the choice persists in the cookie set below.
         enabled = app.config['ENABLED_LOCALES']
         requested = (request.args.get('uselang') or '').strip()
+        if requested and not _USELANG_RE.match(requested):
+            requested = ''
         persist = None
         if requested:
             # Any locale, not only an enabled one. ENABLED_LOCALES says what the switcher
@@ -5007,7 +5019,9 @@ def create_app(test_config: dict | None = None) -> Flask:
             # a forced preview is deliberately not sticky.
             locale = requested
             persist = requested if requested in enabled else None
-        elif (cookie := (request.cookies.get('uselang') or '').strip()) in enabled:
+        elif (cookie := unquote((request.cookies.get('uselang') or '').strip())) in enabled:
+            # Decoded before comparing, because the client decodes it too: a "%6El" cookie
+            # would otherwise be rejected here and accepted as "nl" there.
             locale = cookie
         else:
             locale = app.config['DEFAULT_LOCALE']

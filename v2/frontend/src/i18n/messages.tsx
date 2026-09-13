@@ -4,8 +4,13 @@ import {createContext, useContext, useEffect, useMemo, type ReactNode} from 'rea
 
 import {sessionQuery} from '../api/queries';
 
-const SOURCE_LOCALE = 'en';
-const DEBUG_LOCALE = 'qqx';   // mirrors i18n.DEBUG_LOCALE
+/** Must stay identical to `_USELANG_RE` in app.py, or the two ends reject different inputs.
+ *
+ *  banana-i18n throws on a code that is not a well-formed tag — `new Banana('en_US')` raises
+ *  — and it is constructed in the render body of the provider that wraps every route, with no
+ *  error boundary above it, so a throw blanks the page. This gate is stricter than banana's
+ *  own, which makes that unreachable while leaving qqx, he and pt-br through. */
+const USELANG_RE = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8}){0,3}$/;
 
 /** Mirrors `i18n.py`'s `_RTL_LANGS` / `text_direction()`. Kept in the SPA as well as on the
  *  server because the SPA owns the <html> attributes: the server renders one shell for every
@@ -52,20 +57,40 @@ export function effectiveLocale(
   // English per key, so the page renders in the requested language's direction with English
   // text, which is the familiar MediaWiki behaviour. The server honours it identically and
   // stamps the same locale, and deliberately does not remember it.
-  if (request.explicit || request.code === DEBUG_LOCALE) return request.code;
+  if (request.explicit) return request.code;
   // A remembered cookie only while that locale is still offered — otherwise withdrawing one
   // leaves returning readers on it while the server, applying the same rule, stamps another.
-  return locales.available.some((entry) => entry.code === request.code)
+  // qqx is deliberately NOT exempt here: ?uselang=qqx works through `explicit` above, while a
+  // qqx *cookie* is something the server refuses, so honouring one would guarantee a
+  // disagreement. The server never writes it.
+  return request.code && locales.available.some((entry) => entry.code === request.code)
     ? request.code
     : locales.current;
 }
 
 export function localeRequest(): {code: string; explicit: boolean} {
   const requested = new URLSearchParams(window.location.search).get('uselang');
-  if (requested) return {code: requested, explicit: true};
+  if (requested && USELANG_RE.test(requested)) return {code: requested, explicit: true};
+
   const match = document.cookie.match(/(?:^|;\s*)uselang=([^;]+)/);
-  if (match?.[1]) return {code: decodeURIComponent(match[1]), explicit: false};
-  return {code: SOURCE_LOCALE, explicit: false};
+  if (match?.[1]) {
+    // The cookie is not HttpOnly and this host shares a domain with other tools, so it may
+    // hold something this app never wrote. An undecodable value throws URIError from
+    // decodeURIComponent during render — the same blank page as above — so treat it as absent.
+    let code = match[1];
+    try {
+      code = decodeURIComponent(code);
+    } catch {
+      code = '';
+    }
+    if (USELANG_RE.test(code)) return {code, explicit: false};
+  }
+
+  // Deliberately not English: DEFAULT_LOCALE is configured independently of ENABLED_LOCALES,
+  // so guessing 'en' here disagrees with a server whose default is something else. An empty
+  // code matches nothing in `available`, so effectiveLocale falls through to what the server
+  // actually negotiated.
+  return {code: '', explicit: false};
 }
 
 /** The catalogue is a bare `{key: text}` map, not the `{data: ...}` envelope the rest of
@@ -94,6 +119,7 @@ export function messagesQuery(locale: string, version: string) {
 export type Message = (key: string, ...params: (string | number)[]) => string;
 
 const MessageContext = createContext<Message | null>(null);
+const LocaleContext = createContext<string>('');
 
 export function MessageProvider({children, locale: override}: {children: ReactNode; locale?: string}) {
   const {data: session} = useSuspenseQuery(sessionQuery());
@@ -115,8 +141,15 @@ export function MessageProvider({children, locale: override}: {children: ReactNo
   const {data: messages, isPending} = useQuery(messagesQuery(locale, session.gitVersion ?? ''));
 
   const msg = useMemo<Message>(() => {
-    const banana = new Banana(locale, {messages: {[locale]: messages ?? {}}});
-    return (key, ...params) => banana.i18n(key, ...params);
+    // Belt and braces behind USELANG_RE. The comment below argues the interface must survive
+    // a missing catalogue; it survives a rejected locale the same way — banana throws
+    // synchronously here, and this is the render body of the provider wrapping every route.
+    try {
+      const banana = new Banana(locale, {messages: {[locale]: messages ?? {}}});
+      return (key, ...params) => banana.i18n(key, ...params);
+    } catch {
+      return (key) => key;
+    }
   }, [locale, messages]);
 
   // spec_accessibility.md: "Set `lang` (and `dir` where relevant) so screen readers pick the
@@ -138,7 +171,11 @@ export function MessageProvider({children, locale: override}: {children: ReactNo
     // least announces this one English word in the right voice.
     return <p className="loading-state" role="status">Loading…</p>;
   }
-  return <MessageContext.Provider value={msg}>{children}</MessageContext.Provider>;
+  return (
+    <LocaleContext.Provider value={locale}>
+      <MessageContext.Provider value={msg}>{children}</MessageContext.Provider>
+    </LocaleContext.Provider>
+  );
 }
 
 /** `msg('conv-col-shift')`, or `msg('conv-participant-count', 3)` for parameters.
@@ -149,4 +186,15 @@ export function useMessage(): Message {
     throw new Error('useMessage() used outside a <MessageProvider>.');
   }
   return msg;
+}
+
+
+/** The locale actually in effect.
+ *
+ *  Not `session.locales.current`: that is negotiated for the /api/v1/session XHR, which
+ *  carries no ?uselang and, for a locale that is not enabled, no cookie either — so under a
+ *  forced preview it names a different language than the page is rendering in. The switcher
+ *  needs this one to mark the right option. */
+export function useLocale(): string {
+  return useContext(LocaleContext);
 }

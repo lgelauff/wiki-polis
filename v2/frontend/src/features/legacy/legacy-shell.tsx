@@ -4,7 +4,7 @@ import {useLocation} from 'react-router-dom';
 
 import {sessionQuery} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
-import {useMessage, type Message} from '../../i18n/messages';
+import {useLocale, useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 
 type HeaderMode = 'fork' | 'demo' | 'real' | 'conversation-demo' | 'conversation-real' | 'admin' | 'plain';
@@ -91,8 +91,9 @@ function localeHref(location: {pathname: string; search: string; hash: string}, 
   return `${location.pathname}?${params.toString()}${location.hash}`;
 }
 
-function LanguageSwitcher({locales, msg}: {
+function LanguageSwitcher({locales, active, msg}: {
   locales: {current: string; available: {code: string; name: string}[]};
+  active: string;
   msg: Message;
 }) {
   const location = useLocation();
@@ -104,11 +105,11 @@ function LanguageSwitcher({locales, msg}: {
       {locales.available.map((locale) => (
         <InternalLink
           key={locale.code}
-          className={`lang-switch-opt${locale.code === locales.current ? ' is-active' : ''}`}
+          className={`lang-switch-opt${locale.code === active ? ' is-active' : ''}`}
           href={localeHref(location, locale.code)}
           hrefLang={locale.code}
           lang={locale.code}
-          aria-current={locale.code === locales.current ? 'true' : undefined}
+          aria-current={locale.code === active ? 'true' : undefined}
           reloadDocument
         >{locale.name}</InternalLink>
       ))}
@@ -132,6 +133,7 @@ export function LegacyShell({
   title?: string;
 }) {
   const msg = useMessage();
+  const activeLocale = useLocale();
   const {data: session} = useSuspenseQuery(sessionQuery());
   const authenticated = session.state === 'authenticated';
   useLegacyDocument({demo: headerMode === 'demo' || headerMode === 'conversation-demo', title});
@@ -181,7 +183,7 @@ export function LegacyShell({
                 >{msg('base-mode-real')}</InternalLink>
               </div>
             )}
-            <LanguageSwitcher locales={session.locales} msg={msg} />
+            <LanguageSwitcher locales={session.locales} active={activeLocale} msg={msg} />
             {authenticated ? (
               <>
                 <span className="header-user-chip">

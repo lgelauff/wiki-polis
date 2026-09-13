@@ -418,3 +418,60 @@ def test_an_unnamed_locale_degrades_to_its_code_rather_than_blank():
     """Autonyms are added alongside each translation, so a new code may arrive first."""
     assert i18n.language_name('en') == 'English'
     assert i18n.language_name('zxx') == 'zxx'
+
+
+def test_a_malformed_uselang_is_ignored_on_both_ends(app):
+    """banana-i18n throws on a code that is not a well-formed tag.
+
+    It is constructed in the render body of the provider wrapping every route, with no error
+    boundary above it, so an unfiltered ?uselang blanks the page — and `en_US` is exactly what
+    someone reaching for the inspection door types. The gate here must stay identical to
+    USELANG_RE in frontend/src/i18n/messages.tsx, or the two ends reject different inputs.
+    """
+    for bad in ('en_US', 'en US', '  ', '<script>', 'e', 'toolongcode', 'nl%E4'):
+        with app.test_request_context(f'/api/v1/session?uselang={bad}'):
+            app.preprocess_request()
+            assert flask_g.locale == app.config['DEFAULT_LOCALE'], bad
+    for good in ('en', 'he', 'qqx', 'pt-br', 'he-IL'):
+        with app.test_request_context(f'/api/v1/session?uselang={good}'):
+            app.preprocess_request()
+            assert flask_g.locale == good, good
+
+
+def test_the_uselang_gate_matches_the_one_the_spa_uses():
+    """Same inputs rejected on both ends, or a crafted link reaches banana on one of them."""
+    import re as _re
+    from pathlib import Path
+    import app as app_module
+
+    source = (Path(__file__).resolve().parents[1] / 'frontend' / 'src' / 'i18n' / 'messages.tsx'
+              ).read_text(encoding='utf-8')
+    spa = _re.search(r'const USELANG_RE = /\^(.+)\$/;', source)
+    assert spa, 'USELANG_RE not found in messages.tsx — has it been renamed?'
+    assert spa.group(1) == app_module._USELANG_RE.pattern.strip('^$'), (
+        'the SPA and the server gate ?uselang differently; they must reject the same inputs'
+    )
+
+
+def test_a_percent_encoded_cookie_is_read_the_same_way_the_spa_reads_it(app):
+    """The client decodes the cookie, so the server must too.
+
+    Otherwise `uselang=%6El` is rejected here and accepted as `nl` there — a disagreement on
+    the one path both ends are supposed to gate identically.
+    """
+    app.config['ENABLED_LOCALES'] = ['en', 'nl']
+    with app.test_request_context('/api/v1/session', headers={'Cookie': 'uselang=%6El'}):
+        app.preprocess_request()
+        assert flask_g.locale == 'nl'
+
+
+def test_a_qqx_cookie_is_refused(app):
+    """?uselang=qqx works; a qqx cookie is something the server never writes.
+
+    Honouring one on the client would guarantee a disagreement: the page saying one language
+    while every wired string renders as (message-key).
+    """
+    app.config['ENABLED_LOCALES'] = ['en', 'nl']
+    with app.test_request_context('/api/v1/session', headers={'Cookie': 'uselang=qqx'}):
+        app.preprocess_request()
+        assert flask_g.locale == app.config['DEFAULT_LOCALE']
