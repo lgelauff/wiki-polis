@@ -27,6 +27,23 @@ _RTL_LANGS = {
     'ku', 'mzn', 'nqo', 'pnb', 'ps', 'sd', 'ug', 'ur', 'yi',
 }
 
+# Autonyms — a language's name in that language, which is what a language switcher shows:
+# a reader looking for Dutch scans for "Nederlands", not for "Dutch". MediaWiki ships a full
+# table for this; a project this size only needs the locales it actually enables, so entries
+# are added alongside the translation rather than up front. An unlisted code falls back to
+# the code itself, which is ugly but honest.
+_AUTONYMS = {
+    'en': 'English',
+    'nl': 'Nederlands',
+    'qqx': 'qqx (message keys)',
+}
+
+
+def language_name(locale: str) -> str:
+    """The language's own name for ``locale``, for a language switcher."""
+    return _AUTONYMS.get(locale, locale)
+
+
 _MESSAGES: dict[str, dict[str, str]] = {}
 _PLURAL_RE = re.compile(r'\{\{PLURAL:\$(\d+)\|([^}]*)\}\}')
 _MISSING_L, _MISSING_R = '⧼', '⧽'   # ⧼key⧽ — loud marker for a missing message

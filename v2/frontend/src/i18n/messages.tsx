@@ -22,6 +22,12 @@ export function textDirection(locale: string): 'rtl' | 'ltr' {
 /** Mirrors the server's own precedence in `_negotiate_locale`: ?uselang= wins, then the
  *  `uselang` cookie (deliberately not HttpOnly so the client can read it), then English.
  *
+ *  Both ends must reach the same answer — the server stamps <html lang> and the pre-catalogue
+ *  strings, the client picks which catalogue to fetch — so neither may consult anything the
+ *  other cannot see. That is why the server has no Accept-Language step: the browser's header
+ *  is not something the SPA can match against ENABLED_LOCALES, and a locale only one end can
+ *  derive shows up as a document that says one language while its content is another.
+ *
  *  The query parameter is not optional. `qqx` -- the QA locale that renders message keys,
  *  and the only way to see which strings are still unwrapped -- bypasses ENABLED_LOCALES
  *  and is deliberately never written to the cookie. Reading the cookie alone would leave

@@ -8,7 +8,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
-from flask import Blueprint, Flask, jsonify, request, session, url_for
+from flask import Blueprint, Flask, current_app, g, jsonify, request, session, url_for
 from flask_wtf.csrf import CSRFError, generate_csrf
 from werkzeug.exceptions import HTTPException
 
@@ -172,6 +172,16 @@ def create_api_v1_blueprint(
                 'csrfToken': generate_csrf(),
                 'developerLogins': resolve_developer_logins(),
                 'gitVersion': resolve_git_version(),
+                # What the language switcher offers. Server config, so the SPA cannot derive
+                # it; `current` is what this request negotiated, which is also what the shell
+                # was stamped with.
+                'locales': {
+                    'current': g.get('locale') or current_app.config['DEFAULT_LOCALE'],
+                    'available': [
+                        {'code': code, 'name': i18n.language_name(code)}
+                        for code in current_app.config['ENABLED_LOCALES']
+                    ],
+                },
                 'links': {
                     'login': url_for('login'),
                     'logout': url_for('logout'),

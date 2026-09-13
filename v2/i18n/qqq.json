@@ -883,5 +883,6 @@
     "fork-real-title": "Heading of the card leading to live consultations.",
     "fork-real-sub": "Subtitle under {{msg-proto|fork-real-title}}: the point of difference from the demo card.",
     "fork-real-cta": "Call to action on the real-consultations card. The arrow is decorative.",
-    "fork-real-aria": "Accessible name for the whole real-consultations card, which is one link."
+    "fork-real-aria": "Accessible name for the whole real-consultations card, which is one link.",
+    "base-language-label": "Accessible name for the language switcher in the site header. The options are language autonyms and are never translated — a reader looking for Dutch scans for \"Nederlands\"."
 }

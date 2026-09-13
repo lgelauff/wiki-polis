@@ -4889,10 +4889,17 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.before_request
     def _negotiate_locale():
-        # Resolve the UI locale: ?uselang= (explicit) -> uselang cookie -> Accept-Language
-        # best match among enabled -> default. qqx (message keys) is always available for QA.
-        # Registered ahead of the SPA shell handler so the locale is settled even on requests
-        # that short-circuit before route dispatch.
+        # Resolve the UI locale: ?uselang= (explicit) -> uselang cookie -> default. qqx
+        # (message keys) is always available for QA. Registered ahead of the SPA shell handler
+        # so the locale is settled even on requests that short-circuit before route dispatch.
+        #
+        # Deliberately no Accept-Language step. The SPA has to compute the same locale as the
+        # server — it decides which catalogue to fetch — and it cannot reproduce a best_match
+        # against ENABLED_LOCALES, which it does not know. Keeping a step only one end can
+        # perform means the document says one language and the content is another. It also
+        # means a browser header could hand someone a partly-translated interface they never
+        # asked for; the language switcher in the header makes that an explicit choice, and
+        # the choice persists in the cookie set below.
         enabled = app.config['ENABLED_LOCALES']
         requested = (request.args.get('uselang') or '').strip()
         persist = None
@@ -4903,7 +4910,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         elif (cookie := (request.cookies.get('uselang') or '').strip()) in enabled:
             locale = cookie
         else:
-            locale = request.accept_languages.best_match(enabled) or app.config['DEFAULT_LOCALE']
+            locale = app.config['DEFAULT_LOCALE']
         g.locale = locale
         g.dir = i18n.text_direction(locale)
         g._persist_locale = persist

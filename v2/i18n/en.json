@@ -884,5 +884,6 @@
     "fork-real-title": "Participate in real consultations",
     "fork-real-sub": "Your votes count.",
     "fork-real-cta": "Participate →",
-    "fork-real-aria": "Participate in real consultations — your votes count"
+    "fork-real-aria": "Participate in real consultations — your votes count",
+    "base-language-label": "Language"
 }

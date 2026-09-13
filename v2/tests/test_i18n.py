@@ -376,3 +376,28 @@ def test_a_translation_for_a_deleted_message_is_not_served(tmp_path):
     # The resolver may still answer for it; only the served catalogue is authoritative about
     # which messages exist, and that is what the SPA loads.
     assert set(served) == {'greet'}
+
+
+# ── The language switcher's data ─────────────────────────────────────────────
+
+def test_the_session_offers_the_enabled_locales_with_their_own_names(client, app):
+    """The switcher shows autonyms: someone looking for Dutch scans for "Nederlands"."""
+    app.config['ENABLED_LOCALES'] = ['en', 'nl']
+    data = client.get('/api/v1/session').get_json()['data']
+    assert data['locales']['current'] == 'en'
+    assert data['locales']['available'] == [
+        {'code': 'en', 'name': 'English'},
+        {'code': 'nl', 'name': 'Nederlands'},
+    ]
+
+
+def test_the_session_reports_the_locale_this_request_negotiated(client, app):
+    app.config['ENABLED_LOCALES'] = ['en', 'nl']
+    data = client.get('/api/v1/session?uselang=nl').get_json()['data']
+    assert data['locales']['current'] == 'nl'
+
+
+def test_an_unnamed_locale_degrades_to_its_code_rather_than_blank():
+    """Autonyms are added alongside each translation, so a new code may arrive first."""
+    assert i18n.language_name('en') == 'English'
+    assert i18n.language_name('zxx') == 'zxx'
