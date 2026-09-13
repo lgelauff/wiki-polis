@@ -86,8 +86,29 @@ rule 8.
 
 Settled. Changing one is a plan change, not an implementation detail.
 
-1. **`en.json` is the source. Translations normally arrive only from translatewiki** — never
-   hand-edit a delivered `<code>.json`.
+1. **Three kinds of file, three owners.** The earlier wording — "never hand-edit a delivered
+   `<code>.json`" — read strictly forbade editing `qqq.json`, which is a locale code by that
+   pattern and which we edit constantly. translatewiki's own guidance draws the line
+   differently:
+
+   - **`en.json` is ours.** Translators never edit the source. They *propose* changes —
+     grammar corrections, a missing `{{PLURAL:}}`, an ambiguous string — on the project talk
+     page or our issue tracker, and leave a `FIXME` note on the message's `/qqq` page while it
+     is outstanding. Those notes arrive here on the next export, so **a `FIXME` appearing in
+     `qqq.json` is a translator reporting a defect in our English**, and worth reading as
+     signal rather than noise.
+   - **`qqq.json` is shared, and it round-trips.** Edit it directly when adding a message or
+     changing an English one; otherwise documentation "should usually be edited in
+     translatewiki", and those edits are exported back to this repository along with the
+     translations. So this file receives commits from both sides.
+   - **`<lang>.json` is translatewiki's.** Never hand-edit one: the next export overwrites it,
+     and the edit discards a volunteer's work. `test_a_translation_for_a_deleted_message_is_not_served`
+     exists so that deleting a key from `en.json` never requires touching one.
+
+   Cadence, for planning: sync (new source strings going out) is roughly daily and automatic;
+   export (translations and `qqq` coming back) is manually initiated, usually about twice a
+   week.
+
    **Bootstrap exception, live now:** `nl.json` is authored in-repo ahead of translatewiki
    onboarding, because a review queue cannot meet a one-week deadline. When the group comes
    online, that file is handed to translatewiki as the seed for Dutch and TWN becomes
