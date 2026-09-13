@@ -33,3 +33,29 @@ test('?uselang=qqx is honoured even though the server never persists it', () => 
   setSearch('?uselang=qqx');
   expect(readLocale()).toBe('qqx');
 });
+
+test('falls back to the locale the server stamped, not to English', () => {
+  // The server's last resort is Accept-Language, which the browser does not expose to
+  // script. Without this step a visitor whose header says nl is served a document stamped
+  // lang="nl" and then a SPA that computes en, fetches the English catalogue, and resets
+  // <html lang> after first paint -- leaving the server-stamped skip link in the other
+  // language. Regression guard for that.
+  document.documentElement.dataset.locale = 'nl';
+  try {
+    expect(readLocale()).toBe('nl');
+  } finally {
+    delete document.documentElement.dataset.locale;
+  }
+});
+
+test('an explicit choice still wins over the stamped locale', () => {
+  document.documentElement.dataset.locale = 'nl';
+  document.cookie = 'uselang=fr; path=/';
+  try {
+    expect(readLocale()).toBe('fr');
+    setSearch('?uselang=qqx');
+    expect(readLocale()).toBe('qqx');
+  } finally {
+    delete document.documentElement.dataset.locale;
+  }
+});

@@ -151,10 +151,18 @@ _SPA_BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stati
 # <html> tag: the attributes for the document, and the handful of pre-catalogue strings as
 # data-* so the SPA can read them synchronously. Data attributes rather than an inline
 # script deliberately — no CSP nonce to thread through, and nothing to execute.
+# Messages the SPA needs before the catalogue exists, each with the English it falls back
+# to. The fallback is not decoration: i18n.resolve() returns ⧼key⧽ for a message it cannot
+# find, and stamping that marker would put it in the skip link — the first thing a keyboard
+# or screen-reader user meets. Same discipline as error_pages._t.
 _SPA_BOOTSTRAP_MESSAGES = {
-    'skip': 'base-skip-to-content',
-    'loading': 'base-loading-conversations',
+    'skip': ('base-skip-to-content', 'Skip to main content'),
+    'loading': ('base-loading-conversations', 'Loading conversations…'),
 }
+# Matched structurally, not as a literal: v2/static/spa is gitignored and built at deploy
+# time, so a build tool that emits <html lang=en> or reorders attributes would silently turn
+# this whole feature off. A miss is logged rather than passing quietly.
+_HTML_OPEN_TAG_RE = re.compile(r'<html\b[^>]*>', re.I)
 _spa_shell_cache: dict = {}
 
 
@@ -168,28 +176,52 @@ def _spa_shell_document() -> str:
     return _spa_shell_cache['body']
 
 
+def _spa_bootstrap_text(key: str, english: str, locale: str) -> str:
+    """The catalogue's text, or the English original if it cannot supply one."""
+    text = i18n.resolve(key, locale)
+    return english if text.startswith(i18n._MISSING_L) else text
+
+
 def _spa_shell_response():
     """The built shell with this request's locale stamped into <html>."""
     try:
         document = _spa_shell_document()
-    except OSError:
-        # The build is missing or half-written. Fall back to the plain static send so the
-        # existing 404-to-error-page path still applies; this hook must not be the reason a
-        # broken deploy stops answering.
+    except (OSError, ValueError):
+        # Missing, unreadable, or not valid UTF-8 (UnicodeDecodeError is a ValueError). Fall
+        # back to the plain static send so the existing 404-to-error-page path still applies:
+        # this hook must not be the reason a broken deploy stops answering.
         return send_from_directory(_SPA_BUILD_DIR, 'index.html')
 
     locale = g.get('locale') or current_app.config['DEFAULT_LOCALE']
-    attrs = [f'lang="{html.escape(locale, quote=True)}"', f'dir="{html.escape(g.get("dir") or "ltr", quote=True)}"']
-    for name, key in _SPA_BOOTSTRAP_MESSAGES.items():
-        attrs.append(f'data-msg-{name}="{html.escape(i18n.resolve(key, locale), quote=True)}"')
-    document = document.replace('<html lang="en">', f'<html {" ".join(attrs)}>', 1)
+    attrs = [
+        f'lang="{html.escape(locale, quote=True)}"',
+        f'dir="{html.escape(g.get("dir") or "ltr", quote=True)}"',
+        # The client cannot re-derive this: readLocale() has no Accept-Language step, so
+        # without it the SPA would compute a different locale than the document was stamped
+        # with and reset <html lang> after first paint.
+        f'data-locale="{html.escape(locale, quote=True)}"',
+    ]
+    for name, (key, english) in _SPA_BOOTSTRAP_MESSAGES.items():
+        text = _spa_bootstrap_text(key, english, locale)
+        attrs.append(f'data-msg-{name}="{html.escape(text, quote=True)}"')
+
+    stamped, count = _HTML_OPEN_TAG_RE.subn(lambda _: f'<html {" ".join(attrs)}>', document, count=1)
+    if not count:
+        current_app.logger.warning(
+            'SPA shell has no <html> tag to stamp; serving it unlocalised (locale=%s)', locale)
+    document = stamped
 
     response = current_app.make_response(document)
     response.headers['Content-Type'] = 'text/html; charset=utf-8'
-    # Varies per locale, and the locale can come from a cookie or a header.
-    response.headers['Cache-Control'] = 'no-store'
+    # no-cache, not no-store: the body varies by locale so it must revalidate, but no-store
+    # would also make the page bfcache-ineligible in Chrome, so every Back would cold-boot
+    # React and re-announce the loading status. Vary covers the negotiation inputs, and the
+    # ETag is computed over the stamped body so it is already locale-specific.
+    response.headers['Cache-Control'] = 'private, no-cache'
     response.headers['Vary'] = 'Accept-Language, Cookie'
-    return response
+    response.add_etag()
+    return response.make_conditional(request)
+
 
 _TEXT_ALLOWED_TAGS  = {'p', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'br'}
 _TEXT_ALLOWED_ATTRS = {'a': {'href', 'title'}}

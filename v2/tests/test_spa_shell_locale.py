@@ -102,6 +102,77 @@ def test_a_stamped_message_cannot_break_out_of_the_attribute(client, shell, tmp_
         # And the tag still has exactly the attributes we put on it.
         import re as _re
         assert sorted(_re.findall(r'(\b[a-z-]+)="', tag)) == [
-            'data-msg-loading', 'data-msg-skip', 'dir', 'lang']
+            'data-locale', 'data-msg-loading', 'data-msg-skip', 'dir', 'lang']
     finally:
         i18n.load()
+
+
+def test_accept_language_reaches_the_client_through_data_locale(client, shell, app, tmp_path):
+    """The bug this attribute exists for.
+
+    The server's last resort is Accept-Language, which the browser does not expose to script.
+    Without a stamped locale the SPA computes its own, disagrees with the document it was
+    served, and resets <html lang> after first paint — stranding the server-stamped skip link
+    in the other language.
+    """
+    directory = tmp_path / 'messages'
+    directory.mkdir()
+    (directory / 'en.json').write_text(
+        '{"base-skip-to-content": "Skip to main content", "base-loading-conversations": "L"}',
+        encoding='utf-8')
+    (directory / 'nl.json').write_text('{"base-skip-to-content": "Ga naar de inhoud"}',
+                                       encoding='utf-8')
+    i18n.load(str(directory))
+    app.config['ENABLED_LOCALES'] = ['en', 'nl']
+    try:
+        tag = _html_tag(client.get('/', headers={'Accept-Language': 'nl,en;q=0.5'})
+                        .get_data(as_text=True))
+        assert 'lang="nl"' in tag
+        assert 'data-locale="nl"' in tag          # what readLocale() reads back
+        assert 'data-msg-skip="Ga naar de inhoud"' in tag
+    finally:
+        i18n.load()
+
+
+def test_a_missing_catalogue_stamps_english_not_a_key_marker(client, shell, tmp_path):
+    """⧼base-skip-to-content⧽ in the skip link would be worse than English."""
+    empty = tmp_path / 'empty'
+    empty.mkdir()
+    i18n.load(str(empty))
+    try:
+        tag = _html_tag(client.get('/').get_data(as_text=True))
+        assert i18n._MISSING_L not in tag
+        assert 'data-msg-skip="Skip to main content"' in tag
+        assert 'data-msg-loading="Loading conversations' in tag
+    finally:
+        i18n.load()
+
+
+def test_a_shell_whose_html_tag_differs_is_still_stamped(client, shell):
+    """v2/static/spa is built at deploy time, so the tag's exact spelling is not ours."""
+    (shell / 'index.html').write_text(
+        "<!doctype html>\n<HTML lang=en data-build='x'>\n<body></body>\n</HTML>\n",
+        encoding='utf-8')
+    import app as app_module
+    app_module._spa_shell_cache.clear()
+    tag = _html_tag(client.get('/').get_data(as_text=True).replace('<HTML', '<html'))
+    assert 'lang="en"' in tag and 'data-msg-skip=' in tag
+
+
+def test_the_shell_revalidates_rather_than_forbidding_storage(client, shell):
+    """no-store would make the page bfcache-ineligible, so Back would cold-boot the SPA."""
+    response = client.get('/')
+    assert response.headers['Cache-Control'] == 'private, no-cache'
+    assert 'Accept-Language' in response.headers['Vary']
+    assert response.headers.get('ETag')
+    # The ETag covers the stamped body, so it is locale-specific and conditional GET works.
+    again = client.get('/', headers={'If-None-Match': response.headers['ETag']})
+    assert again.status_code == 304
+
+
+def test_a_shell_that_is_not_valid_utf8_does_not_take_the_hook_down(client, shell):
+    """UnicodeDecodeError is a ValueError, not an OSError; it must not escape a before_request."""
+    (shell / 'index.html').write_bytes(b'<!doctype html>\n<html lang="en">\xff\xfe</html>')
+    import app as app_module
+    app_module._spa_shell_cache.clear()
+    assert client.get('/').status_code in (200, 404, 500)   # handled, not an unhandled crash

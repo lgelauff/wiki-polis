@@ -16,9 +16,12 @@ question. A module-level string is imported once at process start and has no loa
 between the exception and the bytes. The cost is that the markup lives in Python;
 the payoff is that there is no configuration under which it can fail to render.
 
-Everything here is static — no request data is interpolated — so the page cannot
-leak internals and needs no escaping. Werkzeug's own ``description`` is
-deliberately not shown for the same reason.
+No request data is interpolated, so the page cannot leak internals. Werkzeug's
+own ``description`` is deliberately not shown for the same reason. The copy is
+no longer entirely static, though — see below — so ``title``, ``message`` and the
+error-code label are escaped before they reach the template. ``hint`` is not: it
+carries the front-page link, so it is trusted markup by design, and a translator
+editing it is editing HTML on purpose.
 
 Translation, without giving up the guarantee
 --------------------------------------------
@@ -34,6 +37,8 @@ translation is an improvement layered on top of it rather than a new way to fail
 
 from __future__ import annotations
 
+import html
+
 from flask import g, has_request_context
 
 import i18n
@@ -41,7 +46,7 @@ import i18n
 # Cluster palette, inlined from static/style.css. Duplicated on purpose: the point
 # of this page is that it does not fetch a stylesheet.
 _PAGE = """<!doctype html>
-<html lang="{lang}">
+<html lang="{lang}" dir="{dir}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -166,11 +171,18 @@ def render_error_page(code: int) -> str:
         part: _t(f'errorpage-{code}-{part}', english)
         for part, english in detail.items()
     }
+    # Catalogue text is not request data, but it is no longer written only by us: it comes
+    # back from translatewiki. Escape everything that lands in element text or an attribute.
+    # `hint` is left raw on purpose — it carries the front-page link.
     return _PAGE.format(
         code=code,
-        lang=_page_language(),
-        code_label=_t('errorpage-code', f'Error {code}').replace('$1', str(code)),
-        **translated,
+        lang=html.escape(_page_language(), quote=True),
+        dir=html.escape(_page_direction(), quote=True),
+        code_label=html.escape(
+            _t('errorpage-code', f'Error {code}').replace('$1', str(code))),
+        title=html.escape(translated['title']),
+        message=html.escape(translated['message']),
+        hint=translated['hint'],
     )
 
 
@@ -180,6 +192,16 @@ def _page_language() -> str:
         return (has_request_context() and g.get('locale')) or i18n.SOURCE_LOCALE
     except Exception:          # noqa: BLE001 — see the module docstring
         return i18n.SOURCE_LOCALE
+
+
+def _page_direction() -> str:
+    """The negotiated text direction. Without it an RTL locale renders left-to-right, and
+    this is the one page the SPA cannot correct afterwards — it renders when the SPA is the
+    thing that is broken."""
+    try:
+        return (has_request_context() and g.get('dir')) or i18n.text_direction(_page_language())
+    except Exception:          # noqa: BLE001 — see the module docstring
+        return 'ltr'
 
 
 SUPPORTED_ERROR_CODES = tuple(_ERRORS)
