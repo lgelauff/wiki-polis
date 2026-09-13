@@ -81,7 +81,7 @@ test('renders the admin console from the catalogue English', async () => {
   expect(screen.getByText('1 readiness check still need resolving before Arguments')).toBeVisible();
   expect(screen.getByRole('button', {name: 'Move on to Arguments →'})).toBeDisabled();
   expect(screen.getByText('1 invite')).toBeVisible();
-  expect(screen.getAllByText('12 joined').length).toBe(1);
+  expect(screen.getAllByText('12 participants joined').length).toBe(1);
   expect(screen.getByText('Need time to coordinate inviting people back? You can pause first.')).toBeVisible();
   // Inline markup in a catalogue message stays markup rather than being escaped into text.
   expect(within(screen.getByText(/These toggles act independently/)).getByText('Advanced.').tagName).toBe('STRONG');

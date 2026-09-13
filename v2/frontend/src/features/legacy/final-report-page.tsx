@@ -137,7 +137,7 @@ function OpinionShift({statements}: {statements: Statement[]}) {
   if (statements.length === 0) return null;
   return <div className="report-section">
     <h2 className="report-section-heading">{msg('report-shift-heading')} <span className="report-section-sub">{msg('report-shift-sub')}</span></h2>
-    <p className="muted" style={{fontSize: 13, marginBottom: '1rem'}}><span dangerouslySetInnerHTML={richHtml(msg('report-shift-intro'))} /> <InternalLink href="#methodology" className="report-anchor">{msg('report-methodology-link')}</InternalLink> {msg('report-shift-below')} {msg('report-shift-sorted')}</p>
+    <p className="muted" style={{fontSize: 13, marginBottom: '1rem'}}><span dangerouslySetInnerHTML={richHtml(msg('report-shift-intro', `<a href="#methodology" class="report-anchor">${escapeHtml(msg('report-methodology-link'))}</a>`))} /> {msg('report-shift-sorted')}</p>
     <table className="p6-results-table report-table" aria-label={msg('report-table-aria')}>
       <thead><tr>
         <th className="p6-col-stmt">{msg('report-col-statement')}</th>
