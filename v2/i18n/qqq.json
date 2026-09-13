@@ -2,7 +2,7 @@
     "@metadata": {
         "authors": []
     },
-    "base-skip-to-content": "Accessibility skip link at the top of every page; jumps keyboard/screen-reader users past the header to the main content.",
+    "base-skip-to-content": "Accessibility skip link at the top of every page; jumps keyboard/screen-reader users past the header to the main content. Rendered before the message catalogue loads, so the server stamps it into the page rather than the app looking it up.",
     "base-admin-badge": "Small badge shown in the header on admin pages, indicating admin mode. Keep short.",
     "base-log-out": "Header button that signs the user out. Lowercase to match the compact header style.",
     "base-admin-link": "Header link to the admin dashboard, shown only to administrators. Lowercase to match the header style.",
@@ -883,5 +883,16 @@
     "fork-real-title": "Heading of the card leading to live consultations.",
     "fork-real-sub": "Subtitle under {{msg-proto|fork-real-title}}: the point of difference from the demo card.",
     "fork-real-cta": "Call to action on the real-consultations card. The arrow is decorative.",
-    "fork-real-aria": "Accessible name for the whole real-consultations card, which is one link."
+    "fork-real-aria": "Accessible name for the whole real-consultations card, which is one link.",
+    "base-loading-conversations": "Shown while the app is still fetching. It renders before the message catalogue has loaded, so the server stamps it into the page; see {{msg-proto|base-skip-to-content}}, which is delivered the same way.",
+    "errorpage-code": "Small label above the heading on a server error page. $1 is the HTTP status code, e.g. 404.",
+    "errorpage-404-title": "Heading of the 404 page.",
+    "errorpage-404-message": "One-line explanation on the 404 page.",
+    "errorpage-404-hint": "What to do next, on the 404 page. Keep the HTML and the text inside it — it links to the front page.",
+    "errorpage-403-title": "Heading of the 403 page. An adjective describing the request, not the person.",
+    "errorpage-403-message": "One-line explanation on the 403 page.",
+    "errorpage-403-hint": "What to do next, on the 403 page.",
+    "errorpage-500-title": "Heading of the 500 page.",
+    "errorpage-500-message": "One-line explanation on the 500 page.",
+    "errorpage-500-hint": "What to do next, on the 500 page."
 }

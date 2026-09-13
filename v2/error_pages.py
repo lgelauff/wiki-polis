@@ -19,14 +19,29 @@ the payoff is that there is no configuration under which it can fail to render.
 Everything here is static — no request data is interpolated — so the page cannot
 leak internals and needs no escaping. Werkzeug's own ``description`` is
 deliberately not shown for the same reason.
+
+Translation, without giving up the guarantee
+--------------------------------------------
+The copy is looked up in the message catalogue, because these pages are read by
+participants and an English 404 in a Dutch interface is a worse experience than a
+translated one. That would ordinarily add exactly the kind of dependency the rest of
+this docstring argues against, so every lookup carries its English original as a
+fallback: ``i18n`` returns ``⧼key⧽`` for a message it cannot find, and ``_t`` treats
+that as a miss. A missing, unreadable or half-written catalogue therefore renders the
+same page it rendered before this was added — the guarantee is unchanged, and the
+translation is an improvement layered on top of it rather than a new way to fail.
 """
 
 from __future__ import annotations
 
+from flask import g, has_request_context
+
+import i18n
+
 # Cluster palette, inlined from static/style.css. Duplicated on purpose: the point
 # of this page is that it does not fetch a stylesheet.
 _PAGE = """<!doctype html>
-<html lang="en">
+<html lang="{lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -92,7 +107,7 @@ _PAGE = """<!doctype html>
 </header>
 <main>
   <div class="card">
-    <p class="code">Error {code}</p>
+    <p class="code">{code_label}</p>
     <h1>{title}</h1>
     <p>{message}</p>
     <p class="muted">{hint}</p>
@@ -102,6 +117,22 @@ _PAGE = """<!doctype html>
 </html>
 """
 
+def _t(key: str, fallback: str) -> str:
+    """The catalogue's text for ``key``, or ``fallback`` if it cannot supply one.
+
+    Deliberately total: an error page must not be able to raise. Outside a request there
+    is no negotiated locale, so this falls back to the source language.
+    """
+    try:
+        locale = g.get('locale') if has_request_context() else None
+        text = i18n.resolve(key, locale or i18n.SOURCE_LOCALE)
+    except Exception:          # noqa: BLE001 — see the module docstring
+        return fallback
+    return fallback if text.startswith(i18n._MISSING_L) else text
+
+
+# English originals, kept as the fallback for every lookup. These are what renders if the
+# catalogue is missing or unreadable, which is the scenario this module exists for.
 _ERRORS = {
     404: {
         'title': 'Page not found',
@@ -131,7 +162,24 @@ def render_error_page(code: int) -> str:
     detail = _ERRORS.get(code)
     if detail is None:
         code, detail = DEFAULT_ERROR_CODE, _ERRORS[DEFAULT_ERROR_CODE]
-    return _PAGE.format(code=code, **detail)
+    translated = {
+        part: _t(f'errorpage-{code}-{part}', english)
+        for part, english in detail.items()
+    }
+    return _PAGE.format(
+        code=code,
+        lang=_page_language(),
+        code_label=_t('errorpage-code', f'Error {code}').replace('$1', str(code)),
+        **translated,
+    )
+
+
+def _page_language() -> str:
+    """The negotiated locale, or the source language outside a request."""
+    try:
+        return (has_request_context() and g.get('locale')) or i18n.SOURCE_LOCALE
+    except Exception:          # noqa: BLE001 — see the module docstring
+        return i18n.SOURCE_LOCALE
 
 
 SUPPORTED_ERROR_CODES = tuple(_ERRORS)

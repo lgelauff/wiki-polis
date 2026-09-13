@@ -884,5 +884,16 @@
     "fork-real-title": "Participate in real consultations",
     "fork-real-sub": "Your votes count.",
     "fork-real-cta": "Participate →",
-    "fork-real-aria": "Participate in real consultations — your votes count"
+    "fork-real-aria": "Participate in real consultations — your votes count",
+    "base-loading-conversations": "Loading conversations…",
+    "errorpage-code": "Error $1",
+    "errorpage-404-title": "Page not found",
+    "errorpage-404-message": "There is nothing at this address.",
+    "errorpage-404-hint": "The link may be out of date, or the page may have moved. Go to <a href=\"/\">the front page</a> to start again.",
+    "errorpage-403-title": "Not allowed",
+    "errorpage-403-message": "You do not have access to this page.",
+    "errorpage-403-hint": "If you expected access, you may need to log in as a different account, or ask an organizer for the role that grants it.",
+    "errorpage-500-title": "Something went wrong",
+    "errorpage-500-message": "The server could not complete this request.",
+    "errorpage-500-hint": "This has been logged. Try again in a moment; if it keeps happening, report it to a site admin."
 }

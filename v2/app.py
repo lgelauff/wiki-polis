@@ -8,6 +8,7 @@ import dataclasses
 import functools
 import hashlib
 import hmac
+import html
 import os
 import random
 import re
@@ -133,6 +134,63 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
 _MW_USER_AGENT   = 'wiki-polis/2.0 (Toolforge tool; https://wiki-polis.toolforge.org)'
 _SPA_BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'spa')
+
+# ── SPA shell: locale bootstrap ───────────────────────────────────────────────
+# index.html is a build artifact served verbatim, which leaves two problems the SPA
+# cannot fix from inside itself:
+#
+#   * `<html lang="en">` is wrong for every other locale, and MessageProvider can only
+#     correct it after first paint — a screen reader that starts reading immediately has
+#     already been told the document is English.
+#   * The skip link and the loading fallback render BEFORE MessageProvider, which suspends
+#     on the session query and then waits on the catalogue fetch. They cannot call msg(),
+#     so they would stay English in a translated interface. The skip link in particular is
+#     the first thing a keyboard or screen-reader user meets.
+#
+# The server already negotiates the locale for this request, so it stamps both onto the
+# <html> tag: the attributes for the document, and the handful of pre-catalogue strings as
+# data-* so the SPA can read them synchronously. Data attributes rather than an inline
+# script deliberately — no CSP nonce to thread through, and nothing to execute.
+_SPA_BOOTSTRAP_MESSAGES = {
+    'skip': 'base-skip-to-content',
+    'loading': 'base-loading-conversations',
+}
+_spa_shell_cache: dict = {}
+
+
+def _spa_shell_document() -> str:
+    """index.html from disk, memoised on mtime so a deploy is picked up without a restart."""
+    path = os.path.join(_SPA_BUILD_DIR, 'index.html')
+    stamp = os.path.getmtime(path)
+    if _spa_shell_cache.get('stamp') != stamp:
+        with open(path, encoding='utf-8') as handle:
+            _spa_shell_cache.update(stamp=stamp, body=handle.read())
+    return _spa_shell_cache['body']
+
+
+def _spa_shell_response():
+    """The built shell with this request's locale stamped into <html>."""
+    try:
+        document = _spa_shell_document()
+    except OSError:
+        # The build is missing or half-written. Fall back to the plain static send so the
+        # existing 404-to-error-page path still applies; this hook must not be the reason a
+        # broken deploy stops answering.
+        return send_from_directory(_SPA_BUILD_DIR, 'index.html')
+
+    locale = g.get('locale') or current_app.config['DEFAULT_LOCALE']
+    attrs = [f'lang="{html.escape(locale, quote=True)}"', f'dir="{html.escape(g.get("dir") or "ltr", quote=True)}"']
+    for name, key in _SPA_BOOTSTRAP_MESSAGES.items():
+        attrs.append(f'data-msg-{name}="{html.escape(i18n.resolve(key, locale), quote=True)}"')
+    document = document.replace('<html lang="en">', f'<html {" ".join(attrs)}>', 1)
+
+    response = current_app.make_response(document)
+    response.headers['Content-Type'] = 'text/html; charset=utf-8'
+    # Varies per locale, and the locale can come from a cookie or a header.
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Vary'] = 'Accept-Language, Cookie'
+    return response
+
 _TEXT_ALLOWED_TAGS  = {'p', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'br'}
 _TEXT_ALLOWED_ATTRS = {'a': {'href', 'title'}}
 _POLIS_ID_RE     = re.compile(r'^[A-Za-z0-9]{6,20}$')
@@ -4908,6 +4966,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         g.dir = i18n.text_direction(locale)
         g._persist_locale = persist
 
+
     @app.before_request
     def _serve_canonical_spa_request():
         if request.method != 'GET' or not _is_canonical_spa_path(request.path):
@@ -4916,7 +4975,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         # Route dispatch normally triggers it later, but this before-request SPA
         # response intentionally bypasses route dispatch.
         _ = request.host
-        return send_from_directory(_SPA_BUILD_DIR, 'index.html')
+        return _spa_shell_response()
 
     @app.after_request
     def _security_headers(response):
@@ -5196,7 +5255,7 @@ def _register_routes(app: Flask) -> None:
     @app.get('/app/<path:spa_path>')
     def spa_shell(spa_path: str = ''):
         """Serve the built React shell; client routing owns the remaining path."""
-        return send_from_directory(_SPA_BUILD_DIR, 'index.html')
+        return _spa_shell_response()
 
 
     # ── OAuth ─────────────────────────────────────────────────────────────────
