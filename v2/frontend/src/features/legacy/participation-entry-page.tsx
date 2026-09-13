@@ -13,6 +13,8 @@ import {
 import {NavigationRedirect} from './external-redirect';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
+import {useMessage} from '../../i18n/messages';
+import {escapeHtml, richHtml} from '../../i18n/rich-html';
 
 function requiredSlug(value: string | undefined) {
   if (!value) throw new Error('Missing route parameter: slug');
@@ -43,30 +45,31 @@ type InviteDeniedEntry = Extract<ParticipationEntry, {state: 'invite_denied'}>;
 type JoinEntry = Extract<ParticipationEntry, {state: 'join'}>;
 
 function InviteDeniedPage({data}: {data: InviteDeniedEntry}) {
+  const msg = useMessage();
   return (
-    <LegacyShell title="Access restricted — Proto">
+    <LegacyShell title={msg('forbidden-invite-doc-title')}>
       <div className="container" style={{maxWidth: 700, paddingTop: '3rem'}}>
         <h1 style={{fontSize: 24, fontWeight: 600, color: 'var(--ink)', margin: '0 0 .75rem'}}>
-          This consultation is invite-only
+          {msg('forbidden-invite-heading')}
         </h1>
         <p style={{color: 'var(--body)', fontSize: 15, lineHeight: 1.6, margin: '0 0 1.5rem'}}>
-          <strong>{data.conversation.title}</strong>
-          {' is restricted to invited participants. You have not been added to the invite list for this consultation.'}
+          <span dangerouslySetInnerHTML={richHtml(msg('forbidden-invite-body', escapeHtml(data.conversation.title)))} />
         </p>
         {data.canModerate && data.links.manageInvites && (
           <div style={{background: '#f0f4ff', border: '1px solid #c7d3f5', borderRadius: 8, padding: '1rem 1.25rem', fontSize: 14, color: 'var(--ink)', lineHeight: 1.6, marginBottom: '1.5rem'}}>
-            <strong>You can moderate this consultation.</strong>
-            {' To participate as a voter, add yourself to the invite list first: '}
-            <InternalLink href={data.links.manageInvites} style={{color: 'var(--accent)'}}>Manage invites →</InternalLink>
+            <strong>{msg('forbidden-invite-mod-lead')}</strong>
+            {` ${msg('forbidden-invite-mod-body')} `}
+            <InternalLink href={data.links.manageInvites} style={{color: 'var(--accent)'}}>{msg('forbidden-invite-mod-link')}</InternalLink>
           </div>
         )}
-        <InternalLink href={data.links.home} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>← back to home</InternalLink>
+        <InternalLink href={data.links.home} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>{msg('forbidden-invite-back-home')}</InternalLink>
       </div>
     </LegacyShell>
   );
 }
 
 function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
+  const msg = useMessage();
   const [pseudonyms, setPseudonyms] = useState(data.pseudonyms);
   const [pseudonym, setPseudonym] = useState(data.pseudonyms[0] ?? '');
   const [notifyEmail, setNotifyEmail] = useState(false);
@@ -75,15 +78,15 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
   const [status, setStatus] = useState('');
   const reroll = useMutation({
     mutationFn: () => getPseudonymSuggestions(data.conversation.slug),
-    onMutate: () => setStatus('Generating new pseudonym options.'),
+    onMutate: () => setStatus(msg('accept-js-generating')),
     onSuccess: (result) => {
       setPseudonyms(result.pseudonyms);
       setPseudonym(result.pseudonyms[0] ?? '');
       setStatus(result.pseudonyms.length
-        ? `New pseudonym options generated. Selected ${result.pseudonyms[0]}.`
-        : 'Could not generate new pseudonym options. Try again.');
+        ? msg('accept-js-regenerated', result.pseudonyms[0] ?? '')
+        : msg('accept-js-error'));
     },
-    onError: () => setStatus('Could not generate new pseudonym options. Try again.'),
+    onError: () => setStatus(msg('accept-js-error')),
   });
   const join = useMutation({
     mutationFn: () => createParticipation(data.conversation.slug, {
@@ -114,7 +117,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
 
   const formError = join.error instanceof ApiContractError
     ? (join.error.code === 'pseudonym_unavailable'
-      ? 'That pseudonym was just taken — please choose another.'
+      ? msg('accept-js-taken')
       : join.error.message)
     : null;
 
@@ -149,8 +152,8 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
           <input type="hidden" name="csrf_token" value={csrfToken} />
           <div className="pseudonym-card" role="radiogroup" aria-labelledby="pseudonym-title" aria-describedby="pseudonym-help pseudonym-status">
             <div className="pseudonym-card-header">
-              <div className="pseudonym-card-title" id="pseudonym-title">Choose a pseudonym</div>
-              <button type="button" className="reroll-btn" aria-controls="pseudonym-options" aria-label="Generate new pseudonym options" disabled={reroll.isPending} onClick={() => reroll.mutate()}>
+              <div className="pseudonym-card-title" id="pseudonym-title">{msg('accept-choose-pseudonym')}</div>
+              <button type="button" className="reroll-btn" aria-controls="pseudonym-options" aria-label={msg('accept-reroll-aria')} disabled={reroll.isPending} onClick={() => reroll.mutate()}>
                 {reroll.isPending ? '↻ loading…' : '↻ reroll'}
               </button>
             </div>
@@ -163,7 +166,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
                 <label className="pseudonym-label" htmlFor={`pseudonym-${index + 1}`} key={name}>
                   <input type="radio" id={`pseudonym-${index + 1}`} name="pseudonym" value={name} checked={pseudonym === name} onChange={() => {
                     setPseudonym(name);
-                    setStatus(`Selected pseudonym ${name}.`);
+                    setStatus(msg('accept-js-selected', name));
                   }} />
                   <span className="pseudonym-name">{name}</span>
                 </label>
@@ -172,62 +175,62 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
           </div>
 
           <div className="accept-section" role="group" aria-labelledby="notification-title" aria-describedby="notification-help">
-            <h2 id="notification-title">Stay informed</h2>
+            <h2 id="notification-title">{msg('accept-notify-heading')}</h2>
             <p id="notification-help" style={{color: 'var(--muted)', fontSize: 13, marginBottom: '.75rem'}}>
               Optional best-effort updates when the consultation closes or results are published.
             </p>
             {data.emailable ? (
               <label className="checkbox-label">
                 <input type="checkbox" name="notify_email" value="1" checked={notifyEmail} onChange={(event) => setNotifyEmail(event.target.checked)} />
-                <span>Email me if we send updates (via your confirmed wiki email address)</span>
+                <span>{msg('accept-notify-email')}</span>
               </label>
             ) : (
-              <p className="muted" style={{marginTop: '.25rem'}}>
-                {'Email notifications unavailable — no confirmed email on your wiki account. '}
-                <InternalLink href="https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal" target="_blank" rel="noopener">Add one on Meta-Wiki<span className="sr-only"> (opens in a new tab)</span></InternalLink> and return to enable this.
-              </p>
+              <p className="muted" style={{marginTop: '.25rem'}} dangerouslySetInnerHTML={richHtml(
+                  msg('accept-notify-email-unavailable',
+                    `<a href="https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal" target="_blank" rel="noopener">`
+                    + `${escapeHtml(msg('accept-notify-add-email'))}<span class="sr-only">${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
             )}
             <label className="checkbox-label" style={{marginTop: '.5rem'}}>
               <input type="checkbox" name="notify_talk_page" value="1" checked={notifyTalkPage} onChange={(event) => setNotifyTalkPage(event.target.checked)} />
-              <span>Post to my talk page if we send updates</span>
+              <span>{msg('accept-notify-talk')}</span>
             </label>
           </div>
 
           <div className="accept-section" id="accept-privacy-note">
-            <h2>Privacy summary</h2>
-            <p>Public records use your pseudonym. Proto keeps the username link internally for login, access checks, notifications, moderation, and privacy controls.</p>
+            <h2>{msg('accept-privacy-heading')}</h2>
+            <p>{msg('accept-privacy-summary')}</p>
             <details className="privacy-details">
-              <summary className="privacy-summary" aria-controls="privacy-details-body">Privacy &amp; data handling</summary>
+              <summary className="privacy-summary" aria-controls="privacy-details-body">{msg('accept-privacy-details-summary')}</summary>
               <div className="privacy-body" id="privacy-details-body">
-                <p>Your pseudonym is used for consultation records and participant-facing displays. Your Wikimedia username is used internally for login, access checks, moderation, and notification preferences.</p>
-                <p>Public results may include aggregate votes, clusters, and pseudonyms. They do not show your Wikimedia username unless you explicitly reveal it after the consultation closes.</p>
-                <p>Between <strong>{data.reveal.cooldownDays}</strong> and <strong>{`${data.reveal.windowEndDays} days`}</strong> after close, you may optionally and permanently link your username to your pseudonym in the public record. This is irreversible during that window.</p>
+                <p>{msg('accept-privacy-body1')}</p>
+                <p>{msg('accept-privacy-body2')}</p>
+                <p dangerouslySetInnerHTML={richHtml(msg('accept-privacy-window-a',
+                  `<strong>${escapeHtml(String(data.reveal.cooldownDays))}</strong>`,
+                  `<strong>${escapeHtml(String(data.reveal.windowEndDays))} days</strong>`))} />
               </div>
             </details>
           </div>
 
           <div className="accept-section" id="accept-licence-note">
-            <h2>What you write</h2>
-            <p>
-              {'Statements and arguments you write here are released under '}
-              <InternalLink href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0<span className="sr-only"> (opens in a new tab)</span></InternalLink>
-              {', which places them in the public domain, the same as a wiki edit. That is what lets the results be published as a report, quoted in a discussion, and reused by anyone.'}
-            </p>
+            <h2>{msg('accept-licence-heading')}</h2>
+            <p dangerouslySetInnerHTML={richHtml(msg('accept-licence-intro',
+              `<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">`
+              + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only">${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
             <p className="muted">
-              This covers what you write, not who wrote it: contributions are published under your pseudonym, and CC0 does not require anyone to credit you. Your votes are not covered — a vote is a fact, not a work. CC0 cannot be withdrawn once given, the same as any wiki edit.
+              {msg('accept-licence-scope')}
             </p>
           </div>
 
           <label className="consent-label" id="consent-label" htmlFor="consent-check" style={{marginTop: '1.25rem'}}>
             <input type="checkbox" name="consent" id="consent-check" value="1" required aria-required="true" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-            <span>I understand my votes and arguments are recorded with this pseudonym, Proto keeps an internal username link while this consultation runs, and what I write is released under CC0.</span>
+            <span>{msg('accept-consent')}</span>
           </label>
           {formError && <p className="error" id="accept-error" role="alert">{formError}</p>}
           <div style={{display: 'flex', alignItems: 'center', gap: 16, marginTop: 22}}>
             <button type="submit" className="participate-btn" id="submit-btn" disabled={join.isPending}>
               Join consultation as <span id="chosen-name">{pseudonym}</span> →
             </button>
-            <InternalLink href={data.links.home} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>Not now</InternalLink>
+            <InternalLink href={data.links.home} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>{msg('accept-not-now')}</InternalLink>
           </div>
         </form>
       </div>
@@ -236,24 +239,25 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
 }
 
 function EligibilityDeniedPage({data, error}: {data: JoinEntry; error: ApiContractError}) {
+  const msg = useMessage();
   const details = error.details as {status?: string; displayMessage?: string | null} | undefined;
   const message = details?.displayMessage
     ?? (details?.status === 'unavailable'
-      ? 'The eligibility checker is unavailable right now. Try again later.'
-      : 'Your account did not meet the configured criteria.');
+      ? msg('forbidden-elig-unavailable')
+      : msg('forbidden-elig-criteria'));
   return (
-    <LegacyShell title={`Not eligible — ${data.conversation.title} — Proto`}>
+    <LegacyShell title={msg('forbidden-elig-doc-title', data.conversation.title)}>
       <div className="container">
         <div className="landing-section">
-          <h1>Not eligible for this consultation</h1>
+          <h1>{msg('forbidden-elig-heading')}</h1>
           <p className="muted">
             {data.conversation.eligibilityLabel
-              ? 'This consultation has an eligibility requirement: '
-              : 'This consultation has an eligibility requirement.'}
-            {data.conversation.eligibilityLabel && <><strong>{data.conversation.eligibilityLabel}</strong>.</>}
+              ? <span dangerouslySetInnerHTML={richHtml(msg('forbidden-elig-requirement-named',
+                  `<strong>${escapeHtml(data.conversation.eligibilityLabel)}</strong>`))} />
+              : msg('forbidden-elig-requirement')}
           </p>
           <p className="muted">{message}</p>
-          <p style={{marginTop: '1rem'}}><InternalLink href={data.links.home}>Return home <span aria-hidden="true">→</span></InternalLink></p>
+          <p style={{marginTop: '1rem'}}><InternalLink href={data.links.home}>{msg('common-return-home')} <span aria-hidden="true">→</span></InternalLink></p>
         </div>
       </div>
     </LegacyShell>

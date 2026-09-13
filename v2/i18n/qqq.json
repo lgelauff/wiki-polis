@@ -60,7 +60,7 @@
     "common-return-home": "Generic link back to the home page. Arrow is decorative in the template.",
     "common-checklist": "Section heading for a checklist of guidance points.",
     "common-examples": "Section heading introducing worked examples.",
-    "forbidden-elig-doc-title": "Browser tab/title for the eligibility-refused page. Followed by the consultation title and the site name.",
+    "forbidden-elig-doc-title": "Browser tab title of the not-eligible page. $1 is the consultation title, which is organizer-authored content and stays untranslated.",
     "forbidden-elig-heading": "Main heading when a user cannot join a consultation because they fail its eligibility check.",
     "forbidden-elig-requirement": "Explains the consultation is gated. In the template an optional label follows after a colon.",
     "forbidden-elig-unavailable": "Shown when the external eligibility checker service is down.",
@@ -172,7 +172,7 @@
     "accept-notify-heading": "Heading of the notification-preferences section.",
     "accept-notify-help": "Helper text for notification preferences.",
     "accept-notify-email": "Checkbox label opting into email notifications.",
-    "accept-notify-email-unavailable": "Shown when the user has no confirmed wiki email; a link to add one follows.",
+    "accept-notify-email-unavailable": "Shown instead of the email-notification checkbox when the account has no confirmed address. $1 is a link to Wikimedia preferences, labelled with {{msg-proto|accept-notify-add-email}}. It was a fragment with the link appended, which fixed the English word order. Keep the HTML and the text inside it.",
     "accept-notify-add-email": "Link text to add a confirmed email on Meta-Wiki. Opens a new tab.",
     "accept-notify-add-email-after": "Text after the 'Add one on Meta-Wiki' link.",
     "accept-notify-talk": "Checkbox label opting into talk-page notifications.",
@@ -181,9 +181,7 @@
     "accept-privacy-details-summary": "Summary/label of the expandable privacy details.",
     "accept-privacy-body1": "First paragraph of the expanded privacy details.",
     "accept-privacy-body2": "Second paragraph of the expanded privacy details.",
-    "accept-privacy-window-a": "Start of the reveal-window sentence; a number of days (bold) follows.",
-    "accept-privacy-window-b": "Connective between the cooldown and window-end day counts.",
-    "accept-privacy-window-c": "End of the reveal-window sentence, after the day counts.",
+    "accept-privacy-window-a": "The identity-reveal window, on the join screen. $1 is the cooldown in days and $2 the end of the window, both already formatted and shown in bold — e.g. <nowiki><strong>7</strong></nowiki> and <nowiki><strong>30 days</strong></nowiki>. This was three messages with the numbers between them, which fixed the English word order; move $1 and $2 wherever your language needs them. Keep the HTML and the text inside it.",
     "accept-licence-heading": "Heading of the content-licence section on the join screen. Sits between the privacy summary and the consent checkbox.",
     "accept-licence-intro": "Licence disclosure on the join screen. $1 is a link to the CC0 deed, labelled with {{msg-proto|accept-licence-link}}. Do not translate the licence name itself.",
     "accept-licence-link": "Link label for the CC0 1.0 deed, used as $1 in {{msg-proto|accept-licence-intro}}. This is a licence name; keep it as-is.",
@@ -895,5 +893,7 @@
     "errorpage-403-hint": "What to do next, on the 403 page.",
     "errorpage-500-title": "Heading of the 500 page.",
     "errorpage-500-message": "One-line explanation on the 500 page.",
-    "errorpage-500-hint": "What to do next, on the 500 page."
+    "errorpage-500-hint": "What to do next, on the 500 page.",
+    "accept-js-taken": "Live-region announcement when the chosen pseudonym was claimed by someone else between the page loading and the form being submitted. Fresh options are offered.",
+    "forbidden-elig-requirement-named": "The eligibility rule on the not-eligible page, when the organizer named one. $1 is that name, shown in bold — organizer-authored content, so it stays untranslated. When no name is configured, {{msg-proto|forbidden-elig-requirement}} is used instead. Keep the HTML and the text inside it."
 }

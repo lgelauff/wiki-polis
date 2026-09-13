@@ -61,7 +61,7 @@
     "common-return-home": "Return home",
     "common-checklist": "Checklist",
     "common-examples": "Examples",
-    "forbidden-elig-doc-title": "Not eligible",
+    "forbidden-elig-doc-title": "Not eligible — $1 — Proto",
     "forbidden-elig-heading": "Not eligible for this consultation",
     "forbidden-elig-requirement": "This consultation has an eligibility requirement",
     "forbidden-elig-unavailable": "The eligibility checker is unavailable right now. Try again later.",
@@ -173,7 +173,7 @@
     "accept-notify-heading": "Stay informed",
     "accept-notify-help": "Optional best-effort updates when the consultation closes or results are published.",
     "accept-notify-email": "Email me if we send updates (via your confirmed wiki email address)",
-    "accept-notify-email-unavailable": "Email notifications unavailable — no confirmed email on your wiki account.",
+    "accept-notify-email-unavailable": "Email notifications unavailable — no confirmed email on your wiki account. $1",
     "accept-notify-add-email": "Add one on Meta-Wiki",
     "accept-notify-add-email-after": "and return to enable this.",
     "accept-notify-talk": "Post to my talk page if we send updates",
@@ -182,9 +182,7 @@
     "accept-privacy-details-summary": "Privacy & data handling",
     "accept-privacy-body1": "Your pseudonym is used for consultation records and participant-facing displays. Your Wikimedia username is used internally for login, access checks, moderation, and notification preferences.",
     "accept-privacy-body2": "Public results may include aggregate votes, clusters, and pseudonyms. They do not show your Wikimedia username unless you explicitly reveal it after the consultation closes.",
-    "accept-privacy-window-a": "Between",
-    "accept-privacy-window-b": "and",
-    "accept-privacy-window-c": "after close, you may optionally and permanently link your username to your pseudonym in the public record. This is irreversible during that window.",
+    "accept-privacy-window-a": "Between $1 and $2 after close, you may optionally and permanently link your username to your pseudonym in the public record. This is irreversible during that window.",
     "accept-licence-heading": "What you write",
     "accept-licence-intro": "Statements and arguments you write here are released under $1, which places them in the public domain, the same as a wiki edit. That is what lets the results be published as a report, quoted in a discussion, and reused by anyone.",
     "accept-licence-link": "CC0",
@@ -896,5 +894,7 @@
     "errorpage-403-hint": "If you expected access, you may need to log in as a different account, or ask an organizer for the role that grants it.",
     "errorpage-500-title": "Something went wrong",
     "errorpage-500-message": "The server could not complete this request.",
-    "errorpage-500-hint": "This has been logged. Try again in a moment; if it keeps happening, report it to a site admin."
+    "errorpage-500-hint": "This has been logged. Try again in a moment; if it keeps happening, report it to a site admin.",
+    "accept-js-taken": "That pseudonym was just taken — please choose another.",
+    "forbidden-elig-requirement-named": "This consultation has an eligibility requirement: $1."
 }
