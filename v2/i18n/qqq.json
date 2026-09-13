@@ -20,7 +20,7 @@
     "home-chip-reveal-today": "Chip warning that the identity-reveal window closes today.",
     "home-chip-reveal-days": "Chip warning how long the identity-reveal window stays open. $1 is a number of days; 'd' abbreviates 'days'.",
     "home-chip-reveal-opens": "Chip noting when the identity-reveal window will open. $1 is a number of days; 'd' abbreviates 'days'.",
-    "home-banner-prototype": "Top-of-page banner stating the tool is an early prototype.",
+    "home-banner-prototype": "Notice at the top of the landing page. $1 is a link to the issue tracker, labelled with {{msg-proto|home-banner-open-issue}} — e.g. <nowiki><a href=\"...\">Open an issue</a></nowiki>. It used to be two messages with the link between them, which fixed the English word order; move $1 wherever your language needs it. Keep the HTML and the text inside it.",
     "home-banner-open-issue": "Link text in the prototype banner to report a bug (opens the GitHub issue tracker).",
     "home-hero-heading": "Main heading on the signed-out landing page. The product's value proposition.",
     "home-hero-body": "Sub-heading paragraph on the signed-out landing page describing how the tool works.",
@@ -870,5 +870,18 @@
     "adminconv-closed-on": "Opens the danger-zone description of a closed consultation. $1 is the close date. A sentence about the identity-reveal window follows.",
     "adminconv-closed-undated": "Used instead of adminconv-closed-on when no close date was recorded.",
     "adminconv-reveal-pending": "Danger-zone description when the identity-reveal window has not opened yet. $1 is the opening date, $2 the number of days until then.",
-    "adminconv-reveal-open-date": "Danger-zone description while the identity-reveal window is open. $1 is the closing date."
+    "adminconv-reveal-open-date": "Danger-zone description while the identity-reveal window is open. $1 is the closing date.",
+    "base-mode-switch-aria": "Accessible name for the demo/real toggle in the site header. Names the choice, since the two options alone do not say what is being switched.",
+    "base-mode-demo": "The demo option in the header's demo/real toggle. A call to action, not a noun — it invites the visitor into a practice consultation. Sits beside {{msg-proto|base-mode-real}}.",
+    "base-mode-real": "The real-consultation option in the header's demo/real toggle, beside {{msg-proto|base-mode-demo}}. Short because it is one half of a two-option switch.",
+    "base-lock-real": "Badge in the header of a real consultation, marking that what the participant does here counts. The demo counterpart is {{msg-proto|conv-demo-label}}.",
+    "base-footer-licence": "Licence line in the site footer. $1 is a link to the CC0 deed labelled with {{msg-proto|accept-licence-link}} — e.g. <nowiki><a href=\"...\">CC0</a></nowiki>. Keep the HTML and the text inside it.",
+    "fork-demo-title": "Heading of the card leading to a demonstration consultation.",
+    "fork-demo-sub": "Subtitle under {{msg-proto|fork-demo-title}}: what the demo card offers.",
+    "fork-demo-cta": "Call to action on the demo card. The arrow is decorative.",
+    "fork-demo-aria": "Accessible name for the whole demo card, which is one link. Says both the heading and the subtitle, since a screen-reader user hears the link name in place of the card.",
+    "fork-real-title": "Heading of the card leading to live consultations.",
+    "fork-real-sub": "Subtitle under {{msg-proto|fork-real-title}}: the point of difference from the demo card.",
+    "fork-real-cta": "Call to action on the real-consultations card. The arrow is decorative.",
+    "fork-real-aria": "Accessible name for the whole real-consultations card, which is one link."
 }

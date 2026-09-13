@@ -18,11 +18,20 @@ def _production_sources():
 # them by shape is narrower than exempting a file — which is what the skip-link line below
 # used to do, and what a Methodology link inside a translated sentence would have needed.
 _ANCHOR = re.compile(r'<a(?=[\s>])[^>]*>')
-_FRAGMENT_HREF = re.compile(r'\bhref=(?:"|\'|\{`)#')
+# Two href shapes canonicalClientPath() rejects outright, so InternalLink renders a plain <a>
+# for them anyway and routing them through it would change nothing:
+#   - a bare "#fragment"   (client-routes.ts: returns None when href starts with '#')
+#   - an absolute URL      (returns None for a foreign origin or a non-http(s) scheme)
+# Both appear inside translated sentences, where the link has to be part of the message so a
+# translator can move it. The realistic mistake -- a root-relative path like "/consultations"
+# that should have been a client-side navigation -- is still caught.
+# Residual gap: an absolute URL on our OWN origin would slip through. Nothing in the codebase
+# writes one, and the guard below pins that path anchors keep failing.
+_EXEMPT_HREF = re.compile(r'\bhref=(?:"|\'|\{`)(?:#|[a-z][a-z0-9+.-]*://)')
 
 
 def _routable_raw_anchors(source):
-    return [tag for tag in _ANCHOR.findall(source) if not _FRAGMENT_HREF.search(tag)]
+    return [tag for tag in _ANCHOR.findall(source) if not _EXEMPT_HREF.search(tag)]
 
 
 def test_production_pages_do_not_bypass_internal_link_navigation():
@@ -42,6 +51,8 @@ def test_the_anchor_guard_still_catches_a_routable_raw_anchor():
     assert _routable_raw_anchors('<a href="/consultations">x</a>') == ['<a href="/consultations">']
     assert _routable_raw_anchors('<a className="c" href="/admin">x</a>')
     assert _routable_raw_anchors('<a href="#methodology">x</a>') == []
+    assert _routable_raw_anchors('<a href="https://creativecommons.org/x">x</a>') == []
+    assert _routable_raw_anchors('<a href="/consultations" target="_blank">x</a>')  # still caught
     assert _routable_raw_anchors('<a className="skip-link" href="#main">x</a>') == []
     assert _routable_raw_anchors('<InternalLink href="/x" />') == []
 
