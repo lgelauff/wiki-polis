@@ -288,7 +288,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
               <span className="stmt-meta-right" id="stmt-right-label">{msg('conv-vote-private')}</span>
               {receipt && (
                 <span className="voted-badge" data-type={receipt.choice === 'pass' ? 'neutral' : receipt.choice}>
-                  <span className="voted-badge-check"><svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 6.5L4.8 9L10 3.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></span> {msg('conv-vote-you-voted')} <span id="voted-label">{receipt.choice === 'agree' ? msg('conv-vote-label-agree') : receipt.choice === 'disagree' ? msg('conv-vote-label-disagree') : msg('conv-vote-label-pass')}</span>
+                  <span className="voted-badge-check"><svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 6.5L4.8 9L10 3.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></span> <span id="voted-label">{msg('conv-vote-you-voted', receipt.choice === 'agree' ? msg('conv-vote-agree') : receipt.choice === 'disagree' ? msg('conv-vote-disagree') : msg('conv-vote-pass'))}</span>
                   <button type="button" className="change-vote-btn" onClick={() => setReceipt(null)}>{msg('conv-vote-change')}</button>
                 </span>
               )}
