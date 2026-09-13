@@ -1,10 +1,17 @@
 """Which messages are offered to translators, and which are held back.
 
-The admin console is not being translated yet: it needs product work before it is worth a
-volunteer's time, and it is a third of the catalogue's words while serving a handful of
-organisers. Holding it back is a translatewiki configuration choice — the keys, the `msg()`
-call sites and the `qqq` entries all stay exactly as they are, so nothing has to be rebuilt
-when it is released to translators.
+Two groups are held back, for different reasons, and they are tracked separately so either
+can be released without the other:
+
+  - **The admin console.** It needs product work before it is worth a volunteer's time, and
+    it is a third of the catalogue's words while serving a handful of organisers.
+  - **The help pages.** Their content is still being worked on and may be expanded or
+    dropped. translatewiki freezes key names once translators start, and churning the text
+    behind a frozen key spends volunteer effort twice.
+
+Holding either back is a translatewiki configuration choice — the keys, the `msg()` call
+sites and the `qqq` entries all stay exactly as they are, so nothing has to be rebuilt when
+they are released.
 
 The partition is computed here rather than hand-listed, because a hand-list rots: wiring a
 new screen can quietly move a message from one audience to the other.
@@ -30,6 +37,10 @@ _ADMIN_NAMESPACES = (
     'admin', 'adminconv-', 'stmts-', 'featured-', 'invites-', 'participants-',
     'modlog-', 'flags-', 'role-', 'precond-', 'rec-',
 )
+
+# Held back for a different reason: the copy itself is unsettled. Unlike the admin console
+# these are participant-facing, so they come back as soon as the content stops moving.
+_UNSTABLE_NAMESPACES = ('guidance-',)
 
 
 def _source_files(suffix):
@@ -74,7 +85,9 @@ def audiences():
     admin &= catalogue
     unreferenced = catalogue - participant - admin
     admin |= {k for k in unreferenced if k.startswith(_ADMIN_NAMESPACES)}
-    return participant, admin - participant          # participants win a tie
+    admin -= participant                             # participants win a tie
+    unstable = {k for k in catalogue if k.startswith(_UNSTABLE_NAMESPACES)}
+    return participant - unstable, admin | unstable
 
 
 def _deferred_from_config():
@@ -99,6 +112,16 @@ def test_no_participant_message_is_held_back():
     participant, admin_only = audiences()
     assert not (participant & admin_only)
     assert not (participant & _deferred_from_config())
+
+
+def test_the_help_pages_are_held_back_while_their_copy_is_unsettled():
+    """Separately from the admin console, so either can be released on its own."""
+    _, deferred = audiences()
+    guidance = {k for k in json.loads((_V2 / 'i18n' / 'en.json').read_text(encoding='utf-8'))
+                if k.startswith('guidance-')}
+    assert guidance, 'no guidance-* messages found; has the namespace been renamed?'
+    assert guidance <= deferred
+    assert guidance <= _deferred_from_config()
 
 
 def test_the_split_is_not_vacuous():
