@@ -147,9 +147,8 @@ export function MessageProvider({children, locale: override}: {children: ReactNo
     try {
       const banana = new Banana(locale, {messages: {[locale]: messages ?? {}}});
       return (key, ...params) => {
-        // banana parses each message for markup and throws on one it cannot parse -- a
-        // stray `<` is enough ("<1m" did it). msg() runs in render, so a throw here blanks
-        // the whole page for one bad string. Show the key instead: loud, but contained.
+        // banana parses each message for markup and throws on one it cannot parse, such as a
+        // bare `<`. msg() runs in render, so the key is returned instead of throwing.
         try {
           return banana.i18n(key, ...params);
         } catch {

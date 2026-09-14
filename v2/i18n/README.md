@@ -215,8 +215,8 @@ Messages with inline HTML are rendered as HTML, in the SPA and in the error page
 markup is held to two rules:
 
 - **English** may use only `<strong>`, `<em>`, `<code>`, and `<a href>` to a same-site path,
-  with no bare `<` that is not a tag. A bare `<` is not just untidy: banana-i18n throws on it
-  in render and blanks the page (`"<1m"` did exactly that to the admin console).
+  with no bare `<` that is not a tag: banana-i18n cannot parse one, and `msg()` shows the
+  message key in its place.
 - **A translation** may use only markup its English already uses: the same tags with the same
   attributes and values, repeated or reordered as the language needs. `i18n.load()` does not
   serve one that adds anything else — that message falls back to English — and
