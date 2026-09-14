@@ -96,7 +96,7 @@ A flat `{key: text}` map — **not** the `{"data": ...}` envelope the rest of AP
 because that flat map is what `banana-i18n` takes as a message store. English-filled, so a
 partly translated locale is still complete. `@metadata` is excluded. An unknown locale falls
 back to English rather than 404ing, mirroring the resolver's `locale -> en -> ⧼key⧽` chain.
-`qqx` returns `(key)` for every key.
+`qqx` returns `(key)` for every key, or `(key: $1, $2)` for a message with parameters.
 
 Pin `?v=<gitVersion>` (the SPA already has `gitVersion` from `GET /api/v1/session`) to get the
 cacheable response; the same `?v=<git-sha>` contract the static assets use, so a deploy busts
