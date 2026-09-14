@@ -4292,6 +4292,9 @@ button.conv-output-symbol {
   grid-template-columns: minmax(120px, 0.3fr) 1fr;
   gap: 12px;
 }
+/* Status values are lowercase messages ("provisional"); the capital is presentation. */
+.output-status-value::first-letter { text-transform: uppercase; }
+
 .output-context-grid dt {
   font-family: var(--mono);
   font-size: 11px;

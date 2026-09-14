@@ -4,6 +4,7 @@ import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
+import {outputMethod, outputPhase} from '../../i18n/server-labels';
 
 type Report = components['schemas']['ResultsReport'];
 type Statement = components['schemas']['ResultsStatement'];
@@ -160,11 +161,11 @@ function OpinionGroups({report}: {report: Report}) {
   return <div className="report-section">
     <h2 className="report-section-heading">{msg('report-groups-heading')} <span className="report-section-sub">{msg('report-groups-sub', report.opinionGroups.length)}</span></h2>
     <p className="muted" style={{fontSize: 13, marginBottom: '1rem'}}>{msg('report-groups-intro')}</p>
-    {report.opinionGroups.map((group) => <div className="results-block" style={{marginBottom: '1rem'}} key={group.label}>
-      <p className="results-group-heading">{`\n        ${group.label}\n        `}{!!group.memberCount && <span className="muted" style={{fontWeight: 400, fontSize: 12}}>{msg('report-group-members', group.memberCount)}</span>}{'\n      '}</p>
+    {report.opinionGroups.map((group, groupIndex) => <div className="results-block" style={{marginBottom: '1rem'}} key={group.label}>
+      <p className="results-group-heading">{`\n        ${msg('report-group-label', groupIndex + 1)}\n        `}{!!group.memberCount && <span className="muted" style={{fontWeight: 400, fontSize: 12}}>{msg('report-group-members', group.memberCount)}</span>}{'\n      '}</p>
       {group.positions.map((position, index) => <div className="results-row" key={`${position.choice}-${index}`}>
         <span className={`results-badge results-${position.choice}`}>{position.choice === 'agree' ? msg('report-badge-agree') : msg('report-badge-disagree')}</span>
-        <span className="results-text">{`"${position.statement}"`}</span>
+        <span className="results-text">{msg('conv-results-quoted', position.statement)}</span>
         {!!position.percentage && <span className="results-pct">{`${Math.trunc(position.percentage)}%`}</span>}
       </div>)}
     </div>)}
@@ -220,6 +221,7 @@ function ResultsBody({report}: {report: Report}) {
 export function FinalReportLegacyPage({report}: {report: Report}) {
   const dates = useDateFormat();
   const msg: Message = useMessage();
+  const contextOutput = report.publication === 'final' ? 'report' : 'preliminary-results';
   return <LegacyShell headerCrumb={<span className="header-crumb">
     <span className="header-crumb-sep">/</span>
     <span>{truncated(report.title, 40)}</span>
@@ -238,9 +240,11 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
       <div className="report-section output-context">
         <h2 className="report-section-heading">{msg('output-howto-heading')}</h2>
         <dl className="output-context-grid">
-          <div><dt>{msg('output-produced-from')}</dt><dd>{report.context.phase}</dd></div>
+          {/* The server takes this context from the output definition: "report" once the
+              consultation is closed, "preliminary-results" before. */}
+          <div><dt>{msg('output-produced-from')}</dt><dd>{outputPhase(msg, contextOutput, report.context.phase)}</dd></div>
           <div><dt>{msg('output-status-label')}</dt><dd>{msg('report-status-final')}</dd></div>
-          <div><dt>{msg('output-method-label')}</dt><dd>{report.context.method}</dd></div>
+          <div><dt>{msg('output-method-label')}</dt><dd>{outputMethod(msg, contextOutput, report.context.method)}</dd></div>
         </dl>
       </div>
       <PlaceholderSections />

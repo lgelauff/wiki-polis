@@ -113,3 +113,51 @@ export const outputTooltip = (msg: Message, id: string | null | undefined, serve
 
 export const outputPending = (msg: Message, id: string | null | undefined, serverLabel?: string | null) =>
   resolve(OUTPUT_PENDING_MESSAGES, msg, id, serverLabel);
+
+/** The phase each consultation output is produced in, from `app.OUTPUT_DEFINITIONS`. */
+const OUTPUT_PHASE_MESSAGES: Record<string, string> = {
+  'initial-clustering': 'output-initial-clustering-phase',
+  'argument-map': 'output-argument-map-phase',
+  'preliminary-results': 'output-preliminary-results-phase',
+  report: 'output-report-phase',
+  dataset: 'output-dataset-phase',
+};
+
+const OUTPUT_METHOD_MESSAGES: Record<string, string> = {
+  'initial-clustering': 'output-initial-clustering-method',
+  'argument-map': 'output-argument-map-method',
+  'preliminary-results': 'output-preliminary-results-method',
+  report: 'output-report-method',
+  dataset: 'output-dataset-method',
+};
+
+/** Output status values: `provisional` or `final`. */
+const OUTPUT_STATUS_MESSAGES: Record<string, string> = {
+  provisional: 'output-status-provisional',
+  final: 'output-status-final',
+};
+
+export const outputPhase = (msg: Message, id: string | null | undefined, serverLabel?: string | null) =>
+  resolve(OUTPUT_PHASE_MESSAGES, msg, id, serverLabel);
+
+export const outputMethod = (msg: Message, id: string | null | undefined, serverLabel?: string | null) =>
+  resolve(OUTPUT_METHOD_MESSAGES, msg, id, serverLabel);
+
+export const outputStatus = (msg: Message, id: string | null | undefined) =>
+  resolve(OUTPUT_STATUS_MESSAGES, msg, id, id);
+
+/** Public moderation-log values from `app._moderation_log_rows`. */
+const MODLOG_ACTION_MESSAGES: Record<string, string> = {
+  Banned: 'modlog-action-banned',
+  Unbanned: 'modlog-action-unbanned',
+};
+
+const MODLOG_SCOPE_MESSAGES: Record<string, string> = {
+  conversation: 'modlog-scope-conversation',
+};
+
+export const moderationAction = (msg: Message, id: string | null | undefined) =>
+  resolve(MODLOG_ACTION_MESSAGES, msg, id, id);
+
+export const moderationScope = (msg: Message, id: string | null | undefined) =>
+  resolve(MODLOG_SCOPE_MESSAGES, msg, id, id);

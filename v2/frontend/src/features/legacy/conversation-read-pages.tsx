@@ -9,7 +9,11 @@ import {
 } from '../../api/queries';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
-import {useDateFormat} from '../../i18n/dates';
+import {intlLocale, useDateFormat} from '../../i18n/dates';
+import {useLocale, useMessage} from '../../i18n/messages';
+import {nodeSlot, withNodes} from '../../i18n/message-nodes';
+import {escapeHtml, richHtml} from '../../i18n/rich-html';
+import {moderationAction, moderationScope, outputLabel, outputMethod, outputPending, outputPhase, outputStatus, phaseLabel} from '../../i18n/server-labels';
 
 type OutputKey = components['schemas']['ConversationOutputDetail']['key'];
 
@@ -26,19 +30,28 @@ function outputKey(value: string | undefined): OutputKey {
   return key as OutputKey;
 }
 
-function capitalize(value: string) {
-  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
-}
-
 function truncated(value: string, length: number) {
   return value.length > length ? `${value.slice(0, length - 1)}…` : value;
 }
 
-function countLabel(count: number, singular: string) {
-  return `${count} ${singular}${count === 1 ? '' : 's'}`;
+/** A short list in the reader's language, e.g. "Explore, Arguments". The `unit` type joins
+ *  without a trailing "and", which suits a list of concurrent phases. */
+function listOf(locale: string, items: string[]): string {
+  try {
+    return new Intl.ListFormat(intlLocale(locale), {type: 'unit', style: 'short'}).format(items);
+  } catch {
+    return items.join(', ');
+  }
 }
 
+/** Chooses the plural form of a statistic's unit when its value is unknown. 100 takes the
+ *  general plural form in the languages that have more than two forms, where 2 would pick a
+ *  dual or "few" form. */
+const UNKNOWN_COUNT = 100;
+
 export function ConversationAboutLegacyPage() {
+  const msg = useMessage();
+  const locale = useLocale();
   const dates = useDateFormat();
   const slug = requiredParam('slug', useParams().slug);
   const {data} = useSuspenseQuery(conversationAboutQuery(slug));
@@ -47,77 +60,76 @@ export function ConversationAboutLegacyPage() {
   return (
     <LegacyShell
       headerMode={data.space === 'demo' ? 'conversation-demo' : 'conversation-real'}
-      title={`About — ${data.title} — Proto`}
+      title={msg('about-doc-title', data.title)}
       headerCrumb={(
-        <nav className="header-crumb" aria-label="Conversation context">
+        <nav className="header-crumb" aria-label={msg('conv-crumb-aria')}>
           <span className="header-crumb-sep">/</span>
           <InternalLink href={`/c/${data.slug}`}>{truncated(data.title, 32)}</InternalLink>
           <span className="header-crumb-sep">/</span>
-          <span>About</span>
+          <span>{msg('conv-crumb-about')}</span>
         </nav>
       )}
     >
       <div className="container">
-        <p className="muted" style={{fontFamily: 'var(--mono)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '.5rem'}}>Conversation record</p>
-        <h1>{`About ${data.title}`}</h1>
+        <p className="muted" style={{fontFamily: 'var(--mono)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '.5rem'}}>{msg('about-eyebrow')}</p>
+        <h1>{msg('about-heading', data.title)}</h1>
 
         {data.descriptionHtml && <div className="intro-text" style={{marginTop: '1rem'}} dangerouslySetInnerHTML={{__html: data.descriptionHtml}} />}
         {data.outroHtml && <div className="outro-text" style={{marginTop: '1rem'}} dangerouslySetInnerHTML={{__html: data.outroHtml}} />}
 
         <div className="landing-section" style={{marginTop: '1.5rem'}}>
-          <h2 className="section-heading">Where it stands</h2>
-          <p><strong>Status:</strong> {data.status === 'archived' ? 'Closed' : data.status === 'paused' ? 'Paused' : 'Open'}</p>
-          <p><strong>Current phase:</strong> {data.phases.map((phase) => phase.label).join(', ')}</p>
+          <h2 className="section-heading">{msg('about-status-heading')}</h2>
+          <p><strong>{msg('about-status-label')}</strong> {data.status === 'archived' ? msg('about-status-closed') : data.status === 'paused' ? msg('about-status-paused') : msg('about-status-open')}</p>
+          <p><strong>{msg('about-phase-label', data.phases.length)}</strong> {listOf(locale, data.phases.map((phase) => phaseLabel(msg, phase.key, phase.label)))}</p>
           {transition && (
-            <p><strong>Next:</strong> {`${transition.targetLabel} on `}
-              <time dateTime={transition.at} title="Shown in your local timezone">
-                {dates.dateTime(transition.at)}
-              </time>
-            </p>
+            <p dangerouslySetInnerHTML={richHtml(msg('conv-scheduled-transition',
+              escapeHtml(phaseLabel(msg, transition.target, transition.targetLabel)),
+              `<time datetime="${escapeHtml(transition.at)}" title="${escapeHtml(msg('conv-scheduled-tz-title'))}">${escapeHtml(dates.dateTime(transition.at))}</time>`))} />
           )}
-          {data.pseudonym && <p><strong>Your pseudonym:</strong> <code>{data.pseudonym}</code></p>}
+          {data.pseudonym && <p><strong>{msg('about-pseudonym-label')}</strong> <code>{data.pseudonym}</code></p>}
         </div>
 
         <div className="landing-section" style={{marginTop: '1rem'}}>
-          <h2 className="section-heading">Conversation statistics</h2>
+          <h2 className="section-heading">{msg('about-stats-heading')}</h2>
           <div className="stat-row" style={{display: 'flex', gap: '2rem', flexWrap: 'wrap'}}>
-            <AboutStatistic value={data.statistics.participants} label="participants" />
-            <AboutStatistic value={data.statistics.statementVotes} label="statement votes" />
-            <AboutStatistic value={data.statistics.statements} label="statements" />
-            <AboutStatistic value={data.statistics.arguments} label="arguments" />
-            <AboutStatistic value={data.statistics.argumentContributors} label="argument contributors" />
+            {/* The unit follows the number's plural form. */}
+            <AboutStatistic value={data.statistics.participants} label={msg('about-stat-participants', data.statistics.participants ?? UNKNOWN_COUNT)} />
+            <AboutStatistic value={data.statistics.statementVotes} label={msg('about-stat-statement-votes', data.statistics.statementVotes ?? UNKNOWN_COUNT)} />
+            <AboutStatistic value={data.statistics.statements} label={msg('about-stat-statements', data.statistics.statements ?? UNKNOWN_COUNT)} />
+            <AboutStatistic value={data.statistics.arguments} label={msg('about-stat-arguments', data.statistics.arguments ?? UNKNOWN_COUNT)} />
+            <AboutStatistic value={data.statistics.argumentContributors} label={msg('about-stat-argument-contributors', data.statistics.argumentContributors ?? UNKNOWN_COUNT)} />
           </div>
-          {data.statistics.participants === null && <p className="muted" style={{fontSize: 12, marginTop: '.8rem'}}>Polis vote statistics are unavailable right now; local argument totals remain current.</p>}
+          {data.statistics.participants === null && <p className="muted" style={{fontSize: 12, marginTop: '.8rem'}}>{msg('about-stats-unavailable')}</p>}
         </div>
 
         {data.personal && (
           <div className="landing-section" style={{marginTop: '1rem'}}>
-            <h2 className="section-heading">Your contributions</h2>
+            <h2 className="section-heading">{msg('about-contrib-heading')}</h2>
             <ul>
-              <li>{`${countLabel(data.personal.statementsSuggested, 'new statement')} suggested`}</li>
+              <li>{msg('about-contrib-suggested', data.personal.statementsSuggested)}</li>
               <li>{data.personal.statementVotesAvailable
-                ? countLabel(data.personal.statementVotes ?? 0, 'statement vote')
-                : 'Vote count unavailable'}</li>
-              <li>{`${countLabel(data.personal.argumentsAdded, 'argument')} added`}</li>
-              <li>{`${countLabel(data.personal.argumentsRated, 'argument')} rated`}</li>
+                ? msg('about-contrib-votes', data.personal.statementVotes ?? 0)
+                : msg('about-contrib-votes-unavailable')}</li>
+              <li>{msg('about-contrib-arguments-added', data.personal.argumentsAdded)}</li>
+              <li>{msg('about-contrib-arguments-rated', data.personal.argumentsRated)}</li>
             </ul>
           </div>
         )}
 
         <div className="landing-section" style={{marginTop: '1rem'}}>
-          <h2 className="section-heading">Outputs</h2>
+          <h2 className="section-heading">{msg('about-outputs-heading')}</h2>
           <ul>
             {data.outputs.map((output) => <li key={output.key}>
               {output.ready && output.href
-                ? <InternalLink href={output.href}>{output.label}</InternalLink>
-                : <>{output.label} <span className="muted">— pending</span></>}
+                ? <InternalLink href={output.href}>{outputLabel(msg, output.key, output.label)}</InternalLink>
+                : <span className="muted">{withNodes(msg('about-output-pending', nodeSlot(0)), <span style={{color: 'var(--ink)'}}>{outputLabel(msg, output.key, output.label)}</span>)}</span>}
             </li>)}
           </ul>
         </div>
 
         <p style={{marginTop: '1.25rem'}}>
-          <InternalLink href={`/c/${data.slug}/moderation-log`}>Moderation log{data.moderation.eventCount > 0 ? ` (${data.moderation.eventCount})` : ''}</InternalLink>
-          {' · '}<InternalLink href={`/c/${data.slug}`}>Return to conversation</InternalLink>
+          <InternalLink href={`/c/${data.slug}/moderation-log`}>{data.moderation.eventCount > 0 ? msg('about-modlog-link-count', data.moderation.eventCount) : msg('conv-moderation-log')}</InternalLink>
+          {' · '}<InternalLink href={`/c/${data.slug}`}>{msg('about-return')}</InternalLink>
         </p>
       </div>
     </LegacyShell>
@@ -125,47 +137,47 @@ export function ConversationAboutLegacyPage() {
 }
 
 function AboutStatistic({value, label}: {value: number | null; label: string}) {
-  return <span><strong>{value ?? '—'}</strong><br /><span className="muted">{label}</span></span>;
+  const msg = useMessage();
+  return <span><strong>{value ?? <><span aria-hidden="true">—</span><span className="sr-only">{msg('about-stat-unknown')}</span></>}</strong><br /><span className="muted">{label}</span></span>;
 }
 
 export function ModerationLogPage() {
+  const msg = useMessage();
+  const dates = useDateFormat();
   const slug = requiredParam('slug', useParams().slug);
   const {data} = useSuspenseQuery(moderationLogQuery(slug));
 
   return (
     <LegacyShell
-      title={`Moderation log — ${data.title} — Proto`}
+      title={msg('modlog-doc-title', data.title)}
       headerCrumb={(
-        <nav className="header-crumb" aria-label="Conversation context">
+        <nav className="header-crumb" aria-label={msg('conv-crumb-aria')}>
           <span className="header-crumb-sep">/</span>
-          <InternalLink href={`/c/${data.slug}/moderation-log`}>Moderation log</InternalLink>
+          <InternalLink href={`/c/${data.slug}/moderation-log`}>{msg('conv-moderation-log')}</InternalLink>
         </nav>
       )}
     >
       <div className="container">
-        <h1>Moderation log — {data.title}</h1>
-        <p className="muted" style={{fontSize: 13, marginBottom: '1.5rem'}}>
-          Conversation-level bans and unbans are listed for accountability. Private moderator
-          notes are not public.
-        </p>
+        <h1>{msg('modlog-heading', data.title)}</h1>
+        <p className="muted" style={{fontSize: 13, marginBottom: '1.5rem'}}>{msg('modlog-intro')}</p>
 
         {data.events.length > 0 ? (
           <table className="admin-table">
-            <thead><tr><th>When</th><th>Action</th><th>Pseudonym</th><th>Scope</th><th>Moderator</th></tr></thead>
+            <thead><tr><th>{msg('modlog-th-when')}</th><th>{msg('modlog-th-action')}</th><th>{msg('modlog-th-pseudonym')}</th><th>{msg('modlog-th-scope')}</th><th>{msg('modlog-th-moderator')}</th></tr></thead>
             <tbody>
               {data.events.map((event, index) => (
                 <tr key={`${event.occurredAt}-${event.pseudonym}-${index}`}>
-                  <td className="muted">{event.occurredAt?.slice(0, 16).replace('T', ' ') ?? ''}</td>
-                  <td>{event.action}</td>
+                  <td className="muted">{event.occurredAt && <time dateTime={event.occurredAt}>{dates.dateTime(event.occurredAt)}</time>}</td>
+                  <td>{moderationAction(msg, event.action)}</td>
                   <td>{event.pseudonym}</td>
-                  <td>{event.scope}</td>
+                  <td>{moderationScope(msg, event.scope)}</td>
                   <td>{event.actor}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
-          <p className="muted">No bans or unbans have been recorded for this conversation.</p>
+          <p className="muted">{msg('modlog-empty')}</p>
         )}
       </div>
     </LegacyShell>
@@ -173,6 +185,7 @@ export function ModerationLogPage() {
 }
 
 export function ConversationOutputPage() {
+  const msg = useMessage();
   const params = useParams();
   const slug = requiredParam('slug', params.slug);
   const key = outputKey(params.outputKey);
@@ -180,14 +193,17 @@ export function ConversationOutputPage() {
   const output = data.output;
 
   return (
-    <LegacyShell headerCrumb={(
-      <span className="header-crumb">
-        <span className="header-crumb-sep">/</span>
-        <span>{data.title.length > 40 ? `${data.title.slice(0, 39)}…` : data.title}</span>
-        <span className="header-crumb-sep">/</span>
-        <span>{output.label}</span>
-      </span>
-    )}>
+    <LegacyShell
+      title={msg('output-doc-title', outputLabel(msg, output.key, output.label), data.title)}
+      headerCrumb={(
+        <nav className="header-crumb" aria-label={msg('conv-crumb-aria')}>
+          <span className="header-crumb-sep">/</span>
+          <span>{truncated(data.title, 40)}</span>
+          <span className="header-crumb-sep">/</span>
+          <span>{outputLabel(msg, output.key, output.label)}</span>
+        </nav>
+      )}
+    >
       <div className="container" style={{maxWidth: 800}}>
         <p style={{marginBottom: '1.25rem'}}>
           <InternalLink href={`/c/${data.slug}`} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>
@@ -197,18 +213,18 @@ export function ConversationOutputPage() {
 
         <div className="output-page-header">
           <div>
-            <p className="results-label">{output.phase} output</p>
-            <h1 className="report-title">{output.label}</h1>
+            <p className="results-label">{msg('output-eyebrow', outputPhase(msg, output.key, output.phase))}</p>
+            <h1 className="report-title">{outputLabel(msg, output.key, output.label)}</h1>
           </div>
-          <span className="report-badge">{capitalize(output.status)}</span>
+          <span className="report-badge">{outputStatus(msg, output.status)}</span>
         </div>
 
         <div className="report-section output-context">
-          <h2 className="report-section-heading">How to read this output</h2>
+          <h2 className="report-section-heading">{msg('output-howto-heading')}</h2>
           <dl className="output-context-grid">
-            <div><dt>Produced from</dt><dd>{output.phase}</dd></div>
-            <div><dt>Status</dt><dd>{`${capitalize(output.status)}${output.ready ? '' : ' · pending'}`}</dd></div>
-            <div><dt>Method</dt><dd>{output.method}</dd></div>
+            <div><dt>{msg('output-produced-from')}</dt><dd>{outputPhase(msg, output.key, output.phase)}</dd></div>
+            <div><dt>{msg('output-status-label')}</dt><dd className="output-status-value">{output.ready ? outputStatus(msg, output.status) : msg('output-status-pending', outputStatus(msg, output.status))}</dd></div>
+            <div><dt>{msg('output-method-label')}</dt><dd>{outputMethod(msg, output.key, output.method)}</dd></div>
           </dl>
         </div>
 
@@ -224,28 +240,29 @@ function OutputBody({slug, output}: {
   slug: string;
   output: components['schemas']['ConversationOutputDetail'];
 }) {
+  const msg = useMessage();
   if (output.key === 'initial-clustering') return <>
-    <h2 className="report-section-heading">Consensus and breaking points</h2>
-    <p className="muted">This page will summarize the Explore-phase statements that were broadly agreed on and the statements that divided participants. When clustering is stable enough, it will explain the opinion groups in plain language.</p>
-    <p className="report-placeholder"><em>Detailed clustering visuals are still to be developed.</em></p>
+    <h2 className="report-section-heading">{msg('output-initial-clustering-heading')}</h2>
+    <p className="muted">{msg('output-initial-clustering-body')}</p>
+    <p className="report-placeholder"><em>{msg('output-initial-clustering-note')}</em></p>
   </>;
   if (output.key === 'argument-map') return <>
-    <h2 className="report-section-heading">Featured statements and arguments</h2>
-    <p className="muted">This page will collect the pro and con arguments for each featured statement and order them by participant support. Your own submitted arguments will be highlighted when you are signed in.</p>
-    <p><InternalLink href={`/c/${slug}#tab-arguments`}>Open the current Arguments tab <span aria-hidden="true">→</span></InternalLink></p>
+    <h2 className="report-section-heading">{msg('output-argument-map-heading')}</h2>
+    <p className="muted">{msg('output-argument-map-body')}</p>
+    <p><InternalLink href={`/c/${slug}#tab-arguments`}>{msg('output-argument-map-link')} <span aria-hidden="true">→</span></InternalLink></p>
   </>;
   if (output.key === 'preliminary-results') return <>
-    <h2 className="report-section-heading">Live informed-vote preview</h2>
-    <p className="muted">Preliminary results are a lightweight, provisional view of the informed-voting round. They are not the official outcome and may change until the organizer publishes the final report.</p>
-    <p><InternalLink href={`/c/${slug}#tab-p6-results`}>Open the preliminary results tab <span aria-hidden="true">→</span></InternalLink></p>
+    <h2 className="report-section-heading">{msg('output-preliminary-heading')}</h2>
+    <p className="muted">{msg('output-preliminary-body')}</p>
+    <p><InternalLink href={`/c/${slug}#tab-p6-results`}>{msg('output-preliminary-link')} <span aria-hidden="true">→</span></InternalLink></p>
   </>;
   if (output.key === 'dataset') return <>
-    <h2 className="report-section-heading">Raw pseudonymous export</h2>
-    <p className="muted">The dataset will provide raw pseudonymous rows for independent analysis and replication. It will not expose xid, Wikimedia user IDs, or private identity links.</p>
-    <p className="report-placeholder"><em>Dataset export is still to be developed.</em></p>
+    <h2 className="report-section-heading">{msg('output-dataset-heading')}</h2>
+    <p className="muted">{msg('output-dataset-body')}</p>
+    <p className="report-placeholder"><em>{msg('output-dataset-note')}</em></p>
   </>;
   return <>
-    <h2 className="report-section-heading">To be developed</h2>
-    <p className="muted">{output.pending}</p>
+    <h2 className="report-section-heading">{msg('output-tbd-heading')}</h2>
+    <p className="muted">{outputPending(msg, output.key, output.pending)}</p>
   </>;
 }
