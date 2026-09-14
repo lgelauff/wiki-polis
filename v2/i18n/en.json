@@ -90,7 +90,7 @@
     "guidance-argument-doc-title": "Writing good arguments",
     "guidance-argument-crumb": "argument guide",
     "guidance-argument-heading": "Writing good arguments",
-    "guidance-argument-intro": "Arguments are a Proto feature. They explain why someone might support or oppose a featured statement; they are read by people, not used by the clustering algorithm. A good argument gives one clear reason why someone might agree or disagree with the statement.",
+    "guidance-argument-intro": "Arguments are a Proto feature. They explain why someone might support or oppose a featured statement; they are read by people, not used by the clustering algorithm.",
     "guidance-argument-check-direction": "<strong>State the direction.</strong> Make clear whether the argument is for or against the statement.",
     "guidance-argument-check-reason": "<strong>Add a reason.</strong> Do not just restate your vote.",
     "guidance-argument-check-one-point": "<strong>Make one point.</strong> If you have several reasons, write separate arguments.",
