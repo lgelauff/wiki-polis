@@ -178,7 +178,7 @@ function ArgumentCard({mapping, slug, csrfToken, side, item, prioritization}: {
 
   return (
     <div className="at-card argument-card" data-side={side} data-arg-id={item.id} data-picked={selected} data-own={item.own} data-can-vote={item.capabilities.prioritize} data-limit-reached={limitReached} data-hidden={item.hidden} onClick={toggle}>
-      <button className="at-pick argument-checkbox" type="button" aria-pressed={selected} aria-label={selected ? msg('conv-arg-unmark') : msg('conv-arg-mark')} aria-hidden={item.hidden || undefined} aria-disabled={volumeLocked || undefined} tabIndex={item.hidden ? -1 : item.capabilities.prioritize || volumeLocked ? 0 : -1}>
+      <button className="at-pick argument-checkbox" type="button" aria-pressed={selected} aria-label={msg('conv-arg-mark')} aria-hidden={item.hidden || undefined} aria-disabled={volumeLocked || undefined} tabIndex={item.hidden ? -1 : item.capabilities.prioritize || volumeLocked ? 0 : -1}>
         {selected && <PickMark />}
       </button>
       <div className="at-card-body argument-body">
@@ -225,11 +225,12 @@ function ArgumentColumn({mapping, slug, csrfToken, card, side}: {
 
 function Circle({state, number, current, onClick}: {state: 'none' | 'half' | 'complete'; number: number; current: boolean; onClick: () => void}) {
   const msg = useMessage();
-  const stateText = state === 'complete' ? msg('conv-circle-state-complete')
-    : state === 'half' ? msg('conv-circle-state-half')
-      : msg('conv-circle-state-none');
+  // A whole message per state: the state word agrees with "statement" in many languages.
+  const label = state === 'complete' ? msg('conv-circle-aria-complete', number)
+    : state === 'half' ? msg('conv-circle-aria-in-progress', number)
+      : msg('conv-circle-aria-not-started', number);
   return (
-    <svg className="at-circle" viewBox="0 0 36 36" role="img" aria-label={msg('conv-circle-aria', number, stateText)} onClick={onClick}>
+    <svg className="at-circle" viewBox="0 0 36 36" role="img" aria-label={label} onClick={onClick}>
       <circle cx="18" cy="18" r="15" fill={state === 'complete' ? 'var(--spot, #fef3c7)' : 'var(--surface, #fff)'} stroke={current ? 'var(--ink, #2c3e6b)' : state === 'none' ? 'var(--muted, #9ca3af)' : 'var(--pass, #3b5bdb)'} strokeWidth={current ? 3 : 2} />
       {state === 'half' && <path d="M18 3 A15 15 0 0 0 18 33 Z" fill="var(--spot, #fef3c7)" opacity=".75" />}
       <text x="18" y="22" textAnchor="middle" className="at-circle-label" fill={state === 'complete' ? 'var(--blue-dark, #1e3a8a)' : 'var(--pass, #3b5bdb)'} aria-hidden="true">{number}</text>
@@ -256,7 +257,10 @@ function FeaturedPanel({mapping, slug, csrfToken, card, index, currentIndex, set
   const pro = card.sides.pro.prioritization;
   const con = card.sides.con.prioritization;
   const sideDone = (sideName: SideName) => card.contributionsComplete || card.sides[sideName].contribution.status !== 'pending';
-  const stepOneSub = `${msg('conv-arg-for')}${sideDone('pro') ? ' ✓' : ''} · ${msg('conv-arg-against')}${sideDone('con') ? ' ✓' : ''}`;
+  // One message per combination, so the marks and separator stay inside translatable text.
+  const stepOneSub = sideDone('pro')
+    ? (sideDone('con') ? msg('conv-arg-step1-sub-both') : msg('conv-arg-step1-sub-for'))
+    : (sideDone('con') ? msg('conv-arg-step1-sub-against') : msg('conv-arg-step1-sub-none'));
   return (
     <div className={`at-panel arg-block${index !== currentIndex ? ' arg-block--hidden' : ''}${complete ? ' at-panel--done' : ''}${expanded ? ' at-panel--expanded' : ''}`} id={`fs-${card.id}`} tabIndex={-1} data-index={index} aria-hidden={index !== currentIndex || undefined}>
       <div className="at-head" {...(complete ? {role: 'button', tabIndex: 0, 'aria-expanded': expanded, 'aria-label': expanded ? msg('conv-arg-panel-collapse-aria') : msg('conv-arg-panel-expand-aria'), onClick: () => setExpanded(!expanded)} : {})}>
