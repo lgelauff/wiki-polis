@@ -456,8 +456,8 @@ def resolve(key: str, locale: str = SOURCE_LOCALE, params=()) -> str:
 
 def all_messages(locale: str) -> dict[str, str]:
     """Full message map for ``locale`` (English-filled for fallback), for the client-side
-    banana-i18n island. ``qqx`` maps every key to ``(key)`` so the JS surface is also
-    coverage-checkable.
+    banana-i18n island. ``qqx`` maps every key to ``(key)``, or ``(key: $1, $2)`` for one with
+    parameters, so the JS surface is also coverage-checkable.
 
     NOTE: v1 ships the whole map inline per page. When the JS message set grows, switch to a
     cache-headered per-locale endpoint (like the static ``?v=<sha>`` scheme).
