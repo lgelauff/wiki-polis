@@ -20,8 +20,9 @@ No request data is interpolated, so the page cannot leak internals. Werkzeug's
 own ``description`` is deliberately not shown for the same reason. The copy is
 no longer entirely static, though — see below — so ``title``, ``message`` and the
 error-code label are escaped before they reach the template. ``hint`` is not: it
-carries the front-page link, so it is trusted markup by design, and a translator
-editing it is editing HTML on purpose.
+carries the front-page link. A translation of it may only use the markup its English
+uses — the same ``<a href="/">`` — because ``i18n.load()`` refuses any other, so what
+reaches the page unescaped is still markup we wrote.
 
 Translation, without giving up the guarantee
 --------------------------------------------
@@ -173,7 +174,8 @@ def render_error_page(code: int) -> str:
     }
     # Catalogue text is not request data, but it is no longer written only by us: it comes
     # back from translatewiki. Escape everything that lands in element text or an attribute.
-    # `hint` is left raw on purpose — it carries the front-page link.
+    # `hint` is left raw on purpose — it carries the front-page link, and i18n.load() has
+    # already refused any translation of it that adds markup beyond that link.
     return _PAGE.format(
         code=code,
         lang=html.escape(_page_language(), quote=True),

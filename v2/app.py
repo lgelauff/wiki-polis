@@ -4912,6 +4912,8 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     # Configure logging before extensions init so their startup logs are formatted/correlated.
     configure_logging(app, on_toolforge=_on_toolforge)
+    # i18n loads its catalogue at import, before logging exists; report what it refused now.
+    i18n.log_refusals(app.logger)
 
     db.init_app(app)
     Migrate(app, db)
