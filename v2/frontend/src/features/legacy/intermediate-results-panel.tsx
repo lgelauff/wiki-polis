@@ -20,9 +20,9 @@ export function LegacyIntermediateResultsPanel({slug}: {slug: string}) {
   const msg = useMessage();
   const {data} = useSuspenseQuery(intermediateResultsQuery(slug));
   return <div className="landing-section results-section">
-    <h2>{msg('conv-results-heading')}{!!data.participantCount && <span className="muted" style={{fontSize: 13, fontWeight: 400, marginLeft: '.75rem'}}>{msg('conv-participant-count', data.participantCount)}</span>}</h2>
+    <h2>{msg('conv-results-heading')}{!!data.participantCount && <>{' '}<span className="muted" style={{fontSize: 13, fontWeight: 400, marginLeft: '.75rem'}}>{msg('conv-participant-count', data.participantCount)}</span></>}</h2>
     {data.state === 'ready' ? <>
-      {data.smallSample && <div className="notice-low-n" dangerouslySetInnerHTML={richHtml(msg('conv-small-sample', data.participantCount ?? 0))} />}
+      {data.smallSample && data.participantCount !== null && <div className="notice-low-n" dangerouslySetInnerHTML={richHtml(msg('conv-small-sample', data.participantCount))} />}
       {data.consensus.length > 0 && <div className="results-block">
         <p className="results-label">{msg('conv-consensus-label')}</p>
         {data.consensus.map((position, index) => <ResultRow position={position} key={`${position.choice}-${index}`} />)}

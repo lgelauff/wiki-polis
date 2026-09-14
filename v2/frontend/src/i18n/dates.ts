@@ -18,8 +18,13 @@ const INTL_LOCALE: Record<string, string> = {
   qqx: 'en-GB',
 };
 
+/** The tag to hand Intl for an interface locale. Also used for list formatting. */
+export function intlLocale(locale: string): string {
+  return (Object.hasOwn(INTL_LOCALE, locale) ? INTL_LOCALE[locale] : locale) || 'en-GB';
+}
+
 function formatter(locale: string, options: Intl.DateTimeFormatOptions) {
-  const tag = Object.hasOwn(INTL_LOCALE, locale) ? INTL_LOCALE[locale] : locale;
+  const tag = intlLocale(locale);
   try {
     return new Intl.DateTimeFormat(tag || 'en-GB', options);
   } catch {

@@ -9,10 +9,11 @@ import {
 } from '../../api/queries';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
-import {useDateFormat} from '../../i18n/dates';
+import {intlLocale, useDateFormat} from '../../i18n/dates';
 import {useLocale, useMessage} from '../../i18n/messages';
+import {nodeSlot, withNodes} from '../../i18n/message-nodes';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
-import {outputLabel, outputMethod, outputPending, outputPhase, outputStatus, phaseLabel} from '../../i18n/server-labels';
+import {moderationAction, moderationScope, outputLabel, outputMethod, outputPending, outputPhase, outputStatus, phaseLabel} from '../../i18n/server-labels';
 
 type OutputKey = components['schemas']['ConversationOutputDetail']['key'];
 
@@ -33,14 +34,20 @@ function truncated(value: string, length: number) {
   return value.length > length ? `${value.slice(0, length - 1)}…` : value;
 }
 
-/** A short list in the reader's language, e.g. "Explore, Arguments". */
+/** A short list in the reader's language, e.g. "Explore, Arguments". The `unit` type joins
+ *  without a trailing "and", which suits a list of concurrent phases. */
 function listOf(locale: string, items: string[]): string {
   try {
-    return new Intl.ListFormat(locale === 'qqx' ? 'en' : locale, {type: 'unit', style: 'short'}).format(items);
+    return new Intl.ListFormat(intlLocale(locale), {type: 'unit', style: 'short'}).format(items);
   } catch {
     return items.join(', ');
   }
 }
+
+/** Chooses the plural form of a statistic's unit when its value is unknown. 100 takes the
+ *  general plural form in the languages that have more than two forms, where 2 would pick a
+ *  dual or "few" form. */
+const UNKNOWN_COUNT = 100;
 
 export function ConversationAboutLegacyPage() {
   const msg = useMessage();
@@ -73,7 +80,7 @@ export function ConversationAboutLegacyPage() {
         <div className="landing-section" style={{marginTop: '1.5rem'}}>
           <h2 className="section-heading">{msg('about-status-heading')}</h2>
           <p><strong>{msg('about-status-label')}</strong> {data.status === 'archived' ? msg('about-status-closed') : data.status === 'paused' ? msg('about-status-paused') : msg('about-status-open')}</p>
-          <p><strong>{msg('about-phase-label')}</strong> {listOf(locale, data.phases.map((phase) => phaseLabel(msg, phase.key, phase.label)))}</p>
+          <p><strong>{msg('about-phase-label', data.phases.length)}</strong> {listOf(locale, data.phases.map((phase) => phaseLabel(msg, phase.key, phase.label)))}</p>
           {transition && (
             <p dangerouslySetInnerHTML={richHtml(msg('conv-scheduled-transition',
               escapeHtml(phaseLabel(msg, transition.target, transition.targetLabel)),
@@ -85,12 +92,12 @@ export function ConversationAboutLegacyPage() {
         <div className="landing-section" style={{marginTop: '1rem'}}>
           <h2 className="section-heading">{msg('about-stats-heading')}</h2>
           <div className="stat-row" style={{display: 'flex', gap: '2rem', flexWrap: 'wrap'}}>
-            {/* The unit follows the number's plural form; an unknown count takes the plural. */}
-            <AboutStatistic value={data.statistics.participants} label={msg('about-stat-participants', data.statistics.participants ?? 2)} />
-            <AboutStatistic value={data.statistics.statementVotes} label={msg('about-stat-statement-votes', data.statistics.statementVotes ?? 2)} />
-            <AboutStatistic value={data.statistics.statements} label={msg('about-stat-statements', data.statistics.statements ?? 2)} />
-            <AboutStatistic value={data.statistics.arguments} label={msg('about-stat-arguments', data.statistics.arguments ?? 2)} />
-            <AboutStatistic value={data.statistics.argumentContributors} label={msg('about-stat-argument-contributors', data.statistics.argumentContributors ?? 2)} />
+            {/* The unit follows the number's plural form. */}
+            <AboutStatistic value={data.statistics.participants} label={msg('about-stat-participants', data.statistics.participants ?? UNKNOWN_COUNT)} />
+            <AboutStatistic value={data.statistics.statementVotes} label={msg('about-stat-statement-votes', data.statistics.statementVotes ?? UNKNOWN_COUNT)} />
+            <AboutStatistic value={data.statistics.statements} label={msg('about-stat-statements', data.statistics.statements ?? UNKNOWN_COUNT)} />
+            <AboutStatistic value={data.statistics.arguments} label={msg('about-stat-arguments', data.statistics.arguments ?? UNKNOWN_COUNT)} />
+            <AboutStatistic value={data.statistics.argumentContributors} label={msg('about-stat-argument-contributors', data.statistics.argumentContributors ?? UNKNOWN_COUNT)} />
           </div>
           {data.statistics.participants === null && <p className="muted" style={{fontSize: 12, marginTop: '.8rem'}}>{msg('about-stats-unavailable')}</p>}
         </div>
@@ -115,7 +122,7 @@ export function ConversationAboutLegacyPage() {
             {data.outputs.map((output) => <li key={output.key}>
               {output.ready && output.href
                 ? <InternalLink href={output.href}>{outputLabel(msg, output.key, output.label)}</InternalLink>
-                : <>{outputLabel(msg, output.key, output.label)} <span className="muted">{msg('about-output-pending')}</span></>}
+                : <span className="muted">{withNodes(msg('about-output-pending', nodeSlot(0)), <span style={{color: 'var(--ink)'}}>{outputLabel(msg, output.key, output.label)}</span>)}</span>}
             </li>)}
           </ul>
         </div>
@@ -130,7 +137,8 @@ export function ConversationAboutLegacyPage() {
 }
 
 function AboutStatistic({value, label}: {value: number | null; label: string}) {
-  return <span><strong>{value ?? '—'}</strong><br /><span className="muted">{label}</span></span>;
+  const msg = useMessage();
+  return <span><strong>{value ?? <><span aria-hidden="true">—</span><span className="sr-only">{msg('about-stat-unknown')}</span></>}</strong><br /><span className="muted">{label}</span></span>;
 }
 
 export function ModerationLogPage() {
@@ -159,9 +167,9 @@ export function ModerationLogPage() {
               {data.events.map((event, index) => (
                 <tr key={`${event.occurredAt}-${event.pseudonym}-${index}`}>
                   <td className="muted">{event.occurredAt?.slice(0, 16).replace('T', ' ') ?? ''}</td>
-                  <td>{event.action === 'Banned' ? msg('modlog-action-banned') : msg('modlog-action-unbanned')}</td>
+                  <td>{moderationAction(msg, event.action)}</td>
                   <td>{event.pseudonym}</td>
-                  <td>{msg('modlog-scope-conversation')}</td>
+                  <td>{moderationScope(msg, event.scope)}</td>
                   <td>{event.actor}</td>
                 </tr>
               ))}

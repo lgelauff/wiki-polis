@@ -8,6 +8,7 @@ import {App} from '../../app';
 import {createQueryClient} from '../../query-client';
 import {renderAsQqx, untranslatedCopy} from '../../test/i18n';
 import {server} from '../../test/server';
+import {testMessages} from '../../test/handlers';
 
 function renderRoute(route: string) {
   return render(
@@ -25,7 +26,8 @@ test('renders the legacy conversation record from the typed about contract', asy
   expect(screen.getByText('quiet-otter')).toBeVisible();
   expect(screen.getByText('2 new statements suggested')).toBeVisible();
   // Output names come from the catalogue by key ("report"), not from the payload's label.
-  expect(screen.getByText('Report', {selector: 'li'})).toHaveTextContent('Report — pending');
+  const outputs = [...document.querySelectorAll('.landing-section li')].map((node) => node.textContent);
+  expect(outputs).toContain('Report — pending');
   expect(screen.getByRole('link', {name: 'Moderation log (1)'})).toHaveAttribute(
     'href', '/c/community-strategy/moderation-log',
   );
@@ -86,8 +88,56 @@ test('under qqx, the About page carries no English but the consultation and the 
   // Catches hardcoded copy and any server label (phase, output, scheduled phase) rendered
   // as sent: the fixture's labels are all "SERVER ENGLISH", so one reaching the page shows.
   const page = document.querySelector('.container');
-  expect(untranslatedCopy([page], ['Community strategy', 'quiet-otter', '1 Oct 2026, 12:00'])).toEqual([]);
+  expect(untranslatedCopy([page], ['Community strategy', 'quiet-otter'])).toEqual([]);
   expect(document.title).toBe('(about-doc-title)');
+  // qqx drops parameters, so it cannot show which phase name reached the Next line; the
+  // English test below checks that.
+  expect(screen.getByText('(conv-scheduled-transition)')).toBeInTheDocument();
+});
+
+test('the About page maps the scheduled phase and output names from their identifiers', async () => {
+  const response = await fetch(url('/api/v1/conversations/community-strategy/about'));
+  const {data} = await response.json() as {data: Record<string, unknown>};
+  server.use(http.get(url('/api/v1/conversations/community-strategy/about'), () => HttpResponse.json({data: {
+    ...data,
+    phases: [{key: 'submission', label: 'SERVER PHASE'}],
+    scheduledTransition: {at: '2026-10-01T12:00:00Z', target: 'informed_voting', targetLabel: 'SERVER PHASE'},
+    statistics: {participants: null, statementVotes: 1, statements: 2, arguments: 3, argumentContributors: 4},
+    outputs: [{key: 'report', label: 'SERVER OUTPUT', status: 'final', symbol: 'report', tooltip: '', pending: '', ready: false, href: null}],
+  }})));
+  renderRoute('/app/conversations/community-strategy/about');
+  await screen.findByRole('heading', {name: 'About Community strategy'});
+
+  // Catches the payload's English labels reaching the page: every label in this fixture is a
+  // marker the catalogue does not contain.
+  expect(document.body.textContent).not.toContain('SERVER');
+  const next = document.querySelector('time[datetime="2026-10-01T12:00:00Z"]')!.closest('p')!;
+  expect(next).toHaveTextContent('Next: Informed vote on 1 Oct 2026, 12:00.');
+  expect(screen.getByText(/^Current phase:/).closest('p')).toHaveTextContent('Current phase: Explore');
+  const outputs = [...document.querySelectorAll('.landing-section li')].map((node) => node.textContent);
+  expect(outputs.at(-1)).toBe('Report — pending');
+  // An unknown statistic shows a dash, announced as "unknown", with its unit in the plural.
+  expect(document.querySelector('.stat-row > span')!.textContent).toBe('—unknownparticipants');
+});
+
+test('the output page maps its phase and status from identifiers', async () => {
+  server.use(
+    http.get(url('/api/v1/conversations/:slug/outputs/:outputKey'), () => HttpResponse.json({data: {
+      slug: 'community-strategy', title: 'Community strategy',
+      output: {key: 'initial-clustering', label: 'SERVER LABEL', phase: 'SERVER PHASE', status: 'provisional', ready: false, method: 'SERVER METHOD', pending: 'SERVER PENDING'},
+      links: {self: '', conversation: '/c/community-strategy', about: '/c/community-strategy/about'},
+    }})),
+    // The status identifier and its English are the same word, so the catalogue value is
+    // changed here to tell a mapped status from the raw one.
+    http.get(url('/api/v1/i18n/:locale'), () => HttpResponse.json({...testMessages, 'output-status-provisional': 'provisional-from-catalogue'})),
+  );
+  renderRoute('/app/parity/conversations/community-strategy/outputs/initial-clustering');
+  await screen.findByRole('heading', {name: 'Initial clustering'});
+
+  // Catches the payload's phase, method or status reaching the eyebrow or the reading guide.
+  expect(document.body.textContent).not.toContain('SERVER');
+  expect(document.querySelector('.output-page-header .results-label')).toHaveTextContent('Explore output');
+  expect(document.querySelector('.output-status-value')).toHaveTextContent('provisional-from-catalogue · pending');
 });
 
 test('the About page pluralises each statistic by its own number', async () => {

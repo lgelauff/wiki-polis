@@ -145,3 +145,19 @@ export const outputMethod = (msg: Message, id: string | null | undefined, server
 
 export const outputStatus = (msg: Message, id: string | null | undefined) =>
   resolve(OUTPUT_STATUS_MESSAGES, msg, id, id);
+
+/** Public moderation-log values from `app._moderation_log_rows`. */
+const MODLOG_ACTION_MESSAGES: Record<string, string> = {
+  Banned: 'modlog-action-banned',
+  Unbanned: 'modlog-action-unbanned',
+};
+
+const MODLOG_SCOPE_MESSAGES: Record<string, string> = {
+  conversation: 'modlog-scope-conversation',
+};
+
+export const moderationAction = (msg: Message, id: string | null | undefined) =>
+  resolve(MODLOG_ACTION_MESSAGES, msg, id, id);
+
+export const moderationScope = (msg: Message, id: string | null | undefined) =>
+  resolve(MODLOG_SCOPE_MESSAGES, msg, id, id);
