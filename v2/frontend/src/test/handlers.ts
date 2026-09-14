@@ -84,13 +84,10 @@ export function phaseAdvanceFixture(
   return {...receipt, transition: {...receipt.transition, ...transition}};
 }
 
-/** The message catalogue the test server serves: the real `v2/i18n/en.json`, not a copy.
+/** The message catalogue the test server serves: the real `v2/i18n/en.json`.
  *
- *  This used to be a hand-maintained subset, "copied from en.json". Nothing checked the copy,
- *  so a test could assert English the catalogue no longer contained and still pass — the same
- *  shape as the stage-1 fixture that hand-wrote a label the server never emitted. Importing
- *  the file makes that impossible, and wiring a component no longer means transcribing its
- *  messages here first. `@metadata` is dropped, as the real endpoint drops it. */
+ *  Importing the file keeps test English identical to the catalogue, and a newly wired
+ *  component needs no fixture changes. `@metadata` is dropped, as the real endpoint drops it. */
 export const testMessages: Record<string, string> = Object.fromEntries(
   Object.entries(catalogue).filter(([key]) => key !== '@metadata'),
 ) as Record<string, string>;

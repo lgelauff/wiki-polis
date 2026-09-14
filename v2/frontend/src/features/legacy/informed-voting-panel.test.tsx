@@ -120,8 +120,8 @@ test('the pointer to preliminary results is one sentence, and its link still swi
     ],
   } as Partial<Workspace>), [answered]);
 
-  // conv-p6-done-see-a and -b used to sit either side of this link. One message now, with the
-  // link passed in as an element so its onClick survives -- which HTML in a message cannot do.
+  // conv-p6-done-see is one message with the link passed in as an element, so the link keeps
+  // its onClick handler.
   const done = await screen.findByText(/for the full comparison/);
   expect(done).toHaveTextContent('See the Preliminary results tab for the full comparison.');
   fireEvent.click(within(done).getByRole('link', {name: 'Preliminary results'}));

@@ -63,9 +63,8 @@ def _server_label_tables():
 def _server_label_helpers():
     """(helper, table) for each exported helper in server-labels.ts, read from the source.
 
-    This was a hand-written list of three, so a fourth table added there reached no audience
-    and its keys were offered to translators by default rather than because a participant
-    screen uses them -- the right answer for the wrong reason, until an admin-only table.
+    Read from the file so that a table added there is attributed to an audience without
+    also editing this test.
     """
     source = (_SRC / 'i18n' / 'server-labels.ts').read_text(encoding='utf-8')
     return re.findall(r'export const (\w+) = [^\n]*\n\s*resolve\((\w+_MESSAGES),', source)

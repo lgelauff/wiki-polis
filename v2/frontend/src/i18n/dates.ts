@@ -4,14 +4,13 @@ import {useLocale} from './messages';
 
 /** Dates follow the interface language the reader chose, not their browser.
  *
- *  `Intl.DateTimeFormat(undefined, …)` formats with the browser's locale, so a reader who
- *  picked Dutch in the language switcher still met "Sep 2026" if their browser was English.
- *  Formatting with the chosen locale keeps dates consistent with the words around them — a
- *  date is often a parameter inside a translated sentence.
+ *  `Intl.DateTimeFormat(undefined, …)` would format with the browser's locale. Formatting
+ *  with the chosen locale keeps dates consistent with the words around them — a date is often
+ *  a parameter inside a translated sentence.
  *
  *  Locales that are not what Intl should be handed:
  *  - `en` is Proto's source language, written to British conventions ("licence",
- *    "catalogue"), and its dates were already day-first. Plain `en` in Intl is US English.
+ *    "catalogue"), and formats dates day-first. Plain `en` in Intl is US English.
  *  - `qqx` is the QA locale. It has no CLDR data, so Intl would silently use the runtime's
  *    default and the page would vary by machine; pin it to the source language instead. */
 const INTL_LOCALE: Record<string, string> = {
