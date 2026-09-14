@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
-import {useMutation, useQuery, useSuspenseQuery} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {useLocation, useParams} from 'react-router-dom';
 
 import {ApiContractError} from '../../api/client';
@@ -320,13 +320,15 @@ function ClosedWorkspace({data}: {data: Workspace}) {
   const dates = useDateFormat();
   const msg = useMessage();
   const reveal = data.reveal;
+  const queryClient = useQueryClient();
+  const refreshWorkspace = () => void queryClient.invalidateQueries({queryKey: conversationWorkspaceQuery(data.slug).queryKey});
   const pseudonym = escapeHtml(data.viewer.pseudonym ?? '');
   return (
     <div className="landing-section">
       {reveal ? (
         <>
           <p className="muted" dangerouslySetInnerHTML={richHtml(msg('conv-closed-on', escapeHtml(dates.date(reveal.closedAt))))} />
-          <RevealTimeline state={reveal.state} closedAt={reveal.closedAt} opensAt={reveal.opensAt} closesAt={reveal.closesAt} cooldownDays={reveal.cooldownDays} windowDays={reveal.windowDays} countdownTargetAt={reveal.countdownTargetAt} />
+          <RevealTimeline state={reveal.state} closedAt={reveal.closedAt} opensAt={reveal.opensAt} closesAt={reveal.closesAt} cooldownDays={reveal.cooldownDays} windowDays={reveal.windowDays} countdownTargetAt={reveal.countdownTargetAt} onBoundary={refreshWorkspace} />
           {reveal.state === 'revealed' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}} dangerouslySetInnerHTML={richHtml(msg('conv-revealed-text', pseudonym))} />}
           {reveal.state === 'open' && <div className="reveal-callout"><p className="reveal-callout-text" dangerouslySetInnerHTML={richHtml(msg('reveal-callout-open-text', pseudonym))} /><InternalLink className="reveal-callout-link" href={`/c/${data.slug}/reveal`}>{msg('reveal-callout-link')} <span aria-hidden="true">→</span></InternalLink></div>}
           {reveal.state === 'pending' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>{msg('conv-reveal-pending-opens', dates.date(reveal.opensAt))}</p>}

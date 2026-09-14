@@ -1,8 +1,8 @@
 import {useState, type FormEvent} from 'react';
-import {useMutation, useSuspenseQuery} from '@tanstack/react-query';
+import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {useParams} from 'react-router-dom';
 
-import type {components} from '../../api/schema';
+import {ApiContractError} from '../../api/client';
 import {createIdentityReveal, identityRevealQuery, sessionQuery} from '../../api/queries';
 import {NavigationRedirect} from './external-redirect';
 import {LegacyShell} from './legacy-shell';
@@ -12,8 +12,6 @@ import {useMessage} from '../../i18n/messages';
 import {nodeSlot, withNodes} from '../../i18n/message-nodes';
 import {richHtml} from '../../i18n/rich-html';
 import {RevealTimeline} from './reveal-timeline';
-
-type RevealData = components['schemas']['IdentityReveal'];
 
 function requiredSlug(value: string | undefined) {
   if (!value) throw new Error('Missing route parameter: slug');
@@ -34,9 +32,16 @@ export function IdentityRevealLegacyPage() {
 function AuthenticatedIdentityReveal({slug, csrfToken}: {slug: string; csrfToken: string}) {
   const msg = useMessage();
   const dates = useDateFormat();
+  const queryClient = useQueryClient();
   const {data} = useSuspenseQuery(identityRevealQuery(slug));
   const [confirmed, setConfirmed] = useState(false);
-  const mutation = useMutation({mutationFn: () => createIdentityReveal(slug, csrfToken)});
+  const refresh = () => void queryClient.invalidateQueries({queryKey: identityRevealQuery(slug).queryKey});
+  // A failed request may still have linked the identity: the server commits before it
+  // responds. Refetching shows whichever state is true; linking again is a no-op.
+  const mutation = useMutation({mutationFn: () => createIdentityReveal(slug, csrfToken), onError: refresh});
+  // Only the server's refusal is known not to have linked anything. After any other failure
+  // (a network error, a 5xx) the page must not claim the identity is unlinked.
+  const refused = mutation.error instanceof ApiContractError && mutation.error.code === 'identity_reveal_unavailable';
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,7 +52,7 @@ function AuthenticatedIdentityReveal({slug, csrfToken}: {slug: string; csrfToken
 
   const timeline = <RevealTimeline state={data.state} closedAt={data.timeline.closedAt} opensAt={data.timeline.opensAt} closesAt={data.timeline.closesAt}
     cooldownDays={daysBetween(data.timeline.closedAt, data.timeline.opensAt)} windowDays={daysBetween(data.timeline.opensAt, data.timeline.closesAt)}
-    countdownTargetAt={data.timeline.nextBoundaryAt} />;
+    countdownTargetAt={data.timeline.nextBoundaryAt} onBoundary={refresh} />;
   // Participant data inside sentences, styled as on the card below.
   const pseudonym = <span style={{fontFamily: 'var(--mono)', color: 'var(--ink)'}}>{data.pseudonym}</span>;
   const username = <span style={{fontFamily: 'var(--mono)', color: 'var(--ink)'}}>{data.wikimediaUsername}</span>;
@@ -119,6 +124,7 @@ function AuthenticatedIdentityReveal({slug, csrfToken}: {slug: string; csrfToken
                 <input type="checkbox" name="confirm" value="1" required checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
                 <span>{withNodes(msg('reveal-consent', nodeSlot(0), nodeSlot(1)), <strong>{data.wikimediaUsername}</strong>, <strong>{data.pseudonym}</strong>)}</span>
               </label>
+              {mutation.error && <p className="error" role="alert">{refused ? msg('reveal-submit-unavailable') : msg('reveal-submit-unknown')}</p>}
               <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
                 <button type="submit" className="participate-btn" style={{background: 'var(--ink)'}} disabled={mutation.isPending}>{msg('reveal-submit')}</button>
                 <InternalLink href={data.links.conversation} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>{msg('common-cancel')}</InternalLink>
