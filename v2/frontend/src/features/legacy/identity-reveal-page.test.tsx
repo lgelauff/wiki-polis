@@ -67,9 +67,9 @@ test('the open window names the username and the pseudonym in the right places',
 
   // Catches the two identities swapping places. Both are plain strings of the same kind, so
   // a swapped parameter would still read as a sentence -- and would misstate what is published.
-  expect(heading).toHaveTextContent(`Permanently link ${PSEUDONYM} to your wiki name?`);
+  expect(heading).toHaveTextContent(`Permanently link ${PSEUDONYM} to your Wikimedia username?`);
   expect(screen.getByText(/You may optionally publish that/)).toHaveTextContent(
-    `You may optionally publish that ${USERNAME} voted as ${PSEUDONYM} in this conversation. Other pseudonyms you used elsewhere are unaffected.`);
+    `You may optionally publish that ${USERNAME} voted as ${PSEUDONYM} in this consultation process. Other pseudonyms you used elsewhere are unaffected.`);
   const warning = screen.getByText('Irreversible').closest<HTMLElement>('.close-warning')!;
   expect(within(warning).getAllByRole('listitem')[0]).toHaveTextContent(
     `Your Wikimedia username (${USERNAME}) will be permanently associated with your pseudonym ${PSEUDONYM} in exported records for this consultation.`);
