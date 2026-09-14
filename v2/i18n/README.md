@@ -45,8 +45,17 @@ rather than rendering the server's `message`, so those strings stay developer-fa
 ## For translators
 
 Translate on **translatewiki.net**, not here. `qqq.json` gives the context for each message.
-Placeholders `$1`, `$2`, … must be preserved. `{{PLURAL:$1|singular|plural}}` selects a form
-by the number in `$1` — use the plural forms your language needs.
+Placeholders `$1`, `$2`, … must be preserved, and no others added. `{{PLURAL:$1|singular|plural}}`
+selects a form by the number in `$1` — use the plural forms your language needs.
+
+A translation that breaks these rules is not shown; English is shown in its place:
+
+- Use only the tags and attributes the English uses. Leaving them out, or moving them, is fine.
+- No `<` in text, and no HTML entities such as `&lt;`: write it in words.
+- In `{{PLURAL:$1|…}}`: no space before `$1`, no empty forms, and at least one form that is not
+  an explicit number such as `1=…`. No stray `{`, `}` or `{{…}}` of other kinds.
+- In a message that contains markup or `{{…}}`: no `$` except in a placeholder like `$1`, and no
+  backslash.
 
 ## For maintainers — adding or changing a UI string
 
@@ -221,23 +230,31 @@ stay green.
 Messages with inline HTML are rendered as HTML, in the SPA and in the error pages' hint, so
 markup is held to two rules.
 
-**English** may use only `<strong>`, `<em>`, `<code>`, and `<a href>` to a same-site path,
-and must parse in banana-i18n: no `<` that does not start a tag, tags that nest, and `{{`
-only for a closed PLURAL, GENDER or GRAMMAR. The allowlist is `_SOURCE_TAGS` /
-`_SOURCE_ATTRIBUTES` in `tests/test_i18n.py`, and widening it widens what every translation
-may use. An `<a>` written in a message renders only on the server-rendered error pages: the
-SPA's banana-i18n escapes it, so a link in the SPA is passed into the message as a parameter.
+Both are scanned against a small grammar in `i18n.py` (`_Scanner`), a strict subset of what
+banana-i18n parses; the scan reads each character once, so no input is slow.
 
-**A translation** is served only if it parses the same way and uses only markup its English
+**English** may use only `<strong>`, `<em>`, `<code>`, and `<a href>` to a same-site path, and
+must fit the grammar. The allowlist is `_SOURCE_TAGS` / `_SOURCE_ATTRIBUTES` in
+`tests/test_i18n.py`, and widening it widens what every translation may use. In the SPA,
+banana-i18n escapes an `<a>` written in plain message text but not inside a `{{PLURAL:}}`
+branch; SPA links are passed into the message as a parameter instead.
+
+**A translation** is served only if it fits the grammar and uses only markup its English
 already uses: the same tags with the same attributes and values, repeated or reordered as the
-language needs. `i18n.load()` does not serve one that fails — English is used for that
-message — nor any translation of a key English does not have, nor any translation at all if
-`en.json` did not load. The app logs what it refused at startup.
+language needs, and no placeholder the English lacks. `i18n.load()` does not serve one that
+fails — English is used for that message — nor any translation at all if `en.json` did not
+load. A translation of a key English no longer has is set aside as stale and does not fail
+CI; translatewiki drops it on its next export. The app logs both at startup.
+
+**Changing English markup.** If a change removes or alters a tag or attribute in an existing
+message, existing translations that still carry it will fail the check. Give the message a
+new key instead: the old translations become stale, which CI accepts, and translators see a
+new message. This is the MediaWiki convention for a change that invalidates translations.
 
 ### When a translatewiki export fails the check
 
-The failing test names the file, the key, and why: text that does not parse, or the tags and
-attributes it added.
+The failing test names the file, the key, and why: where the text leaves the grammar, the tags
+and attributes it added, or a placeholder English does not have.
 
 1. Fix the message on translatewiki.net, or ask on its talk page; the next export carries the
    fix. Never hand-edit `<code>.json` — the next export overwrites it.

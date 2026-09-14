@@ -120,7 +120,8 @@ export type Message = (key: string, ...params: (string | number)[]) => string;
 
 const MessageContext = createContext<Message | null>(null);
 
-/** Keys already reported as unparseable, so a message rendered on every frame logs once. */
+/** Locale-and-key pairs already reported as unparseable, so a message rendered on every frame
+ *  logs once. */
 const unparseable = new Set<string>();
 const LocaleContext = createContext<string>('');
 
@@ -148,7 +149,9 @@ export function MessageProvider({children, locale: override}: {children: ReactNo
     // a missing catalogue; it survives a rejected locale the same way — banana throws
     // synchronously here, and this is the render body of the provider wrapping every route.
     try {
-      const banana = new Banana(locale, {messages: {[locale]: messages ?? {}}});
+      // wikilinks stays off (banana's default, stated so it cannot change silently): with it on,
+      // "[url text]" in a translation would become a link the server's markup check never sees.
+      const banana = new Banana(locale, {messages: {[locale]: messages ?? {}}, wikilinks: false});
       return (key, ...params) => {
         // banana parses each message for markup and throws on one it cannot parse, such as a
         // bare `<`. msg() runs in render, so the key is returned instead of throwing; the key,
@@ -157,14 +160,15 @@ export function MessageProvider({children, locale: override}: {children: ReactNo
         try {
           return banana.i18n(key, ...params);
         } catch (error) {
-          if (!unparseable.has(key)) {
-            unparseable.add(key);
+          if (!unparseable.has(`${locale}:${key}`)) {
+            unparseable.add(`${locale}:${key}`);
             console.error(`Message "${key}" could not be parsed and is shown as its key.`, error);
           }
           return key;
         }
       };
-    } catch {
+    } catch (error) {
+      console.error(`The message catalogue for "${locale}" could not be loaded; keys are shown instead.`, error);
       return (key) => key;
     }
   }, [locale, messages]);

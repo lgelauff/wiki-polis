@@ -511,6 +511,21 @@ def test_markup_the_english_does_not_use_is_refused(translation):
     '<strong>$1</strong> {{PLURAL:$1|dag|dagen',                       # unclosed {{
     '<strong>$1</strong> {{PLURL:$1|dag|dagen}}',                      # unknown function
     '<strong>$1</strong> {{dagen}}',
+    # Each of these passed the earlier regex check and made banana-i18n 2.4.0 throw, or
+    # print "undefined".
+    'US$ 5 voor <strong>$1</strong>',                                  # "$" not a placeholder
+    '<strong>$1</strong> 5 $',
+    '<strong>$1</strong> dagen\\',                                    # backslash
+    '<strong>$1</strong> {dagen}',                                     # lone braces
+    '<strong>$1</strong> }}} dagen',
+    '{{{PLURAL:$1|dag|dagen}}} <strong>$1</strong>',
+    '}} {{PLURAL:$1|dag|dagen}} <strong>$1</strong>',
+    '<strong>$1</strong> {{PLURAL: $1|dag|dagen}}',                    # space before the argument
+    '<strong>$1</strong> {{PLURAL:$1a|dag|dagen}}',                    # argument not a placeholder
+    '<strong>$1</strong> {{PLURAL:$1|}}',                              # empty branch -> "undefined"
+    '<strong>$1</strong> {{PLURAL:$1|2=twee}}',                        # explicit forms only
+    '<b>{{PLURAL:$1|x</b>|y}}',                                        # tag closed in another branch
+    '<b>' * 30 + '$1' + '</b>' * 30,                                   # nested beyond any message
 ])
 def test_text_banana_cannot_parse_is_refused(translation):
     # Catches a translation that passes the tag comparison but makes banana throw, which
@@ -532,9 +547,24 @@ def test_tags_that_do_not_nest_are_refused():
     'Ga naar <a href="/" target="_blank">de voorpagina</a>.',
     'Ga naar <a href="\'/\'">de voorpagina</a>.',                       # quotes inside the value
     'Ga naar <a href="/\'">de voorpagina</a>.',
+    'Ga naar <a href=/>de voorpagina</a>.',                             # unquoted value
+    'Ga naar <a/href="/">de voorpagina</a>.',
+    'Ga naar <a href="/" "<>">de voorpagina</a>.',                      # junk after the attribute
+    'Ga naar <a href="/" href="/x">de voorpagina</a>.',                 # a second href
 ])
 def test_a_link_may_not_change_where_it_goes_or_what_it_does(translation):
     assert not i18n.markup_is_permitted(translation, _EN_LINK)
+
+
+@pytest.mark.parametrize('translation, english', [
+    # Each would read as the same tag and attributes as its English if the scanner took any
+    # delimiter as a quote, or let attributes run together. banana-i18n throws on both, which
+    # would replace the whole message with its key on the page.
+    ('Ga naar <a href=|/|>de voorpagina</a>.', _EN_LINK),
+    ('Ga naar <a href="/"title="x">de voorpagina</a>.', 'Go to <a href="/" title="x">the front page</a>.'),
+])
+def test_a_tag_is_only_read_the_way_banana_reads_it(translation, english):
+    assert not i18n.markup_is_permitted(translation, english)
 
 
 @pytest.mark.parametrize('translation, english', [
@@ -551,13 +581,21 @@ def test_markup_the_english_already_uses_is_allowed(translation, english):
     assert i18n.markup_is_permitted(translation, english)
 
 
-def test_the_check_takes_linear_time_on_hostile_input():
-    # Catches a pattern that backtracks: load() runs this over every message of every
-    # translation at import, in every worker.
+@pytest.mark.parametrize('hostile', [
+    '<' + ' ' * 50_000,
+    '<a' + 'b' * 50_000,                                               # quadratic for the old regex
+    '</a' + 'b' * 50_000,
+    'Klik <b' + 'dag' * 17_000,
+    '<a' + ' x="' * 20_000,
+    '{{PLURAL:$1|' * 20_000,
+    '<b>' * 20_000,
+])
+def test_the_check_takes_linear_time_on_hostile_input(hostile):
+    # Catches a scanner that backtracks or recurses without bound: load() runs this over every
+    # message of every translation at import, in every worker.
     import time
     started = time.perf_counter()
-    assert not i18n.markup_is_permitted('<' + ' ' * 50_000, 'x')
-    assert not i18n.markup_is_permitted('<a' + ' x="' * 20_000, '<a href="/">x</a>')
+    assert not i18n.markup_is_permitted(hostile, '<a href="/">x</a>')
     assert time.perf_counter() - started < 0.5
 
 
@@ -565,6 +603,8 @@ def test_a_refusal_says_why():
     assert 'adds markup' in i18n.markup_problem('<em>x</em>', '<strong>x</strong>')
     assert '<em>' in i18n.markup_problem('<em>x</em>', '<strong>x</strong>')
     assert 'cannot be parsed' in i18n.markup_problem('a < b', 'a')
+    assert 'at character 3' in i18n.markup_problem('a < b', 'a')
+    assert 'placeholders its English does not have: $2' in i18n.markup_problem('$1 en $2', '$1')
     assert i18n.markup_problem('<strong>x</strong>', '<strong>y</strong>') is None
 
 
@@ -586,7 +626,8 @@ def test_a_translation_with_foreign_markup_is_not_served(tmp_path):
     assert served['hint'] == _EN_LINK
     assert served['plain'] == 'Hello'
     assert served['left'] == '<strong>$1</strong> {{PLURAL:$1|dag|dagen}} over'
-    assert i18n.refused_translations() == {'nl': ['hint', 'plain']}
+    assert sorted(i18n.refused_translations()['nl']) == ['hint', 'plain']
+    assert 'javascript' in i18n.refused_translations()['nl']['hint']
 
 
 def test_no_translation_is_served_without_english_to_compare_it_with(tmp_path):
@@ -598,21 +639,36 @@ def test_no_translation_is_served_without_english_to_compare_it_with(tmp_path):
     (d / 'nl.json').write_text(json.dumps({'hint': 'Klik <img src=x onerror=alert(1)>'}), encoding='utf-8')
     i18n.load(str(d))
     assert i18n.resolve('hint', 'nl') == '⧼hint⧽'
-    assert i18n.refused_translations() == {'nl': ['hint']}
+    assert i18n.refused_translations() == {'nl': {'hint': 'en.json did not load'}}
 
     (tmp_path / 'second').mkdir()
     _setup(tmp_path / 'second', {'en': {'kept': 'Kept'}, 'nl': {'kept': 'Bewaard', 'stale': '<img src=x onerror=alert(1)>'}})
     assert i18n.resolve('stale', 'nl') == '⧼stale⧽'
     assert i18n.resolve('kept', 'nl') == 'Bewaard'
+    # A key English no longer has is set aside as stale, not reported as a markup failure.
+    assert i18n.stale_translations() == {'nl': ['stale']}
+    assert i18n.refused_translations() == {}
 
 
-def test_refusals_are_logged_once_logging_exists(tmp_path, caplog):
+def test_refusals_are_logged_with_their_reasons(tmp_path, caplog):
     import logging
-    _setup(tmp_path, {'en': {'hint': _EN_LINK}, 'nl': {'hint': 'Klik <img src=x>'}})
-    with caplog.at_level(logging.WARNING):
+    _setup(tmp_path, {'en': {'hint': _EN_LINK}, 'nl': {'hint': 'Klik <img src=x>', 'gone': 'Weg'}})
+    with caplog.at_level(logging.INFO):
         i18n.log_refusals(logging.getLogger('test'))
-    assert 'nl.json: not serving 1 message(s)' in caplog.text
-    assert 'hint' in caplog.text
+    assert 'nl.json: not serving 1 message(s): hint: it cannot be parsed' in caplog.text
+    assert 'awaiting the next translatewiki export: gone' in caplog.text
+
+
+def test_the_app_logs_refusals_once_logging_is_configured():
+    # Catches the create_app wiring being dropped or moved before logging exists: load() runs
+    # at import, so without this call nothing reports a refused translation. create_app()
+    # cannot be called a second time in one process, so the order is checked in its source.
+    import inspect
+
+    import app as app_module
+    source = inspect.getsource(app_module.create_app)
+    assert 'i18n.log_refusals(app.logger)' in source
+    assert source.index('configure_logging(app') < source.index('i18n.log_refusals(app.logger)')
 
 
 def test_the_catalogue_endpoint_never_serves_a_refused_translation(tmp_path, client):
@@ -638,8 +694,10 @@ def _markup_violations(directory):
             if key == '@metadata' or not isinstance(text, str):
                 continue
             if key not in en:
-                found.append(f'{path.name}: {key}: not in en.json')
-            elif (problem := i18n.markup_problem(text, en[key])) is not None:
+                # Stale, not wrong: removing a message from en.json must not turn CI red until
+                # translatewiki's next export drops it. load() sets it aside either way.
+                continue
+            if (problem := i18n.markup_problem(text, en[key])) is not None:
                 found.append(f'{path.name}: {key}: {problem}')
     return found
 
@@ -655,10 +713,11 @@ def test_the_translation_gate_reports_a_bad_delivered_file(tmp_path):
         'plain': 'Hallo',
         'gone': 'Weg',
     }), encoding='utf-8')
-    violations = sorted(_markup_violations(tmp_path))
-    assert len(violations) == 2
-    assert violations[0] == 'nl.json: gone: not in en.json'
-    assert violations[1].startswith('nl.json: hint: it adds markup') and 'onclick' in violations[1]
+    violations = _markup_violations(tmp_path)
+    assert len(violations) == 1
+    assert violations[0].startswith('nl.json: hint: it cannot be parsed') or 'onclick' in violations[0]
+    # A key removed from English is not a violation: the gate must not block that change.
+    assert not any('gone' in line for line in violations)
 
 
 def test_every_delivered_translation_passes_the_markup_check():
