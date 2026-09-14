@@ -150,6 +150,16 @@ test('renders the closed workspace from parameterised sentences', async () => {
   expect(screen.getByText('quiet-otter').tagName).toBe('STRONG');
 });
 
+test('a participant who has linked their identity sees no countdown', async () => {
+  serve({...closedWorkspace, reveal: {...closedWorkspace.reveal!, state: 'revealed'}});
+  renderWorkspace();
+
+  await screen.findByText(/You linked your identity/, {}, {timeout: 10_000});
+  // Catches a "Window closes in …" line under the confirmation. The window's end no longer
+  // concerns someone who has linked, even while a closing date is still sent.
+  expect(document.querySelector('.reveal-deadline')).toBeNull();
+});
+
 test('renders workspace text from the catalogue, not from source literals', async () => {
   // Non-vacuity: serve deliberately different English for keys covering distinct
   // mechanisms -- plain text, an aria-label, an aria-valuetext with two parameters, a

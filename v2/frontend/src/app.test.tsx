@@ -474,7 +474,7 @@ test('requires deliberate confirmation before permanently revealing identity', a
   );
 
   expect(await screen.findByRole('heading', {
-    name: 'Permanently link quiet-otter to your wiki name?',
+    name: 'Permanently link quiet-otter to your Wikimedia username?',
   })).toBeVisible();
   const submit = screen.getByRole('button', {name: 'Yes, link my identity'});
   expect(submit.closest('form')).not.toHaveAttribute('action');

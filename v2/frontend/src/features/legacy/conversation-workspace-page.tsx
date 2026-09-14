@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
-import {useMutation, useQuery, useSuspenseQuery} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {useLocation, useParams} from 'react-router-dom';
 
 import {ApiContractError} from '../../api/client';
@@ -19,6 +19,7 @@ import {LegacyIntermediateResultsPanel} from './intermediate-results-panel';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
 import {LegacyContentFlag} from './legacy-content-flag';
+import {RevealTimeline} from './reveal-timeline';
 import {useMessage, type Message} from '../../i18n/messages';
 import {phaseLabel, tabLabel} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
@@ -319,13 +320,15 @@ function ClosedWorkspace({data}: {data: Workspace}) {
   const dates = useDateFormat();
   const msg = useMessage();
   const reveal = data.reveal;
+  const queryClient = useQueryClient();
+  const refreshWorkspace = () => void queryClient.invalidateQueries({queryKey: conversationWorkspaceQuery(data.slug).queryKey});
   const pseudonym = escapeHtml(data.viewer.pseudonym ?? '');
   return (
     <div className="landing-section">
       {reveal ? (
         <>
           <p className="muted" dangerouslySetInnerHTML={richHtml(msg('conv-closed-on', escapeHtml(dates.date(reveal.closedAt))))} />
-          <RevealTimeline reveal={reveal} />
+          <RevealTimeline state={reveal.state} closedAt={reveal.closedAt} opensAt={reveal.opensAt} closesAt={reveal.closesAt} cooldownDays={reveal.cooldownDays} windowDays={reveal.windowDays} countdownTargetAt={reveal.countdownTargetAt} onBoundary={refreshWorkspace} />
           {reveal.state === 'revealed' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}} dangerouslySetInnerHTML={richHtml(msg('conv-revealed-text', pseudonym))} />}
           {reveal.state === 'open' && <div className="reveal-callout"><p className="reveal-callout-text" dangerouslySetInnerHTML={richHtml(msg('reveal-callout-open-text', pseudonym))} /><InternalLink className="reveal-callout-link" href={`/c/${data.slug}/reveal`}>{msg('reveal-callout-link')} <span aria-hidden="true">→</span></InternalLink></div>}
           {reveal.state === 'pending' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>{msg('conv-reveal-pending-opens', dates.date(reveal.opensAt))}</p>}
@@ -335,63 +338,6 @@ function ClosedWorkspace({data}: {data: Workspace}) {
       {data.links.results && <p style={{marginTop: '1rem', fontSize: 14}}><InternalLink href={`/c/${data.slug}/report`}>{msg('conv-read-report')} <span aria-hidden="true">→</span></InternalLink></p>}
     </div>
   );
-}
-
-function countdown(msg: Message, value: string) {
-  const milliseconds = Date.parse(value) - Date.now();
-  if (milliseconds <= 0) return msg('reveal-tl-now');
-  const seconds = Math.floor(milliseconds / 1000);
-  const pad = (part: number) => String(part).padStart(2, '0');
-  return `${Math.floor(seconds / 86400)}d ${pad(Math.floor(seconds % 86400 / 3600))}:${pad(Math.floor(seconds % 3600 / 60))}:${pad(seconds % 60)}`;
-}
-
-/** The countdown is a styled element inside a sentence. Passing it in as an escaped HTML
- *  fragment keeps each sentence one translatable unit — a translator can move the deadline
- *  within the sentence, which splitting at the <strong> made impossible — without exposing
- *  the class name to translatewiki. */
-function deadlineSentence(msg: Message, state: NonNullable<Workspace['reveal']>['state'], remaining: string) {
-  const clock = `<strong class="reveal-countdown">${escapeHtml(remaining)}</strong>`;
-  if (state === 'pending') return msg('reveal-tl-deadline-opens', clock);
-  if (state === 'open') return msg('reveal-tl-deadline-closes-permanent', clock);
-  return msg('reveal-tl-deadline-closes', clock);
-}
-
-function RevealTimeline({reveal}: {reveal: NonNullable<Workspace['reveal']>}) {
-  const dates = useDateFormat();
-  const msg = useMessage();
-  const [remaining, setRemaining] = useState(
-    reveal.countdownTargetAt ? countdown(msg, reveal.countdownTargetAt) : null,
-  );
-  useEffect(() => {
-    if (!reveal.countdownTargetAt) return;
-    const update = () => setRemaining(countdown(msg, reveal.countdownTargetAt!));
-    update();
-    const timer = globalThis.setInterval(update, 1000);
-    return () => globalThis.clearInterval(timer);
-  }, [msg, reveal.countdownTargetAt]);
-  const firstNow = reveal.state === 'pending';
-  const secondNow = reveal.state === 'open' || reveal.state === 'revealed';
-  const expired = reveal.state === 'expired';
-  return <div className="reveal-timeline">
-    <ol className="reveal-track" aria-label={msg('reveal-tl-aria')}>
-      <li className={`reveal-node reveal-node--done${firstNow ? ' reveal-node--now' : ''}`} {...(firstNow ? {'aria-current': 'step' as const} : {})}>
-        <span className="reveal-pip" aria-hidden="true" />
-        <div className="reveal-when">{dates.date(reveal.closedAt)}</div>
-        <div className="reveal-what">{msg('reveal-tl-closed-what', reveal.cooldownDays)}{' '}<span className="sr-only">{firstNow ? msg('reveal-tl-step-inprogress') : msg('reveal-tl-step-completed')}</span></div>
-      </li>
-      <li className={`reveal-node${secondNow ? ' reveal-node--now' : expired ? ' reveal-node--done' : ''}`} {...(secondNow ? {'aria-current': 'step' as const} : {})}>
-        <span className="reveal-pip" aria-hidden="true" />
-        <div className="reveal-when">{dates.date(reveal.opensAt)}</div>
-        <div className="reveal-what">{msg('reveal-tl-opens-what', reveal.windowDays)}{' '}<span className="sr-only">{secondNow ? msg('reveal-tl-step-current') : expired ? msg('reveal-tl-step-completed') : msg('reveal-tl-step-upcoming')}</span></div>
-      </li>
-      <li className={`reveal-node${expired ? ' reveal-node--now' : ''}`} {...(expired ? {'aria-current': 'step' as const} : {})}>
-        <span className="reveal-pip" aria-hidden="true" />
-        <div className="reveal-when">{dates.date(reveal.closesAt)}</div>
-        <div className="reveal-what">{msg('reveal-tl-closes-what')}{' '}<span className="sr-only">{expired ? msg('reveal-tl-step-current') : msg('reveal-tl-step-upcoming')}</span></div>
-      </li>
-    </ol>
-    {remaining && <p className="reveal-deadline" dangerouslySetInnerHTML={richHtml(deadlineSentence(msg, reveal.state, remaining))} />}
-  </div>;
 }
 
 /** The scheduled-transition sentence carries a <time> element whose attributes cannot come
