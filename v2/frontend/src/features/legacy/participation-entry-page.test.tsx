@@ -23,7 +23,9 @@ function renderJoin() {
 test('the join screen renders its copy from the catalogue', async () => {
   renderJoin();
   expect(await screen.findByText(testMessages['accept-choose-pseudonym']!)).toBeVisible();
-  // The consent checkbox and the licence disclosure are what the participant agrees to.
+  // Catches a key that is renamed, missing from en.json, or wired to the wrong element: the
+  // page then shows the raw key or other text. The form still submits in that state, so the
+  // consent text and licence heading, which the participant agrees to, are checked by name.
   expect(screen.getByText(testMessages['accept-consent']!)).toBeVisible();
   expect(screen.getByRole('heading', {name: testMessages['accept-licence-heading']!})).toBeVisible();
   expect(screen.getByText(testMessages['accept-privacy-summary']!)).toBeVisible();
@@ -32,8 +34,9 @@ test('the join screen renders its copy from the catalogue', async () => {
 
 test('the licence sentence keeps its link inside one message', async () => {
   renderJoin();
-  // accept-licence-intro is one message with the link passed in as $1. Two CC0 links render
-  // on the page (this one and the shell footer's), so the query is scoped to this section.
+  // Catches the link leaving the sentence or turning into visible markup: the message losing
+  // its $1 (easy in a translation), or richHtml being swapped for plain text rendering. Scoped
+  // to this section because the shell footer renders a second CC0 link.
   await screen.findByText(testMessages['accept-licence-heading']!);
   const section = document.getElementById('accept-licence-note');
   expect(section).not.toBeNull();
@@ -45,7 +48,8 @@ test('the licence sentence keeps its link inside one message', async () => {
 
 test('the identity-reveal window reads as one sentence with both numbers', async () => {
   renderJoin();
-  // accept-privacy-reveal-window is one sentence taking both numbers as parameters.
+  // Catches a parameter that is dropped or passed in the wrong position, and a plural unit
+  // that fails to resolve. The sentence still renders in each case; only the numbers show it.
   const details = await screen.findByText(testMessages['accept-privacy-details-summary']!);
   const body = details.closest('details')?.textContent ?? '';
   expect(body).toContain('Between');
@@ -65,7 +69,7 @@ test('the invite-only page names the consultation inside one sentence', async ()
     }}),
   ));
   renderJoin();
-  // The consultation title is organizer-authored content, passed into the sentence as $1.
+  // Catches the organizer's title going missing from the sentence, e.g. $1 not being passed.
   expect(await screen.findByText(/Community strategy/)).toBeVisible();
   expect(screen.getByText(/restricted to invited participants/)).toBeVisible();
 });
