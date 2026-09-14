@@ -9,9 +9,7 @@ import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
 import {testMessages} from '../../test/handlers';
 
-/** The join screen had no test at all before this file, which is how a page carrying the
- *  consent checkbox, the licence disclosure and the privacy summary — every word of it
- *  load-bearing — could have been rewritten without evidence that it still rendered. */
+/** Renders the join screen through the app router with the test catalogue. */
 function renderJoin() {
   return render(
     <QueryClientProvider client={createQueryClient()}>
@@ -25,8 +23,7 @@ function renderJoin() {
 test('the join screen renders its copy from the catalogue', async () => {
   renderJoin();
   expect(await screen.findByText(testMessages['accept-choose-pseudonym']!)).toBeVisible();
-  // The consent checkbox and the licence disclosure are the two the participant is agreeing
-  // to; if either silently failed to render, the page would still look plausible.
+  // The consent checkbox and the licence disclosure are what the participant agrees to.
   expect(screen.getByText(testMessages['accept-consent']!)).toBeVisible();
   expect(screen.getByRole('heading', {name: testMessages['accept-licence-heading']!})).toBeVisible();
   expect(screen.getByText(testMessages['accept-privacy-summary']!)).toBeVisible();
@@ -35,9 +32,8 @@ test('the join screen renders its copy from the catalogue', async () => {
 
 test('the licence sentence keeps its link inside one message', async () => {
   renderJoin();
-  // It used to be three pieces with the CC0 link between them, which fixed the English word
-  // order. One message now, with the link passed in as $1.
-  // Two CC0 links render: this one and the shell's footer, both from accept-licence-link.
+  // accept-licence-intro is one message with the link passed in as $1. Two CC0 links render
+  // on the page (this one and the shell footer's), so the query is scoped to this section.
   await screen.findByText(testMessages['accept-licence-heading']!);
   const section = document.getElementById('accept-licence-note');
   expect(section).not.toBeNull();
@@ -49,8 +45,7 @@ test('the licence sentence keeps its link inside one message', async () => {
 
 test('the identity-reveal window reads as one sentence with both numbers', async () => {
   renderJoin();
-  // accept-privacy-window-a/-b/-c (now accept-privacy-reveal-window) were "Between", "and", and the rest, with the two numbers
-  // interpolated between them. A translator could not reorder that.
+  // accept-privacy-reveal-window is one sentence taking both numbers as parameters.
   const details = await screen.findByText(testMessages['accept-privacy-details-summary']!);
   const body = details.closest('details')?.textContent ?? '';
   expect(body).toContain('Between');
@@ -59,7 +54,7 @@ test('the identity-reveal window reads as one sentence with both numbers', async
   expect(body).toContain('permanently link your username');
 });
 
-test('the eligibility rule names what it requires, in one sentence', async () => {
+test('the invite-only page names the consultation inside one sentence', async () => {
   server.use(http.get(
     new URL('/api/v1/conversations/community-strategy/participation-entry', globalThis.location.origin).toString(),
     () => HttpResponse.json({data: {
@@ -70,8 +65,7 @@ test('the eligibility rule names what it requires, in one sentence', async () =>
     }}),
   ));
   renderJoin();
-  // The consultation title is organizer-authored and must survive untranslated, inside a
-  // sentence that used to be split around it.
+  // The consultation title is organizer-authored content, passed into the sentence as $1.
   expect(await screen.findByText(/Community strategy/)).toBeVisible();
   expect(screen.getByText(/restricted to invited participants/)).toBeVisible();
 });
