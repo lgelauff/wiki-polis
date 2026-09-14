@@ -6,7 +6,7 @@ export function StatementGuidancePage() {
       <div className="container" style={{maxWidth: 760}}>
         <div className="landing-section">
           <h1 style={{fontSize: 28, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.2, margin: '0 0 12px'}}>Writing good statements</h1>
-          <p className="muted">Statements are the short claims participants vote Agree, Disagree, or Pass on. A good statement lets people answer one clear question with one clear vote.</p>
+          <p className="muted">Statements are the short claims participants vote Agree, Disagree, or Pass on. A good statement lets people give their opinion on one clear statement with one clear vote.</p>
         </div>
         <div className="landing-section">
           <h2>Checklist</h2>
