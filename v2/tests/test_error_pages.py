@@ -177,3 +177,36 @@ def test_the_error_page_still_renders_with_no_catalogue_at_all(tmp_path):
         assert i18n._MISSING_L not in page
     finally:
         i18n.load()
+
+
+@pytest.fixture
+def delivered_catalogue(tmp_path):
+    """Load a temporary catalogue for one test, and the real one again afterwards."""
+    import i18n
+    directory = tmp_path / 'i18n'
+    directory.mkdir()
+    yield directory
+    i18n.load()
+
+
+def test_a_hostile_translated_hint_does_not_reach_the_page_when_english_fails_to_load(app, delivered_catalogue):
+    """The hint is rendered unescaped, so its markup check must not depend on English loading.
+
+    Catches the check failing open: with no English to compare against, a translation would
+    otherwise be served as it arrived. A malformed en.json is the degraded catalogue this module
+    exists to survive."""
+    import json
+
+    import error_pages
+    import i18n
+    from flask import g
+
+    (delivered_catalogue / 'en.json').write_text('{ not json', encoding='utf-8')
+    (delivered_catalogue / 'nl.json').write_text(json.dumps({
+        'errorpage-404-hint': 'Klik <img src=x onerror=alert(1)>',
+    }), encoding='utf-8')
+    i18n.load(str(delivered_catalogue))
+    with app.test_request_context('/'):
+        g.locale, g.dir = 'nl', 'ltr'
+        body = error_pages.render_error_page(404)
+    assert '<img' not in body

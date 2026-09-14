@@ -897,7 +897,7 @@
     "adminconv-countdown-days": "Compact day unit in the countdown to a scheduled phase transition, e.g. \"2d 4h 30m\". $1 is the number of days. Keep it to a letter or two.",
     "adminconv-countdown-hours": "Compact hour unit in the countdown to a scheduled phase transition. $1 is the number of hours. Keep it to a letter or two.",
     "adminconv-countdown-minutes": "Compact minute unit in the countdown to a scheduled phase transition. $1 is the number of minutes. Keep it to a letter or two.",
-    "adminconv-countdown-lt1m": "Countdown shown when a scheduled transition is under a minute away but not yet due. Keep it very short.",
+    "adminconv-countdown-lt1m": "Countdown shown when a scheduled transition is under a minute away but not yet due; the other units are {{msg-proto|adminconv-countdown-minutes}} and its siblings. Keep it very short, in words, e.g. \"under 1 min\". Do not use <nowiki><</nowiki>: the message cannot be parsed with it. Do not use an HTML entity either: the countdown is plain text, so it would show literally.",
     "adminconv-status-published": "Pill beside the report phase name: the final report has been published.",
     "adminconv-status-unpublished": "Pill beside the report phase name: the report phase is reached but the report has not been published.",
     "adminconv-phase-desc-published": "Description under the current-phase name once the report is published, replacing the phase effect text.",
