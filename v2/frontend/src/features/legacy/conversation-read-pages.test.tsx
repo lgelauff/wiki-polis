@@ -161,7 +161,7 @@ test('under qqx, the moderation log carries no English but pseudonyms and modera
 
   // Catches the action and scope values ("Banned", "conversation") reaching the table as the
   // server sends them.
-  expect(untranslatedCopy([document.querySelector('.container')], ['quiet-otter', 'patient-fox', 'adminuser', 'moderator'])).toEqual([]);
+  expect(untranslatedCopy([document.querySelector('.container')], ['Community strategy', 'quiet-otter', 'patient-fox', 'adminuser', 'moderator'])).toEqual([]);
 });
 
 test('the moderation log names each action from the catalogue', async () => {
