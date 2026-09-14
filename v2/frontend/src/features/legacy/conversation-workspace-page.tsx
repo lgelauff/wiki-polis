@@ -277,7 +277,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
         <p className="sr-only" id="statement-live" role="status" aria-live="polite">{data.currentStatement?.text}</p>
         {!allDone && data.currentStatement && (
           <div className={`statement-card${receipt ? ' statement-card--voted' : ''}`} id="statement-card">
-            <LegacyContentFlag slug={slug} target={{contentType: 'statement', targetId: data.currentStatement.id}} label="this statement" csrfToken={csrfToken} corner />
+            <LegacyContentFlag slug={slug} target={{contentType: 'statement', targetId: data.currentStatement.id}} csrfToken={csrfToken} corner />
             <div className="statement-card-header">
               <span className="stmt-meta-left"><span className="stmt-dot" /><span className="stmt-meta-label">{msg('conv-vote-statement-label')}</span></span>
               <span className="stmt-meta-right" id="stmt-right-label">{msg('conv-vote-private')}</span>
