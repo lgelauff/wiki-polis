@@ -36,7 +36,7 @@ What this does and does not mean:
 - **Votes are not covered.** A vote is a fact rather than a work, and facts are not
   copyrightable in the first place.
 - **It cannot be withdrawn.** CC0 is irrevocable. Deleting your account later does not
-  un-license text that has already been published — the same as any wiki edit.
+  un-license text that has already been published.
 - **It does not change what is public.** Whether a statement is shown at all is governed
   by moderation and by the sections above; the licence only governs reuse of what does
   get published.

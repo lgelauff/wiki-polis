@@ -42,8 +42,7 @@ test('the licence sentence keeps its link inside one message', async () => {
   expect(section).not.toBeNull();
   const link = within(section!).getByRole('link', {name: /CC0/});
   expect(link).toHaveAttribute('href', 'https://creativecommons.org/publicdomain/zero/1.0/');
-  expect(link.closest('p')?.textContent).toContain('released under');
-  expect(link.closest('p')?.textContent).toContain('public domain');
+  expect(link.closest('p')?.textContent).toContain('released into the public domain (CC0');
 });
 
 test('the identity-reveal window reads as one sentence with both numbers', async () => {
