@@ -53,9 +53,9 @@ export function LegacyPreliminaryResultsPanel({slug}: {slug: string}) {
               : <span className={`p6-shift${statement.agreementShift > 0 ? ' p6-shift--up' : statement.agreementShift < 0 ? ' p6-shift--down' : ''}`}>{statement.agreementShift > 0 ? '+' : ''}{percentage(statement.agreementShift)}%</span>}
             </td>
             {data.viewer.participating && <td className="p6-col-mine">{statement.viewerChoice
-              ? <span className={`p6-my-vote p6-my-vote--${statement.viewerChoice}`}>{statement.viewerChoice === 'agree' ? msg('conv-vote-agree')
-                : statement.viewerChoice === 'disagree' ? msg('conv-vote-disagree')
-                : msg('conv-vote-pass')}</span>
+              ? statement.viewerChoice === 'agree' ? <span className="p6-my-vote p6-my-vote--agreed">{msg('conv-p6-voted-agree')}</span>
+                : statement.viewerChoice === 'disagree' ? <span className="p6-my-vote p6-my-vote--disagreed">{msg('conv-p6-voted-disagree')}</span>
+                : <span className="p6-my-vote p6-my-vote--passed">{msg('conv-p6-voted-pass')}</span>
               : <span className="muted">—</span>}
             </td>}
           </tr>)}</tbody>

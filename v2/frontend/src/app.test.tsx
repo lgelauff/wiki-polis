@@ -649,7 +649,8 @@ test('routes preliminary results through the legacy workspace tab', async () => 
   expect(await screen.findByRole('tab', {name: 'Preliminary results'})).toHaveAttribute('aria-selected', 'true');
   expect(screen.getByRole('table', {name: 'Preliminary informed voting results by statement'})).toBeVisible();
   expect(screen.getByText('70.0% agree · 20.0% pass')).toBeVisible();
-  expect(screen.getByText('Agree', {selector: '.p6-my-vote'})).toBeVisible();
+  // The recorded vote is past tense, and carries the modifier class the stylesheet colours.
+  expect(screen.getByText('Agreed', {selector: '.p6-my-vote.p6-my-vote--agreed'})).toBeVisible();
 });
 
 test('stays usable when the message catalogue is unavailable', async () => {
