@@ -141,3 +141,28 @@ test('renders console text from the catalogue, not from source literals', async 
   expect(screen.queryByText('Phase control')).not.toBeInTheDocument();
   expect(screen.queryByText('You are in phase 2 of 3')).not.toBeInTheDocument();
 });
+
+/** A transition due in thirty seconds, which is when the countdown falls back to its
+ *  "under a minute" message. */
+function dueShortly(): Lifecycle {
+  return {...lifecycle, schedule: {canSchedule: true, scheduledAt: new Date(Date.now() + 30_000).toISOString(), targetKey: 'argument_mapping', targetLabel: 'Arguments', frozen: false}};
+}
+
+test('a transition under a minute away shows its countdown instead of blanking the console', async () => {
+  // The message was "<1m". banana-i18n parses messages for markup and threw on the bare
+  // "<", in render, so the whole console went blank for the last minute before a transition.
+  serve(dueShortly());
+  renderConsole();
+  expect(await screen.findByText('under 1m')).toBeVisible();
+});
+
+test('a message banana cannot parse degrades to its key, not to a blank page', async () => {
+  // The same failure from the other direction: any catalogue value with a stray "<" -- a
+  // translation, say -- must cost one string, not the screen it is on.
+  server.use(http.get(new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
+    () => HttpResponse.json({...testMessages, 'adminconv-countdown-lt1m': '<1m'})));
+  serve(dueShortly());
+  renderConsole();
+  expect(await screen.findByText('adminconv-countdown-lt1m')).toBeVisible();
+});
+

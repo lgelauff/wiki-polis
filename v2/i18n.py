@@ -13,8 +13,11 @@ still on screen under ``?uselang=qqx`` is a missed string).
 """
 
 import json
+import logging
 import os
 import re
+
+_log = logging.getLogger(__name__)
 
 _I18N_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'i18n')
 
@@ -72,6 +75,62 @@ def load(directory: str = _I18N_DIR) -> None:
                 k: v for k, v in data.items()
                 if k != '@metadata' and isinstance(v, str)
             }
+    source = _MESSAGES.get(SOURCE_LOCALE, {})
+    for code, messages in _MESSAGES.items():
+        if code == SOURCE_LOCALE:
+            continue
+        refused = [k for k, v in messages.items() if k in source and not markup_is_permitted(v, source[k])]
+        for key in refused:
+            del messages[key]
+        if refused:
+            _log.warning('i18n: %s.json: not serving %d message(s) whose markup differs from '
+                         'English: %s', code, len(refused), ', '.join(sorted(refused)))
+
+
+# ── Markup in translations ────────────────────────────────────────────────────────────
+#
+# Some messages carry inline HTML, and both consumers render it as HTML: the SPA through
+# banana-i18n into innerHTML (richHtml), and error_pages.py's `hint`. English is ours;
+# translations are not — they arrive from translatewiki, typed by volunteers. banana-i18n
+# is not a sanitiser: a self-closing tag keeps its attributes (`<img src=x onerror=…/>`),
+# and inside a {{PLURAL:}}, {{GENDER:}} or {{GRAMMAR:}} branch any HTML passes through
+# untouched. A stray `<` makes it throw, which blanks the page it renders on.
+#
+# So a translation may only use markup its English original already uses: the same tag
+# names with the same attributes and attribute values, as many times as it likes, in any
+# order (a language may need a bold number in each plural branch). Anything else is not
+# served, and English is used for that one message. tests/test_i18n.py applies the same
+# check to every delivered file, so a bad translation fails CI where it arrives rather than
+# being quietly replaced in production.
+
+_TAG_RE = re.compile(r'<\s*(/?)\s*([A-Za-z][A-Za-z0-9-]*)((?:[^<>"\']|"[^"]*"|\'[^\']*\')*)>')
+_ATTR_RE = re.compile(r'([^\s=/"\'<>]+)(?:\s*=\s*("[^"]*"|\'[^\']*\'|[^\s"\'>]+))?')
+
+
+def markup_signature(text: str) -> set[tuple] | None:
+    """The distinct tags ``text`` uses, each with its attributes and their values.
+
+    ``None`` when the text holds a ``<`` that is not part of a tag, which banana-i18n
+    cannot parse — that is a defect in its own right, not a signature.
+    """
+    tags = set()
+    for match in _TAG_RE.finditer(text):
+        closing, name, rest = match.groups()
+        attrs = tuple(sorted(
+            (attr.lower(), (value or '').strip('"\''))
+            for attr, value in _ATTR_RE.findall(rest.rstrip().rstrip('/'))
+        ))
+        tags.add((closing, name.lower(), attrs))
+    if '<' in _TAG_RE.sub('', text):
+        return None
+    return tags
+
+
+def markup_is_permitted(translation: str, english: str) -> bool:
+    """True when ``translation`` uses no markup that ``english`` does not."""
+    allowed = markup_signature(english)
+    used = markup_signature(translation)
+    return allowed is not None and used is not None and used <= allowed
 
 
 def has_locale(locale: str) -> bool:

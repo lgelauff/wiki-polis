@@ -146,7 +146,16 @@ export function MessageProvider({children, locale: override}: {children: ReactNo
     // synchronously here, and this is the render body of the provider wrapping every route.
     try {
       const banana = new Banana(locale, {messages: {[locale]: messages ?? {}}});
-      return (key, ...params) => banana.i18n(key, ...params);
+      return (key, ...params) => {
+        // banana parses each message for markup and throws on one it cannot parse -- a
+        // stray `<` is enough ("<1m" did it). msg() runs in render, so a throw here blanks
+        // the whole page for one bad string. Show the key instead: loud, but contained.
+        try {
+          return banana.i18n(key, ...params);
+        } catch {
+          return key;
+        }
+      };
     } catch {
       return (key) => key;
     }

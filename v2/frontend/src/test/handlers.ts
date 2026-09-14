@@ -180,7 +180,7 @@ export const testMessages: Record<string, string> = {
   "adminconv-content-access": "Content & access",
   "adminconv-countdown-days": "$1d",
   "adminconv-countdown-hours": "$1h",
-  "adminconv-countdown-lt1m": "<1m",
+  "adminconv-countdown-lt1m": "under 1m",
   "adminconv-countdown-minutes": "$1m",
   "adminconv-custom-state": "Phases are in a custom state (more than one active).",
   "adminconv-danger-label": "Ending the consultation",
