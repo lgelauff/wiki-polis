@@ -118,7 +118,7 @@ test('renders the voting workspace from the catalogue English', async () => {
   expect(warning).toHaveTextContent('These ballots are real — your votes here count.');
   // A sentence whose two values are an interface label and a <time> element.
   expect(document.querySelector('.output-context p')?.textContent)
-    .toBe('Next: Arguments on Aug 2, 2026, 9:30 AM.');
+    .toBe('Next: Arguments on 2 Aug 2026, 09:30.');
   expect(document.querySelector('.output-context time'))
     .toHaveAttribute('title', 'Shown in your local timezone');
   // The document title is an interface frame around an untranslated content value.
@@ -150,6 +150,16 @@ test('renders the closed workspace from parameterised sentences', async () => {
   expect(screen.getByText('quiet-otter').tagName).toBe('STRONG');
 });
 
+test('a participant who has linked their identity sees no countdown', async () => {
+  serve({...closedWorkspace, reveal: {...closedWorkspace.reveal!, state: 'revealed'}});
+  renderWorkspace();
+
+  await screen.findByText(/You linked your identity/, {}, {timeout: 10_000});
+  // Catches a "Window closes in …" line under the confirmation. The window's end no longer
+  // concerns someone who has linked, even while a closing date is still sent.
+  expect(document.querySelector('.reveal-deadline')).toBeNull();
+});
+
 test('renders workspace text from the catalogue, not from source literals', async () => {
   // Non-vacuity: serve deliberately different English for keys covering distinct
   // mechanisms -- plain text, an aria-label, an aria-valuetext with two parameters, a
@@ -175,7 +185,7 @@ test('renders workspace text from the catalogue, not from source literals', asyn
   expect(within(screen.getByRole('alert')).getByText('CATALOGUE LEAD.').tagName).toBe('STRONG');
   expect(document.querySelector('.output-context em')?.textContent).toBe('Arguments');
   expect(document.querySelector('.output-context p')?.textContent)
-    .toBe('Then Arguments at Aug 2, 2026, 9:30 AM, catalogue-side.');
+    .toBe('Then Arguments at 2 Aug 2026, 09:30, catalogue-side.');
   expect(document.title).toBe('Workspace for Community strategy');
   expect(screen.queryByRole('button', {name: 'Agree'})).not.toBeInTheDocument();
   expect(screen.queryByText('Unlocks after 1 more vote')).not.toBeInTheDocument();

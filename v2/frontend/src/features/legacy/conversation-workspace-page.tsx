@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
-import {useMutation, useQuery, useSuspenseQuery} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {useLocation, useParams} from 'react-router-dom';
 
 import {ApiContractError} from '../../api/client';
@@ -19,9 +19,11 @@ import {LegacyIntermediateResultsPanel} from './intermediate-results-panel';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
 import {LegacyContentFlag} from './legacy-content-flag';
+import {RevealTimeline} from './reveal-timeline';
 import {useMessage, type Message} from '../../i18n/messages';
 import {phaseLabel, tabLabel} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
+import {useDateFormat} from '../../i18n/dates';
 
 type Workspace = components['schemas']['ConversationWorkspace'];
 type WorkspaceTab = components['schemas']['ConversationWorkspaceTab']['key'];
@@ -73,12 +75,6 @@ function InviteOnlyPage({details}: {details: InviteOnlyDetails}) {
 
 function shortTitle(value: string) {
   return value.length > 40 ? `${value.slice(0, 39)}…` : value;
-}
-
-function localDateTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium', timeStyle: 'short',
-  }).format(new Date(value));
 }
 
 function ConversationCrumb({data}: {data: Workspace}) {
@@ -282,7 +278,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
         <p className="sr-only" id="statement-live" role="status" aria-live="polite">{data.currentStatement?.text}</p>
         {!allDone && data.currentStatement && (
           <div className={`statement-card${receipt ? ' statement-card--voted' : ''}`} id="statement-card">
-            <LegacyContentFlag slug={slug} target={{contentType: 'statement', targetId: data.currentStatement.id}} label="this statement" csrfToken={csrfToken} corner />
+            <LegacyContentFlag slug={slug} target={{contentType: 'statement', targetId: data.currentStatement.id}} csrfToken={csrfToken} corner />
             <div className="statement-card-header">
               <span className="stmt-meta-left"><span className="stmt-dot" /><span className="stmt-meta-label">{msg('conv-vote-statement-label')}</span></span>
               <span className="stmt-meta-right" id="stmt-right-label">{msg('conv-vote-private')}</span>
@@ -321,18 +317,21 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
 }
 
 function ClosedWorkspace({data}: {data: Workspace}) {
+  const dates = useDateFormat();
   const msg = useMessage();
   const reveal = data.reveal;
+  const queryClient = useQueryClient();
+  const refreshWorkspace = () => void queryClient.invalidateQueries({queryKey: conversationWorkspaceQuery(data.slug).queryKey});
   const pseudonym = escapeHtml(data.viewer.pseudonym ?? '');
   return (
     <div className="landing-section">
       {reveal ? (
         <>
-          <p className="muted" dangerouslySetInnerHTML={richHtml(msg('conv-closed-on', escapeHtml(legacyDate(reveal.closedAt))))} />
-          <RevealTimeline reveal={reveal} />
+          <p className="muted" dangerouslySetInnerHTML={richHtml(msg('conv-closed-on', escapeHtml(dates.date(reveal.closedAt))))} />
+          <RevealTimeline state={reveal.state} closedAt={reveal.closedAt} opensAt={reveal.opensAt} closesAt={reveal.closesAt} cooldownDays={reveal.cooldownDays} windowDays={reveal.windowDays} countdownTargetAt={reveal.countdownTargetAt} onBoundary={refreshWorkspace} />
           {reveal.state === 'revealed' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}} dangerouslySetInnerHTML={richHtml(msg('conv-revealed-text', pseudonym))} />}
           {reveal.state === 'open' && <div className="reveal-callout"><p className="reveal-callout-text" dangerouslySetInnerHTML={richHtml(msg('reveal-callout-open-text', pseudonym))} /><InternalLink className="reveal-callout-link" href={`/c/${data.slug}/reveal`}>{msg('reveal-callout-link')} <span aria-hidden="true">→</span></InternalLink></div>}
-          {reveal.state === 'pending' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>{msg('conv-reveal-pending-opens', legacyDate(reveal.opensAt))}</p>}
+          {reveal.state === 'pending' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>{msg('conv-reveal-pending-opens', dates.date(reveal.opensAt))}</p>}
           {reveal.state === 'expired' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>{msg('conv-reveal-expired')}</p>}
         </>
       ) : <p className="muted">{msg('conv-closed-simple')}</p>}
@@ -341,77 +340,16 @@ function ClosedWorkspace({data}: {data: Workspace}) {
   );
 }
 
-function legacyDate(value: string) {
-  const date = new Date(value);
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${date.getUTCDate()} ${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
-}
-
-function countdown(msg: Message, value: string) {
-  const milliseconds = Date.parse(value) - Date.now();
-  if (milliseconds <= 0) return msg('reveal-tl-now');
-  const seconds = Math.floor(milliseconds / 1000);
-  const pad = (part: number) => String(part).padStart(2, '0');
-  return `${Math.floor(seconds / 86400)}d ${pad(Math.floor(seconds % 86400 / 3600))}:${pad(Math.floor(seconds % 3600 / 60))}:${pad(seconds % 60)}`;
-}
-
-/** The countdown is a styled element inside a sentence. Passing it in as an escaped HTML
- *  fragment keeps each sentence one translatable unit — a translator can move the deadline
- *  within the sentence, which splitting at the <strong> made impossible — without exposing
- *  the class name to translatewiki. */
-function deadlineSentence(msg: Message, state: NonNullable<Workspace['reveal']>['state'], remaining: string) {
-  const clock = `<strong class="reveal-countdown">${escapeHtml(remaining)}</strong>`;
-  if (state === 'pending') return msg('reveal-tl-deadline-opens', clock);
-  if (state === 'open') return msg('reveal-tl-deadline-closes-permanent', clock);
-  return msg('reveal-tl-deadline-closes', clock);
-}
-
-function RevealTimeline({reveal}: {reveal: NonNullable<Workspace['reveal']>}) {
-  const msg = useMessage();
-  const [remaining, setRemaining] = useState(
-    reveal.countdownTargetAt ? countdown(msg, reveal.countdownTargetAt) : null,
-  );
-  useEffect(() => {
-    if (!reveal.countdownTargetAt) return;
-    const update = () => setRemaining(countdown(msg, reveal.countdownTargetAt!));
-    update();
-    const timer = globalThis.setInterval(update, 1000);
-    return () => globalThis.clearInterval(timer);
-  }, [msg, reveal.countdownTargetAt]);
-  const firstNow = reveal.state === 'pending';
-  const secondNow = reveal.state === 'open' || reveal.state === 'revealed';
-  const expired = reveal.state === 'expired';
-  return <div className="reveal-timeline">
-    <ol className="reveal-track" aria-label={msg('reveal-tl-aria')}>
-      <li className={`reveal-node reveal-node--done${firstNow ? ' reveal-node--now' : ''}`} {...(firstNow ? {'aria-current': 'step' as const} : {})}>
-        <span className="reveal-pip" aria-hidden="true" />
-        <div className="reveal-when">{legacyDate(reveal.closedAt)}</div>
-        <div className="reveal-what">{msg('reveal-tl-closed-what', reveal.cooldownDays)}{' '}<span className="sr-only">{firstNow ? msg('reveal-tl-step-inprogress') : msg('reveal-tl-step-completed')}</span></div>
-      </li>
-      <li className={`reveal-node${secondNow ? ' reveal-node--now' : expired ? ' reveal-node--done' : ''}`} {...(secondNow ? {'aria-current': 'step' as const} : {})}>
-        <span className="reveal-pip" aria-hidden="true" />
-        <div className="reveal-when">{legacyDate(reveal.opensAt)}</div>
-        <div className="reveal-what">{msg('reveal-tl-opens-what', reveal.windowDays)}{' '}<span className="sr-only">{secondNow ? msg('reveal-tl-step-current') : expired ? msg('reveal-tl-step-completed') : msg('reveal-tl-step-upcoming')}</span></div>
-      </li>
-      <li className={`reveal-node${expired ? ' reveal-node--now' : ''}`} {...(expired ? {'aria-current': 'step' as const} : {})}>
-        <span className="reveal-pip" aria-hidden="true" />
-        <div className="reveal-when">{legacyDate(reveal.closesAt)}</div>
-        <div className="reveal-what">{msg('reveal-tl-closes-what')}{' '}<span className="sr-only">{expired ? msg('reveal-tl-step-current') : msg('reveal-tl-step-upcoming')}</span></div>
-      </li>
-    </ol>
-    {remaining && <p className="reveal-deadline" dangerouslySetInnerHTML={richHtml(deadlineSentence(msg, reveal.state, remaining))} />}
-  </div>;
-}
-
 /** The scheduled-transition sentence carries a <time> element whose attributes cannot come
  *  from a translated string. It is built here and passed in as one parameter, so the
  *  sentence itself stays a plain "Next: $1 on $2." frame. */
-function scheduledTime(msg: Message, at: string) {
-  return `<time datetime="${escapeHtml(at)}" title="${escapeHtml(msg('conv-scheduled-tz-title'))}">${escapeHtml(localDateTime(at))}</time>`;
+function scheduledTime(msg: Message, dateTime: (value: string) => string, at: string) {
+  return `<time datetime="${escapeHtml(at)}" title="${escapeHtml(msg('conv-scheduled-tz-title'))}">${escapeHtml(dateTime(at))}</time>`;
 }
 
 function WorkspaceBody({data, csrfToken, routeTab}: {data: Workspace; csrfToken: string; routeTab?: WorkspaceTab}) {
   const msg = useMessage();
+  const dates = useDateFormat();
   const hashTab = useLocation().hash.replace(/^#tab-/, '') as WorkspaceTab;
   const requestedTab = routeTab ?? hashTab;
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(data.tabs.some((tab) => tab.key === requestedTab) ? requestedTab : data.defaultTab ?? 'vote');
@@ -438,7 +376,7 @@ function WorkspaceBody({data, csrfToken, routeTab}: {data: Workspace; csrfToken:
       {data.spaceWarning && <SpaceWarning space={data.spaceWarning} />}
       {data.space === 'demo' && <div className="mode-lock mode-lock--demo" style={{marginBottom: '1rem'}}><span className="mode-lock-dot" aria-hidden="true" />{msg('conv-demo-mode-lock')}</div>}
       {data.descriptionHtml && <div className="intro-text" dangerouslySetInnerHTML={{__html: data.descriptionHtml}} />}
-      {data.scheduledTransition && <div className="landing-section output-context"><p className="muted" style={{margin: 0}} dangerouslySetInnerHTML={richHtml(msg('conv-scheduled-transition', escapeHtml(phaseLabel(msg, data.scheduledTransition.target, data.scheduledTransition.targetLabel)), scheduledTime(msg, data.scheduledTransition.at)))} /></div>}
+      {data.scheduledTransition && <div className="landing-section output-context"><p className="muted" style={{margin: 0}} dangerouslySetInnerHTML={richHtml(msg('conv-scheduled-transition', escapeHtml(phaseLabel(msg, data.scheduledTransition.target, data.scheduledTransition.targetLabel)), scheduledTime(msg, dates.dateTime, data.scheduledTransition.at)))} /></div>}
       {data.status === 'closed' ? <ClosedWorkspace data={data} /> : data.status === 'paused' ? <div className="landing-section"><p className="muted">{msg('conv-paused')}</p></div> : data.tabs.length === 0 ? <div className="landing-section"><p className="muted">{msg('conv-nothing-available')}</p></div> : (
         <>
           {data.tabs.length > 1 && <div className="tab-bar" role="tablist" onKeyDown={keyDown}>{data.tabs.map((tab, index) => <button key={tab.key} ref={(element) => { tabRefs.current[index] = element; }} id={`tab-btn-${tab.key}`} className={`tab-btn${activeTab === tab.key ? ' tab-btn--active' : ''}`} role="tab" data-tab={`tab-${tab.key}`} aria-controls={`tab-${tab.key}`} aria-selected={activeTab === tab.key} tabIndex={activeTab === tab.key ? 0 : -1} onClick={() => setActiveTab(tab.key)}>{tabLabel(msg, tab.key, tab.label)}</button>)}</div>}

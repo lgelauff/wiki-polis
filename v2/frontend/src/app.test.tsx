@@ -474,7 +474,7 @@ test('requires deliberate confirmation before permanently revealing identity', a
   );
 
   expect(await screen.findByRole('heading', {
-    name: 'Permanently link quiet-otter to your wiki name?',
+    name: 'Permanently link quiet-otter to your Wikimedia username?',
   })).toBeVisible();
   const submit = screen.getByRole('button', {name: 'Yes, link my identity'});
   expect(submit.closest('form')).not.toHaveAttribute('action');
@@ -649,7 +649,8 @@ test('routes preliminary results through the legacy workspace tab', async () => 
   expect(await screen.findByRole('tab', {name: 'Preliminary results'})).toHaveAttribute('aria-selected', 'true');
   expect(screen.getByRole('table', {name: 'Preliminary informed voting results by statement'})).toBeVisible();
   expect(screen.getByText('70.0% agree · 20.0% pass')).toBeVisible();
-  expect(screen.getByText('Agree', {selector: '.p6-my-vote'})).toBeVisible();
+  // The recorded vote is past tense, and carries the modifier class the stylesheet colours.
+  expect(screen.getByText('Agreed', {selector: '.p6-my-vote.p6-my-vote--agreed'})).toBeVisible();
 });
 
 test('stays usable when the message catalogue is unavailable', async () => {
@@ -668,8 +669,10 @@ test('stays usable when the message catalogue is unavailable', async () => {
     </QueryClientProvider>,
   );
 
-  // The lane still renders from its own contract; only catalogue-sourced strings degrade.
-  expect(await screen.findByRole('heading', {name: 'Needs attention'}, {timeout: 5000})).toBeVisible();
+  // The lane still renders from its own contract; its copy degrades to visible keys, which
+  // is ugly but usable -- the alternative is a page stuck on a loading state.
+  expect(await screen.findByRole('heading', {name: 'home-section-needs-attention'}, {timeout: 5000})).toBeVisible();
+  expect(screen.getByRole('link', {name: /Community strategy/})).toHaveAttribute('href', '/c/community-strategy');
   expect(screen.queryByText('Loading conversations…')).not.toBeInTheDocument();
 });
 

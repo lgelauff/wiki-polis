@@ -21,7 +21,8 @@ const reportFixture: components['schemas']['ResultsReport'] = {
   resultsAvailable: true,
   openedAt: '2026-05-01T12:00:00Z',
   closedAt: '2026-07-01T12:00:00Z',
-  context: {phase: 'Publish', status: 'final', method: 'Informed-voting tallies frozen at publication.'},
+  // Deliberately unlike the catalogue's English, so a page echoing the server shows the marker.
+  context: {phase: 'SERVER ENGLISH', status: 'final', method: 'SERVER ENGLISH'},
   participation: {initialRound: 25, informedRound: 22, matchedRounds: null},
   dataAvailability: {detailedCounts: true, opinionGroups: true},
   moderation: {excludedStatements: 1, excludedParticipants: 0},
@@ -34,7 +35,8 @@ const reportFixture: components['schemas']['ResultsReport'] = {
     viewerChoice: null,
   }],
   opinionGroups: [{
-    label: 'Group 1',
+    // Unlike the catalogue's "Group $1", so the server's label cannot pass for the mapped one.
+    label: 'SERVER GROUP',
     memberCount: 11,
     positions: [{choice: 'agree', statement: 'Shared maintenance matters.', percentage: 82}],
   }],
@@ -110,4 +112,21 @@ test('renders report text from the catalogue, not from source literals', async (
   // Inline markup in a catalogue message stays markup rather than being escaped into text.
   expect(within(screen.getByText(/Computed as/)).getByText('CATALOGUE FORMULA').tagName).toBe('EM');
   expect(screen.queryByRole('heading', {name: 'Methodology'})).not.toBeInTheDocument();
+});
+
+test('the reading guide names its phase and method from the catalogue, not the server', async () => {
+  renderReport();
+  // Catches the payload's English phase or method reaching the page, and the wrong output's
+  // definition being used for a final report.
+  const guide = (await screen.findByRole('heading', {name: 'How to read this output'})).closest('.output-context')!;
+  expect(guide).toHaveTextContent(`Produced from${testMessages['output-report-phase']}`);
+  expect(guide).toHaveTextContent(testMessages['output-report-method']!);
+  expect(guide).not.toHaveTextContent('SERVER ENGLISH');
+});
+
+test('opinion groups are numbered from the catalogue, not the server label', async () => {
+  renderReport();
+  // Catches the server's group label rendering in place of report-group-label.
+  expect((await screen.findAllByText(/Group 1/, {selector: '.results-group-heading'}))[0]).toBeInTheDocument();
+  expect(document.body.textContent).not.toContain('SERVER GROUP');
 });

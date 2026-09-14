@@ -6,17 +6,19 @@ UI strings for Proto, in the **translatewiki.net (TWN) "banana" JSON** format.
 
 ## Status — what is wired up today
 
-The catalogue and the resolver are in place, and the SPA now reads them: four screens are
-converted — the preliminary results panel, the final report page, the admin lifecycle
-console, and the conversation workspace. The rest of the SPA is still hardcoded English.
+The catalogue and the resolver are in place, and the SPA reads them on these surfaces: the
+shared frame and landing page, the consultation list, the join screen, the conversation
+workspace, the informed-voting panel, the preliminary results panel, the final report page,
+and the admin lifecycle console. The rest of the SPA is still hardcoded English; the order
+the remainder is wired in is in [`../plan_i18n.md`](../plan_i18n.md) stage 2.
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (878 keys, 100% documented) | ✅ committed |
+| `en.json` + `qqq.json` (904 keys, 100% documented) | ✅ committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
-| React SPA reads it via `banana-i18n` | ✅ wired (4 screens converted) |
+| React SPA reads it via `banana-i18n` | 🟡 partly wired (see above) |
 | Locales offered to users (`ENABLED_LOCALES`) | English only |
 
 `ENABLED_LOCALES` defaults to `en`, so nothing here is user-visible yet. The keys are the
@@ -45,8 +47,20 @@ rather than rendering the server's `message`, so those strings stay developer-fa
 ## For translators
 
 Translate on **translatewiki.net**, not here. `qqq.json` gives the context for each message.
-Placeholders `$1`, `$2`, … must be preserved. `{{PLURAL:$1|singular|plural}}` selects a form
-by the number in `$1` — use the plural forms your language needs.
+Placeholders `$1`, `$2`, … must be preserved, and no others added. `{{PLURAL:$1|singular|plural}}`
+selects a form by the number in `$1` — use the plural forms your language needs.
+
+A translation that breaks these rules is not shown; English is shown in its place:
+
+- Use only the tags and attributes the English uses. Leaving them out, or moving them, is fine.
+- No `<` in text: write it in words.
+- In `{{PLURAL:$1|…}}`: no space before `$1`, no empty forms, and at least one form that is not
+  an explicit number such as `1=…`. No stray `{`, `}` or `{{…}}` of other kinds.
+- In a message that contains markup or `{{…}}`: no `$` except in a placeholder like `$1`, and no
+  backslash.
+
+Avoid HTML entities such as `&lt;` as well. They are not refused, but some places show them
+exactly as typed.
 
 ## For maintainers — adding or changing a UI string
 
@@ -67,6 +81,9 @@ by the number in `$1` — use the plural forms your language needs.
 5. **Plurals / counts:** `"reveal-tl-days": "$1 {{PLURAL:$1|day|days}}"`.
 6. **Never** hardcode user-facing English in a component once that surface has been
    converted.
+7. **Dates** go through `frontend/src/i18n/dates.ts`, which formats in the language the reader
+   chose, not the browser's. `Intl.DateTimeFormat(undefined, …)` and month-name tables are
+   the two ways a translated page ends up with English dates.
 
 ## The endpoint
 
@@ -79,7 +96,7 @@ A flat `{key: text}` map — **not** the `{"data": ...}` envelope the rest of AP
 because that flat map is what `banana-i18n` takes as a message store. English-filled, so a
 partly translated locale is still complete. `@metadata` is excluded. An unknown locale falls
 back to English rather than 404ing, mirroring the resolver's `locale -> en -> ⧼key⧽` chain.
-`qqx` returns `(key)` for every key.
+`qqx` returns `(key)` for every key, or `(key: $1, $2)` for a message with parameters.
 
 Pin `?v=<gitVersion>` (the SPA already has `gitVersion` from `GET /api/v1/session`) to get the
 cacheable response; the same `?v=<git-sha>` contract the static assets use, so a deploy busts
@@ -118,9 +135,21 @@ that list.
 
 Append **`?uselang=qqx`** to any page: every externalised string renders as its key
 (`(base-log-out)`). Any real English still visible = a string that still needs extracting.
-A missing key renders loudly as `⧼key⧽`. Only the four converted screens render as keys
-throughout today; everywhere else is still un-externalised, so this remains a tool for the
-conversion phases rather than a passing check.
+A missing key renders loudly as `⧼key⧽`. Only the wired surfaces render as keys throughout
+today; everywhere else is still un-externalised, so this remains a tool for the conversion
+phases rather than a passing check.
+
+`qqx` shows a message's parameters too, as MediaWiki does: `(key: a, b)`. So English passed
+*into* a message — a link label, a phase name — is as visible as English written around one.
+
+The same check runs in the frontend tests. `renderAsQqx()` and `untranslatedCopy()` in
+`frontend/src/test/i18n.ts` render a surface under `qqx` and list any text or readable
+attribute still carrying a word once message keys and fixture content are removed. A test
+that asserts English cannot prove a surface is wired — the test catalogue is the real
+`en.json`, so a literal and `msg()` of the same words render identically — and this one can.
+It cannot see a *wrong* value in the right place (a swapped parameter, a server label used
+instead of its identifier's message): those need an English test whose fixture differs from
+the catalogue.
 
 ## Scope — the interface / content split
 
@@ -204,7 +233,54 @@ offered.
   render as `⧼key⧽` at runtime. The scan reads `msg('key')` and `_('key')` literals across
   `v2/*.py`, `v2/api/`, `v2/services/` and `v2/frontend/src/`; keys assembled at runtime are
   skipped, since a static scan cannot resolve them. **This guard is live**: it covers the
-  keys the converted screens reference, so a typo'd key fails CI rather than shipping.
+  keys the converted screens reference, so a typo'd key fails CI rather than shipping;
+- a delivered translation would not be served (see *Markup in messages* below):
+  `test_every_delivered_translation_passes_the_markup_check`;
+- an English message uses markup outside the allowlist, or cannot be parsed:
+  `test_source_messages_use_only_allowlisted_markup`.
+
+`frontend/src/i18n/catalogue-parses.test.ts` fails CI if any message in any catalogue file
+makes banana-i18n throw.
 
 Add both the `en.json` value **and** the `qqq.json` line in the same change and the guards
 stay green.
+
+## Markup in messages
+
+Messages with inline HTML are rendered as HTML, in the SPA and in the error pages' hint, so
+markup is held to two rules.
+
+Both are scanned against a small grammar in `i18n.py` (`_Scanner`), a strict subset of what
+banana-i18n parses; the scan is linear in the message's length, so no input is slow.
+
+**English** may use only `<strong>`, `<em>`, `<code>`, and `<a href>` to a same-site path, and
+must fit the grammar. The allowlist is `_SOURCE_TAGS` / `_SOURCE_ATTRIBUTES` in
+`tests/test_i18n.py`, and widening it widens what every translation may use. In the SPA,
+banana-i18n escapes an `<a>` written in plain message text but not inside a `{{PLURAL:}}`
+branch; SPA links are passed into the message as a parameter instead.
+
+**A translation** is served only if it fits the grammar and uses only markup its English
+already uses: the same tags with the same attributes and values, repeated or reordered as the
+language needs, and no placeholder the English lacks. `i18n.load()` does not serve one that
+fails — English is used for that message — nor any translation at all if `en.json` did not
+load. A translation of a key English no longer has is set aside as stale and does not fail
+CI; translatewiki drops it on its next export. The app logs both at startup.
+
+**Changing English markup.** If a change removes or alters a tag or attribute in an existing
+message, existing translations that still carry it will fail the check. Give the message a
+new key instead: the old translations become stale, which CI accepts, and translators see a
+new message. This is the MediaWiki convention for a change that invalidates translations.
+
+### When a translatewiki export fails the check
+
+The failing test names the file, the key, and why: where the text leaves the grammar, the tags
+and attributes it added, or a placeholder English does not have.
+
+1. Fix the message on translatewiki.net, or ask on its talk page; the next export carries the
+   fix. Never hand-edit `<code>.json` — the next export overwrites it.
+2. Merging the export in the meantime is safe for readers, because `i18n.load()` serves English
+   for that one message. Merging does leave CI red until the fix arrives.
+
+The group config (`translatewiki-group.yaml`) expects exports as pull requests. The check can
+only stop a translation before it lands if `main` requires the CI checks to pass; until branch
+protection is on, a failing export can still be merged or pushed. Tracked in #390.

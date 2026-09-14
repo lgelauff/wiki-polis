@@ -3,6 +3,8 @@ import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
+import {useDateFormat} from '../../i18n/dates';
+import {outputMethod, outputPhase} from '../../i18n/server-labels';
 
 type Report = components['schemas']['ResultsReport'];
 type Statement = components['schemas']['ResultsStatement'];
@@ -10,12 +12,6 @@ type Tally = components['schemas']['VoteTally'];
 
 function truncated(value: string, length: number) {
   return value.length > length ? `${value.slice(0, length - 1)}…` : value;
-}
-
-function shortDate(value: string) {
-  const date = new Date(value);
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${date.getUTCDate()} ${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
 function percentage(value: number) {
@@ -59,13 +55,14 @@ function PlaceholderSections() {
 }
 
 function ProcessTimeline({report}: {report: Report}) {
+  const dates = useDateFormat();
   const msg = useMessage();
   return <div className="report-section">
     <h2 className="report-section-heading">{msg('report-process-heading')}</h2>
     <div className="report-timeline">
       <div className="report-timeline-item">
         <span className="report-timeline-label">{msg('report-process-opened')}</span>
-        <span className="report-timeline-value">{shortDate(report.openedAt)}</span>
+        <span className="report-timeline-value">{dates.date(report.openedAt)}</span>
       </div>
       {[msg('report-process-submission'), msg('report-process-argmap'), msg('report-process-informed')].map((label) => (
         <div className="report-timeline-item report-timeline-item--placeholder" key={label}>
@@ -75,7 +72,7 @@ function ProcessTimeline({report}: {report: Report}) {
       ))}
       {report.closedAt && <div className="report-timeline-item">
         <span className="report-timeline-label">{msg('report-process-closed')}</span>
-        <span className="report-timeline-value">{shortDate(report.closedAt)}</span>
+        <span className="report-timeline-value">{dates.date(report.closedAt)}</span>
       </div>}
     </div>
   </div>;
@@ -164,11 +161,11 @@ function OpinionGroups({report}: {report: Report}) {
   return <div className="report-section">
     <h2 className="report-section-heading">{msg('report-groups-heading')} <span className="report-section-sub">{msg('report-groups-sub', report.opinionGroups.length)}</span></h2>
     <p className="muted" style={{fontSize: 13, marginBottom: '1rem'}}>{msg('report-groups-intro')}</p>
-    {report.opinionGroups.map((group) => <div className="results-block" style={{marginBottom: '1rem'}} key={group.label}>
-      <p className="results-group-heading">{`\n        ${group.label}\n        `}{!!group.memberCount && <span className="muted" style={{fontWeight: 400, fontSize: 12}}>{msg('report-group-members', group.memberCount)}</span>}{'\n      '}</p>
+    {report.opinionGroups.map((group, groupIndex) => <div className="results-block" style={{marginBottom: '1rem'}} key={group.label}>
+      <p className="results-group-heading">{`\n        ${msg('report-group-label', groupIndex + 1)}\n        `}{!!group.memberCount && <span className="muted" style={{fontWeight: 400, fontSize: 12}}>{msg('report-group-members', group.memberCount)}</span>}{'\n      '}</p>
       {group.positions.map((position, index) => <div className="results-row" key={`${position.choice}-${index}`}>
         <span className={`results-badge results-${position.choice}`}>{position.choice === 'agree' ? msg('report-badge-agree') : msg('report-badge-disagree')}</span>
-        <span className="results-text">{`"${position.statement}"`}</span>
+        <span className="results-text">{msg('conv-results-quoted', position.statement)}</span>
         {!!position.percentage && <span className="results-pct">{`${Math.trunc(position.percentage)}%`}</span>}
       </div>)}
     </div>)}
@@ -222,7 +219,9 @@ function ResultsBody({report}: {report: Report}) {
 }
 
 export function FinalReportLegacyPage({report}: {report: Report}) {
+  const dates = useDateFormat();
   const msg: Message = useMessage();
+  const contextOutput = report.publication === 'final' ? 'report' : 'preliminary-results';
   return <LegacyShell headerCrumb={<span className="header-crumb">
     <span className="header-crumb-sep">/</span>
     <span>{truncated(report.title, 40)}</span>
@@ -234,16 +233,18 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
       <div className="report-header">
         <div>
           <h1 className="report-title">{report.title}</h1>
-          <p className="report-subtitle">{`${msg('report-subtitle')}${report.closedAt ? ` ${msg('report-closed-suffix')} ${shortDate(report.closedAt)}` : ''}`}</p>
+          <p className="report-subtitle">{`${msg('report-subtitle')}${report.closedAt ? ` ${msg('report-closed-suffix')} ${dates.date(report.closedAt)}` : ''}`}</p>
         </div>
         <span className="report-badge">{msg('report-badge-final')}</span>
       </div>
       <div className="report-section output-context">
         <h2 className="report-section-heading">{msg('output-howto-heading')}</h2>
         <dl className="output-context-grid">
-          <div><dt>{msg('output-produced-from')}</dt><dd>{report.context.phase}</dd></div>
+          {/* The server takes this context from the output definition: "report" once the
+              consultation is closed, "preliminary-results" before. */}
+          <div><dt>{msg('output-produced-from')}</dt><dd>{outputPhase(msg, contextOutput, report.context.phase)}</dd></div>
           <div><dt>{msg('output-status-label')}</dt><dd>{msg('report-status-final')}</dd></div>
-          <div><dt>{msg('output-method-label')}</dt><dd>{report.context.method}</dd></div>
+          <div><dt>{msg('output-method-label')}</dt><dd>{outputMethod(msg, contextOutput, report.context.method)}</dd></div>
         </dl>
       </div>
       <PlaceholderSections />

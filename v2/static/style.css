@@ -3331,7 +3331,7 @@ a { color: var(--pass); }
 }
 .p6-my-vote--agreed    { color: var(--agree);    background: rgba(31,138,91,.09); }
 .p6-my-vote--disagreed { color: var(--disagree); background: rgba(196,74,74,.09); }
-.p6-my-vote--passed    { color: var(--pass);     background: rgba(61,109,186,.09); }
+.p6-my-vote--passed    { color: #3563ad;         background: rgba(61,109,186,.09); }  /* --pass is 4.36:1 on --bg at this size */
 
 /* Mobile: collapse phase columns */
 @media (max-width: 640px) {
@@ -3782,6 +3782,7 @@ a { color: var(--pass); }
 }
 .at-star { display: inline-flex; align-items: center; gap: 4px; }
 .at-yours {
+  text-transform: uppercase;
   color: var(--pass);
   background: rgba(61,109,186,.1);
   border-radius: 3px;
@@ -3789,6 +3790,7 @@ a { color: var(--pass); }
   letter-spacing: .05em;
 }
 .at-hidden-badge {
+  text-transform: uppercase;
   color: var(--muted);
   background: var(--surface2);
   border: 1px solid var(--hairline);
@@ -4290,6 +4292,9 @@ button.conv-output-symbol {
   grid-template-columns: minmax(120px, 0.3fr) 1fr;
   gap: 12px;
 }
+/* Status values are lowercase messages ("provisional"); the capital is presentation. */
+.output-status-value::first-letter { text-transform: uppercase; }
+
 .output-context-grid dt {
   font-family: var(--mono);
   font-size: 11px;

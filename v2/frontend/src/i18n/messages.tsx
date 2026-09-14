@@ -119,7 +119,44 @@ export function messagesQuery(locale: string, version: string) {
 export type Message = (key: string, ...params: (string | number)[]) => string;
 
 const MessageContext = createContext<Message | null>(null);
+
+/** Locale-and-key pairs already reported as unparseable, so a message rendered on every frame
+ *  logs once. */
+const unparseable = new Set<string>();
 const LocaleContext = createContext<string>('');
+
+/** The msg() function for one locale's catalogue. Exported so tests exercise the options and
+ *  containment the interface uses, not a Banana built separately. */
+export function createMessage(locale: string, messages: Record<string, string> | undefined): Message {
+  // Belt and braces behind USELANG_RE. The interface survives a missing catalogue (see
+  // MessageProvider), and a rejected locale the same way: banana throws synchronously here,
+  // and this runs in the render body of the provider wrapping every route.
+  try {
+    // wikilinks stays off (banana's default, stated so it cannot change silently): with it on,
+    // "[url text]" in a translation would become a link the server's markup check never sees.
+    const banana = new Banana(locale, {messages: {[locale]: messages ?? {}}, wikilinks: false});
+    return (key, ...params) => {
+      // banana parses each message for markup and throws on one it cannot parse, such as a
+      // bare `<`. msg() runs in render, so the key is returned instead of throwing; the key,
+      // not a marker, because server-labels.ts treats `msg(key) === key` as "no message" and
+      // falls back to the server's label.
+      try {
+        // As strings: banana drops a plural form that is only a placeholder when the number
+        // passed is 0, and renders "undefined".
+        return banana.i18n(key, ...params.map(String));
+      } catch (error) {
+        if (!unparseable.has(`${locale}:${key}`)) {
+          unparseable.add(`${locale}:${key}`);
+          console.error(`Message "${key}" could not be parsed and is shown as its key.`, error);
+        }
+        return key;
+      }
+    };
+  } catch (error) {
+    console.error(`The message catalogue for "${locale}" could not be loaded; keys are shown instead.`, error);
+    return (key) => key;
+  }
+}
 
 export function MessageProvider({children, locale: override}: {children: ReactNode; locale?: string}) {
   const {data: session} = useSuspenseQuery(sessionQuery());
@@ -140,17 +177,7 @@ export function MessageProvider({children, locale: override}: {children: ReactNo
   // taking the product down.
   const {data: messages, isPending} = useQuery(messagesQuery(locale, session.gitVersion ?? ''));
 
-  const msg = useMemo<Message>(() => {
-    // Belt and braces behind USELANG_RE. The comment below argues the interface must survive
-    // a missing catalogue; it survives a rejected locale the same way — banana throws
-    // synchronously here, and this is the render body of the provider wrapping every route.
-    try {
-      const banana = new Banana(locale, {messages: {[locale]: messages ?? {}}});
-      return (key, ...params) => banana.i18n(key, ...params);
-    } catch {
-      return (key) => key;
-    }
-  }, [locale, messages]);
+  const msg = useMemo(() => createMessage(locale, messages), [locale, messages]);
 
   // spec_accessibility.md: "Set `lang` (and `dir` where relevant) so screen readers pick the
   // right voice." index.html hard-codes lang="en" for the shell, and ?uselang= can change the
