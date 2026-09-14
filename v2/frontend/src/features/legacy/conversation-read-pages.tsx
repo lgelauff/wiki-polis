@@ -9,6 +9,7 @@ import {
 } from '../../api/queries';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
+import {useDateFormat} from '../../i18n/dates';
 
 type OutputKey = components['schemas']['ConversationOutputDetail']['key'];
 
@@ -38,6 +39,7 @@ function countLabel(count: number, singular: string) {
 }
 
 export function ConversationAboutLegacyPage() {
+  const dates = useDateFormat();
   const slug = requiredParam('slug', useParams().slug);
   const {data} = useSuspenseQuery(conversationAboutQuery(slug));
   const transition = data.scheduledTransition;
@@ -69,7 +71,7 @@ export function ConversationAboutLegacyPage() {
           {transition && (
             <p><strong>Next:</strong> {`${transition.targetLabel} on `}
               <time dateTime={transition.at} title="Shown in your local timezone">
-                {new Intl.DateTimeFormat(undefined, {dateStyle: 'medium', timeStyle: 'short'}).format(new Date(transition.at))}
+                {dates.dateTime(transition.at)}
               </time>
             </p>
           )}

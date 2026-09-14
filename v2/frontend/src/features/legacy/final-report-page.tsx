@@ -3,6 +3,7 @@ import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
+import {useDateFormat} from '../../i18n/dates';
 
 type Report = components['schemas']['ResultsReport'];
 type Statement = components['schemas']['ResultsStatement'];
@@ -10,12 +11,6 @@ type Tally = components['schemas']['VoteTally'];
 
 function truncated(value: string, length: number) {
   return value.length > length ? `${value.slice(0, length - 1)}…` : value;
-}
-
-function shortDate(value: string) {
-  const date = new Date(value);
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${date.getUTCDate()} ${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
 function percentage(value: number) {
@@ -59,13 +54,14 @@ function PlaceholderSections() {
 }
 
 function ProcessTimeline({report}: {report: Report}) {
+  const dates = useDateFormat();
   const msg = useMessage();
   return <div className="report-section">
     <h2 className="report-section-heading">{msg('report-process-heading')}</h2>
     <div className="report-timeline">
       <div className="report-timeline-item">
         <span className="report-timeline-label">{msg('report-process-opened')}</span>
-        <span className="report-timeline-value">{shortDate(report.openedAt)}</span>
+        <span className="report-timeline-value">{dates.date(report.openedAt)}</span>
       </div>
       {[msg('report-process-submission'), msg('report-process-argmap'), msg('report-process-informed')].map((label) => (
         <div className="report-timeline-item report-timeline-item--placeholder" key={label}>
@@ -75,7 +71,7 @@ function ProcessTimeline({report}: {report: Report}) {
       ))}
       {report.closedAt && <div className="report-timeline-item">
         <span className="report-timeline-label">{msg('report-process-closed')}</span>
-        <span className="report-timeline-value">{shortDate(report.closedAt)}</span>
+        <span className="report-timeline-value">{dates.date(report.closedAt)}</span>
       </div>}
     </div>
   </div>;
@@ -222,6 +218,7 @@ function ResultsBody({report}: {report: Report}) {
 }
 
 export function FinalReportLegacyPage({report}: {report: Report}) {
+  const dates = useDateFormat();
   const msg: Message = useMessage();
   return <LegacyShell headerCrumb={<span className="header-crumb">
     <span className="header-crumb-sep">/</span>
@@ -234,7 +231,7 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
       <div className="report-header">
         <div>
           <h1 className="report-title">{report.title}</h1>
-          <p className="report-subtitle">{`${msg('report-subtitle')}${report.closedAt ? ` ${msg('report-closed-suffix')} ${shortDate(report.closedAt)}` : ''}`}</p>
+          <p className="report-subtitle">{`${msg('report-subtitle')}${report.closedAt ? ` ${msg('report-closed-suffix')} ${dates.date(report.closedAt)}` : ''}`}</p>
         </div>
         <span className="report-badge">{msg('report-badge-final')}</span>
       </div>

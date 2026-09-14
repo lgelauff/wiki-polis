@@ -6,17 +6,19 @@ UI strings for Proto, in the **translatewiki.net (TWN) "banana" JSON** format.
 
 ## Status — what is wired up today
 
-The catalogue and the resolver are in place, and the SPA now reads them: four screens are
-converted — the preliminary results panel, the final report page, the admin lifecycle
-console, and the conversation workspace. The rest of the SPA is still hardcoded English.
+The catalogue and the resolver are in place, and the SPA reads them on these surfaces: the
+shared frame and landing page, the consultation list, the join screen, the conversation
+workspace, the informed-voting panel, the preliminary results panel, the final report page,
+and the admin lifecycle console. The rest of the SPA is still hardcoded English; the order
+the remainder is wired in is in [`../plan_i18n.md`](../plan_i18n.md) stage 2.
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (878 keys, 100% documented) | ✅ committed |
+| `en.json` + `qqq.json` (904 keys, 100% documented) | ✅ committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
-| React SPA reads it via `banana-i18n` | ✅ wired (4 screens converted) |
+| React SPA reads it via `banana-i18n` | 🟡 partly wired (see above) |
 | Locales offered to users (`ENABLED_LOCALES`) | English only |
 
 `ENABLED_LOCALES` defaults to `en`, so nothing here is user-visible yet. The keys are the
@@ -79,6 +81,9 @@ exactly as typed.
 5. **Plurals / counts:** `"reveal-tl-days": "$1 {{PLURAL:$1|day|days}}"`.
 6. **Never** hardcode user-facing English in a component once that surface has been
    converted.
+7. **Dates** go through `frontend/src/i18n/dates.ts`, which formats in the language the reader
+   chose, not the browser's. `Intl.DateTimeFormat(undefined, …)` and month-name tables are
+   the two ways a translated page ends up with English dates.
 
 ## The endpoint
 
@@ -91,7 +96,7 @@ A flat `{key: text}` map — **not** the `{"data": ...}` envelope the rest of AP
 because that flat map is what `banana-i18n` takes as a message store. English-filled, so a
 partly translated locale is still complete. `@metadata` is excluded. An unknown locale falls
 back to English rather than 404ing, mirroring the resolver's `locale -> en -> ⧼key⧽` chain.
-`qqx` returns `(key)` for every key.
+`qqx` returns `(key)` for every key, or `(key: $1, $2)` for a message with parameters.
 
 Pin `?v=<gitVersion>` (the SPA already has `gitVersion` from `GET /api/v1/session`) to get the
 cacheable response; the same `?v=<git-sha>` contract the static assets use, so a deploy busts
@@ -130,9 +135,21 @@ that list.
 
 Append **`?uselang=qqx`** to any page: every externalised string renders as its key
 (`(base-log-out)`). Any real English still visible = a string that still needs extracting.
-A missing key renders loudly as `⧼key⧽`. Only the four converted screens render as keys
-throughout today; everywhere else is still un-externalised, so this remains a tool for the
-conversion phases rather than a passing check.
+A missing key renders loudly as `⧼key⧽`. Only the wired surfaces render as keys throughout
+today; everywhere else is still un-externalised, so this remains a tool for the conversion
+phases rather than a passing check.
+
+`qqx` shows a message's parameters too, as MediaWiki does: `(key: a, b)`. So English passed
+*into* a message — a link label, a phase name — is as visible as English written around one.
+
+The same check runs in the frontend tests. `renderAsQqx()` and `untranslatedCopy()` in
+`frontend/src/test/i18n.ts` render a surface under `qqx` and list any text or readable
+attribute still carrying a word once message keys and fixture content are removed. A test
+that asserts English cannot prove a surface is wired — the test catalogue is the real
+`en.json`, so a literal and `msg()` of the same words render identically — and this one can.
+It cannot see a *wrong* value in the right place (a swapped parameter, a server label used
+instead of its identifier's message): those need an English test whose fixture differs from
+the catalogue.
 
 ## Scope — the interface / content split
 

@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
 
 import type {Message} from './messages';
-import {phaseLabel, routeLabel, tabLabel} from './server-labels';
+import {outputLabel, outputPending, outputTooltip, phaseLabel, routeLabel, tabLabel} from './server-labels';
 
 /** A catalogue whose values are deliberately UNLIKE the server's English. Every assertion
  *  below distinguishes "read the catalogue" from "echoed the server label" -- which the
@@ -12,6 +12,9 @@ const CATALOGUE: Record<string, string> = {
   'phase-label-closed': 'CATALOGUE closed',
   'phase-label-cleanup': 'CATALOGUE cleanup',
   'phase-route-default_7': 'CATALOGUE default route',
+  'output-report-label': 'CATALOGUE report',
+  'output-report-tooltip': 'CATALOGUE report tooltip',
+  'output-report-pending': 'CATALOGUE report pending',
 };
 
 /** Stands in for banana: returns the key itself for a message it does not hold, which is
@@ -70,5 +73,13 @@ describe('server identifier -> message', () => {
     // this is why resolve() compares against the key rather than testing for emptiness.
     const qqx: Message = (key) => `(${key})`;
     expect(tabLabel(qqx, 'vote', 'Vote')).toBe('(conv-tab-vote)');
+  });
+
+  test('an output reads its label, tooltip and pending note from three separate tables', () => {
+    // One table per field, so that a mix-up (the tooltip rendered as the label) shows here.
+    expect(outputLabel(msg, 'report', 'Report')).toBe('CATALOGUE report');
+    expect(outputTooltip(msg, 'report', 'After closing')).toBe('CATALOGUE report tooltip');
+    expect(outputPending(msg, 'report', 'Published after cleanup')).toBe('CATALOGUE report pending');
+    expect(outputLabel(msg, 'dataset', 'Dataset')).toBe('Dataset');
   });
 });

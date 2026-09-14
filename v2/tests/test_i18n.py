@@ -75,6 +75,13 @@ def test_qqx_returns_keys(tmp_path):
     assert i18n.resolve('anything-at-all', 'qqx') == '(anything-at-all)'
 
 
+def test_qqx_shows_the_parameters_it_was_given(tmp_path):
+    # As MediaWiki's qqx: an interpolated value stays visible, so a coverage check can see
+    # English passed into a message as well as English written around one.
+    _setup(tmp_path, {'en': {'hi': 'Hello $1, from $2'}})
+    assert i18n.resolve('hi', 'qqx', ('Ada', 'Proto')) == '(hi: Ada, Proto)'
+
+
 def test_text_direction():
     assert i18n.text_direction('ar') == 'rtl'
     assert i18n.text_direction('he') == 'rtl'
@@ -88,6 +95,9 @@ def test_all_messages_fallback_and_qqx(tmp_path):
     _setup(tmp_path, {'en': {'@metadata': {}, 'a': 'A', 'b': 'B'}, 'fr': {'a': 'Aa'}})
     assert i18n.all_messages('fr') == {'a': 'Aa', 'b': 'B'}   # en-filled, @metadata excluded
     assert i18n.all_messages('qqx') == {'a': '(a)', 'b': '(b)'}
+    (tmp_path / 'params').mkdir()
+    _setup(tmp_path / 'params', {'en': {'one': 'Hi $1', 'three': '$3 of $1', 'plural': '{{PLURAL:$2|a|b}}'}})
+    assert i18n.all_messages('qqx') == {'one': '(one: $1)', 'three': '(three: $1, $2, $3)', 'plural': '(plural: $1, $2)'}
 
 
 # ── End-to-end through the app ───────────────────────────────────────────────

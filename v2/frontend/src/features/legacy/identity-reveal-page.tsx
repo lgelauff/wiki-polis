@@ -7,18 +7,13 @@ import {createIdentityReveal, identityRevealQuery, sessionQuery} from '../../api
 import {NavigationRedirect} from './external-redirect';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
+import {useDateFormat} from '../../i18n/dates';
 
 type RevealData = components['schemas']['IdentityReveal'];
 
 function requiredSlug(value: string | undefined) {
   if (!value) throw new Error('Missing route parameter: slug');
   return value;
-}
-
-function shortDate(value: string) {
-  const date = new Date(value);
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${date.getUTCDate()} ${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
 function daysBetween(start: string, end: string) {
@@ -43,6 +38,7 @@ function RevealCountdown({target}: {target: string}) {
 }
 
 function RevealTimeline({data}: {data: RevealData}) {
+  const dates = useDateFormat();
   const state = data.state;
   const cooldownDays = daysBetween(data.timeline.closedAt, data.timeline.opensAt);
   const windowDays = daysBetween(data.timeline.opensAt, data.timeline.closesAt);
@@ -51,21 +47,21 @@ function RevealTimeline({data}: {data: RevealData}) {
       <ol className="reveal-track" aria-label="Identity reveal timeline">
         <li className={`reveal-node reveal-node--done${state === 'pending' ? ' reveal-node--now' : ''}`} aria-current={state === 'pending' ? 'step' : undefined}>
           <span className="reveal-pip" aria-hidden="true" />
-          <div className="reveal-when">{shortDate(data.timeline.closedAt)}</div>
+          <div className="reveal-when">{dates.date(data.timeline.closedAt)}</div>
           <div className="reveal-what">{`Closed — linking stays sealed for ${cooldownDays} days `}
             <span className="sr-only">{state === 'pending' ? '(in progress — cooldown)' : '(completed)'}</span>
           </div>
         </li>
         <li className={`reveal-node${['open', 'revealed'].includes(state) ? ' reveal-node--now' : state === 'expired' ? ' reveal-node--done' : ''}`} aria-current={['open', 'revealed'].includes(state) ? 'step' : undefined}>
           <span className="reveal-pip" aria-hidden="true" />
-          <div className="reveal-when">{shortDate(data.timeline.opensAt)}</div>
+          <div className="reveal-when">{dates.date(data.timeline.opensAt)}</div>
           <div className="reveal-what">{`Window opens — ${windowDays} days to optionally link your Wikimedia username `}
             <span className="sr-only">{['open', 'revealed'].includes(state) ? '(current)' : state === 'expired' ? '(completed)' : '(upcoming)'}</span>
           </div>
         </li>
         <li className={`reveal-node${state === 'expired' ? ' reveal-node--now' : ''}`} aria-current={state === 'expired' ? 'step' : undefined}>
           <span className="reveal-pip" aria-hidden="true" />
-          <div className="reveal-when">{shortDate(data.timeline.closesAt)}</div>
+          <div className="reveal-when">{dates.date(data.timeline.closesAt)}</div>
           <div className="reveal-what">Window closes — records stay pseudonymous permanently <span className="sr-only">{state === 'expired' ? '(current)' : '(upcoming)'}</span></div>
         </li>
       </ol>
@@ -88,6 +84,7 @@ export function IdentityRevealLegacyPage() {
 }
 
 function AuthenticatedIdentityReveal({slug, csrfToken}: {slug: string; csrfToken: string}) {
+  const dates = useDateFormat();
   const {data} = useSuspenseQuery(identityRevealQuery(slug));
   const [confirmed, setConfirmed] = useState(false);
   const mutation = useMutation({mutationFn: () => createIdentityReveal(slug, csrfToken)});
@@ -130,7 +127,7 @@ function AuthenticatedIdentityReveal({slug, csrfToken}: {slug: string; csrfToken
           <>
             <div className="reveal-banner">Identity reveal</div>
             <h1 style={{fontSize: 26, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.02em', margin: 0}}>Reveal window not yet open</h1>
-            <p style={{fontSize: 15, lineHeight: 1.6, color: 'var(--body)', marginTop: 14}}>{'The identity reveal window has not opened yet. It will open on '}<strong>{shortDate(data.timeline.opensAt)}</strong>.</p>
+            <p style={{fontSize: 15, lineHeight: 1.6, color: 'var(--body)', marginTop: 14}}>{'The identity reveal window has not opened yet. It will open on '}<strong>{dates.date(data.timeline.opensAt)}</strong>.</p>
             <p className="muted" style={{marginTop: 8}}>After that date you may optionally and <strong>permanently</strong> link your Wikimedia username to your pseudonym in this consultation's public record. You're never required to.</p>
             <RevealTimeline data={data} />
           </>

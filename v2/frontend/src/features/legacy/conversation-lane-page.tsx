@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {Fragment, useEffect, useRef, useState} from 'react';
 import {useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -9,19 +9,14 @@ import {
 } from '../../api/queries';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
+import {useMessage, type Message} from '../../i18n/messages';
+import {escapeHtml, richHtml} from '../../i18n/rich-html';
+import {outputLabel, outputPending, outputTooltip, phaseLabel} from '../../i18n/server-labels';
+import {useDateFormat} from '../../i18n/dates';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationOutput = components['schemas']['ConversationOutput'];
 
-const monthNames = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-] as const;
-
-function archivedMonth(value: string): string {
-  const date = new Date(value);
-  return `${monthNames[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
-}
 
 function timelinePosition(phases: string[]): number {
   if (phases.some((phase) => ['closed', 'cleanup_window', 'public_results'].includes(phase))) return 4;
@@ -32,30 +27,32 @@ function timelinePosition(phases: string[]): number {
 }
 
 function InputTimeline({phases}: {phases: string[]}) {
+  const msg = useMessage();
   const position = timelinePosition(phases);
+  const done = (step: number) => position > step && <><span aria-hidden="true">✓</span> </>;
   const badgeClass = (step: number) => (
     `conv-input-badge${position === step ? ' conv-input-badge--current' : ''}${position > step ? ' conv-input-badge--done' : ''}`
   );
   return (
-    <div className="conv-input-timeline" aria-label="Input phase progress">
-      <span className={badgeClass(1)} dangerouslySetInnerHTML={{__html: `${position > 1 ? '<span aria-hidden="true">✓</span> ' : ''}Explore`}} />
+    <div className="conv-input-timeline" aria-label={msg('home-timeline-aria')}>
+      <span className={badgeClass(1)}>{done(1)}{msg('home-phase-explore')}</span>
       {position >= 2 && <>
         <span className="conv-input-rail" aria-hidden="true" />
         <span className="conv-input-clock" aria-hidden="true" />
         <span className="conv-input-rail" aria-hidden="true" />
-        <span className={badgeClass(2)} dangerouslySetInnerHTML={{__html: `${position > 2 ? '<span aria-hidden="true">✓</span> ' : ''}Arguments`}} />
+        <span className={badgeClass(2)}>{done(2)}{msg('home-phase-arguments')}</span>
       </>}
       {position >= 3 && <>
         <span className="conv-input-rail" aria-hidden="true" />
         <span className="conv-input-clock" aria-hidden="true" />
         <span className="conv-input-rail" aria-hidden="true" />
-        <span className={badgeClass(3)} dangerouslySetInnerHTML={{__html: `${position > 3 ? '<span aria-hidden="true">✓</span> ' : ''}Informed vote`}} />
+        <span className={badgeClass(3)}>{done(3)}{msg('home-phase-informed-vote')}</span>
       </>}
       {phases.includes('closed') && <>
         <span className="conv-input-rail" aria-hidden="true" />
         <span className="conv-input-clock" aria-hidden="true" />
         <span className="conv-input-rail" aria-hidden="true" />
-        <span className="conv-input-badge conv-input-badge--todo" dangerouslySetInnerHTML={{__html: 'Opt-in identification'}} />
+        <span className="conv-input-badge conv-input-badge--todo">{msg('home-phase-optin-id')}</span>
       </>}
     </div>
   );
@@ -68,8 +65,9 @@ function OutputSymbols({
   outputs: ConversationOutput[];
   onPending: (output: ConversationOutput, trigger: HTMLButtonElement) => void;
 }) {
+  const msg = useMessage();
   return (
-    <div className="conv-output-grid" aria-label="Consultation outputs">
+    <div className="conv-output-grid" aria-label={msg('home-outputs-aria')}>
       {outputs.map((output) => output.ready ? (
         <InternalLink
           key={output.key}
@@ -77,11 +75,11 @@ function OutputSymbols({
           href={output.href ?? undefined}
           data-state="ready"
           data-href={output.href ?? ''}
-          aria-label={output.tooltip}
-          title={output.tooltip}
+          aria-label={outputTooltip(msg, output.key, output.tooltip)}
+          title={outputTooltip(msg, output.key, output.tooltip)}
         >
           <span className={`phase-symbol phase-symbol--${output.symbol}`} aria-hidden="true" />
-          <span className="sr-only">{output.label}</span>
+          <span className="sr-only">{outputLabel(msg, output.key, output.label)}</span>
         </InternalLink>
       ) : (
         <button
@@ -89,37 +87,23 @@ function OutputSymbols({
           className="conv-output-symbol conv-output-symbol--pending"
           type="button"
           data-state="pending"
-          data-title={output.label}
-          data-detail={output.pending}
-          aria-label={output.tooltip}
-          title={output.tooltip}
+          data-title={outputLabel(msg, output.key, output.label)}
+          data-detail={outputPending(msg, output.key, output.pending)}
+          aria-label={outputTooltip(msg, output.key, output.tooltip)}
+          title={outputTooltip(msg, output.key, output.tooltip)}
           onClick={(event) => onPending(output, event.currentTarget)}
         >
           <span className={`phase-symbol phase-symbol--${output.symbol}`} aria-hidden="true" />
-          <span className="sr-only">{output.label}</span>
+          <span className="sr-only">{outputLabel(msg, output.key, output.label)}</span>
         </button>
       ))}
     </div>
   );
 }
 
-function localDateTime(at: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(at));
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
 function ConversationChips({conversation}: {conversation: ConversationCard}) {
+  const msg = useMessage();
+  const dates = useDateFormat();
   const chips = [];
   if (conversation.scheduledTransition) {
     const transition = conversation.scheduledTransition;
@@ -127,36 +111,44 @@ function ConversationChips({conversation}: {conversation: ConversationCard}) {
       <span
         className="conv-chip"
         key="transition"
-        dangerouslySetInnerHTML={{
-          __html: `Next: ${escapeHtml(transition.targetLabel)} <time datetime="${escapeHtml(transition.at)}" data-local-datetime title="Shown in your local timezone">${escapeHtml(localDateTime(transition.at))}</time>`,
-        }}
+        dangerouslySetInnerHTML={richHtml(msg('home-chip-next',
+          escapeHtml(phaseLabel(msg, transition.target, transition.targetLabel)),
+          `<time datetime="${escapeHtml(transition.at)}" data-local-datetime title="${escapeHtml(msg('conv-scheduled-tz-title'))}">${escapeHtml(dates.dateTime(transition.at))}</time>`,
+        ))}
       />,
     );
   }
   if (conversation.statementsRemaining !== null && conversation.statementsRemaining > 0) {
-    chips.push(<span className="conv-chip" key="remaining" dangerouslySetInnerHTML={{__html: `${conversation.statementsRemaining} to vote`}} />);
+    chips.push(<span className="conv-chip" key="remaining">{msg('home-chip-to-vote', conversation.statementsRemaining)}</span>);
   }
   if (conversation.reveal?.state === 'open') {
     chips.push(
-      <span
-        className="conv-chip conv-chip--alert"
-        key="reveal"
-        dangerouslySetInnerHTML={{__html: `<span aria-hidden="true">! </span>Reveal window: ${conversation.reveal.daysRemaining <= 0 ? 'today' : `${conversation.reveal.daysRemaining}d left`}`}}
-      />,
+      <span className="conv-chip conv-chip--alert" key="reveal"><span aria-hidden="true">! </span>{conversation.reveal.daysRemaining <= 0
+        ? msg('home-chip-reveal-today')
+        : msg('home-chip-reveal-days', conversation.reveal.daysRemaining)}</span>,
     );
   } else if (conversation.reveal?.state === 'pending') {
-    chips.push(<span className="conv-chip" key="reveal" dangerouslySetInnerHTML={{__html: `Reveal opens in ${conversation.reveal.daysRemaining}d`}} />);
+    chips.push(<span className="conv-chip" key="reveal">{msg('home-chip-reveal-opens', conversation.reveal.daysRemaining)}</span>);
   }
   return chips.length > 0 ? <div className="conv-chips">{chips}</div> : null;
 }
 
 type JoinedState = 'needs_attention' | 'caught_up' | 'inactive' | 'archived';
 
-function joinedAriaLabel(conversation: ConversationCard, state: JoinedState): string {
-  const pseudonym = conversation.pseudonym ? ` — your pseudonym: ${conversation.pseudonym}` : '';
-  const remaining = conversation.statementsRemaining ? ` — ${conversation.statementsRemaining} statements to vote` : '';
-  const action = state === 'needs_attention' ? 'continue' : state.replace('_', ' ');
-  return `${conversation.title}${pseudonym}${remaining} — ${action}`;
+/** The card link's accessible name: title, then whichever of pseudonym, remaining count
+ *  and state apply, each its own dash-led message. They are independent clauses in a
+ *  list rather than one sentence, so a translator never needs to reorder across them. */
+function joinedAriaLabel(msg: Message, conversation: ConversationCard, state: JoinedState): string {
+  const parts = [conversation.title];
+  if (conversation.pseudonym) parts.push(msg('home-card-aria-pseudonym', conversation.pseudonym));
+  if (conversation.statementsRemaining) parts.push(msg('home-card-aria-remaining', conversation.statementsRemaining));
+  parts.push(
+    state === 'needs_attention' ? msg('home-card-aria-continue')
+      : state === 'caught_up' ? msg('home-card-aria-caught-up')
+        : state === 'inactive' ? msg('home-card-aria-inactive')
+          : msg('home-card-aria-closed'),
+  );
+  return parts.join(' ');
 }
 
 function JoinedSection({
@@ -172,6 +164,8 @@ function JoinedSection({
   state: JoinedState;
   onPending: (output: ConversationOutput, trigger: HTMLButtonElement) => void;
 }) {
+  const msg = useMessage();
+  const dates = useDateFormat();
   if (conversations.length === 0) return null;
   return (
     <section aria-labelledby={sectionId}>
@@ -183,14 +177,14 @@ function JoinedSection({
         <ul className="conv-list">
           {conversations.map((conversation) => <li key={conversation.slug}>
             <div className="conv-card conv-card--phase conv-card--outputs">
-              <InternalLink href={conversation.links.self} className="conv-card-main" aria-label={joinedAriaLabel(conversation, state)}>
+              <InternalLink href={conversation.links.self} className="conv-card-main" aria-label={joinedAriaLabel(msg, conversation, state)}>
                 <div className="conv-card-left conv-card-left--col">
                   <div className="conv-card-title-row">
                     <h3 className="conv-card-title">{conversation.title}</h3>
                     {conversation.pseudonym && <span className="conv-card-badge" aria-hidden="true">{conversation.pseudonym}</span>}
-                    {state === 'caught_up' && <span className="conv-card-badge conv-card-badge--muted">caught up</span>}
-                    {state === 'inactive' && <span className="conv-card-badge conv-card-badge--muted">{conversation.status === 'paused' ? 'paused' : 'waiting'}</span>}
-                    {state === 'archived' && conversation.closedAt && <span className="conv-card-badge conv-card-badge--muted" aria-hidden="true">{archivedMonth(conversation.closedAt)}</span>}
+                    {state === 'caught_up' && <span className="conv-card-badge conv-card-badge--muted">{msg('home-card-badge-caught-up')}</span>}
+                    {state === 'inactive' && <span className="conv-card-badge conv-card-badge--muted">{conversation.status === 'paused' ? msg('home-card-badge-paused') : msg('home-card-badge-waiting')}</span>}
+                    {state === 'archived' && conversation.closedAt && <span className="conv-card-badge conv-card-badge--muted" aria-hidden="true">{dates.monthYear(conversation.closedAt)}</span>}
                   </div>
                   <InputTimeline phases={conversation.phases} />
                   <ConversationChips conversation={conversation} />
@@ -198,8 +192,7 @@ function JoinedSection({
                 <span
                   className={`conv-card-action${state !== 'needs_attention' ? ' conv-card-action--muted' : ''}`}
                   aria-hidden="true"
-                  dangerouslySetInnerHTML={{__html: `${state === 'needs_attention' ? 'CONTINUE' : 'VIEW'} →`}}
-                />
+                >{state === 'needs_attention' ? msg('home-action-continue') : msg('home-action-view')}</span>
               </InternalLink>
               <span className="conv-card-output-divider" aria-hidden="true" />
               <OutputSymbols outputs={conversation.outputs} onPending={onPending} />
@@ -212,32 +205,23 @@ function JoinedSection({
 }
 
 function PhaseLegend() {
+  const msg = useMessage();
+  const nodes = [
+    {symbol: 'explore', label: msg('home-phase-explore')},
+    {symbol: 'arguments', label: msg('home-phase-arguments')},
+    {symbol: 'informed-vote', label: msg('home-phase-informed-vote')},
+    {symbol: 'report', label: msg('home-phase-report')},
+  ];
   return (
-    <div
-      className="phase-legend"
-      role="img"
-      aria-label="Consultation phases: Explore, Arguments, Informed vote, Report"
-      dangerouslySetInnerHTML={{__html: `
-        <div class="phase-legend-node">
-          <span class="phase-legend-icon" aria-hidden="true"><span class="phase-symbol phase-symbol--explore"></span></span>
-          <span class="phase-legend-label" aria-hidden="true">Explore</span>
+    <div className="phase-legend" role="img" aria-label={msg('home-phase-legend-aria')}>
+      {nodes.map((node, index) => <Fragment key={node.symbol}>
+        {index > 0 && <div className="phase-legend-connector" aria-hidden="true"><span className="phase-legend-line" /><span className="phase-legend-mid-dot" /><span className="phase-legend-line" /></div>}
+        <div className="phase-legend-node">
+          <span className="phase-legend-icon" aria-hidden="true"><span className={`phase-symbol phase-symbol--${node.symbol}`} /></span>
+          <span className="phase-legend-label" aria-hidden="true">{node.label}</span>
         </div>
-        <div class="phase-legend-connector" aria-hidden="true"><span class="phase-legend-line"></span><span class="phase-legend-mid-dot"></span><span class="phase-legend-line"></span></div>
-        <div class="phase-legend-node">
-          <span class="phase-legend-icon" aria-hidden="true"><span class="phase-symbol phase-symbol--arguments"></span></span>
-          <span class="phase-legend-label" aria-hidden="true">Arguments</span>
-        </div>
-        <div class="phase-legend-connector" aria-hidden="true"><span class="phase-legend-line"></span><span class="phase-legend-mid-dot"></span><span class="phase-legend-line"></span></div>
-        <div class="phase-legend-node">
-          <span class="phase-legend-icon" aria-hidden="true"><span class="phase-symbol phase-symbol--informed-vote"></span></span>
-          <span class="phase-legend-label" aria-hidden="true">Informed vote</span>
-        </div>
-        <div class="phase-legend-connector" aria-hidden="true"><span class="phase-legend-line"></span><span class="phase-legend-mid-dot"></span><span class="phase-legend-line"></span></div>
-        <div class="phase-legend-node">
-          <span class="phase-legend-icon" aria-hidden="true"><span class="phase-symbol phase-symbol--report"></span></span>
-          <span class="phase-legend-label" aria-hidden="true">Report</span>
-        </div>`}}
-    />
+      </Fragment>)}
+    </div>
   );
 }
 
@@ -248,25 +232,26 @@ function AvailableSection({
   conversations: ConversationCard[];
   onPending: (output: ConversationOutput, trigger: HTMLButtonElement) => void;
 }) {
+  const msg = useMessage();
   if (conversations.length === 0) {
-    return <div className="home-empty"><p className="muted">No consultations open to you right now.</p></div>;
+    return <div className="home-empty"><p className="muted">{msg('home-empty-none-open')}</p></div>;
   }
   return (
     <section aria-labelledby="sec-available">
       <div className="home-section">
         <div className="home-section-header">
-          <h2 className="home-section-label" id="sec-available">Open to you</h2>
+          <h2 className="home-section-label" id="sec-available">{msg('home-section-open-to-you')}</h2>
           <span className="home-section-count" aria-hidden="true" dangerouslySetInnerHTML={{__html: String(conversations.length)}} />
         </div>
         <ul className="conv-list">
           {conversations.map((conversation) => <li key={conversation.slug}>
             <div className="conv-card conv-card--phase conv-card--outputs">
-              <InternalLink href={conversation.links.self} className="conv-card-main" aria-label={`${conversation.title} — join consultation`}>
+              <InternalLink href={conversation.links.self} className="conv-card-main" aria-label={msg('home-card-join-aria', conversation.title)}>
                 <div className="conv-card-left conv-card-left--col">
                   <div className="conv-card-title-row"><h3 className="conv-card-title">{conversation.title}</h3></div>
                   <InputTimeline phases={conversation.phases} />
                 </div>
-                <span className="conv-card-action" aria-hidden="true" dangerouslySetInnerHTML={{__html: 'JOIN →'}} />
+                <span className="conv-card-action" aria-hidden="true">{msg('home-action-join')}</span>
               </InternalLink>
               <span className="conv-card-output-divider" aria-hidden="true" />
               <OutputSymbols outputs={conversation.outputs} onPending={onPending} />
@@ -279,12 +264,13 @@ function AvailableSection({
 }
 
 function ModeratingSection({conversations}: {conversations: ConversationCard[]}) {
+  const msg = useMessage();
   if (conversations.length === 0) return null;
   return (
     <section aria-labelledby="sec-moderate">
       <div className="home-section">
         <div className="home-section-header">
-          <h2 className="home-section-label" id="sec-moderate">You moderate</h2>
+          <h2 className="home-section-label" id="sec-moderate">{msg('home-section-moderate')}</h2>
           <span className="home-section-count" aria-hidden="true" dangerouslySetInnerHTML={{__html: String(conversations.length)}} />
         </div>
         <ul className="conv-list">
@@ -292,11 +278,11 @@ function ModeratingSection({conversations}: {conversations: ConversationCard[]})
             <div className="conv-card conv-card--split">
               <div className="conv-card-left">
                 <span className={`conv-dot ${conversation.status === 'archived' ? 'conv-dot--closed' : 'conv-dot--active'}`} aria-hidden="true" />
-                <h3 className="conv-card-title-wrap"><InternalLink href={conversation.links.self} className="conv-card-title" aria-label={`${conversation.title} — open consultation`}>{conversation.title}</InternalLink></h3>
-                {conversation.status === 'archived' && <span className="conv-card-badge">closed</span>}
+                <h3 className="conv-card-title-wrap"><InternalLink href={conversation.links.self} className="conv-card-title" aria-label={msg('home-card-view-aria', conversation.title)}>{conversation.title}</InternalLink></h3>
+                {conversation.status === 'archived' && <span className="conv-card-badge">{msg('home-card-badge-closed')}</span>}
               </div>
               <span className="conv-card-divider" aria-hidden="true" />
-              <InternalLink href={conversation.links.admin} className="admin-action-btn" aria-label={`Open admin panel for ${conversation.title}`}>Admin →</InternalLink>
+              <InternalLink href={conversation.links.admin} className="admin-action-btn" aria-label={msg('home-card-admin-aria', conversation.title)}>{msg('home-action-admin')}</InternalLink>
             </div>
           </li>)}
         </ul>
@@ -314,47 +300,44 @@ function AnonymousLane({
   developerLogins: components['schemas']['DeveloperLogin'][];
   loginHref: string;
 }) {
+  const msg = useMessage();
   return <>
     <div className="landing-section">
-      <h1 className="sr-only">Consultations</h1>
-      <h2 style={{fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 12}}>Where the community actually stands.</h2>
-      <p style={{fontSize: 15, lineHeight: 1.6, color: 'var(--body)', maxWidth: 520}}>
-        Vote on short statements, and suggest improvements. Learn how your views
-        compare to other community members — which statements already have
-        consensus, and what topics are divisive, and why.
-      </p>
+      <h1 className="sr-only">{msg('home-heading')}</h1>
+      <h2 style={{fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 12}}>{msg('home-hero-heading')}</h2>
+      <p style={{fontSize: 15, lineHeight: 1.6, color: 'var(--body)', maxWidth: 520}}>{msg('home-hero-body')}</p>
       <InternalLink href={loginHref} className="login-btn" style={{marginTop: 18}}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.4 1.6" aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
           <ellipse cx="12" cy="12" rx="9" ry="3.5" />
           <ellipse cx="12" cy="12" rx="3.5" ry="9" />
         </svg>
-        Login with Wikimedia
+        {msg('home-login-wikimedia')}
       </InternalLink>
       {developerLogins.length > 0 && <div style={{marginTop: '1.25rem', padding: '10px 14px', border: '1px dashed var(--spot)', borderRadius: 8, background: 'rgba(245,158,11,0.05)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap'}}>
-        <span style={{fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--spot)'}}>Dev</span>
+        <span style={{fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--spot)'}}>{msg('home-dev-badge')}</span>
         {developerLogins.map((login) => <InternalLink
           key={login.username}
           href={login.href}
           style={{fontFamily: 'var(--mono)', fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--surface2)', border: '1px solid var(--hairline)', color: 'var(--ink)', textDecoration: 'none'}}
-          title={`Log in as ${login.username}`}
+          title={msg('home-dev-login-as', login.username)}
         >{login.username}</InternalLink>)}
       </div>}
     </div>
     {conversations.length > 0 && <section aria-labelledby="sec-open">
       <div className="home-section">
         <div className="home-section-header">
-          <h2 className="home-section-label" id="sec-open">Open consultations</h2>
-          <span className="home-section-count" aria-hidden="true" dangerouslySetInnerHTML={{__html: `${conversations.length} total`}} />
+          <h2 className="home-section-label" id="sec-open">{msg('home-open-consultations')}</h2>
+          <span className="home-section-count" aria-hidden="true">{msg('home-count-total', conversations.length)}</span>
         </div>
         <ul className="conv-list">
           {conversations.map((conversation) => <li key={conversation.slug}>
-            <InternalLink href={conversation.links.self} className="conv-card" aria-label={`${conversation.title} — open consultation`}>
+            <InternalLink href={conversation.links.self} className="conv-card" aria-label={msg('home-card-view-aria', conversation.title)}>
               <div className="conv-card-left">
                 <span className="conv-dot conv-dot--available" aria-hidden="true" />
                 <h3 className="conv-card-title">{conversation.title}</h3>
               </div>
-              <span className="conv-card-action" aria-hidden="true" dangerouslySetInnerHTML={{__html: 'JOIN →'}} />
+              <span className="conv-card-action" aria-hidden="true">{msg('home-action-join')}</span>
             </InternalLink>
           </li>)}
         </ul>
@@ -364,6 +347,7 @@ function AnonymousLane({
 }
 
 export function ConversationLanePage({space}: {space: ConversationSpace}) {
+  const msg = useMessage();
   const {data} = useSuspenseQuery(conversationLaneQuery(space));
   const {data: session} = useSuspenseQuery(sessionQuery());
   const [mode, setMode] = useState<'yours' | 'browse'>(() => {
@@ -405,8 +389,8 @@ export function ConversationLanePage({space}: {space: ConversationSpace}) {
     const title = document.getElementById('output-dialog-title');
     const body = document.getElementById('output-dialog-body');
     if (!dialog || !title || !body) return;
-    title.textContent = output.label;
-    body.textContent = output.pending;
+    title.textContent = outputLabel(msg, output.key, output.label);
+    body.textContent = outputPending(msg, output.key, output.pending);
     dialog.hidden = false;
     dialog.querySelector<HTMLButtonElement>('.output-dialog-close')?.focus();
   }
@@ -426,29 +410,26 @@ export function ConversationLanePage({space}: {space: ConversationSpace}) {
   return (
     <LegacyShell headerMode={space}>
       <div className="container home-container">
-        <div className="home-banner">
-          Prototype in active development — things may change.{' '}
-          <InternalLink href="https://github.com/lgelauff/wiki-polis/issues/new" target="_blank" rel="noopener">
-            Open an issue<span className="sr-only"> (opens in a new tab)</span>
-          </InternalLink>{' '}if you find a bug.
-        </div>
+        <div className="home-banner" dangerouslySetInnerHTML={richHtml(msg('home-banner-prototype',
+          `<a href="https://github.com/lgelauff/wiki-polis/issues/new" target="_blank" rel="noopener">`
+          + `${escapeHtml(msg('home-banner-open-issue'))}<span class="sr-only">${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
 
         {!data.authenticated ? (
           <AnonymousLane conversations={groups.available} developerLogins={session.developerLogins} loginHref={session.links.login} />
         ) : <>
-          <h1 className="sr-only">Consultations</h1>
-          <img src="/static/wiki-polis-flow.svg" alt="How a Proto conversation works" style={{width: '100%', maxWidth: 900, display: 'block', margin: '0 auto 1.5rem'}} />
+          <h1 className="sr-only">{msg('home-heading')}</h1>
+          <img src="/static/wiki-polis-flow.svg" alt={msg('home-flow-alt')} style={{width: '100%', maxWidth: 900, display: 'block', margin: '0 auto 1.5rem'}} />
           <PhaseLegend />
-          <div className="home-mode-toggle" role="group" aria-label="View mode">
-            <button className={`home-mode-btn${mode === 'yours' ? ' home-mode-btn--active' : ''}`} data-target="yours" type="button" aria-pressed={mode === 'yours'} onClick={() => changeMode('yours')}>Your conversations</button>
-            <button className={`home-mode-btn${mode === 'browse' ? ' home-mode-btn--active' : ''}`} data-target="browse" type="button" aria-pressed={mode === 'browse'} onClick={() => changeMode('browse')}>Browse</button>
+          <div className="home-mode-toggle" role="group" aria-label={msg('home-view-mode-aria')}>
+            <button className={`home-mode-btn${mode === 'yours' ? ' home-mode-btn--active' : ''}`} data-target="yours" type="button" aria-pressed={mode === 'yours'} onClick={() => changeMode('yours')}>{msg('home-mode-yours')}</button>
+            <button className={`home-mode-btn${mode === 'browse' ? ' home-mode-btn--active' : ''}`} data-target="browse" type="button" aria-pressed={mode === 'browse'} onClick={() => changeMode('browse')}>{msg('home-mode-browse')}</button>
           </div>
           <div id="home-yours" hidden={mode !== 'yours'}>
-            <JoinedSection conversations={groups.needsAttention} label="Needs attention" sectionId="sec-attention" state="needs_attention" onPending={openPending} />
-            <JoinedSection conversations={groups.caughtUp} label="Caught up" sectionId="sec-caught-up" state="caught_up" onPending={openPending} />
-            <JoinedSection conversations={groups.inactive} label="Inactive / paused" sectionId="sec-inactive" state="inactive" onPending={openPending} />
-            <JoinedSection conversations={groups.archived} label="Closed" sectionId="sec-closed" state="archived" onPending={openPending} />
-            {joinedEmpty && <div className="home-empty"><p className="muted">You haven&apos;t joined any consultations yet. Use Browse to find one.</p></div>}
+            <JoinedSection conversations={groups.needsAttention} label={msg('home-section-needs-attention')} sectionId="sec-attention" state="needs_attention" onPending={openPending} />
+            <JoinedSection conversations={groups.caughtUp} label={msg('home-section-caught-up')} sectionId="sec-caught-up" state="caught_up" onPending={openPending} />
+            <JoinedSection conversations={groups.inactive} label={msg('home-section-inactive')} sectionId="sec-inactive" state="inactive" onPending={openPending} />
+            <JoinedSection conversations={groups.archived} label={msg('home-section-closed')} sectionId="sec-closed" state="archived" onPending={openPending} />
+            {joinedEmpty && <div className="home-empty"><p className="muted">{msg('home-empty-none-joined')}</p></div>}
           </div>
           <div id="home-browse" hidden={mode !== 'browse'}>
             <AvailableSection conversations={groups.available} onPending={openPending} />
@@ -475,7 +456,9 @@ export function ConversationLanePage({space}: {space: ConversationSpace}) {
         <div
           className="output-dialog-panel"
           dangerouslySetInnerHTML={{
-            __html: '<button type="button" class="output-dialog-close" aria-label="Close output details"></button><h2 id="output-dialog-title">Output pending</h2><p id="output-dialog-body" class="muted"></p>',
+            // Left as markup rather than JSX: openPending() writes the title and body
+            // imperatively, which React would fight over if it owned these children.
+            __html: `<button type="button" class="output-dialog-close" aria-label="${escapeHtml(msg('home-output-dialog-close'))}"></button><h2 id="output-dialog-title">${escapeHtml(msg('home-output-dialog-title'))}</h2><p id="output-dialog-body" class="muted"></p>`,
           }}
         />
       </div>}

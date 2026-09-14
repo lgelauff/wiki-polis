@@ -26,6 +26,7 @@ import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {phaseLabel, routeLabel} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
+import {useDateFormat} from '../../i18n/dates';
 
 type Lifecycle = components['schemas']['AdminLifecycle'];
 type PhaseTransitionReceipt = components['schemas']['AdminPhaseAdvanceReceipt']['transition'];
@@ -95,12 +96,6 @@ function countdown(msg: Message, value: string): string {
     hours && msg('adminconv-countdown-hours', hours),
     minutes && msg('adminconv-countdown-minutes', minutes),
   ].filter(Boolean).join(' ') || msg('adminconv-countdown-lt1m');
-}
-
-function shortDate(value: string): string {
-  return new Date(value).toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
-  });
 }
 
 /** Advanced-toggle names, which are deliberately more explicit than the phase labels the
@@ -234,17 +229,18 @@ function ConfigurationSection({conversationId, csrfToken, settings, refresh, fai
 
 function ClosedDescription({lifecycle}: {lifecycle: Lifecycle}) {
   const msg = useMessage();
+  const dates = useDateFormat();
   const reveal = lifecycle.conversation.identityReveal;
   const closedAt = lifecycle.conversation.closedAt
-    ? shortDate(lifecycle.conversation.closedAt) : null;
+    ? dates.date(lifecycle.conversation.closedAt) : null;
   // The reveal-window sentences carry their own dates and counts as parameters rather
   // than being assembled around them, so a translation can reorder inside each sentence.
   const closed = msg('adminconv-closed-on', closedAt ?? '');
   if (reveal?.state === 'pending' && reveal.opensAt) {
-    return <>{closed} {msg('adminconv-reveal-pending', shortDate(reveal.opensAt), reveal.daysLeft ?? 0)}</>;
+    return <>{closed} {msg('adminconv-reveal-pending', dates.date(reveal.opensAt), reveal.daysLeft ?? 0)}</>;
   }
   if (reveal?.state === 'open' && reveal.closesAt) {
-    return <>{closed} {msg('adminconv-reveal-open-date', shortDate(reveal.closesAt))}</>;
+    return <>{closed} {msg('adminconv-reveal-open-date', dates.date(reveal.closesAt))}</>;
   }
   if (reveal?.state === 'expired') {
     return <>{closed} {msg('adminconv-reveal-ended')}</>;
