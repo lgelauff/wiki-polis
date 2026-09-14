@@ -47,8 +47,20 @@ rather than rendering the server's `message`, so those strings stay developer-fa
 ## For translators
 
 Translate on **translatewiki.net**, not here. `qqq.json` gives the context for each message.
-Placeholders `$1`, `$2`, … must be preserved. `{{PLURAL:$1|singular|plural}}` selects a form
-by the number in `$1` — use the plural forms your language needs.
+Placeholders `$1`, `$2`, … must be preserved, and no others added. `{{PLURAL:$1|singular|plural}}`
+selects a form by the number in `$1` — use the plural forms your language needs.
+
+A translation that breaks these rules is not shown; English is shown in its place:
+
+- Use only the tags and attributes the English uses. Leaving them out, or moving them, is fine.
+- No `<` in text: write it in words.
+- In `{{PLURAL:$1|…}}`: no space before `$1`, no empty forms, and at least one form that is not
+  an explicit number such as `1=…`. No stray `{`, `}` or `{{…}}` of other kinds.
+- In a message that contains markup or `{{…}}`: no `$` except in a placeholder like `$1`, and no
+  backslash.
+
+Avoid HTML entities such as `&lt;` as well. They are not refused, but some places show them
+exactly as typed.
 
 ## For maintainers — adding or changing a UI string
 
@@ -221,7 +233,54 @@ offered.
   render as `⧼key⧽` at runtime. The scan reads `msg('key')` and `_('key')` literals across
   `v2/*.py`, `v2/api/`, `v2/services/` and `v2/frontend/src/`; keys assembled at runtime are
   skipped, since a static scan cannot resolve them. **This guard is live**: it covers the
-  keys the converted screens reference, so a typo'd key fails CI rather than shipping.
+  keys the converted screens reference, so a typo'd key fails CI rather than shipping;
+- a delivered translation would not be served (see *Markup in messages* below):
+  `test_every_delivered_translation_passes_the_markup_check`;
+- an English message uses markup outside the allowlist, or cannot be parsed:
+  `test_source_messages_use_only_allowlisted_markup`.
+
+`frontend/src/i18n/catalogue-parses.test.ts` fails CI if any message in any catalogue file
+makes banana-i18n throw.
 
 Add both the `en.json` value **and** the `qqq.json` line in the same change and the guards
 stay green.
+
+## Markup in messages
+
+Messages with inline HTML are rendered as HTML, in the SPA and in the error pages' hint, so
+markup is held to two rules.
+
+Both are scanned against a small grammar in `i18n.py` (`_Scanner`), a strict subset of what
+banana-i18n parses; the scan is linear in the message's length, so no input is slow.
+
+**English** may use only `<strong>`, `<em>`, `<code>`, and `<a href>` to a same-site path, and
+must fit the grammar. The allowlist is `_SOURCE_TAGS` / `_SOURCE_ATTRIBUTES` in
+`tests/test_i18n.py`, and widening it widens what every translation may use. In the SPA,
+banana-i18n escapes an `<a>` written in plain message text but not inside a `{{PLURAL:}}`
+branch; SPA links are passed into the message as a parameter instead.
+
+**A translation** is served only if it fits the grammar and uses only markup its English
+already uses: the same tags with the same attributes and values, repeated or reordered as the
+language needs, and no placeholder the English lacks. `i18n.load()` does not serve one that
+fails — English is used for that message — nor any translation at all if `en.json` did not
+load. A translation of a key English no longer has is set aside as stale and does not fail
+CI; translatewiki drops it on its next export. The app logs both at startup.
+
+**Changing English markup.** If a change removes or alters a tag or attribute in an existing
+message, existing translations that still carry it will fail the check. Give the message a
+new key instead: the old translations become stale, which CI accepts, and translators see a
+new message. This is the MediaWiki convention for a change that invalidates translations.
+
+### When a translatewiki export fails the check
+
+The failing test names the file, the key, and why: where the text leaves the grammar, the tags
+and attributes it added, or a placeholder English does not have.
+
+1. Fix the message on translatewiki.net, or ask on its talk page; the next export carries the
+   fix. Never hand-edit `<code>.json` — the next export overwrites it.
+2. Merging the export in the meantime is safe for readers, because `i18n.load()` serves English
+   for that one message. Merging does leave CI red until the fix arrives.
+
+The group config (`translatewiki-group.yaml`) expects exports as pull requests. The check can
+only stop a translation before it lands if `main` requires the CI checks to pass; until branch
+protection is on, a failing export can still be merged or pushed. Tracked in #390.

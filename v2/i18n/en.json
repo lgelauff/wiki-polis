@@ -860,7 +860,7 @@
     "adminconv-countdown-days": "$1d",
     "adminconv-countdown-hours": "$1h",
     "adminconv-countdown-minutes": "$1m",
-    "adminconv-countdown-lt1m": "<1m",
+    "adminconv-countdown-lt1m": "under 1m",
     "adminconv-status-published": "Published",
     "adminconv-status-unpublished": "Not yet published",
     "adminconv-phase-desc-published": "The final aggregate report is published and participant activity is closed.",
