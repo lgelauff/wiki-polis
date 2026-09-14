@@ -45,7 +45,7 @@ def language_name(locale: str) -> str:
 
 
 _MESSAGES: dict[str, dict[str, str]] = {}
-_PLURAL_RE = re.compile(r'\{\{PLURAL:\$(\d+)\|([^}]*)\}\}', re.IGNORECASE)
+_PLURAL_RE = re.compile(r'\{\{PLURAL:\$(\d+)\|([^}]*)\}\}', re.IGNORECASE | re.ASCII)
 _MISSING_L, _MISSING_R = '⧼', '⧽'   # ⧼key⧽ — loud marker for a missing message
 
 
@@ -117,15 +117,17 @@ def load(directory: str = _I18N_DIR) -> None:
 #
 # banana-i18n only runs its full parser when a message contains `{{` or `<`; anything else is
 # plain text with $n placeholders, and is accepted as it is. The grammar below is a strict
-# subset of what the full parser accepts, and the scanner reads each character once.
+# subset of what the full parser accepts. The scan is linear in the message's length: nesting
+# is capped, and each character is read a bounded number of times.
 
 _NAME_START = frozenset('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
 _NAME_CHARS = _NAME_START | frozenset('0123456789')
 _ATTR_CHARS = _NAME_CHARS | frozenset('-')
 _SPACE = frozenset(' \t\n')
+_DIGITS = frozenset('0123456789')   # banana's /\d/; str.isdigit() also takes '²' and '①'
 _FUNCTIONS = {'PLURAL', 'GENDER', 'GRAMMAR'}
 
-_PLACEHOLDER_RE = re.compile(r'\$(\d+)')
+_PLACEHOLDER_RE = re.compile(r'\$(\d+)', re.ASCII)
 _EXPLICIT_FORM_RE = re.compile(r'\d=')
 
 _REFUSED: dict[str, dict[str, str]] = {}
@@ -184,7 +186,7 @@ class _Scanner:
             elif char == '$':
                 start = self.pos
                 self.pos += 1
-                while self.pos < len(text) and text[self.pos].isdigit():
+                while self.pos < len(text) and text[self.pos] in _DIGITS:
                     self.pos += 1
                 if self.pos == start + 1:
                     self.pos = start
@@ -275,7 +277,7 @@ class _Scanner:
                 self.pos += 1
         elif self.peek('$'):
             self.pos += 1
-            while self.pos < len(self.text) and self.text[self.pos].isdigit():
+            while self.pos < len(self.text) and self.text[self.pos] in _DIGITS:
                 self.pos += 1
             if self.pos == start + 1:
                 self.pos = start
@@ -340,7 +342,7 @@ def markup_problem(translation: str, english: str) -> str | None:
         return 'it adds markup its English does not have: ' + ', '.join(sorted(map(_describe, extra)))
     placeholders = set(_PLACEHOLDER_RE.findall(translation)) - set(_PLACEHOLDER_RE.findall(english))
     if placeholders:
-        return 'it uses placeholders its English does not have: ' + ', '.join(f'${n}' for n in sorted(placeholders, key=int))
+        return 'it uses placeholders its English does not have: ' + ', '.join(f'${n}' for n in sorted(placeholders, key=lambda n: (len(n), n)))
     return None
 
 
@@ -429,7 +431,7 @@ def resolve(key: str, locale: str = SOURCE_LOCALE, params=()) -> str:
     if text is None:
         return f'{_MISSING_L}{key}{_MISSING_R}'
     params = tuple(params)
-    if '{{PLURAL:' in text:
+    if _PLURAL_RE.search(text):
         text = _expand_plural(text, params, locale)
     if params:
         text = _substitute(text, params)

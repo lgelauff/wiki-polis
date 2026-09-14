@@ -61,6 +61,14 @@ def test_plural_english_rule(tmp_path):
     assert i18n.resolve('n', 'en', (0,)) == '0 statements'
 
 
+def test_plural_is_expanded_whatever_its_case(tmp_path):
+    # Catches the server expanding only "{{PLURAL:" while the markup check, like banana,
+    # accepts "{{plural:".
+    _setup(tmp_path, {'en': {'n': '$1 {{PLURAL:$1|day|days}}'}, 'nl': {'n': '$1 {{plural:$1|dag|dagen}}'}})
+    assert i18n.resolve('n', 'nl', (1,)) == '1 dag'
+    assert i18n.resolve('n', 'nl', (3,)) == '3 dagen'
+
+
 def test_qqx_returns_keys(tmp_path):
     _setup(tmp_path, {'en': {'greet': 'Hello'}})
     assert i18n.resolve('greet', 'qqx') == '(greet)'
@@ -511,8 +519,7 @@ def test_markup_the_english_does_not_use_is_refused(translation):
     '<strong>$1</strong> {{PLURAL:$1|dag|dagen',                       # unclosed {{
     '<strong>$1</strong> {{PLURL:$1|dag|dagen}}',                      # unknown function
     '<strong>$1</strong> {{dagen}}',
-    # Each of these passed the earlier regex check and made banana-i18n 2.4.0 throw, or
-    # print "undefined".
+    # banana-i18n 2.4.0 throws on each of these, or prints "undefined".
     'US$ 5 voor <strong>$1</strong>',                                  # "$" not a placeholder
     '<strong>$1</strong> 5 $',
     '<strong>$1</strong> dagen\\',                                    # backslash
@@ -525,6 +532,10 @@ def test_markup_the_english_does_not_use_is_refused(translation):
     '<strong>$1</strong> {{PLURAL:$1|}}',                              # empty branch -> "undefined"
     '<strong>$1</strong> {{PLURAL:$1|2=twee}}',                        # explicit forms only
     '<b>{{PLURAL:$1|x</b>|y}}',                                        # tag closed in another branch
+    '{{PLURAL:$1|<strong>$1|dagen</strong>}}',                         # tag spanning two branches
+    '<strong>$1</strong> {{PLURAL:$|dag|dagen}}',                      # "$" with no number
+    'a $² <strong>$1</strong>',                                        # a digit banana does not read
+    '<strong>$1</strong> {{PLURAL:$①|dag|dagen}}',
     '<b>' * 30 + '$1' + '</b>' * 30,                                   # nested beyond any message
 ])
 def test_text_banana_cannot_parse_is_refused(translation):
@@ -567,6 +578,19 @@ def test_a_tag_is_only_read_the_way_banana_reads_it(translation, english):
     assert not i18n.markup_is_permitted(translation, english)
 
 
+def test_braces_in_an_attribute_value_are_refused_even_when_english_has_them():
+    # banana escapes the whole message when a value holds "{", so its tags show as text.
+    text = 'Ga naar <a href="/{x}">de voorpagina</a>.'
+    assert not i18n.markup_is_permitted(text, text)
+
+
+def test_a_very_long_placeholder_is_refused_rather_than_raising():
+    # Catches the refusal reason converting placeholder numbers with int(): Python refuses
+    # more than 4300 digits, and load() runs this at import, so one string would stop the app.
+    problem = i18n.markup_problem('Hallo $' + '1' * 5000, 'Hello $1')
+    assert problem is not None and 'placeholders' in problem
+
+
 @pytest.mark.parametrize('translation, english', [
     ('<strong>$1</strong> {{PLURAL:$1|dag|dagen}} over', _EN_BOLD),
     # A language may repeat the English markup in each plural branch, or reorder it.
@@ -576,6 +600,7 @@ def test_a_tag_is_only_read_the_way_banana_reads_it(translation, english):
     ("Ga naar <a  href = '/' >de voorpagina</a>.", _EN_LINK),                 # whitespace, quote style
     ('Geen opmaak', _EN_BOLD),                                               # dropping it is fine
     ('Terug over &lt;1 minuut', 'Back in under 1m'),                         # an entity is not a tag
+    ('{{GRAMMAR:genitive|<strong>$1</strong>}} dagen', _EN_BOLD),            # GRAMMAR takes a word
 ])
 def test_markup_the_english_already_uses_is_allowed(translation, english):
     assert i18n.markup_is_permitted(translation, english)
@@ -715,7 +740,7 @@ def test_the_translation_gate_reports_a_bad_delivered_file(tmp_path):
     }), encoding='utf-8')
     violations = _markup_violations(tmp_path)
     assert len(violations) == 1
-    assert violations[0].startswith('nl.json: hint: it cannot be parsed') or 'onclick' in violations[0]
+    assert violations[0].startswith('nl.json: hint: it adds markup') and 'onclick' in violations[0]
     # A key removed from English is not a violation: the gate must not block that change.
     assert not any('gone' in line for line in violations)
 

@@ -51,11 +51,14 @@ selects a form by the number in `$1` — use the plural forms your language need
 A translation that breaks these rules is not shown; English is shown in its place:
 
 - Use only the tags and attributes the English uses. Leaving them out, or moving them, is fine.
-- No `<` in text, and no HTML entities such as `&lt;`: write it in words.
+- No `<` in text: write it in words.
 - In `{{PLURAL:$1|…}}`: no space before `$1`, no empty forms, and at least one form that is not
   an explicit number such as `1=…`. No stray `{`, `}` or `{{…}}` of other kinds.
 - In a message that contains markup or `{{…}}`: no `$` except in a placeholder like `$1`, and no
   backslash.
+
+Avoid HTML entities such as `&lt;` as well. They are not refused, but some places show them
+exactly as typed.
 
 ## For maintainers — adding or changing a UI string
 
@@ -231,7 +234,7 @@ Messages with inline HTML are rendered as HTML, in the SPA and in the error page
 markup is held to two rules.
 
 Both are scanned against a small grammar in `i18n.py` (`_Scanner`), a strict subset of what
-banana-i18n parses; the scan reads each character once, so no input is slow.
+banana-i18n parses; the scan is linear in the message's length, so no input is slow.
 
 **English** may use only `<strong>`, `<em>`, `<code>`, and `<a href>` to a same-site path, and
 must fit the grammar. The allowlist is `_SOURCE_TAGS` / `_SOURCE_ATTRIBUTES` in
