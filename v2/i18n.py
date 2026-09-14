@@ -116,15 +116,31 @@ def _substitute(text: str, params) -> str:
     return text
 
 
+_PLACEHOLDER_RE = re.compile(r'\$(\d+)')
+
+
+def _qqx(key: str, params=()) -> str:
+    """``(key)``, or ``(key: p1, p2)`` with its parameters, as MediaWiki's qqx renders."""
+    return f'({key}: {", ".join(str(p) for p in params)})' if params else f'({key})'
+
+
+def qqx_message(key: str, english: str) -> str:
+    """The qqx catalogue entry for a message: ``(key: $1, $2)`` for each placeholder the
+    English uses, so a client substituting parameters shows them inside the parentheses."""
+    count = max((int(n) for n in _PLACEHOLDER_RE.findall(english)), default=0)
+    return _qqx(key, tuple(f'${n}' for n in range(1, count + 1)))
+
+
 def resolve(key: str, locale: str = SOURCE_LOCALE, params=()) -> str:
     """Resolve ``key`` to text in ``locale``.
 
     Fallback chain: ``locale`` -> ``en``. Missing everywhere -> ``⧼key⧽`` (loud). The
-    ``qqx`` debug locale returns ``(key)``. ``params`` are 1-indexed as ``$1..$n``;
+    ``qqx`` debug locale returns ``(key)``, or ``(key: p1, p2)`` when parameters are passed,
+    so what was interpolated stays visible. ``params`` are 1-indexed as ``$1..$n``;
     ``{{PLURAL:$n|a|b}}`` selects a form from the count in ``$n``.
     """
     if locale == DEBUG_LOCALE:
-        return f'({key})'
+        return _qqx(key, tuple(params))
     text = _MESSAGES.get(locale, {}).get(key)
     if text is None and locale != SOURCE_LOCALE:
         text = _MESSAGES.get(SOURCE_LOCALE, {}).get(key)
@@ -148,7 +164,7 @@ def all_messages(locale: str) -> dict[str, str]:
     """
     en = _MESSAGES.get(SOURCE_LOCALE, {})
     if locale == DEBUG_LOCALE:
-        return {k: f'({k})' for k in en}
+        return {k: qqx_message(k, v) for k, v in en.items()}
     # Project onto English's key set rather than dict.update()-ing the locale over it: a
     # translation may still hold a message the source has since dropped (translatewiki keeps
     # translating until it next syncs), and update() would serve that stale message to the

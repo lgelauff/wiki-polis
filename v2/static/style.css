@@ -3331,7 +3331,7 @@ a { color: var(--pass); }
 }
 .p6-my-vote--agreed    { color: var(--agree);    background: rgba(31,138,91,.09); }
 .p6-my-vote--disagreed { color: var(--disagree); background: rgba(196,74,74,.09); }
-.p6-my-vote--passed    { color: var(--pass);     background: rgba(61,109,186,.09); }
+.p6-my-vote--passed    { color: #3563ad;         background: rgba(61,109,186,.09); }  /* --pass is 4.36:1 on --bg at this size */
 
 /* Mobile: collapse phase columns */
 @media (max-width: 640px) {

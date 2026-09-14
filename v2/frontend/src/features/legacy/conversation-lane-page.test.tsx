@@ -38,7 +38,7 @@ function card(slug: string, title: string, overrides: Partial<Card> = {}): Card 
 }
 
 /** One card in every state the lane can show, so a single render reaches every string. */
-const TITLES = ['Community strategy', 'Movement charter', 'Grants review', 'Archive policy', 'Open board', 'Moderated board'];
+const TITLES = ['Community strategy', 'Movement charter', 'Grants review', 'Budget round', 'Archive policy', 'Open board', 'Moderated board'];
 
 function everyState(authenticated = true) {
   return http.get(new URL('/api/v1/conversations', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
@@ -53,7 +53,10 @@ function everyState(authenticated = true) {
         outputs: [output('initial-clustering', true), output('argument-map', false)],
       })],
       caughtUp: [card('movement-charter', 'Movement charter', {participantState: 'caught_up', statementsRemaining: 0, reveal: {state: 'pending', daysRemaining: 12}})],
-      inactive: [card('grants-review', 'Grants review', {participantState: 'inactive', status: 'paused'})],
+      inactive: [
+        card('grants-review', 'Grants review', {participantState: 'inactive', status: 'paused'}),
+        card('budget-round', 'Budget round', {participantState: 'inactive', status: 'open'}),
+      ],
       archived: [card('archive-policy', 'Archive policy', {
         participantState: 'archived', status: 'archived', closedAt: '2026-08-31T23:30:00Z',
         phases: ['closed'], reveal: {state: 'open', daysRemaining: 0},
@@ -138,6 +141,8 @@ test('a closed card shows its month, and the reveal chips their days', async () 
   expect(screen.getByText('Reveal window: today')).toBeVisible();
   expect(screen.getByText('Reveal opens in 12d')).toBeVisible();
   expect(screen.getByText('paused')).toBeVisible();
+  // An inactive consultation that is not paused is between phases.
+  expect(screen.getByText('waiting')).toBeVisible();
 });
 
 test('dates follow the language the reader chose, not the browser', async () => {

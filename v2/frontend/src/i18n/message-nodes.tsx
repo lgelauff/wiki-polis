@@ -16,12 +16,18 @@ export function nodeSlot(index: number): string {
   return `${MARK}${index}${MARK}`;
 }
 
+/** An element whose slot the text does not contain — a translation that dropped `$1`, or a
+ *  catalogue that failed to load — is appended after the text rather than lost, because the
+ *  element is often the link or the name the sentence exists to show. */
 export function withNodes(text: string, ...nodes: ReactNode[]): ReactNode {
   const parts = text.split(new RegExp(`${MARK}(\\d+)${MARK}`));
+  const placed = new Set<number>();
   // split() with a capture group alternates text, index, text, index, …
-  return parts.map((part, position) => (
-    position % 2 === 0
-      ? (part ? <Fragment key={position}>{part}</Fragment> : null)
-      : <Fragment key={position}>{nodes[Number(part)]}</Fragment>
-  ));
+  const rendered = parts.map((part, position) => {
+    if (position % 2 === 0) return part ? <Fragment key={position}>{part}</Fragment> : null;
+    placed.add(Number(part));
+    return <Fragment key={position}>{nodes[Number(part)]}</Fragment>;
+  });
+  const missing = nodes.map((node, index) => (placed.has(index) ? null : <Fragment key={`missing-${index}`}> {node}</Fragment>));
+  return [...rendered, ...missing];
 }
