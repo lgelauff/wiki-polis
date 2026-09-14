@@ -109,6 +109,7 @@
     "guidance-argument-moderation-heading": "Moderation baseline",
     "guidance-argument-moderation-body": "Keep the argument about the statement. Personal attacks, harassment, and content that violates Wikimedia conduct expectations may be removed.",
     "output-eyebrow": "$1 output",
+    "output-doc-title": "$1 — $2 — Proto",
     "output-status-pending": "$1 · pending",
     "output-howto-heading": "How to read this output",
     "output-produced-from": "Produced from",

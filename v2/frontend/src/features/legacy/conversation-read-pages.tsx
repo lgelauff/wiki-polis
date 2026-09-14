@@ -143,6 +143,7 @@ function AboutStatistic({value, label}: {value: number | null; label: string}) {
 
 export function ModerationLogPage() {
   const msg = useMessage();
+  const dates = useDateFormat();
   const slug = requiredParam('slug', useParams().slug);
   const {data} = useSuspenseQuery(moderationLogQuery(slug));
 
@@ -166,7 +167,7 @@ export function ModerationLogPage() {
             <tbody>
               {data.events.map((event, index) => (
                 <tr key={`${event.occurredAt}-${event.pseudonym}-${index}`}>
-                  <td className="muted">{event.occurredAt?.slice(0, 16).replace('T', ' ') ?? ''}</td>
+                  <td className="muted">{event.occurredAt && <time dateTime={event.occurredAt}>{dates.dateTime(event.occurredAt)}</time>}</td>
                   <td>{moderationAction(msg, event.action)}</td>
                   <td>{event.pseudonym}</td>
                   <td>{moderationScope(msg, event.scope)}</td>
@@ -192,14 +193,17 @@ export function ConversationOutputPage() {
   const output = data.output;
 
   return (
-    <LegacyShell headerCrumb={(
-      <span className="header-crumb">
-        <span className="header-crumb-sep">/</span>
-        <span>{data.title.length > 40 ? `${data.title.slice(0, 39)}…` : data.title}</span>
-        <span className="header-crumb-sep">/</span>
-        <span>{outputLabel(msg, output.key, output.label)}</span>
-      </span>
-    )}>
+    <LegacyShell
+      title={msg('output-doc-title', outputLabel(msg, output.key, output.label), data.title)}
+      headerCrumb={(
+        <nav className="header-crumb" aria-label={msg('conv-crumb-aria')}>
+          <span className="header-crumb-sep">/</span>
+          <span>{truncated(data.title, 40)}</span>
+          <span className="header-crumb-sep">/</span>
+          <span>{outputLabel(msg, output.key, output.label)}</span>
+        </nav>
+      )}
+    >
       <div className="container" style={{maxWidth: 800}}>
         <p style={{marginBottom: '1.25rem'}}>
           <InternalLink href={`/c/${data.slug}`} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>

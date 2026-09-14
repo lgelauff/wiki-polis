@@ -38,7 +38,14 @@ test('renders the public moderation accountability table', async () => {
 
   expect(await screen.findByRole('heading', {name: 'Moderation log — Community strategy'})).toBeVisible();
   expect(screen.getByRole('columnheader', {name: 'Pseudonym'})).toBeVisible();
-  expect(screen.getByText('2026-08-14 09:30')).toBeVisible();
+  // Catches the timestamp shown as the server's raw UTC string instead of a date in the
+  // reader's language (en formats as en-GB; vite.config.ts pins the test timezone to UTC),
+  // and the machine-readable value dropping out of the <time> element.
+  const when = [...document.querySelectorAll('tbody tr td:first-child time')];
+  expect(when.map((node) => [node.getAttribute('datetime'), node.textContent])).toEqual([
+    ['2026-08-14T09:30:00Z', '14 Aug 2026, 09:30'],
+    ['2026-08-13T08:15:00Z', '13 Aug 2026, 08:15'],
+  ]);
   expect(screen.getByText('quiet-otter')).toBeVisible();
   expect(screen.getByText('patient-fox')).toBeVisible();
 });
@@ -52,6 +59,10 @@ test('renders the exact argument-map output content and navigation', async () =>
   expect(screen.getByRole('link', {name: /Open the current Arguments tab/})).toHaveAttribute(
     'href', '/c/community-strategy#tab-arguments',
   );
+  // Catches the page keeping the default "Proto" tab title, which names neither the output nor
+  // the consultation, and the breadcrumb losing its labelled navigation landmark.
+  expect(document.title).toBe('Argument map — Community strategy — Proto');
+  expect(screen.getByRole('navigation', {name: 'Conversation context'})).toHaveTextContent('Community strategy/Argument map');
 });
 
 test('renders the pending output state from the typed contract', async () => {
@@ -160,8 +171,11 @@ test('under qqx, the moderation log carries no English but pseudonyms and modera
   await screen.findByRole('heading', {name: '(modlog-heading: Community strategy)'});
 
   // Catches the action and scope values ("Banned", "conversation") reaching the table as the
-  // server sends them.
-  expect(untranslatedCopy([document.querySelector('.container')], ['Community strategy', 'quiet-otter', 'patient-fox', 'adminuser', 'moderator'])).toEqual([]);
+  // server sends them. The allowed content is the fixture's data: title, pseudonyms, moderator
+  // usernames, and the two timestamps as the en-GB date format writes them.
+  expect(untranslatedCopy([document.querySelector('.container')], [
+    'Community strategy', 'quiet-otter', 'patient-fox', 'adminuser', 'mod-kestrel', '14 Aug 2026, 09:30', '13 Aug 2026, 08:15',
+  ])).toEqual([]);
 });
 
 test('the moderation log names each action from the catalogue', async () => {
@@ -181,5 +195,7 @@ test.each(['initial-clustering', 'argument-map', 'preliminary-results', 'report'
 
     // Catches hardcoded copy and the payload's English phase, method, status or pending text.
     expect(untranslatedCopy([document.querySelector('.container')], ['Community strategy'])).toEqual([]);
+    // Catches an English tab title, or one naming the output from the payload's label.
+    expect(document.title).toBe(`(output-doc-title: (output-${key}-label), Community strategy)`);
   },
 );

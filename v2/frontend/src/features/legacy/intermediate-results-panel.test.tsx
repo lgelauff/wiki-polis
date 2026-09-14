@@ -62,6 +62,11 @@ test('groups are numbered from the catalogue, and the sample warning is one sent
   await openResultsTab('Intermediate results');
   await screen.findByText('Areas of broad consensus');
 
+  // Catches the heading and the participant count running together in the accessible name
+  // ("Results1 participant"): the gap between them on screen is a CSS margin, which a screen
+  // reader does not hear.
+  expect(screen.getByRole('heading', {name: 'Results 1 participant'})).toBeVisible();
+
   // Catches the server's label rendering instead of the catalogue's, and a group numbered
   // off by one.
   const headings = [...document.querySelectorAll('.results-group-heading')].map((node) => node.textContent);
