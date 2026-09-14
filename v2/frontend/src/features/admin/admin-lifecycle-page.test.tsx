@@ -3,7 +3,7 @@ import {QueryClientProvider} from '@tanstack/react-query';
 import {render, screen, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 
 import type {components} from '../../api/schema';
 import {AdminLifecyclePage} from './admin-lifecycle-page';
@@ -140,4 +140,31 @@ test('renders console text from the catalogue, not from source literals', async 
   expect(document.title).toBe('Console for Community strategy');
   expect(screen.queryByText('Phase control')).not.toBeInTheDocument();
   expect(screen.queryByText('You are in phase 2 of 3')).not.toBeInTheDocument();
+});
+
+/** A transition due in thirty seconds, which is when the countdown falls back to its
+ *  "under a minute" message. */
+function dueShortly(): Lifecycle {
+  return {...lifecycle, schedule: {canSchedule: true, scheduledAt: new Date(Date.now() + 30_000).toISOString(), targetKey: 'argument_mapping', targetLabel: 'Arguments', frozen: false}};
+}
+
+test('a transition under a minute away shows its countdown instead of blanking the console', async () => {
+  // Under a minute, the countdown uses adminconv-countdown-lt1m on its own.
+  serve(dueShortly());
+  renderConsole();
+  expect(await screen.findByText('under 1m')).toBeVisible();
+});
+
+test('a message banana cannot parse degrades to its key, not to a blank page', async () => {
+  // banana-i18n throws on a bare "<"; msg() shows the key for that message and the rest of
+  // the console still renders.
+  server.use(http.get(new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
+    () => HttpResponse.json({...testMessages, 'adminconv-countdown-lt1m': '<1m'})));
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+  serve(dueShortly());
+  renderConsole();
+  expect(await screen.findByText('adminconv-countdown-lt1m')).toBeVisible();
+  expect(screen.getByText('Every statement has been moderated', {exact: false})).toBeVisible();
+  // Reported once, though the countdown re-renders.
+  expect(errors.mock.calls.filter(([message]) => String(message).includes('adminconv-countdown-lt1m'))).toHaveLength(1);
 });
