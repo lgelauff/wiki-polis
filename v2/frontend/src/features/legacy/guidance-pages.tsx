@@ -6,13 +6,13 @@ export function StatementGuidancePage() {
       <div className="container" style={{maxWidth: 760}}>
         <div className="landing-section">
           <h1 style={{fontSize: 28, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.2, margin: '0 0 12px'}}>Writing good statements</h1>
-          <p className="muted">Statements are the short claims participants vote Agree, Disagree, or Pass on. A good statement lets people give their opinion on one clear statement with one clear vote.</p>
+          <p className="muted">Statements are the short claims participants respond to with Agree, Disagree, or Pass. A good statement lets people express their opinion on one clear claim.</p>
         </div>
         <div className="landing-section">
           <h2>Checklist</h2>
           <ul className="accept-summary-list">
             <li><strong>Make one claim.</strong> If you want to say two things, submit two statements.</li>
-            <li><strong>Use neutral wording.</strong> Describe the claim without arguing for the answer.</li>
+            <li><strong>Use neutral wording.</strong> Describe the claim without arguing for or against it.</li>
             <li><strong>Be specific.</strong> Avoid broad wishes that almost everyone can agree with.</li>
             <li><strong>Write a statement.</strong> Do not submit a question, slogan, or topic title.</li>
           </ul>
@@ -26,7 +26,7 @@ export function StatementGuidancePage() {
         </div>
         <div className="landing-section">
           <h2>When to pass</h2>
-          <p className="muted">Passing is fine when a statement is unclear, does not apply to you, or combines claims you would vote on differently. High pass rates are a signal that a statement may need to be split or rewritten next time.</p>
+          <p className="muted">Passing is fine when a statement is unclear, does not apply to you, or combines claims you would respond to differently. High pass rates are a signal that a statement may need to be split or rewritten next time.</p>
         </div>
       </div>
     </LegacyShell>
