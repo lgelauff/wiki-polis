@@ -12,17 +12,11 @@ import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {outputLabel, outputPending, outputTooltip, phaseLabel} from '../../i18n/server-labels';
+import {useDateFormat} from '../../i18n/dates';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationOutput = components['schemas']['ConversationOutput'];
 
-/** Month and year a consultation closed. Intl rather than a table of English month
- *  abbreviations, and in UTC as the table was, so a close just before midnight does not
- *  move month depending on the reader's zone. */
-function archivedMonth(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {month: 'short', year: 'numeric', timeZone: 'UTC'})
-    .format(new Date(value));
-}
 
 function timelinePosition(phases: string[]): number {
   if (phases.some((phase) => ['closed', 'cleanup_window', 'public_results'].includes(phase))) return 4;
@@ -107,15 +101,9 @@ function OutputSymbols({
   );
 }
 
-function localDateTime(at: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(at));
-}
-
 function ConversationChips({conversation}: {conversation: ConversationCard}) {
   const msg = useMessage();
+  const dates = useDateFormat();
   const chips = [];
   if (conversation.scheduledTransition) {
     const transition = conversation.scheduledTransition;
@@ -125,7 +113,7 @@ function ConversationChips({conversation}: {conversation: ConversationCard}) {
         key="transition"
         dangerouslySetInnerHTML={richHtml(msg('home-chip-next',
           escapeHtml(phaseLabel(msg, transition.target, transition.targetLabel)),
-          `<time datetime="${escapeHtml(transition.at)}" data-local-datetime title="${escapeHtml(msg('conv-scheduled-tz-title'))}">${escapeHtml(localDateTime(transition.at))}</time>`,
+          `<time datetime="${escapeHtml(transition.at)}" data-local-datetime title="${escapeHtml(msg('conv-scheduled-tz-title'))}">${escapeHtml(dates.dateTime(transition.at))}</time>`,
         ))}
       />,
     );
@@ -177,6 +165,7 @@ function JoinedSection({
   onPending: (output: ConversationOutput, trigger: HTMLButtonElement) => void;
 }) {
   const msg = useMessage();
+  const dates = useDateFormat();
   if (conversations.length === 0) return null;
   return (
     <section aria-labelledby={sectionId}>
@@ -195,7 +184,7 @@ function JoinedSection({
                     {conversation.pseudonym && <span className="conv-card-badge" aria-hidden="true">{conversation.pseudonym}</span>}
                     {state === 'caught_up' && <span className="conv-card-badge conv-card-badge--muted">{msg('home-card-badge-caught-up')}</span>}
                     {state === 'inactive' && <span className="conv-card-badge conv-card-badge--muted">{conversation.status === 'paused' ? msg('home-card-badge-paused') : msg('home-card-badge-waiting')}</span>}
-                    {state === 'archived' && conversation.closedAt && <span className="conv-card-badge conv-card-badge--muted" aria-hidden="true">{archivedMonth(conversation.closedAt)}</span>}
+                    {state === 'archived' && conversation.closedAt && <span className="conv-card-badge conv-card-badge--muted" aria-hidden="true">{dates.monthYear(conversation.closedAt)}</span>}
                   </div>
                   <InputTimeline phases={conversation.phases} />
                   <ConversationChips conversation={conversation} />

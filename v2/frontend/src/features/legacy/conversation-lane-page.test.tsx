@@ -78,7 +78,7 @@ test('under qqx, nothing on the signed-in lane is English except the consultatio
   renderLane();
   await screen.findByRole('heading', {name: '(home-section-needs-attention)'});
 
-  const content = [...TITLES, 'quiet-otter', archivedMonth('2026-08-31T23:30:00Z'), scheduledAt('2026-10-01T12:00:00Z')];
+  const content = [...TITLES, 'quiet-otter', 'Aug 2026', '1 Oct 2026, 12:00'];
   expect(untranslatedCopy([document.querySelector('.home-container'), document.getElementById('output-dialog')], content)).toEqual([]);
 });
 
@@ -123,7 +123,7 @@ test('output symbols and the scheduled phase read the catalogue, not the server 
   expect(screen.getByRole('dialog', {name: 'Argument map'})).toHaveTextContent(/opens when featured statements are visible/);
 
   const chip = screen.getByText(/^Next:/);
-  expect(chip).toHaveTextContent(`Next: Informed vote ${scheduledAt('2026-10-01T12:00:00Z')}`);
+  expect(chip).toHaveTextContent('Next: Informed vote 1 Oct 2026, 12:00');
   expect(chip.querySelector('time')).toHaveAttribute('title', 'Shown in your local timezone');
 });
 
@@ -133,17 +133,20 @@ test('a closed card shows its month, and the reveal chips their days', async () 
 
   await screen.findByRole('heading', {name: 'Closed'});
   // 23:30 UTC on 31 August is still August, whatever zone the reader is in.
-  expect(screen.getByText(archivedMonth('2026-08-31T23:30:00Z'))).toHaveTextContent(/Aug/);
+  expect(screen.getByText('Aug 2026')).toBeVisible();
   expect(screen.getByText('Reveal window: 3d left')).toBeVisible();
   expect(screen.getByText('Reveal window: today')).toBeVisible();
   expect(screen.getByText('Reveal opens in 12d')).toBeVisible();
   expect(screen.getByText('paused')).toBeVisible();
 });
 
-function archivedMonth(value: string) {
-  return new Intl.DateTimeFormat(undefined, {month: 'short', year: 'numeric', timeZone: 'UTC'}).format(new Date(value));
-}
+test('dates follow the language the reader chose, not the browser', async () => {
+  // The test runtime's own locale is en-US. Choosing Dutch must give Dutch dates even where
+  // the copy around them is still English, as it is for any message not yet translated.
+  server.use(everyState());
+  globalThis.history.replaceState(null, '', '/?uselang=nl');
+  renderLane();
 
-function scheduledAt(value: string) {
-  return new Intl.DateTimeFormat(undefined, {dateStyle: 'medium', timeStyle: 'short'}).format(new Date(value));
-}
+  expect(await screen.findByText('aug 2026')).toBeVisible();
+  expect(screen.getByText(/^Next:/)).toHaveTextContent('Next: Informed vote 1 okt 2026, 12:00');
+});

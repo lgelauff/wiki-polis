@@ -69,6 +69,9 @@ by the number in `$1` — use the plural forms your language needs.
 5. **Plurals / counts:** `"reveal-tl-days": "$1 {{PLURAL:$1|day|days}}"`.
 6. **Never** hardcode user-facing English in a component once that surface has been
    converted.
+7. **Dates** go through `frontend/src/i18n/dates.ts`, which formats in the language the reader
+   chose, not the browser's. `Intl.DateTimeFormat(undefined, …)` and month-name tables are
+   the two ways a translated page ends up with English dates.
 
 ## The endpoint
 
