@@ -160,8 +160,8 @@ function OpinionGroups({report}: {report: Report}) {
   return <div className="report-section">
     <h2 className="report-section-heading">{msg('report-groups-heading')} <span className="report-section-sub">{msg('report-groups-sub', report.opinionGroups.length)}</span></h2>
     <p className="muted" style={{fontSize: 13, marginBottom: '1rem'}}>{msg('report-groups-intro')}</p>
-    {report.opinionGroups.map((group) => <div className="results-block" style={{marginBottom: '1rem'}} key={group.label}>
-      <p className="results-group-heading">{`\n        ${group.label}\n        `}{!!group.memberCount && <span className="muted" style={{fontWeight: 400, fontSize: 12}}>{msg('report-group-members', group.memberCount)}</span>}{'\n      '}</p>
+    {report.opinionGroups.map((group, groupIndex) => <div className="results-block" style={{marginBottom: '1rem'}} key={group.label}>
+      <p className="results-group-heading">{`\n        ${msg('report-group-label', groupIndex + 1)}\n        `}{!!group.memberCount && <span className="muted" style={{fontWeight: 400, fontSize: 12}}>{msg('report-group-members', group.memberCount)}</span>}{'\n      '}</p>
       {group.positions.map((position, index) => <div className="results-row" key={`${position.choice}-${index}`}>
         <span className={`results-badge results-${position.choice}`}>{position.choice === 'agree' ? msg('report-badge-agree') : msg('report-badge-disagree')}</span>
         <span className="results-text">{`"${position.statement}"`}</span>
