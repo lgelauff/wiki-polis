@@ -6,19 +6,26 @@ UI strings for Proto, in the **translatewiki.net (TWN) "banana" JSON** format.
 
 ## Status — what is wired up today
 
-The catalogue and the resolver are in place, and the SPA reads them on these surfaces: the
-shared frame and landing page, the consultation list, the join screen, the conversation
-workspace, the informed-voting panel, the preliminary results panel, the final report page,
-and the admin lifecycle console. The rest of the SPA is still hardcoded English; the order
-the remainder is wired in is in [`../plan_i18n.md`](../plan_i18n.md) stage 2.
+The catalogue and the resolver are in place, and **the participant interface reads them
+throughout** (stage 2 of [`../plan_i18n.md`](../plan_i18n.md), done 2026-09-14): the shared
+frame and landing page, the consultation list, the join screen, the conversation workspace,
+the arguments tab and flag form, informed voting, intermediate and preliminary results, the
+final report, the About page, the public moderation log, the output pages and the
+identity-reveal page. The admin lifecycle console is wired too.
+
+Still English, on purpose, and listed with reasons in
+[#399](https://github.com/lgelauff/wiki-polis/issues/399): the two help pages
+(`guidance-*`, pending an English review), the rest of the admin console (stage 5), server
+error messages ([#397](https://github.com/lgelauff/wiki-polis/issues/397)) and the moderation
+log's server fallbacks ([#398](https://github.com/lgelauff/wiki-polis/issues/398)).
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (904 keys, 100% documented) | ✅ committed |
+| `en.json` + `qqq.json` (930 keys, 100% documented; 552 offered to translators, 378 held back) | ✅ committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
-| React SPA reads it via `banana-i18n` | 🟡 partly wired (see above) |
+| React SPA reads it via `banana-i18n` | ✅ participant interface; 🟡 help pages and admin console (see above) |
 | Locales offered to users (`ENABLED_LOCALES`) | English only |
 
 `ENABLED_LOCALES` defaults to `en`, so nothing here is user-visible yet. The keys are the

@@ -210,6 +210,14 @@ reintroduction fails CI.
 
 ### 2. Participant interface wiring
 
+> **Done 2026-09-14.** Wired and tested in #357, #371, #385, #386 and #392–#395; the markup check that
+> translations must pass landed in #389. The deliberate exceptions (help pages, admin
+> console, server error messages, moderation-log fallbacks) are listed in
+> [#399](https://github.com/lgelauff/wiki-polis/issues/399). Carried into stage 3: the
+> join-screen tests in [#391](https://github.com/lgelauff/wiki-polis/issues/391), which must
+> land before Dutch is switched on, and deleting the two components nothing renders
+> ([#387](https://github.com/lgelauff/wiki-polis/issues/387)).
+
 Fifteen components, ordered as a participant encounters them, so that partial progress
 covers a continuous journey rather than scattered screens:
 
