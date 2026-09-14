@@ -204,7 +204,7 @@ def create_api_v1_blueprint(
         translated locale is complete; ``@metadata`` is excluded.
 
         An unknown locale is not an error — it falls back to the English map, mirroring the
-        resolver's ``locale -> en -> ⧼key⧽`` chain. ``qqx`` returns ``(key)`` for every key.
+        resolver's ``locale -> en -> ⧼key⧽`` chain. ``qqx`` returns ``(key)``, or ``(key: $1, $2)`` for a message with parameters.
 
         Any locale is served, including one outside ``ENABLED_LOCALES``, because ``?uselang=``
         is honoured verbatim and the shell is stamped with it — this endpoint has to be able

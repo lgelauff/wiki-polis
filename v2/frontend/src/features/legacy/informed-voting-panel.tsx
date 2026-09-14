@@ -193,9 +193,9 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
           </div>
         </div>
         <div className="p6-nav">
-          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={currentIndex === 0} onClick={() => showCard(currentIndex - 1)}>{msg('conv-nav-prev')}</button>
+          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={currentIndex === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => showCard(currentIndex - 1)}>{msg('conv-nav-prev')}</button>
           <span className="p6-nav-counter" aria-live="polite">{msg('conv-of', currentIndex + 1, data.cards.length)}</span>
-          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={currentIndex === data.cards.length - 1} onClick={() => showCard(currentIndex + 1)}>{msg('conv-nav-next')}</button>
+          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={currentIndex === data.cards.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => showCard(currentIndex + 1)}>{msg('conv-nav-next')}</button>
         </div>
       </div>;
     })}

@@ -23,6 +23,13 @@ export function intlLocale(locale: string): string {
   return (Object.hasOwn(INTL_LOCALE, locale) ? INTL_LOCALE[locale] : locale) || 'en-GB';
 }
 
+/** A value that is not a date is shown as it came rather than thrown on: formatting runs in
+ *  render, and a RangeError there blanks the page for one malformed timestamp. */
+function format(locale: string, options: Intl.DateTimeFormatOptions, value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : formatter(locale, options).format(date);
+}
+
 function formatter(locale: string, options: Intl.DateTimeFormatOptions) {
   const tag = intlLocale(locale);
   try {
@@ -37,18 +44,18 @@ function formatter(locale: string, options: Intl.DateTimeFormatOptions) {
 /** A calendar date, "1 Sept 2026". In UTC: these mark the day a consultation closed or a
  *  window opens, which must not move a day depending on where the reader is. */
 export function formatDate(locale: string, value: string): string {
-  return formatter(locale, {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'}).format(new Date(value));
+  return format(locale, {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'}, value);
 }
 
 /** Month and year, "Aug 2026". In UTC, for the same reason as formatDate. */
 export function formatMonthYear(locale: string, value: string): string {
-  return formatter(locale, {month: 'short', year: 'numeric', timeZone: 'UTC'}).format(new Date(value));
+  return format(locale, {month: 'short', year: 'numeric', timeZone: 'UTC'}, value);
 }
 
 /** A moment, "2 Aug 2026, 09:30", in the reader's own timezone: a scheduled phase change
  *  happens at a time of day, and the reader needs it where they are. */
 export function formatDateTime(locale: string, value: string): string {
-  return formatter(locale, {dateStyle: 'medium', timeStyle: 'short'}).format(new Date(value));
+  return format(locale, {dateStyle: 'medium', timeStyle: 'short'}, value);
 }
 
 export function useDateFormat() {

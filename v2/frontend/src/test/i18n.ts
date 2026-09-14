@@ -1,12 +1,18 @@
+import {testMessages} from './handlers';
+
 /** Test support for proving a surface is wired to the catalogue.
  *
  *  Asserting English text cannot prove that: the test catalogue is the real en.json, so a
  *  hardcoded literal and msg() of the same words render identically and the test passes
- *  either way. Under `?uselang=qqx` every message renders as `(key)` instead, and whatever
- *  English is left on screen was never wired. This is the README's manual coverage check,
- *  made into an assertion. */
+ *  either way. Under `?uselang=qqx` every message renders as `(key)`, or `(key: a, b)` with
+ *  the values passed into it, and whatever English is left on screen was never wired —
+ *  including English passed into a message as a parameter. This is the README's manual
+ *  coverage check, made into an assertion. */
 
-const KEY = /\([a-z0-9][a-z0-9._-]*\)/g;
+/** An opening `(key` or `(key:`, for a key the catalogue has; the values after it stay in the
+ *  text and are checked like any other. */
+const KEY_OPENING = /\(([a-z0-9][a-z0-9._-]*)(?::|(?=\)))/g;
+const KNOWN_KEYS = new Set(Object.keys(testMessages));
 
 /** The attributes a reader meets: announced by a screen reader, or shown on hover. */
 const READABLE_ATTRIBUTES = ['aria-label', 'aria-valuetext', 'alt', 'title', 'placeholder'];
@@ -17,7 +23,7 @@ export function renderAsQqx() {
   globalThis.history.replaceState(null, '', '/?uselang=qqx');
 }
 
-/** Text and readable attributes under `root` that still contain a word once every `(key)`
+/** Text and readable attributes under `root` that still contain a word once every message key
  *  and every piece of `content` is removed. `content` is what the fixture supplied — titles,
  *  pseudonyms, statements — which is participant data and must never be keyed.
  *
@@ -27,7 +33,7 @@ export function untranslatedCopy(roots: Array<Element | null>, content: readonly
   const found: string[] = [];
   const check = (raw: string | null, where: string) => {
     if (!raw) return;
-    let rest = raw.replace(KEY, ' ');
+    let rest = raw.replace(KEY_OPENING, (match, key: string) => (KNOWN_KEYS.has(key) ? ' ' : match));
     // Longest first, so a title is not half-consumed by a shorter value inside it.
     for (const value of [...content].sort((a, b) => b.length - a.length)) rest = rest.split(value).join(' ');
     if (/\p{L}{2,}/u.test(rest)) found.push(`${where}: ${JSON.stringify(raw.trim())}`);

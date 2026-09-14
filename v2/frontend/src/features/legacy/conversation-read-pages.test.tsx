@@ -83,16 +83,13 @@ test('under qqx, the About page carries no English but the consultation and the 
   }})));
   renderAsQqx();
   renderRoute('/app/conversations/community-strategy/about');
-  await screen.findByRole('heading', {name: '(about-heading)'});
+  await screen.findByRole('heading', {name: '(about-heading: Community strategy)'});
 
   // Catches hardcoded copy and any server label (phase, output, scheduled phase) rendered
   // as sent: the fixture's labels are all "SERVER ENGLISH", so one reaching the page shows.
   const page = document.querySelector('.container');
-  expect(untranslatedCopy([page], ['Community strategy', 'quiet-otter'])).toEqual([]);
-  expect(document.title).toBe('(about-doc-title)');
-  // qqx drops parameters, so it cannot show which phase name reached the Next line; the
-  // English test below checks that.
-  expect(screen.getByText('(conv-scheduled-transition)')).toBeInTheDocument();
+  expect(untranslatedCopy([page], ['Community strategy', 'quiet-otter', '1 Oct 2026, 12:00'])).toEqual([]);
+  expect(document.title).toBe('(about-doc-title: Community strategy)');
 });
 
 test('the About page maps the scheduled phase and output names from their identifiers', async () => {
@@ -160,7 +157,7 @@ test('the About page pluralises each statistic by its own number', async () => {
 test('under qqx, the moderation log carries no English but pseudonyms and moderators', async () => {
   renderAsQqx();
   renderRoute('/app/parity/conversations/community-strategy/moderation-log');
-  await screen.findByRole('heading', {name: '(modlog-heading)'});
+  await screen.findByRole('heading', {name: '(modlog-heading: Community strategy)'});
 
   // Catches the action and scope values ("Banned", "conversation") reaching the table as the
   // server sends them.
