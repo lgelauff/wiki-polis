@@ -3782,6 +3782,7 @@ a { color: var(--pass); }
 }
 .at-star { display: inline-flex; align-items: center; gap: 4px; }
 .at-yours {
+  text-transform: uppercase;
   color: var(--pass);
   background: rgba(61,109,186,.1);
   border-radius: 3px;
@@ -3789,6 +3790,7 @@ a { color: var(--pass); }
   letter-spacing: .05em;
 }
 .at-hidden-badge {
+  text-transform: uppercase;
   color: var(--muted);
   background: var(--surface2);
   border: 1px solid var(--hairline);
