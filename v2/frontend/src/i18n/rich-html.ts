@@ -4,8 +4,9 @@
  *  instead.
  *
  *  The source is v2/i18n/*.json. English is ours; translations are typed by translatewiki
- *  volunteers and are not trusted markup. banana-i18n does not sanitise them — it lets a
- *  self-closing tag keep its attributes and passes anything inside {{PLURAL:}} through.
+ *  volunteers and are not trusted markup. banana-i18n filters ordinary tags, but a
+ *  self-closing tag written without a space before `/>` keeps its attributes, and anything
+ *  inside {{PLURAL:}}, {{GENDER:}} or {{GRAMMAR:}} passes through unfiltered.
  *  What makes this sink safe is the server: i18n.load() refuses any translation using
  *  markup its English does not, and tests/test_i18n.py fails CI on one. Do not render
  *  catalogue text that did not come through GET /api/v1/i18n/<locale>. */

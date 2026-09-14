@@ -204,7 +204,14 @@ offered.
   render as `⧼key⧽` at runtime. The scan reads `msg('key')` and `_('key')` literals across
   `v2/*.py`, `v2/api/`, `v2/services/` and `v2/frontend/src/`; keys assembled at runtime are
   skipped, since a static scan cannot resolve them. **This guard is live**: it covers the
-  keys the converted screens reference, so a typo'd key fails CI rather than shipping.
+  keys the converted screens reference, so a typo'd key fails CI rather than shipping;
+- a delivered translation would not be served (see *Markup in messages* below):
+  `test_every_delivered_translation_passes_the_markup_check`;
+- an English message uses markup outside the allowlist, or cannot be parsed:
+  `test_source_messages_use_only_allowlisted_markup`.
+
+`frontend/src/i18n/catalogue-parses.test.ts` fails CI if any message in any catalogue file
+makes banana-i18n throw.
 
 Add both the `en.json` value **and** the `qqq.json` line in the same change and the guards
 stay green.
@@ -212,18 +219,31 @@ stay green.
 ## Markup in messages
 
 Messages with inline HTML are rendered as HTML, in the SPA and in the error pages' hint, so
-markup is held to two rules:
+markup is held to two rules.
 
-- **English** may use only `<strong>`, `<em>`, `<code>`, and `<a href>` to a same-site path,
-  with no bare `<` that is not a tag: banana-i18n cannot parse one, and `msg()` shows the
-  message key in its place.
-- **A translation** may use only markup its English already uses: the same tags with the same
-  attributes and values, repeated or reordered as the language needs. `i18n.load()` does not
-  serve one that adds anything else — that message falls back to English — and
-  `test_every_delivered_translation_uses_only_its_englishs_markup` fails the change that
-  brings it.
+**English** may use only `<strong>`, `<em>`, `<code>`, and `<a href>` to a same-site path,
+and must parse in banana-i18n: no `<` that does not start a tag, tags that nest, and `{{`
+only for a closed PLURAL, GENDER or GRAMMAR. The allowlist is `_SOURCE_TAGS` /
+`_SOURCE_ATTRIBUTES` in `tests/test_i18n.py`, and widening it widens what every translation
+may use. An `<a>` written in a message renders only on the server-rendered error pages: the
+SPA's banana-i18n escapes it, so a link in the SPA is passed into the message as a parameter.
 
-The CI check guards what arrives **as a pull request**. A translation pushed straight to
-`main` is still refused at load, but nobody is told except the server log. When the
-translatewiki export is set up, ask for it to arrive as a pull request, or protect `main`,
-so the check runs before a translation is accepted rather than after.
+**A translation** is served only if it parses the same way and uses only markup its English
+already uses: the same tags with the same attributes and values, repeated or reordered as the
+language needs. `i18n.load()` does not serve one that fails — English is used for that
+message — nor any translation of a key English does not have, nor any translation at all if
+`en.json` did not load. The app logs what it refused at startup.
+
+### When a translatewiki export fails the check
+
+The failing test names the file, the key, and why: text that does not parse, or the tags and
+attributes it added.
+
+1. Fix the message on translatewiki.net, or ask on its talk page; the next export carries the
+   fix. Never hand-edit `<code>.json` — the next export overwrites it.
+2. Merging the export in the meantime is safe for readers, because `i18n.load()` serves English
+   for that one message. Merging does leave CI red until the fix arrives.
+
+The group config (`translatewiki-group.yaml`) expects exports as pull requests. The check can
+only stop a translation before it lands if `main` requires the CI checks to pass; until branch
+protection is on, a failing export can still be merged or pushed. Tracked in #390.

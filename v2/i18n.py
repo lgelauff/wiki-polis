@@ -13,11 +13,8 @@ still on screen under ``?uselang=qqx`` is a missed string).
 """
 
 import json
-import logging
 import os
 import re
-
-_log = logging.getLogger(__name__)
 
 _I18N_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'i18n')
 
@@ -75,16 +72,21 @@ def load(directory: str = _I18N_DIR) -> None:
                 k: v for k, v in data.items()
                 if k != '@metadata' and isinstance(v, str)
             }
-    source = _MESSAGES.get(SOURCE_LOCALE, {})
+    # Fail closed: a translation is compared with its English, so with no English, or for a
+    # key English does not have, nothing is served.
+    source = _MESSAGES.get(SOURCE_LOCALE)
+    _REFUSED.clear()
     for code, messages in _MESSAGES.items():
         if code == SOURCE_LOCALE:
             continue
-        refused = [k for k, v in messages.items() if k in source and not markup_is_permitted(v, source[k])]
+        refused = sorted(
+            key for key, text in messages.items()
+            if source is None or key not in source or not markup_is_permitted(text, source[key])
+        )
         for key in refused:
             del messages[key]
         if refused:
-            _log.warning('i18n: %s.json: not serving %d message(s) whose markup differs from '
-                         'English: %s', code, len(refused), ', '.join(sorted(refused)))
+            _REFUSED[code] = refused
 
 
 # ── Markup in translations ────────────────────────────────────────────────────────────
@@ -92,45 +94,110 @@ def load(directory: str = _I18N_DIR) -> None:
 # Some messages carry inline HTML, and both consumers render it as HTML: the SPA through
 # banana-i18n into innerHTML (richHtml), and error_pages.py's `hint`. English is ours;
 # translations are not — they arrive from translatewiki, typed by volunteers. banana-i18n
-# is not a sanitiser: a self-closing tag keeps its attributes (`<img src=x onerror=…/>`),
-# and inside a {{PLURAL:}}, {{GENDER:}} or {{GRAMMAR:}} branch any HTML passes through
-# untouched. A stray `<` makes it throw, which blanks the page it renders on.
+# is not a sanitiser: a self-closing tag written without a space before `/>` keeps its
+# attributes, and inside a {{PLURAL:}}, {{GENDER:}} or {{GRAMMAR:}} branch any HTML passes
+# through untouched. Text it cannot parse — a stray `<`, tags that do not nest, an unclosed
+# `{{` — makes it throw, and msg() then shows the message key instead of any text.
 #
-# So a translation may only use markup its English original already uses: the same tag
-# names with the same attributes and attribute values, as many times as it likes, in any
-# order (a language may need a bold number in each plural branch). Anything else is not
-# served, and English is used for that one message. tests/test_i18n.py applies the same
-# check to every delivered file, so a bad translation fails CI where it arrives rather than
-# being quietly replaced in production.
+# So a translation is served only if it parses the way banana-i18n needs, and uses only
+# markup its English original uses: the same tag names with the same attributes and
+# attribute values, as many times as it likes, in any order (a language may need a bold
+# number in each plural branch). Anything else is not served, and English is used for that
+# one message. With no English to compare against, no translation is served at all.
+# tests/test_i18n.py applies the same check to every delivered file, so a bad translation
+# fails CI where it arrives.
+#
+# The patterns are written so that no input makes them backtrack: a tag must start `<name`
+# or `</name` with no whitespace, and each part of an attribute list starts with a distinct
+# character.
 
-_TAG_RE = re.compile(r'<\s*(/?)\s*([A-Za-z][A-Za-z0-9-]*)((?:[^<>"\']|"[^"]*"|\'[^\']*\')*)>')
+_TAG_RE = re.compile(r'<(/?)([A-Za-z][A-Za-z0-9-]*)((?:[^<>"\']|"[^"]*"|\'[^\']*\')*)>')
 _ATTR_RE = re.compile(r'([^\s=/"\'<>]+)(?:\s*=\s*("[^"]*"|\'[^\']*\'|[^\s"\'>]+))?')
+_FUNCTION_RE = re.compile(r'\{\{([A-Za-z]+):')
+_FUNCTIONS = {'PLURAL', 'GENDER', 'GRAMMAR'}
+
+_REFUSED: dict[str, list[str]] = {}
+
+
+def _unquote(value: str) -> str:
+    """Remove the one pair of quotes around an attribute value, and nothing more."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
+        return value[1:-1]
+    return value
 
 
 def markup_signature(text: str) -> set[tuple] | None:
     """The distinct tags ``text`` uses, each with its attributes and their values.
 
-    ``None`` when the text holds a ``<`` that is not part of a tag, which banana-i18n
-    cannot parse — that is a defect in its own right, not a signature.
+    ``None`` when banana-i18n could not parse the text: a ``<`` that does not start a tag,
+    tags that do not nest, a self-closing tag, attributes on a closing tag, or ``{{`` that
+    does not open a closed PLURAL, GENDER or GRAMMAR.
     """
     tags = set()
+    open_tags: list[str] = []
     for match in _TAG_RE.finditer(text):
         closing, name, rest = match.groups()
+        name, rest = name.lower(), rest.rstrip()
+        if rest.endswith('/'):
+            return None
+        if closing:
+            if rest or not open_tags or open_tags.pop() != name:
+                return None
+        else:
+            open_tags.append(name)
         attrs = tuple(sorted(
-            (attr.lower(), (value or '').strip('"\''))
-            for attr, value in _ATTR_RE.findall(rest.rstrip().rstrip('/'))
+            (attr.lower(), _unquote(value or '')) for attr, value in _ATTR_RE.findall(rest)
         ))
-        tags.add((closing, name.lower(), attrs))
-    if '<' in _TAG_RE.sub('', text):
+        tags.add((closing, name, attrs))
+    if open_tags or '<' in _TAG_RE.sub('', text):
+        return None
+    functions = _FUNCTION_RE.findall(text)
+    if text.count('{{') != len(functions) or text.count('}}') != len(functions):
+        return None
+    if any(function.upper() not in _FUNCTIONS for function in functions):
         return None
     return tags
 
 
-def markup_is_permitted(translation: str, english: str) -> bool:
-    """True when ``translation`` uses no markup that ``english`` does not."""
+def _describe(tag: tuple) -> str:
+    closing, name, attrs = tag
+    rendered = ''.join(f' {attr}="{value}"' for attr, value in attrs)
+    return f'<{closing}{name}{rendered}>'
+
+
+def markup_problem(translation: str, english: str) -> str | None:
+    """Why ``translation`` may not be served in place of ``english``, or ``None`` if it may."""
     allowed = markup_signature(english)
+    if allowed is None:
+        return 'its English cannot be parsed, so there is nothing to compare it with'
     used = markup_signature(translation)
-    return allowed is not None and used is not None and used <= allowed
+    if used is None:
+        return ('it cannot be parsed: a "<" that does not start a tag, tags that do not '
+                'nest, a self-closing tag, or an unclosed or unknown {{...}}')
+    extra = used - allowed
+    if extra:
+        return 'it adds markup its English does not have: ' + ', '.join(sorted(map(_describe, extra)))
+    return None
+
+
+def markup_is_permitted(translation: str, english: str) -> bool:
+    """True when ``translation`` may be served in place of ``english``."""
+    return markup_problem(translation, english) is None
+
+
+def refused_translations() -> dict[str, list[str]]:
+    """{locale: [keys]} not served by the last load(), for the app to log once it can."""
+    return {code: list(keys) for code, keys in _REFUSED.items()}
+
+
+def log_refusals(logger) -> None:
+    """Report what load() refused. Called by the app after logging is configured."""
+    if SOURCE_LOCALE not in _MESSAGES and any(code != SOURCE_LOCALE for code in _MESSAGES):
+        logger.error('i18n: %s.json did not load, so no translation is being served',
+                     SOURCE_LOCALE)
+    for code, keys in _REFUSED.items():
+        logger.warning('i18n: %s.json: not serving %d message(s) that fail the markup '
+                       'check: %s', code, len(keys), ', '.join(keys))
 
 
 def has_locale(locale: str) -> bool:

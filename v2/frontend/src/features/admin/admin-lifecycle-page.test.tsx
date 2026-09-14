@@ -163,5 +163,5 @@ test('a message banana cannot parse degrades to its key, not to a blank page', a
   serve(dueShortly());
   renderConsole();
   expect(await screen.findByText('adminconv-countdown-lt1m')).toBeVisible();
+  expect(screen.getByText('Every statement has been moderated', {exact: false})).toBeVisible();
 });
-

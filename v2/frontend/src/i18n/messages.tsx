@@ -119,6 +119,9 @@ export function messagesQuery(locale: string, version: string) {
 export type Message = (key: string, ...params: (string | number)[]) => string;
 
 const MessageContext = createContext<Message | null>(null);
+
+/** Keys already reported as unparseable, so a message rendered on every frame logs once. */
+const unparseable = new Set<string>();
 const LocaleContext = createContext<string>('');
 
 export function MessageProvider({children, locale: override}: {children: ReactNode; locale?: string}) {
@@ -148,10 +151,16 @@ export function MessageProvider({children, locale: override}: {children: ReactNo
       const banana = new Banana(locale, {messages: {[locale]: messages ?? {}}});
       return (key, ...params) => {
         // banana parses each message for markup and throws on one it cannot parse, such as a
-        // bare `<`. msg() runs in render, so the key is returned instead of throwing.
+        // bare `<`. msg() runs in render, so the key is returned instead of throwing; the key,
+        // not a marker, because server-labels.ts treats `msg(key) === key` as "no message" and
+        // falls back to the server's label.
         try {
           return banana.i18n(key, ...params);
-        } catch {
+        } catch (error) {
+          if (!unparseable.has(key)) {
+            unparseable.add(key);
+            console.error(`Message "${key}" could not be parsed and is shown as its key.`, error);
+          }
           return key;
         }
       };
