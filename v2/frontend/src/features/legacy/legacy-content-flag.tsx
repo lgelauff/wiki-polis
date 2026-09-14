@@ -5,6 +5,8 @@ import type {components} from '../../api/schema';
 import {createContentFlag} from '../../api/queries';
 import {useMessage} from '../../i18n/messages';
 
+type ContentType = components['schemas']['CreateContentFlagRequest']['contentType'];
+
 export function LegacyContentFlag({slug, target, csrfToken, corner = false}: {
   slug: string;
   target: Pick<components['schemas']['CreateContentFlagRequest'], 'contentType' | 'targetId'>;
@@ -16,6 +18,11 @@ export function LegacyContentFlag({slug, target, csrfToken, corner = false}: {
   const fieldId = useId().replaceAll(':', '');
   const [category, setCategory] = useState<'personal_attack' | 'privacy' | 'off_topic' | 'other'>('personal_attack');
   const [detail, setDetail] = useState('');
+  // Keyed by every content type, so a new one fails to compile until it has its own label.
+  const triggerLabel: Record<ContentType, string> = {
+    statement: msg('conv-flag-aria-statement'),
+    argument: msg('conv-flag-aria-argument'),
+  };
   const mutation = useMutation({
     mutationFn: () => createContentFlag(slug, {
       ...target, category,
@@ -33,7 +40,7 @@ export function LegacyContentFlag({slug, target, csrfToken, corner = false}: {
   }, [mutation.data, mutation.reset]);
   return (
     <details ref={detailsRef} className={`content-flag${corner ? ' content-flag--corner' : ''}`}>
-      <summary className="content-flag-trigger" aria-label={target.contentType === 'argument' ? msg('conv-flag-aria-argument') : msg('conv-flag-aria-statement')}>
+      <summary className="content-flag-trigger" aria-label={triggerLabel[target.contentType]}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 21V4a1 1 0 0 1 1-1h11.5a1 1 0 0 1 .8 1.6L14 9l3.3 4.4a1 1 0 0 1-.8 1.6H5" /></svg>
       </summary>
       <form hidden={Boolean(mutation.data)} onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>

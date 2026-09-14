@@ -20,6 +20,9 @@ type Side = components['schemas']['ArgumentSide'];
 type ArgumentItem = components['schemas']['ArgumentItem'];
 type SideName = 'pro' | 'con';
 
+/** The most characters an argument may have; the server refuses a longer one. */
+export const ARGUMENT_MAX_CHARACTERS = 280;
+
 const sideCopy = {
   pro: {sign: '+', className: 'for'},
   con: {sign: '−', className: 'against'},
@@ -30,16 +33,14 @@ const sideCopy = {
  *  per side so the key-existence guard can see every key. */
 function sideMessages(msg: Message, side: SideName) {
   return side === 'pro' ? {
-    label: msg('conv-arg-col-for'),
     add: msg('conv-arg-add-for'),
     composerLabel: msg('conv-arg-composer-label-for'),
-    placeholder: msg('conv-arg-placeholder-for'),
+    placeholder: msg('conv-arg-placeholder-for', ARGUMENT_MAX_CHARACTERS),
     added: msg('conv-arg-added-for'),
   } : {
-    label: msg('conv-arg-col-against'),
     add: msg('conv-arg-add-against'),
     composerLabel: msg('conv-arg-composer-label-against'),
-    placeholder: msg('conv-arg-placeholder-against'),
+    placeholder: msg('conv-arg-placeholder-against', ARGUMENT_MAX_CHARACTERS),
     added: msg('conv-arg-added-against'),
   };
 }
@@ -103,9 +104,9 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
           <span className="contribute-glyph filled">{copy.sign}</span>
           <span className="contribute-composer-label" id={`contribute-label-${featuredId}-${side}`}>{text.composerLabel}</span>
           <InternalLink className="contribute-help-link" href="/help/arguments" target="_blank" rel="noopener">{msg('conv-arg-tips')}<span className="sr-only">{msg('common-opens-in-new-tab')}</span></InternalLink>
-          <span className="contribute-charcount"><span className="cc-len">{body.length}</span> / 280</span>
+          <span className="contribute-charcount"><span className="cc-len">{body.length}</span> / {ARGUMENT_MAX_CHARACTERS}</span>
         </div>
-        <textarea ref={textareaRef} className="contribute-textarea" maxLength={280} rows={3} aria-labelledby={`contribute-label-${featuredId}-${side}`} placeholder={text.placeholder} value={body} onChange={(event) => setBody(event.target.value)} />
+        <textarea ref={textareaRef} className="contribute-textarea" maxLength={ARGUMENT_MAX_CHARACTERS} rows={3} aria-labelledby={`contribute-label-${featuredId}-${side}`} placeholder={text.placeholder} value={body} onChange={(event) => setBody(event.target.value)} />
         <div className="contribute-actions">
           <button type="button" className="btn-secondary contribute-skip-btn" disabled={skip.isPending} onClick={() => skip.mutate()}>{msg('conv-arg-nothing')}</button>
           <button type="submit" className="btn-primary contribute-submit-btn" disabled={!body.length || submit.isPending}>{msg('conv-arg-submit')}</button>
@@ -212,7 +213,7 @@ function ArgumentColumn({mapping, slug, csrfToken, card, side}: {
   const voteReady = value.prioritization.available;
   return (
     <div className={`at-col at-col--${copy.className}`}>
-      <div className="at-col-head"><span className="at-col-sign" aria-hidden="true">{copy.sign}</span><span className="at-col-label">{sideMessages(msg, side).label}</span><span className="at-col-count">{value.arguments.length}</span></div>
+      <div className="at-col-head"><span className="at-col-sign" aria-hidden="true">{copy.sign}</span><span className="at-col-label">{side === 'pro' ? msg('conv-arg-col-for') : msg('conv-arg-col-against')}</span><span className="at-col-count">{value.arguments.length}</span></div>
       <Contribution slug={slug} csrfToken={csrfToken} featuredId={card.id} side={side} value={value.contribution} />
       {!gate && value.arguments.length === 0 && <p className="at-col-note">{msg('conv-arg-locked-note')}</p>}
       {value.arguments.map((item) => <ArgumentCard key={item.id} mapping={mapping} slug={slug} csrfToken={csrfToken} side={side} item={item} prioritization={value.prioritization} />)}

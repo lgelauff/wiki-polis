@@ -6,6 +6,7 @@ import {expect, test} from 'vitest';
 
 import type {components} from '../../api/schema';
 import {App} from '../../app';
+import {ARGUMENT_MAX_CHARACTERS} from './argument-mapping-panel';
 import {createQueryClient} from '../../query-client';
 import {renderAsQqx, untranslatedCopy} from '../../test/i18n';
 import {server} from '../../test/server';
@@ -35,8 +36,8 @@ function side(status: 'pending' | 'submitted' | 'skipped', prioritization: Parti
 
 /** Three statements, one per state a statement can be in:
  *  - Statement 1: both sides handled, not finished. Its for side can be prioritised (one
- *    argument the reader wrote and picked, one hidden by a moderator); its against side is
- *    one argument short of an unlock threshold of 1.
+ *    argument the reader wrote and picked, one hidden by a moderator); its against side has
+ *    no arguments yet, and prioritising there unlocks only with more than its budget of 1.
  *  - Statement 2: only the for side handled.
  *  - Statement 3: complete.
  *  The for side's budget (2) and the against side's (1) differ, so the four step-2 numbers
@@ -72,6 +73,16 @@ function mapping(overrides: Partial<Mapping> = {}): Mapping {
     links: {self: '/api/v1/conversations/community-strategy/arguments', about: '/c/community-strategy/about', conversation: '/c/community-strategy'},
     ...overrides,
   };
+}
+
+/** Every statement finished, as the server reports it once progress is all done. */
+function doneMapping(): Mapping {
+  const data = mapping({progress: {completed: 3, total: 3, allDone: true, currentFeaturedStatementId: null}});
+  data.featuredStatements = data.featuredStatements.map((card) => ({
+    ...card, contributionsComplete: true, complete: true,
+    sides: {pro: side('skipped', {complete: true}), con: side('skipped', {complete: true})},
+  }));
+  return data;
 }
 
 /** Statement 1's for side below its threshold too (two arguments of three needed). */
@@ -134,7 +145,7 @@ test("under qqx, the for side's threshold note and the finished tab carry no Eng
 
   // Once every statement is done, each panel header becomes a toggle with an expand and a
   // collapse name.
-  serve(mapping({progress: {completed: 3, total: 3, allDone: true, currentFeaturedStatementId: null}}));
+  serve(doneMapping());
   renderPanel();
   await screen.findByText(STATEMENTS[0]!);
   expect(untranslatedCopy([panel()], CONTENT)).toEqual([]);
@@ -205,4 +216,19 @@ test('progress circles and flag icons have readable names', async () => {
   const first = document.getElementById('fs-8')!;
   expect(first.querySelector('.content-flag--corner summary')).toHaveAttribute('aria-label', 'Flag this statement for moderator review');
   expect(screen.getByText(BODIES[1]!).closest('.at-card')!.querySelector('summary')).toHaveAttribute('aria-label', 'Flag this argument for moderator review');
+});
+
+test('the argument box names the character limit it enforces', async () => {
+  serve(mapping());
+  renderAsQqx();
+  renderPanel();
+  await screen.findByText(STATEMENTS[0]!);
+
+  // Catches the limit written into the placeholder text, or not passed to it: qqx then shows
+  // no value, and every translation would keep the number after the limit changes.
+  for (const [side, key] of [['pro', 'conv-arg-placeholder-for'], ['con', 'conv-arg-placeholder-against']] as const) {
+    const box = document.querySelector<HTMLTextAreaElement>(`#fs-9 .contribute-wrapper[data-side="${side}"] textarea`)!;
+    expect(box).toHaveAttribute('placeholder', `(${key}: ${ARGUMENT_MAX_CHARACTERS})`);
+    expect(box.maxLength).toBe(ARGUMENT_MAX_CHARACTERS);
+  }
 });
