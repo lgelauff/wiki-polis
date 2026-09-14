@@ -342,9 +342,12 @@ export const handlers = [
     ({params}) => {
       const locale = String(params.locale);
       if (locale === 'qqx') {
-        return HttpResponse.json(Object.fromEntries(
-          Object.keys(testMessages).map((key) => [key, `(${key})`]),
-        ));
+        // The server's qqx: (key), or (key: $1, $2) for a message with parameters, so a value
+        // passed into a message stays visible to untranslatedCopy().
+        return HttpResponse.json(Object.fromEntries(Object.entries(testMessages).map(([key, text]) => {
+          const count = Math.max(0, ...[...text.matchAll(/\$(\d+)/g)].map((match) => Number(match[1])));
+          return [key, count ? `(${key}: ${Array.from({length: count}, (_, index) => `$${index + 1}`).join(', ')})` : `(${key})`];
+        })));
       }
       return HttpResponse.json(testMessages);
     },

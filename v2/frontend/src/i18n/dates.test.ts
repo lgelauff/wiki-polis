@@ -25,3 +25,8 @@ test('a calendar date is taken in UTC, so a late close stays on its own day', ()
 test('a tag Intl rejects degrades to the source language instead of throwing in render', () => {
   expect(formatDate('not a locale!', '2026-09-01T10:00:00Z')).toBe('1 Sept 2026');
 });
+
+test('a value that is not a date is shown as it came, not thrown on in render', () => {
+  expect(formatDate('en', 'not-a-date')).toBe('not-a-date');
+  expect(formatDateTime('nl', '')).toBe('');
+});

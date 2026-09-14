@@ -18,7 +18,17 @@ test('two element parameters keep their own identities when reordered', () => {
   expect(container.innerHTML).toBe('<p><i>two</i> before <b>one</b></p>');
 });
 
-test('a qqx message, which drops its parameters, renders as the bare key', () => {
-  const {container} = render(<p>{withNodes('(conv-p6-done-see)', <a href="/x">link</a>)}</p>);
-  expect(container.textContent).toBe('(conv-p6-done-see)');
+test('a qqx message shows its element parameter inside the parentheses', () => {
+  // qqx renders (key: $1), so the element is substituted like any other parameter.
+  const banana = new Banana('qqx', {messages: {qqx: {k: '(conv-p6-done-see: $1)'}}});
+  const {container} = render(<p>{withNodes(banana.i18n('k', nodeSlot(0)), <a href="/x">link</a>)}</p>);
+  expect(container.textContent).toBe('(conv-p6-done-see: link)');
+});
+
+test('an element whose slot the text lacks is appended, not dropped', () => {
+  // Catches a translation that omitted $1, or a missing catalogue returning the bare key,
+  // silently removing the link or name the sentence is there to show.
+  const {container} = render(<p>{withNodes('conv-p6-done-see', <a href="/x">link</a>)}</p>);
+  expect(container.querySelector('a')?.textContent).toBe('link');
+  expect(container.textContent).toBe('conv-p6-done-see link');
 });

@@ -14,7 +14,7 @@ the remainder is wired in is in [`../plan_i18n.md`](../plan_i18n.md) stage 2.
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (906 keys, 100% documented) | ✅ committed |
+| `en.json` + `qqq.json` (904 keys, 100% documented) | ✅ committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
@@ -127,11 +127,17 @@ A missing key renders loudly as `⧼key⧽`. Only the wired surfaces render as k
 today; everywhere else is still un-externalised, so this remains a tool for the conversion
 phases rather than a passing check.
 
+`qqx` shows a message's parameters too, as MediaWiki does: `(key: a, b)`. So English passed
+*into* a message — a link label, a phase name — is as visible as English written around one.
+
 The same check runs in the frontend tests. `renderAsQqx()` and `untranslatedCopy()` in
 `frontend/src/test/i18n.ts` render a surface under `qqx` and list any text or readable
-attribute still carrying a word once keys and fixture content are removed. A test that
-asserts English cannot prove a surface is wired — the test catalogue is the real `en.json`,
-so a literal and `msg()` of the same words render identically — and this one can.
+attribute still carrying a word once message keys and fixture content are removed. A test
+that asserts English cannot prove a surface is wired — the test catalogue is the real
+`en.json`, so a literal and `msg()` of the same words render identically — and this one can.
+It cannot see a *wrong* value in the right place (a swapped parameter, a server label used
+instead of its identifier's message): those need an English test whose fixture differs from
+the catalogue.
 
 ## Scope — the interface / content split
 

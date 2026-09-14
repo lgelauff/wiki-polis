@@ -163,3 +163,22 @@ test('a saved vote is confirmed in the past tense, while the buttons keep the pr
   expect(await screen.findByText('Disagreed')).toBeVisible();
   expect(screen.getAllByRole('button', {name: 'Disagree'})[0]).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('a pass is confirmed as "Passed"', async () => {
+  renderPanel(workspace(), [unanswered, answered]);
+  await screen.findByText(STATEMENT);
+
+  // Catches the pass branch falling back to another choice's message.
+  fireEvent.click(screen.getAllByRole('button', {name: 'Pass'})[0]!);
+  expect(await screen.findByText('Passed')).toBeVisible();
+});
+
+test('the card navigation is named for the statements it moves between', async () => {
+  renderPanel(workspace(), [unanswered, answered]);
+  await screen.findByText(STATEMENT);
+
+  // Catches the arrows being read out as the buttons' names.
+  expect(screen.getAllByRole('button', {name: 'Next statement'})[0]).toHaveTextContent('Next →');
+  expect(screen.getAllByRole('button', {name: 'Previous statement'})[0]).toHaveTextContent('← Previous');
+});
+
