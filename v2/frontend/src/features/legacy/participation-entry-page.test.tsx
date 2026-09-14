@@ -49,7 +49,7 @@ test('the licence sentence keeps its link inside one message', async () => {
 
 test('the identity-reveal window reads as one sentence with both numbers', async () => {
   renderJoin();
-  // accept-privacy-window-a/-b/-c were "Between", "and", and the rest, with the two numbers
+  // accept-privacy-window-a/-b/-c (now accept-privacy-reveal-window) were "Between", "and", and the rest, with the two numbers
   // interpolated between them. A translator could not reorder that.
   const details = await screen.findByText(testMessages['accept-privacy-details-summary']!);
   const body = details.closest('details')?.textContent ?? '';

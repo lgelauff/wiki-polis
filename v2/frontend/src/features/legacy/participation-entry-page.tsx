@@ -125,7 +125,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
     <LegacyShell headerCrumb={(
       <span className="header-crumb">
         <span className="header-crumb-sep">/</span>
-        <span>join</span>
+        <span>{msg('accept-crumb')}</span>
       </span>
     )}>
       <div className="container" style={{maxWidth: 700}}>
@@ -135,7 +135,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
             <ellipse cx="12" cy="12" rx="9" ry="3.5" />
             <ellipse cx="12" cy="12" rx="3.5" ry="9" />
           </svg>
-          joining consultation
+          {msg('accept-joining')}
         </div>
 
         <h1 id="accept-title" style={{fontSize: 30, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.02em', lineHeight: 1.2, margin: 0}}>
@@ -145,7 +145,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
           <div style={{fontSize: 15, lineHeight: 1.6, color: 'var(--body)', marginTop: 14}} dangerouslySetInnerHTML={{__html: data.conversation.descriptionHtml}} />
         )}
         <p style={{fontSize: 14, color: 'var(--muted)', marginTop: 18, marginBottom: 0}}>
-          Pick the name you will use in this consultation.
+          {msg('accept-pick-name')}
         </p>
 
         <form id="accept-form" aria-labelledby="accept-title" aria-describedby={`pseudonym-help accept-privacy-note accept-licence-note${formError ? ' accept-error' : ''}`} onSubmit={submit}>
@@ -154,11 +154,11 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
             <div className="pseudonym-card-header">
               <div className="pseudonym-card-title" id="pseudonym-title">{msg('accept-choose-pseudonym')}</div>
               <button type="button" className="reroll-btn" aria-controls="pseudonym-options" aria-label={msg('accept-reroll-aria')} disabled={reroll.isPending} onClick={() => reroll.mutate()}>
-                {reroll.isPending ? '↻ loading…' : '↻ reroll'}
+                {reroll.isPending ? msg('accept-reroll-loading') : msg('accept-reroll')}
               </button>
             </div>
             <div className="pseudonym-card-sub" id="pseudonym-help">
-              Other participants see this name next to your votes and arguments. Your Wikimedia username stays internal unless you reveal it after the consultation closes.
+              {msg('accept-pseudonym-help')}
             </div>
             <p className="sr-only" id="pseudonym-status" role="status" aria-live="polite">{status}</p>
             <div className="pseudonym-options" id="pseudonym-options" aria-busy={reroll.isPending ? 'true' : 'false'}>
@@ -177,7 +177,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
           <div className="accept-section" role="group" aria-labelledby="notification-title" aria-describedby="notification-help">
             <h2 id="notification-title">{msg('accept-notify-heading')}</h2>
             <p id="notification-help" style={{color: 'var(--muted)', fontSize: 13, marginBottom: '.75rem'}}>
-              Optional best-effort updates when the consultation closes or results are published.
+              {msg('accept-notify-help')}
             </p>
             {data.emailable ? (
               <label className="checkbox-label">
@@ -204,9 +204,8 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
               <div className="privacy-body" id="privacy-details-body">
                 <p>{msg('accept-privacy-body1')}</p>
                 <p>{msg('accept-privacy-body2')}</p>
-                <p dangerouslySetInnerHTML={richHtml(msg('accept-privacy-window-a',
-                  `<strong>${escapeHtml(String(data.reveal.cooldownDays))}</strong>`,
-                  `<strong>${escapeHtml(String(data.reveal.windowEndDays))} days</strong>`))} />
+                <p dangerouslySetInnerHTML={richHtml(msg('accept-privacy-reveal-window',
+                  data.reveal.cooldownDays, data.reveal.windowEndDays))} />
               </div>
             </details>
           </div>
@@ -227,9 +226,8 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
           </label>
           {formError && <p className="error" id="accept-error" role="alert">{formError}</p>}
           <div style={{display: 'flex', alignItems: 'center', gap: 16, marginTop: 22}}>
-            <button type="submit" className="participate-btn" id="submit-btn" disabled={join.isPending}>
-              Join consultation as <span id="chosen-name">{pseudonym}</span> →
-            </button>
+            <button type="submit" className="participate-btn" id="submit-btn" disabled={join.isPending}
+              dangerouslySetInnerHTML={richHtml(msg('accept-submit', `<span id="chosen-name">${escapeHtml(pseudonym)}</span>`))} />
             <InternalLink href={data.links.home} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>{msg('accept-not-now')}</InternalLink>
           </div>
         </form>
