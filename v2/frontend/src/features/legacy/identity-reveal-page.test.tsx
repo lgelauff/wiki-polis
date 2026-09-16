@@ -72,11 +72,11 @@ test('the open window names the username and the pseudonym in the right places',
   // Catches the two identities swapping places. Both are plain strings of the same kind, so
   // a swapped parameter would still read as a sentence -- and would misstate what is published.
   expect(heading).toHaveTextContent(`Permanently link ${PSEUDONYM} to your Wikimedia username?`);
-  expect(screen.getByText(/You may optionally publish that/)).toHaveTextContent(
-    `You may optionally publish that ${USERNAME} voted as ${PSEUDONYM} in this consultation process. Other pseudonyms you used elsewhere are unaffected.`);
+  expect(screen.getByText(/You can publish that/)).toHaveTextContent(
+    `You can publish that ${USERNAME} expressed opinions as ${PSEUDONYM} in this consultation process. Other pseudonyms you used elsewhere are not affected.`);
   const warning = screen.getByText('Irreversible').closest<HTMLElement>('.close-warning')!;
   expect(within(warning).getAllByRole('listitem')[0]).toHaveTextContent(
-    `Your Wikimedia username (${USERNAME}) will be permanently associated with your pseudonym ${PSEUDONYM} in exported records for this consultation.`);
+    `Your Wikimedia username (${USERNAME}) will be permanently linked to your pseudonym ${PSEUDONYM} in the exported records of this consultation.`);
   expect(screen.getByRole('checkbox')).toBeRequired();
   expect(screen.getByRole('checkbox').closest('label')).toHaveTextContent(
     `I understand this is irreversible. Link my Wikimedia username (${USERNAME}) to my pseudonym (${PSEUDONYM}).`);
@@ -90,21 +90,21 @@ test('the timeline counts its own days and the deadline sentence carries the cou
   // length being computed between the wrong two dates: the cooldown is 30 days, the window 45.
   const steps = [...document.querySelectorAll('.reveal-what')].map((node) => node.firstChild?.textContent);
   expect(steps).toEqual([
-    'Closed — linking stays sealed for 30 days',
-    'Window opens — 45 days to optionally link your Wikimedia username',
-    'Window closes — records stay pseudonymous permanently',
+    'Closed — linking is not possible for 30 days',
+    'Linking opens — 45 days to link your Wikimedia username if you want to',
+    'Linking closes — after this, you can no longer link your username to your opinions',
   ]);
-  expect(document.querySelector('.reveal-deadline')).toHaveTextContent('Window closes in 27d 02:00:00 — linking is permanent and cannot be undone.');
+  expect(document.querySelector('.reveal-deadline')).toHaveTextContent('Linking closes in 27d 02:00:00 — once you link, it is permanent and cannot be undone.');
 });
 
 test('before the window opens, the page gives the opening date inside the sentence', async () => {
   vi.setSystemTime(new Date('2026-06-20T10:00:00Z'));
   renderReveal('pending');
-  await screen.findByRole('heading', {name: 'Reveal window not yet open'});
+  await screen.findByRole('heading', {name: 'Linking has not opened yet'});
 
   // Catches the date leaving the sentence, or the countdown counting to the wrong boundary.
-  expect(screen.getByText(/has not opened yet/)).toHaveTextContent('The identity reveal window has not opened yet. It will open on 1 Jul 2026.');
-  expect(document.querySelector('.reveal-deadline')).toHaveTextContent('Reveal window opens in 11d 02:00:00.');
+  expect(screen.getByText(/You cannot link your Wikimedia username yet/)).toHaveTextContent('You cannot link your Wikimedia username yet. You can do that from 1 Jul 2026.');
+  expect(document.querySelector('.reveal-deadline')).toHaveTextContent('Linking opens in 11d 02:00:00.');
 });
 
 test('the countdown is one message, so a translation can write days its own way', async () => {
@@ -137,7 +137,7 @@ test('when the window closes on an open page, the countdown stops and the page r
   vi.setSystemTime(new Date('2026-08-15T12:00:01Z'));
   // Catches the countdown running past zero ("closes in now") and the page keeping a live
   // submit button for a window that has closed.
-  expect(await screen.findByRole('heading', {name: 'Reveal window closed'}, {timeout: 2000})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Linking has closed'}, {timeout: 2000})).toBeVisible();
   expect(document.querySelector('.reveal-deadline')).toBeNull();
   expect(screen.queryByRole('button', {name: 'Yes, link my identity'})).toBeNull();
 });
@@ -156,7 +156,7 @@ test('a refused reveal says nothing was linked', async () => {
   renderReveal('open');
 
   // Catches a failed submit leaving the page silent, with the button enabled again.
-  expect(await submitReveal()).toHaveTextContent('Your identity was not linked: the reveal window is no longer open.');
+  expect(await submitReveal()).toHaveTextContent('Your identity was not linked, because linking is not open.');
 });
 
 test('a reveal that fails in transit does not claim the identity is unlinked', async () => {

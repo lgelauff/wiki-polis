@@ -74,6 +74,6 @@ test('groups are numbered from the catalogue, and the sample warning is one sent
   expect(screen.getByText('2 opinion groups found')).toBeVisible();
   // Catches the count falling out of the sentence, or the plural ignoring it.
   expect(document.querySelector('.notice-low-n')?.textContent)
-    .toBe('Small sample: these results are based on 1 participant. Opinion groups detected from small samples can shift substantially as more people participate — treat group boundaries with caution.');
+    .toBe('Small sample: these results are based on 1 participant. Opinion groups from small samples can change a lot as more people take part, so read the groups with care.');
   expect(screen.getByText('"Shared maintenance matters."')).toBeVisible();
 });

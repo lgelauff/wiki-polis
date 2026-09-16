@@ -107,15 +107,15 @@ test('renders the voting workspace from the catalogue English', async () => {
 
   expect(await screen.findByRole('button', {name: 'Agree'}, {timeout: 10_000})).toBeVisible();
   expect(screen.getByRole('button', {name: 'Disagree'})).toBeVisible();
-  expect(screen.getByRole('progressbar', {name: 'Statements voted'}))
-    .toHaveAttribute('aria-valuetext', '3 of 12 statements voted');
-  expect(screen.getByText('Unlocks after 1 more vote')).toBeVisible();
-  expect(screen.getByText('After you vote, you can…')).toBeVisible();
+  expect(screen.getByRole('progressbar', {name: 'Statements you have responded to'}))
+    .toHaveAttribute('aria-valuetext', 'You have responded to 3 of 12 statements');
+  expect(screen.getByText('Unlocks after 1 more response')).toBeVisible();
+  expect(screen.getByText('After you respond, you can…')).toBeVisible();
   expect(screen.getByRole('navigation', {name: 'Conversation context'})).toBeVisible();
   // Inline markup in a catalogue message stays markup rather than being escaped into text.
   const warning = screen.getByRole('alert');
   expect(within(warning).getByText('Live consultation.').tagName).toBe('STRONG');
-  expect(warning).toHaveTextContent('These ballots are real — your votes here count.');
+  expect(warning).toHaveTextContent('These are active consultation processes with real responses.');
   // A sentence whose two values are an interface label and a <time> element.
   expect(document.querySelector('.output-context p')?.textContent)
     .toBe('Next: Arguments on 2 Aug 2026, 09:30.');
@@ -136,17 +136,18 @@ test('renders the closed workspace from parameterised sentences', async () => {
   await screen.findByText(/This consultation closed on/, {}, {timeout: 10_000});
   // Each of these was a fragment joined around a value in JSX; they are single messages now.
   expect(document.querySelector('.landing-section > .muted')?.textContent).toBe(
-    'This consultation closed on 1 Jul 2026. Your votes were recorded under your pseudonym;'
-    + ' for a limited time you may optionally and permanently link your Wikimedia username to it.',
+    'This consultation closed on 1 Jul 2026. Your responses were recorded under your pseudonym,'
+    + ' and for a limited time you can choose to link your Wikimedia username to it.'
+    + ' Linking cannot be undone.',
   );
   expect(document.querySelector('.reveal-callout-text')?.textContent).toBe(
-    'The identity reveal window is open. Your participation is recorded under pseudonym quiet-otter.',
+    'Your participation is recorded under pseudonym quiet-otter, and you can now link your Wikimedia username to it.',
   );
   expect(document.querySelector('.reveal-deadline')?.textContent)
-    .toMatch(/^Window closes in .+ — linking is permanent and cannot be undone\.$/);
+    .toMatch(/^Linking closes in .+ — once you link, it is permanent and cannot be undone\.$/);
   // The counts either side of the countdown drive their own plurals independently.
-  expect(screen.getByText(/Closed — linking stays sealed for 31 days/)).toBeVisible();
-  expect(screen.getByText(/Window opens — 1 day to optionally link/)).toBeVisible();
+  expect(screen.getByText(/Closed — linking is not possible for 31 days/)).toBeVisible();
+  expect(screen.getByText(/Linking opens — 1 day to link your Wikimedia username/)).toBeVisible();
   expect(screen.getByText('quiet-otter').tagName).toBe('STRONG');
 });
 
@@ -155,7 +156,7 @@ test('a participant who has linked their identity sees no countdown', async () =
   renderWorkspace();
 
   await screen.findByText(/You linked your identity/, {}, {timeout: 10_000});
-  // Catches a "Window closes in …" line under the confirmation. The window's end no longer
+  // Catches a "Linking closes in …" line under the confirmation. The window's end no longer
   // concerns someone who has linked, even while a closing date is still sent.
   expect(document.querySelector('.reveal-deadline')).toBeNull();
 });
@@ -188,12 +189,12 @@ test('renders workspace text from the catalogue, not from source literals', asyn
     .toBe('Then Arguments at 2 Aug 2026, 09:30, catalogue-side.');
   expect(document.title).toBe('Workspace for Community strategy');
   expect(screen.queryByRole('button', {name: 'Agree'})).not.toBeInTheDocument();
-  expect(screen.queryByText('Unlocks after 1 more vote')).not.toBeInTheDocument();
+  expect(screen.queryByText('Unlocks after 1 more response')).not.toBeInTheDocument();
   expect(screen.queryByText('Live consultation.')).not.toBeInTheDocument();
 });
 
 test('keeps the real-space and demo-space ballot warnings in separate messages', async () => {
-  // The one string on this screen that tells a participant whether their vote counts.
+  // The one string on this screen that tells a participant whether their responses count.
   // Swapping the demo message must not be able to change what the real one says.
   server.use(http.get(I18N_URL, () => HttpResponse.json({
     ...testMessages,
@@ -204,6 +205,6 @@ test('keeps the real-space and demo-space ballot warnings in separate messages',
   renderWorkspace();
 
   const warning = await screen.findByRole('alert', {}, {timeout: 10_000});
-  expect(warning).toHaveTextContent('Live consultation. These ballots are real — your votes here count.');
+  expect(warning).toHaveTextContent('Live consultation. These are active consultation processes with real responses.');
   expect(warning).not.toHaveTextContent('CHANGED DEMO');
 });
