@@ -86,25 +86,25 @@ test('the timeline counts its own days and the deadline sentence carries the cou
   renderReveal('open');
   await screen.findByRole('heading', {level: 1});
 
-  // Catches the day counts or the countdown falling out of their sentences, or the window's
-  // length being computed between the wrong two dates: the cooldown is 30 days, the window 45.
+  // Catches the day counts or the countdown falling out of their sentences, or a period's
+  // length being computed between the wrong two dates: the wait is 30 days, the linking period 45.
   const steps = [...document.querySelectorAll('.reveal-what')].map((node) => node.firstChild?.textContent);
   expect(steps).toEqual([
-    'Closed — linking is not possible for 30 days',
-    'Linking opens — 45 days to link your Wikimedia username if you want to',
-    'Linking closes — after this, you can no longer link your username to your opinions',
+    'Closed — you cannot link your username for 30 days',
+    'Opens — 45 days to link your Wikimedia username if you want to',
+    'Closes — after this, you can no longer link your username to your opinions',
   ]);
-  expect(document.querySelector('.reveal-deadline')).toHaveTextContent('Linking closes in 27d 02:00:00 — once you link, it is permanent and cannot be undone.');
+  expect(document.querySelector('.reveal-deadline')).toHaveTextContent('Username linking closes in 27d 02:00:00 — once you link, it is permanent and cannot be undone.');
 });
 
 test('before the window opens, the page gives the opening date inside the sentence', async () => {
   vi.setSystemTime(new Date('2026-06-20T10:00:00Z'));
   renderReveal('pending');
-  await screen.findByRole('heading', {name: 'Linking has not opened yet'});
+  await screen.findByRole('heading', {name: 'Username linking has not opened yet'});
 
   // Catches the date leaving the sentence, or the countdown counting to the wrong boundary.
   expect(screen.getByText(/You cannot link your Wikimedia username yet/)).toHaveTextContent('You cannot link your Wikimedia username yet. You can do that from 1 Jul 2026.');
-  expect(document.querySelector('.reveal-deadline')).toHaveTextContent('Linking opens in 11d 02:00:00.');
+  expect(document.querySelector('.reveal-deadline')).toHaveTextContent('Username linking opens in 11d 02:00:00.');
 });
 
 test('the countdown is one message, so a translation can write days its own way', async () => {
@@ -137,7 +137,7 @@ test('when the window closes on an open page, the countdown stops and the page r
   vi.setSystemTime(new Date('2026-08-15T12:00:01Z'));
   // Catches the countdown running past zero ("closes in now") and the page keeping a live
   // submit button for a window that has closed.
-  expect(await screen.findByRole('heading', {name: 'Linking has closed'}, {timeout: 2000})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Username linking has closed'}, {timeout: 2000})).toBeVisible();
   expect(document.querySelector('.reveal-deadline')).toBeNull();
   expect(screen.queryByRole('button', {name: 'Yes, link my identity'})).toBeNull();
 });
@@ -156,7 +156,7 @@ test('a refused reveal says nothing was linked', async () => {
   renderReveal('open');
 
   // Catches a failed submit leaving the page silent, with the button enabled again.
-  expect(await submitReveal()).toHaveTextContent('Your identity was not linked, because linking is not open.');
+  expect(await submitReveal()).toHaveTextContent('Your Wikimedia username was not linked, because linking is not open.');
 });
 
 test('a reveal that fails in transit does not claim the identity is unlinked', async () => {

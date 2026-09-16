@@ -137,9 +137,9 @@ test('a closed card shows its month, and the reveal chips their days', async () 
   await screen.findByRole('heading', {name: 'Closed'});
   // 23:30 UTC on 31 August is still August, whatever zone the reader is in.
   expect(screen.getByText('Aug 2026')).toBeVisible();
-  expect(screen.getByText('Linking closes in 3d')).toBeVisible();
-  expect(screen.getByText('Linking closes today')).toBeVisible();
-  expect(screen.getByText('Linking opens in 12d')).toBeVisible();
+  expect(screen.getByText('Username linking closes in 3d')).toBeVisible();
+  expect(screen.getByText('Username linking closes today')).toBeVisible();
+  expect(screen.getByText('Username linking opens in 12d')).toBeVisible();
   expect(screen.getByText('paused')).toBeVisible();
   // An inactive consultation that is not paused is between phases.
   expect(screen.getByText('waiting')).toBeVisible();

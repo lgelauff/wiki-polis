@@ -144,10 +144,10 @@ test('renders the closed workspace from parameterised sentences', async () => {
     'Your participation is recorded under pseudonym quiet-otter, and you can now link your Wikimedia username to it.',
   );
   expect(document.querySelector('.reveal-deadline')?.textContent)
-    .toMatch(/^Linking closes in .+ — once you link, it is permanent and cannot be undone\.$/);
+    .toMatch(/^Username linking closes in .+ — once you link, it is permanent and cannot be undone\.$/);
   // The counts either side of the countdown drive their own plurals independently.
-  expect(screen.getByText(/Closed — linking is not possible for 31 days/)).toBeVisible();
-  expect(screen.getByText(/Linking opens — 1 day to link your Wikimedia username/)).toBeVisible();
+  expect(screen.getByText(/Closed — you cannot link your username for 31 days/)).toBeVisible();
+  expect(screen.getByText(/Opens — 1 day to link your Wikimedia username/)).toBeVisible();
   expect(screen.getByText('quiet-otter').tagName).toBe('STRONG');
 });
 
