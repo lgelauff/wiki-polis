@@ -22,8 +22,8 @@ test('renders a conversation lane from the API contract', async () => {
   expect(await screen.findByRole('heading', {name: 'Needs attention'})).toBeVisible();
   expect(await screen.findByRole('link', {name: /Community strategy.*continue/}))
     .toHaveAttribute('href', '/c/community-strategy');
-  expect(screen.getByRole('button', {name: 'Your conversations'})).toHaveAttribute('aria-pressed', 'true');
-  fireEvent.click(screen.getByRole('button', {name: 'Browse'}));
+  expect(screen.getByRole('button', {name: 'Your consultations'})).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', {name: 'New consultations'}));
   expect(screen.getByText('No consultations open to you right now.')).toBeVisible();
 });
 
@@ -85,7 +85,7 @@ test('matches the legacy pending-output dialog and restores focus', async () => 
   ));
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/real']}><App /></MemoryRouter></QueryClientProvider>);
 
-  const trigger = await screen.findByRole('button', {name: 'After Explore phase: topic and participant clustering'});
+  const trigger = await screen.findByRole('button', {name: 'After the Explore phase: topic and participant clustering'});
   fireEvent.click(trigger);
   const dialog = screen.getByRole('dialog', {name: 'Initial clustering'});
   expect(dialog).toBeVisible();
@@ -223,7 +223,7 @@ test('repairs an advanced phase set through route-valid domain keys', async () =
   await screen.findByRole('heading', {name: 'Community strategy'});
   fireEvent.click(screen.getByRole('button', {name: 'Advanced'}));
   fireEvent.click(screen.getByRole('checkbox', {name: /Argument mapping/}));
-  fireEvent.click(screen.getByRole('checkbox', {name: /Informed voting/}));
+  fireEvent.click(screen.getByRole('checkbox', {name: /Informed opinion/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save phases'}));
   expect(await screen.findByText(/Enabled but not initialised/)).toBeVisible();
   fireEvent.click(screen.getByRole('button', {name: 'Initialise Phase 6'}));
@@ -516,7 +516,7 @@ test('joins a conversation through the typed command', async () => {
   const joinButton = screen.getByRole('button', {name: 'Join consultation as quiet-otter →'});
   expect(joinButton.closest('form')).not.toHaveAttribute('action');
   expect(joinButton.closest('form')).not.toHaveAttribute('method');
-  fireEvent.click(screen.getByRole('checkbox', {name: /I understand my votes/}));
+  fireEvent.click(screen.getByRole('checkbox', {name: /I understand that my responses/}));
   fireEvent.click(joinButton);
 
   await waitFor(() => expect(joined).toHaveBeenCalledWith({
@@ -539,7 +539,7 @@ test('votes in Explore through the wiki-polis API contract', async () => {
 
   // text-transform is visual only, so the DOM text -- and what a screen reader reads -- is
   // sentence case. Asserting on it keeps the casing a CSS concern, not a message one.
-  expect(await screen.findByText('You voted: Agree', {selector: '#voted-label'})).toBeVisible();
+  expect(await screen.findByText('Your response: Agree', {selector: '#voted-label'})).toBeVisible();
   expect(screen.getByRole('button', {name: /Move on/})).toBeVisible();
 });
 
@@ -554,7 +554,7 @@ test('records a pass and opens the legacy post-vote choices', async () => {
 
   fireEvent.click(await screen.findByRole('button', {name: 'Pass'}));
 
-  expect(await screen.findByText('You voted: Pass', {selector: '#voted-label'})).toBeVisible();
+  expect(await screen.findByText('Your response: Pass', {selector: '#voted-label'})).toBeVisible();
   expect(screen.getByText('What now?')).toBeVisible();
   expect(screen.getByRole('button', {name: /Suggest different wording/})).toBeVisible();
 });
@@ -594,9 +594,9 @@ test('completes informed voting through the legacy workspace panel', async () =>
   fireEvent.click(screen.getByRole('button', {name: 'Agree'}));
 
   expect(await screen.findByRole('heading', {
-    name: "You've completed informed voting.",
+    name: "You've given your informed opinion.",
   })).toBeVisible();
-  expect(screen.getByText(/votes are recorded under pseudonym/)).toHaveTextContent('quiet-otter');
+  expect(screen.getByText(/responses are recorded under pseudonym/)).toHaveTextContent('quiet-otter');
   expect(screen.getByRole('alert')).toHaveTextContent('Agreed');
 });
 
@@ -647,7 +647,7 @@ test('routes preliminary results through the legacy workspace tab', async () => 
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/conversations/community-strategy/results']}><App /></MemoryRouter></QueryClientProvider>);
 
   expect(await screen.findByRole('tab', {name: 'Preliminary results'})).toHaveAttribute('aria-selected', 'true');
-  expect(screen.getByRole('table', {name: 'Preliminary informed voting results by statement'})).toBeVisible();
+  expect(screen.getByRole('table', {name: 'Preliminary informed opinion results by statement'})).toBeVisible();
   expect(screen.getByText('70.0% agree · 20.0% pass')).toBeVisible();
   // The recorded vote is past tense, and carries the modifier class the stylesheet colours.
   expect(screen.getByText('Agreed', {selector: '.p6-my-vote.p6-my-vote--agreed'})).toBeVisible();
@@ -848,17 +848,17 @@ test('renders explicit argument contribution states and submits through the type
     'Our movement should invest more in shared technical infrastructure.',
   )).toBeVisible();
   expect(screen.getByText('for · against ✓')).toBeVisible();
-  expect(screen.getByText('Unlocks after step 1')).toBeVisible();
+  expect(screen.getByText('Opens after step 1')).toBeVisible();
 
-  fireEvent.click(screen.getByRole('button', {name: 'Add one for-argument'}));
-  const forArgument = screen.getByRole('textbox', {name: 'Your for-argument · one sentence, one claim'});
+  fireEvent.click(screen.getByRole('button', {name: 'Add your argument for'}));
+  const forArgument = screen.getByRole('textbox', {name: 'Your argument for · one sentence, one point'});
   fireEvent.change(forArgument, {
     target: {value: 'Shared maintenance reduces duplicated work.'},
   });
   fireEvent.click(within(forArgument.closest('form')!).getByRole('button', {name: 'Submit argument'}));
 
   expect(await screen.findByText('You added one argument for')).toBeVisible();
-  expect(screen.getByRole('tab', {name: 'Vote'})).toBeVisible();
+  expect(screen.getByRole('tab', {name: 'Explore'})).toBeVisible();
 });
 
 test('reports a statement through the legacy inline disclosure', async () => {
@@ -880,5 +880,5 @@ test('reports a statement through the legacy inline disclosure', async () => {
   });
   fireEvent.click(screen.getByRole('button', {name: 'Send'}));
 
-  expect(await screen.findByText("Thanks for reporting — we'll take a look.")).toBeVisible();
+  expect(await screen.findByText('Thanks for reporting this. A moderator will look at it.')).toBeVisible();
 });

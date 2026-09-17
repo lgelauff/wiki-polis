@@ -108,10 +108,10 @@ test('the identity-reveal window reads as one sentence with both numbers', async
   // that fails to resolve. The sentence still renders in each case; only the numbers show it.
   const details = await screen.findByText(testMessages['accept-privacy-details-summary']!);
   const body = details.closest('details')?.textContent ?? '';
-  expect(body).toContain('Between');
+  expect(body).toContain('From');
   expect(body).toContain('30');
   expect(body).toContain('60 days');
-  expect(body).toContain('permanently link your username');
+  expect(body).toContain('link your Wikimedia username');
 });
 
 test('the invite-only page names the consultation inside one sentence', async () => {
