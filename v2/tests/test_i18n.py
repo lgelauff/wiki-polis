@@ -272,6 +272,31 @@ def _scan_map_values(text):
     return _MAP_KEY_RE.findall(text)
 
 
+# Keys no call site spells out, because the code builds them. Each is listed with the file
+# that builds it and is checked below to still exist, so this cannot become a list of keys
+# that quietly outlive their caller.
+_RUNTIME_KEYS = {
+    # error_pages.py: f'errorpage-{code}-{part}' over its _ERRORS table, plus the code label.
+    'error_pages.py': [
+        f'errorpage-{code}-{part}'
+        for code in (403, 404, 500)
+        for part in ('title', 'message', 'hint')
+    ] + ['errorpage-code'],
+    # app.py: _SPA_BOOTSTRAP_MESSAGES, stamped onto <html> as data-msg-* before the SPA has
+    # a catalogue to read.
+    'app.py': ['base-skip-to-content', 'base-loading-conversations'],
+}
+
+
+def test_runtime_built_keys_still_exist():
+    """Guards the list above: a key retired without its caller must fail here, not linger."""
+    en = _load('en.json')
+    missing = sorted(f'{key} (built in {where})'
+                     for where, keys in _RUNTIME_KEYS.items()
+                     for key in keys if key not in en)
+    assert not missing, 'keys built at runtime but absent from en.json: ' + '; '.join(missing)
+
+
 def _message_call_sites():
     """{key: 'path:line'} for every statically resolvable message reference in v2/."""
     found = {}
@@ -286,6 +311,9 @@ def _message_call_sites():
                     keys = keys + _scan_map_values(line)
                 for key in keys:
                     found.setdefault(key, f'{path.relative_to(_V2_ROOT)}:{line_no}')
+    for where, keys in _RUNTIME_KEYS.items():
+        for key in keys:
+            found.setdefault(key, f'{where} (built at runtime)')
     return found
 
 
