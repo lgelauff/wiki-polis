@@ -82,7 +82,7 @@ test('a returning participant sees that their cards are already answered', async
   expect(shell).toHaveClass('p6-card--done');
   // Assert the DOM, not the stylesheet: vitest runs jsdom without CSS, so a CSS-only
   // gate would make toBeVisible() true on every card. The hidden attribute is the gate.
-  expect(screen.getByText(/Already voted/)).toBeVisible();
+  expect(screen.getByText(/Already answered/)).toBeVisible();
   expect(screen.getByText(/Choosing again will replace it/)).toBeVisible();
 });
 
@@ -90,12 +90,12 @@ test('a finished deck shows its completion panel', async () => {
   server.use(answeredDeck());
   renderDeck();
 
-  expect(await screen.findByRole('heading', {name: "You've completed informed voting."})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: "You've given your informed opinion."})).toBeVisible();
 });
 
 test('an unanswered card claims nothing', async () => {
   // The gate is an attribute, not a stylesheet rule. Without this, a broken CSS selector
-  // would announce "Already voted" on every untouched card and no test would notice.
+  // would announce "Already answered" on every untouched card and no test would notice.
   server.use(unansweredDeck());
   renderDeck();
 
@@ -103,6 +103,6 @@ test('an unanswered card claims nothing', async () => {
   // The note is rendered but carries `hidden`; the hint is not rendered at all. Both
   // must be inert -- queryByText matches hidden nodes, so assert visibility for the
   // first and absence for the second.
-  expect(screen.queryByText(/Already voted/)).not.toBeVisible();
+  expect(screen.queryByText(/Already answered/)).not.toBeVisible();
   expect(screen.queryByText(/Choosing again will replace it/)).not.toBeInTheDocument();
 });

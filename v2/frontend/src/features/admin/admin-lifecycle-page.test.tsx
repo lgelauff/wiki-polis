@@ -99,7 +99,7 @@ test('renders the closed-consultation description from parameterised sentences',
   expect(await screen.findByText('Permanently closed', {exact: false}, {timeout: 10_000})).toBeVisible();
   // Two parameterised sentences joined at the sentence boundary, each reorderable inside.
   expect(document.querySelector('.danger-row-desc')?.textContent)
-    .toBe('Closed 1 Jul 2026. The identity-reveal window is open until 1 Sept 2026.');
+    .toBe('Closed 1 Jul 2026. Participants can link their Wikimedia username until 1 Sept 2026.');
   expect(screen.getByText('Published')).toBeVisible();
   expect(screen.getByText('The final aggregate report is published and participant activity is closed.')).toBeVisible();
 });

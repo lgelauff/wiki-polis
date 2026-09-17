@@ -106,8 +106,8 @@ test('a card announces its state as one label, with the count pluralised', async
   renderLane();
 
   // Fragments joined in order: title, pseudonym, remaining, state. "1 statement", not "1 statements".
-  expect(await screen.findByRole('link', {name: 'Community strategy — your pseudonym: quiet-otter — 1 statement to vote — continue'})).toBeVisible();
-  expect(screen.getByRole('link', {name: 'Movement charter — your pseudonym: quiet-otter — caught up'})).toBeVisible();
+  expect(await screen.findByRole('link', {name: 'Community strategy — your pseudonym: quiet-otter — 1 statement to respond to — continue'})).toBeVisible();
+  expect(screen.getByRole('link', {name: 'Movement charter — your pseudonym: quiet-otter — you have responded to all statements currently available'})).toBeVisible();
   expect(screen.getByRole('link', {name: 'Grants review — your pseudonym: quiet-otter — inactive'})).toBeVisible();
   // The section is headed "Closed", so the card says closed too -- not the internal "archived".
   expect(screen.getByRole('link', {name: 'Archive policy — your pseudonym: quiet-otter — closed'})).toBeVisible();
@@ -117,16 +117,16 @@ test('output symbols and the scheduled phase read the catalogue, not the server 
   server.use(everyState());
   renderLane();
 
-  const pending = await screen.findByRole('button', {name: 'After Arguments phase: argument mapping'});
-  expect(screen.getByRole('link', {name: 'After Explore phase: topic and participant clustering'})).toBeVisible();
+  const pending = await screen.findByRole('button', {name: 'After the Arguments phase: the argument map'});
+  expect(screen.getByRole('link', {name: 'After the Explore phase: topic and participant clustering'})).toBeVisible();
   expect(screen.queryByText(SERVER_ENGLISH)).not.toBeInTheDocument();
   expect(document.body.innerHTML).not.toContain(SERVER_ENGLISH);
 
   fireEvent.click(pending);
-  expect(screen.getByRole('dialog', {name: 'Argument map'})).toHaveTextContent(/opens when featured statements are visible/);
+  expect(screen.getByRole('dialog', {name: 'Argument map'})).toHaveTextContent(/opens when the featured statements are visible/);
 
   const chip = screen.getByText(/^Next:/);
-  expect(chip).toHaveTextContent('Next: Informed vote 1 Oct 2026, 12:00');
+  expect(chip).toHaveTextContent('Next: Informed opinion 1 Oct 2026, 12:00');
   expect(chip.querySelector('time')).toHaveAttribute('title', 'Shown in your local timezone');
 });
 
@@ -137,9 +137,9 @@ test('a closed card shows its month, and the reveal chips their days', async () 
   await screen.findByRole('heading', {name: 'Closed'});
   // 23:30 UTC on 31 August is still August, whatever zone the reader is in.
   expect(screen.getByText('Aug 2026')).toBeVisible();
-  expect(screen.getByText('Reveal window: 3d left')).toBeVisible();
-  expect(screen.getByText('Reveal window: today')).toBeVisible();
-  expect(screen.getByText('Reveal opens in 12d')).toBeVisible();
+  expect(screen.getByText('Username linking closes in 3d')).toBeVisible();
+  expect(screen.getByText('Username linking closes today')).toBeVisible();
+  expect(screen.getByText('Username linking opens in 12d')).toBeVisible();
   expect(screen.getByText('paused')).toBeVisible();
   // An inactive consultation that is not paused is between phases.
   expect(screen.getByText('waiting')).toBeVisible();
@@ -153,5 +153,5 @@ test('dates follow the language the reader chose, not the browser', async () => 
   renderLane();
 
   expect(await screen.findByText('aug 2026')).toBeVisible();
-  expect(screen.getByText(/^Next:/)).toHaveTextContent('Next: Informed vote 1 okt 2026, 12:00');
+  expect(screen.getByText(/^Next:/)).toHaveTextContent('Next: Informed opinion 1 okt 2026, 12:00');
 });

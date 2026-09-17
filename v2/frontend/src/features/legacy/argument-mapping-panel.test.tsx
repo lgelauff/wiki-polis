@@ -179,11 +179,11 @@ test('importance counts are announced with the right plural, and the number is h
   await screen.findByText(STATEMENTS[0]!);
 
   // Catches the plural ignoring the count, and the visual number being read out as well as
-  // the words, which would announce "1 1 importance vote".
+  // the words, which would announce "1 1 person marked this as most important".
   const own = screen.getByText(BODIES[0]!).closest('.at-card')!;
   const other = screen.getByText(BODIES[1]!).closest('.at-card')!;
-  expect(own.querySelector('.argument-importance .sr-only')?.textContent).toBe('1 importance vote');
-  expect(other.querySelector('.argument-importance .sr-only')?.textContent).toBe('3 importance votes');
+  expect(own.querySelector('.argument-importance .sr-only')?.textContent).toBe('1 person marked this as most important');
+  expect(other.querySelector('.argument-importance .sr-only')?.textContent).toBe('3 people marked this as most important');
   expect(own.querySelector('.importance-count')).toHaveAttribute('aria-hidden', 'true');
 });
 
@@ -195,10 +195,10 @@ test("each side names its own threshold, and the step lines show each statement'
   // Catches the per-side notes being swapped, a threshold of 1 taking the plural, the four
   // step-2 numbers reaching the wrong placeholders, and a step-1 line that ignores which
   // side was handled.
-  expect(document.getElementById('volnote-pro-8')?.textContent).toBe('Prioritising unlocks once there are more than 2 for-arguments (2 so far).');
-  expect(document.getElementById('volnote-con-8')?.textContent).toBe('Prioritising unlocks once there are more than 1 against-argument (0 so far).');
+  expect(document.getElementById('volnote-pro-8')?.textContent).toBe('You can mark the most important once there are more than 2 arguments for (2 so far).');
+  expect(document.getElementById('volnote-con-8')?.textContent).toBe('You can mark the most important once there are more than 1 argument against (0 so far).');
   expect(document.getElementById('step2-sub-8')?.textContent)
-    .toBe('Mark the most important — 1 of 2 for, 0 of 1 against · you can still change these');
+    .toBe('You marked 1 of 2 for and 0 of 1 against. You can still change these.');
   expect(document.getElementById('step1-sub-8')?.textContent).toBe('for ✓ · against ✓');
   expect(document.getElementById('step1-sub-9')?.textContent).toBe('for ✓ · against');
 });
@@ -212,7 +212,7 @@ test('progress circles and flag icons have readable names', async () => {
   // message, not a parameter), and an internal id leaking into a flag's name.
   const circles = within(document.getElementById('fs-8')!).getByRole('group', {name: 'Statement progress'});
   expect(within(circles).getAllByRole('img').map((circle) => circle.getAttribute('aria-label')))
-    .toEqual(['Statement 1: in progress', 'Statement 2: not started', 'Statement 3: complete']);
+    .toEqual(['Statement 1: in progress', 'Statement 2: arguments still to add', 'Statement 3: complete']);
   const first = document.getElementById('fs-8')!;
   expect(first.querySelector('.content-flag--corner summary')).toHaveAttribute('aria-label', 'Flag this statement for moderator review');
   expect(screen.getByText(BODIES[1]!).closest('.at-card')!.querySelector('summary')).toHaveAttribute('aria-label', 'Flag this argument for moderator review');

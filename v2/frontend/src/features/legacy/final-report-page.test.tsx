@@ -67,12 +67,12 @@ test('renders the final report from the catalogue English', async () => {
   expect(await screen.findByRole('heading', {name: 'Methodology'}, {timeout: 5000})).toBeVisible();
   expect(screen.getByRole('table', {name: 'Aggregate opinion shift per statement'})).toBeVisible();
   expect(screen.getByRole('columnheader', {name: /Shift/})).toHaveTextContent('(aggregate)');
-  expect(screen.getByText('Featured statements used in informed voting: 1')).toBeVisible();
-  expect(screen.getByText('1 group identified in the informed voting round')).toBeVisible();
+  expect(screen.getByText('Featured statements in the informed opinion round: 1')).toBeVisible();
+  expect(screen.getByText('1 group found in the informed opinion round')).toBeVisible();
   expect(screen.getByText('· 11 participants')).toBeVisible();
   expect(screen.getByText('Moderation applied: 1 statement excluded')).toBeVisible();
-  expect(screen.getAllByText('60.0% agree · 15.0% pass · 20 votes')[0]).toBeVisible();
-  expect(screen.getByText(/The identity reveal window is open/)).toHaveTextContent('quiet-otter');
+  expect(screen.getAllByText('60.0% agree · 15.0% pass · 20 responses')[0]).toBeVisible();
+  expect(screen.getByText(/Your participation is recorded under pseudonym/)).toHaveTextContent('quiet-otter');
   // Participant- and organizer-authored content is never routed through the catalogue.
   expect(screen.getByRole('heading', {name: 'Community strategy'})).toBeVisible();
   expect(screen.getAllByText('Regional communities should share infrastructure funding.')[0]).toBeVisible();
@@ -119,7 +119,7 @@ test('the reading guide names its phase and method from the catalogue, not the s
   // Catches the payload's English phase or method reaching the page, and the wrong output's
   // definition being used for a final report.
   const guide = (await screen.findByRole('heading', {name: 'How to read this output'})).closest('.output-context')!;
-  expect(guide).toHaveTextContent(`Produced from${testMessages['output-report-phase']}`);
+  expect(guide).toHaveTextContent(`Produced in${testMessages['output-report-phase']}`);
   expect(guide).toHaveTextContent(testMessages['output-report-method']!);
   expect(guide).not.toHaveTextContent('SERVER ENGLISH');
 });

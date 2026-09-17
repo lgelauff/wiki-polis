@@ -56,7 +56,7 @@ test('renders the exact argument-map output content and navigation', async () =>
   expect(await screen.findByRole('heading', {name: 'Argument map'})).toBeVisible();
   expect(screen.getByRole('heading', {name: 'How to read this output'})).toBeVisible();
   expect(screen.getByRole('heading', {name: 'Featured statements and arguments'})).toBeVisible();
-  expect(screen.getByRole('link', {name: /Open the current Arguments tab/})).toHaveAttribute(
+  expect(screen.getByRole('link', {name: /Open the Arguments tab/})).toHaveAttribute(
     'href', '/c/community-strategy#tab-arguments',
   );
   // Catches the page keeping the default "Proto" tab title, which names neither the output nor
@@ -70,7 +70,7 @@ test('renders the pending output state from the typed contract', async () => {
 
   // The status is a lowercase message; the capital letter comes from CSS on .output-status-value.
   expect(await screen.findByText('provisional · pending', {selector: '.output-status-value'})).toBeVisible();
-  expect(screen.getByText('Detailed clustering visuals are still to be developed.')).toBeVisible();
+  expect(screen.getByText('The detailed clustering charts have not been built yet.')).toBeVisible();
 });
 
 const url = (path: string) => new URL(path, globalThis.location.origin).toString();
@@ -120,7 +120,7 @@ test('the About page maps the scheduled phase and output names from their identi
   // marker the catalogue does not contain.
   expect(document.body.textContent).not.toContain('SERVER');
   const next = document.querySelector('time[datetime="2026-10-01T12:00:00Z"]')!.closest('p')!;
-  expect(next).toHaveTextContent('Next: Informed vote on 1 Oct 2026, 12:00.');
+  expect(next).toHaveTextContent('Next: Informed opinion on 1 Oct 2026, 12:00.');
   expect(screen.getByText(/^Current phase:/).closest('p')).toHaveTextContent('Current phase: Explore');
   const outputs = [...document.querySelectorAll('.landing-section li')].map((node) => node.textContent);
   expect(outputs.at(-1)).toBe('Report — pending');
@@ -160,7 +160,7 @@ test('the About page pluralises each statistic by its own number', async () => {
   // Catches a unit that ignores its count: each label must agree with the number above it,
   // and 1 takes the singular.
   const stats = [...document.querySelectorAll('.stat-row > span')].map((node) => node.textContent);
-  expect(stats).toEqual(['24participants', '312statement votes', '42statements', '1argument', '1argument contributor']);
+  expect(stats).toEqual(['24participants', '312statement responses', '42statements', '1argument', '1argument contributor']);
   expect(screen.getByText('1 argument added')).toBeVisible();
   expect(screen.getByText('3 arguments rated')).toBeVisible();
 });

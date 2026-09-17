@@ -122,8 +122,8 @@ test('the pointer to preliminary results is one sentence, and its link still swi
 
   // conv-p6-done-see is one message with the link passed in as an element, so the link keeps
   // its onClick handler.
-  const done = await screen.findByText(/for the full comparison/);
-  expect(done).toHaveTextContent('See the Preliminary results tab for the full comparison.');
+  const done = await screen.findByText(/to compare the first round with this one/);
+  expect(done).toHaveTextContent('See the Preliminary results tab to compare the first round with this one.');
   fireEvent.click(within(done).getByRole('link', {name: 'Preliminary results'}));
   expect(await screen.findByRole('tab', {name: 'Preliminary results'})).toHaveAttribute('aria-selected', 'true');
 });
@@ -132,9 +132,9 @@ test('the identity note names the pseudonym in bold and links to the reveal page
   renderPanel(workspace({reveal: reveal('open')} as Partial<Workspace>), [answered]);
 
   const note = await screen.findByText(/recorded under pseudonym/);
-  expect(note).toHaveTextContent('Your votes are recorded under pseudonym quiet-otter. The identity reveal window is open — optionally link your username →');
+  expect(note).toHaveTextContent('Your responses are recorded under pseudonym quiet-otter. You can link your Wikimedia username to this pseudonym now. Open the linking page →');
   expect(within(note).getByText('quiet-otter').tagName).toBe('STRONG');
-  expect(within(note).getByRole('link', {name: /optionally link your username/})).toHaveAttribute('href', '/c/community-strategy/reveal');
+  expect(within(note).getByRole('link', {name: /Open the linking page/})).toHaveAttribute('href', '/c/community-strategy/reveal');
 });
 
 test('each card counts its position, and a rejected vote says so', async () => {
@@ -143,12 +143,12 @@ test('each card counts its position, and a rejected vote says so', async () => {
   renderPanel(workspace(), [unanswered, answered]);
 
   await screen.findByText(STATEMENT);
-  expect(screen.getAllByText(/Informed vote · 1 of 2/)[0]).toBeInTheDocument();
+  expect(screen.getAllByText(/Informed opinion · 1 of 2/)[0]).toBeInTheDocument();
   expect(screen.getByText('1 more')).toBeInTheDocument();
   expect(screen.getAllByText('No arguments yet.', {selector: '.p6-args-side--con .p6-args-empty'})[0]).toBeInTheDocument();
 
   fireEvent.click(screen.getAllByRole('button', {name: 'Disagree'})[0]!);
-  expect(await screen.findByText('Vote not recorded — try again')).toBeVisible();
+  expect(await screen.findByText('Response not saved — try again')).toBeVisible();
   // The server's English never reaches the participant.
   expect(screen.queryByText(/round is paused/)).not.toBeInTheDocument();
 });
