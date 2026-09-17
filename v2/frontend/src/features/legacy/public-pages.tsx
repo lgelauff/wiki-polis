@@ -20,6 +20,7 @@ export function ForkPage() {
         <div className="landing-section">
           <h1 style={{fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 12}}>{msg('home-hero-heading')}</h1>
           <p style={{fontSize: 15, lineHeight: 1.6, color: 'var(--body)', maxWidth: 520}}>{msg('home-hero-body')}</p>
+          <p style={{fontSize: 15, lineHeight: 1.6, color: 'var(--body)', maxWidth: 520}}>{msg('home-hero-detail')}</p>
         </div>
 
         <div className="fork-grid">

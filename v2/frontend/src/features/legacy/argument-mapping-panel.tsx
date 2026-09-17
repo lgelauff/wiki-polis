@@ -315,6 +315,7 @@ export function LegacyArgumentMappingPanel({slug, csrfToken}: {slug: string; csr
         <span className="at-orient-icon" aria-hidden="true">?</span>
         <div className="at-orient-body" id={`at-orient-body-${slug}`}>
           <div className="at-orient-full" dangerouslySetInnerHTML={richHtml(msg('conv-orient-full'))} />
+          <div className="at-orient-full" dangerouslySetInnerHTML={richHtml(msg('conv-orient-then'))} />
           <div className="at-orient-mini" dangerouslySetInnerHTML={richHtml(msg('conv-orient-mini'))} />
         </div>
         <button className="at-orient-toggle" type="button" aria-expanded={!collapsed} aria-controls={`at-orient-body-${slug}`} onClick={toggleOrientation}>{collapsed ? <>{msg('conv-orient-whatis')} <span aria-hidden="true">▼</span></> : <>{msg('conv-orient-collapse')} <span aria-hidden="true">▲</span></>}</button>

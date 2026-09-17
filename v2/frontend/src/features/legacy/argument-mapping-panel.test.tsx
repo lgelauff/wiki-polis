@@ -195,12 +195,12 @@ test("each side names its own threshold, and the step lines show each statement'
   // Catches the per-side notes being swapped, a threshold of 1 taking the plural, the four
   // step-2 numbers reaching the wrong placeholders, and a step-1 line that ignores which
   // side was handled.
-  expect(document.getElementById('volnote-pro-8')?.textContent).toBe('You can mark the most important once there are more than 2 arguments for (2 so far).');
+  expect(document.getElementById('volnote-pro-8')?.textContent).toBe('You can mark the most important once there are more than 2 arguments in favour (2 so far).');
   expect(document.getElementById('volnote-con-8')?.textContent).toBe('You can mark the most important once there are more than 1 argument against (0 so far).');
   expect(document.getElementById('step2-sub-8')?.textContent)
-    .toBe('You marked 1 of 2 for and 0 of 1 against. You can still change these.');
-  expect(document.getElementById('step1-sub-8')?.textContent).toBe('for ✓ · against ✓');
-  expect(document.getElementById('step1-sub-9')?.textContent).toBe('for ✓ · against');
+    .toBe('You marked 1 of 2 in favour and 0 of 1 against. You can still change these.');
+  expect(document.getElementById('step1-sub-8')?.textContent).toBe('in favour ✓ · against ✓');
+  expect(document.getElementById('step1-sub-9')?.textContent).toBe('in favour ✓ · against');
 });
 
 test('progress circles and flag icons have readable names', async () => {

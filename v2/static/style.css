@@ -1218,20 +1218,26 @@ h3.conv-card-title-wrap {
   border-color: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
+/* The card the participant is most likely to want next is marked by its border, not by a
+   different fill: three cards that can all be clicked read as one set, and a filled card
+   among unfilled ones reads as the only one that works. */
 .v2-triad--active .v2-option-card--primary:not([aria-disabled="true"]) {
-  background: var(--surface3);
   border-color: #c4c2bb; /* fallback */
   border-color: color-mix(in srgb, var(--ink) 25%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent);
 }
 .v2-triad--active .v2-option-card--primary:not([aria-disabled="true"]):hover {
   border-color: #888; /* fallback */
   border-color: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
+/* Cannot be used yet: a flat grey card with muted text, so it is plainly out of reach
+   rather than a slightly paler version of a card that works. */
 .v2-option-card--locked,
 .v2-option-card[aria-disabled="true"] {
   background: var(--surface2);
   border-color: var(--hairline-soft);
+  color: var(--muted);
   opacity: 1;
 }
 .v2-option-card--locked { cursor: not-allowed; }
@@ -1270,7 +1276,8 @@ h3.conv-card-title-wrap {
   letter-spacing: -0.01em;
 }
 
-.v2-option-card--locked .v2-option-title { color: var(--muted); }
+.v2-option-card--locked .v2-option-title,
+.v2-option-card[aria-disabled="true"] .v2-option-title { color: var(--muted); }
 
 .v2-option-sub {
   font-size: 12.5px;
