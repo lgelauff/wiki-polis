@@ -80,6 +80,9 @@ async function submitJoin() {
 test('the join screen renders its copy from the catalogue', async () => {
   renderJoin();
   expect(await screen.findByText(testMessages['accept-choose-pseudonym']!)).toBeVisible();
+  // Catches the consent tick becoming optional: it is the only thing standing between a
+  // participant and a CC0 release they did not agree to.
+  expect(document.getElementById('consent-check')).toBeRequired();
   // Catches a key that is renamed, missing from en.json, or wired to the wrong element: the
   // page then shows the raw key or other text. The form still submits in that state, so the
   // consent text and licence heading, which the participant agrees to, are checked by name.
@@ -240,9 +243,9 @@ test('without a confirmed email the note keeps its link inside the sentence', as
   // the sentence, and catches the checkbox still being offered for an address that cannot
   // receive anything.
   expect(screen.queryByRole('checkbox', {name: testMessages['accept-notify-email']!})).toBeNull();
-  const link = screen.getByRole('link', {name: /Add one on Meta-Wiki/});
+  const link = screen.getByRole('link', {name: /Check your email settings on Meta-Wiki/});
   const note = link.closest('p')!;
-  expect(note.textContent).toBe('Email notifications unavailable — no confirmed email on your wiki account. Add one on Meta-Wiki (opens in a new tab) and return to enable this.');
+  expect(note.textContent).toBe('Email notifications are unavailable because your Wikimedia account cannot receive email. Check your email settings on Meta-Wiki (opens in a new tab) and return to enable this.');
   expect(link).toHaveAttribute('href', 'https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal');
   // Catches the new tab going unannounced: the participant leaves to set an address and has
   // to come back to this form, so the page says both that it opens away and to return.
@@ -317,19 +320,25 @@ test('under qqx, nothing on the invite-only page is English', async () => {
   expect(document.title).toBe('(forbidden-invite-doc-title)');
 });
 
-test.each(['ineligible', 'unavailable'] as const)(
-  'under qqx, nothing on the not-eligible page is English (%s)',
-  async (status) => {
+test.each([
+  ['ineligible', 'Extended-confirmed editors'],
+  ['unavailable', 'Extended-confirmed editors'],
+  ['ineligible', null],
+] as const)(
+  'under qqx, nothing on the not-eligible page is English (%s, label: %s)',
+  async (status, eligibilityLabel) => {
     renderAsQqx();
-    serveJoinEntry({}, {eligibilityLabel: 'Extended-confirmed editors'});
+    serveJoinEntry({}, {eligibilityLabel});
     serveEligibilityRefusal(status);
     renderJoin();
     await submitJoin();
     await screen.findByRole('heading', {name: '(forbidden-elig-heading)'});
 
     // Catches hardcoded copy on the page a refused participant is left on, and the API's own
-    // English message being rendered in place of the catalogue's reason.
-    expect(untranslatedCopy([document.querySelector('.container')], ['Extended-confirmed editors'])).toEqual([]);
+    // English message being rendered in place of the catalogue's reason. The unlabelled row
+    // reaches the sentence shown when the organizer configured no label, which is a different
+    // message from the one with the label in it.
+    expect(untranslatedCopy([document.querySelector('.container')], eligibilityLabel ? [eligibilityLabel] : [])).toEqual([]);
     expect(document.title).toBe(`(forbidden-elig-doc-title: ${TITLE})`);
   },
 );
