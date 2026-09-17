@@ -73,7 +73,7 @@ test('the open window names the username and the pseudonym in the right places',
   // a swapped parameter would still read as a sentence -- and would misstate what is published.
   expect(heading).toHaveTextContent(`Permanently link ${PSEUDONYM} to your Wikimedia username?`);
   expect(screen.getByText(/You can publish that/)).toHaveTextContent(
-    `You can publish that ${USERNAME} expressed opinions as ${PSEUDONYM} in this consultation process. Other pseudonyms you used elsewhere are not affected.`);
+    `You can publish that ${USERNAME} expressed their opinion as ${PSEUDONYM} in this consultation process. Other pseudonyms you used elsewhere are not affected.`);
   const warning = screen.getByText('Irreversible').closest<HTMLElement>('.close-warning')!;
   expect(within(warning).getAllByRole('listitem')[0]).toHaveTextContent(
     `Your Wikimedia username (${USERNAME}) will be permanently linked to your pseudonym ${PSEUDONYM} in the exported records of this consultation.`);
@@ -92,7 +92,7 @@ test('the timeline counts its own days and the deadline sentence carries the cou
   expect(steps).toEqual([
     'Closed — you cannot link your username for 30 days',
     'Opens — 45 days to link your Wikimedia username if you want to',
-    'Closes — after this, you can no longer link your username to your opinions',
+    'Closes — after this, you can no longer link your username to your opinion',
   ]);
   expect(document.querySelector('.reveal-deadline')).toHaveTextContent('Username linking closes in 27d 02:00:00 — once you link, it is permanent and cannot be undone.');
 });
