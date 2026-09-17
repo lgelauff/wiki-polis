@@ -2,7 +2,9 @@
 
 UI strings for Proto, in the **translatewiki.net (TWN) "banana" JSON** format.
 `en.json` is the **source** (English); `qqq.json` documents each message for translators;
-`<code>.json` files are translations **delivered by TWN** — do not edit those by hand.
+`<code>.json` files are translations **delivered by TWN** — do not edit those by hand. The one
+exception is `nl.json`, seeded here before onboarding and handed over at the first TWN export
+(see [`../plan_i18n.md`](../plan_i18n.md), stage 3).
 
 ## Status — what is wired up today
 
@@ -21,7 +23,7 @@ log's server fallbacks ([#398](https://github.com/lgelauff/wiki-polis/issues/398
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (930 keys, 100% documented; 552 offered to translators, 378 held back) | ✅ committed |
+| `en.json` + `qqq.json` (939 keys, 100% documented; 561 offered to translators, 378 held back) | ✅ committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
@@ -59,7 +61,8 @@ selects a form by the number in `$1` — use the plural forms your language need
 
 A translation that breaks these rules is not shown; English is shown in its place:
 
-- Use only the tags and attributes the English uses. Leaving them out, or moving them, is fine.
+- Use only the tags and attributes the English uses. Leaving a tag out, or moving it, is fine —
+  except a link: where the English links, the translation links too, to the same place.
 - No `<` in text: write it in words.
 - In `{{PLURAL:$1|…}}`: no space before `$1`, no empty forms, and at least one form that is not
   an explicit number such as `1=…`. No stray `{`, `}` or `{{…}}` of other kinds.
@@ -281,10 +284,11 @@ new message. This is the MediaWiki convention for a change that invalidates tran
 ### When a translatewiki export fails the check
 
 The failing test names the file, the key, and why: where the text leaves the grammar, the tags
-and attributes it added, or a placeholder English does not have.
+and attributes it added, or a placeholder it added or dropped.
 
 1. Fix the message on translatewiki.net, or ask on its talk page; the next export carries the
-   fix. Never hand-edit `<code>.json` — the next export overwrites it.
+   fix. Never hand-edit `<code>.json` — the next export overwrites it. (Dutch is the standing
+   exception until onboarding; see the note at the top of this file.)
 2. Merging the export in the meantime is safe for readers, because `i18n.load()` serves English
    for that one message. Merging does leave CI red until the fix arrives.
 

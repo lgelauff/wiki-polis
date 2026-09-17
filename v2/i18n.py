@@ -327,6 +327,10 @@ def _describe(tag: tuple) -> str:
     return f'<{name}{rendered}>'
 
 
+def _slots(text: str) -> set[str]:
+    return set(_PLACEHOLDER_RE.findall(text))
+
+
 def markup_problem(translation: str, english: str) -> str | None:
     """Why ``translation`` may not be served in place of ``english``, or ``None`` if it may."""
     try:
@@ -340,9 +344,19 @@ def markup_problem(translation: str, english: str) -> str | None:
     extra = {tag for tag in used - allowed if tag[0] == ''}
     if extra:
         return 'it adds markup its English does not have: ' + ', '.join(sorted(map(_describe, extra)))
-    placeholders = set(_PLACEHOLDER_RE.findall(translation)) - set(_PLACEHOLDER_RE.findall(english))
-    if placeholders:
-        return 'it uses placeholders its English does not have: ' + ', '.join(f'${n}' for n in sorted(placeholders, key=lambda n: (len(n), n)))
+    # A link is the only markup a reader can act on: the 404 hint's link to the front page is
+    # the way off that page. Dropping <strong> or <em> loses emphasis and is allowed; dropping
+    # the link leaves a dead end, so it is refused like markup the English does not have.
+    if any(tag[1] == 'a' for tag in allowed) and not any(tag[1] == 'a' for tag in used):
+        return 'it drops the link its English has'
+    extra_slots = _slots(translation) - _slots(english)
+    if extra_slots:
+        return 'it uses placeholders its English does not have: ' + ', '.join(f'${n}' for n in sorted(extra_slots, key=lambda n: (len(n), n)))
+    # A dropped placeholder loses the value it carried -- a date, a name, a count -- and the
+    # sentence reads as though it was never there.
+    missing_slots = _slots(english) - _slots(translation)
+    if missing_slots:
+        return 'it drops placeholders its English has: ' + ', '.join(f'${n}' for n in sorted(missing_slots, key=lambda n: (len(n), n)))
     return None
 
 

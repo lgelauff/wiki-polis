@@ -636,12 +636,26 @@ def test_a_very_long_placeholder_is_refused_rather_than_raising():
     ('{{plural:$1|<strong>$1</strong> dag|<strong>$1</strong> dagen}}', _EN_BOLD),
     ('Ga <a href="/">naar de voorpagina</a> om opnieuw te beginnen.', _EN_LINK),
     ("Ga naar <a  href = '/' >de voorpagina</a>.", _EN_LINK),                 # whitespace, quote style
-    ('Geen opmaak', _EN_BOLD),                                               # dropping it is fine
+    ('$1 {{PLURAL:$1|dag|dagen}} over', _EN_BOLD),                           # dropping a tag is fine
+    ('Nog $1 dagen', _EN_BOLD),                        # a language without plural forms drops PLURAL
     ('Terug over &lt;1 minuut', 'Back in under 1m'),                         # an entity is not a tag
     ('{{GRAMMAR:genitive|<strong>$1</strong>}} dagen', _EN_BOLD),            # GRAMMAR takes a word
 ])
 def test_markup_the_english_already_uses_is_allowed(translation, english):
     assert i18n.markup_is_permitted(translation, english)
+
+
+@pytest.mark.parametrize('translation, english, reason', [
+    ('Nog een paar dagen', _EN_BOLD, 'it drops placeholders its English has: $1'),
+    ('{{PLURAL:$1|dag|dagen}}', _EN_BOLD, None),                  # PLURAL still carries $1
+    ('Ga naar de voorpagina om opnieuw te beginnen.', _EN_LINK, 'it drops the link its English has'),
+    ('Ga naar <strong>de voorpagina</strong>.', _EN_LINK,
+     'it adds markup its English does not have: <strong>'),       # the added tag is reported first
+])
+def test_a_translation_that_drops_what_the_reader_needs_is_refused(translation, english, reason):
+    # A dropped $1 leaves out the value it carried -- a date, a name, a count -- and a dropped
+    # link leaves the reader of the 404 page with no way off it.
+    assert i18n.markup_problem(translation, english) == reason
 
 
 @pytest.mark.parametrize('hostile', [
@@ -776,9 +790,15 @@ def test_the_translation_gate_reports_a_bad_delivered_file(tmp_path):
         'plain': 'Hallo',
         'gone': 'Weg',
     }), encoding='utf-8')
+    (tmp_path / 'de.json').write_text(json.dumps({
+        '@metadata': {'authors': []},
+        'hint': 'Gehe zur Startseite.',
+        'plain': 'Hallo',
+    }), encoding='utf-8')
     violations = _markup_violations(tmp_path)
-    assert len(violations) == 1
-    assert violations[0].startswith('nl.json: hint: it adds markup') and 'onclick' in violations[0]
+    assert len(violations) == 2
+    assert violations[0].startswith('de.json: hint: it drops the link')
+    assert violations[1].startswith('nl.json: hint: it adds markup') and 'onclick' in violations[1]
     # A key removed from English is not a violation: the gate must not block that change.
     assert not any('gone' in line for line in violations)
 
