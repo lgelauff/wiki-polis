@@ -433,7 +433,7 @@
     "conv-arg-changemind": "Link-styled button after {{msg-proto|conv-arg-skipped}} that reopens the argument box. Lowercase on purpose.",
     "conv-arg-skipped": "Status shown on one side of a featured statement after the participant chose to add no argument there. Followed by {{msg-proto|conv-arg-changemind}}. The button that makes this choice is {{msg-proto|conv-arg-nothing}}; this is the resulting state.\n{{Identical|Nothing to add}}",
     "conv-arg-save-error": "Error under the argument composer when submitting an argument, or choosing to add nothing, fails.",
-    "conv-arg-locked-note": "Note explaining others' arguments are hidden until you contribute.",
+    "conv-arg-locked-note": "Note on one side of a featured statement (in favour or against) while the participant has neither added an argument there nor chosen {{msg-proto|conv-arg-nothing}}, and that side has no arguments yet. Nothing is hidden from them: other participants' arguments appear as soon as they exist, whatever the participant has done. Marking the most important arguments opens once both sides are handled and a side holds more arguments than the participant may mark.",
     "conv-arg-mark": "Accessible name of the toggle on an argument that marks it as one of the most important. Its pressed state tells assistive technology whether it is marked, so the name stays the same either way.",
     "conv-arg-importance-votes": "Screen-reader text for how many participants marked an argument as most important. Parameters:\n* $1 - the number, e.g. 3; sighted readers see it next to a star",
     "conv-arg-yours": "Badge marking an argument the current participant wrote. Rendered in capitals by CSS; write it in sentence case.\n{{Identical|Yours}}",

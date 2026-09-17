@@ -434,7 +434,7 @@
     "conv-arg-changemind": "change my mind",
     "conv-arg-skipped": "Nothing to add",
     "conv-arg-save-error": "Could not save your response. Please try again.",
-    "conv-arg-locked-note": "You will see other people's arguments once you add yours or choose to add nothing. That way you form your own view first.",
+    "conv-arg-locked-note": "You can add an argument of your own first, or choose to add nothing. Then you can weigh your own argument too when you mark the most important ones.",
     "conv-arg-mark": "Mark as most important",
     "conv-arg-importance-votes": "$1 {{PLURAL:$1|person|people}} marked this as most important",
     "conv-arg-yours": "Yours",
