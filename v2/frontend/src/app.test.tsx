@@ -847,17 +847,17 @@ test('renders explicit argument contribution states and submits through the type
   expect(await screen.findByText(
     'Our movement should invest more in shared technical infrastructure.',
   )).toBeVisible();
-  expect(screen.getByText('for · against ✓')).toBeVisible();
+  expect(screen.getByText('in favour · against ✓')).toBeVisible();
   expect(screen.getByText('Opens after step 1')).toBeVisible();
 
-  fireEvent.click(screen.getByRole('button', {name: 'Add your argument for'}));
-  const forArgument = screen.getByRole('textbox', {name: 'Your argument for · one sentence, one point'});
+  fireEvent.click(screen.getByRole('button', {name: 'Add your argument in favour'}));
+  const forArgument = screen.getByRole('textbox', {name: 'Your argument in favour · one sentence, one point'});
   fireEvent.change(forArgument, {
     target: {value: 'Shared maintenance reduces duplicated work.'},
   });
   fireEvent.click(within(forArgument.closest('form')!).getByRole('button', {name: 'Submit argument'}));
 
-  expect(await screen.findByText('You added one argument for')).toBeVisible();
+  expect(await screen.findByText('You added one argument in favour')).toBeVisible();
   expect(screen.getByRole('tab', {name: 'Explore'})).toBeVisible();
 });
 

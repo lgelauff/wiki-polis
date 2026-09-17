@@ -306,6 +306,7 @@ function AnonymousLane({
       <h1 className="sr-only">{msg('home-heading')}</h1>
       <h2 style={{fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 12}}>{msg('home-hero-heading')}</h2>
       <p style={{fontSize: 15, lineHeight: 1.6, color: 'var(--body)', maxWidth: 520}}>{msg('home-hero-body')}</p>
+      <p style={{fontSize: 15, lineHeight: 1.6, color: 'var(--body)', maxWidth: 520}}>{msg('home-hero-detail')}</p>
       <InternalLink href={loginHref} className="login-btn" style={{marginTop: 18}}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.4 1.6" aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
