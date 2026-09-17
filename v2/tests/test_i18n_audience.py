@@ -38,9 +38,11 @@ _ADMIN_NAMESPACES = (
     'modlog-', 'flags-', 'role-', 'precond-', 'rec-',
 )
 
-# Held back for a different reason: the copy itself is unsettled. Unlike the admin console
-# these are participant-facing, so they come back as soon as the content stops moving.
-_UNSTABLE_NAMESPACES = ('guidance-',)
+# Held back for a different reason, and participant-facing either way, so they come back as
+# soon as that reason goes: guidance-* because the copy is unsettled, flow-* because the
+# diagram that shows them is a flat SVG with its English baked in, so a translation would
+# render nowhere.
+_UNSTABLE_NAMESPACES = ('guidance-', 'flow-')
 
 
 def _source_files(suffix):
