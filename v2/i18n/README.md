@@ -14,8 +14,7 @@ final report, the About page, the public moderation log, the output pages and th
 identity-reveal page. The admin lifecycle console is wired too.
 
 Still English, on purpose, and listed with reasons in
-[#399](https://github.com/lgelauff/wiki-polis/issues/399): the flow diagram on the
-consultation list (`flow-*`, whose English is baked into an SVG), the two help pages
+[#399](https://github.com/lgelauff/wiki-polis/issues/399): the two help pages
 (`guidance-*`, pending an English review), the rest of the admin console (stage 5), server
 error messages ([#397](https://github.com/lgelauff/wiki-polis/issues/397)) and the moderation
 log's server fallbacks ([#398](https://github.com/lgelauff/wiki-polis/issues/398)).

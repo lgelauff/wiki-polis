@@ -24,7 +24,7 @@ test('renders a conversation lane from the API contract', async () => {
     .toHaveAttribute('href', '/c/community-strategy');
   expect(screen.getByRole('button', {name: 'Your consultations'})).toHaveAttribute('aria-pressed', 'true');
   fireEvent.click(screen.getByRole('button', {name: 'New consultations'}));
-  expect(screen.getByText('No consultations open to you right now.')).toBeVisible();
+  expect(screen.getByText('No new consultations are open to you right now. You may still have consultations you joined earlier under Your consultations.')).toBeVisible();
 });
 
 test('keeps the current route painted while the next route loads', async () => {
