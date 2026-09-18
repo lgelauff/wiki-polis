@@ -1609,16 +1609,10 @@ def _is_emailable(username: str) -> bool:
         return False
 
 
-def _eligibility_detail(payload: dict, *, reason: str | None = None) -> dict:
-    """Small non-PII detail blob for cached AccountEligibility verdicts (#146)."""
-    detail = {}
-    if reason:
-        detail['reason'] = reason
-    for key in ('reason', 'message', 'event', 'criteria', 'failed', 'rules'):
-        value = payload.get(key)
-        if value not in (None, ''):
-            detail[key] = value
-    return detail
+def _eligibility_detail(payload: dict) -> dict:
+    """Keep only the legacy event identifier; never cache upstream prose or criteria."""
+    event = payload.get('event')
+    return {'event': event} if isinstance(event, str) and event else {}
 
 
 def _eligibility_retry_after(response) -> str | None:
@@ -1740,9 +1734,7 @@ def _check_join_eligibility(conversation, participant) -> tuple[bool, str, dict]
     # on the could-not-check path rather than presenting it as not eligible;
     # the stored verdict model and dedicated refusal copy belong to later work.
     _log_eligibility_indeterminate(policy_id, participant, payload)
-    return False, 'unavailable', _eligibility_detail(
-        payload, reason='eligibility could not be determined',
-    )
+    return False, 'unavailable', _eligibility_detail(payload)
 
 
 def _generate_pseudonyms(count: int = 5) -> list[str]:
