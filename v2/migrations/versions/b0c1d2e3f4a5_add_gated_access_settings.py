@@ -15,6 +15,33 @@ branch_labels = None
 depends_on = None
 
 
+def _backfill_participation_invites(connection):
+    """Materialise the historical admission relation without duplicates."""
+    connection.execute(sa.text(
+        """
+        INSERT INTO conversation_invites
+            (conversation_id, mw_username, mw_user_id, invited_by, created_at)
+        SELECT
+            participations.conversation_id,
+            participants.mw_username,
+            participants.mw_user_id,
+            'migration',
+            participations.accepted_at
+        FROM participations
+        JOIN participants ON participants.id = participations.participant_id
+        JOIN conversations ON conversations.id = participations.conversation_id
+        WHERE conversations.gated = 1
+          AND conversations.access_policy <> 'demo'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM conversation_invites
+              WHERE conversation_invites.conversation_id = participations.conversation_id
+                AND conversation_invites.mw_username = participants.mw_username
+          )
+        """
+    ))
+
+
 def upgrade():
     with op.batch_alter_table('conversations') as batch_op:
         batch_op.add_column(sa.Column(
@@ -111,29 +138,7 @@ def upgrade():
         WHERE mw_user_id IS NULL
         """
     ))
-    connection.execute(sa.text(
-        """
-        INSERT INTO conversation_invites
-            (conversation_id, mw_username, mw_user_id, invited_by, created_at)
-        SELECT
-            participations.conversation_id,
-            participants.mw_username,
-            participants.mw_user_id,
-            'migration',
-            participations.accepted_at
-        FROM participations
-        JOIN participants ON participants.id = participations.participant_id
-        JOIN conversations ON conversations.id = participations.conversation_id
-        WHERE conversations.gated = 1
-          AND conversations.access_policy <> 'demo'
-          AND NOT EXISTS (
-              SELECT 1
-              FROM conversation_invites
-              WHERE conversation_invites.conversation_id = participations.conversation_id
-                AND conversation_invites.mw_username = participants.mw_username
-          )
-        """
-    ))
+    _backfill_participation_invites(connection)
 
 
 def downgrade():
