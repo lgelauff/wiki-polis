@@ -8,6 +8,7 @@ import {adminSettingsQuery, putAdminSettings} from '../../api/queries';
 
 type Settings = components['schemas']['AdminSettings'];
 type Policy = Settings['conversation']['accessPolicy'];
+type GatingType = Settings['conversation']['gatingType'];
 type Tier = Settings['recommendations']['tier'];
 
 export function AdminSettingsPage({conversationId, csrfToken}: {
@@ -20,13 +21,21 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   const [introHtml, setIntroHtml] = useState(data.conversation.introHtml);
   const [outroHtml, setOutroHtml] = useState(data.conversation.outroHtml);
   const [accessPolicy, setAccessPolicy] = useState<Policy>(data.conversation.accessPolicy);
+  const [gated, setGated] = useState(data.conversation.gated);
+  const [gatingType, setGatingType] = useState<GatingType>(data.conversation.gatingType);
+  const [announce, setAnnounce] = useState(data.conversation.announce);
+  const [information, setInformation] = useState(data.conversation.information);
+  const [resultsShared, setResultsShared] = useState(data.conversation.resultsShared);
+  const [showUsernames, setShowUsernames] = useState(data.conversation.showUsernames);
+  const [accessRequestText, setAccessRequestText] = useState(data.conversation.accessRequestText ?? '');
   const [eligibilityEventId, setEligibilityEventId] = useState(data.eligibility.eventId);
   const [eligibilityLabel, setEligibilityLabel] = useState(data.eligibility.label ?? '');
   const [tier, setTier] = useState<Tier>(data.recommendations.tier);
   const mutation = useMutation({
     mutationFn: () => putAdminSettings(conversationId, {
       title, introHtml, outroHtml, accessPolicy, eligibilityEventId,
-      eligibilityLabel, recommendationTier: tier,
+      eligibilityLabel, recommendationTier: tier, gated, gatingType,
+      announce, information, resultsShared, showUsernames, accessRequestText,
     }, csrfToken),
     onSuccess: (receipt) => queryClient.setQueryData<Settings>(
       options.queryKey, receipt.settings,
@@ -60,9 +69,20 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
         </section>
         <section aria-labelledby="settings-access">
           <header><span>02</span><div><h2 id="settings-access">Access</h2><p>Who can discover and join this conversation.</p></div></header>
-          <label>Access policy<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
-            <option value="public">Public</option><option value="invite_only">Invite only</option><option value="demo">Demo</option>
-          </select></label>
+          <label><input type="checkbox" checked={gated} disabled={data.locks?.gated} onChange={(event) => setGated(event.target.checked)} /> Who can take part: gated</label>
+          {gated && <label>Gating type<select value={gatingType ?? ''} disabled={data.locks?.gatingType} onChange={(event) => setGatingType((event.target.value || null) as GatingType)}>
+            <option value="">Choose a gating type</option><option value="invite_only">Invite only</option><option value="voucher">Voucher</option><option value="wiki_based">Wiki-based access policy</option>
+          </select></label>}
+          {!gated && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
+            <option value="public">Not gated</option><option value="demo">Demo</option>
+          </select></label>}
+          {gated && <fieldset><legend>Visibility for people without access</legend>
+            <label><input type="checkbox" checked={announce} onChange={(event) => setAnnounce(event.target.checked)} /> Announce in overviews</label>
+            <label><input type="checkbox" checked={information} onChange={(event) => setInformation(event.target.checked)} /> Show introduction, phase and dates</label>
+            <label><input type="checkbox" checked={resultsShared} onChange={(event) => setResultsShared(event.target.checked)} /> Share results</label>
+            {resultsShared && <label><input type="checkbox" checked={showUsernames} disabled={data.locks?.showUsernames} onChange={(event) => setShowUsernames(event.target.checked)} /> Show usernames in shared results</label>}
+          </fieldset>}
+          {gated && <label>How to ask for access<textarea value={accessRequestText} rows={3} onChange={(event) => setAccessRequestText(event.target.value)} /></label>}
           <label>Eligibility event ID<input value={eligibilityEventId} maxLength={80} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
           <label>Eligibility label<input value={eligibilityLabel} maxLength={255} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
           <div className="settings-eligibility" data-configured={data.eligibility.configured}>

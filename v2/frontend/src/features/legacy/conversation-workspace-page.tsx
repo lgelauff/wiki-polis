@@ -32,8 +32,8 @@ type VoteChoice = components['schemas']['ExploreVoteRequest']['choice'];
 type ComposerMode = 'suggest' | 'new' | null;
 type InviteOnlyDetails = {
   title: string;
-  canModerate: boolean;
-  links: {home: string; invitations?: string};
+  canModerate?: boolean;
+  links?: {home?: string; invitations?: string};
 };
 
 function requiredSlug(value: string | undefined) {
@@ -42,11 +42,10 @@ function requiredSlug(value: string | undefined) {
 }
 
 function inviteOnlyDetails(error: unknown): InviteOnlyDetails | null {
-  if (!(error instanceof ApiContractError) || error.code !== 'invite_only') return null;
+  if (!(error instanceof ApiContractError)
+      || !['access_required', 'invite_only'].includes(error.code)) return null;
   const details = error.details as Partial<InviteOnlyDetails> | undefined;
-  if (!details || typeof details.title !== 'string'
-      || typeof details.canModerate !== 'boolean'
-      || !details.links || typeof details.links.home !== 'string') return null;
+  if (!details || typeof details.title !== 'string') return null;
   return details as InviteOnlyDetails;
 }
 
@@ -60,14 +59,14 @@ function InviteOnlyPage({details}: {details: InviteOnlyDetails}) {
           style={{color: 'var(--body)', fontSize: 15, lineHeight: 1.6, margin: '0 0 1.5rem'}}
           dangerouslySetInnerHTML={richHtml(msg('forbidden-invite-body', escapeHtml(details.title)))}
         />
-        {details.canModerate && details.links.invitations && (
+        {details.canModerate && details.links?.invitations && (
           <div style={{background: '#f0f4ff', border: '1px solid #c7d3f5', borderRadius: 8, padding: '1rem 1.25rem', fontSize: 14, color: 'var(--ink)', lineHeight: 1.6, marginBottom: '1.5rem'}}>
             <strong>{msg('forbidden-invite-mod-lead')}</strong>{' '}
             {msg('forbidden-invite-mod-body')}{' '}
             <InternalLink href={details.links.invitations} style={{color: 'var(--accent)'}}>{msg('forbidden-invite-mod-link')}</InternalLink>
           </div>
         )}
-        <InternalLink href={details.links.home} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>{msg('forbidden-invite-back-home')}</InternalLink>
+        <InternalLink href={details.links?.home ?? '/'} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>{msg('forbidden-invite-back-home')}</InternalLink>
       </div>
     </LegacyShell>
   );
