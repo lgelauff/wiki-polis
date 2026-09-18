@@ -17,13 +17,29 @@ FLAG_CATEGORIES = ('personal_attack', 'privacy', 'off_topic', 'other')
 FLAG_STATUSES = ('open', 'resolved')
 STATEMENT_MODERATION_POLICIES = ('moderate', 'auto_approve')
 
+# This is deliberately a string discriminator rather than a SQL Enum or a check
+# constraint. New authentication methods must be able to add a value without a
+# table-wide migration over existing participant rows.
+ACCOUNT_KIND_WIKIMEDIA = 'wikimedia'
+ACCOUNT_KIND_VOUCHER = 'voucher'
+
 
 class Participant(db.Model):
     __tablename__ = 'participants'
 
     id               = db.Column(db.Integer, primary_key=True)
-    mw_user_id       = db.Column(db.Integer, nullable=False, unique=True)
-    mw_username      = db.Column(db.String(255), nullable=False)
+    mw_user_id       = db.Column(db.Integer, nullable=True, unique=True)
+    mw_username      = db.Column(db.String(255), nullable=True)
+    account_kind     = db.Column(db.String(32), nullable=False,
+                                 default=ACCOUNT_KIND_WIKIMEDIA,
+                                 server_default=ACCOUNT_KIND_WIKIMEDIA)
+    # Wikimedia accounts are conversation-independent. Voucher accounts set this
+    # to the one conversation they are allowed to enter.
+    conversation_id  = db.Column(
+        db.Integer,
+        db.ForeignKey('conversations.id', ondelete='CASCADE'),
+        nullable=True,
+    )
     # Stable opaque token passed to Particiapi. Version 1 was sha256(mw_user_id),
     # which is enumerable; version 2 is keyed HMAC and is not recomputable without
     # the deployment secret.
@@ -37,6 +53,11 @@ class Participant(db.Model):
     participations = db.relationship('Participation', back_populates='participant')
     roles          = db.relationship('AdminRole', foreign_keys='AdminRole.participant_id',
                                      back_populates='participant')
+    conversation   = db.relationship(
+        'Conversation',
+        foreign_keys=[conversation_id],
+        back_populates='voucher_participants',
+    )
 
 
 class Conversation(db.Model):
@@ -115,6 +136,11 @@ class Conversation(db.Model):
     argument_vote_data     = db.Column(db.JSON, nullable=False, default=lambda: {'K': 2})
 
     participations     = db.relationship('Participation', back_populates='conversation')
+    voucher_participants = db.relationship(
+        'Participant',
+        foreign_keys='Participant.conversation_id',
+        back_populates='conversation',
+    )
     invites            = db.relationship('ConversationInvite', back_populates='conversation',
                                          cascade='all, delete-orphan')
     roles              = db.relationship('AdminRole', back_populates='conversation')
