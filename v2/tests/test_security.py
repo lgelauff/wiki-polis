@@ -1,6 +1,7 @@
 """Tests for security headers, redirect safety, and dev DB isolation."""
 import hashlib
 import hmac
+import logging
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -230,6 +231,34 @@ def test_production_uses_toolforge_redis_uri(tmp_path):
         })
     assert a.config['RATELIMIT_STORAGE_URI'] == toolforge_redis
     assert a.config['TRUST_PROXY_HEADERS'] is True
+
+
+def test_toolforge_warns_when_trust_proxy_headers_is_explicit(tmp_path, caplog):
+    """An operator setting cannot silently override Toolforge's safe behavior."""
+    from app import create_app
+
+    session_dir = tmp_path / 'sessions-toolforge-proxy-setting'
+    session_dir.mkdir()
+    with patch.dict(os.environ, {
+        'FLASK_DEBUG': '0',
+        'TOOL_TOOLFORGE_API_URL': 'https://api.svc.tools.eqiad1.wikimedia.cloud',
+        'TOOL_REDIS_URI': 'redis://redis.svc.tools.eqiad1.wikimedia.cloud:6379',
+    }, clear=False):
+        with caplog.at_level(logging.WARNING):
+            a = create_app({
+                'TESTING': True,
+                'SQLALCHEMY_DATABASE_URI': f'sqlite:///{tmp_path}/toolforge-proxy-setting.db',
+                'SECRET_KEY': 'test-secret',
+                'TRUST_PROXY_HEADERS': True,
+                'RATELIMIT_STORAGE_URI': 'memory://',
+                'RATELIMIT_KEY_PREFIX': 'wiki-polis-test:',
+                'RATELIMIT_IDENTITY_SECRET': 'x' * 32,
+                'SESSION_TYPE': 'cachelib',
+                'SESSION_CACHELIB': FileSystemCache(str(session_dir)),
+            })
+
+    assert a.config['TRUST_PROXY_HEADERS'] is True
+    assert 'TRUST_PROXY_HEADERS is ignored on Toolforge' in caplog.text
 
 
 def test_production_requires_ratelimit_key_prefix(tmp_path):
