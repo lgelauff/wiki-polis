@@ -1386,6 +1386,11 @@ csrf    = CSRFProtect()
 # Toolforge provides TOOL_REDIS_URI; production startup validates Redis isolation.
 _UNAUTHENTICATED_SITE_RATE_LIMIT = '600 per minute'
 _UNAUTHENTICATED_SITE_RATE_SCOPE = 'unauthenticated-site'
+_RATELIMIT_PROXY_PROBE_MAX_SAMPLES = 100
+_RATELIMIT_PROXY_PROBE_OWNER = 'wiki-polis identity maintainers'
+_RATELIMIT_PROXY_PROBE_REMOVE_AFTER = '2026-10-02'
+_ratelimit_proxy_probe_count = 0
+_ratelimit_proxy_probe_lock = threading.Lock()
 
 
 def _unauthenticated_site_key() -> str:
@@ -1454,20 +1459,34 @@ def _ratelimit_probe_fingerprint(value: str) -> str:
 def _log_temporary_toolforge_proxy_probe() -> None:
     """Temporarily describe Toolforge forwarding behavior without logging addresses.
 
-    REMOVE THIS PROBE after staging measurement. The fingerprints are keyed and
+    REMOVE THIS PROBE when 100 staging samples have established whether two
+    visitors produce distinct forwarding values, owned by the wiki-polis identity
+    maintainers, and no later than 2026-10-02. The fingerprints are keyed and
     truncated so logs retain no raw network addresses while still showing whether
     two observations carry the same values and how many route entries arrived.
     """
     if not _is_staging_toolforge_app(current_app):
         return
 
+    global _ratelimit_proxy_probe_count
+    with _ratelimit_proxy_probe_lock:
+        if _ratelimit_proxy_probe_count >= _RATELIMIT_PROXY_PROBE_MAX_SAMPLES:
+            return
+        _ratelimit_proxy_probe_count += 1
+        sample_number = _ratelimit_proxy_probe_count
+
     forwarded = request.headers.get('X-Forwarded-For', '')
     forwarded_values = [value.strip() for value in forwarded.split(',') if value.strip()]
     access_route = [str(value).strip() for value in request.access_route if str(value).strip()]
     current_app.logger.info(
-        'TEMPORARY ratelimit proxy probe (remove after staging measurement) '
+        'TEMPORARY ratelimit proxy probe sample=%d/%d owner=%s remove_after=%s '
+        '(remove after staging measurement) '
         'remote_addr_fp=%s x_forwarded_for_fp=%s x_forwarded_for_count=%d '
         'access_route_fp=%s access_route_count=%d',
+        sample_number,
+        _RATELIMIT_PROXY_PROBE_MAX_SAMPLES,
+        _RATELIMIT_PROXY_PROBE_OWNER,
+        _RATELIMIT_PROXY_PROBE_REMOVE_AFTER,
         _ratelimit_probe_fingerprint(str(request.remote_addr or '')),
         [_ratelimit_probe_fingerprint(value) for value in forwarded_values],
         len(forwarded_values),
