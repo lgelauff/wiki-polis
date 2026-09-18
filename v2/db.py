@@ -57,10 +57,6 @@ class Conversation(db.Model):
             "statement_moderation_policy IN ('moderate', 'auto_approve')",
             name='ck_conversation_statement_moderation_policy',
         ),
-        db.CheckConstraint(
-            "gating_type IS NULL OR gating_type IN ('invite_only', 'voucher', 'wiki_based')",
-            name='ck_conversation_gating_type',
-        ),
     )
 
     id           = db.Column(db.Integer, primary_key=True)

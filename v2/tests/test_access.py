@@ -56,6 +56,21 @@ def test_unknown_provider_keeps_viewer_relationship_and_certainty(
     assert decision.reason == 'access-could-not-confirm'
 
 
+def test_future_gating_type_is_storable_and_fails_closed(
+    app, conversation, participant,
+):
+    conversation.gated = True
+    conversation.gating_type = 'future_provider'
+    db.session.commit()
+
+    decision = check_access(conversation, participant)
+
+    assert decision.allowed is False
+    assert decision.answer.state == 'unknown'
+    assert decision.certainty == 'inconclusive'
+    assert decision.reason == 'access-policy-not-configured'
+
+
 def test_invite_lookup_does_not_match_null_identity(app, conversation):
     conversation.access_policy = 'invite_only'
     db.session.add(ConversationInvite(

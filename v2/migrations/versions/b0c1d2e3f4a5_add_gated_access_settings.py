@@ -65,11 +65,6 @@ def upgrade():
         batch_op.add_column(sa.Column(
             'access_request_text', sa.Text(), nullable=True,
         ))
-        batch_op.create_check_constraint(
-            'ck_conversation_gating_type',
-            "gating_type IS NULL OR gating_type IN "
-            "('invite_only', 'voucher', 'wiki_based')",
-        )
 
     with op.batch_alter_table('conversation_invites') as batch_op:
         batch_op.add_column(sa.Column('mw_user_id', sa.Integer(), nullable=True))
@@ -147,9 +142,6 @@ def downgrade():
         batch_op.drop_column('mw_user_id')
 
     with op.batch_alter_table('conversations') as batch_op:
-        batch_op.drop_constraint(
-            'ck_conversation_gating_type', type_='check',
-        )
         batch_op.drop_column('access_request_text')
         batch_op.drop_column('show_usernames')
         batch_op.drop_column('results_shared')
