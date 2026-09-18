@@ -1384,6 +1384,36 @@ def _phase_stat_groups(conv, polis_stats, phase6_stats=None):
 csrf    = CSRFProtect()
 # No global default — limits applied per endpoint only.
 # Toolforge provides TOOL_REDIS_URI; production startup validates Redis isolation.
+_UNAUTHENTICATED_SITE_RATE_LIMIT = '600 per minute'
+_UNAUTHENTICATED_SITE_RATE_SCOPE = 'unauthenticated-site'
+
+
+def _unauthenticated_site_key() -> str:
+    """Return the shared bucket key for unauthenticated entry points."""
+    return 'unauthenticated-site'
+
+
+def _unauthenticated_site_rate_limit_value() -> str:
+    """Return the event-sized shared budget, allowing a test/deployment override."""
+    return (
+        current_app.config.get('UNAUTHENTICATED_SITE_RATE_LIMIT')
+        or _UNAUTHENTICATED_SITE_RATE_LIMIT
+    )
+
+
+def _unauthenticated_site_limit():
+    """Decorate an unauthenticated entry point with the shared site ceiling.
+
+    Use ``shared_limit`` so /login, /oauth-callback, and the future /v/<code>
+    route spend the same budget even though they are different Flask endpoints.
+    """
+    return limiter.shared_limit(
+        _unauthenticated_site_rate_limit_value,
+        scope=_UNAUTHENTICATED_SITE_RATE_SCOPE,
+        key_func=_unauthenticated_site_key,
+    )
+
+
 def _ratelimit_account_or_session_identity() -> str:
     """Return an account key, or a stable anonymous browser-session key.
 
@@ -5400,6 +5430,7 @@ def _register_routes(app: Flask) -> None:
     # ── OAuth ─────────────────────────────────────────────────────────────────
 
     @app.get('/login')
+    @_unauthenticated_site_limit()
     @limiter.limit('20 per minute')
     def login():
         if not app.config.get('OAUTH_CLIENT_ID'):
@@ -5428,6 +5459,7 @@ def _register_routes(app: Flask) -> None:
         return redirect(f'https://meta.wikimedia.org/w/rest.php/oauth2/authorize?{params}')
 
     @app.get('/oauth-callback')
+    @_unauthenticated_site_limit()
     @limiter.limit('30 per minute')
     def oauth_callback():
         if request.args.get('state') != session.pop('oauth_state', None):
