@@ -856,10 +856,11 @@ def test_invite_only_blocks_uninvited(client, app, participant):
     entry = _entry(client, 'private')
     assert entry.status_code == 200
     assert entry.get_json()['data']['state'] == 'invite_denied'
+    assert entry.get_json()['data']['viewer'] == 'refused'
 
     workspace = _workspace(client, 'private')
     assert workspace.status_code == 403
-    assert workspace.get_json()['error']['code'] == 'invite_only'
+    assert workspace.get_json()['error']['code'] == 'access_required'
 
 
 def test_invite_only_allows_invited(client, app, participant):
@@ -881,8 +882,10 @@ def test_invite_only_allows_invited(client, app, participant):
     assert workspace.get_json()['data']['viewer']['state'] == 'join_required'
 
 
-def test_invite_only_allows_already_joined(client, app, participant):
-    """A participant who already joined can visit even without an invite row."""
+def test_invite_only_marks_joined_participant_access_lost_without_invite(
+    client, app, participant,
+):
+    """Having joined does not bypass the current invite-only access check."""
     c = Conversation(slug='private3', polis_id='pr31234567', title='Private3',
                      active=True, access_policy='invite_only')
     db.session.add(c)
@@ -894,9 +897,12 @@ def test_invite_only_allows_already_joined(client, app, participant):
     login(client, 'testuser')
 
     assert ConversationInvite.query.filter_by(conversation_id=c.id).count() == 0
+    entry = _entry(client, 'private3')
+    assert entry.status_code == 200
+    assert entry.get_json()['data']['state'] == 'access_lost'
+    assert entry.get_json()['data']['viewer'] == 'access_lost'
+
     resp = _workspace(client, 'private3')
 
-    assert resp.status_code == 200
-    assert resp.get_json()['data']['viewer'] == {
-        'state': 'participant', 'pseudonym': 'quick-otter',
-    }
+    assert resp.status_code == 403
+    assert resp.get_json()['error']['details']['viewer'] == 'access_lost'
