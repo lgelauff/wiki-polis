@@ -375,8 +375,8 @@ def _check_eligibility(app, conv, participant):
         return _check_join_eligibility(conv, participant)
 
 
-def test_eligibility_defaults_to_canivote(app):
-    assert app.config['ACCOUNT_ELIGIBILITY_URL'] == 'https://canivote.toolforge.org'
+def test_eligibility_checker_stays_unconfigured_until_policy_migration(app):
+    assert app.config['ACCOUNT_ELIGIBILITY_URL'] == ''
 
 
 @pytest.mark.parametrize(

@@ -4877,7 +4877,10 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config['ACCOUNT_ELIGIBILITY_URL'] = (
         _read_secret('account-eligibility-url')
         or os.environ.get('ACCOUNT_ELIGIBILITY_URL')
-        or 'https://canivote.toolforge.org'
+        # Keep legacy event ids offline until #406 work item 2 migrates them to
+        # canivote policy ids; otherwise the default would disclose usernames
+        # for checks that can only return a policy-not-found response.
+        or ''
     )
     app.config['STATEMENT_SIMILARITY_URL'] = (
         _read_secret('statement-similarity-url')
