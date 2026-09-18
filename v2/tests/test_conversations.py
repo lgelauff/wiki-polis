@@ -424,7 +424,7 @@ def test_canivote_http_failures_are_could_not_check_and_do_not_log_username(
         False, 'unavailable', {'reason': 'eligibility checker is unavailable'},
     )
     assert participant.mw_username not in caplog.text
-    assert f'policy=policy-123' in caplog.text
+    assert 'policy=policy-123' in caplog.text
     assert f'status={status_code}' in caplog.text
     if status_code == 429:
         assert 'retry_after=30' in caplog.text
