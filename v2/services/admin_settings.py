@@ -118,6 +118,13 @@ def update_conversation_settings(
     if not gated:
         gating_type = None
 
+    # Invite membership is the complete eligibility source for this provider.
+    # Do not leave the legacy event checker active as a second, contradictory
+    # admission gate when an organizer selects invite-only access.
+    if gating_type == 'invite_only':
+        eligibility_event_id = ''
+        eligibility_label = ''
+
     locked_fields = {
         'gated': gated,
         'gating_type': gating_type,
