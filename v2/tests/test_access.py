@@ -1,8 +1,10 @@
 """Provider-neutral access contract tests."""
 
+from types import SimpleNamespace
+
 import pytest
 
-from db import Participation, db
+from db import ConversationInvite, Participation, db
 from services.access import AccessAnswer, check_access
 
 
@@ -54,6 +56,23 @@ def test_unknown_provider_keeps_viewer_relationship_and_certainty(
     assert decision.reason == 'access-could-not-confirm'
 
 
+def test_invite_lookup_does_not_match_null_identity(app, conversation):
+    conversation.access_policy = 'invite_only'
+    db.session.add(ConversationInvite(
+        conversation_id=conversation.id,
+        mw_username='legacy-account',
+        mw_user_id=None,
+    ))
+    voucher = SimpleNamespace(id=999, mw_user_id=None, mw_username=None)
+    db.session.commit()
+
+    decision = check_access(conversation, voucher)
+
+    assert decision.allowed is False
+    assert decision.viewer == 'refused'
+    assert decision.reason == 'access-invite-required'
+
+
 def test_logged_out_access_has_a_viewer_state_without_provider_call(
     app, conversation,
 ):
@@ -68,4 +87,3 @@ def test_logged_out_access_has_a_viewer_state_without_provider_call(
     assert decision.answer is None
     assert decision.certainty == 'known'
     assert decision.reason is None
-

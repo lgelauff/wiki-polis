@@ -114,12 +114,23 @@ def conversation_gating_type(conversation) -> str | None:
 
 def answer_invite_only(conversation, participant) -> AccessAnswer:
     """Resolve invite-only access by stable user id, with username fallback."""
+    identity_filters = []
+    if participant.mw_user_id is not None:
+        identity_filters.append(
+            ConversationInvite.mw_user_id == participant.mw_user_id,
+        )
+    if participant.mw_username:
+        identity_filters.append(
+            ConversationInvite.mw_username == participant.mw_username,
+        )
+    if not identity_filters:
+        return AccessAnswer(
+            'refused',
+            reason='access-invite-required',
+        )
     invited = ConversationInvite.query.filter(
         ConversationInvite.conversation_id == conversation.id,
-        db.or_(
-            ConversationInvite.mw_user_id == participant.mw_user_id,
-            ConversationInvite.mw_username == participant.mw_username,
-        ),
+        db.or_(*identity_filters),
     ).first()
     if invited is not None:
         return AccessAnswer('authorised')
@@ -217,4 +228,3 @@ def check_access(
         certainty=answer.certainty,
         reason=answer.reason,
     )
-
