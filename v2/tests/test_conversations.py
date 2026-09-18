@@ -302,7 +302,10 @@ def test_accept_post_eligibility_gate_allows_and_caches_verdict(auth_client, con
     db.session.commit()
 
     with patch('app.requests.get', return_value=_canivote_response(
-            'eligible', event='event-123')) as req:
+            'eligible', event='event-123', reason='upstream prose', criteria=[
+                {'metric': 'edit_count', 'passed': True,
+                 'display': '500 edits'},
+            ])) as req:
         resp = auth_client.post('/api/v1/conversations/test-conv/participation',
                                 json={'pseudonym': 'silly-goat'})
 
@@ -334,7 +337,10 @@ def test_accept_post_eligibility_gate_blocks_ineligible(auth_client, conv, parti
         'data']['conversation']['eligibilityLabel'] == 'extended-confirmed'
 
     with patch('app.requests.get', return_value=_canivote_response(
-            'not_eligible', reason='Needs 500 edits.')):
+            'not_eligible', reason='Needs 500 edits.', criteria=[
+                {'metric': 'edit_count', 'passed': False,
+                 'display': 'Needs 500 edits.'},
+            ])):
         resp = auth_client.post('/api/v1/conversations/test-conv/participation',
                                 json={'pseudonym': 'silly-goat'})
 
@@ -343,7 +349,7 @@ def test_accept_post_eligibility_gate_blocks_ineligible(auth_client, conv, parti
     assert error['code'] == 'eligibility_denied'
     assert error['details'] == {
         'status': 'ineligible',
-        'displayMessage': 'Needs 500 edits.',
+        'displayMessage': None,
     }
     assert Participation.query.filter_by(
         participant_id=participant.id, conversation_id=conv.id).first() is None
