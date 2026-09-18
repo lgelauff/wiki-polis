@@ -406,6 +406,31 @@ def test_canivote_verdicts_control_join_eligibility(
     }
 
 
+def test_canivote_indeterminate_is_logged_without_username(app, conv, participant, caplog):
+    conv.eligibility_event_id = 'policy-123'
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://canivote.example'
+    db.session.commit()
+    response = _canivote_response(
+        'indeterminate',
+        criteria=[
+            {'metric': 'registration_age', 'passed': None,
+             'display': participant.mw_username},
+            {'metric': 'edit_count', 'passed': True},
+        ],
+    )
+
+    with patch('app.requests.get', return_value=response), caplog.at_level(
+            logging.WARNING, logger='app'):
+        result = _check_eligibility(app, conv, participant)
+
+    assert result[0:2] == (False, 'unavailable')
+    assert 'eligibility check indeterminate' in caplog.text
+    assert 'policy=policy-123' in caplog.text
+    assert f'participant_id={participant.id}' in caplog.text
+    assert 'metrics=registration_age' in caplog.text
+    assert participant.mw_username not in caplog.text
+
+
 @pytest.mark.parametrize('status_code', (400, 404, 429, 500, 502))
 def test_canivote_http_failures_are_could_not_check_and_do_not_log_username(
     app, conv, participant, caplog, status_code,
