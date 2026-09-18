@@ -1493,9 +1493,14 @@ def _ratelimit_identity_key() -> str:
         client_identity = get_remote_address()
         identity_kind, identity_value = 'ip', client_identity
 
-    identity_secret = current_app.config.get('RATELIMIT_IDENTITY_SECRET', '')
-    if not identity_secret:
-        return client_identity
+    # Production startup requires RATELIMIT_IDENTITY_SECRET. Local and staging
+    # configurations may omit it, but must still hash the value: a durable xid
+    # must never land verbatim in limiter storage or limiter-side logs.
+    identity_secret = (
+        current_app.config.get('RATELIMIT_IDENTITY_SECRET')
+        or current_app.config.get('SECRET_KEY')
+        or 'wiki-polis-dev-ratelimit-fallback'
+    )
     digest = hmac.new(str(identity_secret).encode('utf-8'),
                       identity_value.encode('utf-8'),
                       hashlib.sha256).hexdigest()

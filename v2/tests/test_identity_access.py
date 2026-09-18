@@ -94,6 +94,28 @@ def test_toolforge_limiter_uses_account_not_forwarded_address(app):
     assert '198.51.100.20' not in second
 
 
+def test_limiter_hashes_account_xid_without_dedicated_secret(app):
+    app.config['RATELIMIT_IDENTITY_SECRET'] = ''
+    app.config['SECRET_KEY'] = 'test-secret'
+    with patch.dict(os.environ, {
+        'TOOL_TOOLFORGE_API_URL': 'https://toolforge.example.test',
+        'TOOL_NAME': 'wiki-polis',
+    }, clear=False):
+        with app.test_request_context('/'):
+            from flask import session
+
+            session['xid'] = 'durable-polis-xid'
+            actual = _ratelimit_identity_key()
+
+    expected = 'account:' + hmac.new(
+        b'test-secret',
+        b'xid:durable-polis-xid',
+        hashlib.sha256,
+    ).hexdigest()
+    assert actual == expected
+    assert 'durable-polis-xid' not in actual
+
+
 def test_toolforge_limiter_separates_anonymous_sessions(app):
     app.config['RATELIMIT_IDENTITY_SECRET'] = 's' * 32
     with patch.dict(os.environ, {
