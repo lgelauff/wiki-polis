@@ -4966,11 +4966,12 @@ def create_app(test_config: dict | None = None) -> Flask:
             f'{result["skipped"]} not due.'
         )
 
-    # UI locale config: which locales are offered (CSV) + the fallback. Defaults to English
-    # only, so there is no visible change until translatewiki.net delivers translations and
-    # a deploy opts into them.
+    # UI locale config: which locales are offered (CSV) + the fallback. Defaults to
+    # English and the in-repo translations, so the language switcher is visible as
+    # soon as a locale ships its first catalogue.  Set ENABLED_LOCALES to override.
     _default_locale = os.environ.get('DEFAULT_LOCALE', '').strip() or i18n.SOURCE_LOCALE
-    _enabled_locales = _split_csv(os.environ.get('ENABLED_LOCALES', '')) or [i18n.SOURCE_LOCALE]
+    _enabled_locales = (_split_csv(os.environ.get('ENABLED_LOCALES', ''))
+                        or [i18n.SOURCE_LOCALE, 'nl'])
     if _default_locale not in _enabled_locales:
         _enabled_locales.append(_default_locale)
     app.config['DEFAULT_LOCALE']  = _default_locale
