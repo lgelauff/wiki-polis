@@ -35,9 +35,15 @@ function AuthenticatedParticipationEntry({slug, csrfToken}: {
   csrfToken: string;
 }) {
   const {data} = useSuspenseQuery(participationEntryQuery(slug));
-  if (data.state === 'redirect') return <NavigationRedirect href={data.href} />;
-  if (data.state === 'invite_denied' || data.state === 'access_lost') return <InviteDeniedPage data={data} />;
-  return <JoinPage data={data} csrfToken={csrfToken} />;
+  switch (data.state) {
+    case 'redirect':
+      return <NavigationRedirect href={data.href} />;
+    case 'join':
+      return <JoinPage data={data} csrfToken={csrfToken} />;
+    case 'invite_denied':
+    case 'access_lost':
+      return <InviteDeniedPage data={data} />;
+  }
 }
 
 type ParticipationEntry = components['schemas']['ParticipationEntryResponse']['data'];
