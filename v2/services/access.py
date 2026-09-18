@@ -76,7 +76,13 @@ class AccessRequired(RuntimeError):
         self.decision = decision
 
     def details(self) -> dict:
-        """Return the stable refusal payload shared by every API endpoint."""
+        """Return the stable refusal payload shared by every API endpoint.
+
+        ``loginOptions`` and ``sharedResults`` are deliberately explicit
+        projections for the login prompt and results-only surface. This lane
+        owns the shared gate, not those surfaces, so it returns empty lists
+        until their links can be populated by the visibility/results work.
+        """
         return {
             'slug': self.conversation.slug,
             'title': self.conversation.title,
