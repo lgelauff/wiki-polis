@@ -67,8 +67,8 @@ def test_organizer_replaces_settings_idempotently(
     assert settings['conversation']['title'] == 'Updated consultation'
     assert '<script' not in settings['conversation']['introHtml']
     assert settings['conversation']['accessPolicy'] == 'invite_only'
-    assert settings['eligibility']['eventId'] == 'extended-confirmed'
-    assert settings['eligibility']['label'] == 'Extended-confirmed editors'
+    assert settings['eligibility']['eventId'] == ''
+    assert settings['eligibility']['label'] is None
     assert settings['recommendations']['tier'] == 'complex'
     assert AuditEvent.query.filter_by(
         operation='conversation.settings.update',
