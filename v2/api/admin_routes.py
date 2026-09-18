@@ -42,6 +42,7 @@ from services.admin_catalog import (
     ConversationCreationSaveFailed, ConversationCreationUpstreamFailed,
     ConversationSlugConflict, GlobalAdminParticipantNotFound,
 )
+from services.admin_settings import AccessSettingsLocked, InvalidAccessSettings
 
 
 def register_admin_routes(
@@ -277,12 +278,20 @@ def register_admin_routes(
     @bp.put('/admin/conversations/<int:conversation_id>/settings')
     def put_admin_conversation_settings(conversation_id: int):
         body = request.get_json(silent=True)
-        expected = {
+        legacy_expected = {
             'title', 'introHtml', 'outroHtml', 'accessPolicy',
             'eligibilityEventId', 'eligibilityLabel', 'recommendationTier',
         }
+        access_expected = legacy_expected | {
+            'gated', 'gatingType', 'announce', 'information',
+            'resultsShared', 'showUsernames', 'accessRequestText',
+        }
+        access_without_legacy_alias = access_expected - {'accessPolicy'}
         fields = {}
-        if not isinstance(body, dict) or set(body) != expected:
+        if (not isinstance(body, dict)
+                or set(body) not in (
+                    legacy_expected, access_expected, access_without_legacy_alias,
+                )):
             return error_response(
                 'validation_failed', 'Provide the complete settings representation.',
                 400,
@@ -297,8 +306,24 @@ def register_admin_routes(
             fields['eligibilityEventId'] = ['Use at most 80 characters.']
         if isinstance(body['eligibilityLabel'], str) and len(body['eligibilityLabel']) > 255:
             fields['eligibilityLabel'] = ['Use at most 255 characters.']
-        if body['accessPolicy'] not in {'public', 'invite_only', 'demo'}:
+        access_policy = body.get('accessPolicy')
+        if access_policy is not None and access_policy not in {
+            'public', 'invite_only', 'demo',
+        }:
             fields['accessPolicy'] = ['Choose public, invite_only, or demo.']
+        if 'gated' in body and not isinstance(body['gated'], bool):
+            fields['gated'] = ['Use true or false.']
+        if 'gatingType' in body and body['gatingType'] not in {
+            None, 'invite_only', 'voucher', 'wiki_based',
+        }:
+            fields['gatingType'] = ['Choose invite_only, voucher, or wiki_based.']
+        for key in ('announce', 'information', 'resultsShared', 'showUsernames'):
+            if key in body and not isinstance(body[key], bool):
+                fields[key] = ['Use true or false.']
+        if ('accessRequestText' in body
+                and body['accessRequestText'] is not None
+                and not isinstance(body['accessRequestText'], str)):
+            fields['accessRequestText'] = ['Use text or null.']
         if body['recommendationTier'] not in {'simple', 'medium', 'complex'}:
             fields['recommendationTier'] = ['Choose a supported scope tier.']
         if fields:
@@ -306,9 +331,25 @@ def register_admin_routes(
                 'validation_failed', 'Check the highlighted settings.', 400,
                 details={'fields': fields},
             )
-        return _no_store(jsonify({
-            'data': update_admin_settings(conversation_id, body),
-        }))
+        if access_policy is None:
+            body = {
+                **body,
+                'accessPolicy': 'invite_only' if body.get('gated') else 'public',
+            }
+        try:
+            data = update_admin_settings(conversation_id, body)
+        except AccessSettingsLocked as exc:
+            return error_response(
+                'access_settings_locked',
+                'Gated access settings cannot change after Explore starts.',
+                409,
+                details={'field': exc.field},
+            )
+        except InvalidAccessSettings as exc:
+            return error_response(
+                'validation_failed', str(exc), 400,
+            )
+        return _no_store(jsonify({'data': data}))
 
     @bp.put('/admin/conversations/<int:conversation_id>/recommendation-tier')
     def put_admin_conversation_recommendation_tier(conversation_id: int):
@@ -747,5 +788,3 @@ def register_admin_routes(
         return _no_store(jsonify({
             'data': replace_admin_roles(conversation_id, participant_id, body),
         }))
-
-
