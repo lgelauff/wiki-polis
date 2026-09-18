@@ -9,7 +9,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
-from db import ConversationInvite, db
+from db import ConversationInvite
 
 
 AccessState = Literal['authorised', 'refused', 'unknown']
@@ -113,24 +113,15 @@ def conversation_gating_type(conversation) -> str | None:
 
 
 def answer_invite_only(conversation, participant) -> AccessAnswer:
-    """Resolve invite-only access by stable user id, with username fallback."""
-    identity_filters = []
-    if participant.mw_user_id is not None:
-        identity_filters.append(
-            ConversationInvite.mw_user_id == participant.mw_user_id,
-        )
-    if participant.mw_username:
-        identity_filters.append(
-            ConversationInvite.mw_username == participant.mw_username,
-        )
-    if not identity_filters:
+    """Resolve invite-only access by the stable Wikimedia user id only."""
+    if participant.mw_user_id is None:
         return AccessAnswer(
             'refused',
             reason='access-invite-required',
         )
     invited = ConversationInvite.query.filter(
         ConversationInvite.conversation_id == conversation.id,
-        db.or_(*identity_filters),
+        ConversationInvite.mw_user_id == participant.mw_user_id,
     ).first()
     if invited is not None:
         return AccessAnswer('authorised')

@@ -73,6 +73,24 @@ def test_invite_lookup_does_not_match_null_identity(app, conversation):
     assert decision.reason == 'access-invite-required'
 
 
+def test_invite_lookup_ignores_stale_username_with_different_user_id(
+    app, conversation, participant,
+):
+    conversation.access_policy = 'invite_only'
+    db.session.add(ConversationInvite(
+        conversation_id=conversation.id,
+        mw_username=participant.mw_username,
+        mw_user_id=12345,
+    ))
+    db.session.commit()
+
+    decision = check_access(conversation, participant)
+
+    assert decision.allowed is False
+    assert decision.viewer == 'refused'
+    assert decision.reason == 'access-invite-required'
+
+
 def test_logged_out_access_has_a_viewer_state_without_provider_call(
     app, conversation,
 ):
