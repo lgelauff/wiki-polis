@@ -138,7 +138,13 @@ def answer_invite_only(conversation, participant) -> AccessAnswer:
 
 
 def _unimplemented_provider_answer(conversation, participant) -> AccessAnswer:
-    """Safe placeholder until the provider-specific lane lands its adapter."""
+    """Fail closed until the provider-specific lane supplies its adapter.
+
+    Selecting ``voucher`` or ``wiki_based`` before that adapter is wired makes
+    every account unknown/inconclusive with no access, rather than accidentally
+    opening the conversation. Provider lanes integrate by replacing the
+    corresponding entry in ``DEFAULT_PROVIDERS``.
+    """
     del conversation, participant
     return AccessAnswer(
         'unknown',
@@ -147,6 +153,8 @@ def _unimplemented_provider_answer(conversation, participant) -> AccessAnswer:
     )
 
 
+# Provider-lane integration seam: each provider replaces its entry here while
+# the shared check and refusal/viewer mapping remain provider-neutral.
 DEFAULT_PROVIDERS: Mapping[str, AccessProvider] = {
     'invite_only': answer_invite_only,
     'voucher': _unimplemented_provider_answer,
