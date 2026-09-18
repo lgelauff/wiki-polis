@@ -181,6 +181,7 @@ def test_workspace_allows_invited_nonparticipant_to_join(
     db.session.add(ConversationInvite(
         conversation_id=conversation.id,
         mw_username=participant.mw_username,
+        mw_user_id=participant.mw_user_id,
     ))
     db.session.commit()
 

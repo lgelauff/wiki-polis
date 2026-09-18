@@ -83,6 +83,7 @@ def test_participation_entry_exposes_invite_denial_as_route_state(
     db.session.add(ConversationInvite(
         conversation_id=conversation.id,
         mw_username=participant.mw_username,
+        mw_user_id=participant.mw_user_id,
     ))
     db.session.commit()
     allowed = auth_client.get(

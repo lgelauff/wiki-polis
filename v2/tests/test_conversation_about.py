@@ -135,6 +135,7 @@ def test_invited_participant_can_view_about(
     db.session.add(ConversationInvite(
         conversation_id=conversation.id,
         mw_username=participant.mw_username,
+        mw_user_id=participant.mw_user_id,
     ))
     db.session.commit()
 

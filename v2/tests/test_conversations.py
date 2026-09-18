@@ -1014,7 +1014,11 @@ def test_invite_only_allows_invited(client, app, participant):
                      active=True, access_policy='invite_only')
     db.session.add(c)
     db.session.commit()
-    inv = ConversationInvite(conversation_id=c.id, mw_username='testuser')
+    inv = ConversationInvite(
+        conversation_id=c.id,
+        mw_username='testuser',
+        mw_user_id=participant.mw_user_id,
+    )
     db.session.add(inv)
     db.session.commit()
 
