@@ -1400,6 +1400,14 @@ export interface components {
             outroHtml: string;
             /** @enum {string} */
             accessPolicy: "public" | "invite_only" | "demo";
+            gated: boolean;
+            /** @enum {string} */
+            gatingType: "invite_only" | "voucher" | "wiki_based" | null;
+            announce: boolean;
+            information: boolean;
+            resultsShared: boolean;
+            showUsernames: boolean;
+            accessRequestText: string | null;
             eligibilityEventId: string;
             eligibilityLabel: string;
             /** @enum {string} */
@@ -1431,6 +1439,14 @@ export interface components {
                 outroHtml: string;
                 /** @enum {string} */
                 accessPolicy: "public" | "invite_only" | "demo";
+                gated: boolean;
+                /** @enum {string} */
+                gatingType: "invite_only" | "voucher" | "wiki_based" | null;
+                announce: boolean;
+                information: boolean;
+                resultsShared: boolean;
+                showUsernames: boolean;
+                accessRequestText: string | null;
                 phaseRoute: string;
                 phaseRouteLabel: string;
                 polisId: string;
@@ -1446,6 +1462,11 @@ export interface components {
             };
             capabilities: {
                 edit: boolean;
+            };
+            locks: {
+                gated: boolean;
+                gatingType: boolean;
+                showUsernames: boolean;
             };
             links: {
                 self: string;
@@ -2182,10 +2203,21 @@ export interface components {
             reason: "demo" | "already_participating";
             href: string;
         };
+        ParticipationRefusalConversation: {
+            id: number;
+            slug: string;
+            title: string;
+        };
         InviteDeniedParticipationEntry: {
             /** @enum {string} */
-            state: "invite_denied";
-            conversation: components["schemas"]["ParticipationEntryConversation"];
+            state: "invite_denied" | "access_lost";
+            conversation: components["schemas"]["ParticipationRefusalConversation"];
+            /** @enum {string} */
+            viewer: "refused" | "access_lost";
+            /** @enum {string} */
+            certainty: "known" | "temporary" | "inconclusive";
+            reason: string | null;
+            sharedResults: Record<string, never>[];
             canModerate: boolean;
             links: {
                 home: string;

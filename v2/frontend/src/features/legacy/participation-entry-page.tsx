@@ -36,12 +36,12 @@ function AuthenticatedParticipationEntry({slug, csrfToken}: {
 }) {
   const {data} = useSuspenseQuery(participationEntryQuery(slug));
   if (data.state === 'redirect') return <NavigationRedirect href={data.href} />;
-  if (data.state === 'invite_denied') return <InviteDeniedPage data={data} />;
+  if (data.state === 'invite_denied' || data.state === 'access_lost') return <InviteDeniedPage data={data} />;
   return <JoinPage data={data} csrfToken={csrfToken} />;
 }
 
 type ParticipationEntry = components['schemas']['ParticipationEntryResponse']['data'];
-type InviteDeniedEntry = Extract<ParticipationEntry, {state: 'invite_denied'}>;
+type InviteDeniedEntry = Extract<ParticipationEntry, {state: 'invite_denied' | 'access_lost'}>;
 type JoinEntry = Extract<ParticipationEntry, {state: 'join'}>;
 
 function InviteDeniedPage({data}: {data: InviteDeniedEntry}) {
