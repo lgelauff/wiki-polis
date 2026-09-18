@@ -66,7 +66,17 @@ def test_participation_entry_exposes_invite_denial_as_route_state(
     assert denied.status_code == 200
     data = denied.get_json()['data']
     assert data['state'] == 'invite_denied'
-    assert data['conversation']['title'] == 'Test Conversation'
+    assert data['conversation'] == {
+        'id': conversation.id,
+        'slug': 'test-conv',
+        'title': 'Test Conversation',
+    }
+    assert data['viewer'] == 'refused'
+    assert data['certainty'] == 'known'
+    assert data['reason'] == 'access-invite-required'
+    assert data['sharedResults'] == []
+    assert 'descriptionHtml' not in data['conversation']
+    assert 'eligibilityLabel' not in data['conversation']
     assert data['canModerate'] is False
     assert data['links'] == {'home': '/', 'manageInvites': None}
 

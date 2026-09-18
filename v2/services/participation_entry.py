@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from db import Conversation, Participant, Participation
+from services.access import AccessDecision
 
 
 @dataclass(frozen=True)
@@ -10,7 +11,7 @@ class ParticipationEntry:
     conversation: Conversation
     participant: Participant
     participation: Participation | None
-    invited: bool
+    access: AccessDecision
     can_moderate: bool
     emailable: bool
     pseudonyms: list[str]
@@ -18,11 +19,18 @@ class ParticipationEntry:
     reveal_window_end_days: int
 
     @property
+    def invited(self) -> bool:
+        """Compatibility projection; the shared check is authoritative."""
+        return self.access.allowed
+
+    @property
     def state(self) -> str:
-        if self.conversation.access_policy == 'demo' or self.participation:
+        if self.conversation.access_policy == 'demo' and self.access.allowed:
             return 'redirect'
-        if self.conversation.access_policy == 'invite_only' and not self.invited:
-            return 'invite_denied'
+        if not self.access.allowed:
+            return 'access_lost' if self.participation else 'invite_denied'
+        if self.participation:
+            return 'redirect'
         return 'join'
 
     def to_api(self, *, conversation_link: str, home_link: str,
@@ -41,10 +49,18 @@ class ParticipationEntry:
             'descriptionHtml': self.conversation.intro_text,
             'eligibilityLabel': self.conversation.eligibility_label,
         }
-        if self.state == 'invite_denied':
+        if self.state in {'invite_denied', 'access_lost'}:
             return {
-                'state': 'invite_denied',
-                'conversation': conversation,
+                'state': self.state,
+                'conversation': {
+                    'id': conversation['id'],
+                    'slug': conversation['slug'],
+                    'title': conversation['title'],
+                },
+                'viewer': self.access.viewer,
+                'certainty': self.access.certainty,
+                'reason': self.access.reason,
+                'sharedResults': [],
                 'canModerate': self.can_moderate,
                 'links': {
                     'home': home_link,
@@ -68,7 +84,7 @@ def build_participation_entry(
     *,
     conversation: Conversation,
     participant: Participant,
-    invited: bool,
+    access: AccessDecision,
     can_moderate: bool,
     emailable: bool,
     pseudonyms: list[str],
@@ -83,7 +99,7 @@ def build_participation_entry(
         conversation=conversation,
         participant=participant,
         participation=participation,
-        invited=invited,
+        access=access,
         can_moderate=can_moderate,
         emailable=emailable,
         pseudonyms=pseudonyms,

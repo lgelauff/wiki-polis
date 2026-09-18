@@ -53,6 +53,9 @@ from api.v1 import (
     register_api_error_handlers,
 )
 from services.identity import reconcile_participant_login
+from services.access import (
+    AccessRequired, check_access, is_gated_conversation,
+)
 from services.identity_reveal import (
     REVEAL_COOLDOWN_DAYS, REVEAL_WINDOW_DAYS, build_reveal_context as _reveal_context,
     reveal_identity as reveal_identity_command,
@@ -66,9 +69,7 @@ from services.invites import (
 )
 from services.conversation_about import build_conversation_about
 from services.conversation_lanes import (build_conversation_lane)
-from services.conversation_workspace import (
-    InviteOnlyWorkspaceAccess, build_conversation_workspace,
-)
+from services.conversation_workspace import build_conversation_workspace
 from services.participations import (join_conversation)
 from services.participation_entry import build_participation_entry
 from services.explore import (ExploreGateway, ParticiapiSessionState,
@@ -92,9 +93,10 @@ from services.admin_roles import (
     RoleParticipantNotFound, build_admin_role_roster,
     replace_conversation_roles,
 )
-from services.admin_settings import (build_admin_settings,
-                                     update_conversation_settings,
-                                     update_recommendation_tier)
+from services.admin_settings import (
+    build_admin_settings, update_conversation_settings,
+    update_recommendation_tier,
+)
 from services.admin_termination import (
     build_termination_state,
     delete_empty_conversation,
@@ -2093,25 +2095,13 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
         if _is_demo_session():
             _exit_demo_session()
         if 'username' not in session:
+            if is_gated_conversation(conv):
+                _check_conversation_access(conv, None)
             abort(401)
         participant = _current_participant()
         participation = None
 
-    access_denial = _conversation_access_denial(conv, participant)
-    if access_denial == 'invite_only':
-        can_moderate = _can_moderate(conv, participant)
-        access_links = {
-            'home': '/',
-        }
-        if can_moderate:
-            access_links['invitations'] = _admin_client_link(conv.id, 'invites')
-        raise InviteOnlyWorkspaceAccess(
-            title=conv.title,
-            can_moderate=can_moderate,
-            links=access_links,
-        )
-    if access_denial is not None:
-        abort(403)
+    _check_conversation_access(conv, participant)
     if participation is None and participant is not None:
         participation = Participation.query.filter_by(
             participant_id=participant.id,
@@ -2346,17 +2336,11 @@ def _participation_entry_read_model(slug: str):
     participant = _current_participant()
     if participant is None:
         abort(401)
-    invited = (
-        conv.access_policy != 'invite_only'
-        or ConversationInvite.query.filter_by(
-            conversation_id=conv.id,
-            mw_username=session.get('username'),
-        ).first() is not None
-    )
+    access = _conversation_access_decision(conv, participant)
     return build_participation_entry(
         conversation=conv,
         participant=participant,
-        invited=invited,
+        access=access,
         can_moderate=_can_moderate(conv, participant),
         emailable=bool(session.get('emailable')),
         pseudonyms=_generate_pseudonyms(5),
@@ -3901,6 +3885,13 @@ def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
         eligibility_label=body['eligibilityLabel'],
         tier=body['recommendationTier'], sanitise=_sanitise_text,
         session=db.session, audit=record_audit,
+        gated=body.get('gated'),
+        gating_type=body.get('gatingType'),
+        announce=body.get('announce', False),
+        information=body.get('information', False),
+        results_shared=body.get('resultsShared', False),
+        show_usernames=body.get('showUsernames', False),
+        access_request_text=body.get('accessRequestText'),
     )
     return {
         'changed': result.changed,
@@ -4106,6 +4097,8 @@ def _add_admin_invitations_api_payload(conv_id: int, body: dict) -> dict:
     usernames = [username.strip() for username in body['usernames']]
     result = add_conversation_invites(
         db.session, conversation_id=conv.id, usernames=usernames,
+        invited_by=(getattr(_current_participant(), 'mw_username', None)
+                    or session.get('username')),
     )
     if result.added:
         record_audit('invite.add', conv_id=conv.id, count=result.added)
@@ -4158,44 +4151,33 @@ def _abort_if_banned(conversation, participant: 'Participant | None') -> None:
         abort(403)
 
 
-def _conversation_access_denial(conversation, participant) -> str | None:
-    # NOTE (#293): for a demo session this expects the session to be ALREADY bound
-    # to `conversation` — the conversation view calls _ensure_demo_participation
-    # (which rebinds) before this. Don't reorder those calls, or demo roaming
-    # (visiting a demo the session isn't yet bound to) would 403 here.
-    if _is_demo_session():
-        if conversation.access_policy == 'demo' and _demo_bound_conversation_id() == conversation.id:
-            return None
-        return 'forbidden'
-    if conversation.access_policy == 'demo':
-        return None
-    if conversation.access_policy != 'invite_only':
-        return None
-    if participant:
-        existing = Participation.query.filter_by(
-            participant_id=participant.id,
-            conversation_id=conversation.id,
-        ).first()
-        if existing:
-            return None
-    username = session.get('username')
-    invited = ConversationInvite.query.filter_by(
-        conversation_id=conversation.id,
-        mw_username=username,
-    ).first()
-    return None if invited else 'invite_only'
+def _conversation_access_decision(conversation, participant):
+    """Resolve access once; a participation classifies refusal, never grants it."""
+    return check_access(
+        conversation,
+        participant,
+        demo_session=_is_demo_session(),
+        demo_conversation_id=_demo_bound_conversation_id(),
+    )
 
 
-def _check_conversation_access(conversation, participant) -> None:
+def _conversation_access_denial(conversation, participant):
+    """Compatibility wrapper returning the shared denial decision or ``None``."""
+    decision = _conversation_access_decision(conversation, participant)
+    return None if decision.allowed else decision
+
+
+def _check_conversation_access(conversation, participant):
     """Abort 403 when this participant may not see this conversation.
 
-    Every remaining caller is an /api/v1 payload builder, so the response shape is
-    the API's JSON envelope (InviteOnlyWorkspaceAccess -> 403 in api/v1.py). The
-    branded invite-only HTML page this used to raise belonged to the Jinja
-    frontend; the SPA renders that state from the 403 itself.
+    Every caller receives the same ``access_required`` envelope, including the
+    viewer state and provider certainty. In particular, an existing participation
+    is not an access shortcut.
     """
-    if _conversation_access_denial(conversation, participant) is not None:
-        abort(403)
+    decision = _conversation_access_decision(conversation, participant)
+    if not decision.allowed:
+        raise AccessRequired(conversation, decision)
+    return decision
 
 
 # ── Per-conversation Polis identity ───────────────────────────────────────────
