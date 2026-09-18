@@ -1384,24 +1384,92 @@ def _phase_stat_groups(conv, polis_stats, phase6_stats=None):
 csrf    = CSRFProtect()
 # No global default — limits applied per endpoint only.
 # Toolforge provides TOOL_REDIS_URI; production startup validates Redis isolation.
+def _ratelimit_account_or_session_identity() -> str:
+    """Return an account key, or a stable anonymous browser-session key.
+
+    Toolforge's forwarding headers are not a trustworthy per-visitor identity.
+    Account xids cover Wikimedia and voucher sessions alike; before login, the
+    server-side session id (or a session-local nonce as a fallback) isolates
+    anonymous browsers without using an address.
+    """
+    xid = session.get('xid')
+    if xid:
+        return f'account:xid:{xid}'
+
+    # Old sessions may predate the xid field. Keep their limits account-scoped
+    # until they are refreshed rather than falling back to a proxy address.
+    username = session.get('username')
+    if username:
+        return f'account:username:{username}'
+
+    session_id = getattr(session, 'sid', None)
+    if not session_id:
+        session_id = session.get('_ratelimit_session_id')
+    if not session_id:
+        session_id = secrets.token_urlsafe(24)
+        session['_ratelimit_session_id'] = session_id
+    return f'session:{session_id}'
+
+
+def _ratelimit_probe_fingerprint(value: str) -> str:
+    """Return a short, non-reversible value for temporary staging diagnostics."""
+    if not value:
+        return 'absent'
+    secret = current_app.config.get('RATELIMIT_IDENTITY_SECRET', '')
+    secret = str(secret or current_app.config.get('SECRET_KEY', ''))
+    digest = hmac.new(secret.encode('utf-8'), value.encode('utf-8'), hashlib.sha256)
+    return digest.hexdigest()[:16]
+
+
+def _log_temporary_toolforge_proxy_probe() -> None:
+    """Temporarily describe Toolforge forwarding behavior without logging addresses.
+
+    REMOVE THIS PROBE after staging measurement. The fingerprints are keyed and
+    truncated so logs retain no raw network addresses while still showing whether
+    two observations carry the same values and how many route entries arrived.
+    """
+    if not _is_staging_toolforge_app(current_app):
+        return
+
+    forwarded = request.headers.get('X-Forwarded-For', '')
+    forwarded_values = [value.strip() for value in forwarded.split(',') if value.strip()]
+    access_route = [str(value).strip() for value in request.access_route if str(value).strip()]
+    current_app.logger.info(
+        'TEMPORARY ratelimit proxy probe (remove after staging measurement) '
+        'remote_addr_fp=%s x_forwarded_for_fp=%s x_forwarded_for_count=%d '
+        'access_route_fp=%s access_route_count=%d',
+        _ratelimit_probe_fingerprint(str(request.remote_addr or '')),
+        [_ratelimit_probe_fingerprint(value) for value in forwarded_values],
+        len(forwarded_values),
+        [_ratelimit_probe_fingerprint(value) for value in access_route],
+        len(access_route),
+    )
+
+
 def _ratelimit_identity_key() -> str:
     """Return a stable, non-reversible client identity for Flask-Limiter."""
-    trust_proxy_headers = (
-        _truthy(current_app.config.get('TRUST_PROXY_HEADERS'))
-        or bool(os.environ.get('TOOL_TOOLFORGE_API_URL'))
-    )
-    if trust_proxy_headers:
+    on_toolforge = bool(os.environ.get('TOOL_TOOLFORGE_API_URL'))
+    if on_toolforge:
+        _log_temporary_toolforge_proxy_probe()
+        client_identity = _ratelimit_account_or_session_identity()
+        identity_kind, separator, identity_value = client_identity.partition(':')
+        if not separator or identity_kind not in {'account', 'session'}:
+            identity_kind, identity_value = 'session', client_identity
+    elif _truthy(current_app.config.get('TRUST_PROXY_HEADERS')):
         access_route = [addr.strip() for addr in request.access_route if addr.strip()]
         client_identity = access_route[0] if access_route else get_remote_address()
+        identity_kind, identity_value = 'ip', client_identity
     else:
         client_identity = get_remote_address()
+        identity_kind, identity_value = 'ip', client_identity
+
     identity_secret = current_app.config.get('RATELIMIT_IDENTITY_SECRET', '')
     if not identity_secret:
         return client_identity
     digest = hmac.new(str(identity_secret).encode('utf-8'),
-                      client_identity.encode('utf-8'),
+                      identity_value.encode('utf-8'),
                       hashlib.sha256).hexdigest()
-    return f'ip:{digest}'
+    return f'{identity_kind}:{digest}'
 
 
 limiter = Limiter(key_func=_ratelimit_identity_key, default_limits=[])
@@ -5147,7 +5215,13 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
         response.headers['Content-Security-Policy'] = csp
         response.headers['X-Content-Type-Options']  = 'nosniff'
-        response.headers['Referrer-Policy']         = 'strict-origin-when-cross-origin'
+        # Adopted voucher links carry the credential in a path segment. Keep it
+        # out of referrers on both the typed /v page and /v/<code> routes.
+        response.headers['Referrer-Policy'] = (
+            'no-referrer'
+            if request.path == '/v' or request.path.startswith('/v/')
+            else 'strict-origin-when-cross-origin'
+        )
         # X-Frame-Options superseded by frame-ancestors in CSP above, but kept for old browsers
         response.headers['X-Frame-Options']         = 'DENY'
         response.headers['X-Request-Id']            = g.get('request_id', '-')
