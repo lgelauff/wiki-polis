@@ -10,6 +10,7 @@ db = SQLAlchemy()
 # because SQLite and MySQL both ignore DateTime(timezone=True).
 
 ACCESS_POLICIES = ('public', 'invite_only', 'demo')
+GATING_TYPES   = ('invite_only', 'voucher', 'wiki_based')
 ADMIN_ROLES     = ('moderator', 'organizer')   # conversation-scoped; site-wide access is Participant.is_global_admin
 ARGUMENT_SIDES  = ('pro', 'con')
 FLAG_CONTENT_TYPES = ('statement', 'argument')
@@ -77,6 +78,10 @@ class Conversation(db.Model):
             "statement_moderation_policy IN ('moderate', 'auto_approve')",
             name='ck_conversation_statement_moderation_policy',
         ),
+        db.CheckConstraint(
+            "gating_type IS NULL OR gating_type IN ('invite_only', 'voucher', 'wiki_based')",
+            name='ck_conversation_gating_type',
+        ),
     )
 
     id           = db.Column(db.Integer, primary_key=True)
@@ -88,7 +93,22 @@ class Conversation(db.Model):
     outro_text   = db.Column(db.Text, nullable=True)   # sanitised HTML
     active       = db.Column(db.Boolean, default=True, nullable=False)
     paused       = db.Column(db.Boolean, default=False, nullable=False)  # reversible; does NOT start reveal clock
+    # ``access_policy`` is retained as a compatibility alias while the access
+    # epic moves admission and visibility to these explicit settings. ``demo``
+    # remains a separate process kind and is not represented by ``gated``.
     access_policy = db.Column(db.String(20), nullable=False, default='public')
+    gated         = db.Column(db.Boolean, nullable=False, default=False,
+                               server_default=sa.false())
+    gating_type   = db.Column(db.String(32), nullable=True)
+    announce      = db.Column(db.Boolean, nullable=False, default=False,
+                               server_default=sa.false())
+    information   = db.Column(db.Boolean, nullable=False, default=False,
+                               server_default=sa.false())
+    results_shared = db.Column(db.Boolean, nullable=False, default=False,
+                               server_default=sa.false())
+    show_usernames = db.Column(db.Boolean, nullable=False, default=False,
+                               server_default=sa.false())
+    access_request_text = db.Column(db.Text, nullable=True)
     # Local default for future participant statements. Nullable only for legacy rows:
     # their current upstream strict_moderation value is adopted on first reconciliation.
     statement_moderation_policy = db.Column(
@@ -241,6 +261,8 @@ class ConversationInvite(db.Model):
     id              = db.Column(db.Integer, primary_key=True)
     conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
     mw_username     = db.Column(db.String(255), nullable=False)
+    mw_user_id      = db.Column(db.Integer, nullable=True)
+    invited_by      = db.Column(db.String(255), nullable=True)
     created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     conversation = db.relationship('Conversation', back_populates='invites')
