@@ -1650,6 +1650,31 @@ def _log_eligibility_failure(
         )
 
 
+def _eligibility_unmeasured_metrics(payload: dict) -> list[str]:
+    """Return canivote metric ids for criteria that could not be measured."""
+    criteria = payload.get('criteria')
+    if not isinstance(criteria, list):
+        return []
+
+    metrics = []
+    for criterion in criteria:
+        if not isinstance(criterion, dict) or criterion.get('passed') is not None:
+            continue
+        metric = criterion.get('metric')
+        if isinstance(metric, str) and metric and metric not in metrics:
+            metrics.append(metric)
+    return metrics
+
+
+def _log_eligibility_indeterminate(policy_id: str, participant, payload: dict) -> None:
+    """Log an indeterminate verdict without logging canivote's response prose."""
+    metrics = ','.join(_eligibility_unmeasured_metrics(payload)) or 'unknown'
+    current_app.logger.warning(
+        'eligibility check indeterminate policy=%s participant_id=%s metrics=%s',
+        policy_id, participant.id, metrics,
+    )
+
+
 def _check_join_eligibility(conversation, participant) -> tuple[bool, str, dict]:
     """Return (allowed, status, detail) for the optional join-time gate (#146).
 
@@ -1714,6 +1739,7 @@ def _check_join_eligibility(conversation, participant) -> tuple[bool, str, dict]
     # The current join API has no separate indeterminate status yet. Keep this
     # on the could-not-check path rather than presenting it as not eligible;
     # the stored verdict model and dedicated refusal copy belong to later work.
+    _log_eligibility_indeterminate(policy_id, participant, payload)
     return False, 'unavailable', _eligibility_detail(
         payload, reason='eligibility could not be determined',
     )
