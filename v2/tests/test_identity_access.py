@@ -154,6 +154,31 @@ def test_temporary_toolforge_probe_never_logs_raw_addresses(app, caplog):
     assert '192.0.2.10' not in caplog.text
 
 
+def test_temporary_toolforge_probe_is_sample_capped(app, caplog, monkeypatch):
+    import app as app_module
+
+    app.config['RATELIMIT_IDENTITY_SECRET'] = 's' * 32
+    monkeypatch.setattr(app_module, '_ratelimit_proxy_probe_count', 0)
+    monkeypatch.setattr(app_module, '_RATELIMIT_PROXY_PROBE_MAX_SAMPLES', 2)
+    with patch.dict(os.environ, {
+        'TOOL_TOOLFORGE_API_URL': 'https://toolforge.example.test',
+        'TOOL_NAME': 'wiki-polis-dev',
+    }, clear=False):
+        with caplog.at_level(logging.INFO):
+            for _ in range(3):
+                with app.test_request_context('/'):
+                    _ratelimit_identity_key()
+
+    probe_records = [
+        record for record in caplog.records
+        if 'TEMPORARY ratelimit proxy probe' in record.getMessage()
+    ]
+    assert len(probe_records) == 2
+    assert 'sample=1/2' in probe_records[0].getMessage()
+    assert 'sample=2/2' in probe_records[1].getMessage()
+    assert 'remove_after=2026-10-02' in probe_records[0].getMessage()
+
+
 def test_voucher_path_redaction_covers_the_credential():
     code = '0123456789AB'
     redacted = _redact(f'GET /v/{code}?next=/c/demo')
