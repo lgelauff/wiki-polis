@@ -5029,8 +5029,18 @@ def create_app(test_config: dict | None = None) -> Flask:
     _migration_mode = bool(os.environ.get('MIGRATION_MODE'))
 
     _trust_proxy_headers = app.config.get('TRUST_PROXY_HEADERS')
+    _trust_proxy_headers_explicit = 'TRUST_PROXY_HEADERS' in app.config
     if _trust_proxy_headers is None:
+        _trust_proxy_headers_explicit = (
+            'TRUST_PROXY_HEADERS' in os.environ
+            or os.path.exists('/run/secrets/wiki-polis/trust-proxy-headers')
+        )
         _trust_proxy_headers = _read_secret('trust-proxy-headers')
+    if _on_toolforge and _trust_proxy_headers_explicit:
+        app.logger.warning(
+            'TRUST_PROXY_HEADERS is ignored on Toolforge; '
+            'X-Forwarded-For is not trusted for rate-limit identity'
+        )
     app.config['TRUST_PROXY_HEADERS'] = (
         _truthy(_trust_proxy_headers) or bool(os.environ.get('TOOL_TOOLFORGE_API_URL'))
     )
