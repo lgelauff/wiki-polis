@@ -741,6 +741,8 @@
     "adminconv-p6-not-init": "Shown when Phase 6 is enabled but not initialised.",
     "adminconv-p6-init-btn": "Button to initialise Phase 6.",
     "adminconv-content-access": "Section label for the secondary management cards.",
+    "adminconv-card-settings": "Management card title: the conversation settings page.\n\nThe page holds the description, access and eligibility controls, and the guidance scope.",
+    "adminconv-card-settings-desc": "Management card description: conversation settings.",
     "adminconv-card-statements": "Management card title: statements.\n{{Identical|Statements}}",
     "adminconv-card-statements-desc": "Management card description: statements.",
     "adminconv-invite-count": "Invite count on the invites card. $1 is the number.",

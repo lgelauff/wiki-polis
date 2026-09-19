@@ -1,4 +1,4 @@
-import {Fragment, useCallback, useLayoutEffect, useState, type FormEvent} from 'react';
+import {Fragment, useCallback, useLayoutEffect, useState} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 
@@ -7,7 +7,6 @@ import {ApiContractError} from '../../api/client';
 import {
   adminLifecycleQuery,
   adminRoleRosterQuery,
-  adminSettingsQuery,
   adminTerminationQuery,
   createAdminPhase6Initialization,
   createAdminPublication,
@@ -15,16 +14,14 @@ import {
   putAdminPause,
   putAdminPhase,
   putAdminPhases,
-  putAdminRecommendationTier,
   putAdminRoles,
   putAdminSchedule,
-  putAdminSettings,
 } from '../../api/queries';
 import {LegacyShell} from '../legacy/legacy-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
-import {phaseLabel, routeLabel} from '../../i18n/server-labels';
+import {phaseLabel} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
 
@@ -60,7 +57,6 @@ export function phaseTransitionToast(
   parts.push(msg('flash-moved-to', phaseLabel(msg, transition.targetKey, transition.targetLabel)));
   return {category, message: parts.join(' ')};
 }
-type Settings = components['schemas']['AdminSettings'];
 type RoleRoster = components['schemas']['AdminRoleRoster'];
 type Role = 'moderator' | 'organizer';
 
@@ -180,53 +176,6 @@ function RoleSection({conversationId, csrfToken, roster, refresh, fail}: {
   </div>;
 }
 
-function ConfigurationSection({conversationId, csrfToken, settings, refresh, fail}: {
-  conversationId: number; csrfToken: string; settings: Settings;
-  refresh: () => void; fail: (error: Error) => void;
-}) {
-  const msg = useMessage();
-  const [title, setTitle] = useState(settings.conversation.title);
-  const [introHtml, setIntroHtml] = useState(settings.conversation.introHtml);
-  const [outroHtml, setOutroHtml] = useState(settings.conversation.outroHtml);
-  const [accessPolicy, setAccessPolicy] = useState(settings.conversation.accessPolicy);
-  const [eventId, setEventId] = useState(settings.eligibility.eventId);
-  const [eligibilityLabel, setEligibilityLabel] = useState(settings.eligibility.label ?? '');
-  const [tier, setTier] = useState(settings.recommendations.tier);
-  const settingsMutation = useMutation({
-    mutationFn: () => putAdminSettings(conversationId, {title, introHtml, outroHtml, accessPolicy, eligibilityEventId: eventId, eligibilityLabel, recommendationTier: settings.recommendations.tier, gated: settings.conversation.gated, gatingType: settings.conversation.gatingType, announce: settings.conversation.announce, information: settings.conversation.information, resultsShared: settings.conversation.resultsShared, showUsernames: settings.conversation.showUsernames, accessRequestText: settings.conversation.accessRequestText}, csrfToken),
-    onSuccess: refresh,
-    onError: fail,
-  });
-  const recommendationMutation = useMutation({
-    mutationFn: () => putAdminRecommendationTier(conversationId, {tier}, csrfToken),
-    onSuccess: refresh,
-    onError: fail,
-  });
-  return <div className="console-section">
-    <div className="console-section-label">{msg('adminconv-config-label')}</div>
-    <details className="phase-advanced"><summary>{msg('adminconv-settings-summary')}</summary>
-      <form className="panel" style={{marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); settingsMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} />
-        <div className="edit-row-fields">
-          <label>{msg('admin-label-title')}<input type="text" required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-          <label>{msg('adminconv-label-route-locked')}<input type="text" readOnly value={routeLabel(msg, settings.conversation.phaseRoute, settings.conversation.phaseRouteLabel)} style={{background: '#f5f5f5', color: '#666'}} /></label>
-          <label>{msg('adminconv-label-polis-id')}<input type="text" readOnly value={settings.conversation.polisId} style={{background: '#f5f5f5', color: '#666'}} /></label>
-          <label>{msg('admin-label-access')}<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as typeof accessPolicy)}><option value="public">public</option><option value="invite_only">invite_only</option><option value="demo">demo</option></select></label>
-          <label>{msg('admin-label-elig-event')}<input type="text" maxLength={80} value={eventId} onChange={(event) => setEventId(event.target.value)} /></label>
-          <label>{msg('admin-label-elig-label')}<input type="text" maxLength={255} value={eligibilityLabel} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
-        </div>
-        <div className="edit-row-texts"><label>{msg('admin-label-intro')}<textarea rows={4} value={introHtml} onChange={(event) => setIntroHtml(event.target.value)} /></label><label>{msg('admin-label-outro')}<textarea rows={4} value={outroHtml} onChange={(event) => setOutroHtml(event.target.value)} /></label></div>
-        <button type="submit">{msg('adminconv-save-settings')}</button>
-      </form>
-    </details>
-    <details className="phase-advanced"><summary>{msg('adminconv-rec-summary')}</summary>
-      <form className="panel" style={{marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); recommendationMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><p className="section-help">{msg('adminconv-rec-help')}</p>
-        <div className="edit-row-fields"><label>{msg('adminconv-label-tier')}<select value={tier} onChange={(event) => setTier(event.target.value as typeof tier)}>{settings.recommendations.tiers.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>{Object.entries(settings.recommendations.tiers.find((item) => item.key === tier)?.quantities ?? {}).map(([key, value]) => <div className="recommendation-value" key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}</strong></div>)}</div>
-        <button type="submit">{msg('adminconv-save-rec')}</button>
-      </form>
-    </details>
-  </div>;
-}
-
 function ClosedDescription({lifecycle}: {lifecycle: Lifecycle}) {
   const msg = useMessage();
   const dates = useDateFormat();
@@ -272,10 +221,8 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
   const msg = useMessage();
   const queryClient = useQueryClient();
   const lifecycleOptions = adminLifecycleQuery(conversationId);
-  const settingsOptions = adminSettingsQuery(conversationId);
   const rolesOptions = adminRoleRosterQuery(conversationId);
   const {data} = useSuspenseQuery(lifecycleOptions);
-  const {data: settings} = useSuspenseQuery(settingsOptions);
   const {data: roles} = useSuspenseQuery(rolesOptions);
   const [advanced, setAdvanced] = useState(false);
   const [phaseChecks, setPhaseChecks] = useState<string[]>([]);
@@ -286,7 +233,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
   function notify(category: LegacyToastMessage['category'], text: string) {setToast({id: Date.now(), category, message: text});}
   function fail(error: Error) {notify('error', message(msg, error));}
   function setLifecycle(lifecycle: Lifecycle) {queryClient.setQueryData(lifecycleOptions.queryKey, lifecycle);}
-  function refreshSupporting() {void queryClient.invalidateQueries({queryKey: settingsOptions.queryKey}); void queryClient.invalidateQueries({queryKey: rolesOptions.queryKey}); void queryClient.invalidateQueries({queryKey: lifecycleOptions.queryKey});}
+  function refreshSupporting() {void queryClient.invalidateQueries({queryKey: rolesOptions.queryKey}); void queryClient.invalidateQueries({queryKey: lifecycleOptions.queryKey});}
 
   const phaseMutation = useMutation({mutationFn: () => putAdminPhase(conversationId, {confirmedPreconditionIds: phaseChecks}, csrfToken), onSuccess: (result) => {setLifecycle(result.lifecycle); setPhaseChecks([]); const receipt = phaseTransitionToast(msg, result.transition); notify(receipt.category, receipt.message);}, onError: fail});
   const pauseMutation = useMutation({mutationFn: () => putAdminPause(conversationId, {paused: data.conversation.status !== 'paused'}, csrfToken), onSuccess: (result) => setLifecycle(result.lifecycle), onError: fail});
@@ -325,6 +272,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
       </div>
 
       <div className="console-section"><div className="console-section-label">{msg('adminconv-content-access')}</div><div className="manage-grid">
+        <Link className="manage-card" to={data.links.settings}><div className="manage-card-title">{msg('adminconv-card-settings')}</div><div className="manage-card-desc">{msg('adminconv-card-settings-desc')}</div></Link>
         <Link className="manage-card" to={data.links.statements}><div className="manage-card-title">{msg('adminconv-card-statements')}</div><div className="manage-card-desc">{msg('adminconv-card-statements-desc')}</div></Link>
         <Link className="manage-card" to={data.links.invitations}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-invite-count', data.counts.invitations)}</span></div><div className="manage-card-title">{msg('adminconv-card-invites')}</div><div className="manage-card-desc">{msg('adminconv-card-invites-desc')}</div></Link>
         <Link className="manage-card" to={data.links.featuredStatements}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-featured-count', data.counts.featuredStatements)}</span></div><div className="manage-card-title">{msg('adminconv-card-featured')}</div><div className="manage-card-desc">{msg('adminconv-card-featured-desc')}</div></Link>
@@ -333,7 +281,6 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
         <Link className="manage-card" to={data.links.roles}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-assigned-count', roleCount)}</span></div><div className="manage-card-title">{msg('adminconv-roles-label')}</div><div className="manage-card-desc">{msg('adminconv-card-roles-desc')}</div></Link>
       </div></div>
       <RoleSection conversationId={conversationId} csrfToken={csrfToken} roster={roles} refresh={refreshSupporting} fail={fail} />
-      {canOrganize && <ConfigurationSection conversationId={conversationId} csrfToken={csrfToken} settings={settings} refresh={refreshSupporting} fail={fail} />}
       {isAdmin && <DangerSection conversationId={conversationId} csrfToken={csrfToken} lifecycle={data} fail={fail} />}
     </div>
   </LegacyShell>;

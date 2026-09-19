@@ -742,6 +742,8 @@
     "adminconv-p6-not-init": "Enabled but not initialised. Initialising creates a dedicated Polis conversation and adds all confirmed featured statements to it.",
     "adminconv-p6-init-btn": "Initialise Phase 6",
     "adminconv-content-access": "Content & access",
+    "adminconv-card-settings": "Settings",
+    "adminconv-card-settings-desc": "Title, description, access and eligibility",
     "adminconv-card-statements": "Statements",
     "adminconv-card-statements-desc": "Review, approve or hide statements; add seed statements",
     "adminconv-invite-count": "$1 {{PLURAL:$1|invite|invites}}",

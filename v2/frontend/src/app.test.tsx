@@ -166,44 +166,12 @@ test('advances a conversation from the server-described lifecycle console', asyn
   );
 });
 
-test('saves lifecycle recommendations without submitting unsaved settings', async () => {
-  let recommendationBody: unknown;
-  let settingsWrites = 0;
-  server.use(
-    http.put(
-      new URL('/api/v1/admin/conversations/7/recommendation-tier', globalThis.location.origin).toString(),
-      async ({request}) => {
-        recommendationBody = await request.json();
-        return HttpResponse.json({data: {
-          changed: true,
-          recommendations: {
-            tier: 'complex',
-            tiers: [
-              {key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5}},
-              {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8}},
-              {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}},
-            ],
-          },
-        }});
-      },
-    ),
-    http.put(
-      new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(),
-      () => {
-        settingsWrites += 1;
-        return HttpResponse.error();
-      },
-    ),
-  );
+test('links to the settings page from the lifecycle manage cards', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
 
   await screen.findByRole('heading', {name: 'Community strategy'});
-  fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Unsaved title'} });
-  fireEvent.change(screen.getByLabelText('Complexity tier'), {target: {value: 'complex'}});
-  fireEvent.click(screen.getByRole('button', {name: 'Save recommendations'}));
-
-  await waitFor(() => expect(recommendationBody).toEqual({tier: 'complex'}));
-  expect(settingsWrites).toBe(0);
+  const settingsLink = screen.getByRole('link', {name: /Settings/});
+  expect(settingsLink.getAttribute('href')).toContain('/settings');
 });
 
 test('schedules and cancels a lifecycle transition', async () => {
