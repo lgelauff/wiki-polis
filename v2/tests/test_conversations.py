@@ -7,9 +7,12 @@ observable only through the JSON API, so every request goes to /api/v1 and every
 assertion reads the payload or the database rather than rendered markup.
 """
 from datetime import datetime, timezone
+import json
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from db import (Conversation, ConversationInvite, Participant, Participation,
                 db)
@@ -285,52 +288,72 @@ def test_accept_post_duplicate_pseudonym_shows_error(auth_client, conv, particip
         participant_id=participant.id, conversation_id=conv.id).first() is None
 
 
-def _eligibility_response(eligible, **extra):
+def _canivote_response(verdict, status_code=200, headers=None, **extra):
+    """A response shaped like canivote's /check (see its GET /openapi.json)."""
     resp = MagicMock()
-    resp.raise_for_status.return_value = None
-    resp.json.return_value = {'eligible': eligible, **extra}
+    resp.status_code = status_code
+    resp.headers = headers or {}
+    resp.json.return_value = {
+        'verdict': verdict,
+        'user': 'TestUser',
+        'policy': 'policy-123',
+        'reason': 'Fails 1 of 2 rules.',
+        'criteria': [
+            {'metric': 'edit_count', 'passed': False, 'source': 'policy',
+             'label': 'edit count', 'required': {'value': 500, 'display': '500 edits'},
+             'observed': {'value': 20, 'display': '20 edits'}},
+            {'metric': 'is_blocked', 'passed': True, 'source': 'platform',
+             'label': 'not blocked', 'required': {'value': False, 'display': 'not blocked'},
+             'observed': {'value': False, 'display': 'not blocked'}},
+        ],
+        **extra,
+    }
     return resp
 
 
 def test_accept_post_eligibility_gate_allows_and_caches_verdict(auth_client, conv, participant, app):
-    conv.eligibility_event_id = 'event-123'
+    conv.eligibility_event_id = 'policy-123'
     conv.eligibility_label = 'autoconfirmed on examplewiki'
-    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://account.example/check'
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://canivote.example'
     db.session.commit()
 
-    with patch('app.requests.get', return_value=_eligibility_response(True, event='event-123')) as req:
+    with patch('app.requests.get', return_value=_canivote_response('eligible')) as req:
         resp = auth_client.post('/api/v1/conversations/test-conv/participation',
                                 json={'pseudonym': 'silly-goat'})
 
     assert resp.status_code == 201
     assert resp.get_json()['data']['eligibilityStatus'] == 'eligible'
     req.assert_called_once()
+    assert req.call_args.args[0] == 'https://canivote.example/check'
     assert req.call_args.kwargs['params'] == {
         'user': participant.mw_username,
-        'event': 'event-123',
-        'format': 'json',
+        'policy': 'policy-123',
     }
     p = Participation.query.filter_by(
         participant_id=participant.id, conversation_id=conv.id).first()
     assert p is not None
     assert p.eligibility_status == 'eligible'
     assert p.eligibility_checked_at is not None
-    assert p.eligibility_detail == {'event': 'event-123'}
+    assert p.eligibility_detail == {'policy': 'policy-123'}
+    # Only canivote's machine fields are cached. Its prose is not, and neither
+    # is anything that could name the account.
+    assert 'Fails 1 of 2 rules.' not in json.dumps(p.eligibility_detail)
+    assert participant.mw_username not in json.dumps(p.eligibility_detail)
 
 
 def test_accept_post_eligibility_gate_blocks_ineligible(auth_client, conv, participant, app):
-    conv.eligibility_event_id = 'event-123'
+    conv.eligibility_event_id = 'policy-123'
     conv.eligibility_label = 'extended-confirmed'
-    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://account.example/check'
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://canivote.example'
     db.session.commit()
 
     # The requirement label the denial page showed is served by the join screen's
-    # own payload; the denial itself carries the upstream reason.
+    # own payload. canivote's prose is not cached, so the denial carries no
+    # display message of its own.
     assert _entry(auth_client, 'test-conv').get_json()[
         'data']['conversation']['eligibilityLabel'] == 'extended-confirmed'
 
-    with patch('app.requests.get', return_value=_eligibility_response(
-            False, reason='Needs 500 edits.')):
+    with patch('app.requests.get', return_value=_canivote_response('not_eligible')):
         resp = auth_client.post('/api/v1/conversations/test-conv/participation',
                                 json={'pseudonym': 'silly-goat'})
 
@@ -339,14 +362,17 @@ def test_accept_post_eligibility_gate_blocks_ineligible(auth_client, conv, parti
     assert error['code'] == 'eligibility_denied'
     assert error['details'] == {
         'status': 'ineligible',
-        'displayMessage': 'Needs 500 edits.',
+        'displayMessage': None,
     }
     assert Participation.query.filter_by(
         participant_id=participant.id, conversation_id=conv.id).first() is None
 
 
-def test_accept_post_eligibility_gate_fails_closed_without_endpoint(auth_client, conv, participant):
+def test_accept_post_eligibility_gate_fails_closed_without_endpoint(
+    auth_client, conv, participant, app,
+):
     conv.eligibility_event_id = 'event-123'
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = ''
     db.session.commit()
 
     resp = auth_client.post('/api/v1/conversations/test-conv/participation',
@@ -359,6 +385,144 @@ def test_accept_post_eligibility_gate_fails_closed_without_endpoint(auth_client,
     assert error['details']['displayMessage'] == 'eligibility checker is not configured'
     assert Participation.query.filter_by(
         participant_id=participant.id, conversation_id=conv.id).first() is None
+
+
+def _check_eligibility(app, conv, participant):
+    from app import _check_join_eligibility
+
+    with app.app_context():
+        return _check_join_eligibility(conv, participant)
+
+
+def test_eligibility_checker_stays_unconfigured_until_policy_migration(app):
+    assert app.config['ACCOUNT_ELIGIBILITY_URL'] == ''
+
+
+@pytest.mark.parametrize(
+    ('verdict', 'allowed', 'status'),
+    (
+        ('eligible', True, 'eligible'),
+        ('not_eligible', False, 'ineligible'),
+        ('indeterminate', False, 'unavailable'),
+    ),
+)
+def test_canivote_verdicts_control_join_eligibility(
+    app, conv, participant, verdict, allowed, status,
+):
+    conv.eligibility_event_id = 'policy-123'
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://canivote.example'
+    db.session.commit()
+
+    with patch('app.requests.get', return_value=_canivote_response(verdict)) as req:
+        result = _check_eligibility(app, conv, participant)
+
+    assert result[0:2] == (allowed, status)
+    req.assert_called_once()
+    assert req.call_args.args[0] == 'https://canivote.example/check'
+    assert req.call_args.kwargs['params'] == {
+        'user': participant.mw_username,
+        'policy': 'policy-123',
+    }
+
+
+def test_canivote_indeterminate_is_logged_without_username(app, conv, participant, caplog):
+    conv.eligibility_event_id = 'policy-123'
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://canivote.example'
+    db.session.commit()
+    response = _canivote_response(
+        'indeterminate',
+        criteria=[
+            {'metric': 'registration_age', 'passed': None, 'source': 'policy',
+             'label': 'account age', 'display': participant.mw_username,
+             'required': {'value': 30, 'display': '30 days'},
+             'observed': None},
+            {'metric': 'edit_count', 'passed': True, 'source': 'policy',
+             'label': 'edit count',
+             'required': {'value': 500, 'display': '500 edits'},
+             'observed': {'value': 600, 'display': '600 edits'}},
+        ],
+    )
+
+    with patch('app.requests.get', return_value=response), caplog.at_level(
+            logging.WARNING, logger='app'):
+        result = _check_eligibility(app, conv, participant)
+
+    assert result[0:2] == (False, 'unavailable')
+    assert result[2] == {'policy': 'policy-123'}
+    assert 'eligibility check indeterminate' in caplog.text
+    assert 'policy=policy-123' in caplog.text
+    assert f'participant_id={participant.id}' in caplog.text
+    assert 'metrics=registration_age' in caplog.text
+    assert participant.mw_username not in caplog.text
+
+
+@pytest.mark.parametrize('status_code', (400, 404, 429, 500, 502))
+def test_canivote_http_failures_are_could_not_check_and_do_not_log_username(
+    app, conv, participant, caplog, status_code,
+):
+    conv.eligibility_event_id = 'policy-123'
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://canivote.example'
+    db.session.commit()
+    headers = {'Retry-After': '30'} if status_code == 429 else {}
+
+    with patch('app.requests.get', return_value=_canivote_response(
+            None, status_code=status_code, headers=headers)), caplog.at_level(
+                logging.ERROR, logger='app'):
+        result = _check_eligibility(app, conv, participant)
+
+    assert result == (
+        False, 'unavailable', {'reason': 'eligibility checker is unavailable'},
+    )
+    assert participant.mw_username not in caplog.text
+    assert 'policy=policy-123' in caplog.text
+    assert f'status={status_code}' in caplog.text
+    if status_code == 429:
+        assert 'retry_after=30' in caplog.text
+
+
+def test_canivote_timeout_is_could_not_check_without_logging_username(
+    app, conv, participant, caplog,
+):
+    conv.eligibility_event_id = 'policy-123'
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://canivote.example'
+    db.session.commit()
+    timeout = requests.Timeout(
+        f'GET https://canivote.example/check?user={participant.mw_username}&policy=policy-123 timed out',
+    )
+
+    with patch('app.requests.get', side_effect=timeout), caplog.at_level(
+            logging.ERROR, logger='app'):
+        result = _check_eligibility(app, conv, participant)
+
+    assert result == (
+        False, 'unavailable', {'reason': 'eligibility checker is unavailable'},
+    )
+    assert participant.mw_username not in caplog.text
+    assert 'exception=Timeout' in caplog.text
+    assert 'retry_after=None' in caplog.text
+
+
+def test_canivote_unparseable_body_is_could_not_check_without_logging_username(
+    app, conv, participant, caplog,
+):
+    conv.eligibility_event_id = 'policy-123'
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://canivote.example'
+    db.session.commit()
+    response = _canivote_response(None)
+    response.json.side_effect = ValueError(
+        f'invalid body for user={participant.mw_username}',
+    )
+
+    with patch('app.requests.get', return_value=response), caplog.at_level(
+            logging.ERROR, logger='app'):
+        result = _check_eligibility(app, conv, participant)
+
+    assert result == (
+        False, 'unavailable', {'reason': 'eligibility checker is unavailable'},
+    )
+    assert participant.mw_username not in caplog.text
+    assert 'exception=ValueError' in caplog.text
+    assert 'status=200' not in caplog.text
 
 
 def test_accept_pseudonyms_endpoint_returns_list(auth_client, conv):
