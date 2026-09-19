@@ -1734,9 +1734,15 @@ def _is_emailable(username: str) -> bool:
 
 
 def _eligibility_detail(payload: dict) -> dict:
-    """Keep only the legacy event identifier; never cache upstream prose or criteria."""
-    event = payload.get('event')
-    return {'event': event} if isinstance(event, str) and event else {}
+    """Keep canivote's policy id; do not cache its English prose.
+
+    canivote's ``/check`` answers with ``policy`` and a ``criteria`` list carrying
+    ``metric``/``passed``/``source`` alongside English ``label``/``display`` prose.
+    Only the policy id is kept: nothing reads the rest yet (#406 adds the
+    failed-rule view), and the prose is where a username could leak.
+    """
+    policy = payload.get('policy')
+    return {'policy': policy} if isinstance(policy, str) and policy else {}
 
 
 def _eligibility_retry_after(response) -> str | None:
@@ -1796,11 +1802,11 @@ def _log_eligibility_indeterminate(policy_id: str, participant, payload: dict) -
 def _check_join_eligibility(conversation, participant) -> tuple[bool, str, dict]:
     """Return (allowed, status, detail) for the optional join-time gate (#146).
 
-    The upstream contract is canivote JSON:
-    GET <ACCOUNT_ELIGIBILITY_URL>/check?user=<mw_username>&policy=<event_id>
+    The upstream contract is canivote JSON (its ``GET /openapi.json``):
+    ``GET <ACCOUNT_ELIGIBILITY_URL>/check?user=<mw_username>&policy=<policy id>``
     returning ``verdict`` as ``eligible``, ``not_eligible`` or ``indeterminate``.
-    Extra non-PII fields such as reason/criteria/rules are cached for admin/debug
-    display.
+    Only the policy id is cached on the participation; the criteria are not,
+    because nothing reads them yet (#406 adds the failed-rule view).
     """
     policy_id = (conversation.eligibility_event_id or '').strip()
     if not policy_id:

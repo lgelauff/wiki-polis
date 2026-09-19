@@ -7,6 +7,7 @@ observable only through the JSON API, so every request goes to /api/v1 and every
 assertion reads the payload or the database rather than rendered markup.
 """
 from datetime import datetime, timezone
+import json
 import logging
 from unittest.mock import MagicMock, patch
 
@@ -288,59 +289,71 @@ def test_accept_post_duplicate_pseudonym_shows_error(auth_client, conv, particip
 
 
 def _canivote_response(verdict, status_code=200, headers=None, **extra):
+    """A response shaped like canivote's /check (see its GET /openapi.json)."""
     resp = MagicMock()
     resp.status_code = status_code
     resp.headers = headers or {}
-    resp.json.return_value = {'verdict': verdict, **extra}
+    resp.json.return_value = {
+        'verdict': verdict,
+        'user': 'TestUser',
+        'policy': 'policy-123',
+        'reason': 'Fails 1 of 2 rules.',
+        'criteria': [
+            {'metric': 'edit_count', 'passed': False, 'source': 'policy',
+             'label': 'edit count', 'required': {'value': 500, 'display': '500 edits'},
+             'observed': {'value': 20, 'display': '20 edits'}},
+            {'metric': 'is_blocked', 'passed': True, 'source': 'platform',
+             'label': 'not blocked', 'required': {'value': False, 'display': 'not blocked'},
+             'observed': {'value': False, 'display': 'not blocked'}},
+        ],
+        **extra,
+    }
     return resp
 
 
 def test_accept_post_eligibility_gate_allows_and_caches_verdict(auth_client, conv, participant, app):
-    conv.eligibility_event_id = 'event-123'
+    conv.eligibility_event_id = 'policy-123'
     conv.eligibility_label = 'autoconfirmed on examplewiki'
-    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://account.example'
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://canivote.example'
     db.session.commit()
 
-    with patch('app.requests.get', return_value=_canivote_response(
-            'eligible', event='event-123', reason='upstream prose', criteria=[
-                {'metric': 'edit_count', 'passed': True,
-                 'display': '500 edits'},
-            ])) as req:
+    with patch('app.requests.get', return_value=_canivote_response('eligible')) as req:
         resp = auth_client.post('/api/v1/conversations/test-conv/participation',
                                 json={'pseudonym': 'silly-goat'})
 
     assert resp.status_code == 201
     assert resp.get_json()['data']['eligibilityStatus'] == 'eligible'
     req.assert_called_once()
-    assert req.call_args.args[0] == 'https://account.example/check'
+    assert req.call_args.args[0] == 'https://canivote.example/check'
     assert req.call_args.kwargs['params'] == {
         'user': participant.mw_username,
-        'policy': 'event-123',
+        'policy': 'policy-123',
     }
     p = Participation.query.filter_by(
         participant_id=participant.id, conversation_id=conv.id).first()
     assert p is not None
     assert p.eligibility_status == 'eligible'
     assert p.eligibility_checked_at is not None
-    assert p.eligibility_detail == {'event': 'event-123'}
+    assert p.eligibility_detail == {'policy': 'policy-123'}
+    # Only canivote's machine fields are cached. Its prose is not, and neither
+    # is anything that could name the account.
+    assert 'Fails 1 of 2 rules.' not in json.dumps(p.eligibility_detail)
+    assert participant.mw_username not in json.dumps(p.eligibility_detail)
 
 
 def test_accept_post_eligibility_gate_blocks_ineligible(auth_client, conv, participant, app):
-    conv.eligibility_event_id = 'event-123'
+    conv.eligibility_event_id = 'policy-123'
     conv.eligibility_label = 'extended-confirmed'
-    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://account.example'
+    app.config['ACCOUNT_ELIGIBILITY_URL'] = 'https://canivote.example'
     db.session.commit()
 
     # The requirement label the denial page showed is served by the join screen's
-    # own payload; the denial itself carries the upstream reason.
+    # own payload. canivote's prose is not cached, so the denial carries no
+    # display message of its own.
     assert _entry(auth_client, 'test-conv').get_json()[
         'data']['conversation']['eligibilityLabel'] == 'extended-confirmed'
 
-    with patch('app.requests.get', return_value=_canivote_response(
-            'not_eligible', reason='Needs 500 edits.', criteria=[
-                {'metric': 'edit_count', 'passed': False,
-                 'display': 'Needs 500 edits.'},
-            ])):
+    with patch('app.requests.get', return_value=_canivote_response('not_eligible')):
         resp = auth_client.post('/api/v1/conversations/test-conv/participation',
                                 json={'pseudonym': 'silly-goat'})
 
@@ -419,9 +432,14 @@ def test_canivote_indeterminate_is_logged_without_username(app, conv, participan
     response = _canivote_response(
         'indeterminate',
         criteria=[
-            {'metric': 'registration_age', 'passed': None,
-             'display': participant.mw_username},
-            {'metric': 'edit_count', 'passed': True},
+            {'metric': 'registration_age', 'passed': None, 'source': 'policy',
+             'label': 'account age', 'display': participant.mw_username,
+             'required': {'value': 30, 'display': '30 days'},
+             'observed': None},
+            {'metric': 'edit_count', 'passed': True, 'source': 'policy',
+             'label': 'edit count',
+             'required': {'value': 500, 'display': '500 edits'},
+             'observed': {'value': 600, 'display': '600 edits'}},
         ],
     )
 
@@ -430,6 +448,7 @@ def test_canivote_indeterminate_is_logged_without_username(app, conv, participan
         result = _check_eligibility(app, conv, participant)
 
     assert result[0:2] == (False, 'unavailable')
+    assert result[2] == {'policy': 'policy-123'}
     assert 'eligibility check indeterminate' in caplog.text
     assert 'policy=policy-123' in caplog.text
     assert f'participant_id={participant.id}' in caplog.text
