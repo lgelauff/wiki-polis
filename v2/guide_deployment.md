@@ -417,6 +417,7 @@ Non-secret values can be passed as arguments:
 ```bash
 toolforge envvars create OAUTH_REDIRECT_URI 'https://wiki-polis.toolforge.org/oauth-callback'
 toolforge envvars create TRUSTED_HOSTS 'wiki-polis.toolforge.org'
+toolforge envvars create ACCOUNT_ELIGIBILITY_URL 'https://canivote.toolforge.org'
 ```
 
 Values to enter at the prompts:
@@ -432,6 +433,7 @@ Values to enter at the prompts:
 - `RATELIMIT_KEY_PREFIX` — unique Redis key namespace for this deployment; generate a random value such as `wiki-polis:prod:<random>:` for production and a different one for staging
 - `RATELIMIT_IDENTITY_SECRET` — strong random HMAC key used to hash client identities before Flask-Limiter writes Redis keys
 - `TRUSTED_HOSTS` — comma-separated allowed request hostnames, for example `wiki-polis.toolforge.org`; add explicit staging hostnames on staging deployments
+- `ACCOUNT_ELIGIBILITY_URL` — canivote **base URL** (for example `https://canivote.toolforge.org`) for the optional join-time eligibility gate. This is a base, not an endpoint: the app calls `<base>/check?user=&policy=`. Leave it blank (the default) to keep the gate offline; set it only where conversations carry a canivote **policy id** as their eligibility id, not a legacy event id.
 
 Toolforge exposes shared Redis through the global `TOOL_REDIS_URI` environment variable, so production does not normally need a `RATELIMIT_STORAGE_URI` envvar. If running the Flask frontend directly on a Wikimedia VPS or overriding Toolforge Redis, set `RATELIMIT_STORAGE_URI` to a Redis URL such as `redis://<vps-private-ip>:6379/0`; production startup rejects local limiter backends such as `memory://`. Toolforge proxy headers are trusted automatically. On a Wikimedia VPS, set `TRUST_PROXY_HEADERS=1` only when the Flask app is behind a reverse proxy that overwrites incoming forwarding headers.
 
@@ -786,6 +788,7 @@ export DATABASE_URL
 | `RATELIMIT_IDENTITY_SECRET` | yes (prod) | Random HMAC secret used to avoid storing raw client identities in shared Redis keys |
 | `TRUST_PROXY_HEADERS` | VPS reverse proxy only | Set to `1` only when a Wikimedia VPS reverse proxy overwrites forwarding headers; Toolforge is detected automatically |
 | `TRUSTED_HOSTS` | yes (prod) | Comma-separated allowed request hostnames, for example `wiki-polis.toolforge.org` |
+| `ACCOUNT_ELIGIBILITY_URL` | optional | canivote **base URL** for the join-time eligibility gate; blank disables it (the default). The value is a base — `/check` is appended — and only conversations with a canivote policy id as their eligibility id are checked. |
 | `LOKI_URL` | optional | HTTPS Loki push endpoint for central diagnostics logs |
 | `LOKI_USERNAME` | optional | Basic-auth username for `LOKI_URL` |
 | `LOKI_PASSWORD` | optional | Basic-auth password for `LOKI_URL` |
