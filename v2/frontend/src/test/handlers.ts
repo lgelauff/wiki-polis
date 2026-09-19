@@ -143,21 +143,21 @@ export const handlers = [
     conversationId: 7, deleted: true, links: {admin: '/admin'},
   }})),
   http.get(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
-    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', introHtml: '<p>Shape the future.</p>', outroHtml: '', accessPolicy: 'public', phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', introHtml: '<p>Shape the future.</p>', outroHtml: '', accessPolicy: 'public', gated: false, gatingType: null, announce: false, information: false, resultsShared: false, showUsernames: false, accessRequestText: null, phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},
     recommendations: {tier: 'medium', tiers: [
       {key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5, featured_statements: 8}},
       {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8, featured_statements: 15}},
       {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12, featured_statements: 24}},
     ]},
     eligibility: {configured: true, eventId: 'extended-confirmed', label: 'Extended-confirmed editors', configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'},
-    capabilities: {edit: true}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
+    capabilities: {edit: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
   }})),
   http.put(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), async ({request}) => {
-    const body = await request.json() as {title: string; introHtml: string; outroHtml: string; accessPolicy: 'public' | 'invite_only' | 'demo'; eligibilityEventId: string; eligibilityLabel: string; recommendationTier: 'simple' | 'medium' | 'complex'};
+    const body = await request.json() as {title: string; introHtml: string; outroHtml: string; accessPolicy: 'public' | 'invite_only' | 'demo'; gated: boolean; gatingType: 'invite_only' | 'voucher' | 'wiki_based' | null; announce: boolean; information: boolean; resultsShared: boolean; showUsernames: boolean; accessRequestText: string | null; eligibilityEventId: string; eligibilityLabel: string; recommendationTier: 'simple' | 'medium' | 'complex'};
     return HttpResponse.json({data: {changed: true, changedFields: ['title'], settings: {
-      conversation: {id: 7, slug: 'community-strategy', title: body.title.trim(), introHtml: body.introHtml, outroHtml: body.outroHtml, accessPolicy: body.accessPolicy, phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},
+      conversation: {id: 7, slug: 'community-strategy', title: body.title.trim(), introHtml: body.introHtml, outroHtml: body.outroHtml, accessPolicy: body.accessPolicy, gated: body.gated, gatingType: body.gatingType, announce: body.announce, information: body.information, resultsShared: body.resultsShared, showUsernames: body.showUsernames, accessRequestText: body.accessRequestText, phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},
       recommendations: {tier: body.recommendationTier, tiers: [{key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5}}, {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8}}, {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}}]},
-      eligibility: {configured: Boolean(body.eligibilityEventId), eventId: body.eligibilityEventId, label: body.eligibilityLabel || null, configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'}, capabilities: {edit: true}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
+      eligibility: {configured: Boolean(body.eligibilityEventId), eventId: body.eligibilityEventId, label: body.eligibilityLabel || null, configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'}, capabilities: {edit: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
     }}});
   }),
   http.put(new URL('/api/v1/admin/conversations/7/recommendation-tier', globalThis.location.origin).toString(), async ({request}) => {

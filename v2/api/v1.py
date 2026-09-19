@@ -31,7 +31,7 @@ from services.argument_commands import (
 )
 from services.content_flags import InvalidFlag
 from services.identity_reveal import RevealUnavailable
-from services.conversation_workspace import InviteOnlyWorkspaceAccess
+from services.access import AccessRequired
 
 _OPENAPI_SPEC = json.loads(
     (Path(__file__).resolve().parents[1] / 'openapi.json').read_text(encoding='utf-8')
@@ -282,19 +282,7 @@ def create_api_v1_blueprint(
     @bp.get('/conversations/<slug>/workspace')
     @limiter.limit('120 per minute')
     def get_conversation_workspace(slug: str):
-        try:
-            data = resolve_conversation_workspace(slug)
-        except InviteOnlyWorkspaceAccess as exc:
-            return error_response(
-                'invite_only',
-                'You have not been invited to this consultation.',
-                403,
-                details={
-                    'title': exc.title,
-                    'canModerate': exc.can_moderate,
-                    'links': exc.links,
-                },
-            )
+        data = resolve_conversation_workspace(slug)
         return _no_store(jsonify({'data': data}))
 
     @bp.get('/conversations/<slug>/moderation-log')
@@ -739,6 +727,17 @@ def register_api_error_handlers(app: Flask) -> None:
     def handle_csrf_error(exc):
         if is_api_request():
             return error_response('csrf_failed', exc.description, 400)
+        return exc
+
+    @app.errorhandler(AccessRequired)
+    def handle_access_required(exc):
+        if is_api_request():
+            return error_response(
+                'access_required',
+                'Access to this consultation is required.',
+                403,
+                details=exc.details(),
+            )
         return exc
 
     @app.errorhandler(HTTPException)
