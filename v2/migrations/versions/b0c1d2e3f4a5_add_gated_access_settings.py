@@ -1,8 +1,12 @@
 """add gated-process access settings and migrate legacy admission
 
 Revision ID: b0c1d2e3f4a5
-Revises: a8b9c0d1e2f3
+Revises: 6a7090c4c5d7
 Create Date: 2026-09-18 00:00:00.000000
+
+Chained after the voucher-identity migration (#426) on the beta combination
+branch. Both lanes originally declared a8b9c0d1e2f3, which would leave Alembic
+with two heads.
 """
 
 from alembic import op
@@ -10,7 +14,7 @@ import sqlalchemy as sa
 
 
 revision = 'b0c1d2e3f4a5'
-down_revision = 'a8b9c0d1e2f3'
+down_revision = '6a7090c4c5d7'
 branch_labels = None
 depends_on = None
 
