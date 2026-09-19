@@ -1401,7 +1401,7 @@ export interface components {
             /** @enum {string} */
             accessPolicy: "public" | "invite_only" | "demo";
             gated: boolean;
-            /** @enum {string} */
+            /** @enum {string|null} */
             gatingType: "invite_only" | "voucher" | "wiki_based" | null;
             announce: boolean;
             information: boolean;
@@ -1440,7 +1440,7 @@ export interface components {
                 /** @enum {string} */
                 accessPolicy: "public" | "invite_only" | "demo";
                 gated: boolean;
-                /** @enum {string} */
+                /** @enum {string|null} */
                 gatingType: "invite_only" | "voucher" | "wiki_based" | null;
                 announce: boolean;
                 information: boolean;
