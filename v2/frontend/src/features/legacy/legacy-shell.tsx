@@ -107,7 +107,7 @@ function LanguageSwitcher({locales, active, msg}: {
         name="uselang"
         value={active}
         aria-label={msg('base-language-label')}
-        onChange={(e) => { window.location.assign(localeHref(location, e.target.value)); }}
+        onChange={(e) => { window.location.href = localeHref(location, e.target.value); }}
       >
         {locales.available.map((locale) => (
           <option key={locale.code} value={locale.code} lang={locale.code}>

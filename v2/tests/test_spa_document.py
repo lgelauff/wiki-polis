@@ -36,6 +36,10 @@ def test_react_owned_forms_do_not_fall_back_to_legacy_posts():
         ),
         (
             Path('features/legacy/legacy-shell.tsx'),
+            '<form method="GET" action={location.pathname} className="lang-select-form">',
+        ),
+        (
+            Path('features/legacy/legacy-shell.tsx'),
             "<form method=\"post\" action={session.links.logout} style={{display: 'inline'}}>",
         ),
     ]
