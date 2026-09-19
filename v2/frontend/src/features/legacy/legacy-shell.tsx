@@ -63,32 +63,33 @@ function useLegacyDocument({demo, title}: {demo: boolean; title: string}) {
 }
 
 
-/** Language switcher.
+/** Language switcher — compact <select> that performs a full navigation on change.
  *
- *  Links carrying `?uselang=`, not a <select> with an onChange: the parameter is the
- *  interface, so a link is shareable, works without JavaScript, survives a middle-click, and
- *  needs no state. The server persists the choice to the `uselang` cookie, so it outlives the
- *  query string.
+ *  Autonyms as option text — a Dutch speaker scanning for "Nederlands" recognises it
+ *  immediately.  The <select> shows the current choice, so no extra label is needed.
  *
- *  `reloadDocument` because a language change has to be a full navigation, not a client-side
- *  route change. The server re-negotiates, sets the cookie, and re-stamps <html lang> and the
- *  pre-catalogue strings; MessageProvider reads the locale once at mount, so a soft navigation
- *  would leave the document claiming the old language while the content changed underneath.
+ *  `reloadDocument`-equivalent: setting `window.location.href` forces a full page load
+ *  so the server re-negotiates the locale, stamps `<html lang>`, and persists the
+ *  `uselang` cookie.
  *
- *  Option labels are autonyms and are deliberately NOT translated — someone looking for Dutch
- *  is scanning for "Nederlands". Only the group's accessible name is a message.
+ *  The <form> wrapper provides a no-JS fallback: a hidden submit button inside
+ *  `<noscript>` makes the GET request work when JavaScript is disabled.  JS
+ *  auto-submits on change, so the visible control is just the <select>.
  *
- *  Hidden until a second language exists, so it is not a dead control on every page;
- *  `aria-current` marks the active one rather than styling alone. */
-/** The current URL with `uselang` set, keeping everything else.
- *
- *  A bare "?uselang=nl" href is resolved against the path but drops the rest of the query
- *  and the fragment — and the fragment carries the workspace tab (#tab-arguments), so a
- *  reader switching language would lose their place. */
+ *  Hidden until a second language exists, so it is not a dead control on every page. */
+
 function localeHref(location: {pathname: string; search: string; hash: string}, code: string) {
   const params = new URLSearchParams(location.search);
   params.set('uselang', code);
   return `${location.pathname}?${params.toString()}${location.hash}`;
+}
+
+function preserveParams(location: {search: string}) {
+  const params = new URLSearchParams(location.search);
+  params.delete('uselang');
+  return [...params.entries()].map(([k, v]) => (
+    <input key={k} type="hidden" name={k} value={v} />
+  ));
 }
 
 function LanguageSwitcher({locales, active, msg}: {
@@ -97,23 +98,25 @@ function LanguageSwitcher({locales, active, msg}: {
   msg: Message;
 }) {
   const location = useLocation();
-  // One language is not a choice. ENABLED_LOCALES ships as ['en'], so without this every
-  // page would carry a landmark holding a single link to the page you are already on.
   if (locales.available.length < 2) return null;
   return (
-    <nav className="lang-switch" aria-label={msg('base-language-label')}>
-      {locales.available.map((locale) => (
-        <InternalLink
-          key={locale.code}
-          className={`lang-switch-opt${locale.code === active ? ' is-active' : ''}`}
-          href={localeHref(location, locale.code)}
-          hrefLang={locale.code}
-          lang={locale.code}
-          aria-current={locale.code === active ? 'true' : undefined}
-          reloadDocument
-        >{locale.name}</InternalLink>
-      ))}
-    </nav>
+    <form method="GET" action={location.pathname} className="lang-select-form">
+      {preserveParams(location)}
+      <select
+        className="lang-select"
+        name="uselang"
+        value={active}
+        aria-label={msg('base-language-label')}
+        onChange={(e) => { window.location.assign(localeHref(location, e.target.value)); }}
+      >
+        {locales.available.map((locale) => (
+          <option key={locale.code} value={locale.code} lang={locale.code}>
+            {locale.name}
+          </option>
+        ))}
+      </select>
+      <noscript><button type="submit" className="lang-select-submit">{msg('base-language-label')}</button></noscript>
+    </form>
   );
 }
 
@@ -157,7 +160,7 @@ export function LegacyShell({
             )}
           </div>
 
-          <div className="header-right">
+          <div className="header-controls">
             {headerMode !== 'plain' && headerMode !== 'admin' && (
               headerMode === 'conversation-demo' ? (
                 <span className="mode-lock mode-lock--demo">
@@ -184,6 +187,11 @@ export function LegacyShell({
               </div>
             )}
             <LanguageSwitcher locales={session.locales} active={activeLocale} msg={msg} />
+            {authenticated && session.capabilities.administerSite && (
+              <InternalLink href="/admin" className="header-admin-link">{msg('base-admin-link')}</InternalLink>
+            )}
+          </div>
+          <div className="header-identity">
             {authenticated ? (
               <>
                 <span className="header-user-chip">
@@ -194,12 +202,9 @@ export function LegacyShell({
                   <input type="hidden" name="csrf_token" value={session.csrfToken} />
                   <button type="submit" className="header-logout">{msg('base-log-out')}</button>
                 </form>
-                {session.capabilities.administerSite && (
-                  <InternalLink href="/admin" className="header-admin-link">{msg('base-admin-link')}</InternalLink>
-                )}
               </>
             ) : (
-              <InternalLink href={session.links.login} style={{color: 'var(--muted)', fontSize: 13, textDecoration: 'none'}}>{msg('base-log-in')}</InternalLink>
+              <InternalLink href={session.links.login} className="header-login-link">{msg('base-log-in')}</InternalLink>
             )}
           </div>
         </div>
