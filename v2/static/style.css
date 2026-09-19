@@ -125,8 +125,8 @@ header {
   max-width: 900px;
   margin: 0 auto;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 14px;
 }
 
 .header-left {
@@ -172,6 +172,7 @@ header {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .header-crumb a {
@@ -218,12 +219,26 @@ header {
   text-decoration: none;
 }
 
-.header-right {
+.header-controls {
   display: flex;
   align-items: center;
   gap: 14px;
   font-size: 13px;
+  margin-left: auto;
 }
+
+.header-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-login-link {
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+.header-login-link:hover { color: var(--ink); }
 
 .spa-dev-toggle {
   display: inline-flex;
@@ -4512,21 +4527,55 @@ body[data-demo] {
 }
 .space-warn-ok:hover { background: rgba(0, 0, 0, 0.05); }
 
-/* Language switcher in the site header. One option today; laid out so a second does not
-   need a redesign. Autonyms are never translated, so they may be any script — hence no
-   text-transform and a direction-neutral gap rather than margins. */
-.lang-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+/* Language selector — compact <select> in the site header. Autonyms are never
+   translated, so they may be any script — hence no text-transform. */
+.lang-select-form { display: inline-flex; }
+.lang-select {
+  font-family: var(--sans);
   font-size: 12px;
-}
-.lang-switch-opt {
   color: var(--muted);
-  text-decoration: none;
-  padding: 2px 4px;
+  background: transparent;
+  border: 1px solid var(--hairline);
   border-radius: 4px;
+  padding: 2px 22px 2px 6px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%235f5f68'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  line-height: 1.5;
 }
-.lang-switch-opt:hover,
-.lang-switch-opt:focus-visible { color: var(--ink); background: var(--surface2); }
-.lang-switch-opt.is-active { color: var(--ink); font-weight: 600; }
+.lang-select:hover,
+.lang-select:focus-visible { color: var(--ink); border-color: var(--accent); }
+.lang-select:focus-visible { outline-offset: 1px; }
+.lang-select:focus-visible { outline: 2px solid var(--pass); }
+.lang-select-submit { display: none; }
+
+/* ── Header responsive collapse ── */
+
+@media (max-width: 560px) {
+  header {
+    height: auto;
+    min-height: 56px;
+    padding: 6px 1rem;
+  }
+  .header-inner {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .header-left {
+    flex: 1;
+  }
+  .header-controls {
+    flex-basis: 100%;
+    margin-left: 0;
+    order: 3;
+    justify-content: space-between;
+  }
+  .header-user-chip {
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

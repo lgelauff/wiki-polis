@@ -1,5 +1,5 @@
 import {QueryClientProvider} from '@tanstack/react-query';
-import {render, screen, within} from '@testing-library/react';
+import {render, screen} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test} from 'vitest';
@@ -94,15 +94,18 @@ test('the language switcher offers the enabled languages by their own names', as
 
   renderRoute('/app/parity/fork');
 
-  const group = await screen.findByRole('navigation', {name: 'Language'});
   // Autonyms, never translated: someone looking for Dutch scans for "Nederlands".
-  const dutch = within(group).getByRole('link', {name: 'Nederlands'});
-  // A language change must be a full navigation, so the parameter is the interface. The
-  // href is written relative so the reader stays on the page they are on; the router
-  // resolves it against the current location (here jsdom's "/", in a browser /c/<slug>).
-  expect(dutch.getAttribute('href')).toMatch(/\?uselang=nl$/);
-  expect(dutch).toHaveAttribute('lang', 'nl');
-  // The active language is marked for assistive technology, not by styling alone.
-  expect(within(group).getByRole('link', {name: 'English'})).toHaveAttribute('aria-current', 'true');
-  expect(dutch).not.toHaveAttribute('aria-current');
+  const select = await screen.findByRole('combobox', {name: 'Language'});
+  const options = Array.from(select.querySelectorAll('option'));
+  expect(options).toHaveLength(2);
+  expect(options.map(o => o.textContent)).toEqual(['English', 'Nederlands']);
+  // Each option carries its language code as the value.
+  expect(options[0]!.value).toBe('en');
+  expect(options[1]!.value).toBe('nl');
+  // Options carry the lang attribute for script selection.
+  expect(options[0]!.getAttribute('lang')).toBe('en');
+  expect(options[1]!.getAttribute('lang')).toBe('nl');
+  // The active language is selected.
+  expect(options[0]!.selected).toBe(true);
+  expect(options[1]!.selected).toBe(false);
 });
