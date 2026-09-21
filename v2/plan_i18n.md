@@ -116,10 +116,10 @@ Settled. Changing one is a plan change, not an implementation detail.
 2. **Every `en.json` message has a `qqq.json` entry.** CI fails otherwise.
 3. **Interface copy is keyed; participant-authored content never is.** Statements, arguments,
    titles, and usernames pass through untranslated.
-4. **Server-side error copy is not keyed.** 112 distinct strings across 138
-   `error_response(...)` / `abort(description=...)` call sites stay developer-facing; the SPA
-   maps `error.code` to its own keyed copy. (`i18n/README.md` says 122 — reconcile once and
-   delete one of the two figures so it has a single home.)
+4. **Server-side error copy is not keyed.** 122 distinct strings across 140
+   `error_response(...)` / `abort(description=...)` call sites in `v2/*.py`, `v2/api/` and
+   `v2/services/` (recounted 2026-09-21) stay developer-facing; the SPA maps `error.code` to
+   its own keyed copy. This is the figure's only home; `i18n/README.md` refers here.
 5. **One message per concept, not one per surface.** Reuse before minting; when two surfaces
    show the same words for the same thing they share a key, and the `qqq` names every surface
    ([#369](https://github.com/lgelauff/wiki-polis/pull/369)).
