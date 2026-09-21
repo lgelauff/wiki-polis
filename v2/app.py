@@ -39,7 +39,8 @@ from sqlalchemy.orm import joinedload
 from db import (AdminRole, Argument,
                 ArgumentSideState, ArgumentVote, AuditEvent, ContentFlag, Conversation,
                 ConversationBan, ConversationInvite, FeaturedStatement, Participant,
-                Participation, StatementProvenance, StatementSimilarityScore, db)
+                Participation, StatementProvenance, StatementSimilarityScore,
+                VoucherBatch, VoucherCode, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError,
                          polis_server_config_error)
@@ -52,7 +53,9 @@ from api.v1 import (
     create_api_v1_blueprint, http_exception_json, is_api_request,
     register_api_error_handlers,
 )
-from services.identity import reconcile_participant_login
+from services.identity import (
+    create_voucher_participant, reconcile_participant_login,
+)
 from services.access import (
     AccessRequired, check_access, is_gated_conversation,
 )
@@ -82,6 +85,10 @@ from services.argument_commands import (
     submit_argument as submit_argument_command,
 )
 from services.content_flags import submit_content_flag
+from services.vouchers import (
+    generate_voucher_codes, lookup_voucher, normalize_code,
+    redeem_voucher, reserve_voucher, voucher_code_hmac,
+)
 from services.admin_participants import (
     ParticipantNotInConversation, build_admin_participant_roster,
     set_participant_access,
@@ -237,6 +244,118 @@ def _spa_shell_response():
     response.headers['Vary'] = 'Cookie'
     response.add_etag()
     return response.make_conditional(request)
+
+
+_VOUCHER_PAGE_ERRORS = {
+    'empty': 'Enter a voucher code.',
+    'invalid': 'That code is not valid for this consultation.',
+    'format': 'A voucher code is 12 letters and numbers.',
+}
+
+
+_VOUCHER_PAGE = (
+    '<!DOCTYPE html><html lang="{lang}" dir="{dir}"><head>'
+    '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    '<title>Voucher code — {title}</title>'
+    '<style>'
+    'body{{font-family:system-ui,-apple-system,sans-serif;max-width:28rem;margin:4rem auto;padding:0 1rem;line-height:1.5;color:#222}}'
+    'h1{{font-size:1.25rem;font-weight:600;margin-bottom:.5rem}}'
+    'p{{color:#555;margin-top:0}}'
+    'label{{display:block;font-weight:500;margin-bottom:.25rem}}'
+    'input{{width:100%;box-sizing:border-box;padding:.5rem;font-size:1rem;border:1px solid #ccc;border-radius:4px}}'
+    'input:focus{{border-color:#36c;outline:none;box-shadow:0 0 0 2px rgba(51,102,204,.25)}}'
+    '.error{{color:#d33;font-size:.875rem;margin-top:.25rem}}'
+    'button{{margin-top:.75rem;padding:.5rem 1.25rem;font-size:1rem;border:none;border-radius:4px;background:#36c;color:#fff;cursor:pointer}}'
+    'button:hover{{background:#25a}}'
+    '</style></head><body>'
+    '<h1>{title}</h1>'
+    '<p>You need a voucher code to take part in this consultation.</p>'
+    '<form method="post" autocomplete="off">'
+    '<label for="code">Voucher code</label>'
+    '<input id="code" name="code" type="text" value="{code_value}"'
+    ' placeholder="XXXX XXXX XXXX" autocapitalize="characters" autofocus>'
+    '{error_html}'
+    '<button type="submit">Enter</button>'
+    '</form></body></html>'
+)
+
+
+def _voucher_process(conv, code: str, slug: str):
+    """Validate, reserve, or resume a voucher code. Redirect on success."""
+    from services.vouchers import normalize_code, lookup_voucher, reserve_voucher
+
+    def _utc(dt):
+        """Make a DB-returned naive datetime UTC-aware (SQLite loses tzinfo)."""
+        if dt is not None and dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+
+    normalized = normalize_code(code)
+    if len(normalized) != 12:
+        return _voucher_page_html(slug, conv.title, _VOUCHER_PAGE_ERRORS['format'], code)
+
+    voucher = lookup_voucher(code, conv.id)
+    if voucher is None:
+        return _voucher_page_html(slug, conv.title, _VOUCHER_PAGE_ERRORS['invalid'], code)
+
+    now = datetime.now(timezone.utc)
+
+    # --- already redeemed: resume ---
+    if voucher.status == 'redeemed' and voucher.participant_id is not None:
+        participant = db.session.get(Participant, voucher.participant_id)
+        if participant is not None:
+            session['xid'] = participant.xid
+            session['emailable'] = False
+            return redirect(f'/{slug}')
+
+    # --- revoked ---
+    if voucher.status == 'revoked':
+        return _voucher_page_html(slug, conv.title, _VOUCHER_PAGE_ERRORS['invalid'], code)
+
+    # --- expired ---
+    if _utc(voucher.expires_at) is not None and _utc(voucher.expires_at) < now:
+        return _voucher_page_html(slug, conv.title, _VOUCHER_PAGE_ERRORS['invalid'], code)
+
+    # --- currently reserved by someone else ---
+    if voucher.status == 'reserved' and _utc(voucher.reserved_until) is not None and _utc(voucher.reserved_until) >= now:
+        return _voucher_page_html(slug, conv.title, _VOUCHER_PAGE_ERRORS['invalid'], code)
+
+    # --- unused (or expired reservation): reserve it ---
+    reserve_voucher(voucher)
+    db.session.commit()
+
+    # Build a voucher account. xid derivation mirrors the 'mw:' namespace
+    # but keys on a fresh random 128-bit subject.
+    import secrets as _secrets
+    xid = _derive_xid(f'voucher:{_secrets.token_urlsafe(16)}')
+    participant = create_voucher_participant(
+        conversation_id=conv.id, xid=xid,
+    )
+    db.session.add(participant)
+    db.session.commit()
+
+    session['xid'] = participant.xid
+    session['emailable'] = False
+    redeem_voucher(voucher, participant.id)
+    db.session.commit()
+
+    return redirect(f'/{slug}')
+
+
+def _voucher_page_html(slug: str, title: str, error: str | None = None, code_value: str = ''):
+    """Render a self-contained voucher code entry page."""
+    from flask import g
+    lang = g.get('locale', 'en')
+    direction = g.get('dir', 'ltr')
+    escaped_title = html.escape(title)
+    escaped_code = html.escape(code_value)
+    error_html = f'<p class="error">{html.escape(error)}</p>' if error else ''
+    return _VOUCHER_PAGE.format(
+        lang=lang, dir=direction,
+        title=escaped_title,
+        error_html=error_html,
+        code_value=escaped_code,
+    )
 
 
 _TEXT_ALLOWED_TAGS  = {'p', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'br'}
@@ -5267,11 +5386,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
         response.headers['Content-Security-Policy'] = csp
         response.headers['X-Content-Type-Options']  = 'nosniff'
-        # Adopted voucher links carry the credential in a path segment. Keep it
-        # out of referrers on both the typed /v page and /v/<code> routes.
+        # Voucher credentials travel as /<slug>/v (the entry form) and
+        # /<slug>/v?v=<code> (code in query param). Keep them out of
+        # referrers on every page that can carry a voucher code.
         response.headers['Referrer-Policy'] = (
             'no-referrer'
-            if request.path == '/v' or request.path.startswith('/v/')
+            if request.path.endswith('/v')
             else 'strict-origin-when-cross-origin'
         )
         # X-Frame-Options superseded by frame-ancestors in CSP above, but kept for old browsers
@@ -5538,6 +5658,36 @@ def _register_routes(app: Flask) -> None:
     def spa_shell(spa_path: str = ''):
         """Serve the built React shell; client routing owns the remaining path."""
         return _spa_shell_response()
+
+
+    # ── Voucher redemption (#368) ──────────────────────────────────────────────
+
+    @app.route('/<path:slug>/v', methods=['GET', 'POST'])
+    @_unauthenticated_site_limit()
+    @limiter.limit('10 per minute')
+    def voucher_entry(slug: str):
+        conv = Conversation.query.filter_by(slug=slug).first()
+        if conv is None:
+            abort(404)
+
+        error = None
+        code_value = ''
+
+        # Auto-process a code from the query string (linked entry).
+        if request.method == 'GET':
+            code_param = request.args.get('v', '').strip()
+            if code_param:
+                code_value = code_param
+                return _voucher_process(conv, code_value, slug)
+
+        if request.method == 'POST':
+            code_value = request.form.get('code', '').strip()
+            if not code_value:
+                error = _VOUCHER_PAGE_ERRORS['empty']
+            else:
+                return _voucher_process(conv, code_value, slug)
+
+        return _voucher_page_html(slug, conv.title, error, code_value)
 
 
     # ── OAuth ─────────────────────────────────────────────────────────────────

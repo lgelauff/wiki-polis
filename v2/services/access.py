@@ -9,7 +9,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
-from db import ConversationInvite
+from db import ConversationInvite, VoucherCode
 
 
 AccessState = Literal['authorised', 'refused', 'unknown']
@@ -140,10 +140,10 @@ def answer_invite_only(conversation, participant) -> AccessAnswer:
 def _unimplemented_provider_answer(conversation, participant) -> AccessAnswer:
     """Fail closed until the provider-specific lane supplies its adapter.
 
-    Selecting ``voucher`` or ``wiki_based`` before that adapter is wired makes
-    every account unknown/inconclusive with no access, rather than accidentally
-    opening the conversation. Provider lanes integrate by replacing the
-    corresponding entry in ``DEFAULT_PROVIDERS``.
+    Selecting ``wiki_based`` before that adapter is wired makes every account
+    unknown/inconclusive with no access, rather than accidentally opening the
+    conversation. Provider lanes integrate by replacing the corresponding entry
+    in ``DEFAULT_PROVIDERS``.
     """
     del conversation, participant
     return AccessAnswer(
@@ -153,11 +153,27 @@ def _unimplemented_provider_answer(conversation, participant) -> AccessAnswer:
     )
 
 
+def answer_voucher(conversation, participant) -> AccessAnswer:
+    """Voucher provider (#368): admits the one account that redeemed a voucher
+    for this conversation, unless the organizer has revoked it."""
+    if (participant is None
+            or participant.account_kind != 'voucher'
+            or participant.conversation_id != conversation.id):
+        return AccessAnswer('refused', reason='access-voucher-required')
+
+    voucher = VoucherCode.query.filter_by(
+        participant_id=participant.id,
+    ).first()
+    if voucher is not None and voucher.status == 'revoked':
+        return AccessAnswer('refused', reason='access-voucher-revoked')
+    return AccessAnswer('authorised')
+
+
 # Provider-lane integration seam: each provider replaces its entry here while
 # the shared check and refusal/viewer mapping remain provider-neutral.
 DEFAULT_PROVIDERS: Mapping[str, AccessProvider] = {
     'invite_only': answer_invite_only,
-    'voucher': _unimplemented_provider_answer,
+    'voucher': answer_voucher,
     'wiki_based': _unimplemented_provider_answer,
 }
 

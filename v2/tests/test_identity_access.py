@@ -187,8 +187,9 @@ def test_voucher_path_redaction_covers_the_credential():
     assert '/v/[redacted]?next=/c/demo' in redacted
 
 
-def test_voucher_paths_use_a_no_referrer_policy(client):
-    response = client.get('/v/0123456789AB')
+def test_voucher_paths_use_a_no_referrer_policy(client, conversation):
+    """/<slug>/v carries the voucher credential and must use no-referrer."""
+    response = client.get(f'/{conversation.slug}/v')
 
     assert response.headers['Referrer-Policy'] == 'no-referrer'
 
