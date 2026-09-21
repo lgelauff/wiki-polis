@@ -2,9 +2,8 @@
 
 import re
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
 
-from flask import g
+import pytest
 
 from db import (
     ACCOUNT_KIND_VOUCHER,
@@ -16,16 +15,62 @@ from db import (
     db,
 )
 from services.access import check_access
+from services.identity import create_voucher_participant
 from services.vouchers import (
+    classify_voucher,
     generate_voucher_code,
     generate_voucher_codes,
+    is_well_formed,
     lookup_voucher,
     normalize_code,
-    redeem_voucher,
-    reserve_voucher,
+    redeem_voucher_code,
     revoke_voucher,
     voucher_code_hmac,
 )
+
+CODE = 'X7F3K9M2ABCD'
+
+
+@pytest.fixture
+def voucher_conv(conversation):
+    conversation.gated = True
+    conversation.gating_type = 'voucher'
+    db.session.commit()
+    return conversation
+
+
+def _make_voucher(conversation, code=CODE, **kwargs):
+    batch = VoucherBatch(conversation_id=conversation.id)
+    db.session.add(batch)
+    db.session.flush()
+    voucher = VoucherCode(
+        batch_id=batch.id,
+        code_hmac=voucher_code_hmac(code, conversation.id),
+        **kwargs,
+    )
+    db.session.add(voucher)
+    db.session.commit()
+    return voucher
+
+
+def _voucher_account(conversation, xid='v' * 64):
+    participant = create_voucher_participant(conversation_id=conversation.id, xid=xid)
+    db.session.add(participant)
+    db.session.commit()
+    return participant
+
+
+def _redeem(client, conversation, code=CODE, **form):
+    return client.post(f'/c/{conversation.slug}/v', data={'code': code, **form})
+
+
+def _session_xid(client):
+    with client.session_transaction() as sess:
+        return sess.get('xid')
+
+
+def _voucher_participants():
+    return Participant.query.filter_by(account_kind=ACCOUNT_KIND_VOUCHER).all()
 
 
 # ── Code generation and normalisation ─────────────────────────────────────────
@@ -43,27 +88,37 @@ def test_generated_codes_are_unique():
 
 
 def test_normalize_strips_whitespace_and_hyphens():
-    assert normalize_code('abc def-ghi') == 'ABCDEFGHI'
+    assert normalize_code('abc def-ghj') == 'ABCDEFGHJ'
     assert normalize_code('  X7F3-K9M2  ') == 'X7F3K9M2'
 
 
 def test_normalize_is_case_insensitive():
-    assert normalize_code('abcdefghijkl') == 'ABCDEFGHIJKL'
+    assert normalize_code('x7f3k9m2abcd') == CODE
+
+
+def test_normalize_reads_crockford_lookalikes_as_digits():
+    assert normalize_code('O0Il') == '0011'
+    assert normalize_code('x7f3-k9m2-abcd') == normalize_code('X7F3 K9M2 ABCD')
+
+
+def test_well_formed_rejects_wrong_length_and_alphabet():
+    assert is_well_formed('x7f3 k9m2 abcd')
+    assert not is_well_formed('X7F3K9M2ABC')
+    assert not is_well_formed('X7F3K9M2ABCU')  # U is not Crockford
 
 
 # ── HMAC ──────────────────────────────────────────────────────────────────────
 
 def test_hmac_is_scoped_by_conversation_id(app):
-    """Same raw code, different conversations → different HMAC."""
-    h1 = voucher_code_hmac('X7F3K9M2ABCD', 1)
-    h2 = voucher_code_hmac('X7F3K9M2ABCD', 2)
-    assert h1 != h2
+    assert voucher_code_hmac(CODE, 1) != voucher_code_hmac(CODE, 2)
 
 
 def test_hmac_is_stable_for_same_input(app):
-    a = voucher_code_hmac('X7F3K9M2ABCD', 42)
-    b = voucher_code_hmac('X7F3K9M2ABCD', 42)
-    assert a == b
+    assert voucher_code_hmac(CODE, 42) == voucher_code_hmac(CODE, 42)
+
+
+def test_hmac_matches_a_hand_copied_code(app):
+    assert voucher_code_hmac('x7f3-k9m2-abcd', 42) == voucher_code_hmac(CODE, 42)
 
 
 # ── Batch generation ──────────────────────────────────────────────────────────
@@ -71,39 +126,21 @@ def test_hmac_is_stable_for_same_input(app):
 def test_generate_voucher_codes_persists_rows(app, conversation):
     batch = VoucherBatch(conversation_id=conversation.id, label='Test')
     db.session.add(batch)
+    codes = generate_voucher_codes(batch, 5)
     db.session.commit()
 
-    codes = generate_voucher_codes(batch, 5)
-
-    assert len(codes) == 5
     assert len(set(codes)) == 5
-
     rows = VoucherCode.query.filter_by(batch_id=batch.id).all()
     assert len(rows) == 5
-    for row in rows:
-        assert row.status == 'unused'
-        assert row.code_hmac is not None
+    assert {row.status for row in rows} == {'unused'}
+    assert all(lookup_voucher(code, conversation.id) is not None for code in codes)
 
 
-# ── Lookup and state machine ──────────────────────────────────────────────────
-
-def _make_voucher(conversation, code='X7F3K9M2ABCD', **kwargs):
-    batch = VoucherBatch(conversation_id=conversation.id)
-    db.session.add(batch)
-    db.session.flush()
-    voucher = VoucherCode(
-        batch_id=batch.id,
-        code_hmac=voucher_code_hmac(code, conversation.id),
-        **kwargs,
-    )
-    db.session.add(voucher)
-    db.session.commit()
-    return voucher
-
+# ── Lookup and classification ─────────────────────────────────────────────────
 
 def test_lookup_finds_unused_voucher(app, conversation):
     v = _make_voucher(conversation)
-    found = lookup_voucher('X7F3K9M2ABCD', conversation.id)
+    found = lookup_voucher(CODE, conversation.id)
     assert found is not None
     assert found.id == v.id
 
@@ -115,242 +152,341 @@ def test_lookup_returns_none_for_wrong_code(app, conversation):
 
 def test_lookup_returns_none_for_wrong_conversation(app, conversation):
     _make_voucher(conversation)
-    conv2 = Conversation(
-        slug='other-conv', polis_id='xyz9876543',
-        title='Other', active=True,
-    )
+    conv2 = Conversation(slug='other-conv', polis_id='xyz9876543', title='Other', active=True)
     db.session.add(conv2)
     db.session.commit()
-    assert lookup_voucher('X7F3K9M2ABCD', conv2.id) is None
-
-
-def test_reserve_sets_status_and_30_min_expiry(app, conversation):
-    v = _make_voucher(conversation)
-    reserve_voucher(v)
-    db.session.commit()
-
-    assert v.status == 'reserved'
-    assert v.reserved_until is not None
-    rv = v.reserved_until
-    if rv.tzinfo is None:
-        rv = rv.replace(tzinfo=timezone.utc)
-    delta = rv - datetime.now(timezone.utc)
-    assert timedelta(minutes=29) < delta < timedelta(minutes=31)
-
-
-def test_redeem_marks_status_and_links_participant(app, conversation, participant):
-    v = _make_voucher(conversation, status='reserved')
-    redeem_voucher(v, participant.id)
-    db.session.commit()
-
-    assert v.status == 'redeemed'
-    assert v.participant_id == participant.id
-    assert v.redeemed_at is not None
-    assert v.reserved_until is None
+    assert lookup_voucher(CODE, conv2.id) is None
 
 
 def test_revoke_sets_status_and_timestamp(app, conversation):
     v = _make_voucher(conversation)
     revoke_voucher(v)
     db.session.commit()
-
     assert v.status == 'revoked'
     assert v.revoked_at is not None
 
 
+def test_redeemed_code_whose_account_is_gone_cannot_mint_another(app, conversation):
+    """participant_id is SET NULL on delete; the code must not fall back to 'unused'."""
+    _make_voucher(conversation, status='redeemed', participant_id=None)
+    assert classify_voucher(CODE, conversation.id).outcome == 'invalid'
+
+
+def test_concurrent_first_use_creates_one_account(app, voucher_conv):
+    """Both requests classify the code as unused; the second claim loses and
+    resumes the winner's account instead of creating a second one."""
+    _make_voucher(voucher_conv)
+    first = classify_voucher(CODE, voucher_conv.id)
+    second = classify_voucher(CODE, voucher_conv.id)
+    assert first.outcome == second.outcome == 'redeem'
+
+    def factory(xid):
+        return lambda: create_voucher_participant(conversation_id=voucher_conv.id, xid=xid)
+
+    winner = redeem_voucher_code(first.voucher, voucher_conv.id, factory('a' * 64))
+    loser = redeem_voucher_code(second.voucher, voucher_conv.id, factory('b' * 64))
+
+    assert winner is not None
+    assert loser is not None and loser.id == winner.id
+    assert len(_voucher_participants()) == 1
+
+
+def test_expired_code_cannot_be_claimed(app, voucher_conv):
+    voucher = _make_voucher(
+        voucher_conv, expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+    )
+    created = redeem_voucher_code(
+        voucher, voucher_conv.id,
+        lambda: create_voucher_participant(conversation_id=voucher_conv.id, xid='a' * 64),
+    )
+    assert created is None
+    assert _voucher_participants() == []
+
+
 # ── Voucher entry endpoint ────────────────────────────────────────────────────
 
-def test_voucher_page_renders_form(app, client, conversation):
-    resp = client.get(f'/{conversation.slug}/v')
+def test_voucher_page_renders_form_with_csrf_field(app, client, voucher_conv):
+    resp = client.get(f'/c/{voucher_conv.slug}/v')
     assert resp.status_code == 200
     html = resp.data.decode()
     assert 'Voucher code' in html
-    assert conversation.title in html
+    assert voucher_conv.title in html
+    assert 'name="csrf_token"' in html
+    assert resp.headers['Cache-Control'] == 'no-store'
+    assert resp.headers['Referrer-Policy'] == 'no-referrer'
 
 
-def test_voucher_page_auto_processes_valid_code_and_redirects(
+def test_voucher_page_renders_from_the_message_catalogue(app, client, voucher_conv):
+    html = client.get(f'/c/{voucher_conv.slug}/v?uselang=qqx').data.decode()
+    assert '(voucher-page-label)' in html
+    assert '(voucher-page-intro)' in html
+    assert f'(voucher-page-doc-title: {voucher_conv.title})' in html
+    assert 'Voucher code' not in html
+
+
+def test_short_voucher_url_is_the_same_page(app, client, voucher_conv):
+    resp = client.get(f'/{voucher_conv.slug}/v')
+    assert resp.status_code == 200
+    assert 'name="code"' in resp.data.decode()
+
+
+def test_voucher_page_is_404_on_a_conversation_without_voucher_gating(
     app, client, conversation,
 ):
-    code = 'X7F3K9M2ABCD'
-    _make_voucher(conversation, code=code)
-    resp = client.get(f'/{conversation.slug}/v?v={code}')
+    _make_voucher(conversation)
+    assert client.get(f'/c/{conversation.slug}/v').status_code == 404
+    assert client.get(f'/c/{conversation.slug}/v?v={CODE}').status_code == 404
+    assert _voucher_participants() == []
+
+
+def test_typed_code_redeems_with_csrf_enabled(app, client, voucher_conv):
+    """The production config protects every POST; the form must carry the token."""
+    _make_voucher(voucher_conv)
+    app.config['WTF_CSRF_ENABLED'] = True
+    page = client.get(f'/c/{voucher_conv.slug}/v').data.decode()
+    token = re.search(r'name="csrf_token" value="([^"]+)"', page).group(1)
+
+    resp = _redeem(client, voucher_conv, csrf_token=token)
+
     assert resp.status_code == 302
-    assert resp.headers['Location'] == f'/{conversation.slug}'
-    with client.session_transaction() as sess:
-        assert 'xid' in sess
+    assert _session_xid(client) is not None
 
 
-def test_voucher_page_auto_process_shows_error_for_invalid_code(
-    app, client, conversation,
-):
-    resp = client.get(f'/{conversation.slug}/v?v=ZZZZZZZZZZZZ')
-    html = resp.data.decode()
-    assert 'not valid' in html
+def test_post_without_csrf_token_is_refused_when_csrf_is_enabled(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    app.config['WTF_CSRF_ENABLED'] = True
+    assert _redeem(client, voucher_conv).status_code == 400
+    assert _voucher_participants() == []
 
 
-def test_voucher_post_redeems_and_redirects(app, client, conversation):
-    code = 'X7F3K9M2ABCD'
-    _make_voucher(conversation, code=code)
-    resp = client.post(f'/{conversation.slug}/v', data={'code': code})
+def test_redemption_redirects_to_the_conversation_page(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    resp = _redeem(client, voucher_conv)
     assert resp.status_code == 302
-    assert resp.headers['Location'] == f'/{conversation.slug}'
-    with client.session_transaction() as sess:
-        assert 'xid' in sess
+    assert resp.headers['Location'] == f'/c/{voucher_conv.slug}'
+    assert CODE not in resp.headers['Location']
 
 
-def test_voucher_post_empty_code_shows_error(app, client, conversation):
-    resp = client.post(f'/{conversation.slug}/v', data={'code': ''})
-    html = resp.data.decode()
-    assert 'Enter a voucher code' in html
+def test_linked_code_redeems_and_leaves_the_address(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    resp = client.get(f'/{voucher_conv.slug}/v?v={CODE.lower()}')
+    assert resp.status_code == 302
+    assert resp.headers['Location'] == f'/c/{voucher_conv.slug}'
+    assert _session_xid(client) is not None
 
 
-def test_voucher_post_invalid_code_shows_error(app, client, conversation):
-    resp = client.post(f'/{conversation.slug}/v', data={'code': 'ZZZZZZZZZZZZ'})
-    html = resp.data.decode()
-    assert 'not valid' in html
+def test_hand_copied_code_with_lookalikes_redeems(app, client, voucher_conv):
+    _make_voucher(voucher_conv, code='0011ABCDEFGH')
+    resp = _redeem(client, voucher_conv, code='oOIl-abcd-efgh')
+    assert resp.status_code == 302
 
 
-def test_voucher_post_expired_code_shows_error(app, client, conversation):
-    code = 'X7F3K9M2ABCD'
-    _make_voucher(
-        conversation, code=code,
-        expires_at=datetime.now(timezone.utc) - timedelta(days=1),
-    )
-    resp = client.post(f'/{conversation.slug}/v', data={'code': code})
-    html = resp.data.decode()
-    assert 'not valid' in html
+@pytest.mark.parametrize('kwargs', [
+    {'status': 'revoked'},
+    {'expires_at': datetime.now(timezone.utc) - timedelta(days=1)},
+    {'status': 'reserved', 'reserved_until': datetime.now(timezone.utc) + timedelta(minutes=5)},
+])
+def test_unusable_codes_get_the_same_answer_as_a_wrong_code(app, client, voucher_conv, kwargs):
+    _make_voucher(voucher_conv, **kwargs)
+    wrong = _redeem(client, voucher_conv, code='ZZZZZZZZZZZZ').data.decode()
+    unusable = _redeem(client, voucher_conv).data.decode()
+    assert 'not valid' in unusable
+    assert unusable == wrong
+    assert CODE not in unusable
+    assert _voucher_participants() == []
 
 
-def test_voucher_post_revoked_code_shows_error(app, client, conversation):
-    code = 'X7F3K9M2ABCD'
-    _make_voucher(conversation, code=code, status='revoked')
-    resp = client.post(f'/{conversation.slug}/v', data={'code': code})
-    html = resp.data.decode()
-    assert 'not valid' in html
+def test_empty_and_malformed_codes_show_field_errors(app, client, voucher_conv):
+    empty = _redeem(client, voucher_conv, code='').data.decode()
+    assert 'Enter a voucher code' in empty
+    assert 'aria-invalid="true"' in empty
+    assert 'aria-describedby="code-hint code-error"' in empty
+    malformed = _redeem(client, voucher_conv, code='ABC').data.decode()
+    assert '12 letters and numbers' in malformed
 
 
-def test_voucher_create_participant_is_conversation_scoped(app, client, conversation):
-    code = 'X7F3K9M2ABCD'
-    _make_voucher(conversation, code=code)
-    client.post(f'/{conversation.slug}/v', data={'code': code})
+def test_voucher_account_is_conversation_scoped(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    _redeem(client, voucher_conv)
 
-    with client.session_transaction() as sess:
-        xid = sess.get('xid')
-    assert xid is not None
-
-    p = Participant.query.filter_by(xid=xid).first()
-    assert p is not None
+    p = Participant.query.filter_by(xid=_session_xid(client)).first()
     assert p.account_kind == ACCOUNT_KIND_VOUCHER
-    assert p.conversation_id == conversation.id
+    assert p.conversation_id == voucher_conv.id
     assert p.mw_user_id is None
     assert p.mw_username is None
 
 
+def test_the_code_resumes_the_same_account_in_another_browser(app, voucher_conv):
+    """#412: the code joins once and authenticates that account thereafter."""
+    _make_voucher(voucher_conv)
+    first, second = app.test_client(), app.test_client()
+    _redeem(first, voucher_conv)
+    _redeem(second, voucher_conv)
+    assert _session_xid(first) == _session_xid(second)
+    assert len(_voucher_participants()) == 1
+
+
+def test_expiry_does_not_end_an_account_that_already_redeemed(app, client, voucher_conv):
+    voucher = _make_voucher(voucher_conv)
+    _redeem(client, voucher_conv)
+    xid = _session_xid(client)
+    voucher.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+    db.session.commit()
+
+    other = app.test_client()
+    assert _redeem(other, voucher_conv).status_code == 302
+    assert _session_xid(other) == xid
+
+
+# ── Session identity ──────────────────────────────────────────────────────────
+
+def test_wikimedia_session_is_asked_before_it_is_replaced(app, client, voucher_conv, participant):
+    _make_voucher(voucher_conv)
+    with client.session_transaction() as sess:
+        sess['username'] = 'testuser'
+        sess['xid'] = participant.xid
+
+    # A link must not silently swap the identity.
+    resp = client.get(f'/c/{voucher_conv.slug}/v?v={CODE}')
+    assert resp.status_code == 200
+    assert 'signed in with another account' in resp.data.decode()
+    assert _session_xid(client) == participant.xid
+    assert _voucher_participants() == []
+
+    resp = _redeem(client, voucher_conv, confirm='1')
+    assert resp.status_code == 302
+    with client.session_transaction() as sess:
+        assert 'username' not in sess
+        voucher_xid = sess['xid']
+    assert voucher_xid != participant.xid
+
+
+def test_voucher_session_carries_nothing_from_the_previous_one(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    with client.session_transaction() as sess:
+        sess['demo_conversation_id'] = 99
+        sess['particiapi_api_sessions'] = {str(voucher_conv.id): 'someone-else'}
+        sess['space'] = 'demo'
+    _redeem(client, voucher_conv)
+    with client.session_transaction() as sess:
+        assert set(sess.keys()) - {'_permanent', '_fresh', 'csrf_token'} == {'xid', 'emailable'}
+
+
+def test_second_code_in_the_same_session_is_refused_and_stays_unused(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    second = _make_voucher(voucher_conv, code='ABCDEFGHJKMN')
+    _redeem(client, voucher_conv)
+    xid = _session_xid(client)
+
+    resp = _redeem(client, voucher_conv, code='ABCDEFGHJKMN', confirm='1')
+
+    assert 'already take part' in resp.data.decode()
+    assert _session_xid(client) == xid
+    db.session.refresh(second)
+    assert second.status == 'unused'
+
+
+def test_reopening_your_own_code_keeps_the_session(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    _redeem(client, voucher_conv)
+    xid = _session_xid(client)
+    resp = client.get(f'/c/{voucher_conv.slug}/v?v={CODE}')
+    assert resp.status_code == 302
+    assert _session_xid(client) == xid
+
+
 # ── Access provider ───────────────────────────────────────────────────────────
 
-def test_voucher_account_admitted_for_its_own_process(app, conversation):
-    code = 'X7F3K9M2ABCD'
-    _make_voucher(conversation, code=code)
-
-    batch = VoucherBatch.query.filter_by(conversation_id=conversation.id).first()
-    voucher = VoucherCode.query.filter_by(batch_id=batch.id).first()
-    participant = Participant(
-        mw_user_id=None, mw_username=None,
-        account_kind=ACCOUNT_KIND_VOUCHER,
-        conversation_id=conversation.id,
-        xid='v' * 64,
-    )
-    db.session.add(participant)
-    db.session.flush()
+def test_redeemed_voucher_account_is_admitted(app, voucher_conv):
+    voucher = _make_voucher(voucher_conv)
+    participant = _voucher_account(voucher_conv)
     voucher.participant_id = participant.id
+    voucher.status = 'redeemed'
     db.session.commit()
 
-    conversation.gated = True
-    conversation.gating_type = 'voucher'
+    assert check_access(voucher_conv, participant).allowed is True
+
+
+def test_voucher_account_without_a_redeemed_code_is_refused(app, voucher_conv):
+    """Fail closed: being a voucher account scoped here is not enough."""
+    participant = _voucher_account(voucher_conv)
+    decision = check_access(voucher_conv, participant)
+    assert decision.allowed is False
+    assert decision.reason == 'access-voucher-needed'
+
+
+def test_voucher_account_is_refused_once_its_batch_is_deleted(app, voucher_conv):
+    voucher = _make_voucher(voucher_conv)
+    participant = _voucher_account(voucher_conv)
+    voucher.participant_id = participant.id
+    voucher.status = 'redeemed'
+    db.session.commit()
+    db.session.delete(voucher.batch)
     db.session.commit()
 
-    decision = check_access(conversation, participant)
-    assert decision.allowed is True
+    assert check_access(voucher_conv, participant).allowed is False
 
 
-def test_voucher_account_refused_on_other_process(app, conversation):
-    participant = Participant(
-        mw_user_id=None, mw_username=None,
-        account_kind=ACCOUNT_KIND_VOUCHER,
-        conversation_id=conversation.id,
-        xid='v' * 64,
-    )
-    db.session.add(participant)
+def test_voucher_account_refused_when_revoked(app, voucher_conv):
+    voucher = _make_voucher(voucher_conv)
+    participant = _voucher_account(voucher_conv, xid='w' * 64)
+    voucher.participant_id = participant.id
+    voucher.status = 'revoked'
     db.session.commit()
 
+    decision = check_access(voucher_conv, participant)
+    assert decision.allowed is False
+    assert decision.reason == 'access-voucher-revoked'
+
+
+def test_revoked_participant_is_in_access_lost(app, voucher_conv):
+    voucher = _make_voucher(voucher_conv)
+    participant = _voucher_account(voucher_conv)
+    voucher.participant_id = participant.id
+    voucher.status = 'revoked'
+    db.session.add(Participation(
+        participant_id=participant.id, conversation_id=voucher_conv.id,
+        pseudonym='quiet-otter',
+    ))
+    db.session.commit()
+
+    assert check_access(voucher_conv, participant).viewer == 'access_lost'
+
+
+@pytest.mark.parametrize('other', [
+    {'gated': True, 'gating_type': 'voucher'},
+    {'gated': False, 'gating_type': None},
+    {'gated': True, 'gating_type': 'invite_only'},
+])
+def test_voucher_account_refused_on_every_other_process(app, conversation, other):
+    participant = _voucher_account(conversation)
     conv2 = Conversation(
-        slug='other-conv', polis_id='xyz9876543',
-        title='Other', active=True, gated=True, gating_type='voucher',
+        slug='other-conv', polis_id='xyz9876543', title='Other', active=True, **other,
     )
     db.session.add(conv2)
     db.session.commit()
 
     decision = check_access(conv2, participant)
     assert decision.allowed is False
-    assert decision.reason == 'access-voucher-required'
+    assert decision.reason == 'access-voucher-other'
 
 
-def test_voucher_account_refused_when_revoked(app, conversation):
-    code = 'X7F3K9M2ABCD'
-    _make_voucher(conversation, code=code)
-    batch = VoucherBatch.query.filter_by(conversation_id=conversation.id).first()
-    voucher = VoucherCode.query.filter_by(batch_id=batch.id).first()
-
-    participant = Participant(
-        mw_user_id=None, mw_username=None,
-        account_kind=ACCOUNT_KIND_VOUCHER,
-        conversation_id=conversation.id,
-        xid='w' * 64,
-    )
-    db.session.add(participant)
-    db.session.flush()
-
-    voucher.participant_id = participant.id
-    voucher.status = 'revoked'
-    db.session.commit()
-
-    conversation.gated = True
-    conversation.gating_type = 'voucher'
-    db.session.commit()
-
-    decision = check_access(conversation, participant)
+def test_wikimedia_account_refused_on_voucher_process(app, voucher_conv, participant):
+    decision = check_access(voucher_conv, participant)
     assert decision.allowed is False
-    assert decision.reason == 'access-voucher-revoked'
-
-
-def test_wikimedia_account_refused_on_voucher_process(app, conversation, participant):
-    conversation.gated = True
-    conversation.gating_type = 'voucher'
-    db.session.commit()
-
-    decision = check_access(conversation, participant)
-    assert decision.allowed is False
-    assert decision.reason == 'access-voucher-required'
+    assert decision.reason == 'access-voucher-needed'
 
 
 def test_same_raw_code_in_two_processes_is_independent(app, conversation):
     """Two processes can use the same code string without collision."""
-    code = 'X7F3K9M2ABCD'
-    _make_voucher(conversation, code=code)
-
-    conv2 = Conversation(
-        slug='process-two', polis_id='def4567890',
-        title='Second Process', active=True,
-    )
+    _make_voucher(conversation)
+    conv2 = Conversation(slug='process-two', polis_id='def4567890', title='Second Process', active=True)
     db.session.add(conv2)
     db.session.commit()
+    _make_voucher(conv2)
 
-    _make_voucher(conv2, code=code)
-
-    v1 = lookup_voucher(code, conversation.id)
-    v2 = lookup_voucher(code, conv2.id)
-    assert v1 is not None
-    assert v2 is not None
+    v1 = lookup_voucher(CODE, conversation.id)
+    v2 = lookup_voucher(CODE, conv2.id)
     assert v1.id != v2.id
     assert v1.code_hmac != v2.code_hmac
 
@@ -359,104 +495,71 @@ def test_same_raw_code_in_two_processes_is_independent(app, conversation):
 
 def test_other_pages_use_strict_origin_referrer(client):
     resp = client.get('/')
-    assert 'strict-origin-when-cross-origin' in resp.headers.get(
-        'Referrer-Policy', '')
+    assert 'strict-origin-when-cross-origin' in resp.headers.get('Referrer-Policy', '')
 
 
 # ── Log redaction ─────────────────────────────────────────────────────────────
 
 def test_voucher_query_param_is_redacted_in_url():
     from logging_setup import _redact
-    redacted = _redact('GET /demo/v?v=X7F3K9M2ABCD HTTP/1.1')
-    assert 'X7F3K9M2ABCD' not in redacted
+    redacted = _redact(f'GET /c/demo/v?v={CODE} HTTP/1.1')
+    assert CODE not in redacted
     assert 'v=[redacted]' in redacted
 
 
 def test_voucher_path_segment_is_redacted():
     from logging_setup import _redact
-    redacted = _redact('GET /v/X7F3K9M2ABCD HTTP/1.1')
-    assert 'X7F3K9M2ABCD' not in redacted
+    redacted = _redact(f'GET /v/{CODE} HTTP/1.1')
+    assert CODE not in redacted
     assert '/v/[redacted]' in redacted
 
 
-# ── End-to-end: redemption → session → access ─────────────────────────────────
+# ── End-to-end: redemption → session → API → revoke ──────────────────────────
 
-def test_voucher_redemption_and_access_flow(app, client, conversation):
-    """A complete walk: generate batch, redeem, access check, resume, revoke."""
-    conversation.gated = True
-    conversation.gating_type = 'voucher'
-    db.session.commit()
-
-    # 1. Organiser generates a batch with two codes.
-    batch = VoucherBatch(conversation_id=conversation.id, label='E2E Test')
+def test_voucher_redemption_and_access_flow(app, client, voucher_conv):
+    batch = VoucherBatch(conversation_id=voucher_conv.id, label='E2E Test')
     db.session.add(batch)
-    db.session.commit()
     codes = generate_voucher_codes(batch, 2)
+    db.session.commit()
 
-    # 2. Anonymous user visits the voucher page and gets the form.
-    resp = client.get(f'/{conversation.slug}/v')
-    assert resp.status_code == 200
-    html = resp.data.decode()
-    assert 'Voucher code' in html
-    assert conversation.title in html
+    # Logged out: the workspace refuses and says this is a voucher process.
+    refused = client.get(f'/api/v1/conversations/{voucher_conv.slug}/workspace')
+    assert refused.status_code == 403
+    assert refused.get_json()['error']['details']['gatingType'] == 'voucher'
 
-    # 3. User types a valid code — gets redirected to the process.
-    resp = client.post(
-        f'/{conversation.slug}/v',
-        data={'code': codes[0]},
-        follow_redirects=False,
+    # Typing a code redeems it and lands on the conversation page.
+    resp = client.post(f'/c/{voucher_conv.slug}/v', data={'code': codes[0]})
+    assert resp.headers['Location'] == f'/c/{voucher_conv.slug}'
+
+    # The SPA sees a signed-in voucher session, and the workspace admits it.
+    session_state = client.get('/api/v1/session').get_json()['data']
+    assert session_state['state'] == 'voucher'
+    assert session_state['user'] is None
+    assert session_state['capabilities']['administerSite'] is False
+    workspace = client.get(f'/api/v1/conversations/{voucher_conv.slug}/workspace')
+    assert workspace.status_code == 200, workspace.get_data(as_text=True)
+
+    # Joining works and never opts a voucher account into talk-page notices.
+    joined = client.post(
+        f'/api/v1/conversations/{voucher_conv.slug}/participation',
+        json={'pseudonym': 'quiet-otter', 'notifyEmail': True, 'notifyTalkPage': True},
     )
-    assert resp.status_code == 302
-    assert resp.headers['Location'] == f'/{conversation.slug}'
+    assert joined.status_code == 201, joined.get_data(as_text=True)
+    assert joined.get_json()['data']['notifications'] == {'email': False, 'talkPage': False}
 
-    # 4. Session now carries a voucher identity.
-    with client.session_transaction() as sess:
-        xid = sess.get('xid')
-    assert xid is not None
+    participant = Participant.query.filter_by(xid=_session_xid(client)).first()
 
-    participant = Participant.query.filter_by(xid=xid).first()
-    assert participant is not None
-    assert participant.account_kind == ACCOUNT_KIND_VOUCHER
-    assert participant.conversation_id == conversation.id
-
-    # 5. The access provider admits the voucher account.
-    decision = check_access(conversation, participant)
-    assert decision.allowed is True
-
-    # 6. Redeeming the same code again resumes (same session details).
-    resp = client.post(
-        f'/{conversation.slug}/v',
-        data={'code': codes[0]},
-        follow_redirects=False,
-    )
-    assert resp.status_code == 302
-    with client.session_transaction() as sess:
-        assert sess.get('xid') == xid  # same xid — no duplicate participant
-
-    # 7. The second (unused) code produces a different participant.
-    resp = client.post(
-        f'/{conversation.slug}/v',
-        data={'code': codes[1]},
-        follow_redirects=False,
-    )
-    assert resp.status_code == 302
-    with client.session_transaction() as sess:
-        xid2 = sess.get('xid')
-    assert xid2 != xid
-
-    # 8. Revoke the first participant's voucher. Access is lost.
+    # Revoking the code puts the account in "joined, access lost".
     voucher = VoucherCode.query.filter_by(participant_id=participant.id).first()
     revoke_voucher(voucher)
     db.session.commit()
+    lost = client.get(f'/api/v1/conversations/{voucher_conv.slug}/workspace')
+    assert lost.status_code == 403
+    details = lost.get_json()['error']['details']
+    assert details['viewer'] == 'access_lost'
+    assert details['reason'] == 'access-voucher-revoked'
 
-    decision = check_access(conversation, participant)
-    assert decision.allowed is False
-    assert decision.reason == 'access-voucher-revoked'
-
-    # 9. The revoked code can no longer resume — invalid response.
-    resp = client.post(
-        f'/{conversation.slug}/v',
-        data={'code': codes[0]},
-    )
-    html = resp.data.decode()
-    assert 'not valid' in html
+    # The revoked code no longer opens anything.
+    assert 'not valid' in client.post(
+        f'/c/{voucher_conv.slug}/v', data={'code': codes[0]},
+    ).data.decode()

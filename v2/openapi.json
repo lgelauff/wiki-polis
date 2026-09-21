@@ -1623,7 +1623,7 @@
         "required": ["state", "user", "capabilities", "csrfToken", "developerLogins", "gitVersion", "locales", "links"],
         "additionalProperties": false,
         "properties": {
-          "state": {"type": "string", "enum": ["anonymous", "authenticated", "demo"]},
+          "state": {"type": "string", "enum": ["anonymous", "authenticated", "demo", "voucher"], "description": "voucher: signed in with a voucher account, which has no username (#368)."},
           "user": {
             "oneOf": [
               {"$ref": "#/components/schemas/SessionUser"},

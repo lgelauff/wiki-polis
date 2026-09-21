@@ -27,6 +27,9 @@ def upgrade():
             ondelete='CASCADE',
         ),
     )
+    op.create_index(
+        'ix_voucher_batches_conversation_id', 'voucher_batches', ['conversation_id'],
+    )
     op.create_table(
         'voucher_codes',
         sa.Column('id', sa.Integer(), primary_key=True),
@@ -48,9 +51,19 @@ def upgrade():
             ondelete='SET NULL',
         ),
         sa.UniqueConstraint('code_hmac', name='uq_voucher_codes_code_hmac'),
+        sa.UniqueConstraint('participant_id', name='uq_voucher_codes_participant_id'),
+        sa.CheckConstraint(
+            "status IN ('unused', 'reserved', 'redeemed', 'revoked')",
+            name='ck_voucher_codes_status',
+        ),
     )
+    op.create_index('ix_voucher_codes_batch_id', 'voucher_codes', ['batch_id'])
+    op.create_index('ix_voucher_codes_status', 'voucher_codes', ['status'])
 
 
 def downgrade():
+    op.drop_index('ix_voucher_codes_status', table_name='voucher_codes')
+    op.drop_index('ix_voucher_codes_batch_id', table_name='voucher_codes')
     op.drop_table('voucher_codes')
+    op.drop_index('ix_voucher_batches_conversation_id', table_name='voucher_batches')
     op.drop_table('voucher_batches')

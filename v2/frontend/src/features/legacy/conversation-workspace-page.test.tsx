@@ -208,3 +208,44 @@ test('keeps the real-space and demo-space ballot warnings in separate messages',
   expect(warning).toHaveTextContent('Live consultation. These are active consultation processes with real responses.');
   expect(warning).not.toHaveTextContent('CHANGED DEMO');
 });
+
+/** The 403 the workspace returns for a voucher-gated consultation. */
+function serveVoucherRefusal(details: Record<string, unknown>) {
+  server.use(http.get(WORKSPACE_URL, () => HttpResponse.json({error: {
+    code: 'access_required',
+    message: 'Access to this consultation is required.',
+    details: {
+      slug: 'community-strategy', title: 'Community strategy', gatingType: 'voucher',
+      viewer: 'logged_out', certainty: 'known', reason: null, loginOptions: [], sharedResults: [],
+      ...details,
+    },
+  }}, {status: 403})));
+}
+
+test('a voucher consultation points a visitor at the voucher page, not at invitations', async () => {
+  serveVoucherRefusal({});
+  renderWorkspace();
+
+  // Catches every refusal reading as a missing invitation, which leaves a voucher holder with
+  // no way to find where the code goes.
+  expect(await screen.findByRole('heading', {name: testMessages['forbidden-voucher-heading']!}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByText(testMessages['forbidden-invite-heading']!)).toBeNull();
+  expect(screen.getByRole('link', {name: testMessages['forbidden-voucher-link']!}))
+    .toHaveAttribute('href', '/c/community-strategy/v');
+});
+
+test('a voucher account on another consultation is told so, with no code entry', async () => {
+  serveVoucherRefusal({gatingType: null, viewer: 'refused', reason: 'access-voucher-other'});
+  renderWorkspace();
+
+  expect(await screen.findByRole('heading', {name: testMessages['forbidden-voucher-other-heading']!}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByRole('link', {name: testMessages['forbidden-voucher-link']!})).toBeNull();
+});
+
+test('a revoked voucher reads as access withdrawn', async () => {
+  serveVoucherRefusal({viewer: 'access_lost', reason: 'access-voucher-revoked'});
+  renderWorkspace();
+
+  expect(await screen.findByRole('heading', {name: testMessages['forbidden-lost-voucher-heading']!}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByRole('link', {name: testMessages['forbidden-voucher-link']!})).toBeNull();
+});

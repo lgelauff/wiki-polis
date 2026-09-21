@@ -570,6 +570,13 @@ class VoucherCode(db.Model):
         # An organizer re-using the same raw code in two processes still produces
         # two distinct rows because the HMAC is scoped by conversation_id.
         db.UniqueConstraint('code_hmac', name='uq_voucher_codes_code_hmac'),
+        # One code per voucher account: the access check reads the code by its
+        # participant, so a second row pointing at the same account is never valid.
+        db.UniqueConstraint('participant_id', name='uq_voucher_codes_participant_id'),
+        db.CheckConstraint(
+            "status IN ('unused', 'reserved', 'redeemed', 'revoked')",
+            name='ck_voucher_codes_status',
+        ),
     )
 
     id              = db.Column(db.Integer, primary_key=True)
@@ -607,6 +614,5 @@ db.Index('ix_featured_statements_conversation_id', FeaturedStatement.conversatio
 db.Index('ix_featured_statements_phase6_polis_statement_id',
          FeaturedStatement.conversation_id, FeaturedStatement.phase6_polis_statement_id)
 db.Index('ix_voucher_codes_batch_id', VoucherCode.batch_id)
-db.Index('ix_voucher_codes_participant_id', VoucherCode.participant_id)
 db.Index('ix_voucher_codes_status', VoucherCode.status)
 db.Index('ix_voucher_batches_conversation_id', VoucherBatch.conversation_id)

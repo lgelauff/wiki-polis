@@ -1,18 +1,30 @@
-"""Voucher code generation and redemption (#368)."""
+"""Voucher code generation and redemption (#368).
+
+A code creates exactly one account and thereafter authenticates that account:
+it is single-use for *joining* and reusable for *resuming* (#412). Expiry limits
+redemption only; it never ends an account that already redeemed.
+"""
 
 import hashlib
 import hmac
 import re
-from datetime import datetime, timedelta, timezone
+import secrets
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Literal
 
 from flask import current_app
+from sqlalchemy import and_, or_, update
 
-from db import VoucherBatch, VoucherCode, db
+from db import ACCOUNT_KIND_VOUCHER, Participant, VoucherBatch, VoucherCode, db
 
 # Crockford base32: no I (eye), L (ell), O (oh), U (you)
 _CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 _CROCKFORD_BITS = 60  # 12 chars × 5 bits
-_VOUCHER_RESERVATION_MINUTES = 30
+# Crockford decoding reads the look-alikes as the digits they resemble, so a code
+# copied by hand from a printed card still matches.
+_LOOKALIKES = str.maketrans({'O': '0', 'I': '1', 'L': '1'})
 
 _VOUCHER_CODE_RE = re.compile(r'^[0-9A-HJKMNP-TV-Z]{12}$')
 
@@ -22,9 +34,24 @@ def _voucher_hmac_secret() -> str:
                or current_app.config['SECRET_KEY'])
 
 
+def _utcnow() -> datetime:
+    """Naive UTC, matching how the DateTime columns store and return values."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _naive_utc(value: datetime | None) -> datetime | None:
+    if value is not None and value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
 def normalize_code(code: str) -> str:
-    """Upper-case, strip whitespace and hyphens."""
-    return re.sub(r'[\s\-]+', '', code).upper()
+    """Upper-case, strip whitespace and hyphens, and map Crockford look-alikes."""
+    return re.sub(r'[\s\-]+', '', code).upper().translate(_LOOKALIKES)
+
+
+def is_well_formed(code: str) -> bool:
+    return _VOUCHER_CODE_RE.fullmatch(normalize_code(code)) is not None
 
 
 def voucher_code_hmac(code: str, conversation_id: int) -> str:
@@ -45,7 +72,6 @@ def generate_voucher_code() -> str:
 
     Generated code conforms to ``_VOUCHER_CODE_RE``: no I, L, O, or U.
     """
-    import secrets
     bits = secrets.randbits(_CROCKFORD_BITS)
     chars = []
     for _ in range(12):
@@ -55,49 +81,127 @@ def generate_voucher_code() -> str:
 
 
 def generate_voucher_codes(batch: VoucherBatch, count: int) -> list[str]:
-    """Generate *count* voucher codes and persist them in *batch*."""
-    secret = _voucher_hmac_secret()
-    codes: list[str] = []
-    vouchers: list[VoucherCode] = []
-    for _ in range(count):
-        raw = generate_voucher_code()
-        codes.append(raw)
-        vouchers.append(VoucherCode(
-            batch_id=batch.id,
-            code_hmac=hmac.new(
-                secret.encode(),
-                f'voucher:{batch.conversation_id}:{raw}'.encode(),
-                hashlib.sha256,
-            ).hexdigest(),
-        ))
-    db.session.add_all(vouchers)
+    """Generate *count* voucher codes and add them to *batch*.
+
+    The raw codes are returned once, for the organizer to hand out; only their
+    HMACs are stored. The caller commits.
+    """
+    codes = [generate_voucher_code() for _ in range(count)]
+    db.session.add_all([
+        VoucherCode(batch=batch, code_hmac=voucher_code_hmac(raw, batch.conversation_id))
+        for raw in codes
+    ])
     return codes
 
 
 def lookup_voucher(code: str, conversation_id: int) -> VoucherCode | None:
-    """Find a voucher row by normalised code and conversation scope."""
-    digest = voucher_code_hmac(code, conversation_id)
-    return VoucherCode.query.filter_by(code_hmac=digest).first()
-
-
-def reserve_voucher(voucher: VoucherCode) -> None:
-    """Mark a voucher as reserved for 30 minutes."""
-    voucher.status = 'reserved'
-    voucher.reserved_until = datetime.now(timezone.utc) + timedelta(
-        minutes=_VOUCHER_RESERVATION_MINUTES,
+    """Find a voucher row by normalised code, within one conversation."""
+    return (
+        VoucherCode.query
+        .join(VoucherBatch, VoucherCode.batch_id == VoucherBatch.id)
+        .filter(
+            VoucherCode.code_hmac == voucher_code_hmac(code, conversation_id),
+            VoucherBatch.conversation_id == conversation_id,
+        )
+        .first()
     )
 
 
-def redeem_voucher(voucher: VoucherCode, participant_id: int) -> None:
-    """Mark a voucher as redeemed and link the participant."""
-    voucher.status = 'redeemed'
-    voucher.participant_id = participant_id
-    voucher.redeemed_at = datetime.now(timezone.utc)
-    voucher.reserved_until = None
+@dataclass(frozen=True)
+class VoucherEntry:
+    """What entering a code would do. ``invalid`` covers wrong, revoked,
+    expired-unredeemed and in-flight codes alike, so a response never reveals
+    which of them applies."""
+
+    outcome: Literal['invalid', 'redeem', 'resume']
+    voucher: VoucherCode | None = None
+    participant: Participant | None = None
+
+
+def _classify(voucher: VoucherCode | None, conversation_id: int) -> VoucherEntry:
+    if voucher is None or voucher.status == 'revoked':
+        return VoucherEntry('invalid')
+
+    if voucher.status == 'redeemed':
+        participant = (
+            db.session.get(Participant, voucher.participant_id)
+            if voucher.participant_id is not None else None
+        )
+        # A redeemed code whose account is gone never mints a second one.
+        if (participant is None
+                or participant.account_kind != ACCOUNT_KIND_VOUCHER
+                or participant.conversation_id != conversation_id):
+            return VoucherEntry('invalid')
+        return VoucherEntry('resume', voucher, participant)
+
+    now = _utcnow()
+    expires_at = _naive_utc(voucher.expires_at)
+    if expires_at is not None and expires_at <= now:
+        return VoucherEntry('invalid')
+    reserved_until = _naive_utc(voucher.reserved_until)
+    if voucher.status == 'reserved' and reserved_until is not None and reserved_until > now:
+        return VoucherEntry('invalid')
+    return VoucherEntry('redeem', voucher)
+
+
+def classify_voucher(code: str, conversation_id: int) -> VoucherEntry:
+    return _classify(lookup_voucher(code, conversation_id), conversation_id)
+
+
+def redeem_voucher_code(
+    voucher: VoucherCode,
+    conversation_id: int,
+    make_participant: Callable[[], Participant],
+) -> Participant | None:
+    """Claim *voucher* and create its account in one transaction.
+
+    The claim is a conditional UPDATE, so of two concurrent first uses exactly
+    one creates an account; the other resumes the winner's account rather than
+    erroring. Returns ``None`` when the code is no longer usable.
+    """
+    voucher_id = voucher.id
+    now = _utcnow()
+    try:
+        claimed = db.session.execute(
+            update(VoucherCode)
+            .where(
+                VoucherCode.id == voucher_id,
+                VoucherCode.participant_id.is_(None),
+                or_(
+                    VoucherCode.status == 'unused',
+                    and_(VoucherCode.status == 'reserved',
+                         VoucherCode.reserved_until <= now),
+                ),
+                or_(VoucherCode.expires_at.is_(None), VoucherCode.expires_at > now),
+            )
+            .values(status='redeemed', redeemed_at=now, reserved_until=None)
+            .execution_options(synchronize_session=False)
+        ).rowcount == 1
+
+        if not claimed:
+            db.session.rollback()
+            current = db.session.get(VoucherCode, voucher_id, populate_existing=True)
+            entry = _classify(current, conversation_id)
+            return entry.participant if entry.outcome == 'resume' else None
+
+        participant = make_participant()
+        db.session.add(participant)
+        db.session.flush()
+        db.session.execute(
+            update(VoucherCode)
+            .where(VoucherCode.id == voucher_id)
+            .values(participant_id=participant.id)
+            .execution_options(synchronize_session=False)
+        )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return participant
 
 
 def revoke_voucher(voucher: VoucherCode) -> None:
-    """Mark a voucher as revoked."""
+    """Mark a voucher as revoked. The caller commits."""
     voucher.status = 'revoked'
-    voucher.revoked_at = datetime.now(timezone.utc)
+    voucher.revoked_at = _utcnow()
     voucher.reserved_until = None

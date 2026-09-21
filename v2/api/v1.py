@@ -14,7 +14,7 @@ from werkzeug.exceptions import HTTPException
 
 import i18n
 from api.admin_routes import register_admin_routes
-from db import Participant
+from db import ACCOUNT_KIND_VOUCHER, Participant
 from services.participations import (EligibilityDenied, InvalidPseudonym,
                                      PseudonymUnavailable)
 from services.explore import ExploreUpstreamError
@@ -150,6 +150,8 @@ def create_api_v1_blueprint(
 
         if participant is not None and participant.is_demo:
             state = 'demo'
+        elif participant is not None and participant.account_kind == ACCOUNT_KIND_VOUCHER:
+            state = 'voucher'
         elif username:
             state = 'authenticated'
         else:

@@ -1401,7 +1401,7 @@ export interface components {
             /** @enum {string} */
             accessPolicy: "public" | "invite_only" | "demo";
             gated: boolean;
-            /** @enum {string} */
+            /** @enum {string|null} */
             gatingType: "invite_only" | "voucher" | "wiki_based" | null;
             announce: boolean;
             information: boolean;
@@ -1440,7 +1440,7 @@ export interface components {
                 /** @enum {string} */
                 accessPolicy: "public" | "invite_only" | "demo";
                 gated: boolean;
-                /** @enum {string} */
+                /** @enum {string|null} */
                 gatingType: "invite_only" | "voucher" | "wiki_based" | null;
                 announce: boolean;
                 information: boolean;
@@ -1944,8 +1944,11 @@ export interface components {
             data: components["schemas"]["Session"];
         };
         Session: {
-            /** @enum {string} */
-            state: "anonymous" | "authenticated" | "demo";
+            /**
+             * @description voucher: signed in with a voucher account, which has no username (#368).
+             * @enum {string}
+             */
+            state: "anonymous" | "authenticated" | "demo" | "voucher";
             user: components["schemas"]["SessionUser"] | null;
             capabilities: components["schemas"]["SiteCapabilities"];
             csrfToken: string;
