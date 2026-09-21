@@ -69,6 +69,62 @@ def test_plural_is_expanded_whatever_its_case(tmp_path):
     assert i18n.resolve('n', 'nl', (3,)) == '3 dagen'
 
 
+# The form banana-i18n 2.4.0 picks (Node 22, CLDR 47) from '{{PLURAL:$1|f0|f1|f2|f3|f4|f5}}',
+# for each count below. Generated once with banana itself and hard-coded here, so these
+# tests need no Node: the server must pick the form the browser picks.
+_PLURAL_COUNTS = (0, 1, 2, 3, 4, 5, 6, 7, 11, 12, 21, 22, 25, 101, 102, 111, 1000000)
+_BANANA_PLURAL_FORMS = {
+    'ru': (2, 0, 1, 1, 1, 2, 2, 2, 2, 2, 0, 1, 2, 0, 1, 2, 2),   # one|few|many|other
+    'uk': (2, 0, 1, 1, 1, 2, 2, 2, 2, 2, 0, 1, 2, 0, 1, 2, 2),
+    'pl': (2, 0, 1, 1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 1, 2, 2),   # 21 and 101 are 'many'
+    'ar': (0, 1, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 4, 5),   # zero|one|two|few|many|other
+    'cy': (0, 1, 2, 3, 5, 5, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5),
+    'ga': (4, 0, 1, 2, 2, 2, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4),   # one|two|few|many|other
+    'he': (2, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2),   # one|two|other
+    'fr': (0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1),   # one|many|other; 0 is 'one'
+    'pt-PT': (2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1),
+    'en': (1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+    'nl': (1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+    'ja': (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),   # other only
+}
+
+
+@pytest.mark.parametrize('locale', sorted(_BANANA_PLURAL_FORMS))
+def test_plural_picks_the_form_banana_picks(tmp_path, locale):
+    _setup(tmp_path, {'en': {'n': '{{PLURAL:$1|f0|f1|f2|f3|f4|f5}}'}})
+    served = tuple(int(i18n.resolve('n', locale, (n,))[1:]) for n in _PLURAL_COUNTS)
+    assert served == _BANANA_PLURAL_FORMS[locale]
+
+
+# Each case is what banana-i18n 2.4.0 renders, generated the same way.
+@pytest.mark.parametrize('locale, message, counts, expected', [
+    # Explicit forms: one for the count wins; the others are dropped, and the rest are
+    # counted without them, so Arabic still needs its zero form after a "0=".
+    ('ru', '{{PLURAL:$1|0=ни одного|$1 голос|$1 голоса|$1 голосов}}', (0, 1, 2, 5, 21),
+     ('ни одного', '1 голос', '2 голоса', '5 голосов', '21 голос')),
+    ('ar', '{{PLURAL:$1|0=none|one|two|few|many|other}}', (0, 1, 2, 3, 11, 100),
+     ('none', 'two', 'few', 'many', 'other', 'other')),
+    ('en', '{{PLURAL:$1|0=no votes|$1 vote|$1 votes}}', (0, 1, 2), ('no votes', '1 vote', '2 votes')),
+    # Fewer forms than the language has categories: the last one stands in for the rest.
+    ('ru', '{{PLURAL:$1|один|несколько}}', (1, 2, 5), ('один', 'несколько', 'несколько')),
+    ('ar', '{{PLURAL:$1|zero|one|two}}', (0, 1, 2, 3, 11, 100), ('zero', 'one', 'two', 'two', 'two', 'two')),
+    # A count passed as text is read as parseFloat reads it; a fraction is 'other' in
+    # Russian, and text that is not a number is 'other' everywhere.
+    ('ru', '{{PLURAL:$1|a|b|c|d}}', ('3', '1.5', 'many'), ('b', 'd', 'd')),
+])
+def test_plural_explicit_and_missing_forms_as_banana(tmp_path, locale, message, counts, expected):
+    _setup(tmp_path, {'en': {'n': message}})
+    assert tuple(i18n.resolve('n', locale, (n,)) for n in counts) == expected
+
+
+def test_plural_rule_is_matched_on_the_base_language_and_falls_back_to_english(tmp_path):
+    _setup(tmp_path, {'en': {'n': '{{PLURAL:$1|a|b|c|d}}'}})
+    assert i18n.resolve('n', 'ru-RU', (2,)) == 'b'      # Russian's 'few'
+    assert i18n.resolve('n', 'pt-BR', (0,)) == 'a'      # Brazilian: 0 is singular
+    assert i18n.resolve('n', 'pt-PT', (0,)) == 'c'      # European: it is not
+    assert i18n.resolve('n', 'xx', (2,)) == 'b'         # unknown: the English rule
+
+
 def test_qqx_returns_keys(tmp_path):
     _setup(tmp_path, {'en': {'greet': 'Hello'}})
     assert i18n.resolve('greet', 'qqx') == '(greet)'

@@ -397,29 +397,189 @@ def text_direction(locale: str) -> str:
     return 'rtl' if (locale or '').split('-')[0].lower() in _RTL_LANGS else 'ltr'
 
 
-def _plural_index(n: int, locale: str) -> int:
-    """Index into a ``{{PLURAL:...}}`` form list for count ``n``.
+# ── Plural rules ──────────────────────────────────────────────────────────────────────
+#
+# The server and the browser must pick the same {{PLURAL:}} form, and the browser's pick is
+# banana-i18n's: it asks Intl.PluralRules for the count's CLDR category (zero, one, two,
+# few, many, other) and takes the form at that category's position among the categories
+# the language has, in that fixed order. Russian has one, few, many and other, so a Russian
+# message lists its forms as one|few|many|other; when fewer forms are given, the last one
+# stands in for the rest. The table below is the same CLDR data (CLDR 47, as Node 22 ships
+# it) for the languages likely to be enabled, written out so the resolver stays
+# stdlib-only. An unlisted language gets the English rule, which Intl would not give it:
+# add a language here before enabling it.
+#
+# A rule sees CLDR's operands for the count: n, its absolute value; i, its integer digits;
+# v, how many fraction digits it has. Counts here are whole numbers, where v is 0 and n
+# equals i, but a rule still answers for 1.5.
 
-    v1 implements the English/Germanic rule (n == 1 -> form 0, else form 1), which is
-    exact for the only shipped locale (en). Locales with other plural categories
-    (ar, ru, pl, cy, ...) need CLDR rules before being enabled — a tracked follow-up;
-    banana-i18n already applies CLDR rules on the client side.
-    """
-    return 0 if n == 1 else 1
+_CATEGORY_ORDER = ('zero', 'one', 'two', 'few', 'many', 'other')
+
+
+def _one_other(n, i, v):         # English, Dutch, German, ...: 1 is singular, 0 is not
+    return 'one' if i == 1 and v == 0 else 'other'
+
+
+def _other_only(n, i, v):        # Japanese, Chinese, Korean, ...: no grammatical number
+    return 'other'
+
+
+def _million(i, v):              # French, Spanish, ...: "un million de votes" is 'many'
+    return i != 0 and i % 1000000 == 0 and v == 0
+
+
+def _french(n, i, v):            # 0 and 1 are both singular
+    return 'one' if i in (0, 1) else 'many' if _million(i, v) else 'other'
+
+
+def _spanish(n, i, v):
+    return 'one' if n == 1 else 'many' if _million(i, v) else 'other'
+
+
+def _italian(n, i, v):
+    return 'one' if i == 1 and v == 0 else 'many' if _million(i, v) else 'other'
+
+
+def _east_slavic(n, i, v):       # Russian, Ukrainian: 1, 21, 101 | 2-4, 22 | 5-20, 25, 111
+    if v != 0:
+        return 'other'
+    if i % 10 == 1 and i % 100 != 11:
+        return 'one'
+    if 2 <= i % 10 <= 4 and not 12 <= i % 100 <= 14:
+        return 'few'
+    return 'many'
+
+
+def _polish(n, i, v):            # as Russian, except that 21 and 101 are 'many'
+    if v != 0:
+        return 'other'
+    if i == 1:
+        return 'one'
+    if 2 <= i % 10 <= 4 and not 12 <= i % 100 <= 14:
+        return 'few'
+    return 'many'
+
+
+def _czech(n, i, v):             # Czech, Slovak: 'many' is for fractions
+    if v != 0:
+        return 'many'
+    return 'one' if i == 1 else 'few' if 2 <= i <= 4 else 'other'
+
+
+def _arabic(n, i, v):
+    if n in (0, 1, 2):
+        return ('zero', 'one', 'two')[int(n)]
+    if n == i and 3 <= i % 100 <= 10:
+        return 'few'
+    if n == i and 11 <= i % 100 <= 99:
+        return 'many'
+    return 'other'
+
+
+def _welsh(n, i, v):
+    return {0: 'zero', 1: 'one', 2: 'two', 3: 'few', 6: 'many'}.get(n, 'other')
+
+
+def _irish(n, i, v):
+    if n in (1, 2):
+        return ('one', 'two')[int(n) - 1]
+    if n == i and 3 <= i <= 6:
+        return 'few'
+    if n == i and 7 <= i <= 10:
+        return 'many'
+    return 'other'
+
+
+def _hebrew(n, i, v):
+    if (i == 1 and v == 0) or (i == 0 and v != 0):
+        return 'one'
+    return 'two' if i == 2 and v == 0 else 'other'
+
+
+# {language: (the categories it has, in _CATEGORY_ORDER, and its rule)}. Matched on the full
+# code first, then on the base language subtag, because pt-PT differs from pt.
+_ONE_OTHER = (('one', 'other'), _one_other)
+_EAST_SLAVIC = (('one', 'few', 'many', 'other'), _east_slavic)
+_WEST_SLAVIC = (('one', 'few', 'many', 'other'), _czech)
+_PLURAL_RULES = {
+    **dict.fromkeys(('en', 'nl', 'de', 'sv', 'nb', 'fi', 'et'), _ONE_OTHER),
+    **dict.fromkeys(('ja', 'zh', 'ko', 'id', 'vi', 'th'), (('other',), _other_only)),
+    'fr': (('one', 'many', 'other'), _french),
+    'es': (('one', 'many', 'other'), _spanish),
+    'it': (('one', 'many', 'other'), _italian),
+    'pt': (('one', 'many', 'other'), _french),       # Brazilian: 0 and 1 are singular
+    'pt-pt': (('one', 'many', 'other'), _italian),   # European: only 1 is
+    'ru': _EAST_SLAVIC,
+    'uk': _EAST_SLAVIC,
+    'pl': (('one', 'few', 'many', 'other'), _polish),
+    'cs': _WEST_SLAVIC,
+    'sk': _WEST_SLAVIC,
+    'ar': (_CATEGORY_ORDER, _arabic),
+    'cy': (_CATEGORY_ORDER, _welsh),
+    'ga': (('one', 'two', 'few', 'many', 'other'), _irish),
+    'he': (('one', 'two', 'other'), _hebrew),
+}
+
+
+def _plural_rule(locale: str):
+    code = (locale or '').lower().replace('_', '-')
+    return (_PLURAL_RULES.get(code) or _PLURAL_RULES.get(code.split('-')[0])
+            or _PLURAL_RULES[SOURCE_LOCALE])
+
+
+def _plural_category(n, locale: str) -> str:
+    """The CLDR plural category of count ``n`` in ``locale``: 'zero', 'one', ... 'other'."""
+    if n != n or n in (float('inf'), float('-inf')):     # NaN and infinity: Intl says 'other'
+        return 'other'
+    n = abs(n)
+    if isinstance(n, float) and n.is_integer():
+        n = int(n)
+    fraction = repr(n).partition('.')[2] if isinstance(n, float) else ''
+    v = 0 if 'e' in fraction else len(fraction)   # a count like 1.5e-07 is 'other' anyway
+    return _plural_rule(locale)[1](n, int(n), v)
+
+
+def _plural_index(n, locale: str) -> int:
+    """Index into a ``{{PLURAL:...}}`` form list for count ``n``: the position of ``n``'s
+    category among the categories ``locale`` has. The caller takes the last form when
+    fewer are given."""
+    categories, _rule = _plural_rule(locale)
+    return categories.index(_plural_category(n, locale))
+
+
+# banana reads the count with parseFloat, and an explicit form's number with parseInt: both
+# skip leading space, read as far as the number goes, and give NaN when there is none.
+_JS_FLOAT_RE = re.compile(r'\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)', re.ASCII)
+_JS_INT_RE = re.compile(r'\s*([+-]?\d+)', re.ASCII)
+
+
+def _count(value):
+    """A parameter as banana reads a count: 3 and '3' are 3, '3 days' is 3, 'three' is NaN."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    match = _JS_FLOAT_RE.match(str(value))
+    return float(match.group(1)) if match else float('nan')
 
 
 def _expand_plural(text: str, params, locale: str) -> str:
     def _repl(match):
         idx = int(match.group(1)) - 1
-        forms = match.group(2).split('|')
-        try:
-            n = int(params[idx])
-        except (IndexError, ValueError, TypeError):
-            n = 0
-        i = _plural_index(n, locale)
+        n = _count(params[idx]) if idx < len(params) else float('nan')
+        # MediaWiki's explicit forms, as banana handles them: {{PLURAL:$1|0=no votes|$1 vote|
+        # $1 votes}}. A form whose number is the count wins outright. Every other form with
+        # "<digits>=" in it, anywhere, is dropped before the category picks from what is left,
+        # so explicit forms never shift the positions of the others.
+        forms = []
+        for form in match.group(2).split('|'):
+            if _EXPLICIT_FORM_RE.search(form):
+                number = _JS_INT_RE.match(form[:form.index('=')])
+                if number and int(number.group(1)) == n:
+                    return form[form.index('=') + 1:]
+                continue
+            forms.append(form)
         if not forms:
             return ''
-        return forms[i] if i < len(forms) else forms[-1]
+        return forms[min(_plural_index(n, locale), len(forms) - 1)]
     return _PLURAL_RE.sub(_repl, text)
 
 
