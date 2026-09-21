@@ -377,3 +377,86 @@ def test_voucher_path_segment_is_redacted():
     redacted = _redact('GET /v/X7F3K9M2ABCD HTTP/1.1')
     assert 'X7F3K9M2ABCD' not in redacted
     assert '/v/[redacted]' in redacted
+
+
+# ── End-to-end: redemption → session → access ─────────────────────────────────
+
+def test_voucher_redemption_and_access_flow(app, client, conversation):
+    """A complete walk: generate batch, redeem, access check, resume, revoke."""
+    conversation.gated = True
+    conversation.gating_type = 'voucher'
+    db.session.commit()
+
+    # 1. Organiser generates a batch with two codes.
+    batch = VoucherBatch(conversation_id=conversation.id, label='E2E Test')
+    db.session.add(batch)
+    db.session.commit()
+    codes = generate_voucher_codes(batch, 2)
+
+    # 2. Anonymous user visits the voucher page and gets the form.
+    resp = client.get(f'/{conversation.slug}/v')
+    assert resp.status_code == 200
+    html = resp.data.decode()
+    assert 'Voucher code' in html
+    assert conversation.title in html
+
+    # 3. User types a valid code — gets redirected to the process.
+    resp = client.post(
+        f'/{conversation.slug}/v',
+        data={'code': codes[0]},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert resp.headers['Location'] == f'/{conversation.slug}'
+
+    # 4. Session now carries a voucher identity.
+    with client.session_transaction() as sess:
+        xid = sess.get('xid')
+    assert xid is not None
+
+    participant = Participant.query.filter_by(xid=xid).first()
+    assert participant is not None
+    assert participant.account_kind == ACCOUNT_KIND_VOUCHER
+    assert participant.conversation_id == conversation.id
+
+    # 5. The access provider admits the voucher account.
+    decision = check_access(conversation, participant)
+    assert decision.allowed is True
+
+    # 6. Redeeming the same code again resumes (same session details).
+    resp = client.post(
+        f'/{conversation.slug}/v',
+        data={'code': codes[0]},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    with client.session_transaction() as sess:
+        assert sess.get('xid') == xid  # same xid — no duplicate participant
+
+    # 7. The second (unused) code produces a different participant.
+    resp = client.post(
+        f'/{conversation.slug}/v',
+        data={'code': codes[1]},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    with client.session_transaction() as sess:
+        xid2 = sess.get('xid')
+    assert xid2 != xid
+
+    # 8. Revoke the first participant's voucher. Access is lost.
+    voucher = VoucherCode.query.filter_by(participant_id=participant.id).first()
+    revoke_voucher(voucher)
+    db.session.commit()
+
+    decision = check_access(conversation, participant)
+    assert decision.allowed is False
+    assert decision.reason == 'access-voucher-revoked'
+
+    # 9. The revoked code can no longer resume — invalid response.
+    resp = client.post(
+        f'/{conversation.slug}/v',
+        data={'code': codes[0]},
+    )
+    html = resp.data.decode()
+    assert 'not valid' in html
