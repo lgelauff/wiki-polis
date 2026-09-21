@@ -117,6 +117,8 @@ test('the drawings in the flow diagram carry no text', async () => {
   expect(drawings.length).toBeGreaterThan(0);
   expect(diagram.querySelectorAll('svg text')).toHaveLength(0);
   expect(drawings.filter((svg) => !svg.closest('[aria-hidden="true"]'))).toEqual([]);
+  // Colours come from the .flow-svg-* classes, so the drawings follow the design tokens.
+  expect(diagram.querySelectorAll('[fill^="#"], [stroke^="#"]')).toHaveLength(0);
 });
 
 test('under qqx, nothing on the signed-out lane is English', async () => {

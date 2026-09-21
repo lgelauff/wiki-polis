@@ -4038,11 +4038,12 @@ a { color: var(--pass); }
   border: 1px solid var(--hairline);
   border-radius: 14px;
 }
-/* The chevron between two rounds sits in the gap, pointing to the next one. */
+/* The chevron between two rounds sits in the gap, pointing to the next one. Logical
+   properties, so that in a right-to-left page it sits on the right and points left. */
 .flow-step + .flow-step::before {
   content: "";
   position: absolute;
-  left: -1.2rem;
+  inset-inline-start: -1.2rem;
   top: 50%;
   width: .6rem;
   height: .6rem;
@@ -4050,6 +4051,7 @@ a { color: var(--pass); }
   border-right: 2.4px solid var(--muted);
   transform: translateY(-50%) rotate(45deg);
 }
+.flow-step + .flow-step:dir(rtl)::before { transform: translateY(-50%) rotate(-135deg); }
 .flow-step-title {
   margin: 0 0 .6rem;
   padding-bottom: .6rem;
@@ -4136,11 +4138,30 @@ a { color: var(--pass); }
 }
 .flow-outcome-icon svg { width: 22px; height: 22px; }
 
+/* The drawings' colours, from the tokens. Stroke widths and shapes stay in the markup. */
+.flow-svg-surface { fill: var(--surface); stroke: var(--hairline); }
+.flow-svg-copy { fill: none; stroke: #cfcdc6; }
+.flow-svg-pass { fill: var(--pass); }
+.flow-svg-spot { fill: var(--spot); }
+.flow-svg-ink { fill: var(--ink); }
+.flow-svg-line { fill: none; stroke: var(--pass); }
+.flow-svg-agree { fill: none; stroke: var(--agree); }
+.flow-svg-disagree { fill: none; stroke: var(--disagree); }
+.flow-svg-con { fill: none; stroke: var(--muted); }
+.flow-svg-agree-box { fill: color-mix(in srgb, var(--agree) 12%, transparent); stroke: var(--agree); }
+.flow-svg-pro-box { fill: color-mix(in srgb, var(--agree) 6%, transparent); stroke: var(--agree); }
+.flow-svg-disagree-box { fill: color-mix(in srgb, var(--disagree) 10%, transparent); stroke: var(--disagree); }
+.flow-svg-con-box { fill: var(--surface2); stroke: var(--muted); }
+.flow-svg-pro-fill { fill: color-mix(in srgb, var(--agree) 7%, transparent); }
+.flow-svg-con-fill { fill: var(--surface2); }
+
 @media (max-width: 680px) {
   .flow { padding: 1.1rem 1rem 1.25rem; }
   .flow-steps { grid-template-columns: minmax(0, 1fr); row-gap: 2rem; }
   /* Stacked, the chevron points down into the next round. */
-  .flow-step + .flow-step::before {
+  .flow-step + .flow-step::before,
+  .flow-step + .flow-step:dir(rtl)::before {
+    inset-inline-start: auto;
     left: 50%;
     top: -1.35rem;
     transform: translateX(-50%) rotate(135deg);
