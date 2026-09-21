@@ -125,7 +125,7 @@ def test_invite_only_about_uses_structured_api_denial(
 
     assert response.status_code == 403
     assert response.is_json
-    assert response.get_json()['error']['code'] == 'forbidden'
+    assert response.get_json()['error']['code'] == 'access_required'
 
 
 def test_invited_participant_can_view_about(
@@ -135,6 +135,7 @@ def test_invited_participant_can_view_about(
     db.session.add(ConversationInvite(
         conversation_id=conversation.id,
         mw_username=participant.mw_username,
+        mw_user_id=participant.mw_user_id,
     ))
     db.session.commit()
 

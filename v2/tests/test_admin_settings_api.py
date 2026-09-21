@@ -27,6 +27,13 @@ def test_settings_contract_exposes_editable_eligibility_configuration(
     assert data['eligibility']['configured'] is True
     assert data['eligibility']['configurationMode'] == 'editable'
     assert data['eligibility']['eventId'] == 'private-checker-event'
+    assert data['conversation']['gated'] is False
+    assert data['conversation']['gatingType'] is None
+    assert data['conversation']['announce'] is False
+    assert data['conversation']['information'] is False
+    assert data['conversation']['resultsShared'] is False
+    assert data['conversation']['showUsernames'] is False
+    assert data['conversation']['accessRequestText'] is None
 
 
 def test_organizer_replaces_settings_idempotently(
@@ -60,8 +67,8 @@ def test_organizer_replaces_settings_idempotently(
     assert settings['conversation']['title'] == 'Updated consultation'
     assert '<script' not in settings['conversation']['introHtml']
     assert settings['conversation']['accessPolicy'] == 'invite_only'
-    assert settings['eligibility']['eventId'] == 'extended-confirmed'
-    assert settings['eligibility']['label'] == 'Extended-confirmed editors'
+    assert settings['eligibility']['eventId'] == ''
+    assert settings['eligibility']['label'] is None
     assert settings['recommendations']['tier'] == 'complex'
     assert AuditEvent.query.filter_by(
         operation='conversation.settings.update',
@@ -128,3 +135,102 @@ def test_organizer_updates_recommendation_tier_independently(
     assert AuditEvent.query.filter_by(
         operation='recommendations.set', conversation_id=conversation.id,
     ).count() == 1
+
+
+def test_organizer_updates_explicit_gated_settings(
+    admin_client, conversation,
+):
+    endpoint = f'/api/v1/admin/conversations/{conversation.id}/settings'
+    response = admin_client.put(endpoint, json={
+        'title': conversation.title,
+        'introHtml': '',
+        'outroHtml': '',
+        'accessPolicy': 'invite_only',
+        'gated': True,
+        'gatingType': 'invite_only',
+        'announce': True,
+        'information': True,
+        'resultsShared': True,
+        'showUsernames': True,
+        'accessRequestText': 'Ask the organizer for an invitation.',
+        'eligibilityEventId': '',
+        'eligibilityLabel': '',
+        'recommendationTier': 'medium',
+    })
+
+    assert response.status_code == 200
+    settings = response.get_json()['data']['settings']['conversation']
+    assert settings['gated'] is True
+    assert settings['gatingType'] == 'invite_only'
+    assert settings['announce'] is True
+    assert settings['information'] is True
+    assert settings['resultsShared'] is True
+    assert settings['showUsernames'] is True
+    assert settings['accessRequestText'] == 'Ask the organizer for an invitation.'
+    assert conversation.gated is True
+    assert conversation.access_policy == 'invite_only'
+
+
+def test_gated_settings_lock_after_explore_starts(
+    admin_client, conversation,
+):
+    conversation.gated = True
+    conversation.gating_type = 'invite_only'
+    conversation.phase_submission = True
+    db.session.commit()
+
+    response = admin_client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/settings',
+        json={
+            'title': conversation.title,
+            'introHtml': '',
+            'outroHtml': '',
+            'accessPolicy': 'invite_only',
+            'gated': True,
+            'gatingType': 'wiki_based',
+            'announce': False,
+            'information': False,
+            'resultsShared': False,
+            'showUsernames': False,
+            'accessRequestText': None,
+            'eligibilityEventId': '',
+            'eligibilityLabel': '',
+            'recommendationTier': 'medium',
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.get_json()['error']['code'] == 'access_settings_locked'
+    assert response.get_json()['error']['details'] == {'field': 'gating_type'}
+
+
+def test_migrated_unconfigured_gate_can_choose_provider_after_explore(
+    admin_client, conversation,
+):
+    conversation.gated = True
+    conversation.gating_type = None
+    conversation.phase_submission = True
+    db.session.commit()
+
+    response = admin_client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/settings',
+        json={
+            'title': conversation.title,
+            'introHtml': '',
+            'outroHtml': '',
+            'accessPolicy': 'public',
+            'gated': True,
+            'gatingType': 'wiki_based',
+            'announce': True,
+            'information': True,
+            'resultsShared': False,
+            'showUsernames': False,
+            'accessRequestText': None,
+            'eligibilityEventId': 'legacy-event',
+            'eligibilityLabel': 'Legacy eligibility',
+            'recommendationTier': 'medium',
+        },
+    )
+
+    assert response.status_code == 200
+    assert conversation.gating_type == 'wiki_based'

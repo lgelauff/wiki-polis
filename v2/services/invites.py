@@ -7,7 +7,7 @@ from datetime import timezone
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from db import Conversation, ConversationInvite
+from db import Conversation, ConversationInvite, Participant
 
 
 @dataclass(frozen=True)
@@ -70,7 +70,8 @@ def remove_conversation_invite(session, *, conversation_id: int, invite_id: int)
 
 
 def add_conversation_invites(session, *, conversation_id: int,
-                             usernames: Iterable[str]) -> InviteBatchResult:
+                             usernames: Iterable[str],
+                             invited_by: str | None = None) -> InviteBatchResult:
     """Add each missing username without losing unrelated rows to a race.
 
     Each insert gets a savepoint. A concurrent unique-key winner rolls back only
@@ -92,9 +93,14 @@ def add_conversation_invites(session, *, conversation_id: int,
         for username in pending:
             try:
                 with session.begin_nested():
+                    target = Participant.query.filter_by(
+                        mw_username=username,
+                    ).first()
                     session.add(ConversationInvite(
                         conversation_id=conversation_id,
                         mw_username=username,
+                        mw_user_id=target.mw_user_id if target else None,
+                        invited_by=invited_by,
                     ))
                     session.flush()
             except IntegrityError:

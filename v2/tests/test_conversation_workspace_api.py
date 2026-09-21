@@ -121,6 +121,18 @@ def test_workspace_requires_real_authentication(client, conversation):
     assert response.get_json()['error']['code'] == 'unauthorized'
 
 
+def test_gated_workspace_exposes_logged_out_access_state(client, conversation):
+    conversation.gated = True
+    conversation.gating_type = 'invite_only'
+    db.session.commit()
+
+    response = client.get('/api/v1/conversations/test-conv/workspace')
+
+    assert response.status_code == 403
+    assert response.get_json()['error']['code'] == 'access_required'
+    assert response.get_json()['error']['details']['viewer'] == 'logged_out'
+
+
 def test_workspace_returns_structured_invite_only_denial(
     auth_client, participant, conversation,
 ):
@@ -131,11 +143,16 @@ def test_workspace_returns_structured_invite_only_denial(
 
     assert response.status_code == 403
     error = response.get_json()['error']
-    assert error['code'] == 'invite_only'
+    assert error['code'] == 'access_required'
     assert error['details'] == {
+        'slug': 'test-conv',
         'title': conversation.title,
-        'canModerate': False,
-        'links': {'home': '/'},
+        'gatingType': 'invite_only',
+        'viewer': 'refused',
+        'certainty': 'known',
+        'reason': 'access-invite-required',
+        'loginOptions': [],
+        'sharedResults': [],
     }
 
 
@@ -153,14 +170,8 @@ def test_workspace_invite_only_denial_exposes_moderator_recovery_link(
     response = auth_client.get('/api/v1/conversations/test-conv/workspace')
 
     assert response.status_code == 403
-    assert response.get_json()['error']['details'] == {
-        'title': conversation.title,
-        'canModerate': True,
-        'links': {
-            'home': '/',
-            'invitations': f'/admin/conversations/{conversation.id}/invites',
-        },
-    }
+    assert response.get_json()['error']['details']['viewer'] == 'refused'
+    assert response.get_json()['error']['details']['reason'] == 'access-invite-required'
 
 
 def test_workspace_allows_invited_nonparticipant_to_join(
@@ -170,6 +181,7 @@ def test_workspace_allows_invited_nonparticipant_to_join(
     db.session.add(ConversationInvite(
         conversation_id=conversation.id,
         mw_username=participant.mw_username,
+        mw_user_id=participant.mw_user_id,
     ))
     db.session.commit()
 
