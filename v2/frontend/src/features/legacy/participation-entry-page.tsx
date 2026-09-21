@@ -50,18 +50,41 @@ type ParticipationEntry = components['schemas']['ParticipationEntryResponse']['d
 type InviteDeniedEntry = Extract<ParticipationEntry, {state: 'invite_denied' | 'access_lost'}>;
 type JoinEntry = Extract<ParticipationEntry, {state: 'join'}>;
 
+// The server sends why access was refused and how sure it is; the page says that, rather than
+// reading every refusal as a missing invitation. A check that could not decide comes first:
+// telling someone they are not invited, when nobody knows, would be wrong in either direction.
+function refusalCopy(data: InviteDeniedEntry, msg: ReturnType<typeof useMessage>) {
+  const title = escapeHtml(data.conversation.title);
+  if (data.certainty === 'temporary') {
+    return {heading: msg('forbidden-unconfirmed-heading'), body: msg('forbidden-unconfirmed-temporary', title), invite: false};
+  }
+  if (data.certainty === 'inconclusive') {
+    return {heading: msg('forbidden-unconfirmed-heading'), body: msg('forbidden-unconfirmed-inconclusive', title), invite: false};
+  }
+  const invite = data.reason === 'access-invite-required';
+  if (data.state === 'access_lost') {
+    return invite
+      ? {heading: msg('forbidden-lost-invite-heading'), body: msg('forbidden-lost-invite-body', title), invite}
+      : {heading: msg('forbidden-lost-heading'), body: msg('forbidden-lost-body', title), invite};
+  }
+  return invite
+    ? {heading: msg('forbidden-invite-heading'), body: msg('forbidden-invite-body', title), invite}
+    : {heading: msg('forbidden-access-heading'), body: msg('forbidden-access-body', title), invite};
+}
+
 function InviteDeniedPage({data}: {data: InviteDeniedEntry}) {
   const msg = useMessage();
+  const copy = refusalCopy(data, msg);
   return (
     <LegacyShell title={msg('forbidden-invite-doc-title')}>
       <div className="container" style={{maxWidth: 700, paddingTop: '3rem'}}>
         <h1 style={{fontSize: 24, fontWeight: 600, color: 'var(--ink)', margin: '0 0 .75rem'}}>
-          {msg('forbidden-invite-heading')}
+          {copy.heading}
         </h1>
         <p style={{color: 'var(--body)', fontSize: 15, lineHeight: 1.6, margin: '0 0 1.5rem'}}>
-          <span dangerouslySetInnerHTML={richHtml(msg('forbidden-invite-body', escapeHtml(data.conversation.title)))} />
+          <span dangerouslySetInnerHTML={richHtml(copy.body)} />
         </p>
-        {data.canModerate && data.links.manageInvites && (
+        {copy.invite && data.canModerate && data.links.manageInvites && (
           <div style={{background: '#f0f4ff', border: '1px solid #c7d3f5', borderRadius: 8, padding: '1rem 1.25rem', fontSize: 14, color: 'var(--ink)', lineHeight: 1.6, marginBottom: '1.5rem'}}>
             <strong>{msg('forbidden-invite-mod-lead')}</strong>
             {` ${msg('forbidden-invite-mod-body')} `}

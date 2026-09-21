@@ -121,7 +121,7 @@ test('the invite-only page names the consultation inside one sentence', async ()
   server.use(http.get(
     ENTRY_URL,
     () => HttpResponse.json({data: {
-      state: 'invite_denied',
+      state: 'invite_denied', viewer: 'refused', certainty: 'known', reason: 'access-invite-required',
       conversation: {id: 7, slug: 'community-strategy', title: TITLE},
       canModerate: false,
       links: {home: '/', manageInvites: null},
@@ -256,7 +256,7 @@ test('without a confirmed email the note keeps its link inside the sentence', as
 
 test('a hostile consultation title stays text on the invite-only page', async () => {
   server.use(http.get(ENTRY_URL, () => HttpResponse.json({data: {
-    state: 'invite_denied',
+    state: 'invite_denied', viewer: 'refused', certainty: 'known', reason: 'access-invite-required',
     conversation: {id: 7, slug: 'community-strategy', title: HOSTILE},
     canModerate: false,
     links: {home: '/', manageInvites: null},
@@ -303,10 +303,41 @@ test.each([true, false])(
   },
 );
 
+test.each([
+  ['invite_denied', 'access-invite-required', 'known', 'forbidden-invite-heading', true],
+  ['access_lost', 'access-invite-required', 'known', 'forbidden-lost-invite-heading', true],
+  ['invite_denied', 'access-not-eligible', 'known', 'forbidden-access-heading', false],
+  ['access_lost', 'access-not-eligible', 'known', 'forbidden-lost-heading', false],
+  ['invite_denied', 'access-could-not-confirm', 'temporary', 'forbidden-unconfirmed-heading', false],
+  ['access_lost', 'access-could-not-confirm', 'inconclusive', 'forbidden-unconfirmed-heading', false],
+  ['invite_denied', 'access-invite-required', 'inconclusive', 'forbidden-unconfirmed-heading', false],
+] as const)(
+  'a %s refusal (%s, %s) says why, in the catalogue',
+  async (state, reason, certainty, heading, moderatorNote) => {
+    renderAsQqx();
+    server.use(http.get(ENTRY_URL, () => HttpResponse.json({data: {
+      state, reason, certainty,
+      viewer: state === 'access_lost' ? 'access_lost' : 'refused',
+      conversation: {id: 7, slug: 'community-strategy', title: TITLE},
+      canModerate: true,
+      links: {home: '/', manageInvites: '/admin/conversations/7/invites'},
+    }})));
+    renderJoin();
+
+    // Catches every refusal reading as a missing invitation: someone whose wiki-based access
+    // lapsed, or whose check could not be decided, was told they were not on an invite list.
+    await screen.findByRole('heading', {name: `(${heading})`});
+    expect(untranslatedCopy([document.querySelector('.container')], [TITLE])).toEqual([]);
+    // The note sends an organizer to the invite list, which only helps when an invitation is
+    // what is missing.
+    expect(screen.queryByText('(forbidden-invite-mod-lead)') !== null).toBe(moderatorNote);
+  },
+);
+
 test('under qqx, nothing on the invite-only page is English', async () => {
   renderAsQqx();
   server.use(http.get(ENTRY_URL, () => HttpResponse.json({data: {
-    state: 'invite_denied',
+    state: 'invite_denied', viewer: 'refused', certainty: 'known', reason: 'access-invite-required',
     conversation: {id: 7, slug: 'community-strategy', title: TITLE},
     canModerate: true,
     links: {home: '/', manageInvites: '/admin/conversations/7/invites'},
