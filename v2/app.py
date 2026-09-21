@@ -5551,6 +5551,13 @@ def _register_routes(app: Flask) -> None:
                 return redirect(url_for('dev_login'))
             return 'OAuth not configured — set OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_REDIRECT_URI', 503
 
+        # Deep links arrive as /login?next=/c/<slug> (SPA client routes are not
+        # behind login_required, so the decorator's session['next'] never fires).
+        # Store the validated same-origin path for the OAuth callback (#432).
+        next_url = request.args.get('next', '').strip()
+        if next_url:
+            session['next'] = _safe_redirect(next_url, '/')
+
         code_verifier  = secrets.token_urlsafe(64)
         code_challenge = base64.urlsafe_b64encode(
             hashlib.sha256(code_verifier.encode()).digest()

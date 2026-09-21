@@ -150,6 +150,33 @@ def test_current_participant_rejects_invalid_xid_even_if_username_matches(app, p
         assert _current_participant() is None
 
 
+def test_login_stores_same_origin_next_for_callback(client, app):
+    """A deep link's ?next= survives the OAuth round trip (#432)."""
+    app.config['OAUTH_CLIENT_ID'] = 'cid'
+    resp = client.get('/login?next=/c/some-slug')
+    assert resp.status_code == 302
+    with client.session_transaction() as sess:
+        assert sess.get('next') == '/c/some-slug'
+
+
+def test_login_next_rejects_external_url(client, app):
+    """An absolute external ?next= falls back to '/', never an open redirect."""
+    app.config['OAUTH_CLIENT_ID'] = 'cid'
+    resp = client.get('/login?next=https://evil.example/steal')
+    assert resp.status_code == 302
+    with client.session_transaction() as sess:
+        assert sess.get('next') != 'https://evil.example/steal'
+        assert sess.get('next') == '/'
+
+
+def test_login_without_next_leaves_session_clean(client, app):
+    app.config['OAUTH_CLIENT_ID'] = 'cid'
+    resp = client.get('/login')
+    assert resp.status_code == 302
+    with client.session_transaction() as sess:
+        assert 'next' not in sess
+
+
 def test_logout_clears_session(auth_client):
     resp = auth_client.post('/logout')
     assert resp.status_code == 302
