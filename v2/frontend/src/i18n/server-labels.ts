@@ -1,3 +1,4 @@
+import {ApiContractError} from '../api/client';
 import type {Message} from './messages';
 
 /** Rule 6 of `plan_i18n.md`: a UI label is never shipped from the server as English.
@@ -161,3 +162,53 @@ export const moderationAction = (msg: Message, id: string | null | undefined) =>
 
 export const moderationScope = (msg: Message, id: string | null | undefined) =>
   resolve(MODLOG_SCOPE_MESSAGES, msg, id, id);
+
+/** Rule 4 of `plan_i18n.md`: an API error's `message` is for developers, never for the page.
+ *
+ *  Each form that can fail maps the error's `code` to its own copy, and anything it does not
+ *  know — a new code, a rate limit, a network failure that never reached the server — gets
+ *  that form's generic message rather than the server's English. That generic message is
+ *  the table's `_fallback` entry, kept in the table rather than beside it so that the audience
+ *  and key-existence scans see it, and passed where the other helpers pass the server label,
+ *  so `resolve()` never sees server text. */
+function apiErrorCode(error: unknown) {
+  return error instanceof ApiContractError ? error.code : null;
+}
+
+/** `POST /conversations/<slug>/statements`, from the Explore composer. */
+const STATEMENT_ERROR_MESSAGES: Record<string, string> = {
+  statement_quota_exceeded: 'conv-err-proposal-limit',
+  derivative_similarity_too_low: 'conv-err-similarity',
+  unknown_parent_statement: 'conv-err-original-unavailable',
+  // The submission may have landed. The composer keeps its idempotency key, so pressing
+  // submit again is safe; starting over as a new statement is what could post it twice. An
+  // idempotency conflict means that key already carried an earlier attempt: the same case.
+  command_outcome_unknown: 'conv-err-outcome-unknown',
+  idempotency_conflict: 'conv-err-outcome-unknown',
+  // Nothing was sent upstream, and the server says a retry with the same key is safe.
+  upstream_unavailable: 'conv-err-submit-statement',
+  _fallback: 'conv-err-submit-statement',
+};
+
+/** `GET /conversations/<slug>/workspace`, when it fails with anything but a sign-in or an
+ *  access refusal, which have their own pages. */
+const WORKSPACE_ERROR_MESSAGES: Record<string, string> = {
+  not_found: 'errorpage-404-message',
+  _fallback: 'conv-unavailable-body',
+};
+
+/** `POST /conversations/<slug>/participation`, on the join form. The eligibility refusals
+ *  never reach this: they replace the form with the not-eligible page. */
+const JOIN_ERROR_MESSAGES: Record<string, string> = {
+  pseudonym_unavailable: 'accept-js-taken',
+  _fallback: 'accept-err-join',
+};
+
+export const statementErrorCopy = (msg: Message, error: unknown) =>
+  resolve(STATEMENT_ERROR_MESSAGES, msg, apiErrorCode(error), msg(STATEMENT_ERROR_MESSAGES._fallback!));
+
+export const workspaceErrorCopy = (msg: Message, error: unknown) =>
+  resolve(WORKSPACE_ERROR_MESSAGES, msg, apiErrorCode(error), msg(WORKSPACE_ERROR_MESSAGES._fallback!));
+
+export const joinErrorCopy = (msg: Message, error: unknown) =>
+  resolve(JOIN_ERROR_MESSAGES, msg, apiErrorCode(error), msg(JOIN_ERROR_MESSAGES._fallback!));

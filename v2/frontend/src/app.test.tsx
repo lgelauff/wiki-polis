@@ -830,7 +830,11 @@ test('freezes a statement attempt when the upstream outcome is unknown', async (
   });
   fireEvent.click(screen.getByRole('button', {name: 'Submit & next'}));
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('may have reached the voting service');
+  // The catalogue's warning, not the server's developer-facing message (rule 4). It has to
+  // say not to start over, since a fresh composer means a fresh key and a possible duplicate.
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent(testMessages['conv-err-outcome-unknown']!);
+  expect(alert).not.toHaveTextContent('may have reached the voting service');
   expect(screen.getByRole('textbox', {name: 'Propose a new statement'})).toBeEnabled();
   expect(screen.getByRole('button', {name: 'Submit & next'})).toBeEnabled();
 });

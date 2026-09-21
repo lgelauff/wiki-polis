@@ -14,6 +14,7 @@ import {NavigationRedirect} from './external-redirect';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
 import {useMessage} from '../../i18n/messages';
+import {joinErrorCopy} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 
 function requiredSlug(value: string | undefined) {
@@ -144,11 +145,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
     join.mutate();
   }
 
-  const formError = join.error instanceof ApiContractError
-    ? (join.error.code === 'pseudonym_unavailable'
-      ? msg('accept-js-taken')
-      : join.error.message)
-    : null;
+  const formError = join.error ? joinErrorCopy(msg, join.error) : null;
 
   return (
     <LegacyShell headerCrumb={(
@@ -267,11 +264,11 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
 
 function EligibilityDeniedPage({data, error}: {data: JoinEntry; error: ApiContractError}) {
   const msg = useMessage();
-  const details = error.details as {status?: string; displayMessage?: string | null} | undefined;
-  const message = details?.displayMessage
-    ?? (details?.status === 'unavailable'
-      ? msg('forbidden-elig-unavailable')
-      : msg('forbidden-elig-criteria'));
+  // The error's `details.displayMessage` is Proto's own English diagnostic about the checker,
+  // not a reason written for the participant, so the reason comes from the code alone.
+  const message = error.code === 'eligibility_unavailable'
+    ? msg('forbidden-elig-unavailable')
+    : msg('forbidden-elig-criteria');
   return (
     <LegacyShell title={msg('forbidden-elig-doc-title', data.conversation.title)}>
       <div className="container">

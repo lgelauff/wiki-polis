@@ -333,6 +333,7 @@
     "conv-loading": "De raadpleging wordt geladen…",
     "conv-unavailable-doc-title": "Raadpleging niet beschikbaar — Proto",
     "conv-unavailable-heading": "Raadpleging niet beschikbaar",
+    "conv-unavailable-body": "Deze raadpleging kon niet worden geladen. Probeer het zo meteen opnieuw.",
     "conv-doc-title": "$1 — Proto",
     "conv-vote-agree": "Eens",
     "conv-vote-pass": "Sla over",
@@ -457,6 +458,11 @@
     "conv-bar-title": "Eens $1% · Oneens $2% · Overgeslagen $3%",
     "conv-bar-label": "$1% eens · $2% overgeslagen",
     "conv-err-submit-vote": "Uw antwoord kon niet worden verzonden. Probeer het opnieuw.",
+    "conv-err-similarity": "Dit lijkt een andere bewering. Blijf dichter bij de oorspronkelijke stelling, of dien de tekst in plaats daarvan in als nieuwe stelling.",
+    "conv-err-proposal-limit": "U hebt het maximale aantal nieuwe stellingen voor deze raadpleging bereikt.",
+    "conv-err-submit-statement": "Uw stelling kon niet worden ingediend. Probeer het opnieuw.",
+    "conv-err-outcome-unknown": "We konden niet bevestigen of uw stelling is ontvangen. Mogelijk komt die alsnog aan; dien deze daarom niet opnieuw in als nieuwe stelling.",
+    "conv-err-original-unavailable": "De stelling waarvoor u een andere formulering schreef, is niet meer beschikbaar. U kunt uw tekst in plaats daarvan als nieuwe stelling indienen.",
     "conv-newstmt-unlocks-more": "Beschikbaar na nog $1 {{PLURAL:$1|antwoord|antwoorden}}",
     "conv-newstmt-limit-reached": "Limiet bereikt",
     "conv-newstmt-remaining": "nog $1 van $2",
@@ -534,5 +540,6 @@
     "errorpage-500-message": "De server kon dit verzoek niet afronden.",
     "errorpage-500-hint": "Deze foutmelding is vastgelegd in het logboek. Probeer het zo meteen opnieuw; als het zich blijft voordoen, meld het dan bij een sitebeheerder.",
     "accept-js-taken": "Iemand heeft dat pseudoniem zojuist gekozen. Kies een ander.",
+    "accept-err-join": "Deelnemen aan deze raadpleging is niet gelukt. Probeer het opnieuw.",
     "forbidden-elig-requirement-named": "Voor deelname aan deze raadpleging geldt de voorwaarde: $1."
 }

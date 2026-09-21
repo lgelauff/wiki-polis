@@ -21,7 +21,7 @@ import {InternalLink} from '../../internal-link';
 import {LegacyContentFlag} from './legacy-content-flag';
 import {RevealTimeline} from './reveal-timeline';
 import {useMessage, type Message} from '../../i18n/messages';
-import {phaseLabel, tabLabel} from '../../i18n/server-labels';
+import {phaseLabel, statementErrorCopy, tabLabel, workspaceErrorCopy} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
 
@@ -181,7 +181,7 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
           <button type="button" className="propose-submit-btn" disabled={mutation.isPending || !text.trim() || (suggest && text.trim() === original.trim())} onClick={() => mutation.mutate()}>{msg('conv-composer-submit')}</button>
         </div>
       </div>
-      {mutation.error && <p className="muted" role="alert">{mutation.error.message}</p>}
+      {mutation.error && <p className="muted" role="alert">{statementErrorCopy(msg, mutation.error)}</p>}
     </div>
   );
 }
@@ -408,7 +408,7 @@ export function ConversationWorkspacePage() {
   const restricted = inviteOnlyDetails(workspace.error);
   if (restricted) return <InviteOnlyPage details={restricted} />;
   if (workspace.error) {
-    return <LegacyShell title={msg('conv-unavailable-doc-title')}><div className="container"><div className="landing-section"><h1>{msg('conv-unavailable-heading')}</h1><p className="muted">{workspace.error.message}</p></div></div></LegacyShell>;
+    return <LegacyShell title={msg('conv-unavailable-doc-title')}><div className="container"><div className="landing-section"><h1>{msg('conv-unavailable-heading')}</h1><p className="muted">{workspaceErrorCopy(msg, workspace.error)}</p></div></div></LegacyShell>;
   }
   const data = workspace.data;
   if (data.viewer.state === 'join_required') return <NavigationRedirect href={data.links.join} />;
