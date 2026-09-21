@@ -1733,46 +1733,138 @@ def _is_emailable(username: str) -> bool:
         return False
 
 
-def _eligibility_detail(payload: dict, *, reason: str | None = None) -> dict:
-    """Small non-PII detail blob for cached AccountEligibility verdicts (#146)."""
-    detail = {}
-    if reason:
-        detail['reason'] = reason
-    for key in ('reason', 'message', 'event', 'criteria', 'failed', 'rules'):
-        value = payload.get(key)
-        if value not in (None, ''):
-            detail[key] = value
-    return detail
+def _eligibility_detail(payload: dict) -> dict:
+    """Keep canivote's policy id; do not cache its English prose.
+
+    canivote's ``/check`` answers with ``policy`` and a ``criteria`` list carrying
+    ``metric``/``passed``/``source`` alongside English ``label``/``display`` prose.
+    Only the policy id is kept: nothing reads the rest yet (#406 adds the
+    failed-rule view), and the prose is where a username could leak.
+    """
+    policy = payload.get('policy')
+    return {'policy': policy} if isinstance(policy, str) and policy else {}
+
+
+def _eligibility_retry_after(response) -> str | None:
+    """Return the upstream Retry-After header without exposing other response data."""
+    headers = getattr(response, 'headers', None)
+    if headers is None or not hasattr(headers, 'get'):
+        return None
+    value = headers.get('Retry-After')
+    return value if isinstance(value, str) else None
+
+
+def _log_eligibility_failure(
+    policy_id: str,
+    *,
+    status: int | None = None,
+    exception_class: str | None = None,
+    retry_after: str | None = None,
+) -> None:
+    """Log only canivote diagnostics that cannot identify the Wikimedia account."""
+    if status is not None:
+        current_app.logger.error(
+            'eligibility check failed policy=%s status=%s retry_after=%s',
+            policy_id, status, retry_after,
+        )
+    else:
+        current_app.logger.error(
+            'eligibility check failed policy=%s exception=%s retry_after=%s',
+            policy_id, exception_class, retry_after,
+        )
+
+
+def _eligibility_unmeasured_metrics(payload: dict) -> list[str]:
+    """Return canivote metric ids for criteria that could not be measured."""
+    criteria = payload.get('criteria')
+    if not isinstance(criteria, list):
+        return []
+
+    metrics = []
+    for criterion in criteria:
+        if not isinstance(criterion, dict) or criterion.get('passed') is not None:
+            continue
+        metric = criterion.get('metric')
+        if isinstance(metric, str) and metric and metric not in metrics:
+            metrics.append(metric)
+    return metrics
+
+
+def _log_eligibility_indeterminate(policy_id: str, participant, payload: dict) -> None:
+    """Log an indeterminate verdict without logging canivote's response prose."""
+    metrics = ','.join(_eligibility_unmeasured_metrics(payload)) or 'unknown'
+    current_app.logger.warning(
+        'eligibility check indeterminate policy=%s participant_id=%s metrics=%s',
+        policy_id, participant.id, metrics,
+    )
 
 
 def _check_join_eligibility(conversation, participant) -> tuple[bool, str, dict]:
     """Return (allowed, status, detail) for the optional join-time gate (#146).
 
-    The expected sidecar/tool contract is AccountEligibility-style JSON:
-    GET <ACCOUNT_ELIGIBILITY_URL>?user=<mw_username>&event=<event_id>&format=json
-    returning at least {"eligible": true|false}. Extra non-PII fields such as
-    reason/criteria/rules are cached for admin/debug display.
+    The upstream contract is canivote JSON (its ``GET /openapi.json``):
+    ``GET <ACCOUNT_ELIGIBILITY_URL>/check?user=<mw_username>&policy=<policy id>``
+    returning ``verdict`` as ``eligible``, ``not_eligible`` or ``indeterminate``.
+    Only the policy id is cached on the participation; the criteria are not,
+    because nothing reads them yet (#406 adds the failed-rule view).
     """
-    event_id = (conversation.eligibility_event_id or '').strip()
-    if not event_id:
+    policy_id = (conversation.eligibility_event_id or '').strip()
+    if not policy_id:
         return True, 'not_required', {}
-    endpoint = current_app.config.get('ACCOUNT_ELIGIBILITY_URL', '').strip()
-    if not endpoint:
+    base_url = current_app.config.get('ACCOUNT_ELIGIBILITY_URL', '').strip()
+    if not base_url:
         return False, 'unavailable', {'reason': 'eligibility checker is not configured'}
+
+    retry_after = None
     try:
         resp = requests.get(
-            endpoint,
-            params={'user': participant.mw_username, 'event': event_id, 'format': 'json'},
+            f'{base_url.rstrip("/")}/check',
+            params={'user': participant.mw_username, 'policy': policy_id},
             headers={'User-Agent': _MW_USER_AGENT},
             timeout=5,
         )
-        resp.raise_for_status()
-        payload = resp.json()
-    except Exception:
-        current_app.logger.exception('eligibility check failed for event %s', event_id)
+        retry_after = _eligibility_retry_after(resp)
+    except Exception as exc:
+        _log_eligibility_failure(
+            policy_id,
+            exception_class=type(exc).__name__,
+            retry_after=retry_after,
+        )
         return False, 'unavailable', {'reason': 'eligibility checker is unavailable'}
-    allowed = bool(payload.get('eligible'))
-    return allowed, 'eligible' if allowed else 'ineligible', _eligibility_detail(payload)
+
+    if resp.status_code != 200:
+        _log_eligibility_failure(
+            policy_id,
+            status=resp.status_code,
+            retry_after=retry_after,
+        )
+        return False, 'unavailable', {'reason': 'eligibility checker is unavailable'}
+
+    try:
+        payload = resp.json()
+        if not isinstance(payload, dict):
+            raise ValueError('canivote response is not an object')
+        verdict = payload.get('verdict')
+        if verdict not in {'eligible', 'not_eligible', 'indeterminate'}:
+            raise ValueError('canivote response has no valid verdict')
+    except Exception as exc:
+        _log_eligibility_failure(
+            policy_id,
+            exception_class=type(exc).__name__,
+            retry_after=retry_after,
+        )
+        return False, 'unavailable', {'reason': 'eligibility checker is unavailable'}
+
+    if verdict == 'eligible':
+        return True, 'eligible', _eligibility_detail(payload)
+    if verdict == 'not_eligible':
+        return False, 'ineligible', _eligibility_detail(payload)
+
+    # The current join API has no separate indeterminate status yet. Keep this
+    # on the could-not-check path rather than presenting it as not eligible;
+    # the stored verdict model and dedicated refusal copy belong to later work.
+    _log_eligibility_indeterminate(policy_id, participant, payload)
+    return False, 'unavailable', _eligibility_detail(payload)
 
 
 def _generate_pseudonyms(count: int = 5) -> list[str]:
@@ -4912,7 +5004,11 @@ def create_app(test_config: dict | None = None) -> Flask:
                                           or os.environ.get('POLIS_ADMIN_PASSWORD', ''))
     app.config['ACCOUNT_ELIGIBILITY_URL'] = (
         _read_secret('account-eligibility-url')
-        or os.environ.get('ACCOUNT_ELIGIBILITY_URL', '')
+        or os.environ.get('ACCOUNT_ELIGIBILITY_URL')
+        # Keep legacy event ids offline until #406 work item 2 migrates them to
+        # canivote policy ids; otherwise the default would disclose usernames
+        # for checks that can only return a policy-not-found response.
+        or ''
     )
     app.config['STATEMENT_SIMILARITY_URL'] = (
         _read_secret('statement-similarity-url')
