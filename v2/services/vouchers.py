@@ -22,9 +22,10 @@ from db import ACCOUNT_KIND_VOUCHER, Participant, VoucherBatch, VoucherCode, db
 # Crockford base32: no I (eye), L (ell), O (oh), U (you)
 _CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 _CROCKFORD_BITS = 60  # 12 chars × 5 bits
-# Crockford decoding reads the look-alikes as the digits they resemble, so a code
-# copied by hand from a printed card still matches.
-_LOOKALIKES = str.maketrans({'O': '0', 'I': '1', 'L': '1'})
+# Letters Crockford base32 leaves out because they are easily misread (I, L, O)
+# or produce accidental words (U). Input is never rewritten; a code containing
+# them is refused with its own message, so the holder can check what they typed.
+_EXCLUDED_LETTERS = frozenset('ILOU')
 
 _VOUCHER_CODE_RE = re.compile(r'^[0-9A-HJKMNP-TV-Z]{12}$')
 
@@ -46,8 +47,13 @@ def _naive_utc(value: datetime | None) -> datetime | None:
 
 
 def normalize_code(code: str) -> str:
-    """Upper-case, strip whitespace and hyphens, and map Crockford look-alikes."""
-    return re.sub(r'[\s\-]+', '', code).upper().translate(_LOOKALIKES)
+    """Upper-case, strip whitespace and hyphens."""
+    return re.sub(r'[\s\-]+', '', code).upper()
+
+
+def has_excluded_letters(code: str) -> bool:
+    """Whether *code* uses a letter voucher codes never contain (I, L, O, U)."""
+    return not _EXCLUDED_LETTERS.isdisjoint(normalize_code(code))
 
 
 def is_well_formed(code: str) -> bool:

@@ -966,6 +966,7 @@
     "voucher-page-submit": "Continue",
     "voucher-error-empty": "Enter a voucher code.",
     "voucher-error-format": "A voucher code is 12 letters and numbers.",
+    "voucher-error-excluded-letters": "Voucher codes never use the letters I, L, O or U. Check the code: these are often the numbers 1 and 0.",
     "voucher-invalid": "That code is not valid for this consultation.",
     "voucher-already-joined": "You already take part in this consultation with a voucher in this browser. Log out first to use a different code.",
     "voucher-switch-heading": "You are signed in with another account",

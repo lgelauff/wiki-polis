@@ -85,7 +85,7 @@ from services.argument_commands import (
 )
 from services.content_flags import submit_content_flag
 from services.vouchers import (
-    classify_voucher, is_well_formed, redeem_voucher_code,
+    classify_voucher, has_excluded_letters, is_well_formed, redeem_voucher_code,
 )
 from services.admin_participants import (
     ParticipantNotInConversation, build_admin_participant_roster,
@@ -254,6 +254,9 @@ _VOUCHER_MESSAGES = {
     'submit': ('voucher-page-submit', 'Continue'),
     'empty': ('voucher-error-empty', 'Enter a voucher code.'),
     'format': ('voucher-error-format', 'A voucher code is 12 letters and numbers.'),
+    'excluded': ('voucher-error-excluded-letters',
+                 'Voucher codes never use the letters I, L, O or U. '
+                 'Check the code: these are often the numbers 1 and 0.'),
     'invalid': ('voucher-invalid', 'That code is not valid for this consultation.'),
     'joined': ('voucher-already-joined',
                'You already take part in this consultation with a voucher in this browser. '
@@ -387,6 +390,8 @@ def _voucher_submit(conv, code: str, *, confirmed: bool):
     """
     if not code.strip():
         return _voucher_form_page(conv, error='empty')
+    if has_excluded_letters(code):
+        return _voucher_form_page(conv, error='excluded', code_value=code)
     if not is_well_formed(code):
         return _voucher_form_page(conv, error='format', code_value=code)
 

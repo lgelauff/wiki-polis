@@ -20,6 +20,7 @@ from services.vouchers import (
     classify_voucher,
     generate_voucher_code,
     generate_voucher_codes,
+    has_excluded_letters,
     is_well_formed,
     lookup_voucher,
     normalize_code,
@@ -96,9 +97,19 @@ def test_normalize_is_case_insensitive():
     assert normalize_code('x7f3k9m2abcd') == CODE
 
 
-def test_normalize_reads_crockford_lookalikes_as_digits():
-    assert normalize_code('O0Il') == '0011'
+def test_normalize_never_rewrites_letters():
+    assert normalize_code('o0il') == 'O0IL'
     assert normalize_code('x7f3-k9m2-abcd') == normalize_code('X7F3 K9M2 ABCD')
+
+
+def test_excluded_letters_are_detected_in_any_case():
+    assert has_excluded_letters('x7f3 k9m2 abco')
+    assert has_excluded_letters('ILOU')
+    assert not has_excluded_letters(CODE)
+
+
+def test_generated_codes_never_use_excluded_letters():
+    assert not any(has_excluded_letters(generate_voucher_code()) for _ in range(500))
 
 
 def test_well_formed_rejects_wrong_length_and_alphabet():
@@ -275,10 +286,16 @@ def test_linked_code_redeems_and_leaves_the_address(app, client, voucher_conv):
     assert _session_xid(client) is not None
 
 
-def test_hand_copied_code_with_lookalikes_redeems(app, client, voucher_conv):
+def test_code_with_excluded_letters_gets_its_own_message(app, client, voucher_conv):
+    """A misread 0 or 1 is pointed out rather than silently corrected."""
     _make_voucher(voucher_conv, code='0011ABCDEFGH')
-    resp = _redeem(client, voucher_conv, code='oOIl-abcd-efgh')
-    assert resp.status_code == 302
+    resp = _redeem(client, voucher_conv, code='OO1l-abcd-efgh')
+    html = resp.data.decode()
+    assert resp.status_code == 200
+    assert 'never use the letters I, L, O or U' in html
+    assert 'value="OO1l-abcd-efgh"' in html  # kept in the field to correct
+    assert 'aria-invalid="true"' in html
+    assert _voucher_participants() == []
 
 
 @pytest.mark.parametrize('kwargs', [
