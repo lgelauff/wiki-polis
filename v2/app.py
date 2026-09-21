@@ -4542,8 +4542,8 @@ def _conversation_ban_log_rows(conv: Conversation) -> list[dict]:
         rows.append({
             'action': 'Unbanned' if event.operation == 'participant.unban' else 'Banned',
             'ts': event.ts,
-            'pseudonym': pseudonyms.get(target_id, 'participant'),
-            'actor': actors.get(event.actor_participant_id, 'administrator'),
+            'pseudonym': pseudonyms.get(target_id),
+            'actor': actors.get(event.actor_participant_id),
             'scope': 'conversation',
         })
     return rows

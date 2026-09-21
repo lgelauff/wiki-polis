@@ -178,6 +178,21 @@ test('under qqx, the moderation log carries no English but pseudonyms and modera
   ])).toEqual([]);
 });
 
+test('under qqx, the moderation log names an unknown participant or moderator from the catalogue', async () => {
+  server.use(http.get(url('/api/v1/conversations/community-strategy/moderation-log'), () => HttpResponse.json({data: {
+    slug: 'community-strategy', title: 'Community strategy',
+    events: [{occurredAt: '2026-08-14T09:30:00Z', action: 'Banned', pseudonym: null, scope: 'conversation', actor: null}],
+    links: {self: '/api/v1/conversations/community-strategy/moderation-log', conversation: '/c/community-strategy', about: '/c/community-strategy/about'},
+  }})));
+  renderAsQqx();
+  renderRoute('/app/parity/conversations/community-strategy/moderation-log');
+  await screen.findByRole('heading', {name: '(modlog-heading: Community strategy)'});
+
+  // Catches a null name rendering as an empty cell, or the server's old English fallback.
+  const cells = [...document.querySelectorAll('tbody tr td')].map((cell) => cell.textContent);
+  expect([cells[2], cells[4]]).toEqual(['(modlog-unknown-participant)', '(modlog-unknown-moderator)']);
+});
+
 test('the moderation log names each action from the catalogue', async () => {
   renderRoute('/app/parity/conversations/community-strategy/moderation-log');
   await screen.findByRole('heading', {name: 'Moderation log — Community strategy'});

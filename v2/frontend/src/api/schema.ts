@@ -2031,10 +2031,10 @@ export interface components {
             occurredAt: string | null;
             /** @enum {string} */
             action: "Banned" | "Unbanned";
-            pseudonym: string;
+            pseudonym: string | null;
             /** @enum {string} */
             scope: "conversation";
-            actor: string;
+            actor: string | null;
         };
         ConversationOutputPageResponse: {
             data: components["schemas"]["ConversationOutputPage"];
