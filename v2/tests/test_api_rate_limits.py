@@ -113,3 +113,25 @@ def test_each_endpoint_gets_its_own_budget(limited_app):
     # A different view function, well inside its own 120/min budget.
     other = client.get('/api/v1/conversations/anything/about')
     assert other.status_code != 429
+
+
+def test_unauthenticated_site_budget_survives_session_rotation(limited_app):
+    """Discarding the session cookie cannot mint an unlimited login budget."""
+    limited_app.config['UNAUTHENTICATED_SITE_RATE_LIMIT'] = '3 per minute'
+    client = limited_app.test_client()
+
+    # Toolforge deliberately keys the route-specific limit by the server-side
+    # session. The shared unauthenticated ceiling must remain site-wide anyway.
+    with patch.dict(os.environ, {
+        'TOOL_TOOLFORGE_API_URL': 'https://toolforge.example.test',
+    }, clear=False):
+        statuses = []
+        for index in range(3):
+            client.set_cookie('session', f'rotated-session-{index}')
+            statuses.append(client.get('/login').status_code)
+
+        client.set_cookie('session', 'rotated-session-breach')
+        breach = client.get('/login')
+
+    assert 429 not in statuses
+    assert breach.status_code == 429
