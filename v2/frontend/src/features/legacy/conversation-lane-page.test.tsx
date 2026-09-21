@@ -1,5 +1,5 @@
 import {QueryClientProvider} from '@tanstack/react-query';
-import {fireEvent, render, screen} from '@testing-library/react';
+import {fireEvent, render, screen, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test} from 'vitest';
@@ -83,6 +83,40 @@ test('under qqx, nothing on the signed-in lane is English except the consultatio
 
   const content = [...TITLES, 'quiet-otter', 'Aug 2026', '1 Oct 2026, 12:00'];
   expect(untranslatedCopy([document.querySelector('.home-container'), document.getElementById('output-dialog')], content)).toEqual([]);
+});
+
+test('the flow diagram is a heading and an ordered list of the three rounds', async () => {
+  server.use(everyState());
+  renderAsQqx();
+  renderLane();
+  const diagram = await screen.findByRole('region', {name: '(flow-title)'});
+
+  // Catches the diagram going back to a picture: its words have to be text a screen reader
+  // can move through and a translation can reach, in the order the rounds happen.
+  expect(within(diagram).getByText('(flow-subtitle)')).toBeVisible();
+  const rounds = within(within(diagram).getByRole('list')).getAllByRole('listitem');
+  expect(rounds.map((round) => within(round).getByRole('heading', {level: 3}).textContent)).toEqual([
+    '(flow-explore-title)', '(flow-arguments-title)', '(flow-informed-title)',
+  ]);
+  ['explore', 'arguments', 'informed'].forEach((round, index) => {
+    expect(within(rounds[index]!).getByText(`(flow-${round}-body)`)).toBeVisible();
+    expect(within(rounds[index]!).getByText(`(flow-${round}-learn)`)).toBeVisible();
+    expect(within(rounds[index]!).getByText('(flow-learn-label)')).toBeVisible();
+  });
+  expect(within(diagram).getByText('(flow-outcome)')).toBeVisible();
+});
+
+test('the drawings in the flow diagram carry no text', async () => {
+  server.use(everyState());
+  renderLane();
+  const diagram = await screen.findByRole('region', {name: 'How a consultation process works'});
+
+  // Catches English painted back into a drawing, where no translation can reach it and a
+  // screen reader would read it out twice.
+  const drawings = [...diagram.querySelectorAll('svg')];
+  expect(drawings.length).toBeGreaterThan(0);
+  expect(diagram.querySelectorAll('svg text')).toHaveLength(0);
+  expect(drawings.filter((svg) => !svg.closest('[aria-hidden="true"]'))).toEqual([]);
 });
 
 test('under qqx, nothing on the signed-out lane is English', async () => {
