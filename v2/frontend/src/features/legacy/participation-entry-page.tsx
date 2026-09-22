@@ -25,22 +25,23 @@ function requiredSlug(value: string | undefined) {
 export function ParticipationEntryLegacyPage() {
   const slug = requiredSlug(useParams().slug);
   const {data: session} = useSuspenseQuery(sessionQuery());
-  if (session.state !== 'authenticated') {
+  if (session.state !== 'authenticated' && session.state !== 'voucher') {
     return <NavigationRedirect href={session.links.login} />;
   }
-  return <AuthenticatedParticipationEntry slug={slug} csrfToken={session.csrfToken} />;
+  return <AuthenticatedParticipationEntry slug={slug} csrfToken={session.csrfToken} voucher={session.state === 'voucher'} />;
 }
 
-function AuthenticatedParticipationEntry({slug, csrfToken}: {
+function AuthenticatedParticipationEntry({slug, csrfToken, voucher}: {
   slug: string;
   csrfToken: string;
+  voucher: boolean;
 }) {
   const {data} = useSuspenseQuery(participationEntryQuery(slug));
   switch (data.state) {
     case 'redirect':
       return <NavigationRedirect href={data.href} />;
     case 'join':
-      return <JoinPage data={data} csrfToken={csrfToken} />;
+      return <JoinPage data={data} csrfToken={csrfToken} voucher={voucher} />;
     case 'invite_denied':
     case 'access_lost':
       return <InviteDeniedPage data={data} />;
@@ -61,6 +62,12 @@ function refusalCopy(data: InviteDeniedEntry, msg: ReturnType<typeof useMessage>
   }
   if (data.certainty === 'inconclusive') {
     return {heading: msg('forbidden-unconfirmed-heading'), body: msg('forbidden-unconfirmed-inconclusive', title), invite: false};
+  }
+  if (data.reason === 'access-voucher-other') {
+    return {heading: msg('forbidden-voucher-other-heading'), body: msg('forbidden-voucher-other-body', title), invite: false};
+  }
+  if (data.reason === 'access-voucher-revoked') {
+    return {heading: msg('forbidden-lost-voucher-heading'), body: msg('forbidden-lost-voucher-body', title), invite: false};
   }
   const invite = data.reason === 'access-invite-required';
   if (data.state === 'access_lost') {
@@ -98,7 +105,7 @@ function InviteDeniedPage({data}: {data: InviteDeniedEntry}) {
   );
 }
 
-function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
+function JoinPage({data, csrfToken, voucher}: {data: JoinEntry; csrfToken: string; voucher: boolean}) {
   const msg = useMessage();
   const [pseudonyms, setPseudonyms] = useState(data.pseudonyms);
   const [pseudonym, setPseudonym] = useState(data.pseudonyms[0] ?? '');
@@ -200,7 +207,8 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
             </div>
           </div>
 
-          <div className="accept-section" role="group" aria-labelledby="notification-title" aria-describedby="notification-help">
+          {/* A voucher account has no Wikimedia email or talk page to notify (#368). */}
+          {!voucher && <div className="accept-section" role="group" aria-labelledby="notification-title" aria-describedby="notification-help">
             <h2 id="notification-title">{msg('accept-notify-heading')}</h2>
             <p id="notification-help" style={{color: 'var(--muted)', fontSize: 13, marginBottom: '.75rem'}}>
               {msg('accept-notify-help')}
@@ -220,7 +228,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
               <input type="checkbox" name="notify_talk_page" value="1" checked={notifyTalkPage} onChange={(event) => setNotifyTalkPage(event.target.checked)} />
               <span>{msg('accept-notify-talk')}</span>
             </label>
-          </div>
+          </div>}
 
           <div className="accept-section" id="accept-privacy-note">
             <h2>{msg('accept-privacy-heading')}</h2>

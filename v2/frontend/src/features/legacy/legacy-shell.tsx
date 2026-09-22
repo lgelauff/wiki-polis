@@ -139,6 +139,8 @@ export function LegacyShell({
   const activeLocale = useLocale();
   const {data: session} = useSuspenseQuery(sessionQuery());
   const authenticated = session.state === 'authenticated';
+  // A voucher account is signed in but has no username to show (#368).
+  const signedIn = authenticated || session.state === 'voucher';
   useLegacyDocument({demo: headerMode === 'demo' || headerMode === 'conversation-demo', title});
 
   return (
@@ -192,11 +194,11 @@ export function LegacyShell({
             )}
           </div>
           <div className="header-identity">
-            {authenticated ? (
+            {signedIn ? (
               <>
                 <span className="header-user-chip">
                   <span className="header-user-chip-dot" />
-                  {session.user?.username}
+                  {authenticated ? session.user?.username : msg('base-voucher-account')}
                 </span>
                 <form method="post" action={session.links.logout} style={{display: 'inline'}}>
                   <input type="hidden" name="csrf_token" value={session.csrfToken} />

@@ -26,7 +26,7 @@ error's `code` to catalogue copy instead
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (946 keys, 100% documented; 568 offered to translators, 378 held back) | ✅ committed |
+| `en.json` + `qqq.json` (967 keys, 100% documented; 589 offered to translators, 378 held back) | ✅ committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |

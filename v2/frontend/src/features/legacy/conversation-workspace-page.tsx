@@ -32,6 +32,9 @@ type VoteChoice = components['schemas']['ExploreVoteRequest']['choice'];
 type ComposerMode = 'suggest' | 'new' | null;
 type InviteOnlyDetails = {
   title: string;
+  slug?: string;
+  gatingType?: string | null;
+  reason?: string | null;
   canModerate?: boolean;
   links?: {home?: string; invitations?: string};
 };
@@ -49,8 +52,41 @@ function inviteOnlyDetails(error: unknown): InviteOnlyDetails | null {
   return details as InviteOnlyDetails;
 }
 
+/** A voucher-gated consultation refuses in its own words, and a visitor without a
+ *  voucher account is pointed at the page where a code is typed (#368). */
+function VoucherRefusalPage({details}: {details: InviteOnlyDetails}) {
+  const msg = useMessage();
+  const title = escapeHtml(details.title);
+  const copy = details.reason === 'access-voucher-other'
+    ? {heading: msg('forbidden-voucher-other-heading'), body: msg('forbidden-voucher-other-body', title), entry: false}
+    : details.reason === 'access-voucher-revoked'
+      ? {heading: msg('forbidden-lost-voucher-heading'), body: msg('forbidden-lost-voucher-body', title), entry: false}
+      : {heading: msg('forbidden-voucher-heading'), body: msg('forbidden-voucher-body', title), entry: Boolean(details.slug)};
+  return (
+    <LegacyShell title={msg('forbidden-invite-doc-title')}>
+      <div className="container" style={{maxWidth: 700, paddingTop: '3rem'}}>
+        <h1 style={{fontSize: 24, fontWeight: 600, color: 'var(--ink)', margin: '0 0 .75rem'}}>{copy.heading}</h1>
+        <p
+          style={{color: 'var(--body)', fontSize: 15, lineHeight: 1.6, margin: '0 0 1.5rem'}}
+          dangerouslySetInnerHTML={richHtml(copy.body)}
+        />
+        {copy.entry && (
+          <p style={{margin: '0 0 1.5rem'}}>
+            {/* Served by Flask; InternalLink renders a full-page link for it. */}
+            <InternalLink className="btn-primary" href={`/c/${encodeURIComponent(details.slug ?? '')}/v`}>{msg('forbidden-voucher-link')}</InternalLink>
+          </p>
+        )}
+        <InternalLink href={details.links?.home ?? '/'} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>{msg('forbidden-invite-back-home')}</InternalLink>
+      </div>
+    </LegacyShell>
+  );
+}
+
 function InviteOnlyPage({details}: {details: InviteOnlyDetails}) {
   const msg = useMessage();
+  if (details.gatingType === 'voucher' || details.reason === 'access-voucher-other') {
+    return <VoucherRefusalPage details={details} />;
+  }
   return (
     <LegacyShell title={msg('forbidden-invite-doc-title')}>
       <div className="container" style={{maxWidth: 700, paddingTop: '3rem'}}>
