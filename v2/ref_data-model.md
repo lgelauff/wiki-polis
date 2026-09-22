@@ -139,10 +139,13 @@ enum(`personal_attack`, `privacy`, `off_topic`, `other`) · `detail` nullable ·
 `id` PK · `conversation_id` FK (CASCADE) · `mw_username` · `mw_user_id` nullable ·
 `invited_by` nullable · `created_at`. Unique `(conversation_id, mw_username)`.
 - **The invite-only check matches `mw_user_id`**, the stable Wikimedia id (#405), not the
-  username. An invitation added for someone who has never logged in has no id yet; their
-  first login claims it (`services.invites.claim_username_invites`), filling in the id on
-  every invitation for that username that has none. An invitation that already carries an
-  id is never re-bound, so a renamed or reused username cannot take it over.
+  username. Names are stored in MediaWiki's canonical form (underscores as spaces, first
+  letter upper-case, otherwise exact), and an invitation is bound to an existing account
+  only on an exact name match. An invitation without an id is claimed by the first
+  account that logs in with exactly that canonical name
+  (`services.invites.claim_username_invites`, run on every login); once it has an id it is
+  never re-bound. Names are compared in Python, not by the column collation, which on
+  MariaDB ignores case and accents ("Alice" and "ALICE" are different accounts).
 
 ### `admin_roles`
 `id` PK · `participant_id` FK (CASCADE) · `conversation_id` FK (CASCADE) · `role`

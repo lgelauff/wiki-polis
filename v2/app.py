@@ -600,6 +600,16 @@ def _truthy(value) -> bool:
     return str(value or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+def _claim_invites_at_login(participant) -> None:
+    """Bind invitations made by user name before this account existed (see
+    services.invites.claim_username_invites). Logged by participant id only."""
+    claimed = claim_username_invites(db.session, mw_user_id=participant.mw_user_id,
+                                     mw_username=participant.mw_username)
+    if claimed:
+        current_app.logger.info('login bound %d invitation(s) to participant %s',
+                                claimed, participant.id)
+
+
 def _derive_xid(subject: str) -> str:
     """Keyed participant xid derivation (#96).
 
@@ -5852,8 +5862,7 @@ def _register_routes(app: Flask) -> None:
             )
             if participant.id is None:
                 db.session.add(participant)
-            claim_username_invites(db.session, mw_user_id=participant.mw_user_id,
-                                   mw_username=participant.mw_username)
+            _claim_invites_at_login(participant)
             db.session.commit()
             session['username']  = username
             session['xid']       = participant.xid
@@ -5904,8 +5913,7 @@ def _register_routes(app: Flask) -> None:
             )
             if participant.id is None:
                 db.session.add(participant)
-            claim_username_invites(db.session, mw_user_id=participant.mw_user_id,
-                                   mw_username=participant.mw_username)
+            _claim_invites_at_login(participant)
             db.session.commit()
             session['username']  = username
             session['xid']       = participant.xid
@@ -6084,8 +6092,7 @@ def _register_routes(app: Flask) -> None:
         )
         if participant.id is None:
             db.session.add(participant)
-        claim_username_invites(db.session, mw_user_id=participant.mw_user_id,
-                               mw_username=participant.mw_username)
+        _claim_invites_at_login(participant)
         db.session.commit()
 
         next_url = session.pop('next', None)
