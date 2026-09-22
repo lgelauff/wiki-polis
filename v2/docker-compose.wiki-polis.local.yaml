@@ -9,6 +9,7 @@ services:
       # on macOS cannot chown a fresh host bind mount here.
       - "polis-pgdata:/var/lib/postgresql"
       - "${WIKI_POLIS_DIR:?set WIKI_POLIS_DIR to the wiki-polis checkout}/v2/tmp/postgres-backups:/backups"
+    mem_limit: 256m
 
   particiapi:
     environment:
@@ -32,10 +33,23 @@ services:
     # "open sysctl kernel.domainname file: permission denied" and particiapi never
     # starts. Nothing reads it locally (PARTICIAPI_SERVER_NAME is a separate env var).
     domainname: ""
+    mem_limit: 256m
 
   polis-server:
     ports: !override
       - "127.0.0.1:${POLIS_HOST_PORT:-8003}:5000"
+    mem_limit: 256m
+
+  polis-file-server:
+    mem_limit: 256m
+
+  # Memory caps, from docker stats on hague (2026-09-22) over two full
+  # simulate_cats_vs_dogs.py --phase6 runs: peak polis-math 1.0-1.25 GiB,
+  # polis-server ~134 MiB, particiapi ~103, polis-file-server 41, postgres 36.
+  # polis-math is a JVM whose heap does not shrink back after load and grows with
+  # conversation size, so it gets 2g; the others fit well inside 256m.
+  polis-math:
+    mem_limit: 2g
 
 volumes:
   polis-pgdata:
