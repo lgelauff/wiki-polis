@@ -30,7 +30,6 @@ from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from limits import parse as parse_rate_limit
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from sqlalchemy import text as _sa_text
 from sqlalchemy.engine import make_url
@@ -261,7 +260,7 @@ _VOUCHER_MESSAGES = {
     'too-short': ('voucher-error-too-short', 'Voucher codes are at least $1 characters long.'),
     'invalid': ('voucher-invalid', 'That code is not valid for this consultation.'),
     'throttled': ('voucher-throttled',
-                  'Too many codes were tried here. Wait $1 seconds and try again.'),
+                  'That was too many wrong codes. Wait $1 seconds and try again.'),
     'invalid-excluded': ('voucher-invalid-excluded-letters',
                          'That code is not valid for this consultation. If it contains '
                          'I, L, O or U, check whether those should be the numbers 1 and 0.'),
@@ -437,29 +436,19 @@ def _voucher_not_valid(conv, code: str):
     return _voucher_form_page(conv, error='invalid')
 
 
-# Failed-attempt budgets for voucher entry (#368). Only misses are counted, so a
-# room of people entering valid codes never trips them. Going over answers
-# voucher-throttled (429 + Retry-After); nothing is locked and no code is
-# invalidated, so a valid code redeems again as soon as the window passes.
-# Neither budget depends on the client address, which Toolforge does not pass
-# (#411): one is per process, sized for a room, and one per browser session and
-# process.
-#
-# Known trade-off: while a process's budget is spent, valid codes are refused
-# too (letting them through would let a guesser test codes unthrottled). So one
-# script sending a wrong code every second keeps entry to that process paused
-# for as long as it runs; people already signed in are unaffected. Operators can
-# raise VOUCHER_PROCESS_FAILURE_LIMIT (see guide_runbook.md, "Voucher codes").
-_VOUCHER_PROCESS_FAILURE_LIMIT = '60 per minute'
-_VOUCHER_SESSION_FAILURE_LIMIT = '10 per minute'
+# Failed-attempt budget for voucher entry (#368): it locks out the guesser,
+# never the consultation. Only misses are counted, so people entering valid
+# codes never trip it. After 3 wrong codes in a minute a browser session (or
+# signed-in account) waits until the minute is up, per consultation; the answer
+# is voucher-throttled (429 + Retry-After), no code is locked or invalidated.
+# It does not depend on the client address, which Toolforge may not pass (#411);
+# an IP-based lockout is tracked in #458. Someone who discards their cookie can
+# keep guessing, capped only by the site-wide unauthenticated limit.
+_VOUCHER_SESSION_FAILURE_LIMIT = '3 per minute'
 
 
 def _voucher_limit_setting(name: str, default: str) -> str:
     return current_app.config.get(name) or os.environ.get(name, '').strip() or default
-
-
-def _voucher_process_failure_limit() -> str:
-    return _voucher_limit_setting('VOUCHER_PROCESS_FAILURE_LIMIT', _VOUCHER_PROCESS_FAILURE_LIMIT)
 
 
 def _voucher_session_failure_limit() -> str:
@@ -475,10 +464,6 @@ def _voucher_slug() -> str:
     return (request.view_args or {}).get('slug', '')
 
 
-def _voucher_process_budget_key() -> str:
-    return f'process:{_voucher_slug()}'
-
-
 def _voucher_session_budget_key() -> str:
     """This browser session (or signed-in account) on this process."""
     identity = _ratelimit_digest(_ratelimit_account_or_session_identity())
@@ -489,14 +474,13 @@ def _voucher_attempt_failed(_response) -> bool:
     return bool(g.get('voucher_attempt_failed'))
 
 
-def _voucher_throttled(request_limit, conv=None):
+def _voucher_throttled(request_limit):
     """The voucher page's own 429: the form, with how long to wait.
 
     What was typed (or linked) stays in the field, so it can be sent again once
     the wait is over. That depends only on the input, not on the code's state.
     """
-    if conv is None:
-        conv = Conversation.query.filter_by(slug=_voucher_slug()).first()
+    conv = Conversation.query.filter_by(slug=_voucher_slug()).first()
     if conv is None:
         return None  # fall back to the generic 429
     wait = max(1, int(request_limit.reset_at - time.time()))
@@ -506,26 +490,6 @@ def _voucher_throttled(request_limit, conv=None):
     response.status_code = 429
     response.headers['Retry-After'] = str(wait)
     return response
-
-
-_VOUCHER_EXHAUSTED_LOG_RATE = parse_rate_limit('1 per minute')
-
-
-def _voucher_throttled_process(request_limit):
-    """Process budget spent: many wrong codes from many sessions, i.e. likely guessing.
-
-    Logged for the operators once per window, not per rejected request, so the
-    line stays findable during an attack. #368 also wants the organizer alerted,
-    which needs the organizer screens. The log names the process by id only.
-    """
-    conv = Conversation.query.filter_by(slug=_voucher_slug()).first()
-    if conv is not None and limiter.limiter.hit(
-        _VOUCHER_EXHAUSTED_LOG_RATE, 'voucher-exhausted-log', str(conv.id),
-    ):
-        current_app.logger.warning(
-            'voucher failed-attempt budget for conversation %s exhausted', conv.id,
-        )
-    return _voucher_throttled(request_limit, conv)
 
 
 def _voucher_submit(conv, code: str, *, confirmed: bool):
@@ -5975,9 +5939,6 @@ def _register_routes(app: Flask) -> None:
 
     @app.route('/c/<slug>/v', methods=['GET', 'POST'])
     @_unauthenticated_site_limit()
-    @limiter.limit(_voucher_process_failure_limit, key_func=_voucher_process_budget_key,
-                   scope='voucher-failures-process', deduct_when=_voucher_attempt_failed,
-                   exempt_when=_voucher_budget_exempt, on_breach=_voucher_throttled_process)
     @limiter.limit(_voucher_session_failure_limit, key_func=_voucher_session_budget_key,
                    scope='voucher-failures-session', deduct_when=_voucher_attempt_failed,
                    exempt_when=_voucher_budget_exempt, on_breach=_voucher_throttled)
