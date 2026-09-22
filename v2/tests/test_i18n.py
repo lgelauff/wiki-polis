@@ -191,6 +191,58 @@ def test_placeholders_and_plurals_are_well_formed():
     assert not problems, 'malformed messages: ' + '; '.join(problems)
 
 
+# ── Text copied from MediaWiki: qqq and i18n/ATTRIBUTION.md must agree ────────
+# A message whose text is copied from MediaWiki or one of its components cites the source in
+# qqq with {{msg-mw|<key>}} and is listed, with its licence, in ATTRIBUTION.md. The two are
+# kept by hand, so they are checked against each other: a citation with no licence record,
+# or a record for a message that no longer cites anything, fails here.
+
+_ATTRIBUTION_ROW = _re.compile(
+    r'^\| `(?P<key>[^`]+)` \| `(?P<english>[^`]*)` \| [^|]+ \| '
+    r'\[`(?P<source>[^`]+)`\]\([^)\s]+\) \| (?P<licence>[^|]+?) \| [^|]+ \|$', _re.M)
+_MSG_MW = _re.compile(r'\{\{msg-mw\|([^|}]+)', _re.I)
+
+
+def _attribution_rows():
+    text = (_I18N_DIR / 'ATTRIBUTION.md').read_text(encoding='utf-8')
+    rows = list(_ATTRIBUTION_ROW.finditer(text))
+    # A row the pattern cannot read would silently drop out of both checks below.
+    table_lines = [line for line in text.splitlines() if line.startswith('| `')]
+    assert len(rows) == len(table_lines), 'ATTRIBUTION.md has a table row this test cannot read'
+    return rows
+
+
+def _mw_key(name):
+    # {{msg-mw}} links to MediaWiki:<Name>, where the first letter's case does not matter.
+    return name[:1].lower() + name[1:]
+
+
+def test_copied_messages_in_qqq_and_attribution_agree():
+    qqq = _load('qqq.json')
+    cited = {(key, _mw_key(m)) for key, doc in qqq.items() for m in _MSG_MW.findall(doc)}
+    listed = {(row['key'], row['source']) for row in _attribution_rows()}
+    assert listed, 'no rows read from ATTRIBUTION.md'
+    assert not cited - listed, f'cited in qqq but not in ATTRIBUTION.md: {sorted(cited - listed)}'
+    assert not listed - cited, f'in ATTRIBUTION.md but not cited in qqq: {sorted(listed - cited)}'
+
+
+def test_each_copied_message_names_its_licence_in_qqq():
+    qqq = _load('qqq.json')
+    problems = [f"{row['key']}: qqq should say {row['licence']} and point to i18n/ATTRIBUTION.md"
+                for row in _attribution_rows()
+                if row['licence'] not in qqq.get(row['key'], '')
+                or 'i18n/ATTRIBUTION.md' not in qqq.get(row['key'], '')]
+    assert not problems, '; '.join(problems)
+
+
+def test_attribution_records_the_english_that_ships():
+    """Rewording a copied message makes its credit wrong: re-check the source, or drop the row."""
+    en = _load('en.json')
+    stale = [f"{row['key']}: {row['english']!r} in ATTRIBUTION.md, {en.get(row['key'])!r} in en.json"
+             for row in _attribution_rows() if en.get(row['key']) != row['english']]
+    assert not stale, '; '.join(stale)
+
+
 # ── The catalogue endpoint (GET /api/v1/i18n/<locale>) ───────────────────────
 # This is what makes the catalogue consumable by the React SPA, and it is why the
 # message map is NOT inlined into every HTML response.
@@ -284,7 +336,7 @@ _RUNTIME_KEYS = {
     ] + ['errorpage-code'],
     # app.py: _SPA_BOOTSTRAP_MESSAGES, stamped onto <html> as data-msg-* before the SPA has
     # a catalogue to read.
-    'app.py': ['base-skip-to-content', 'base-loading-conversations'],
+    'app.py': ['base-skip-to-content', 'common-loading'],
 }
 
 

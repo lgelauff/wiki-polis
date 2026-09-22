@@ -160,8 +160,8 @@ _SPA_BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stati
 # find, and stamping that marker would put it in the skip link — the first thing a keyboard
 # or screen-reader user meets. Same discipline as error_pages._t.
 _SPA_BOOTSTRAP_MESSAGES = {
-    'skip': ('base-skip-to-content', 'Skip to main content'),
-    'loading': ('base-loading-conversations', 'Loading conversations…'),
+    'skip': ('base-skip-to-content', 'Jump to content'),
+    'loading': ('common-loading', 'Loading…'),
 }
 # Matched structurally, not as a literal: v2/static/spa is gitignored and built at deploy
 # time, so a build tool that emits <html lang=en> or reorders attributes would silently turn

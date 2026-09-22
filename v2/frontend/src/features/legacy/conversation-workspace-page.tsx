@@ -174,7 +174,7 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
       <div className="v2-composer-header">
         <div>
           <div className="v2-composer-title" id={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'}>{title}</div>
-          <div className="v2-composer-helper" id={helperId}>{suggest ? msg('conv-suggest-helper') : msg('conv-newstmt-helper')}{' '}<InternalLink href="/help/statements" target="_blank" rel="noopener">{msg('conv-writing-tips')}<span className="sr-only">{msg('common-opens-in-new-tab')}</span></InternalLink></div>
+          <div className="v2-composer-helper" id={helperId}>{suggest ? msg('conv-suggest-helper') : msg('conv-newstmt-helper')}{' '}<InternalLink href="/help/statements" target="_blank" rel="noopener">{msg('conv-writing-tips')}<span className="sr-only">{' '}{msg('common-opens-in-new-tab')}</span></InternalLink></div>
         </div>
         <span className="propose-charcount">{msg('conv-composer-charcount', text.length)}</span>
       </div>
@@ -406,7 +406,7 @@ export function ConversationWorkspacePage() {
     document.head.appendChild(meta);
     return () => meta.remove();
   }, [workspace.data?.space]);
-  if (workspace.isPending) return <p className="loading-state" role="status">{msg('conv-loading')}</p>;
+  if (workspace.isPending) return <p className="loading-state" role="status">{msg('common-loading')}</p>;
   if (workspace.error instanceof ApiContractError && workspace.error.code === 'unauthorized') {
     return <NavigationRedirect href={session.links.login} />;
   }

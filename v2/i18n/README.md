@@ -26,12 +26,12 @@ error's `code` to catalogue copy instead
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (954 keys, 100% documented; 576 offered to translators, 378 held back) | ✅ committed |
+| `en.json` + `qqq.json` (946 keys, 100% documented; 568 offered to translators, 378 held back) | ✅ committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
 | React SPA reads it via `banana-i18n` | ✅ participant interface; 🟡 help pages and admin console (see above) |
-| Locales offered to users (`ENABLED_LOCALES`) | English and Dutch (`nl.json`, 541 keys) |
+| Locales offered to users (`ENABLED_LOCALES`) | English and Dutch (`nl.json`, 539 keys) |
 
 `ENABLED_LOCALES` defaults to `en,nl` when unset (`app.py`), so the language switcher is visible
 and Dutch is live wherever the variable is left alone. The keys are the durable asset: they were authored against the Jinja UI, which has since been deleted, but
@@ -82,12 +82,20 @@ exactly as typed.
    from. Reusing it keeps one message for translators instead of two.
 
    Then, before minting a message — error messages above all — look for an equivalent in
-   MediaWiki core, through the API
+   MediaWiki core or one of its components (a skin, an extension, OOUI), through the API
    (`https://www.mediawiki.org/w/api.php?action=query&meta=allmessages&ammessages=<key>&amlang=<lang>`)
    or translatewiki's message search. If one fits, copy its English text exactly and point to
    it in `qqq.json` with `{{msg-mw|<key>}}`: the wording is already familiar to Wikimedia
    users, and translation memory then offers translators the translations that already exist
    in hundreds of languages. `common-err-nologin` is core's `exception-nologin-text`.
+
+   Copied text keeps its licence. Copy only from a source whose licence is compatible with
+   Proto's GPL-3.0: MediaWiki core (including its Codex messages) and most skins and
+   extensions are GPL-2.0-or-later, while OOUI and VisualEditor are MIT, whose notice
+   [`ATTRIBUTION.md`](ATTRIBUTION.md) carries. Check the source's own `COPYING`, `LICENSE` or
+   `extension.json` `license-name`. Record the message in `ATTRIBUTION.md` with its source
+   key, source file and licence, and name the licence in its `qqq` entry next to the
+   `{{msg-mw}}` citation; `tests/test_i18n.py` fails if the two disagree.
 2. Add a key to **`en.json`** (English text) and a one-line context note to **`qqq.json`**.
    Never leave a message in `en.json` without a `qqq.json` entry — CI fails on it.
 3. Use it:

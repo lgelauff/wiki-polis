@@ -103,7 +103,7 @@ function Contribution({slug, csrfToken, featuredId, side, value}: {
         <div className="contribute-composer-header">
           <span className="contribute-glyph filled">{copy.sign}</span>
           <span className="contribute-composer-label" id={`contribute-label-${featuredId}-${side}`}>{text.composerLabel}</span>
-          <InternalLink className="contribute-help-link" href="/help/arguments" target="_blank" rel="noopener">{msg('conv-arg-tips')}<span className="sr-only">{msg('common-opens-in-new-tab')}</span></InternalLink>
+          <InternalLink className="contribute-help-link" href="/help/arguments" target="_blank" rel="noopener">{msg('conv-arg-tips')}<span className="sr-only">{' '}{msg('common-opens-in-new-tab')}</span></InternalLink>
           <span className="contribute-charcount"><span className="cc-len">{body.length}</span> / {ARGUMENT_MAX_CHARACTERS}</span>
         </div>
         <textarea ref={textareaRef} className="contribute-textarea" maxLength={ARGUMENT_MAX_CHARACTERS} rows={3} aria-labelledby={`contribute-label-${featuredId}-${side}`} placeholder={text.placeholder} value={body} onChange={(event) => setBody(event.target.value)} />
@@ -278,9 +278,9 @@ function FeaturedPanel({mapping, slug, csrfToken, card, index, currentIndex, set
       </div>
       <div className="at-cols"><ArgumentColumn mapping={mapping} slug={slug} csrfToken={csrfToken} card={card} side="pro" /><div className="at-rule" aria-hidden="true" /><ArgumentColumn mapping={mapping} slug={slug} csrfToken={csrfToken} card={card} side="con" /></div>
       <div className="at-nav">
-        <button className="at-navbtn at-navbtn--prev" type="button" disabled={index === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => setIndex(index - 1)}>{msg('conv-nav-prev')}</button>
+        <button className="at-navbtn at-navbtn--prev" type="button" disabled={index === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => setIndex(index - 1)}><span aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
         <div className="at-circles" role="group" aria-label={msg('conv-arg-progress-aria')}>{mapping.featuredStatements.map((item, circleIndex) => <Circle key={item.id} state={panelState(item)} number={circleIndex + 1} current={circleIndex === index} onClick={() => setIndex(circleIndex)} />)}</div>
-        <button className="at-navbtn at-navbtn--next" type="button" disabled={index === mapping.featuredStatements.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => setIndex(index + 1)}>{msg('conv-nav-next')}</button>
+        <button className="at-navbtn at-navbtn--next" type="button" disabled={index === mapping.featuredStatements.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => setIndex(index + 1)}>{msg('conv-nav-next')} <span aria-hidden="true">→</span></button>
       </div>
     </div>
   );

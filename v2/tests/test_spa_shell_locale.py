@@ -49,7 +49,7 @@ def test_the_shell_carries_the_messages_that_render_before_the_catalogue(client,
     tag = _html_tag(client.get('/').get_data(as_text=True))
     # Both are read synchronously by app.tsx, above <MessageProvider>.
     assert f'data-msg-skip="{i18n.resolve("base-skip-to-content", "en")}"' in tag
-    assert f'data-msg-loading="{i18n.resolve("base-loading-conversations", "en")}"' in tag
+    assert f'data-msg-loading="{i18n.resolve("common-loading", "en")}"' in tag
 
 
 def test_a_requested_locale_reaches_the_shell(client, shell, app, tmp_path):
@@ -58,7 +58,7 @@ def test_a_requested_locale_reaches_the_shell(client, shell, app, tmp_path):
     directory.mkdir()
     (directory / 'en.json').write_text(
         '{"base-skip-to-content": "Skip to main content", '
-        '"base-loading-conversations": "Loading conversations\\u2026"}', encoding='utf-8')
+        '"common-loading": "Loading\\u2026"}', encoding='utf-8')
     (directory / 'nl.json').write_text('{"base-skip-to-content": "Ga naar de inhoud"}',
                                        encoding='utf-8')
     i18n.load(str(directory))
@@ -68,7 +68,7 @@ def test_a_requested_locale_reaches_the_shell(client, shell, app, tmp_path):
         assert 'lang="nl"' in tag
         assert 'data-msg-skip="Ga naar de inhoud"' in tag
         # Untranslated in nl, so English fills it — the same per-key fallback the SPA gets.
-        assert 'data-msg-loading="Loading conversations' in tag
+        assert 'data-msg-loading="Loading…"' in tag
     finally:
         i18n.load()
 
@@ -91,7 +91,7 @@ def test_a_stamped_message_cannot_break_out_of_the_attribute(client, shell, tmp_
     directory.mkdir()
     (directory / 'en.json').write_text(
         '{"base-skip-to-content": "a \\" onload=\\"alert(1)", '
-        '"base-loading-conversations": "x"}', encoding='utf-8')
+        '"common-loading": "x"}', encoding='utf-8')
     i18n.load(str(directory))
     try:
         tag = _html_tag(client.get('/').get_data(as_text=True))
@@ -118,7 +118,7 @@ def test_a_browser_header_does_not_choose_the_language(client, shell, app, tmp_p
     directory = tmp_path / 'messages'
     directory.mkdir()
     (directory / 'en.json').write_text(
-        '{"base-skip-to-content": "Skip to main content", "base-loading-conversations": "L"}',
+        '{"base-skip-to-content": "Skip to main content", "common-loading": "L"}',
         encoding='utf-8')
     (directory / 'nl.json').write_text('{"base-skip-to-content": "Ga naar de inhoud"}',
                                        encoding='utf-8')
@@ -145,8 +145,8 @@ def test_a_missing_catalogue_stamps_english_not_a_key_marker(client, shell, tmp_
     try:
         tag = _html_tag(client.get('/').get_data(as_text=True))
         assert i18n._MISSING_L not in tag
-        assert 'data-msg-skip="Skip to main content"' in tag
-        assert 'data-msg-loading="Loading conversations' in tag
+        assert 'data-msg-skip="Jump to content"' in tag
+        assert 'data-msg-loading="Loading…"' in tag
     finally:
         i18n.load()
 

@@ -180,7 +180,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
             <div className="pseudonym-card-header">
               <div className="pseudonym-card-title" id="pseudonym-title">{msg('accept-choose-pseudonym')}</div>
               <button type="button" className="reroll-btn" aria-controls="pseudonym-options" aria-label={msg('accept-reroll-aria')} disabled={reroll.isPending} onClick={() => reroll.mutate()}>
-                {reroll.isPending ? msg('accept-reroll-loading') : msg('accept-reroll')}
+                <span aria-hidden="true">↻</span> {reroll.isPending ? msg('common-loading') : msg('accept-reroll')}
               </button>
             </div>
             <div className="pseudonym-card-sub" id="pseudonym-help">
@@ -214,7 +214,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
               <p className="muted" style={{marginTop: '.25rem'}} dangerouslySetInnerHTML={richHtml(
                   msg('accept-notify-email-unavailable',
                     `<a href="https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal" target="_blank" rel="noopener">`
-                    + `${escapeHtml(msg('accept-notify-add-email'))}<span class="sr-only">${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
+                    + `${escapeHtml(msg('accept-notify-add-email'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
             )}
             <label className="checkbox-label" style={{marginTop: '.5rem'}}>
               <input type="checkbox" name="notify_talk_page" value="1" checked={notifyTalkPage} onChange={(event) => setNotifyTalkPage(event.target.checked)} />
@@ -240,7 +240,7 @@ function JoinPage({data, csrfToken}: {data: JoinEntry; csrfToken: string}) {
             <h2>{msg('accept-licence-heading')}</h2>
             <p dangerouslySetInnerHTML={richHtml(msg('accept-licence-intro',
               `<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">`
-              + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only">${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
+              + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
             <p className="muted">
               {msg('accept-licence-scope')}
             </p>

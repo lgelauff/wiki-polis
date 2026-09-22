@@ -413,7 +413,7 @@ export function ConversationLanePage({space}: {space: ConversationSpace}) {
       <div className="container home-container">
         <div className="home-banner" dangerouslySetInnerHTML={richHtml(msg('home-banner-prototype',
           `<a href="https://github.com/lgelauff/wiki-polis/issues/new" target="_blank" rel="noopener">`
-          + `${escapeHtml(msg('home-banner-open-issue'))}<span class="sr-only">${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
+          + `${escapeHtml(msg('home-banner-open-issue'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
 
         {!data.authenticated ? (
           <AnonymousLane conversations={groups.available} developerLogins={session.developerLogins} loginHref={session.links.login} />

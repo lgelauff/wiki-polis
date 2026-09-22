@@ -125,6 +125,8 @@ Settled. Changing one is a plan change, not an implementation detail.
    ([#369](https://github.com/lgelauff/wiki-polis/pull/369)). Whenever MediaWiki core has an
    error message that fits, reuse it: copy its English exactly and cite it in `qqq` with
    `{{msg-mw|<key>}}`, so translators get its existing translations from translation memory.
+   Copy only from a GPL-3.0-compatible source, and record the source and its licence in
+   `i18n/ATTRIBUTION.md` and in the message's `qqq`.
 6. **A UI label is never shipped from the server as English.** Presentation constants that
    cross the API send a key or stable identifier the SPA maps, never display text.
 7. **Key convention:** `surface-subkey`, lowercase-hyphenated, grouped by screen. A key name
