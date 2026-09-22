@@ -769,7 +769,7 @@
     "adminconv-card-modqueue": "Moderation queue",
     "adminconv-card-modqueue-desc": "Review participant flags for statements and arguments",
     "adminconv-card-settings": "Settings",
-    "adminconv-card-settings-desc": "Title, introduction, access and guidance scope",
+    "adminconv-card-settings-desc": "Title, introduction and access",
     "adminconv-roles-label": "Consultation roles",
     "adminconv-roles-summary": "Roles",
     "adminconv-th-role": "Role",

@@ -210,7 +210,7 @@ function ConfigurationSection({conversationId, csrfToken, settings, refresh, fai
           <label>{msg('admin-label-title')}<input type="text" required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           <label>{msg('adminconv-label-route-locked')}<input type="text" readOnly value={routeLabel(msg, settings.conversation.phaseRoute, settings.conversation.phaseRouteLabel)} style={{background: '#f5f5f5', color: '#666'}} /></label>
           <label>{msg('adminconv-label-polis-id')}<input type="text" readOnly value={settings.conversation.polisId} style={{background: '#f5f5f5', color: '#666'}} /></label>
-          <label>{msg('admin-label-access')}<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as typeof accessPolicy)}><option value="public">{msg('admin-access-policy-public')}</option><option value="invite_only">{msg('admin-access-policy-invite_only')}</option><option value="demo">{msg('admin-access-policy-demo')}</option></select></label>
+          <label>{msg('admin-label-access')}<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as typeof accessPolicy)}><option value="public">public</option><option value="invite_only">invite_only</option><option value="demo">demo</option></select></label>
           <label>{msg('admin-label-elig-event')}<input type="text" maxLength={80} value={eventId} onChange={(event) => setEventId(event.target.value)} /></label>
           <label>{msg('admin-label-elig-label')}<input type="text" maxLength={255} value={eligibilityLabel} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
         </div>

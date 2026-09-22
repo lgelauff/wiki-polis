@@ -100,7 +100,7 @@ test('the settings page is reachable from the management cards', async () => {
 
   const settings = await screen.findByRole('link', {name: /Settings/}, {timeout: 10_000});
   expect(settings).toHaveAttribute('href', '/admin/conversations/7/settings');
-  expect(within(settings).getByText('Title, introduction, access and guidance scope')).toBeVisible();
+  expect(within(settings).getByText('Title, introduction and access')).toBeVisible();
 });
 
 test('the access policy is named in plain words, not by its stored value', async () => {
@@ -108,13 +108,12 @@ test('the access policy is named in plain words, not by its stored value', async
   renderConsole();
 
   await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
-  // Both places the stored value used to surface: the line under the title, and the
-  // option of the configuration select that carries the value on the wire.
+  // The line under the title is where this PR takes the stored value off the screen. The
+  // configuration select further down still carries the raw values on purpose (#465 deletes
+  // that control), so the negative assertion is scoped to the subtitle, not the whole page.
   expect(document.querySelector('.console-sub')?.textContent)
     .toContain('Only people who have been given access');
-  expect(screen.getByRole('option', {name: 'Only people who have been given access'}))
-    .toHaveValue('invite_only');
-  expect(screen.queryByText('invite_only', {exact: false})).not.toBeInTheDocument();
+  expect(document.querySelector('.console-sub')?.textContent).not.toContain('invite_only');
 });
 
 test('renders the closed-consultation description from parameterised sentences', async () => {

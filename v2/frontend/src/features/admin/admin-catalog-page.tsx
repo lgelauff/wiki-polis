@@ -114,7 +114,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
 
         <h3 className="section-heading">Conversations</h3>
         <table className="admin-table">
-          <thead><tr><th>Title</th><th>Slug</th><th>Policy</th><th>Status</th><th /></tr></thead>
+          <thead><tr><th>{msg('admin-th-title')}</th><th>{msg('admin-th-slug')}</th><th>{msg('admin-th-policy')}</th><th>{msg('admin-th-status')}</th><th /></tr></thead>
           <tbody>{data.conversations.map((conversation) => (
             <tr key={conversation.id}>
               <td><InternalLink href={conversation.links.participant}>{conversation.title}</InternalLink></td>

@@ -400,6 +400,37 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(await screen.findByText('No invites yet.')).toBeVisible();
 });
 
+test('warns that invites are inert in words, not in stored values', async () => {
+  // The default roster fixture is invite_only, so the warning branch never renders there.
+  // This is the only prose this scope rewrites, and it names two access-policy labels.
+  server.use(http.get(
+    new URL('/api/v1/admin/conversations/7/invitations', globalThis.location.origin).toString(),
+    () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public'},
+      invitations: [],
+      capabilities: {manageInvitations: true},
+      links: {self: '/api/v1/admin/conversations/7/invitations', conversation: '/admin/conversations/7'},
+    }}),
+  ));
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/admin/conversations/7/invitations']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  const note = await screen.findByText(/Invites only take effect/);
+  expect(note).toHaveTextContent(
+    'Access is set to Anyone with a Wikimedia account. '
+    + 'Invites only take effect when it is set to Only people who have been given access.',
+  );
+  // Neither stored value reaches the note, including the one hardcoded in the sentence.
+  // Scoped to the note: the page footer legitimately says "public domain".
+  expect(note.textContent).not.toContain('invite_only');
+  expect(note.textContent).not.toMatch(/\bpublic\b/);
+});
+
 test('restores the legacy cleared form and toast after an invitation save error', async () => {
   server.use(http.put(
     new URL(
