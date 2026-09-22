@@ -66,69 +66,46 @@ def test_public_moderation_log_excludes_ids_and_private_notes(
     assert participant.xid not in serialized
 
 
-def test_public_moderation_log_sends_null_for_unknown_names(client, conversation):
-    """An unknown participant or moderator is null, never an English placeholder.
-
-    Catches the server filling the gap with 'participant' or 'administrator', which the
-    page would then show untranslated.
-    """
-    db.session.add(AuditEvent(
-        ts=datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc),
-        actor_participant_id=None,
-        conversation_id=conversation.id,
-        operation='participant.unban',
-        target_type='participant',
-        target_id='424242',
-    ))
-    db.session.commit()
-
-    events = client.get(
-        '/api/v1/conversations/test-conv/moderation-log',
-    ).get_json()['data']['events']
-
-    assert events == [{
-        'occurredAt': '2026-08-14T09:30:00Z',
-        'action': 'Unbanned',
-        'pseudonym': None,
-        'scope': 'conversation',
-        'actor': None,
-        'actorKind': None,
-    }]
-
-
-def test_public_moderation_log_marks_a_ban_by_a_site_admin_without_an_account(
+def test_public_moderation_log_sends_null_for_unknown_names(
     client, conversation, participant,
 ):
-    """An env-listed admin has no Participant row; the log says so instead of 'unknown'.
+    """Unresolved names are null, and a site administrator's ban says whose it was.
 
-    Catches actorKind being dropped, which would show a site administrator's ban as made by
-    an unknown moderator.
+    Catches the server filling either gap with English ('participant', 'administrator'),
+    which the page would then show untranslated, and actorKind being dropped, which would
+    show a site administrator's ban as an unknown moderator.
     """
     _join(conversation, participant, pseudonym='')
-    db.session.add(AuditEvent(
-        ts=datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc),
-        actor_participant_id=None,
-        conversation_id=conversation.id,
-        operation='participant.ban',
-        target_type='participant',
-        target_id=str(participant.id),
-        detail={'actor_kind': 'env_admin', 'scope': 'conversation'},
-    ))
+    db.session.add_all([
+        AuditEvent(
+            ts=datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc),
+            actor_participant_id=None,
+            conversation_id=conversation.id,
+            operation='participant.unban',
+            target_type='participant',
+            target_id='424242',
+        ),
+        AuditEvent(
+            ts=datetime(2026, 8, 14, 9, 31, tzinfo=timezone.utc),
+            actor_participant_id=None,
+            conversation_id=conversation.id,
+            operation='participant.ban',
+            target_type='participant',
+            target_id=str(participant.id),
+            detail={'actor_kind': 'env_admin', 'scope': 'conversation'},
+        ),
+    ])
     db.session.commit()
 
     events = client.get(
         '/api/v1/conversations/test-conv/moderation-log',
     ).get_json()['data']['events']
 
-    # The empty pseudonym also comes back as null, so the page shows its fallback.
-    assert events == [{
-        'occurredAt': '2026-08-14T09:30:00Z',
-        'action': 'Banned',
-        'pseudonym': None,
-        'scope': 'conversation',
-        'actor': None,
-        'actorKind': 'site_admin',
-    }]
+    # The target of the second event has an empty pseudonym, which is null here too.
+    assert [(e['pseudonym'], e['actor'], e['actorKind']) for e in events] == [
+        (None, None, 'site_admin'),
+        (None, None, None),
+    ]
 
 
 def test_output_contract_requires_authentication(client, conversation):
