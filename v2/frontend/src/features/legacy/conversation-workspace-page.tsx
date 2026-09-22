@@ -164,6 +164,11 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
   const suggest = mode === 'suggest';
   const title = suggest ? msg('conv-triad-suggest-title') : msg('conv-triad-newstmt-title');
   const helperId = suggest ? 'composer-suggest-helper' : 'composer-newstmt-helper';
+  const errorId = suggest ? 'composer-suggest-error' : 'composer-newstmt-error';
+  // Only a rewording that strayed too far is a problem with the text itself; the other
+  // failures say nothing about what was typed, so they do not mark the field invalid.
+  const textRejected = mutation.error instanceof ApiContractError
+    && mutation.error.code === 'derivative_similarity_too_low';
   return (
     <div id={suggest ? 'composer-suggest' : 'composer-newstmt'} className="v2-composer">
       <div className="v2-composer-header">
@@ -173,7 +178,7 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
         </div>
         <span className="propose-charcount">{msg('conv-composer-charcount', text.length)}</span>
       </div>
-      <textarea className="v2-composer-textarea" maxLength={280} aria-labelledby={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'} aria-describedby={helperId} placeholder={suggest ? msg('conv-suggest-placeholder') : msg('conv-newstmt-placeholder')} value={text} onChange={(event) => setText(event.target.value)} onFocus={(event) => { if (suggest) event.currentTarget.select(); }} autoFocus />
+      <textarea className="v2-composer-textarea" maxLength={280} aria-labelledby={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'} aria-describedby={mutation.error ? `${helperId} ${errorId}` : helperId} aria-invalid={textRejected || undefined} placeholder={suggest ? msg('conv-suggest-placeholder') : msg('conv-newstmt-placeholder')} value={text} onChange={(event) => setText(event.target.value)} onFocus={(event) => { if (suggest) event.currentTarget.select(); }} autoFocus />
       <div className="v2-composer-footer">
         <span className="v2-composer-hint">{suggest ? msg('conv-suggest-hint') : msg('conv-newstmt-hint')}</span>
         <div className="v2-composer-btns">
@@ -181,7 +186,7 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
           <button type="button" className="propose-submit-btn" disabled={mutation.isPending || !text.trim() || (suggest && text.trim() === original.trim())} onClick={() => mutation.mutate()}>{msg('conv-composer-submit')}</button>
         </div>
       </div>
-      {mutation.error && <p className="muted" role="alert">{statementErrorCopy(msg, mutation.error)}</p>}
+      {mutation.error && <p className="error" id={errorId} role="alert">{statementErrorCopy(msg, mutation.error)}</p>}
     </div>
   );
 }
@@ -408,7 +413,7 @@ export function ConversationWorkspacePage() {
   const restricted = inviteOnlyDetails(workspace.error);
   if (restricted) return <InviteOnlyPage details={restricted} />;
   if (workspace.error) {
-    return <LegacyShell title={msg('conv-unavailable-doc-title')}><div className="container"><div className="landing-section"><h1>{msg('conv-unavailable-heading')}</h1><p className="muted">{workspaceErrorCopy(msg, workspace.error)}</p></div></div></LegacyShell>;
+    return <LegacyShell title={msg('conv-unavailable-doc-title')}><div className="container"><div className="landing-section"><h1>{workspace.error instanceof ApiContractError && workspace.error.code === 'not_found' ? msg('errorpage-404-title') : msg('conv-unavailable-heading')}</h1><p className="muted">{workspaceErrorCopy(msg, workspace.error)}</p></div></div></LegacyShell>;
   }
   const data = workspace.data;
   if (data.viewer.state === 'join_required') return <NavigationRedirect href={data.links.join} />;

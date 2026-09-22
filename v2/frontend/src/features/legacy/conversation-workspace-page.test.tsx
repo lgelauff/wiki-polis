@@ -215,6 +215,23 @@ test('keeps the real-space and demo-space ballot warnings in separate messages',
  *  `message`. Rule 4 of `plan_i18n.md`: the page must never show it. */
 const SERVER_ENGLISH = 'Server-side English that must not reach the page.';
 
+/** Opens the new-statement composer under qqx and submits it into an API error. */
+async function submitFailingStatement(code: string, status: number) {
+  serve(workspace, {
+    ...explore,
+    progress: {completed: 12, total: 12, remaining: 0, allDone: true},
+    newStatement: {unlocked: true, unlockAfter: 4, quota: 3, used: 0, remaining: 3},
+  });
+  server.use(http.post(STATEMENTS_URL, () => HttpResponse.json(
+    {error: {code, message: SERVER_ENGLISH}}, {status},
+  )));
+  renderWorkspace('qqx');
+
+  fireEvent.click(await screen.findByRole('button', {name: /conv-triad-newstmt-title/}, {timeout: 10_000}));
+  fireEvent.change(document.querySelector('.v2-composer-textarea')!, {target: {value: 'A new angle.'}});
+  fireEvent.click(screen.getByRole('button', {name: '(conv-composer-submit)'}));
+}
+
 test.each([
   ['statement_quota_exceeded', 409, 'conv-err-proposal-limit'],
   ['derivative_similarity_too_low', 409, 'conv-err-similarity'],
@@ -224,22 +241,13 @@ test.each([
   ['upstream_unavailable', 502, 'conv-err-submit-statement'],
   ['validation_failed', 400, 'conv-err-submit-statement'],
   ['rate_limited', 429, 'conv-err-submit-statement'],
+  ['conflict', 409, 'conv-err-submissions-closed'],
+  ['forbidden', 403, 'conv-err-submissions-closed'],
+  ['unauthorized', 401, 'conv-err-submit-statement'],
 ] as const)(
   'a %s from the statement composer shows catalogue copy, not the server message',
   async (code, status, key) => {
-    serve(workspace, {
-      ...explore,
-      progress: {completed: 12, total: 12, remaining: 0, allDone: true},
-      newStatement: {unlocked: true, unlockAfter: 4, quota: 3, used: 0, remaining: 3},
-    });
-    server.use(http.post(STATEMENTS_URL, () => HttpResponse.json(
-      {error: {code, message: SERVER_ENGLISH}}, {status},
-    )));
-    renderWorkspace('qqx');
-
-    fireEvent.click(await screen.findByRole('button', {name: /conv-triad-newstmt-title/}, {timeout: 10_000}));
-    fireEvent.change(document.querySelector('.v2-composer-textarea')!, {target: {value: 'A new angle.'}});
-    fireEvent.click(screen.getByRole('button', {name: '(conv-composer-submit)'}));
+    await submitFailingStatement(code, status);
 
     // Catches the server's English reaching the participant, and a code falling to the wrong
     // message: an unknown outcome read as a plain failure invites a duplicate statement.
@@ -250,18 +258,38 @@ test.each([
 );
 
 test.each([
-  ['not_found', 404, 'errorpage-404-message'],
-  ['forbidden', 403, 'conv-unavailable-body'],
+  ['derivative_similarity_too_low', 409, 'true'],
+  ['statement_quota_exceeded', 409, null],
+] as const)(
+  'a %s error is tied to the composer field for assistive technology',
+  async (code, status, invalid) => {
+    await submitFailingStatement(code, status);
+    const message = await screen.findByText(/^\(conv-err-/);
+    const field = document.querySelector('.v2-composer-textarea')!;
+
+    // Catches an error a screen reader announces once and then loses: the field it is about
+    // must point at it, and only a rejection of the text itself marks the text invalid.
+    expect(message).toHaveAttribute('id', 'composer-newstmt-error');
+    expect(message).toHaveClass('error');
+    expect(field.getAttribute('aria-describedby')?.split(' ')).toEqual(['composer-newstmt-helper', 'composer-newstmt-error']);
+    expect(field.getAttribute('aria-invalid')).toBe(invalid);
+  },
+);
+
+test.each([
+  ['not_found', 404, 'errorpage-404-title', 'errorpage-404-message'],
+  ['forbidden', 403, 'conv-unavailable-heading', 'conv-unavailable-body'],
 ] as const)(
   'a workspace that fails with %s explains itself from the catalogue',
-  async (code, status, key) => {
+  async (code, status, heading, key) => {
     server.use(http.get(WORKSPACE_URL, () => HttpResponse.json(
       {error: {code, message: SERVER_ENGLISH}}, {status},
     )));
     renderWorkspace('qqx');
 
     // Catches the server's English under the heading, which a Dutch reader cannot read.
-    await screen.findByRole('heading', {name: '(conv-unavailable-heading)'}, {timeout: 10_000});
+    // A consultation that does not exist is not "unavailable": the heading says so too.
+    await screen.findByRole('heading', {name: `(${heading})`}, {timeout: 10_000});
     expect(screen.getByText(`(${key})`)).toBeVisible();
     expect(document.body).not.toHaveTextContent(SERVER_ENGLISH);
   },

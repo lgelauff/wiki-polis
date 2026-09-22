@@ -222,6 +222,19 @@ test('a checker that cannot answer says so, rather than refusing the participant
   expect(screen.queryByText(testMessages['forbidden-elig-criteria']!)).toBeNull();
 });
 
+test('the not-eligible page takes focus from the form it replaces', async () => {
+  serveJoinEntry();
+  serveEligibilityRefusal('ineligible');
+  renderJoin();
+  await submitJoin();
+  const heading = await screen.findByRole('heading', {name: testMessages['forbidden-elig-heading']!});
+
+  // Catches focus left on a submit button that no longer exists, which drops a keyboard or
+  // screen-reader user at the top of the document with nothing announced.
+  await waitFor(() => expect(heading).toHaveFocus());
+  expect(heading).toHaveAttribute('tabindex', '-1');
+});
+
 test.each([
   ['ineligible', 'forbidden-elig-criteria'],
   ['unavailable', 'forbidden-elig-unavailable'],

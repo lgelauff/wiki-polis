@@ -180,13 +180,22 @@ const STATEMENT_ERROR_MESSAGES: Record<string, string> = {
   statement_quota_exceeded: 'conv-err-proposal-limit',
   derivative_similarity_too_low: 'conv-err-similarity',
   unknown_parent_statement: 'conv-err-original-unavailable',
-  // The submission may have landed. The composer keeps its idempotency key, so pressing
-  // submit again is safe; starting over as a new statement is what could post it twice. An
-  // idempotency conflict means that key already carried an earlier attempt: the same case.
+  // The statement was sent and may have landed. Nothing reconciles the pending attempt, so
+  // pressing submit again only brings this message back, and edited text under the same key
+  // comes back as an idempotency conflict: the same case, so the same message. It tells the
+  // participant they need not send it again, rather than inviting a retry.
   command_outcome_unknown: 'conv-err-outcome-unknown',
   idempotency_conflict: 'conv-err-outcome-unknown',
   // Nothing was sent upstream, and the server says a retry with the same key is safe.
   upstream_unavailable: 'conv-err-submit-statement',
+  // Refusals a retry cannot change: voting has closed or the participant has not joined
+  // (409), or they are banned from this consultation (403).
+  conflict: 'conv-err-submissions-closed',
+  forbidden: 'conv-err-submissions-closed',
+  // A session that expired mid-consultation. No participant message says "sign in again"
+  // yet, so it gets the generic one, listed here so the choice is visible; a retry fails the
+  // same way, but reloading the page redirects to the login.
+  unauthorized: 'conv-err-submit-statement',
   _fallback: 'conv-err-submit-statement',
 };
 

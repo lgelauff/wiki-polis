@@ -2931,7 +2931,7 @@ def _statement_api_payload(
         try:
             parent_text = _statement_text_map(conv.polis_id).get(derived_from)
         except PolisParticipantError as exc:
-            raise ExploreUpstreamError('Could not load the original statement.') from exc
+            raise StatementPreparationUnavailable() from exc
         if parent_text is None:
             raise UnknownParentStatement(derived_from)
         scores = _statement_similarity_scores(text_value, parent_text)

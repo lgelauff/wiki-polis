@@ -1,4 +1,4 @@
-import {useState, type FormEvent} from 'react';
+import {useEffect, useRef, useState, type FormEvent} from 'react';
 import {useMutation, useSuspenseQuery} from '@tanstack/react-query';
 import {useParams} from 'react-router-dom';
 
@@ -269,11 +269,15 @@ function EligibilityDeniedPage({data, error}: {data: JoinEntry; error: ApiContra
   const message = error.code === 'eligibility_unavailable'
     ? msg('forbidden-elig-unavailable')
     : msg('forbidden-elig-criteria');
+  // This page replaces the form the participant just submitted, so focus would otherwise fall
+  // to the document body and a screen reader would announce nothing.
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []);
   return (
     <LegacyShell title={msg('forbidden-elig-doc-title', data.conversation.title)}>
       <div className="container">
         <div className="landing-section">
-          <h1>{msg('forbidden-elig-heading')}</h1>
+          <h1 ref={heading} tabIndex={-1}>{msg('forbidden-elig-heading')}</h1>
           <p className="muted">
             {data.conversation.eligibilityLabel
               ? <span dangerouslySetInnerHTML={richHtml(msg('forbidden-elig-requirement-named',
