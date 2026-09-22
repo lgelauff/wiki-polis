@@ -2085,6 +2085,10 @@ def _check_join_eligibility(conversation, participant) -> tuple[bool, str, dict]
     policy_id = (conversation.eligibility_event_id or '').strip()
     if not policy_id:
         return True, 'not_required', {}
+    # Wikimedia eligibility is checked by username, which a voucher account does
+    # not have: holding the voucher is its admission (#368).
+    if participant.account_kind == ACCOUNT_KIND_VOUCHER:
+        return True, 'not_required', {}
     base_url = current_app.config.get('ACCOUNT_ELIGIBILITY_URL', '').strip()
     if not base_url:
         return False, 'unavailable', {'reason': 'eligibility checker is not configured'}
@@ -5607,10 +5611,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         response.headers['Content-Security-Policy'] = csp
         response.headers['X-Content-Type-Options']  = 'nosniff'
         # A linked voucher code arrives as /c/<slug>/v?v=<code> or
-        # /c/<slug>?v=<code>. Keep it out of referrers on every page that can
-        # carry one (a ?v= asset cache-buster losing its referrer is harmless).
+        # /c/<slug>?v=<code>. Keep it out of referrers to other sites on every
+        # page that can carry one. 'same-origin' rather than 'no-referrer': the
+        # entry form posts back to this origin, and over HTTPS Flask-WTF refuses
+        # a POST that carries no Referer ("The referrer header is missing").
         response.headers['Referrer-Policy'] = (
-            'no-referrer'
+            'same-origin'
             if request.path.endswith('/v') or 'v' in request.args
             else 'strict-origin-when-cross-origin'
         )

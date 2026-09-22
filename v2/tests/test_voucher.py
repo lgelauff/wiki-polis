@@ -2,6 +2,7 @@
 
 import re
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -286,7 +287,7 @@ def test_voucher_page_renders_form_with_csrf_field(app, client, voucher_conv):
     assert voucher_conv.title in html
     assert 'name="csrf_token"' in html
     assert resp.headers['Cache-Control'] == 'no-store'
-    assert resp.headers['Referrer-Policy'] == 'no-referrer'
+    assert resp.headers['Referrer-Policy'] == 'same-origin'
 
 
 def test_voucher_page_renders_from_the_message_catalogue(app, client, voucher_conv):
@@ -327,6 +328,32 @@ def test_typed_code_redeems_with_csrf_enabled(app, client, voucher_conv):
     assert _session_xid(client) is not None
 
 
+def test_typed_code_redeems_over_https_as_a_browser_sends_it(app, client, voucher_conv):
+    """Over HTTPS Flask-WTF also requires a Referer. The page's own referrer policy
+    decides whether the browser sends one on the form post: it must, so the
+    policy must not be no-referrer (staging: "The referrer header is missing")."""
+    _make_voucher(voucher_conv)
+    app.config['WTF_CSRF_ENABLED'] = True
+    base = 'https://localhost'
+    page = client.get(f'/c/{voucher_conv.slug}/v', base_url=base)
+    assert page.headers['Referrer-Policy'] == 'same-origin'
+    token = re.search(r'name="csrf_token" value="([^"]+)"', page.data.decode()).group(1)
+
+    # What a browser sends under same-origin: the page URL as Referer.
+    resp = client.post(
+        f'/c/{voucher_conv.slug}/v', base_url=base,
+        data={'code': CODE, 'csrf_token': token},
+        headers={'Referer': f'{base}/c/{voucher_conv.slug}/v'},
+    )
+    assert resp.status_code == 302
+    # And what it would send under no-referrer: nothing, which is refused.
+    refused = client.post(
+        f'/c/{voucher_conv.slug}/v', base_url=base,
+        data={'code': CODE, 'csrf_token': token},
+    )
+    assert refused.status_code == 400
+
+
 def test_post_without_csrf_token_is_refused_when_csrf_is_enabled(app, client, voucher_conv):
     _make_voucher(voucher_conv)
     app.config['WTF_CSRF_ENABLED'] = True
@@ -357,7 +384,7 @@ def test_code_on_the_conversation_link_redeems(app, client, voucher_conv):
     first = client.get(f'/c/{voucher_conv.slug}?v={CODE}')
     assert first.status_code == 302
     assert first.headers['Location'] == f'/c/{voucher_conv.slug}/v?v={CODE}'
-    assert first.headers['Referrer-Policy'] == 'no-referrer'
+    assert first.headers['Referrer-Policy'] == 'same-origin'
 
     landed = client.get(first.headers['Location'])
     assert landed.headers['Location'] == f'/c/{voucher_conv.slug}'
@@ -549,6 +576,26 @@ def test_reopening_your_own_code_keeps_the_session(app, client, voucher_conv):
     resp = client.get(f'/c/{voucher_conv.slug}/v?v={CODE}')
     assert resp.status_code == 302
     assert _session_xid(client) == xid
+
+
+def test_voucher_account_joins_without_the_wikimedia_eligibility_check(
+    app, client, voucher_conv,
+):
+    """The #146 eligibility gate checks a Wikimedia username; a voucher account has
+    none, and holding the voucher is its admission (staging: eligibility_unavailable)."""
+    voucher_conv.eligibility_event_id = 'some-canivote-policy'
+    db.session.commit()
+    _make_voucher(voucher_conv)
+    _redeem(client, voucher_conv)
+
+    with patch('app.requests.get') as upstream:
+        joined = client.post(
+            f'/api/v1/conversations/{voucher_conv.slug}/participation',
+            json={'pseudonym': 'quiet-otter'},
+        )
+    assert joined.status_code == 201, joined.get_data(as_text=True)
+    assert joined.get_json()['data']['eligibilityStatus'] == 'not_required'
+    upstream.assert_not_called()
 
 
 # ── Access provider ───────────────────────────────────────────────────────────
