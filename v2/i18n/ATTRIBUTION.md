@@ -4,7 +4,7 @@ Some of Proto's messages reuse text from MediaWiki and its components rather tha
 wording (see "Reuse before you mint" in [README.md](README.md)). This file lists every one of
 them, with its source and licence. Each is also marked in `qqq.json`, where its entry cites
 the source message with `{{msg-mw|<key>}}` and points here; `tests/test_i18n.py` fails
-if the two lists differ, or if a message's English here no longer matches `en.json`.
+if the two lists differ, or if a citation does not name its licence.
 
 Proto is licensed under GPL-3.0 (see [`LICENSE`](../../LICENSE)). Every source below is
 compatible with it: GPL-2.0-or-later may be used under GPL-3.0, and MIT permits reuse in a

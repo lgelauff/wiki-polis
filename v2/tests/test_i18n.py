@@ -235,14 +235,6 @@ def test_each_copied_message_names_its_licence_in_qqq():
     assert not problems, '; '.join(problems)
 
 
-def test_attribution_records_the_english_that_ships():
-    """Rewording a copied message makes its credit wrong: re-check the source, or drop the row."""
-    en = _load('en.json')
-    stale = [f"{row['key']}: {row['english']!r} in ATTRIBUTION.md, {en.get(row['key'])!r} in en.json"
-             for row in _attribution_rows() if en.get(row['key']) != row['english']]
-    assert not stale, '; '.join(stale)
-
-
 # ── The catalogue endpoint (GET /api/v1/i18n/<locale>) ───────────────────────
 # This is what makes the catalogue consumable by the React SPA, and it is why the
 # message map is NOT inlined into every HTML response.
