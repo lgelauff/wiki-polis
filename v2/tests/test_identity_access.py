@@ -188,8 +188,8 @@ def test_voucher_path_redaction_covers_the_credential():
 
 
 def test_voucher_paths_use_a_no_referrer_policy(client, conversation):
-    """/<slug>/v carries the voucher credential and must use no-referrer."""
-    response = client.get(f'/{conversation.slug}/v')
+    """/c/<slug>/v carries the voucher credential and must use no-referrer."""
+    response = client.get(f'/c/{conversation.slug}/v')
 
     assert response.headers['Referrer-Policy'] == 'no-referrer'
 

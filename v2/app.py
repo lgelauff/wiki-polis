@@ -5454,9 +5454,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
         response.headers['Content-Security-Policy'] = csp
         response.headers['X-Content-Type-Options']  = 'nosniff'
-        # A linked voucher code arrives as /c/<slug>/v?v=<code> (or the short
-        # /<slug>/v form). Keep it out of referrers on every page that can
-        # carry one.
+        # A linked voucher code arrives as /c/<slug>/v?v=<code>. Keep it out
+        # of referrers on every page that can carry one.
         response.headers['Referrer-Policy'] = (
             'no-referrer'
             if request.path.endswith('/v')
@@ -5729,11 +5728,9 @@ def _register_routes(app: Flask) -> None:
 
 
     # ── Voucher redemption (#368) ──────────────────────────────────────────────
-    # /c/<slug>/v is canonical; /<slug>/v is the short form for printed cards.
     # A linked code arrives as ?v=<code> and is redeemed (or resumed) on open.
 
     @app.route('/c/<slug>/v', methods=['GET', 'POST'])
-    @app.route('/<slug>/v', methods=['GET', 'POST'])
     @_unauthenticated_site_limit()
     @limiter.limit('10 per minute')
     def voucher_entry(slug: str):

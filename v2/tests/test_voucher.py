@@ -235,10 +235,12 @@ def test_voucher_page_renders_from_the_message_catalogue(app, client, voucher_co
     assert 'Voucher code' not in html
 
 
-def test_short_voucher_url_is_the_same_page(app, client, voucher_conv):
-    resp = client.get(f'/{voucher_conv.slug}/v')
-    assert resp.status_code == 200
-    assert 'name="code"' in resp.data.decode()
+def test_there_is_no_top_level_voucher_url(app, client, voucher_conv):
+    """Conversations live under /c/; /<slug>/v is not a second door."""
+    _make_voucher(voucher_conv)
+    assert client.get(f'/{voucher_conv.slug}/v').status_code == 404
+    assert client.get(f'/{voucher_conv.slug}/v?v={CODE}').status_code == 404
+    assert _voucher_participants() == []
 
 
 def test_voucher_page_is_404_on_a_conversation_without_voucher_gating(
@@ -280,7 +282,7 @@ def test_redemption_redirects_to_the_conversation_page(app, client, voucher_conv
 
 def test_linked_code_redeems_and_leaves_the_address(app, client, voucher_conv):
     _make_voucher(voucher_conv)
-    resp = client.get(f'/{voucher_conv.slug}/v?v={CODE.lower()}')
+    resp = client.get(f'/c/{voucher_conv.slug}/v?v={CODE.lower()}')
     assert resp.status_code == 302
     assert resp.headers['Location'] == f'/c/{voucher_conv.slug}'
     assert _session_xid(client) is not None
