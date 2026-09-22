@@ -41,7 +41,7 @@ retention commitment (decision D-PRIV), pending legal/comms review.
   application-service boundaries, generated TypeScript contracts, and a strangler
   migration to React. Dependency order and issue map: [`plan_spa-foundation.md`](plan_spa-foundation.md).
 
-- **Blueprint refactor** — ✅ **done.** `app.py` decomposed into `proxy_bp` / `admin_bp` /
+- **Blueprint refactor** — **done.** `app.py` decomposed into `proxy_bp` / `admin_bp` /
   `participant_bp`; `_register_routes` complexity 177→33. Steps 1–4 (PR #88), 5–6 (#97),
   7 (#98), 8 (#99), 9 (#100); issues #89–93 closed. See
   [`log_changelog.md`](log_changelog.md).
@@ -75,13 +75,13 @@ retention commitment (decision D-PRIV), pending legal/comms review.
   so reconciliation follows the wiring that establishes reachability, and the support request
   is filed only once the catalogue is reconciled.
 
-- **Voting** — ✅ "change vote" reopens + resubmits to Polis
+- **Voting** — done: "change vote" reopens + resubmits to Polis
   ([#69](https://github.com/lgelauff/wiki-polis/issues/69)), the three-action footer
   ([#64](https://github.com/lgelauff/wiki-polis/issues/64)), and the slug-format hint on
   validation ([#68](https://github.com/lgelauff/wiki-polis/issues/68)) all shipped.
   Remaining: mobile tap affordance on listing cards
   ([#71](https://github.com/lgelauff/wiki-polis/issues/71)).
-- **Arguments tab** — ✅ the visual + interaction overhaul to the design handoff (Screen 2)
+- **Arguments tab** — done: the visual + interaction overhaul to the design handoff (Screen 2)
   shipped (PR #174): status strip, dashed contribute affordance, reserved checkbox slot,
   importance-vote gating, the top-of-tab explanation
   ([#80](https://github.com/lgelauff/wiki-polis/issues/80)), the clarified
@@ -94,7 +94,7 @@ retention commitment (decision D-PRIV), pending legal/comms review.
   ([#47](https://github.com/lgelauff/wiki-polis/issues/47)). _(The detailed visual spec
   lives in the design-handoff doc; the pre-rename build-log history has the full
   checklist.)_
-- **Results / identity** — ✅ participant results tab fixed
+- **Results / identity** — done: participant results tab fixed
   ([#81](https://github.com/lgelauff/wiki-polis/issues/81)) and the reveal-window end date
   + "what happens next" now shown on closed conversations
   ([#70](https://github.com/lgelauff/wiki-polis/issues/70)). Remaining: simplify the
@@ -115,7 +115,7 @@ retention commitment (decision D-PRIV), pending legal/comms review.
 
 ## 5. Deferred / later
 
-- ~~**Phase 6 — informed voting**~~ ✅ Implemented (PR #115, 2026-06-04); standalone
+- ~~**Phase 6 — informed voting**~~ — implemented (PR #115, 2026-06-04); standalone
   phase6-init hardened (PR #179). Data model, admin init, participant UI, vote route. See
   `log_changelog.md` for detail. Follow-up: informed-voting card layout polish
   ([#119](https://github.com/lgelauff/wiki-polis/issues/119)), a Phase-2-vs-informed
