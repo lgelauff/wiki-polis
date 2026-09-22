@@ -42,7 +42,7 @@ _REDACTIONS = [
     # credentials embedded in a URL: scheme://[user]:PASSWORD@host -> scheme://[user]:***@host
     # (username optional so scheme://:password@host is also caught)
     (re.compile(r'(://[^:/?#\s]*:)[^@/?#\s]+(@)'), r'\1***\2'),
-    # Voucher credentials arrive as ?v=<code> on the entry page (/c/<slug>/v).
+    # Voucher credentials arrive as ?v=<code> on /c/<slug>/v or /c/<slug>.
     # The /v/<code> path rule is kept so the credential stays out of
     # logs even when a client sends the path form #412 first proposed. The query
     # rule is intentionally broad (it also masks the ?v=<git-sha> asset buster):

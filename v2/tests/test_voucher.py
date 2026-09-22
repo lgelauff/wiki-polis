@@ -288,6 +288,27 @@ def test_linked_code_redeems_and_leaves_the_address(app, client, voucher_conv):
     assert _session_xid(client) is not None
 
 
+def test_code_on_the_conversation_link_redeems(app, client, voucher_conv):
+    """/c/<slug>?v=<code> is handed to the entry route, which redeems and lands
+    on the plain conversation page."""
+    _make_voucher(voucher_conv)
+    first = client.get(f'/c/{voucher_conv.slug}?v={CODE}')
+    assert first.status_code == 302
+    assert first.headers['Location'] == f'/c/{voucher_conv.slug}/v?v={CODE}'
+    assert first.headers['Referrer-Policy'] == 'no-referrer'
+
+    landed = client.get(first.headers['Location'])
+    assert landed.headers['Location'] == f'/c/{voucher_conv.slug}'
+    assert _session_xid(client) is not None
+
+
+def test_code_on_a_conversation_without_vouchers_is_dropped(app, client, conversation):
+    resp = client.get(f'/c/{conversation.slug}?v={CODE}')
+    assert resp.status_code == 302
+    assert resp.headers['Location'] == f'/c/{conversation.slug}'
+    assert _voucher_participants() == []
+
+
 def test_code_with_excluded_letters_gets_its_own_message(app, client, voucher_conv):
     """A misread 0 or 1 is pointed out rather than silently corrected."""
     _make_voucher(voucher_conv, code='0011ABCDEFGH')

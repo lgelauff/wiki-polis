@@ -353,6 +353,29 @@ def _voucher_switch_page(conv, code: str):
     return _voucher_response(conv, _voucher_text('switch-heading'), body)
 
 
+_CONVERSATION_PAGE_RE = re.compile(r'/c/([^/]+)')
+
+
+def _linked_voucher_redirect():
+    """Accept a voucher link on the conversation page itself: /c/<slug>?v=<code>.
+
+    The code is handed to the entry route (/c/<slug>/v), so rate limits, gating
+    and the identity checks stay in one place. On a conversation that is not
+    voucher-gated the parameter is dropped, so a stray code never lingers in the
+    address bar. Returns None when the request carries no code.
+    """
+    code = request.args.get('v', '')
+    match = _CONVERSATION_PAGE_RE.fullmatch(request.path)
+    if not code.strip() or match is None:
+        return None
+    slug = match.group(1)
+    conv = Conversation.query.filter_by(slug=slug).first()
+    if (conv is not None and is_gated_conversation(conv)
+            and conversation_gating_type(conv) == 'voucher'):
+        return redirect(f"{_path_conversation(slug, page='v')}?{urlencode({'v': code})}")
+    return redirect(_path_conversation(slug))
+
+
 def _start_voucher_session(participant) -> None:
     """One identity per browser session (#368): nothing from a previous login,
     demo guest or voucher account survives into the voucher session."""
@@ -5434,6 +5457,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     def _serve_canonical_spa_request():
         if request.method != 'GET' or not _is_canonical_spa_path(request.path):
             return None
+        linked = _linked_voucher_redirect()
+        if linked is not None:
+            return linked
         # Accessing ``request.host`` applies Flask's TRUSTED_HOSTS validation.
         # Route dispatch normally triggers it later, but this before-request SPA
         # response intentionally bypasses route dispatch.
@@ -5454,11 +5480,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
         response.headers['Content-Security-Policy'] = csp
         response.headers['X-Content-Type-Options']  = 'nosniff'
-        # A linked voucher code arrives as /c/<slug>/v?v=<code>. Keep it out
-        # of referrers on every page that can carry one.
+        # A linked voucher code arrives as /c/<slug>/v?v=<code> or
+        # /c/<slug>?v=<code>. Keep it out of referrers on every page that can
+        # carry one (a ?v= asset cache-buster losing its referrer is harmless).
         response.headers['Referrer-Policy'] = (
             'no-referrer'
-            if request.path.endswith('/v')
+            if request.path.endswith('/v') or 'v' in request.args
             else 'strict-origin-when-cross-origin'
         )
         # X-Frame-Options superseded by frame-ancestors in CSP above, but kept for old browsers
