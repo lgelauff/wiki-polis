@@ -227,9 +227,9 @@ list every locale to offer. Until enabled, a locale is present in the repo but n
 
 ### Before enabling a non-English locale
 
-1. ✅ **CLDR plural rules.** `banana-i18n` in the browser takes its rules from
-   `Intl.PluralRules`; the server has the same CLDR rules written out in `i18n._PLURAL_RULES`
-   (#436), and `tests/test_i18n.py` checks it picks the form banana picks. The table covers
+1. **CLDR plural rules — done (#436).** `banana-i18n` in the browser takes its rules from
+   `Intl.PluralRules`; the server has the same CLDR rules written out in `i18n._PLURAL_RULES`,
+   and `tests/test_i18n.py` checks it picks the form banana picks. The table covers
    the languages likely to be enabled (among them fr, ru, uk, pl, ar, cy, ga, he, ja, zh);
    **a language not in it gets the English rule on the server**, so add it there first;
    `test_every_shipped_locale_has_a_plural_rule` fails when a `<code>.json` lands without one.
