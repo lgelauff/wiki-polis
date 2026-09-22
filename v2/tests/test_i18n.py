@@ -89,9 +89,15 @@ _BANANA_PLURAL_FORMS = {
 }
 
 
+def _translated(tmp_path, locales, message):
+    # The message in each locale's own file: a key that falls back to English is expanded
+    # with the English rule, so the rule under test only applies to a translation.
+    _setup(tmp_path, {'en': {'n': message}, **{code: {'n': message} for code in locales}})
+
+
 @pytest.mark.parametrize('locale', sorted(_BANANA_PLURAL_FORMS))
 def test_plural_picks_the_form_banana_picks(tmp_path, locale):
-    _setup(tmp_path, {'en': {'n': '{{PLURAL:$1|f0|f1|f2|f3|f4|f5}}'}})
+    _translated(tmp_path, [locale], '{{PLURAL:$1|f0|f1|f2|f3|f4|f5}}')
     served = tuple(int(i18n.resolve('n', locale, (n,))[1:]) for n in _PLURAL_COUNTS)
     assert served == _BANANA_PLURAL_FORMS[locale]
 
@@ -113,16 +119,43 @@ def test_plural_picks_the_form_banana_picks(tmp_path, locale):
     ('ru', '{{PLURAL:$1|a|b|c|d}}', ('3', '1.5', 'many'), ('b', 'd', 'd')),
 ])
 def test_plural_explicit_and_missing_forms_as_banana(tmp_path, locale, message, counts, expected):
-    _setup(tmp_path, {'en': {'n': message}})
+    _translated(tmp_path, [locale], message)
     assert tuple(i18n.resolve('n', locale, (n,)) for n in counts) == expected
 
 
 def test_plural_rule_is_matched_on_the_base_language_and_falls_back_to_english(tmp_path):
-    _setup(tmp_path, {'en': {'n': '{{PLURAL:$1|a|b|c|d}}'}})
+    _translated(tmp_path, ['ru-RU', 'pt-BR', 'pt-PT', 'xx'], '{{PLURAL:$1|a|b|c|d}}')
     assert i18n.resolve('n', 'ru-RU', (2,)) == 'b'      # Russian's 'few'
     assert i18n.resolve('n', 'pt-BR', (0,)) == 'a'      # Brazilian: 0 is singular
     assert i18n.resolve('n', 'pt-PT', (0,)) == 'c'      # European: it is not
     assert i18n.resolve('n', 'xx', (2,)) == 'b'         # unknown: the English rule
+
+
+def test_english_fallback_takes_the_english_plural_rule(tmp_path):
+    # Catches English forms being picked by the reader's rule when a translation is missing:
+    # Japanese has only 'other', which would give "1 participants"; Arabic's 'one' is the
+    # second of six categories, which would give "5 participant" for 'few'.
+    _setup(tmp_path, {'en': {'n': '$1 {{PLURAL:$1|participant|participants}}'}, 'ja': {}, 'ar': {}})
+    assert i18n.resolve('n', 'ja', (1,)) == '1 participant'
+    assert i18n.resolve('n', 'ar', (5,)) == '5 participants'
+    assert i18n.resolve('n', 'ar', (1,)) == '1 participant'
+
+
+def test_explicit_forms_need_ascii_digits(tmp_path):
+    # banana's /\d=/ is ASCII: an Arabic-Indic '٠=' is an ordinary category form there, so
+    # the server must not drop it as explicit.
+    _translated(tmp_path, ['ar'], '{{PLURAL:$1|٠=a|b|c|d|e|f}}')
+    assert i18n.resolve('n', 'ar', (0,)) == '٠=a'
+    assert i18n.resolve('n', 'ar', (1,)) == 'b'
+
+
+def test_every_shipped_locale_has_a_plural_rule():
+    # An unlisted language silently gets the English rule on the server while the browser
+    # uses its real one; add a language to _PLURAL_RULES before its file lands.
+    codes = [f.stem for f in _I18N_DIR.glob('*.json') if f.stem != 'qqq']
+    unruled = [c for c in codes if c.lower() not in i18n._PLURAL_RULES
+               and c.lower().split('-')[0] not in i18n._PLURAL_RULES]
+    assert unruled == []
 
 
 def test_qqx_returns_keys(tmp_path):

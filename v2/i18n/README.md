@@ -231,7 +231,8 @@ list every locale to offer. Until enabled, a locale is present in the repo but n
    `Intl.PluralRules`; the server has the same CLDR rules written out in `i18n._PLURAL_RULES`
    (#436), and `tests/test_i18n.py` checks it picks the form banana picks. The table covers
    the languages likely to be enabled (among them fr, ru, uk, pl, ar, cy, ga, he, ja, zh);
-   **a language not in it gets the English rule on the server**, so add it there first.
+   **a language not in it gets the English rule on the server**, so add it there first;
+   `test_every_shipped_locale_has_a_plural_rule` fails when a `<code>.json` lands without one.
 2. **RTL CSS audit.** `<html dir>` is already driven by `i18n.text_direction(locale)`, so RTL
    locales render right-to-left today — but `static/style.css` / `static/redesign.css` still use
    a handful of *physical* properties (`margin-left`, `text-align:left`, `left:`) that should be

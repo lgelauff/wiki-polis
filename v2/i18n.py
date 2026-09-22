@@ -128,7 +128,7 @@ _DIGITS = frozenset('0123456789')   # banana's /\d/; str.isdigit() also takes 'Â
 _FUNCTIONS = {'PLURAL', 'GENDER', 'GRAMMAR'}
 
 _PLACEHOLDER_RE = re.compile(r'\$(\d+)', re.ASCII)
-_EXPLICIT_FORM_RE = re.compile(r'\d=')
+_EXPLICIT_FORM_RE = re.compile(r'\d=', re.ASCII)   # banana's \d: 'Ù =' is not explicit
 
 _REFUSED: dict[str, dict[str, str]] = {}
 _STALE: dict[str, list[str]] = {}
@@ -507,7 +507,9 @@ _PLURAL_RULES = {
     'fr': (('one', 'many', 'other'), _french),
     'es': (('one', 'many', 'other'), _spanish),
     'it': (('one', 'many', 'other'), _italian),
-    'pt': (('one', 'many', 'other'), _french),       # Brazilian: 0 and 1 are singular
+    # CLDR's pt is Brazilian, where 0 and 1 are singular. translatewiki's pt is European
+    # Portuguese, but Intl gives pt this rule, and the server has to agree with the browser.
+    'pt': (('one', 'many', 'other'), _french),
     'pt-pt': (('one', 'many', 'other'), _italian),   # European: only 1 is
     'ru': _EAST_SLAVIC,
     'uk': _EAST_SLAVIC,
@@ -535,7 +537,9 @@ def _plural_category(n, locale: str) -> str:
     if isinstance(n, float) and n.is_integer():
         n = int(n)
     fraction = repr(n).partition('.')[2] if isinstance(n, float) else ''
-    v = 0 if 'e' in fraction else len(fraction)   # a count like 1.5e-07 is 'other' anyway
+    # repr writes very small and very large floats in exponent form; v is then taken as 0,
+    # which is wrong for 1.5e-07 but never met: counts are whole numbers.
+    v = 0 if 'e' in fraction else len(fraction)
     return _plural_rule(locale)[1](n, int(n), v)
 
 
@@ -616,13 +620,17 @@ def resolve(key: str, locale: str = SOURCE_LOCALE, params=()) -> str:
     if locale == DEBUG_LOCALE:
         return _qqx(key, tuple(params))
     text = _MESSAGES.get(locale, {}).get(key)
+    # The plural rule is the one of the language the text is written in: English forms,
+    # falling back for a missing translation, take the English rule.
+    plural_locale = locale
     if text is None and locale != SOURCE_LOCALE:
         text = _MESSAGES.get(SOURCE_LOCALE, {}).get(key)
+        plural_locale = SOURCE_LOCALE
     if text is None:
         return f'{_MISSING_L}{key}{_MISSING_R}'
     params = tuple(params)
     if _PLURAL_RE.search(text):
-        text = _expand_plural(text, params, locale)
+        text = _expand_plural(text, params, plural_locale)
     if params:
         text = _substitute(text, params)
     return text
