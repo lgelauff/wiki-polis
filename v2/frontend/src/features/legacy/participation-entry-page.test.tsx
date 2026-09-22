@@ -260,6 +260,7 @@ test.each([
   ['validation_failed', 400, 'accept-err-join'],
   ['conflict', 409, 'accept-err-join'],
   ['rate_limited', 429, 'accept-err-join'],
+  ['unauthorized', 401, 'common-err-nologin'],
 ] as const)(
   'a %s from the join form shows catalogue copy, not the server message',
   async (code, status, key) => {

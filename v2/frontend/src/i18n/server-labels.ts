@@ -192,15 +192,14 @@ const STATEMENT_ERROR_MESSAGES: Record<string, string> = {
   // (409), or they are banned from this consultation (403).
   conflict: 'conv-err-submissions-closed',
   forbidden: 'conv-err-submissions-closed',
-  // A session that expired mid-consultation. No participant message says "sign in again"
-  // yet, so it gets the generic one, listed here so the choice is visible; a retry fails the
-  // same way, but reloading the page redirects to the login.
-  unauthorized: 'conv-err-submit-statement',
+  // A session that expired mid-consultation: a retry fails the same way, so say to log in.
+  unauthorized: 'common-err-nologin',
   _fallback: 'conv-err-submit-statement',
 };
 
 /** `GET /conversations/<slug>/workspace`, when it fails with anything but a sign-in or an
- *  access refusal, which have their own pages. */
+ *  access refusal, which have their own pages. A 401 redirects to the login before it gets
+ *  here, so it has no entry. */
 const WORKSPACE_ERROR_MESSAGES: Record<string, string> = {
   not_found: 'errorpage-404-message',
   _fallback: 'conv-unavailable-body',
@@ -210,6 +209,8 @@ const WORKSPACE_ERROR_MESSAGES: Record<string, string> = {
  *  never reach this: they replace the form with the not-eligible page. */
 const JOIN_ERROR_MESSAGES: Record<string, string> = {
   pseudonym_unavailable: 'accept-js-taken',
+  // The session expired while the form was open.
+  unauthorized: 'common-err-nologin',
   _fallback: 'accept-err-join',
 };
 

@@ -149,6 +149,7 @@
     "output-dataset-note": "Italic note that the dataset export is not built yet.",
     "output-tbd-heading": "Fallback section heading for an output type with no bespoke description yet.",
     "common-cancel": "Generic cancel button/link.",
+    "common-err-nologin": "Error shown when the participant's session has expired and a form they submitted was refused for that reason: under the statement composer on the voting tab, and under the join form's submit button. The text is MediaWiki core's {{msg-mw|exception-nologin-text}}, copied exactly so translation memory offers its existing translations; keep it the same as core's translation in your language.",
     "reveal-crumb": "Last part of the header breadcrumb on the identity-reveal page, where a participant may, after a consultation closes, permanently and publicly link their Wikimedia username to the pseudonym they used in it. Lowercase, like the other breadcrumb labels.",
     "reveal-banner-identity": "Small label above the heading of the identity-reveal page when the window is not open: before it opens, after it closed, or once the participant has linked their identity.",
     "reveal-banner-window": "Small label above the heading of the identity-reveal page while the participant can link their Wikimedia username, next to a globe icon. Rendered in capitals by CSS.",

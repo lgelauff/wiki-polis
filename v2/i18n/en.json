@@ -150,6 +150,7 @@
     "output-dataset-note": "The dataset export has not been built yet.",
     "output-tbd-heading": "Not built yet",
     "common-cancel": "Cancel",
+    "common-err-nologin": "Please log in to be able to access this page or action.",
     "reveal-crumb": "reveal",
     "reveal-banner-identity": "Identity reveal",
     "reveal-banner-window": "username linking open",

@@ -121,6 +121,7 @@
     "output-dataset-note": "De dataset-export is nog niet gebouwd.",
     "output-tbd-heading": "Nog niet gebouwd",
     "common-cancel": "Annuleren",
+    "common-err-nologin": "Meld u aan om toegang te krijgen tot deze pagina of handeling.",
     "reveal-crumb": "koppelen",
     "reveal-banner-identity": "Gebruikersnaam koppelen",
     "reveal-banner-window": "koppelperiode open",

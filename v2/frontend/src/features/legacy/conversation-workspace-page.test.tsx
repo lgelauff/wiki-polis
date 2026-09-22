@@ -243,7 +243,7 @@ test.each([
   ['rate_limited', 429, 'conv-err-submit-statement'],
   ['conflict', 409, 'conv-err-submissions-closed'],
   ['forbidden', 403, 'conv-err-submissions-closed'],
-  ['unauthorized', 401, 'conv-err-submit-statement'],
+  ['unauthorized', 401, 'common-err-nologin'],
 ] as const)(
   'a %s from the statement composer shows catalogue copy, not the server message',
   async (code, status, key) => {
