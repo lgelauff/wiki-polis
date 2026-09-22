@@ -21,7 +21,7 @@ from services.vouchers import (
     generate_voucher_code,
     generate_voucher_codes,
     has_excluded_letters,
-    is_well_formed,
+    import_voucher_codes,
     lookup_voucher,
     normalize_code,
     redeem_voucher_code,
@@ -112,10 +112,72 @@ def test_generated_codes_never_use_excluded_letters():
     assert not any(has_excluded_letters(generate_voucher_code()) for _ in range(500))
 
 
-def test_well_formed_rejects_wrong_length_and_alphabet():
-    assert is_well_formed('x7f3 k9m2 abcd')
-    assert not is_well_formed('X7F3K9M2ABC')
-    assert not is_well_formed('X7F3K9M2ABCU')  # U is not Crockford
+# ── Import ────────────────────────────────────────────────────────────────────
+
+def _batch(conversation):
+    batch = VoucherBatch(conversation_id=conversation.id)
+    db.session.add(batch)
+    db.session.flush()
+    return batch
+
+
+def test_codes_for_an_unflushed_batch_hash_with_its_conversation(app, conversation):
+    """A batch built with conversation= has no conversation_id until flushed; the
+    HMAC must still be scoped to the conversation, not to None."""
+    batch = VoucherBatch(conversation=conversation)
+    db.session.add(batch)
+    codes = generate_voucher_codes(batch, 1)
+    import_voucher_codes(batch, ['ROOM-101'])
+    db.session.commit()
+    assert lookup_voucher(codes[0], conversation.id) is not None
+    assert lookup_voucher('ROOM101', conversation.id) is not None
+
+
+def test_import_normalises_and_skips_blank_lines(app, conversation):
+    result = import_voucher_codes(_batch(conversation), ['wiki-ola-01\n', '\n', '  Smith 2024 \n'])
+    db.session.commit()
+
+    assert result.added == ['WIKIOLA01', 'SMITH2024']
+    # Stored codes are found however they are typed, excluded letters included.
+    assert lookup_voucher('Wiki Ola 01', conversation.id) is not None
+    assert lookup_voucher('smith-2024', conversation.id) is not None
+
+
+def test_import_reports_duplicates_and_rejects(app, conversation):
+    _make_voucher(conversation, code='EXISTING1')
+    result = import_voucher_codes(_batch(conversation), [
+        'ABCDE',        # five characters is the floor
+        'abc-de',       # same code as the line above once normalised
+        'existing-1',   # already in this conversation
+        'ABCD',         # too short
+        'café-2024',    # not ASCII letters and digits
+        'A' * 65,       # too long
+    ])
+    assert result.added == ['ABCDE']
+    assert result.duplicates == ['ABCDE', 'EXISTING1']
+    assert result.rejected == ['ABCD', 'CAFÉ2024', 'A' * 65]
+
+
+def test_the_same_imported_list_works_in_two_processes(app, client, voucher_conv):
+    """Organizers keep one list of codes across processes; each process gets its
+    own rows, and each code makes a separate account per process."""
+    conv2 = Conversation(
+        slug='process-two', polis_id='def4567890', title='Second Process', active=True,
+        gated=True, gating_type='voucher',
+    )
+    db.session.add(conv2)
+    db.session.commit()
+    for conv in (voucher_conv, conv2):
+        assert import_voucher_codes(_batch(conv), ['ROOM-101']).added == ['ROOM101']
+    db.session.commit()
+
+    _redeem(client, voucher_conv, code='room 101')
+    first = _session_xid(client)
+    other = app.test_client()
+    _redeem(other, conv2, code='room 101')
+
+    assert first and _session_xid(other) and first != _session_xid(other)
+    assert len(_voucher_participants()) == 2
 
 
 # ── HMAC ──────────────────────────────────────────────────────────────────────
@@ -309,16 +371,29 @@ def test_code_on_a_conversation_without_vouchers_is_dropped(app, client, convers
     assert _voucher_participants() == []
 
 
-def test_code_with_excluded_letters_gets_its_own_message(app, client, voucher_conv):
+def test_missed_code_with_excluded_letters_gets_a_hint(app, client, voucher_conv):
     """A misread 0 or 1 is pointed out rather than silently corrected."""
     _make_voucher(voucher_conv, code='0011ABCDEFGH')
     resp = _redeem(client, voucher_conv, code='OO1l-abcd-efgh')
     html = resp.data.decode()
     assert resp.status_code == 200
-    assert 'never use the letters I, L, O or U' in html
+    assert 'check whether those should be the numbers 1 and 0' in html
     assert 'value="OO1l-abcd-efgh"' in html  # kept in the field to correct
     assert 'aria-invalid="true"' in html
     assert _voucher_participants() == []
+
+
+def test_imported_code_with_excluded_letters_redeems(app, client, voucher_conv):
+    """Organizers' own codes may contain I, L, O or U; entry must not refuse them."""
+    import_voucher_codes(_batch(voucher_conv), ['OLIU-2024'])
+    db.session.commit()
+    assert _redeem(client, voucher_conv, code='oliu 2024').status_code == 302
+
+
+def test_short_imported_code_redeems(app, client, voucher_conv):
+    import_voucher_codes(_batch(voucher_conv), ['K7Q2M'])
+    db.session.commit()
+    assert _redeem(client, voucher_conv, code='k7q2m').status_code == 302
 
 
 @pytest.mark.parametrize('kwargs', [
@@ -326,23 +401,64 @@ def test_code_with_excluded_letters_gets_its_own_message(app, client, voucher_co
     {'expires_at': datetime.now(timezone.utc) - timedelta(days=1)},
     {'status': 'reserved', 'reserved_until': datetime.now(timezone.utc) + timedelta(minutes=5)},
 ])
-def test_unusable_codes_get_the_same_answer_as_a_wrong_code(app, client, voucher_conv, kwargs):
-    _make_voucher(voucher_conv, **kwargs)
-    wrong = _redeem(client, voucher_conv, code='ZZZZZZZZZZZZ').data.decode()
-    unusable = _redeem(client, voucher_conv).data.decode()
+@pytest.mark.parametrize('code,wrong_code', [
+    (CODE, 'ZZZZZZZZZZZZ'),
+    ('OLIU2024', 'OLIU2025'),  # the excluded-letter hint depends on the input only
+])
+def test_unusable_codes_get_the_same_answer_as_a_wrong_code(
+    app, client, voucher_conv, kwargs, code, wrong_code,
+):
+    _make_voucher(voucher_conv, code=code, **kwargs)
+    wrong = _redeem(client, voucher_conv, code=wrong_code).data.decode()
+    unusable = _redeem(client, voucher_conv, code=code).data.decode()
     assert 'not valid' in unusable
-    assert unusable == wrong
-    assert CODE not in unusable
+    assert unusable.replace(code, wrong_code) == wrong
     assert _voucher_participants() == []
 
 
-def test_empty_and_malformed_codes_show_field_errors(app, client, voucher_conv):
+def test_empty_code_shows_a_field_error(app, client, voucher_conv):
     empty = _redeem(client, voucher_conv, code='').data.decode()
     assert 'Enter a voucher code' in empty
     assert 'aria-invalid="true"' in empty
     assert 'aria-describedby="code-hint code-error"' in empty
-    malformed = _redeem(client, voucher_conv, code='ABC').data.decode()
-    assert '12 letters and numbers' in malformed
+
+
+def test_a_missed_code_is_not_echoed_back(app, client, voucher_conv):
+    html = _redeem(client, voucher_conv, code='ZZZZZZZZZZZZ').data.decode()
+    assert 'not valid' in html
+    assert 'ZZZZZZZZZZZZ' not in html
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
+def test_cli_generates_codes_that_redeem(app, client, voucher_conv):
+    result = app.test_cli_runner().invoke(
+        args=['vouchers', 'generate', voucher_conv.slug, '3', '--label', 'Workshop'],
+    )
+    assert result.exit_code == 0, result.output
+    codes = result.output.split('\n')[:3]
+    assert all(re.fullmatch(r'[0-9A-Z]{4} [0-9A-Z]{4} [0-9A-Z]{4}', c) for c in codes)
+    assert VoucherBatch.query.filter_by(label='Workshop').one().conversation_id == voucher_conv.id
+    assert _redeem(client, voucher_conv, code=codes[0]).status_code == 302
+
+
+def test_cli_imports_codes_and_reports_skips(app, voucher_conv, tmp_path):
+    source = tmp_path / 'codes.txt'
+    source.write_text('ROOM-101\nroom101\nAB\n', encoding='utf-8')
+    result = app.test_cli_runner().invoke(
+        args=['vouchers', 'import', voucher_conv.slug, str(source)],
+    )
+    assert result.exit_code == 0, result.output
+    assert 'Imported 1 codes.' in result.output
+    assert 'Skipped 1 duplicates.' in result.output
+    assert '  AB' in result.output
+    assert lookup_voucher('room 101', voucher_conv.id) is not None
+
+
+def test_cli_refuses_an_unknown_conversation(app, tmp_path):
+    result = app.test_cli_runner().invoke(args=['vouchers', 'generate', 'no-such-slug', '1'])
+    assert result.exit_code != 0
+    assert 'No conversation' in result.output
 
 
 def test_voucher_account_is_conversation_scoped(app, client, voucher_conv):

@@ -1,8 +1,14 @@
-"""Voucher code generation and redemption (#368).
+"""Voucher code generation, import and redemption (#368).
 
 A code creates exactly one account and thereafter authenticates that account:
 it is single-use for *joining* and reusable for *resuming* (#412). Expiry limits
 redemption only; it never ends an account that already redeemed.
+
+Codes are either generated here (12 characters of Crockford base32) or imported
+from a list the organizers made themselves, which is how the same codes can work
+in several processes: only HMACs are stored, so a generated code can never be
+copied to another process afterwards. Entry therefore accepts any code shape and
+simply looks it up.
 """
 
 import hashlib
@@ -10,7 +16,8 @@ import hmac
 import re
 import secrets
 from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -23,11 +30,19 @@ from db import ACCOUNT_KIND_VOUCHER, Participant, VoucherBatch, VoucherCode, db
 _CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 _CROCKFORD_BITS = 60  # 12 chars × 5 bits
 # Letters Crockford base32 leaves out because they are easily misread (I, L, O)
-# or produce accidental words (U). Input is never rewritten; a code containing
-# them is refused with its own message, so the holder can check what they typed.
+# or produce accidental words (U). Input is never rewritten: an imported code may
+# well contain them. When a code containing them is not found, the entry page
+# says so, so the holder can check what they typed.
 _EXCLUDED_LETTERS = frozenset('ILOU')
 
-_VOUCHER_CODE_RE = re.compile(r'^[0-9A-HJKMNP-TV-Z]{12}$')
+# An imported code, after normalize_code(). Imported codes are only as hard to
+# guess as the organizers made them; the minimum length is a floor, not a
+# guarantee (a sequential list such as WIKI0001, WIKI0002 is trivially guessed).
+IMPORTED_CODE_MIN_LENGTH = 5
+IMPORTED_CODE_MAX_LENGTH = 64
+_IMPORTED_CODE_RE = re.compile(
+    rf'^[0-9A-Z]{{{IMPORTED_CODE_MIN_LENGTH},{IMPORTED_CODE_MAX_LENGTH}}}$'
+)
 
 
 def _voucher_hmac_secret() -> str:
@@ -52,12 +67,8 @@ def normalize_code(code: str) -> str:
 
 
 def has_excluded_letters(code: str) -> bool:
-    """Whether *code* uses a letter voucher codes never contain (I, L, O, U)."""
+    """Whether *code* uses a letter generated codes never contain (I, L, O, U)."""
     return not _EXCLUDED_LETTERS.isdisjoint(normalize_code(code))
-
-
-def is_well_formed(code: str) -> bool:
-    return _VOUCHER_CODE_RE.fullmatch(normalize_code(code)) is not None
 
 
 def voucher_code_hmac(code: str, conversation_id: int) -> str:
@@ -74,10 +85,7 @@ def voucher_code_hmac(code: str, conversation_id: int) -> str:
 
 
 def generate_voucher_code() -> str:
-    """12-character Crockford base32 (~60 bits of entropy).
-
-    Generated code conforms to ``_VOUCHER_CODE_RE``: no I, L, O, or U.
-    """
+    """12-character Crockford base32 (~60 bits of entropy): no I, L, O or U."""
     bits = secrets.randbits(_CROCKFORD_BITS)
     chars = []
     for _ in range(12):
@@ -86,18 +94,68 @@ def generate_voucher_code() -> str:
     return ''.join(chars)
 
 
+def _batch_conversation_id(batch: VoucherBatch) -> int:
+    """The batch's conversation id, also for a batch built with ``conversation=``
+    and not yet flushed: the HMAC must never be taken over ``None``."""
+    conversation_id = batch.conversation_id
+    if conversation_id is None and batch.conversation is not None:
+        conversation_id = batch.conversation.id
+    if conversation_id is None:
+        raise ValueError('a voucher batch needs a saved conversation')
+    return conversation_id
+
+
 def generate_voucher_codes(batch: VoucherBatch, count: int) -> list[str]:
     """Generate *count* voucher codes and add them to *batch*.
 
     The raw codes are returned once, for the organizer to hand out; only their
     HMACs are stored. The caller commits.
     """
+    conversation_id = _batch_conversation_id(batch)
     codes = [generate_voucher_code() for _ in range(count)]
     db.session.add_all([
-        VoucherCode(batch=batch, code_hmac=voucher_code_hmac(raw, batch.conversation_id))
+        VoucherCode(batch=batch, code_hmac=voucher_code_hmac(raw, conversation_id))
         for raw in codes
     ])
     return codes
+
+
+@dataclass
+class VoucherImport:
+    """What an import added and what it left out, by normalised code."""
+
+    added: list[str] = field(default_factory=list)
+    duplicates: list[str] = field(default_factory=list)
+    rejected: list[str] = field(default_factory=list)
+
+
+def import_voucher_codes(batch: VoucherBatch, lines: Iterable[str]) -> VoucherImport:
+    """Add organizer-supplied codes, one per line, to *batch*.
+
+    Codes are normalised the same way entry is (case, spaces and hyphens do not
+    matter) and must then be 5-64 letters and digits. A code that repeats within
+    the list, or already exists in this conversation, is reported and skipped.
+    Blank lines are ignored. The caller commits.
+    """
+    conversation_id = _batch_conversation_id(batch)
+    result = VoucherImport()
+    seen: set[str] = set()
+    for line in lines:
+        code = normalize_code(line)
+        if not code:
+            continue
+        if _IMPORTED_CODE_RE.fullmatch(code) is None:
+            result.rejected.append(code)
+            continue
+        if code in seen or lookup_voucher(code, conversation_id) is not None:
+            result.duplicates.append(code)
+            continue
+        seen.add(code)
+        result.added.append(code)
+        db.session.add(VoucherCode(
+            batch=batch, code_hmac=voucher_code_hmac(code, conversation_id),
+        ))
+    return result
 
 
 def lookup_voucher(code: str, conversation_id: int) -> VoucherCode | None:

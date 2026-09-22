@@ -39,7 +39,8 @@ from sqlalchemy.orm import joinedload
 from db import (ACCOUNT_KIND_VOUCHER, AdminRole, Argument,
                 ArgumentSideState, ArgumentVote, AuditEvent, ContentFlag, Conversation,
                 ConversationBan, ConversationInvite, FeaturedStatement, Participant,
-                Participation, StatementProvenance, StatementSimilarityScore, db)
+                Participation, StatementProvenance, StatementSimilarityScore,
+                VoucherBatch, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError,
                          polis_server_config_error)
@@ -85,7 +86,8 @@ from services.argument_commands import (
 )
 from services.content_flags import submit_content_flag
 from services.vouchers import (
-    classify_voucher, has_excluded_letters, is_well_formed, redeem_voucher_code,
+    classify_voucher, generate_voucher_codes, has_excluded_letters,
+    import_voucher_codes, redeem_voucher_code,
 )
 from services.admin_participants import (
     ParticipantNotInConversation, build_admin_participant_roster,
@@ -250,14 +252,13 @@ _VOUCHER_MESSAGES = {
     'doc-title': ('voucher-page-doc-title', 'Voucher code — $1'),
     'intro': ('voucher-page-intro', 'You need a voucher code to take part in this consultation.'),
     'label': ('voucher-page-label', 'Voucher code'),
-    'hint': ('voucher-page-hint', '12 letters and numbers. Spaces and hyphens do not matter.'),
+    'hint': ('voucher-page-hint', 'Capitals, spaces and hyphens do not matter.'),
     'submit': ('voucher-page-submit', 'Continue'),
     'empty': ('voucher-error-empty', 'Enter a voucher code.'),
-    'format': ('voucher-error-format', 'A voucher code is 12 letters and numbers.'),
-    'excluded': ('voucher-error-excluded-letters',
-                 'Voucher codes never use the letters I, L, O or U. '
-                 'Check the code: these are often the numbers 1 and 0.'),
     'invalid': ('voucher-invalid', 'That code is not valid for this consultation.'),
+    'invalid-excluded': ('voucher-invalid-excluded-letters',
+                         'That code is not valid for this consultation. If it contains '
+                         'I, L, O or U, check whether those should be the numbers 1 and 0.'),
     'joined': ('voucher-already-joined',
                'You already take part in this consultation with a voucher in this browser. '
                'Log out first to use a different code.'),
@@ -406,6 +407,19 @@ def _voucher_identity_conflict(conv, target) -> str | None:
     return 'switch'
 
 
+def _voucher_not_valid(conv, code: str):
+    """One answer for wrong, revoked, expired-unused and in-flight codes alike.
+
+    Codes may be imported in any shape, so nothing is refused before the lookup.
+    The only variation depends on what was typed, never on the code's state: a
+    code with I, L, O or U gets a hint about 1 and 0 and stays in the field to
+    correct; any other miss is not echoed back.
+    """
+    if has_excluded_letters(code):
+        return _voucher_form_page(conv, error='invalid-excluded', code_value=code)
+    return _voucher_form_page(conv, error='invalid')
+
+
 def _voucher_submit(conv, code: str, *, confirmed: bool):
     """Redeem or resume *code* on *conv*, then send the holder to the process.
 
@@ -413,14 +427,10 @@ def _voucher_submit(conv, code: str, *, confirmed: bool):
     """
     if not code.strip():
         return _voucher_form_page(conv, error='empty')
-    if has_excluded_letters(code):
-        return _voucher_form_page(conv, error='excluded', code_value=code)
-    if not is_well_formed(code):
-        return _voucher_form_page(conv, error='format', code_value=code)
 
     entry = classify_voucher(code, conv.id)
     if entry.outcome == 'invalid':
-        return _voucher_form_page(conv, error='invalid')
+        return _voucher_not_valid(conv, code)
 
     conflict = _voucher_identity_conflict(conv, entry.participant)
     if conflict == 'joined':
@@ -438,7 +448,7 @@ def _voucher_submit(conv, code: str, *, confirmed: bool):
             ),
         )
         if participant is None:
-            return _voucher_form_page(conv, error='invalid')
+            return _voucher_not_valid(conv, code)
 
     _start_voucher_session(participant)
     return redirect(_path_conversation(conv.slug))
@@ -5375,6 +5385,63 @@ def create_app(test_config: dict | None = None) -> Flask:
         else:
             _upgrade()
             click.echo('Database migrated to head revision.')
+
+    # Until the organizer screens exist (#368), codes are created from the shell:
+    #   flask --app app vouchers generate <slug> <count> [--label TEXT]
+    #   flask --app app vouchers import <slug> <file|-> [--label TEXT]
+    # Only HMACs are stored, so generated codes are printed once and cannot be
+    # shown again. To use the same codes in several processes, import one list
+    # into each of them.
+    vouchers_cli = click.Group('vouchers', help='Create voucher codes for a process.')
+    app.cli.add_command(vouchers_cli)
+
+    def _voucher_batch_for(slug: str, label: str | None):
+        conv = Conversation.query.filter_by(slug=slug).first()
+        if conv is None:
+            raise click.ClickException(f'No conversation with slug {slug!r}.')
+        if not (is_gated_conversation(conv) and conversation_gating_type(conv) == 'voucher'):
+            click.echo(f'Warning: {slug!r} is not voucher-gated yet; the codes will not '
+                       'work until its gating type is set to voucher.', err=True)
+        batch = VoucherBatch(conversation_id=conv.id, label=label)
+        db.session.add(batch)
+        return batch
+
+    @vouchers_cli.command('generate')
+    @click.argument('slug')
+    @click.argument('count', type=click.IntRange(1, 20000))
+    @click.option('--label', default=None, help='Batch label, e.g. "Workshop Utrecht 12 Oct".')
+    def vouchers_generate_cmd(slug, count, label):
+        """Generate COUNT codes and print them, one per line. Shown only once."""
+        codes = generate_voucher_codes(_voucher_batch_for(slug, label), count)
+        db.session.commit()
+        for code in codes:
+            click.echo(' '.join(code[i:i + 4] for i in range(0, len(code), 4)))
+
+    @vouchers_cli.command('import')
+    @click.argument('slug')
+    @click.argument('source', type=click.File('r', encoding='utf-8'))
+    @click.option('--label', default=None, help='Batch label, e.g. "Workshop Utrecht 12 Oct".')
+    def vouchers_import_cmd(slug, source, label):
+        """Import organizer-made codes from SOURCE (a file, or - for stdin), one per line.
+
+        Capitals, spaces and hyphens do not matter. Codes must be 5-64 letters and
+        digits; a code is only as hard to guess as it is long and random.
+        """
+        result = import_voucher_codes(_voucher_batch_for(slug, label), source)
+        if not result.added:
+            db.session.rollback()
+            raise click.ClickException('No codes imported.')
+        db.session.commit()
+        click.echo(f'Imported {len(result.added)} codes.')
+        if result.duplicates:
+            # Counted, not printed: a duplicate may be a live code.
+            click.echo(f'Skipped {len(result.duplicates)} duplicates.', err=True)
+        if result.rejected:
+            # Not stored, so not credentials: list them so the file can be fixed.
+            click.echo(f'Rejected {len(result.rejected)} lines that are not 5-64 letters '
+                       'and digits:', err=True)
+            for line in result.rejected:
+                click.echo(f'  {line}', err=True)
 
     @app.cli.command('process-phase-schedules')
     def process_phase_schedules_cmd():

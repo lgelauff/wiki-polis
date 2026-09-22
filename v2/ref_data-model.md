@@ -120,8 +120,11 @@ enum(`personal_attack`, `privacy`, `off_topic`, `other`) · `detail` nullable ·
 `reserved_until` · `redeemed_at` · `revoked_at` · `expires_at` (all nullable) · `created_at`.
 - **The raw code is never stored.** `code_hmac = HMAC-SHA256(VOUCHER_HMAC_SECRET or
   SECRET_KEY, "voucher:{conversation_id}:{normalised code}")`, so the same string in two
-  conversations gives two rows. Codes are 12 characters of Crockford base32 (no I, L, O, U);
-  normalising only upper-cases and strips spaces and hyphens.
+  conversations gives two rows — which is how one organizer-made list is imported into
+  several processes. Codes are either generated (12 characters of Crockford base32, no
+  I, L, O, U) or imported (5–64 ASCII letters and digits, as the organizers made them;
+  a code already in the conversation is skipped). Normalising only upper-cases and strips
+  spaces and hyphens; entry accepts any shape and just looks the code up.
 - **`status`** is one of `unused` · `reserved` · `redeemed` · `revoked` (CHECK constraint).
   Redemption claims an `unused` row (or one whose reservation lapsed) with a conditional
   UPDATE, and links the new voucher account in the same transaction. Nothing sets
