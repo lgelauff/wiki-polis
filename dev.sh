@@ -196,4 +196,10 @@ if [ ! -f "$FLASK_DIR/static/spa/index.html" ]; then
 fi
 
 uv run flask --app app init-db
-exec uv run flask --app app run --host 127.0.0.1 --port "$FLASK_PORT"
+# Not exec: exec replaced this shell, and the stop_docker EXIT trap went with it, so
+# stopping Flask left the whole Docker stack running. Flask runs as a child instead;
+# Ctrl-C or a TERM to this script stops it, and the script's exit then runs the trap.
+uv run flask --app app run --host 127.0.0.1 --port "$FLASK_PORT" &
+FLASK_PID=$!
+trap 'kill "$FLASK_PID" 2>/dev/null || true' INT TERM
+wait "$FLASK_PID"
