@@ -19,10 +19,17 @@
 
 ## Tables
 
-### `participants` — one row per Wikimedia account
-`id` PK · `mw_user_id` int not-null unique · `mw_username` str(255) · `xid` str(64)
-not-null unique · `xid_key_version` int=2 · `is_demo` bool=F · `is_global_admin` bool=F ·
-`created_at`.
+### `participants` — one row per account (Wikimedia or voucher)
+`id` PK · `mw_user_id` int nullable unique · `mw_username` str(255) nullable ·
+`account_kind` str(32)=`wikimedia` · `conversation_id` FK→conversations (CASCADE) nullable ·
+`xid` str(64) not-null unique · `xid_key_version` int=2 · `is_demo` bool=F ·
+`is_global_admin` bool=F · `created_at`.
+- **`account_kind`** is `wikimedia` or `voucher` (#368), an open string so a new login
+  method needs no migration. Wikimedia accounts carry `mw_user_id`/`mw_username` and no
+  `conversation_id`. Voucher accounts carry neither Wikimedia field and set
+  `conversation_id` to the one conversation they may enter; the shared access check
+  refuses them everywhere else. Their xid subject is `voucher:<random 128-bit id>`, never
+  in the `mw:` space.
 - **`xid` = `HMAC(secret, subject)`, versioned by `xid_key_version`** — the opaque token
   passed to Particiapi. Version 1 was `sha256(mw_user_id)` (legacy, plain and
   enumerable — MW user IDs are sequential); version 2 (current default) is a keyed HMAC
@@ -103,6 +110,27 @@ enum(`personal_attack`, `privacy`, `off_topic`, `other`) · `detail` nullable ·
   argument flags store `argument_id` and no `statement_tid`.
 - The admin queue does not display flagger identity; moderators review the target,
   reason, optional note, and timestamp.
+
+### `voucher_batches` (#368)
+`id` PK · `conversation_id` FK (CASCADE) · `label` str(255) nullable · `created_at`.
+
+### `voucher_codes` (#368)
+`id` PK · `batch_id` FK→voucher_batches (CASCADE) · `code_hmac` str(64) unique ·
+`status` str(16)=`unused` · `participant_id` FK→participants (**SET NULL**) nullable unique ·
+`reserved_until` · `redeemed_at` · `revoked_at` · `expires_at` (all nullable) · `created_at`.
+- **The raw code is never stored.** `code_hmac = HMAC-SHA256(VOUCHER_HMAC_SECRET or
+  SECRET_KEY, "voucher:{conversation_id}:{normalised code}")`, so the same string in two
+  conversations gives two rows. Codes are 12 characters of Crockford base32 (no I, L, O, U);
+  normalising only upper-cases and strips spaces and hyphens.
+- **`status`** is one of `unused` · `reserved` · `redeemed` · `revoked` (CHECK constraint).
+  Redemption claims an `unused` row (or one whose reservation lapsed) with a conditional
+  UPDATE, and links the new voucher account in the same transaction. Nothing sets
+  `reserved` yet; it is kept for a reserve-until-joined step.
+- **A redeemed code keeps authenticating its account** (#412): entering it again resumes
+  that account. `expires_at` limits redemption only. A redeemed row whose participant was
+  deleted (`participant_id` now NULL) can never be claimed again.
+- **Access** is granted only through a `redeemed` row of the same conversation pointing
+  at the account; `revoked` refuses with `access-voucher-revoked`.
 
 ### `conversation_invites`
 `id` PK · `conversation_id` FK (CASCADE) · `mw_username` · `created_at`. Unique
@@ -252,6 +280,8 @@ name/version, e.g. `char`, `semantic-v1`) · `value` float (similarity in `[0, 1
 - `admin_roles.granted_by`, `audit_events.actor_participant_id`,
   `audit_events.conversation_id` → **SET NULL** (the audit trail must outlive a deleted
   participant or conversation).
+- `voucher_codes.participant_id` → **SET NULL** (the code row outlives a deleted account,
+  and stays unusable).
 - `arguments.proposer_pseudonym` has **no FK** (see `arguments` above).
 - Everything else → **CASCADE**.
 
@@ -260,8 +290,10 @@ name/version, e.g. `char`, `semantic-v1`) · `value` float (similarity in `[0, 1
 FK columns are explicitly indexed (MySQL/MariaDB doesn't auto-index FKs): on
 `participations(participant_id, conversation_id)`, `arguments(featured_statement_id,
 proposer_pseudonym)`, `argument_votes(argument_id, participant_id)`,
-`argument_side_states(participant_id, featured_statement_id)`, and
-`featured_statements(conversation_id)`. (See also the `audit_events` indexes noted in
+`argument_side_states(participant_id, featured_statement_id)`,
+`featured_statements(conversation_id)`, `voucher_batches(conversation_id)`, and
+`voucher_codes(batch_id)` / `voucher_codes(status)` (`voucher_codes.participant_id` is
+covered by its unique constraint). (See also the `audit_events` indexes noted in
 its own section above.)
 
 ## Known discrepancies

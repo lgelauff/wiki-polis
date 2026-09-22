@@ -548,6 +548,9 @@ class StatementSimilarityScore(db.Model):
 
 # ── Vouchers (#368) ───────────────────────────────────────────────────────────
 
+# unused -> redeemed (claimed atomically, then resumes its account) -> revoked.
+# Nothing sets 'reserved' yet: it is kept for a reserve-until-joined step (#368),
+# and a reservation whose reserved_until has passed counts as unused.
 VOUCHER_STATUSES = ('unused', 'reserved', 'redeemed', 'revoked')
 
 

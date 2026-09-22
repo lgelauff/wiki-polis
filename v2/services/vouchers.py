@@ -144,6 +144,7 @@ def _classify(voucher: VoucherCode | None, conversation_id: int) -> VoucherEntry
     expires_at = _naive_utc(voucher.expires_at)
     if expires_at is not None and expires_at <= now:
         return VoucherEntry('invalid')
+    # A live reservation is someone else's in-flight entry; a lapsed one is free.
     reserved_until = _naive_utc(voucher.reserved_until)
     if voucher.status == 'reserved' and reserved_until is not None and reserved_until > now:
         return VoucherEntry('invalid')

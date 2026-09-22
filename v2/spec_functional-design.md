@@ -382,7 +382,7 @@ The **demo lane** (`/demo`) lists only demo conversations and is available logge
 
 A **demo** conversation (`access_policy = 'demo'`) is a genuine *demonstration* conversation: it runs the full flow and **records votes as usual**, so a newcomer experiences how the platform actually works. It is not a throwaway sandbox. The point of separating it from real consultations is **safety** — someone who only wants to try things must not accidentally act on a live consultation.
 
-Demo conversations are open to anonymous visitors: a logged-out participant gets a synthetic, per-conversation guest identity so they can try without logging in. Real conversations require Wikimedia login as usual.
+Demo conversations are open to anonymous visitors: a logged-out participant gets a synthetic, per-conversation guest identity so they can try without logging in. Real conversations require a Wikimedia login, or, on a voucher-gated conversation, a voucher (see [Login and identity](#login-and-identity)).
 
 ### States
 
@@ -400,7 +400,14 @@ Leaving a demo for a real consultation is never forbidden: the demo (synthetic) 
 
 ## Login and identity
 
-Login is via Wikimedia account only — no separate registration. The participant's Wikimedia username is used as their display identity within the platform. No passwords, no email required.
+Login is via Wikimedia account — no separate registration. The participant's Wikimedia username is used as their display identity within the platform. No passwords, no email required.
+
+**Vouchers (#368, #412).** A conversation gated by voucher admits people who hold a code the organizers handed out: 12 characters, typed at `/c/<slug>/v` or opened as a link `/c/<slug>/v?v=<code>`. The first use creates a **voucher account** — a pseudonymous identity with no Wikimedia account behind it, valid for that one conversation only — and every later use of the same code, on any device, signs back into that account. Whoever holds the code is that participant; revoking the code is the escape hatch for a leaked one.
+
+- **Entry.** Case, spaces and hyphens are ignored; nothing else is rewritten. Codes never contain I, L, O or U, and a typed code that does gets its own message. A wrong, revoked, expired-unused or in-use code gets one indistinguishable "not valid" answer. After a code is accepted the browser goes to `/c/<slug>`, so the code leaves the address bar, and the usual join step follows (pseudonym and consent, without email or talk-page notifications).
+- **One identity per browser.** Signing in with a voucher clears the session first. If a Wikimedia or other voucher account is already signed in, the page asks before replacing it — also when arriving by link. A second code for the same conversation in one session is refused (`voucher-already-joined`) and stays unused. A browser with no session is signed in by a link without asking; that is the trade-off #412 accepts.
+- **Access.** Only a redeemed, unrevoked code of that conversation admits the account. A voucher account is refused on every other conversation, gated or not (`access-voucher-other`); a Wikimedia account is refused on a voucher conversation (`access-voucher-needed`). Revoking puts a joined account in "joined, access lost" (`access-voucher-revoked`). Expiry stops unused codes only; it never ends an account that already redeemed.
+- **Never staff.** A voucher session has no username, so it never matches `ADMIN_USERS`, invites or roles. Identity reveal and Wikimedia notifications do not apply.
 
 ## Participant identity
 
