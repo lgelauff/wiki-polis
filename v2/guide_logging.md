@@ -86,8 +86,11 @@ Flask's exception logs and pytest's `caplog`).
   Wikimedia username, email, session contents, secrets, or tokens.
 - Reference a participant by **internal `participant_id` only** — never their username/xid.
 - A minimal `RedactingFormatter` scrubs URL-embedded credentials, sha256/`xid`-shaped hex,
-  and `key: value` secrets (authorization / cookie / token / password / api-key) from the
-  final line **including tracebacks**. This is a backstop, **not** a licence to log
+  voucher codes (any `?v=`/`&v=` query value and any `/v/<segment>` path), and
+  `key: value` secrets (authorization / cookie / token / password / api-key) from the
+  final line **including tracebacks**. It only reaches the app's own logger: uWSGI and
+  the Toolforge front proxy keep their own access logs, which record the request line —
+  including a `?v=` voucher code — unless configured not to. This is a backstop, **not** a licence to log
   sensitive data — the full redaction catalogue is Plan 3. See `tests/test_logging.py`.
 - The startup fingerprint logs only the DB **scheme** (`make_url(...).drivername`) and
   booleans — never a URL with a password or any credential.

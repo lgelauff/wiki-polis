@@ -159,6 +159,8 @@ class Conversation(db.Model):
     )
     invites            = db.relationship('ConversationInvite', back_populates='conversation',
                                          cascade='all, delete-orphan')
+    voucher_batches    = db.relationship('VoucherBatch', back_populates='conversation',
+                                         cascade='all, delete-orphan')
     roles              = db.relationship('AdminRole', back_populates='conversation')
     featured_statements = db.relationship('FeaturedStatement', back_populates='conversation',
                                           cascade='all, delete-orphan')
@@ -544,8 +546,59 @@ class StatementSimilarityScore(db.Model):
     )
 
 
-# Explicit indexes — MySQL/MariaDB does not auto-index FK columns.
-# Cover the highest-volume lookup patterns in the argument mapping flow.
+# ── Vouchers (#368) ───────────────────────────────────────────────────────────
+
+# unused -> redeemed (claimed atomically, then resumes its account) -> revoked.
+# Nothing sets 'reserved' yet: it is kept for a reserve-until-joined step (#368),
+# and a reservation whose reserved_until has passed counts as unused.
+VOUCHER_STATUSES = ('unused', 'reserved', 'redeemed', 'revoked')
+
+
+class VoucherBatch(db.Model):
+    __tablename__ = 'voucher_batches'
+
+    id              = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
+    label           = db.Column(db.String(255), nullable=True)
+    created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    conversation = db.relationship('Conversation', back_populates='voucher_batches')
+    vouchers     = db.relationship('VoucherCode', back_populates='batch', cascade='all, delete-orphan')
+
+
+class VoucherCode(db.Model):
+    __tablename__ = 'voucher_codes'
+    __table_args__ = (
+        # Global uniqueness forces every code to be unique across all batches.
+        # An organizer re-using the same raw code in two processes still produces
+        # two distinct rows because the HMAC is scoped by conversation_id.
+        db.UniqueConstraint('code_hmac', name='uq_voucher_codes_code_hmac'),
+        # One code per voucher account: the access check reads the code by its
+        # participant, so a second row pointing at the same account is never valid.
+        db.UniqueConstraint('participant_id', name='uq_voucher_codes_participant_id'),
+        db.CheckConstraint(
+            "status IN ('unused', 'reserved', 'redeemed', 'revoked')",
+            name='ck_voucher_codes_status',
+        ),
+    )
+
+    id              = db.Column(db.Integer, primary_key=True)
+    batch_id        = db.Column(db.Integer, db.ForeignKey('voucher_batches.id', ondelete='CASCADE'), nullable=False)
+    code_hmac       = db.Column(db.String(64), nullable=False)
+    status          = db.Column(db.String(16), nullable=False, default='unused',
+                                server_default='unused')
+    participant_id  = db.Column(db.Integer, db.ForeignKey('participants.id', ondelete='SET NULL'), nullable=True)
+    reserved_until  = db.Column(db.DateTime, nullable=True)
+    redeemed_at     = db.Column(db.DateTime, nullable=True)
+    revoked_at      = db.Column(db.DateTime, nullable=True)
+    expires_at      = db.Column(db.DateTime, nullable=True)
+    created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    batch       = db.relationship('VoucherBatch', back_populates='vouchers')
+    participant = db.relationship('Participant')
+
+
+# ── Explicit indexes ──────────────────────────────────────────────────────────
 db.Index('ix_participations_participant_id', Participation.participant_id)
 db.Index('ix_participations_conversation_id', Participation.conversation_id)
 db.Index('ix_conversation_bans_conversation_participant',
@@ -563,3 +616,6 @@ db.Index('ix_argument_side_states_featured_statement_id', ArgumentSideState.feat
 db.Index('ix_featured_statements_conversation_id', FeaturedStatement.conversation_id)
 db.Index('ix_featured_statements_phase6_polis_statement_id',
          FeaturedStatement.conversation_id, FeaturedStatement.phase6_polis_statement_id)
+db.Index('ix_voucher_codes_batch_id', VoucherCode.batch_id)
+db.Index('ix_voucher_codes_status', VoucherCode.status)
+db.Index('ix_voucher_batches_conversation_id', VoucherBatch.conversation_id)
