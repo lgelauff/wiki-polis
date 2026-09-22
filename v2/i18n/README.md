@@ -57,7 +57,12 @@ rather than rendering the server's `message`, so those strings stay developer-fa
 
 Translate on **translatewiki.net**, not here. `qqq.json` gives the context for each message.
 Placeholders `$1`, `$2`, … must be preserved, and no others added. `{{PLURAL:$1|singular|plural}}`
-selects a form by the number in `$1` — use the plural forms your language needs.
+selects a form by the number in `$1` — use the plural forms your language needs, in CLDR's
+category order (zero, one, two, few, many, other), writing only the categories your language
+has: Russian is `{{PLURAL:$1|one|few|many|other}}`, Arabic
+`{{PLURAL:$1|zero|one|two|few|many|other}}`. If you give fewer forms, the last one is used for
+the rest. A form for one exact number, like `0=no votes`, may be added anywhere; it does not
+take the place of a category.
 
 A translation that breaks these rules is not shown; English is shown in its place:
 
@@ -220,12 +225,14 @@ New locales arrive as `i18n/<code>.json` from TWN. Enable them for users by addi
 `ENABLED_LOCALES` (see `.env.example`); setting the variable replaces the `en,nl` default, so
 list every locale to offer. Until enabled, a locale is present in the repo but not offered.
 
-### Before enabling a non-English locale — two tracked follow-ups
+### Before enabling a non-English locale
 
-1. **CLDR plural rules.** Server-side `{{PLURAL:}}` currently uses the English rule (`n == 1` →
-   singular, else plural). Languages with more than two plural forms (Arabic, Polish, Russian,
-   …) need their CLDR rule wired into `i18n._plural_index` before their counts read correctly.
-   (The client side gets this for free: `banana-i18n` applies CLDR rules itself.)
+1. **CLDR plural rules — done (#436).** `banana-i18n` in the browser takes its rules from
+   `Intl.PluralRules`; the server has the same CLDR rules written out in `i18n._PLURAL_RULES`,
+   and `tests/test_i18n.py` checks it picks the form banana picks. The table covers
+   the languages likely to be enabled (among them fr, ru, uk, pl, ar, cy, ga, he, ja, zh);
+   **a language not in it gets the English rule on the server**, so add it there first;
+   `test_every_shipped_locale_has_a_plural_rule` fails when a `<code>.json` lands without one.
 2. **RTL CSS audit.** `<html dir>` is already driven by `i18n.text_direction(locale)`, so RTL
    locales render right-to-left today — but `static/style.css` / `static/redesign.css` still use
    a handful of *physical* properties (`margin-left`, `text-align:left`, `left:`) that should be
