@@ -2035,6 +2035,8 @@ export interface components {
             /** @enum {string} */
             scope: "conversation";
             actor: string | null;
+            /** @enum {string|null} */
+            actorKind: "site_admin" | null;
         };
         ConversationOutputPageResponse: {
             data: components["schemas"]["ConversationOutputPage"];

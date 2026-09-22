@@ -178,19 +178,42 @@ test('under qqx, the moderation log carries no English but pseudonyms and modera
   ])).toEqual([]);
 });
 
-test('under qqx, the moderation log names an unknown participant or moderator from the catalogue', async () => {
+function moderationLogWithUnnamedRows() {
   server.use(http.get(url('/api/v1/conversations/community-strategy/moderation-log'), () => HttpResponse.json({data: {
     slug: 'community-strategy', title: 'Community strategy',
-    events: [{occurredAt: '2026-08-14T09:30:00Z', action: 'Banned', pseudonym: null, scope: 'conversation', actor: null}],
+    events: [
+      {occurredAt: '2026-08-14T09:30:00Z', action: 'Banned', pseudonym: null, scope: 'conversation', actor: null, actorKind: null},
+      {occurredAt: '2026-08-13T08:15:00Z', action: 'Banned', pseudonym: 'quiet-otter', scope: 'conversation', actor: null, actorKind: 'site_admin'},
+    ],
     links: {self: '/api/v1/conversations/community-strategy/moderation-log', conversation: '/c/community-strategy', about: '/c/community-strategy/about'},
   }})));
+}
+
+test('under qqx, the moderation log names an unknown participant or moderator from the catalogue', async () => {
+  moderationLogWithUnnamedRows();
   renderAsQqx();
   renderRoute('/app/parity/conversations/community-strategy/moderation-log');
   await screen.findByRole('heading', {name: '(modlog-heading: Community strategy)'});
 
   // Catches a null name rendering as an empty cell, or the server's old English fallback.
-  const cells = [...document.querySelectorAll('tbody tr td')].map((cell) => cell.textContent);
-  expect([cells[2], cells[4]]).toEqual(['(modlog-unknown-participant)', '(modlog-unknown-moderator)']);
+  const [unknown] = [...document.querySelectorAll('tbody tr')];
+  expect([unknown?.children[2]?.textContent, unknown?.children[4]?.textContent]).toEqual(
+    ['(modlog-unknown-participant)', '(modlog-unknown-moderator)'],
+  );
+  // Catches the fallback styled like a real pseudonym or username.
+  expect(unknown?.children[2]?.querySelector('.muted')).not.toBeNull();
+  expect(unknown?.children[4]?.querySelector('.muted')).not.toBeNull();
+});
+
+test('under qqx, the moderation log names a site administrator without an account from the catalogue', async () => {
+  moderationLogWithUnnamedRows();
+  renderAsQqx();
+  renderRoute('/app/parity/conversations/community-strategy/moderation-log');
+  await screen.findByRole('heading', {name: '(modlog-heading: Community strategy)'});
+
+  // Catches a ban by an env-listed admin, who has no username, shown as an unknown moderator.
+  const siteAdmin = [...document.querySelectorAll('tbody tr')][1];
+  expect(siteAdmin?.children[4]?.textContent).toBe('(modlog-actor-site-admin)');
 });
 
 test('the moderation log names each action from the catalogue', async () => {

@@ -475,6 +475,7 @@
     "modlog-scope-conversation": "raadpleging",
     "modlog-unknown-participant": "onbekende deelnemer",
     "modlog-unknown-moderator": "onbekende moderator",
+    "modlog-actor-site-admin": "sitebeheerder",
     "phase-label-preparation": "Voorbereiding",
     "phase-label-submission": "Inventarisatie",
     "phase-label-featured_selection": "Uitlichten",

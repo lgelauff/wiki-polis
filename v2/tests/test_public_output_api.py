@@ -59,6 +59,7 @@ def test_public_moderation_log_excludes_ids_and_private_notes(
         'pseudonym': 'quiet-otter',
         'scope': 'conversation',
         'actor': 'adminuser',
+        'actorKind': None,
     }]
     serialized = json.dumps(data)
     assert 'private moderator note' not in serialized
@@ -91,6 +92,42 @@ def test_public_moderation_log_sends_null_for_unknown_names(client, conversation
         'pseudonym': None,
         'scope': 'conversation',
         'actor': None,
+        'actorKind': None,
+    }]
+
+
+def test_public_moderation_log_marks_a_ban_by_a_site_admin_without_an_account(
+    client, conversation, participant,
+):
+    """An env-listed admin has no Participant row; the log says so instead of 'unknown'.
+
+    Catches actorKind being dropped, which would show a site administrator's ban as made by
+    an unknown moderator.
+    """
+    _join(conversation, participant, pseudonym='')
+    db.session.add(AuditEvent(
+        ts=datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc),
+        actor_participant_id=None,
+        conversation_id=conversation.id,
+        operation='participant.ban',
+        target_type='participant',
+        target_id=str(participant.id),
+        detail={'actor_kind': 'env_admin', 'scope': 'conversation'},
+    ))
+    db.session.commit()
+
+    events = client.get(
+        '/api/v1/conversations/test-conv/moderation-log',
+    ).get_json()['data']['events']
+
+    # The empty pseudonym also comes back as null, so the page shows its fallback.
+    assert events == [{
+        'occurredAt': '2026-08-14T09:30:00Z',
+        'action': 'Banned',
+        'pseudonym': None,
+        'scope': 'conversation',
+        'actor': None,
+        'actorKind': 'site_admin',
     }]
 
 

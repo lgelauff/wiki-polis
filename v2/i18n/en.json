@@ -521,6 +521,7 @@
     "modlog-scope-conversation": "consultation",
     "modlog-unknown-participant": "unknown participant",
     "modlog-unknown-moderator": "unknown moderator",
+    "modlog-actor-site-admin": "site administrator",
     "admin-convs-heading": "Consultations",
     "admin-th-title": "Title",
     "admin-th-slug": "Slug",

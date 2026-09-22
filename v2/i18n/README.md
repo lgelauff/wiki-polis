@@ -22,12 +22,12 @@ error messages ([#397](https://github.com/lgelauff/wiki-polis/issues/397)).
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (950 keys, 100% documented; 572 offered to translators, 378 held back) | ✅ committed |
+| `en.json` + `qqq.json` (951 keys, 100% documented; 573 offered to translators, 378 held back) | ✅ committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
 | React SPA reads it via `banana-i18n` | ✅ participant interface; 🟡 help pages and admin console (see above) |
-| Locales offered to users (`ENABLED_LOCALES`) | English and Dutch (`nl.json`, 534 keys) |
+| Locales offered to users (`ENABLED_LOCALES`) | English and Dutch (`nl.json`, 535 keys) |
 
 `ENABLED_LOCALES` defaults to `en,nl` when unset (`app.py`), so the language switcher is visible
 and Dutch is live wherever the variable is left alone. The keys are the durable asset: they were authored against the Jinja UI, which has since been deleted, but
