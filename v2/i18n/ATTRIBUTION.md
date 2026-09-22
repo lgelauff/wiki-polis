@@ -40,8 +40,9 @@ MediaWiki core has Dutch only for `hours-abbrev` ("$1 u"). `days-abbrev` and
 ## Short labels that already matched
 
 Our English was already the same word as MediaWiki's, in the same sense, so it counts as
-copied text and is credited here too. Our Dutch is kept where it differs from MediaWiki's;
-translatewiki's translation memory will offer MediaWiki's as a suggestion.
+copied text and is credited here too. Where MediaWiki has Dutch for the same message, ours
+is MediaWiki's (lowercased where the English is), and other Dutch messages use the same words
+for the same thing: "samenvouwen"/"uitvouwen", "zichtbaar maken", "Niet toegestaan".
 
 | Our key | English | Source | Source key | Licence | Copied |
 |---|---|---|---|---|---|
@@ -56,7 +57,7 @@ translatewiki's translation memory will offer MediaWiki's as a suggestion.
 | `conv-arg-hidden` | `Hidden` | MediaWiki core | [`revdelete-radio-set`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `featured-arg-hidden` | `hidden` | MediaWiki core | [`revdelete-radio-set`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
 | `stmts-hidden-heading` | `Hidden` | MediaWiki core | [`revdelete-radio-set`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
-| `conv-arg-unhide` | `unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
+| `conv-arg-unhide` | `unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
 | `featured-arg-unhide` | `unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
 | `base-log-in` | `log in` | MediaWiki core | [`loginreqlink`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `base-log-out` | `log out` | MediaWiki core | [`logout`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
@@ -69,11 +70,11 @@ translatewiki's translation memory will offer MediaWiki's as a suggestion.
 | `conv-flag-send` | `Send` | MediaWiki core | [`emailsend`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `conv-vote-change` | `change` | MediaWiki core | [`protect_change`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `conv-results-heading` | `Results` | MediaWiki core | [`apisandbox-results`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
-| `conv-results-quoted` | `"$1"` | MediaWiki core | [`quotation-marks`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
-| `conv-orient-collapse` | `collapse` | MediaWiki core | [`collapsible-collapse`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
+| `conv-results-quoted` | `"$1"` | MediaWiki core | [`quotation-marks`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
+| `conv-orient-collapse` | `collapse` | MediaWiki core | [`collapsible-collapse`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
 | `adminconv-mode-advanced` | `Advanced` | MediaWiki core | [`searchprofile-advanced`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `base-language-label` | `Language` | MediaWiki core | [`pagelang-language`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
-| `errorpage-403-title` | `Not allowed` | MediaWiki core | [`specialpage-securitylevel-not-allowed-title`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
+| `errorpage-403-title` | `Not allowed` | MediaWiki core | [`specialpage-securitylevel-not-allowed-title`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `conv-of` | `$1 of $2` | MediaWiki core | [`watchlistlabels-onboarding-progress`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `about-stat-unknown` | `unknown` | MediaWiki core | [`mediastatistics-header-unknown`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
 | `accept-not-now` | `Not now` | VisualEditor | [`visualeditor-sourceswitch-popup-dismiss`](https://github.com/wikimedia/mediawiki-extensions-VisualEditor/blob/master/i18n/ve-mw/en.json) | MIT | en |
