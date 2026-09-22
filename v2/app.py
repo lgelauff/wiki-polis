@@ -30,6 +30,7 @@ from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from limits import parse as parse_rate_limit
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from sqlalchemy import text as _sa_text
 from sqlalchemy.engine import make_url
@@ -86,8 +87,9 @@ from services.argument_commands import (
 )
 from services.content_flags import submit_content_flag
 from services.vouchers import (
-    classify_voucher, generate_voucher_codes, has_excluded_letters,
-    import_voucher_codes, redeem_voucher_code,
+    CODE_MIN_LENGTH, WEAK_CODE_LENGTH, classify_voucher, generate_voucher_codes,
+    has_excluded_letters, import_voucher_codes, is_too_short, redeem_voucher_code,
+    weak_codes,
 )
 from services.admin_participants import (
     ParticipantNotInConversation, build_admin_participant_roster,
@@ -255,6 +257,7 @@ _VOUCHER_MESSAGES = {
     'hint': ('voucher-page-hint', 'Capitals, spaces and hyphens do not matter.'),
     'submit': ('voucher-page-submit', 'Continue'),
     'empty': ('voucher-error-empty', 'Enter a voucher code.'),
+    'too-short': ('voucher-error-too-short', 'Voucher codes are at least $1 characters long.'),
     'invalid': ('voucher-invalid', 'That code is not valid for this consultation.'),
     'throttled': ('voucher-throttled',
                   'Too many codes were tried here. Wait $1 seconds and try again.'),
@@ -320,6 +323,12 @@ def _voucher_response(conv, heading: str, body: str):
     return response
 
 
+def _voucher_form_action(conv) -> str:
+    """Post back without the query string, so a ?v=<code> in the address never
+    rides along as the Referer of the form post."""
+    return _path_conversation(conv.slug, page='v')
+
+
 def _voucher_form_page(conv, *, error: str | None = None, code_value: str = '',
                        error_params: tuple = ()):
     """The typed-code form. The error is tied to the field for assistive tech."""
@@ -327,7 +336,8 @@ def _voucher_form_page(conv, *, error: str | None = None, code_value: str = '',
     invalid_attr = ' aria-invalid="true"' if error else ''
     body = (
         f'<p>{_voucher_text("intro")}</p>'
-        '<form method="post" autocomplete="off" novalidate>'
+        f'<form method="post" action="{html.escape(_voucher_form_action(conv))}"'
+        ' autocomplete="off" novalidate>'
         f'<input type="hidden" name="csrf_token" value="{html.escape(generate_csrf())}">'
         f'<label for="code">{_voucher_text("label")}</label>'
         f'<input id="code" name="code" type="text" value="{html.escape(code_value)}"'
@@ -347,7 +357,8 @@ def _voucher_switch_page(conv, code: str):
     """Ask before a voucher replaces the identity already in this browser."""
     body = (
         f'<p>{_voucher_text("switch-body")}</p>'
-        '<form method="post" autocomplete="off">'
+        f'<form method="post" action="{html.escape(_voucher_form_action(conv))}"'
+        ' autocomplete="off">'
         f'<input type="hidden" name="csrf_token" value="{html.escape(generate_csrf())}">'
         f'<input type="hidden" name="code" value="{html.escape(code)}">'
         '<input type="hidden" name="confirm" value="1">'
@@ -430,53 +441,90 @@ def _voucher_not_valid(conv, code: str):
 # voucher-throttled (429 + Retry-After); nothing is locked and no code is
 # invalidated, so a valid code redeems again as soon as the window passes.
 # Neither budget depends on the client address, which Toolforge does not pass
-# (#411): one is per process, sized for a room, and one per browser session.
+# (#411): one is per process, sized for a room, and one per browser session and
+# process.
+#
+# Known trade-off: while a process's budget is spent, valid codes are refused
+# too (letting them through would let a guesser test codes unthrottled). So one
+# script sending a wrong code every second keeps entry to that process paused
+# for as long as it runs; people already signed in are unaffected. Operators can
+# raise VOUCHER_PROCESS_FAILURE_LIMIT (see guide_runbook.md, "Voucher codes").
 _VOUCHER_PROCESS_FAILURE_LIMIT = '60 per minute'
 _VOUCHER_SESSION_FAILURE_LIMIT = '10 per minute'
 
 
+def _voucher_limit_setting(name: str, default: str) -> str:
+    return current_app.config.get(name) or os.environ.get(name, '').strip() or default
+
+
+def _voucher_process_failure_limit() -> str:
+    return _voucher_limit_setting('VOUCHER_PROCESS_FAILURE_LIMIT', _VOUCHER_PROCESS_FAILURE_LIMIT)
+
+
+def _voucher_session_failure_limit() -> str:
+    return _voucher_limit_setting('VOUCHER_SESSION_FAILURE_LIMIT', _VOUCHER_SESSION_FAILURE_LIMIT)
+
+
+def _voucher_budget_exempt() -> bool:
+    """The blank form (a GET without ?v=) is never throttled: it tests nothing."""
+    return request.method == 'GET' and not request.args.get('v', '').strip()
+
+
+def _voucher_slug() -> str:
+    return (request.view_args or {}).get('slug', '')
+
+
 def _voucher_process_budget_key() -> str:
-    return f"process:{(request.view_args or {}).get('slug', '')}"
+    return f'process:{_voucher_slug()}'
 
 
 def _voucher_session_budget_key() -> str:
-    """The browser session (or signed-in account), hashed like _ratelimit_identity_key."""
-    secret = (current_app.config.get('RATELIMIT_IDENTITY_SECRET')
-              or current_app.config.get('SECRET_KEY'))
-    identity = _ratelimit_account_or_session_identity()
-    return 'session:' + hmac.new(str(secret).encode(), identity.encode(),
-                                 hashlib.sha256).hexdigest()
+    """This browser session (or signed-in account) on this process."""
+    identity = _ratelimit_digest(_ratelimit_account_or_session_identity())
+    return f'session:{_voucher_slug()}:{identity}'
 
 
 def _voucher_attempt_failed(_response) -> bool:
     return bool(g.get('voucher_attempt_failed'))
 
 
-def _voucher_throttled(request_limit):
-    """The voucher page's own 429: the form, with how long to wait."""
-    slug = (request.view_args or {}).get('slug', '')
-    conv = Conversation.query.filter_by(slug=slug).first()
+def _voucher_throttled(request_limit, conv=None):
+    """The voucher page's own 429: the form, with how long to wait.
+
+    What was typed (or linked) stays in the field, so it can be sent again once
+    the wait is over. That depends only on the input, not on the code's state.
+    """
+    if conv is None:
+        conv = Conversation.query.filter_by(slug=_voucher_slug()).first()
     if conv is None:
         return None  # fall back to the generic 429
     wait = max(1, int(request_limit.reset_at - time.time()))
-    response = _voucher_form_page(conv, error='throttled', error_params=(wait,))
+    typed = request.form.get('code', '') or request.args.get('v', '')
+    response = _voucher_form_page(conv, error='throttled', code_value=typed,
+                                  error_params=(wait,))
     response.status_code = 429
     response.headers['Retry-After'] = str(wait)
     return response
 
 
+_VOUCHER_EXHAUSTED_LOG_RATE = parse_rate_limit('1 per minute')
+
+
 def _voucher_throttled_process(request_limit):
     """Process budget spent: many wrong codes from many sessions, i.e. likely guessing.
 
-    Logged for the operators; #368 also wants the organizer alerted, which needs
-    the organizer screens. The log names the process by id only, never a code.
+    Logged for the operators once per window, not per rejected request, so the
+    line stays findable during an attack. #368 also wants the organizer alerted,
+    which needs the organizer screens. The log names the process by id only.
     """
-    slug = (request.view_args or {}).get('slug', '')
-    conv = Conversation.query.filter_by(slug=slug).first()
-    app_logger = current_app.logger
-    app_logger.warning('voucher failed-attempt budget for conversation %s exhausted',
-                       conv.id if conv else '?')
-    return _voucher_throttled(request_limit)
+    conv = Conversation.query.filter_by(slug=_voucher_slug()).first()
+    if conv is not None and limiter.limiter.hit(
+        _VOUCHER_EXHAUSTED_LOG_RATE, 'voucher-exhausted-log', str(conv.id),
+    ):
+        current_app.logger.warning(
+            'voucher failed-attempt budget for conversation %s exhausted', conv.id,
+        )
+    return _voucher_throttled(request_limit, conv)
 
 
 def _voucher_submit(conv, code: str, *, confirmed: bool):
@@ -486,15 +534,24 @@ def _voucher_submit(conv, code: str, *, confirmed: bool):
     """
     if not code.strip():
         return _voucher_form_page(conv, error='empty')
+    # Shorter than any code can be: say so, and don't count it as a guess.
+    if is_too_short(code):
+        return _voucher_form_page(conv, error='too-short', code_value=code,
+                                  error_params=(CODE_MIN_LENGTH,))
 
     entry = classify_voucher(code, conv.id)
     if entry.outcome == 'invalid':
         return _voucher_not_valid(conv, code)
 
+    # Both answers below reveal that the code is valid without using it, so they
+    # spend the failed-attempt budgets like a miss: otherwise a signed-in browser
+    # could test codes unthrottled.
     conflict = _voucher_identity_conflict(conv, entry.participant)
     if conflict == 'joined':
+        g.voucher_attempt_failed = True
         return _voucher_form_page(conv, error='joined')
     if conflict == 'switch' and not confirmed:
+        g.voucher_attempt_failed = True
         return _voucher_switch_page(conv, code)
 
     participant = entry.participant
@@ -1788,18 +1845,23 @@ def _ratelimit_identity_key() -> str:
         client_identity = get_remote_address()
         identity_kind, identity_value = 'ip', client_identity
 
-    # Production startup requires RATELIMIT_IDENTITY_SECRET. Local and staging
-    # configurations may omit it, but must still hash the value: a durable xid
-    # must never land verbatim in limiter storage or limiter-side logs.
+    return f'{identity_kind}:{_ratelimit_digest(identity_value)}'
+
+
+def _ratelimit_digest(value: str) -> str:
+    """Keyed hash of a limiter identity.
+
+    Production startup requires RATELIMIT_IDENTITY_SECRET. Local and staging
+    configurations may omit it, but must still hash the value: a durable xid
+    must never land verbatim in limiter storage or limiter-side logs.
+    """
     identity_secret = (
         current_app.config.get('RATELIMIT_IDENTITY_SECRET')
         or current_app.config.get('SECRET_KEY')
         or 'wiki-polis-dev-ratelimit-fallback'
     )
-    digest = hmac.new(str(identity_secret).encode('utf-8'),
-                      identity_value.encode('utf-8'),
-                      hashlib.sha256).hexdigest()
-    return f'{identity_kind}:{digest}'
+    return hmac.new(str(identity_secret).encode('utf-8'), value.encode('utf-8'),
+                    hashlib.sha256).hexdigest()
 
 
 limiter = Limiter(key_func=_ratelimit_identity_key, default_limits=[])
@@ -2086,9 +2148,12 @@ def _check_join_eligibility(conversation, participant) -> tuple[bool, str, dict]
     if not policy_id:
         return True, 'not_required', {}
     # Wikimedia eligibility is checked by username, which a voucher account does
-    # not have: holding the voucher is its admission (#368).
-    if participant.account_kind == ACCOUNT_KIND_VOUCHER:
-        return True, 'not_required', {}
+    # not have: holding the voucher for this process is its admission (#368).
+    # (The access check already refuses a voucher account elsewhere; the scope
+    # test here keeps the skip from ever widening beyond that.)
+    if (participant.account_kind == ACCOUNT_KIND_VOUCHER
+            and participant.conversation_id == conversation.id):
+        return True, 'not_required', {'reason': 'voucher admission'}
     base_url = current_app.config.get('ACCOUNT_ELIGIBILITY_URL', '').strip()
     if not base_url:
         return False, 'unavailable', {'reason': 'eligibility checker is not configured'}
@@ -5496,6 +5561,12 @@ def create_app(test_config: dict | None = None) -> Flask:
             raise click.ClickException('No codes imported.')
         db.session.commit()
         click.echo(f'Imported {len(result.added)} codes.')
+        weak = weak_codes(result.added)
+        if weak:
+            # Counted, not printed: they are live codes now.
+            click.echo(f'Warning: {len(weak)} of these codes are digits only or shorter '
+                       f'than {WEAK_CODE_LENGTH} characters, and easy to guess. See '
+                       'guide_runbook.md, "Voucher codes".', err=True)
         if result.duplicates:
             # Counted, not printed: a duplicate may be a live code.
             click.echo(f'Skipped {len(result.duplicates)} duplicates.', err=True)
@@ -5611,12 +5682,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         response.headers['Content-Security-Policy'] = csp
         response.headers['X-Content-Type-Options']  = 'nosniff'
         # A linked voucher code arrives as /c/<slug>/v?v=<code> or
-        # /c/<slug>?v=<code>. Keep it out of referrers to other sites on every
-        # page that can carry one. 'same-origin' rather than 'no-referrer': the
-        # entry form posts back to this origin, and over HTTPS Flask-WTF refuses
-        # a POST that carries no Referer ("The referrer header is missing").
+        # /c/<slug>?v=<code>. 'strict-origin' sends only this site's origin, and
+        # only over HTTPS: the code never leaves in a Referer, while the entry
+        # form's own POST still carries the Referer that Flask-WTF requires over
+        # HTTPS (no-referrer made it fail with "The referrer header is missing").
         response.headers['Referrer-Policy'] = (
-            'same-origin'
+            'strict-origin'
             if request.path.endswith('/v') or 'v' in request.args
             else 'strict-origin-when-cross-origin'
         )
@@ -5891,12 +5962,12 @@ def _register_routes(app: Flask) -> None:
 
     @app.route('/c/<slug>/v', methods=['GET', 'POST'])
     @_unauthenticated_site_limit()
-    @limiter.limit(_VOUCHER_PROCESS_FAILURE_LIMIT, key_func=_voucher_process_budget_key,
+    @limiter.limit(_voucher_process_failure_limit, key_func=_voucher_process_budget_key,
                    scope='voucher-failures-process', deduct_when=_voucher_attempt_failed,
-                   on_breach=_voucher_throttled_process)
-    @limiter.limit(_VOUCHER_SESSION_FAILURE_LIMIT, key_func=_voucher_session_budget_key,
+                   exempt_when=_voucher_budget_exempt, on_breach=_voucher_throttled_process)
+    @limiter.limit(_voucher_session_failure_limit, key_func=_voucher_session_budget_key,
                    scope='voucher-failures-session', deduct_when=_voucher_attempt_failed,
-                   on_breach=_voucher_throttled)
+                   exempt_when=_voucher_budget_exempt, on_breach=_voucher_throttled)
     def voucher_entry(slug: str):
         conv = Conversation.query.filter_by(slug=slug).first()
         if (conv is None or not is_gated_conversation(conv)

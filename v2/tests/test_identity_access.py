@@ -191,7 +191,7 @@ def test_voucher_paths_use_a_no_referrer_policy(client, conversation):
     """/c/<slug>/v carries the voucher credential: never sent to other sites."""
     response = client.get(f'/c/{conversation.slug}/v')
 
-    assert response.headers['Referrer-Policy'] == 'same-origin'
+    assert response.headers['Referrer-Policy'] == 'strict-origin'
 
 
 def test_identity_migration_keeps_existing_wikimedia_rows_and_adds_scope():

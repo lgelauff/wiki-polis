@@ -965,6 +965,7 @@
     "voucher-page-hint": "Capitals, spaces and hyphens do not matter.",
     "voucher-page-submit": "Continue",
     "voucher-error-empty": "Enter a voucher code.",
+    "voucher-error-too-short": "Voucher codes are at least $1 {{PLURAL:$1|character|characters}} long.",
     "voucher-invalid-excluded-letters": "That code is not valid for this consultation. If it contains I, L, O or U, check whether those should be the numbers 1 and 0.",
     "voucher-throttled": "Too many codes were tried here. Wait $1 {{PLURAL:$1|second|seconds}} and try again.",
     "voucher-invalid": "That code is not valid for this consultation.",
