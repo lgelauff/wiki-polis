@@ -143,9 +143,11 @@ that list.
 
 Append **`?uselang=qqx`** to any page: every externalised string renders as its key
 (`(base-log-out)`). Any real English still visible = a string that still needs extracting.
-A missing key renders loudly as `⧼key⧽`. The participant interface renders as keys throughout;
-the help pages and most of the admin console still show English, on purpose
-([#399](https://github.com/lgelauff/wiki-polis/issues/399)).
+A missing key renders loudly as `⧼key⧽`. Most of the participant interface renders as keys.
+The exceptions are listed in [#399](https://github.com/lgelauff/wiki-polis/issues/399): the
+help pages, most of the admin console, server error messages
+([#397](https://github.com/lgelauff/wiki-polis/issues/397)) and the moderation log's server
+fallbacks ([#398](https://github.com/lgelauff/wiki-polis/issues/398)).
 
 `qqx` shows a message's parameters too, as MediaWiki does: `(key: a, b)`. So English passed
 *into* a message — a link label, a phase name — is as visible as English written around one.

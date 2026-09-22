@@ -64,13 +64,11 @@ of the 551 are pre-authored copy awaiting the component that will use it.
 
 Counts come from a heuristic scan of JSX text nodes, user-visible attributes, and string
 literals. It over-collects, so read the string totals as **upper bounds** and the
-already-keyed share as a floor. (`i18n/README.md` claims 72% of SPA copy has a key; the scan
-says ~51%. The scan is the pessimistic one because it counts non-copy strings that could
-never have a key.)
+already-keyed share as a floor.
 
-**Participant — 13 components, ≤279 strings, 152 already keyed.** These carry the 514
-messages offered for translation; the other 356 are the admin console, held back under
-rule 8.
+**Participant — 13 components, ≤279 strings, 152 already keyed.** These carry the
+messages offered for translation; the admin console's are held back under rule 8. The
+current counts of each are in `i18n/README.md`.
 
 **Participant components:**
 `argument-mapping-panel` (56/23 keyed), `conversation-lane-page` (38/19),
