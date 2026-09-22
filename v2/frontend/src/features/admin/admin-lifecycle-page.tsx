@@ -24,7 +24,7 @@ import {LegacyShell} from '../legacy/legacy-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
-import {phaseLabel, routeLabel} from '../../i18n/server-labels';
+import {accessPolicyLabel, phaseLabel, routeLabel} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
 
@@ -210,7 +210,7 @@ function ConfigurationSection({conversationId, csrfToken, settings, refresh, fai
           <label>{msg('admin-label-title')}<input type="text" required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           <label>{msg('adminconv-label-route-locked')}<input type="text" readOnly value={routeLabel(msg, settings.conversation.phaseRoute, settings.conversation.phaseRouteLabel)} style={{background: '#f5f5f5', color: '#666'}} /></label>
           <label>{msg('adminconv-label-polis-id')}<input type="text" readOnly value={settings.conversation.polisId} style={{background: '#f5f5f5', color: '#666'}} /></label>
-          <label>{msg('admin-label-access')}<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as typeof accessPolicy)}><option value="public">public</option><option value="invite_only">invite_only</option><option value="demo">demo</option></select></label>
+          <label>{msg('admin-label-access')}<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as typeof accessPolicy)}><option value="public">{msg('admin-access-policy-public')}</option><option value="invite_only">{msg('admin-access-policy-invite_only')}</option><option value="demo">{msg('admin-access-policy-demo')}</option></select></label>
           <label>{msg('admin-label-elig-event')}<input type="text" maxLength={80} value={eventId} onChange={(event) => setEventId(event.target.value)} /></label>
           <label>{msg('admin-label-elig-label')}<input type="text" maxLength={255} value={eligibilityLabel} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
         </div>
@@ -307,7 +307,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
     <div className="role-bar"><div className="role-bar-inner"><span className={`role-chip${isAdmin ? ' role-chip--admin' : ''}`} title={msg('adminconv-role-title')}><span className="role-chip-dot" />{data.operator.roleLabel}</span><span className="role-bar-context">{msg('adminconv-managing')}&nbsp;<strong>{data.conversation.title}</strong></span><span className="role-bar-spacer" /><InternalLink className="view-as-btn" href={data.links.participantView}>{msg('adminconv-view-as')}</InternalLink></div></div>
     <div className="console">
       <div className="console-head"><h1 className="console-title">{data.conversation.title}</h1><span className={`status-pill status-pill--${!isActive ? 'closed' : data.conversation.status === 'paused' ? 'paused' : data.conversation.status === 'scheduled' ? 'scheduled' : 'active'}`}><span className="status-pill-dot" />{!isActive ? msg('adminconv-status-closed') : data.conversation.status === 'paused' ? msg('adminconv-status-paused') : data.conversation.status === 'scheduled' ? msg('adminconv-status-scheduled') : msg('adminconv-status-active')}</span></div>
-      <p className="console-sub"><code>/c/{data.conversation.slug}</code> &nbsp;·&nbsp; {data.conversation.accessPolicy} &nbsp;·&nbsp; {msg('adminconv-joined', data.counts.participants)}</p>
+      <p className="console-sub"><code>/c/{data.conversation.slug}</code> &nbsp;·&nbsp; {accessPolicyLabel(msg, data.conversation.accessPolicy)} &nbsp;·&nbsp; {msg('adminconv-joined', data.counts.participants)}</p>
 
       <div className="console-section" id="phaseControl" data-mode={advanced ? 'advanced' : 'simple'}><div className="phase-hero"><div className="phase-hero-top"><span className="phase-now-kicker">{msg('adminconv-phase-control')}</span></div>
         <ol className="journey phase-stepper" aria-label={msg('adminconv-journey-aria')}>{data.phase.steps.map((step, index) => {const active = step.state === 'current'; const done = data.phase.linear && step.state === 'completed'; return <li key={step.key} className={`journey-step${active ? ' journey-step--current' : done ? ' journey-step--done' : ''}`} aria-current={active ? 'step' : undefined}><span className="journey-dot">{done ? '✓' : index + 1}</span><span className="journey-label">{phaseLabel(msg, step.key, step.label)}</span><span className="sr-only">{active ? msg('adminconv-step-current') : done ? msg('adminconv-step-completed') : msg('adminconv-step-upcoming')}</span></li>;})}</ol>
@@ -331,6 +331,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
         <Link className="manage-card" to={data.links.participants}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-joined', data.counts.participants)}</span></div><div className="manage-card-title">{msg('adminconv-card-participants')}</div><div className="manage-card-desc">{msg('adminconv-card-participants-desc')}</div></Link>
         <Link className="manage-card" to={data.links.moderation}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-open-count', data.counts.openFlags)}</span></div><div className="manage-card-title">{msg('adminconv-card-modqueue')}</div><div className="manage-card-desc">{msg('adminconv-card-modqueue-desc')}</div></Link>
         <Link className="manage-card" to={data.links.roles}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-assigned-count', roleCount)}</span></div><div className="manage-card-title">{msg('adminconv-roles-label')}</div><div className="manage-card-desc">{msg('adminconv-card-roles-desc')}</div></Link>
+        <Link className="manage-card" to={data.links.settings}><div className="manage-card-title">{msg('adminconv-card-settings')}</div><div className="manage-card-desc">{msg('adminconv-card-settings-desc')}</div></Link>
       </div></div>
       <RoleSection conversationId={conversationId} csrfToken={csrfToken} roster={roles} refresh={refreshSupporting} fail={fail} />
       {canOrganize && <ConfigurationSection conversationId={conversationId} csrfToken={csrfToken} settings={settings} refresh={refreshSupporting} fail={fail} />}

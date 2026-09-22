@@ -92,6 +92,31 @@ test('renders the admin console from the catalogue English', async () => {
   expect(screen.getByText('Every statement has been moderated', {exact: false})).toBeVisible();
 });
 
+test('the settings page is reachable from the management cards', async () => {
+  // The lifecycle payload has carried links.settings all along; until now no component
+  // rendered it, so the page could only be opened by typing its URL.
+  serve(lifecycle);
+  renderConsole();
+
+  const settings = await screen.findByRole('link', {name: /Settings/}, {timeout: 10_000});
+  expect(settings).toHaveAttribute('href', '/admin/conversations/7/settings');
+  expect(within(settings).getByText('Title, introduction, access and guidance scope')).toBeVisible();
+});
+
+test('the access policy is named in plain words, not by its stored value', async () => {
+  serve({...lifecycle, conversation: {...lifecycle.conversation, accessPolicy: 'invite_only'}});
+  renderConsole();
+
+  await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
+  // Both places the stored value used to surface: the line under the title, and the
+  // option of the configuration select that carries the value on the wire.
+  expect(document.querySelector('.console-sub')?.textContent)
+    .toContain('Only people who have been given access');
+  expect(screen.getByRole('option', {name: 'Only people who have been given access'}))
+    .toHaveValue('invite_only');
+  expect(screen.queryByText('invite_only', {exact: false})).not.toBeInTheDocument();
+});
+
 test('renders the closed-consultation description from parameterised sentences', async () => {
   serve(closedLifecycle);
   renderConsole();
