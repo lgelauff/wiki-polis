@@ -383,6 +383,9 @@ test('adds and removes invitations through convergent admin commands', async () 
   );
 
   expect(await screen.findByRole('heading', {name: 'Invites — Community strategy'})).toBeVisible();
+  // The access policy reads in words; the stored value never reaches the page.
+  expect(screen.getByText('Only people who have been given access')).toBeVisible();
+  expect(screen.queryByText('invite_only', {exact: false})).not.toBeInTheDocument();
   expect(screen.getByText('Existing editor')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia usernames (one per line)'), {
     target: {value: 'New editor\nNew editor'},
