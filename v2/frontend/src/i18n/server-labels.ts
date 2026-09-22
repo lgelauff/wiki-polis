@@ -161,3 +161,19 @@ export const moderationAction = (msg: Message, id: string | null | undefined) =>
 
 export const moderationScope = (msg: Message, id: string | null | undefined) =>
   resolve(MODLOG_SCOPE_MESSAGES, msg, id, id);
+
+/** Access-policy values from `Conversation.access_policy`, as they reach the admin DTOs.
+ *
+ *  The column is the legacy representation and is recomputed on every save from the
+ *  explicit gating settings (`services/admin_settings.py`): `demo` stays `demo`, anything
+ *  gated becomes `invite_only` whatever its gating type, everything else `public`. The
+ *  words below therefore describe the three states that value can stand for, not the
+ *  invitation list specifically. */
+const ACCESS_POLICY_MESSAGES: Record<string, string> = {
+  public: 'admin-access-policy-public',
+  invite_only: 'admin-access-policy-invite_only',
+  demo: 'admin-access-policy-demo',
+};
+
+export const accessPolicyLabel = (msg: Message, id: string | null | undefined) =>
+  resolve(ACCESS_POLICY_MESSAGES, msg, id, id);
