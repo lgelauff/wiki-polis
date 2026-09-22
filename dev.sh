@@ -30,7 +30,10 @@ source "$SESSION_FILE"
 session_set() {
   local key="$1" val="$2"
   if grep -q "^${key}=" "$SESSION_FILE" 2>/dev/null; then
-    sed -i '' "s|^${key}=.*|${key}=${val}|" "$SESSION_FILE"
+    # Not sed -i: BSD sed needs `-i ''` and GNU sed reads that '' as the script, so
+    # either spelling kills this script under set -e on the other platform.
+    sed "s|^${key}=.*|${key}=${val}|" "$SESSION_FILE" > "$SESSION_FILE.tmp"
+    mv "$SESSION_FILE.tmp" "$SESSION_FILE"
   else
     echo "${key}=${val}" >> "$SESSION_FILE"
   fi

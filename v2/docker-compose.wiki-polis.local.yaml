@@ -11,6 +11,10 @@ services:
       - "${WIKI_POLIS_DIR:?set WIKI_POLIS_DIR to the wiki-polis checkout}/v2/tmp/postgres-backups:/backups"
 
   particiapi:
+    # particiapp-docker names the container's domain for its TLS/Traefik setup, which
+    # local dev does not use. Rootless Docker cannot set a domainname (the
+    # kernel.domainname sysctl), so particiapi would fail to start there.
+    domainname: !reset null
     environment:
       PARTICIAPI_AUTHENTICATION_DISABLED: "True"
       PARTICIAPI_CORS_ORIGINS: "http://127.0.0.1:${FLASK_HOST_PORT:-5001}"
