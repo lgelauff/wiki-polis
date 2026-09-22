@@ -69,6 +69,7 @@ from services.results_report import build_results_report
 from services.intermediate_results import build_intermediate_results
 from services.invites import (
     InvitationNotInConversation, add_conversation_invites, build_invitation_roster,
+    claim_username_invites,
     remove_conversation_invite,
 )
 from services.conversation_about import build_conversation_about
@@ -5851,6 +5852,8 @@ def _register_routes(app: Flask) -> None:
             )
             if participant.id is None:
                 db.session.add(participant)
+            claim_username_invites(db.session, mw_user_id=participant.mw_user_id,
+                                   mw_username=participant.mw_username)
             db.session.commit()
             session['username']  = username
             session['xid']       = participant.xid
@@ -5901,6 +5904,8 @@ def _register_routes(app: Flask) -> None:
             )
             if participant.id is None:
                 db.session.add(participant)
+            claim_username_invites(db.session, mw_user_id=participant.mw_user_id,
+                                   mw_username=participant.mw_username)
             db.session.commit()
             session['username']  = username
             session['xid']       = participant.xid
@@ -6079,6 +6084,8 @@ def _register_routes(app: Flask) -> None:
         )
         if participant.id is None:
             db.session.add(participant)
+        claim_username_invites(db.session, mw_user_id=participant.mw_user_id,
+                               mw_username=participant.mw_username)
         db.session.commit()
 
         next_url = session.pop('next', None)

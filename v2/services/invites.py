@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from collections.abc import Iterable
 from datetime import timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from db import Conversation, ConversationInvite, Participant
@@ -55,6 +55,27 @@ def build_invitation_roster(
 
 class InvitationNotInConversation(LookupError):
     pass
+
+
+def claim_username_invites(session, *, mw_user_id: int, mw_username: str) -> int:
+    """Bind invitations made by username before this account's first login.
+
+    The invite-only check matches the stable Wikimedia user id, so an invitation
+    added for someone who had never logged in (``mw_user_id`` NULL) would never
+    match. At login the id is known: fill it in on every such invitation for this
+    username. Invitations that already carry an id are left alone, so a later
+    rename or a reused username cannot take them over. The caller commits.
+    """
+    result = session.execute(
+        update(ConversationInvite)
+        .where(
+            ConversationInvite.mw_username == mw_username,
+            ConversationInvite.mw_user_id.is_(None),
+        )
+        .values(mw_user_id=mw_user_id)
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount
 
 
 def remove_conversation_invite(session, *, conversation_id: int, invite_id: int):
