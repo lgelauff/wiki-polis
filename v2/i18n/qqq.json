@@ -38,7 +38,7 @@
     "home-action-admin": "Call-to-action to open the admin panel for a consultation the user moderates. The arrow is decorative. Rendered in capitals by CSS; write it in sentence case.",
     "flow-title": "Heading of the diagram on the consultation list that shows the three rounds of a consultation process and what each one produces. Below it are {{msg-proto|flow-subtitle}}, three cards (one per round) and {{msg-proto|flow-outcome}}.",
     "flow-subtitle": "Subtitle under {{msg-proto|flow-title}} in the flow diagram: what the process is for.",
-    "flow-learn-label": "Small label in the box at the bottom of each round's card in the flow diagram, above what that round produces, e.g. {{msg-proto|flow-explore-learn}}. Rendered in capitals; write it in sentence case.\n{{Identical|What we learn}}",
+    "flow-learn-label": "Small label in the box at the bottom of each round's card in the flow diagram, above what that round produces, e.g. {{msg-proto|flow-explore-learn}}. Rendered in capitals; write it in sentence case.",
     "flow-explore-title": "Heading of the first round in the flow diagram. The round itself is {{msg-proto|phase-label-submission}}.",
     "flow-explore-body": "What a participant does in the first round, under {{msg-proto|flow-explore-title}} in the flow diagram.",
     "flow-explore-learn": "What the first round produces, shown under {{msg-proto|flow-learn-label}} in the flow diagram. It wraps to fit the card.",

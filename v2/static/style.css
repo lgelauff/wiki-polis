@@ -3998,6 +3998,9 @@ a { color: var(--pass); }
    extra line in a translation, the drawings, lines and boxes below still line up. */
 
 .flow {
+  /* The pale blue of the learn and outcome boxes, mixed from --pass rather than fixed. */
+  --flow-tint: color-mix(in srgb, var(--pass) 9%, var(--surface));
+  --flow-tint-line: color-mix(in srgb, var(--pass) 28%, var(--surface));
   max-width: 900px;
   margin: 0 auto 1.5rem;
   padding: 1.5rem 1.75rem 1.75rem;
@@ -4051,7 +4054,7 @@ a { color: var(--pass); }
   border-right: 2.4px solid var(--muted);
   transform: translateY(-50%) rotate(45deg);
 }
-.flow-step + .flow-step:dir(rtl)::before { transform: translateY(-50%) rotate(-135deg); }
+[dir="rtl"] .flow-step + .flow-step::before { transform: translateY(-50%) rotate(-135deg); }
 .flow-step-title {
   margin: 0 0 .6rem;
   padding-bottom: .6rem;
@@ -4077,19 +4080,19 @@ a { color: var(--pass); }
 }
 .flow-learn {
   padding: .6rem .75rem .7rem;
-  background: #eef3fb;
-  border: 1px solid #c9d6ef;
+  background: var(--flow-tint);
+  border: 1px solid var(--flow-tint-line);
   border-radius: 10px;
 }
 .flow-learn-label {
   display: block;
   margin-bottom: .35rem;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--pass);
+  color: var(--blue-dark);
 }
 .flow-learn-row {
   display: flex;
@@ -4118,8 +4121,8 @@ a { color: var(--pass); }
   gap: .9rem;
   margin: 0;
   padding: .8rem 1.25rem;
-  background: #eef3fb;
-  border: 1px solid #c9d6ef;
+  background: var(--flow-tint);
+  border: 1px solid var(--flow-tint-line);
   border-radius: 14px;
   font-size: 1.05rem;
   font-weight: 700;
@@ -4133,7 +4136,7 @@ a { color: var(--pass); }
   width: 36px;
   height: 36px;
   background: var(--surface);
-  border: 1px solid #c9d6ef;
+  border: 1px solid var(--flow-tint-line);
   border-radius: 9px;
 }
 .flow-outcome-icon svg { width: 22px; height: 22px; }
@@ -4160,7 +4163,7 @@ a { color: var(--pass); }
   .flow-steps { grid-template-columns: minmax(0, 1fr); row-gap: 2rem; }
   /* Stacked, the chevron points down into the next round. */
   .flow-step + .flow-step::before,
-  .flow-step + .flow-step:dir(rtl)::before {
+  [dir="rtl"] .flow-step + .flow-step::before {
     inset-inline-start: auto;
     left: 50%;
     top: -1.35rem;
