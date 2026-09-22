@@ -188,12 +188,15 @@ function ConfigurationSection({conversationId, csrfToken, settings, refresh, fai
   const [title, setTitle] = useState(settings.conversation.title);
   const [introHtml, setIntroHtml] = useState(settings.conversation.introHtml);
   const [outroHtml, setOutroHtml] = useState(settings.conversation.outroHtml);
-  const [accessPolicy, setAccessPolicy] = useState(settings.conversation.accessPolicy);
   const [eventId, setEventId] = useState(settings.eligibility.eventId);
   const [eligibilityLabel, setEligibilityLabel] = useState(settings.eligibility.label ?? '');
   const [tier, setTier] = useState(settings.recommendations.tier);
+  // This form edits the texts and the eligibility fields only. The access answers --
+  // including the legacy access policy, which the server derives from `gated` unless it
+  // is `demo` -- belong to the Access page and are echoed back exactly as they were
+  // read, because the endpoint takes the whole settings representation at once.
   const settingsMutation = useMutation({
-    mutationFn: () => putAdminSettings(conversationId, {title, introHtml, outroHtml, accessPolicy, eligibilityEventId: eventId, eligibilityLabel, recommendationTier: settings.recommendations.tier, gated: settings.conversation.gated, gatingType: settings.conversation.gatingType, announce: settings.conversation.announce, information: settings.conversation.information, resultsShared: settings.conversation.resultsShared, showUsernames: settings.conversation.showUsernames, accessRequestText: settings.conversation.accessRequestText}, csrfToken),
+    mutationFn: () => putAdminSettings(conversationId, {title, introHtml, outroHtml, accessPolicy: settings.conversation.accessPolicy, eligibilityEventId: eventId, eligibilityLabel, recommendationTier: settings.recommendations.tier, gated: settings.conversation.gated, gatingType: settings.conversation.gatingType, announce: settings.conversation.announce, information: settings.conversation.information, resultsShared: settings.conversation.resultsShared, showUsernames: settings.conversation.showUsernames, accessRequestText: settings.conversation.accessRequestText}, csrfToken),
     onSuccess: refresh,
     onError: fail,
   });
@@ -210,7 +213,6 @@ function ConfigurationSection({conversationId, csrfToken, settings, refresh, fai
           <label>{msg('admin-label-title')}<input type="text" required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           <label>{msg('adminconv-label-route-locked')}<input type="text" readOnly value={routeLabel(msg, settings.conversation.phaseRoute, settings.conversation.phaseRouteLabel)} style={{background: '#f5f5f5', color: '#666'}} /></label>
           <label>{msg('adminconv-label-polis-id')}<input type="text" readOnly value={settings.conversation.polisId} style={{background: '#f5f5f5', color: '#666'}} /></label>
-          <label>{msg('admin-label-access')}<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as typeof accessPolicy)}><option value="public">public</option><option value="invite_only">invite_only</option><option value="demo">demo</option></select></label>
           <label>{msg('admin-label-elig-event')}<input type="text" maxLength={80} value={eventId} onChange={(event) => setEventId(event.target.value)} /></label>
           <label>{msg('admin-label-elig-label')}<input type="text" maxLength={255} value={eligibilityLabel} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
         </div>
