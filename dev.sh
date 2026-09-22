@@ -70,7 +70,9 @@ COMPOSE+=(
 # since a mismatched secret still returns 200. Read it from v2/.env when the shell does
 # not already provide one. Unset is fine and means anonymous, exactly as before.
 if [ -z "${PARTICIAPI_SUB_SECRET:-}" ] && [ -f "$FLASK_DIR/.env" ]; then
-  PARTICIAPI_SUB_SECRET="$(grep -E '^PARTICIAPI_SUB_SECRET=' "$FLASK_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\042\047')"
+  # `|| true`: a v2/.env without the key (as copied from .env.example) makes grep
+  # return 1, which pipefail and set -e turned into a silent exit before any output.
+  PARTICIAPI_SUB_SECRET="$( (grep -E '^PARTICIAPI_SUB_SECRET=' "$FLASK_DIR/.env" || true) | tail -1 | cut -d= -f2- | tr -d '\042\047')"
 fi
 export PARTICIAPI_SUB_SECRET="${PARTICIAPI_SUB_SECRET:-}"
 if [ -n "$PARTICIAPI_SUB_SECRET" ]; then
