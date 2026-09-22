@@ -966,6 +966,7 @@
     "voucher-page-submit": "Continue",
     "voucher-error-empty": "Enter a voucher code.",
     "voucher-invalid-excluded-letters": "That code is not valid for this consultation. If it contains I, L, O or U, check whether those should be the numbers 1 and 0.",
+    "voucher-throttled": "Too many codes were tried here. Wait $1 {{PLURAL:$1|second|seconds}} and try again.",
     "voucher-invalid": "That code is not valid for this consultation.",
     "voucher-already-joined": "You already take part in this consultation with a voucher in this browser. Log out first to use a different code.",
     "voucher-switch-heading": "You are signed in with another account",

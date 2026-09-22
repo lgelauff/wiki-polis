@@ -39,8 +39,15 @@ flask --app app vouchers import <slug> organizer-codes.txt --label "Printed card
   letters and digits. Lines that are not are listed so the file can be fixed; a code
   already in the process is skipped and counted.
 - **Short codes are guessable.** An imported code is only as strong as it is long and
-  random, and sequential lists (`ROOM001`, `ROOM002`) are trivially guessed. The only
-  other guard is the rate limit on the entry page.
+  random, and sequential lists (`ROOM001`, `ROOM002`) are trivially guessed. The other
+  guard is the failed-attempt budget on the entry page: 10 wrong codes a minute per
+  browser session and 60 a minute per process. Guessing flat out against 500 random
+  codes (letters and digits), that is roughly one hit every 50 days at 6 characters and
+  one every day or two at 5; generated 12-character codes are out of reach.
+- **"voucher failed-attempt budget … exhausted" in the logs** means someone tried more
+  than 60 wrong codes in a minute on that process — most likely guessing. Nothing is
+  locked; entry for that process pauses until the minute passes. If it repeats, consider
+  longer codes or revoking the batch.
 - **Handle the output as credentials.** Whoever holds a code is that participant.
   Delete `codes.txt` from the shell once it has been handed over.
 - **Revoking** has no command yet (`services.vouchers.revoke_voucher` exists).

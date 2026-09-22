@@ -256,6 +256,8 @@ _VOUCHER_MESSAGES = {
     'submit': ('voucher-page-submit', 'Continue'),
     'empty': ('voucher-error-empty', 'Enter a voucher code.'),
     'invalid': ('voucher-invalid', 'That code is not valid for this consultation.'),
+    'throttled': ('voucher-throttled',
+                  'Too many codes were tried here. Wait $1 seconds and try again.'),
     'invalid-excluded': ('voucher-invalid-excluded-letters',
                          'That code is not valid for this consultation. If it contains '
                          'I, L, O or U, check whether those should be the numbers 1 and 0.'),
@@ -318,7 +320,8 @@ def _voucher_response(conv, heading: str, body: str):
     return response
 
 
-def _voucher_form_page(conv, *, error: str | None = None, code_value: str = ''):
+def _voucher_form_page(conv, *, error: str | None = None, code_value: str = '',
+                       error_params: tuple = ()):
     """The typed-code form. The error is tied to the field for assistive tech."""
     described_by = 'code-hint code-error' if error else 'code-hint'
     invalid_attr = ' aria-invalid="true"' if error else ''
@@ -328,11 +331,12 @@ def _voucher_form_page(conv, *, error: str | None = None, code_value: str = ''):
         f'<input type="hidden" name="csrf_token" value="{html.escape(generate_csrf())}">'
         f'<label for="code">{_voucher_text("label")}</label>'
         f'<input id="code" name="code" type="text" value="{html.escape(code_value)}"'
-        ' placeholder="XXXX XXXX XXXX" autocapitalize="characters" spellcheck="false"'
+        ' autocapitalize="characters" spellcheck="false"'
         f' aria-describedby="{described_by}"'
         f'{invalid_attr} autofocus>'
         f'<p class="hint" id="code-hint">{_voucher_text("hint")}</p>'
-        + (f'<p class="error" id="code-error">{_voucher_text(error)}</p>' if error else '')
+        + (f'<p class="error" id="code-error">{_voucher_text(error, *error_params)}</p>'
+           if error else '')
         + f'<button type="submit">{_voucher_text("submit")}</button>'
         '</form>'
     )
@@ -415,9 +419,64 @@ def _voucher_not_valid(conv, code: str):
     code with I, L, O or U gets a hint about 1 and 0 and stays in the field to
     correct; any other miss is not echoed back.
     """
+    g.voucher_attempt_failed = True  # spends the failed-attempt budgets below
     if has_excluded_letters(code):
         return _voucher_form_page(conv, error='invalid-excluded', code_value=code)
     return _voucher_form_page(conv, error='invalid')
+
+
+# Failed-attempt budgets for voucher entry (#368). Only misses are counted, so a
+# room of people entering valid codes never trips them. Going over answers
+# voucher-throttled (429 + Retry-After); nothing is locked and no code is
+# invalidated, so a valid code redeems again as soon as the window passes.
+# Neither budget depends on the client address, which Toolforge does not pass
+# (#411): one is per process, sized for a room, and one per browser session.
+_VOUCHER_PROCESS_FAILURE_LIMIT = '60 per minute'
+_VOUCHER_SESSION_FAILURE_LIMIT = '10 per minute'
+
+
+def _voucher_process_budget_key() -> str:
+    return f"process:{(request.view_args or {}).get('slug', '')}"
+
+
+def _voucher_session_budget_key() -> str:
+    """The browser session (or signed-in account), hashed like _ratelimit_identity_key."""
+    secret = (current_app.config.get('RATELIMIT_IDENTITY_SECRET')
+              or current_app.config.get('SECRET_KEY'))
+    identity = _ratelimit_account_or_session_identity()
+    return 'session:' + hmac.new(str(secret).encode(), identity.encode(),
+                                 hashlib.sha256).hexdigest()
+
+
+def _voucher_attempt_failed(_response) -> bool:
+    return bool(g.get('voucher_attempt_failed'))
+
+
+def _voucher_throttled(request_limit):
+    """The voucher page's own 429: the form, with how long to wait."""
+    slug = (request.view_args or {}).get('slug', '')
+    conv = Conversation.query.filter_by(slug=slug).first()
+    if conv is None:
+        return None  # fall back to the generic 429
+    wait = max(1, int(request_limit.reset_at - time.time()))
+    response = _voucher_form_page(conv, error='throttled', error_params=(wait,))
+    response.status_code = 429
+    response.headers['Retry-After'] = str(wait)
+    return response
+
+
+def _voucher_throttled_process(request_limit):
+    """Process budget spent: many wrong codes from many sessions, i.e. likely guessing.
+
+    Logged for the operators; #368 also wants the organizer alerted, which needs
+    the organizer screens. The log names the process by id only, never a code.
+    """
+    slug = (request.view_args or {}).get('slug', '')
+    conv = Conversation.query.filter_by(slug=slug).first()
+    app_logger = current_app.logger
+    app_logger.warning('voucher failed-attempt budget for conversation %s exhausted',
+                       conv.id if conv else '?')
+    return _voucher_throttled(request_limit)
 
 
 def _voucher_submit(conv, code: str, *, confirmed: bool):
@@ -5826,7 +5885,12 @@ def _register_routes(app: Flask) -> None:
 
     @app.route('/c/<slug>/v', methods=['GET', 'POST'])
     @_unauthenticated_site_limit()
-    @limiter.limit('10 per minute')
+    @limiter.limit(_VOUCHER_PROCESS_FAILURE_LIMIT, key_func=_voucher_process_budget_key,
+                   scope='voucher-failures-process', deduct_when=_voucher_attempt_failed,
+                   on_breach=_voucher_throttled_process)
+    @limiter.limit(_VOUCHER_SESSION_FAILURE_LIMIT, key_func=_voucher_session_budget_key,
+                   scope='voucher-failures-session', deduct_when=_voucher_attempt_failed,
+                   on_breach=_voucher_throttled)
     def voucher_entry(slug: str):
         conv = Conversation.query.filter_by(slug=slug).first()
         if (conv is None or not is_gated_conversation(conv)
