@@ -11,8 +11,8 @@ function ResultRow({position}: {position: Position}) {
   const msg = useMessage();
   return <div className="results-row">
     <span className={`results-badge results-${position.choice}`}>{position.choice === 'agree' ? msg('conv-badge-agree') : msg('conv-badge-disagree')}</span>
-    <span className="results-text">{msg('conv-results-quoted', position.statement)}</span>
     <span className="results-pct">{position.percentage}%</span>
+    <span className="results-text">{msg('conv-results-quoted', position.statement)}</span>
   </div>;
 }
 
