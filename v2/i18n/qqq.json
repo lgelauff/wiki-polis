@@ -530,7 +530,6 @@
     "admin-label-slug": "Form label for the conversation slug.",
     "admin-slug-title": "Tooltip/validation hint for the slug field.",
     "admin-label-title": "Form label for the conversation title.\n{{Identical|Title}}",
-    "admin-label-access": "Form label for the access-policy select.",
     "admin-label-route": "Form label for the phase-route select.",
     "admin-label-elig-event": "Form label for the eligibility event ID.",
     "admin-elig-event-ph": "Placeholder for the eligibility event ID field.",

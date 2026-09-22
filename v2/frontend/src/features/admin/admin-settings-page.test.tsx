@@ -221,6 +221,92 @@ test('maps a field refusal to its field and keeps what was typed', async () => {
   expect(title).toHaveValue('A retitled consultation');
 });
 
+test('asks before swapping one gate for another, which also takes access away', async () => {
+  serve({
+    ...settings,
+    conversation: {
+      ...settings.conversation, accessPolicy: 'invite_only', gated: true,
+      gatingType: 'invite_only',
+    },
+  });
+  const sent = recordPuts();
+  renderPage();
+
+  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  fireEvent.click(screen.getByRole('radio', {name: /Anyone with a voucher code/}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+
+  // Everybody on the invitation list loses access when the gate becomes a voucher.
+  expect(screen.getByText('Some people will lose access. Continue?')).toBeVisible();
+  expect(sent).toHaveLength(0);
+
+  fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
+  await waitFor(() => expect(sent).toHaveLength(1));
+  expect(sent[0]).toMatchObject({gated: true, gatingType: 'voucher'});
+});
+
+test('drops the question when the answer stops narrowing', async () => {
+  serve(settings);
+  const sent = recordPuts();
+  renderPage();
+
+  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  fireEvent.click(screen.getByRole('radio', {name: /Only people on the invitation list/}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  expect(screen.getByText('Some people will lose access. Continue?')).toBeVisible();
+
+  // Putting the widest answer back leaves the question with nothing to ask about.
+  fireEvent.click(screen.getByRole('radio', {name: 'Anyone with a Wikimedia account'}));
+  expect(screen.queryByText('Some people will lose access. Continue?')).toBeNull();
+  expect(screen.getByRole('button', {name: 'Save settings'})).toBeVisible();
+  expect(sent).toHaveLength(0);
+});
+
+test('an unavailable option cannot become the answer', async () => {
+  serve(settings);
+  const sent = recordPuts();
+  renderPage();
+
+  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  fireEvent.click(screen.getByRole('radio', {name: /Wiki policy/}));
+  expect(screen.getByRole('radio', {name: 'Anyone with a Wikimedia account'})).toBeChecked();
+  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+
+  await waitFor(() => expect(sent).toHaveLength(1));
+  expect(sent[0]).toMatchObject({gated: false, gatingType: null});
+});
+
+test('a role that may not edit gets the reason and no way to save', async () => {
+  serve({...settings, capabilities: {edit: false}});
+  renderPage();
+
+  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  expect(screen.getByRole('note')).toHaveTextContent('inspect but not change');
+  expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();
+});
+
+test('shows a refusal of the admission answer once, under the group', async () => {
+  serve(settings);
+  const sent = recordPuts(400, {error: {
+    code: 'validation_failed',
+    message: 'Check the highlighted settings.',
+    details: {fields: {gatingType: ['Choose invite_only, voucher, or wiki_based.']}},
+  }});
+  renderPage();
+
+  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+
+  await waitFor(() => expect(sent).toHaveLength(1));
+  // Once in the summary, once under the group -- and the description the choices point at
+  // is the one that is actually rendered.
+  const refusal = await screen.findAllByText('Choose invite_only, voucher, or wiki_based.');
+  expect(refusal).toHaveLength(2);
+  const anyone = screen.getByRole('radio', {name: 'Anyone with a Wikimedia account'});
+  expect(anyone).toHaveAttribute('aria-invalid', 'true');
+  expect(anyone).toHaveAttribute('aria-describedby', refusal[1]?.id);
+});
+
 test('renders its labels from the catalogue, not from source literals', async () => {
   server.use(http.get(
     new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),

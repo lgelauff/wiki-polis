@@ -831,16 +831,20 @@ a { color: inherit; }
 .access-choice { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: .75rem; min-height: 44px; padding: .35rem 0; font-size: .78rem; cursor: pointer; }
 .access-choice input { width: 18px; height: 18px; margin: 0; accent-color: var(--civic); }
 .settings-form .access-choice input { display: inline-block; width: 18px; margin-top: 0; padding: 0; border: 0; background: none; }
-/* Inactive because the functionality does not exist yet: muted, never merely faint. */
+/* Inactive because the functionality does not exist yet: muted, never merely faint. The
+   control itself has to grey too -- `color` does not paint a radio or a checkbox, so an
+   already-stored option would otherwise sit there in full-strength accent blue, looking
+   switched on. */
 .access-unavailable, .access-unavailable input { color: var(--muted); cursor: default; }
-.access-reason { display: block; font-size: .7rem; color: var(--muted); }
+.access-unavailable input { accent-color: var(--muted); filter: grayscale(1); opacity: .6; }
+.access-reason { display: block; font-size: .75rem; color: var(--muted); }
 .access-answer { margin: 1.75rem 0; }
 .access-answer-legend { margin: 0 0 .35rem; font-size: .72rem; font-weight: 650; }
 .access-answer-value { display: flex; align-items: center; gap: .4rem; margin: 0; font-size: .78rem; }
 .access-lock { display: inline-flex; color: var(--muted); }
 .access-summary { margin-bottom: 1.5rem; padding: .85rem 1rem; border-left: 4px solid var(--dissent); background: var(--surface); }
 .access-summary ul { margin: 0; padding-inline-start: 1.1rem; color: var(--dissent); font-size: .74rem; }
-.access-field-error { margin: .35rem 0 0; color: var(--dissent); font-size: .72rem; }
+.access-field-error { margin: .35rem 0 0; color: var(--dissent); font-size: .75rem; }
 .access-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: .85rem 1rem; border-left: 4px solid var(--signal); background: var(--surface); }
 .access-confirm p { margin: 0; font-size: .78rem; }
 .access-confirm button { min-height: 44px; padding: .7rem 1rem; border: 1px solid var(--ink); background: var(--surface); cursor: pointer; }

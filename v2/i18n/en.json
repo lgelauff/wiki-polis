@@ -531,7 +531,6 @@
     "admin-label-slug": "Slug (URL-safe, immutable)",
     "admin-slug-title": "Lowercase letters, numbers, and hyphens only — no spaces or special characters (e.g. climate-2026)",
     "admin-label-title": "Title",
-    "admin-label-access": "Access policy",
     "admin-label-route": "Route",
     "admin-label-elig-event": "Eligibility event ID",
     "admin-elig-event-ph": "optional AccountEligibility event",

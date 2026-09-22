@@ -133,14 +133,23 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   });
 
   // Narrowing is measured against what the server last told us, not against the first
-  // render: after a save the stored answers are the new baseline.
-  const narrowing = (stored === 'anyone' && gated)
+  // render: after a save the stored answers are the new baseline. Every move to a different
+  // gated answer counts, not only anyone -> gated: invitation list -> voucher, and the
+  // legacy `unset` row -> a real gate, both take access away from people who have it today.
+  // Only a move *to* "anyone" widens.
+  const narrowing = (stored !== admission && admission !== 'anyone')
     || (data.conversation.announce && !announce)
     || (data.conversation.information && !information)
     || (data.conversation.resultsShared && !resultsShared);
 
   const fields = fieldErrors(mutation.error);
   const fieldMessages = Object.values(fields).flat();
+  // The admission radio group answers both wire fields, so a refusal of either is shown
+  // once, under the group, and linked from every live choice in it.
+  const admissionMessages = [...(fields.gated ?? []), ...(fields.gatingType ?? [])];
+  const admissionInvalid = admissionMessages.length
+    ? {'aria-invalid': true, 'aria-describedby': `${ids}-gated-error`}
+    : {};
   const locked = lockedField(mutation.error);
   const serverMessage = mutation.error instanceof ApiContractError
     ? mutation.error.message : null;
@@ -151,9 +160,16 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   useEffect(() => {
     if (confirming) confirmRef.current?.focus();
   }, [confirming]);
+  // The question is about a change that is on screen: put the widest answer back and it has
+  // nothing left to ask about, so it goes away with the narrowing it was asking about.
+  useEffect(() => {
+    if (!narrowing) setConfirming(false);
+  }, [narrowing]);
+  // Keyed on the attempt, not on the message count, so a second refusal naming the same
+  // number of fields still moves focus to the summary.
   useEffect(() => {
     if (fieldMessages.length) summaryRef.current?.focus();
-  }, [fieldMessages.length]);
+  }, [mutation.failureCount, fieldMessages.length]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -193,7 +209,7 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
       {!canEdit && <p className="settings-readonly" role="note">
         Your role can inspect but not change these settings.
       </p>}
-      <form className="settings-form" onSubmit={submit} aria-disabled={canEdit ? undefined : true}>
+      <form className="settings-form" onSubmit={submit}>
         {fieldMessages.length > 0 && <div className="access-summary" role="alert" tabIndex={-1} ref={summaryRef}>
           <ul>{Object.entries(fields).map(([field, messages]) => (
             <li key={field}>{messages.join(' ')}</li>
@@ -206,12 +222,9 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
           <label>Introduction HTML<textarea value={introHtml} rows={7} onChange={(event) => setIntroHtml(event.target.value)} /></label>
           <label>Closing HTML<textarea value={outroHtml} rows={5} onChange={(event) => setOutroHtml(event.target.value)} /></label>
           <p className="settings-hint">Allowed HTML is sanitized by the server when saved.</p>
-          {!gated && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
-            <option value="public">Not gated</option><option value="demo">Demo</option>
-          </select></label>}
         </section>
-        <section aria-labelledby="settings-access">
-          <header><span>02</span><div><h2 id="settings-access">{msg('admin-access-heading')}</h2><p>Who can discover and join this consultation.</p></div></header>
+        <section aria-label={msg('admin-access-heading')}>
+          <header><span>02</span><div><p>Who can discover and join this consultation.</p></div></header>
           {admissionLocked ? <div className="access-answer">
             <p className="access-answer-legend">{msg('admin-access-admission-legend')}</p>
             <p className="access-answer-value">
@@ -220,25 +233,30 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
           </div> : <fieldset className="access-choices">
             <legend>{msg('admin-access-admission-legend')}</legend>
             <label className="access-choice">
-              <input type="radio" name="admission" value="anyone" checked={admission === 'anyone'} {...invalid('gated')} onChange={() => setAdmission('anyone')} />
+              <input type="radio" name="admission" value="anyone" checked={admission === 'anyone'} {...admissionInvalid} onChange={() => setAdmission('anyone')} />
               <span>{msg('admin-access-admission-anyone')}</span>
             </label>
             <label className="access-choice">
-              <input type="radio" name="admission" value="invite_only" checked={admission === 'invite_only'} onChange={() => setAdmission('invite_only')} />
+              <input type="radio" name="admission" value="invite_only" checked={admission === 'invite_only'} {...admissionInvalid} onChange={() => setAdmission('invite_only')} />
               <span>{msg('admin-access-admission-invited')}</span>
             </label>
             <label className="access-choice">
-              <input type="radio" name="admission" value="voucher" checked={admission === 'voucher'} onChange={() => setAdmission('voucher')} />
+              <input type="radio" name="admission" value="voucher" checked={admission === 'voucher'} {...admissionInvalid} onChange={() => setAdmission('voucher')} />
               <span>{msg('admin-access-admission-voucher')}</span>
             </label>
+            {/* The reason is inside the label, so it is part of the option's own name; it is
+                deliberately not also an `aria-describedby` target, which would read it twice. */}
             <label className="access-choice access-unavailable" aria-disabled="true">
               <input type="radio" name="admission" value="wiki_based" checked={admission === 'wiki_based'}
-                aria-disabled="true" aria-describedby={`${ids}-wiki-reason`} readOnly
-                onClick={(event) => event.preventDefault()} />
-              <span>Wiki policy <span className="access-reason" id={`${ids}-wiki-reason`}>{WIKI_BASED_REASON}</span></span>
+                aria-disabled="true" readOnly onClick={(event) => event.preventDefault()} />
+              <span>Wiki policy <span className="access-reason">{WIKI_BASED_REASON}</span></span>
             </label>
           </fieldset>}
+          {admissionMessages.length > 0 && <p className="access-field-error" id={`${ids}-gated-error`}>{admissionMessages.join(' ')}</p>}
           {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
+          {!gated && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
+            <option value="public">Not gated</option><option value="demo">Demo</option>
+          </select></label>}
           {gated && <fieldset className="access-choices">
             <legend>{msg('admin-access-visibility-legend')}</legend>
             <label className="access-choice">
@@ -254,10 +272,9 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
               <span>{msg('admin-access-visibility-results')}</span>
             </label>
             {resultsShared && <label className="access-choice access-unavailable" aria-disabled="true">
-              <input type="checkbox" checked={showUsernames} aria-disabled="true"
-                aria-describedby={`${ids}-reveal-reason`} readOnly
+              <input type="checkbox" checked={showUsernames} aria-disabled="true" readOnly
                 onClick={(event) => event.preventDefault()} />
-              <span>Show usernames in shared results <span className="access-reason" id={`${ids}-reveal-reason`}>{REVEAL_REASON}</span></span>
+              <span>Show usernames in shared results <span className="access-reason">{REVEAL_REASON}</span></span>
             </label>}
           </fieldset>}
           {gated && <label>{msg('admin-access-request-text')}<textarea value={accessRequestText} rows={3} onChange={(event) => setAccessRequestText(event.target.value)} /></label>}
@@ -284,7 +301,7 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
         {canEdit && <footer>
           {confirming ? <div className="access-confirm" tabIndex={-1} ref={confirmRef}>
             <p>{msg('admin-access-narrowing-confirm')}</p>
-            <button type="submit">{msg('admin-access-narrowing-continue')}</button>
+            <button type="submit" disabled={mutation.isPending}>{msg('admin-access-narrowing-continue')}</button>
             <button type="button" onClick={() => setConfirming(false)}>{msg('common-cancel')}</button>
           </div> : <button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? 'Saving…' : msg('adminconv-save-settings')}
