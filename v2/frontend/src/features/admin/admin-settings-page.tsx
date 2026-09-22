@@ -1,19 +1,94 @@
-import {useState, type FormEvent} from 'react';
+import {useEffect, useId, useRef, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
 import {adminSettingsQuery, putAdminSettings} from '../../api/queries';
+import {useMessage, type Message} from '../../i18n/messages';
 
 type Settings = components['schemas']['AdminSettings'];
 type Policy = Settings['conversation']['accessPolicy'];
 type GatingType = Settings['conversation']['gatingType'];
 type Tier = Settings['recommendations']['tier'];
 
+/** The answers to "who can take part" that this page offers, as one value.
+ *
+ * `gated` and `gatingType` travel separately on the wire, but only four of their
+ * combinations are ones the server accepts from a new write today: not gated (no type),
+ * gated with `invite_only`, with `voucher`, or with `wiki_based`. Keeping the answer as a
+ * single radio value is what makes the impossible fifth combination -- gated with no type
+ * -- unreachable from the page: the server refuses it for any row that is not already
+ * gated ("a gated conversation needs a gating type", `services/admin_settings.py`).
+ *
+ * `unset` is not offered as a choice. It is the read-back of a legacy row that is gated
+ * with no stored type; such a row may be saved unchanged (the server's own exception for
+ * it), so the page carries that state rather than silently rewriting it. */
+type Admission = 'anyone' | 'invite_only' | 'voucher' | 'wiki_based' | 'unset';
+
+/** `wiki_based` is stored and accepted but admits nobody (`services/access.py` answers
+ *  `unknown` for every account), so it is shown as an unavailable option rather than as a
+ *  choice. Its label and reason stay hardcoded English until the provider ships. */
+const WIKI_BASED_REASON = 'Not available yet (issue 406)';
+
+/** The username-reveal option has no reader anywhere in the code: it is stored and sent
+ *  back unchanged. Greyed out for the same reason, without an issue number because none
+ *  has been filed for it yet. */
+const REVEAL_REASON = 'Not available yet';
+
+function admissionOf(conversation: Settings['conversation']): Admission {
+  if (!conversation.gated) return 'anyone';
+  return conversation.gatingType ?? 'unset';
+}
+
+function admissionWire(admission: Admission): {gated: boolean; gatingType: GatingType} {
+  if (admission === 'anyone') return {gated: false, gatingType: null};
+  if (admission === 'unset') return {gated: true, gatingType: null};
+  return {gated: true, gatingType: admission};
+}
+
+function admissionLabel(msg: Message, admission: Admission): string {
+  switch (admission) {
+    case 'anyone': return msg('admin-access-admission-anyone');
+    case 'invite_only': return msg('admin-access-admission-invited');
+    case 'voucher': return msg('admin-access-admission-voucher');
+    case 'wiki_based': return 'Wiki policy';
+    default: return '—';
+  }
+}
+
+/** The per-field messages of a 400 `validation_failed`, keyed by the request field. */
+function fieldErrors(error: unknown): Record<string, string[]> {
+  if (!(error instanceof ApiContractError) || error.code !== 'validation_failed') return {};
+  const details = error.details as {fields?: Record<string, string[]>} | undefined;
+  return details?.fields ?? {};
+}
+
+/** The field named by a 409 `access_settings_locked` (`gated`, `gating_type` or
+ *  `show_usernames`), so the refusal can be shown beside the row it is about. */
+function lockedField(error: unknown): string | null {
+  if (!(error instanceof ApiContractError)
+      || error.code !== 'access_settings_locked') return null;
+  const details = error.details as {field?: string} | undefined;
+  return details?.field ?? null;
+}
+
+function LockGlyph({label}: {label: string}) {
+  return (
+    <span className="access-lock" title={label} role="img" aria-label={label}>
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor"
+        strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="7" width="10" height="7" rx="1.5" />
+        <path d="M5.5 7V4.8a2.5 2.5 0 0 1 5 0V7" />
+      </svg>
+    </span>
+  );
+}
+
 export function AdminSettingsPage({conversationId, csrfToken}: {
   conversationId: number; csrfToken: string;
 }) {
+  const msg = useMessage();
   const queryClient = useQueryClient();
   const options = adminSettingsQuery(conversationId);
   const {data} = useSuspenseQuery(options);
@@ -21,70 +96,175 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   const [introHtml, setIntroHtml] = useState(data.conversation.introHtml);
   const [outroHtml, setOutroHtml] = useState(data.conversation.outroHtml);
   const [accessPolicy, setAccessPolicy] = useState<Policy>(data.conversation.accessPolicy);
-  const [gated, setGated] = useState(data.conversation.gated);
-  const [gatingType, setGatingType] = useState<GatingType>(data.conversation.gatingType);
+  const [admission, setAdmission] = useState<Admission>(admissionOf(data.conversation));
   const [announce, setAnnounce] = useState(data.conversation.announce);
   const [information, setInformation] = useState(data.conversation.information);
   const [resultsShared, setResultsShared] = useState(data.conversation.resultsShared);
-  const [showUsernames, setShowUsernames] = useState(data.conversation.showUsernames);
-  const [accessRequestText, setAccessRequestText] = useState(data.conversation.accessRequestText ?? '');
+  const [accessRequestText, setAccessRequestText] = useState(
+    data.conversation.accessRequestText ?? '',
+  );
   const [eligibilityEventId, setEligibilityEventId] = useState(data.eligibility.eventId);
   const [eligibilityLabel, setEligibilityLabel] = useState(data.eligibility.label ?? '');
   const [tier, setTier] = useState<Tier>(data.recommendations.tier);
+  const [confirming, setConfirming] = useState(false);
+  const confirmRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const ids = useId();
+  const canEdit = data.capabilities.edit;
+  // Both flags carry the same server predicate (the Explore phase flag); either one being
+  // true means the stored admission answer cannot change, so the row renders as text --
+  // which is what today's page does by disabling both of its access controls.
+  const admissionLocked = Boolean(data.locks?.gated || data.locks?.gatingType);
+  const stored = admissionOf(data.conversation);
+  // The username-reveal option is sent back exactly as it was read, so it can never be the
+  // field a 409 names; it is kept out of component state for that reason.
+  const showUsernames = data.conversation.showUsernames;
+  const gated = admission !== 'anyone';
+
   const mutation = useMutation({
     mutationFn: () => putAdminSettings(conversationId, {
       title, introHtml, outroHtml, accessPolicy, eligibilityEventId,
-      eligibilityLabel, recommendationTier: tier, gated, gatingType,
+      eligibilityLabel, recommendationTier: tier, ...admissionWire(admission),
       announce, information, resultsShared, showUsernames, accessRequestText,
     }, csrfToken),
     onSuccess: (receipt) => queryClient.setQueryData<Settings>(
       options.queryKey, receipt.settings,
     ),
   });
+
+  // Narrowing is measured against what the server last told us, not against the first
+  // render: after a save the stored answers are the new baseline.
+  const narrowing = (stored === 'anyone' && gated)
+    || (data.conversation.announce && !announce)
+    || (data.conversation.information && !information)
+    || (data.conversation.resultsShared && !resultsShared);
+
+  const fields = fieldErrors(mutation.error);
+  const fieldMessages = Object.values(fields).flat();
+  const locked = lockedField(mutation.error);
+  const serverMessage = mutation.error instanceof ApiContractError
+    ? mutation.error.message : null;
+  const generalError = mutation.error instanceof ApiContractError
+    ? (fieldMessages.length || locked ? null : serverMessage)
+    : mutation.error ? 'Settings could not be saved.' : null;
+
+  useEffect(() => {
+    if (confirming) confirmRef.current?.focus();
+  }, [confirming]);
+  useEffect(() => {
+    if (fieldMessages.length) summaryRef.current?.focus();
+  }, [fieldMessages.length]);
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Widening saves at once; narrowing asks once, inside the page, keeping every input.
+    if (narrowing && !confirming) {
+      setConfirming(true);
+      return;
+    }
+    setConfirming(false);
     mutation.mutate();
   }
-  const error = mutation.error instanceof ApiContractError
-    ? mutation.error.message : mutation.error ? 'Settings could not be saved.' : null;
+
+  /** `aria-invalid` plus the link to the message, for a field the server refused. */
+  function invalid(field: string) {
+    return fields[field]
+      ? {'aria-invalid': true, 'aria-describedby': `${ids}-${field}-error`} : {};
+  }
+
+  function FieldError({field}: {field: string}) {
+    const messages = fields[field];
+    if (!messages) return null;
+    return <p className="access-field-error" id={`${ids}-${field}-error`}>{messages.join(' ')}</p>;
+  }
 
   return (
     <main className="settings-shell" id="main">
-      <nav className="record-breadcrumb" aria-label="Breadcrumb">
-        <Link to="/admin">Admin panel</Link><span>/</span>
-        <Link to={data.links.lifecycle}>{data.conversation.title}</Link><span>/</span><span>Settings</span>
+      <nav className="record-breadcrumb" aria-label={msg('admin-crumb-aria')}>
+        <Link to="/admin">{msg('admin-nav-panel')}</Link><span>/</span>
+        <Link to={data.links.lifecycle}>{data.conversation.title}</Link><span>/</span>
+        <span>{msg('admin-access-heading')}</span>
       </nav>
       <header className="settings-heading">
-        <p className="eyebrow">Configuration · {data.conversation.slug}</p>
-        <h1>Conversation settings</h1>
+        <p className="eyebrow">Configuration &middot; {data.conversation.slug}</p>
+        <h1>{msg('admin-access-heading')}</h1>
         <p>Describe the consultation, control access, and choose the scope used for tool guidance.</p>
       </header>
-      <form className="settings-form" onSubmit={submit}>
+      {!canEdit && <p className="settings-readonly" role="note">
+        Your role can inspect but not change these settings.
+      </p>}
+      <form className="settings-form" onSubmit={submit} aria-disabled={canEdit ? undefined : true}>
+        {fieldMessages.length > 0 && <div className="access-summary" role="alert" tabIndex={-1} ref={summaryRef}>
+          <ul>{Object.entries(fields).map(([field, messages]) => (
+            <li key={field}>{messages.join(' ')}</li>
+          ))}</ul>
+        </div>}
         <section aria-labelledby="settings-description">
           <header><span>01</span><div><h2 id="settings-description">Description</h2><p>Participant-facing title and rich-text context.</p></div></header>
-          <label>Title<input value={title} maxLength={255} required onChange={(event) => setTitle(event.target.value)} /></label>
+          <label>{msg('admin-label-title')}<input value={title} maxLength={255} required {...invalid('title')} onChange={(event) => setTitle(event.target.value)} /></label>
+          <FieldError field="title" />
           <label>Introduction HTML<textarea value={introHtml} rows={7} onChange={(event) => setIntroHtml(event.target.value)} /></label>
           <label>Closing HTML<textarea value={outroHtml} rows={5} onChange={(event) => setOutroHtml(event.target.value)} /></label>
           <p className="settings-hint">Allowed HTML is sanitized by the server when saved.</p>
-        </section>
-        <section aria-labelledby="settings-access">
-          <header><span>02</span><div><h2 id="settings-access">Access</h2><p>Who can discover and join this conversation.</p></div></header>
-          <label><input type="checkbox" checked={gated} disabled={data.locks?.gated} onChange={(event) => setGated(event.target.checked)} /> Who can take part: gated</label>
-          {gated && <label>Gating type<select value={gatingType ?? ''} disabled={data.locks?.gatingType} onChange={(event) => setGatingType((event.target.value || null) as GatingType)}>
-            <option value="">Choose a gating type</option><option value="invite_only">Invite only</option><option value="voucher">Voucher</option><option value="wiki_based">Wiki-based access policy</option>
-          </select></label>}
           {!gated && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
             <option value="public">Not gated</option><option value="demo">Demo</option>
           </select></label>}
-          {gated && <fieldset><legend>Visibility for people without access</legend>
-            <label><input type="checkbox" checked={announce} onChange={(event) => setAnnounce(event.target.checked)} /> Announce in overviews</label>
-            <label><input type="checkbox" checked={information} onChange={(event) => setInformation(event.target.checked)} /> Show introduction, phase and dates</label>
-            <label><input type="checkbox" checked={resultsShared} onChange={(event) => setResultsShared(event.target.checked)} /> Share results</label>
-            {resultsShared && <label><input type="checkbox" checked={showUsernames} disabled={data.locks?.showUsernames} onChange={(event) => setShowUsernames(event.target.checked)} /> Show usernames in shared results</label>}
+        </section>
+        <section aria-labelledby="settings-access">
+          <header><span>02</span><div><h2 id="settings-access">{msg('admin-access-heading')}</h2><p>Who can discover and join this consultation.</p></div></header>
+          {admissionLocked ? <div className="access-answer">
+            <p className="access-answer-legend">{msg('admin-access-admission-legend')}</p>
+            <p className="access-answer-value">
+              {admissionLabel(msg, stored)} <LockGlyph label={msg('admin-access-locked')} />
+            </p>
+          </div> : <fieldset className="access-choices">
+            <legend>{msg('admin-access-admission-legend')}</legend>
+            <label className="access-choice">
+              <input type="radio" name="admission" value="anyone" checked={admission === 'anyone'} {...invalid('gated')} onChange={() => setAdmission('anyone')} />
+              <span>{msg('admin-access-admission-anyone')}</span>
+            </label>
+            <label className="access-choice">
+              <input type="radio" name="admission" value="invite_only" checked={admission === 'invite_only'} onChange={() => setAdmission('invite_only')} />
+              <span>{msg('admin-access-admission-invited')}</span>
+            </label>
+            <label className="access-choice">
+              <input type="radio" name="admission" value="voucher" checked={admission === 'voucher'} onChange={() => setAdmission('voucher')} />
+              <span>{msg('admin-access-admission-voucher')}</span>
+            </label>
+            <label className="access-choice access-unavailable" aria-disabled="true">
+              <input type="radio" name="admission" value="wiki_based" checked={admission === 'wiki_based'}
+                aria-disabled="true" aria-describedby={`${ids}-wiki-reason`} readOnly
+                onClick={(event) => event.preventDefault()} />
+              <span>Wiki policy <span className="access-reason" id={`${ids}-wiki-reason`}>{WIKI_BASED_REASON}</span></span>
+            </label>
           </fieldset>}
-          {gated && <label>How to ask for access<textarea value={accessRequestText} rows={3} onChange={(event) => setAccessRequestText(event.target.value)} /></label>}
-          <label>Eligibility event ID<input value={eligibilityEventId} maxLength={80} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
-          <label>Eligibility label<input value={eligibilityLabel} maxLength={255} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
+          {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
+          {gated && <fieldset className="access-choices">
+            <legend>{msg('admin-access-visibility-legend')}</legend>
+            <label className="access-choice">
+              <input type="checkbox" checked={announce} onChange={(event) => setAnnounce(event.target.checked)} />
+              <span>{msg('admin-access-visibility-announce')}</span>
+            </label>
+            <label className="access-choice">
+              <input type="checkbox" checked={information} onChange={(event) => setInformation(event.target.checked)} />
+              <span>{msg('admin-access-visibility-information')}</span>
+            </label>
+            <label className="access-choice">
+              <input type="checkbox" checked={resultsShared} onChange={(event) => setResultsShared(event.target.checked)} />
+              <span>{msg('admin-access-visibility-results')}</span>
+            </label>
+            {resultsShared && <label className="access-choice access-unavailable" aria-disabled="true">
+              <input type="checkbox" checked={showUsernames} aria-disabled="true"
+                aria-describedby={`${ids}-reveal-reason`} readOnly
+                onClick={(event) => event.preventDefault()} />
+              <span>Show usernames in shared results <span className="access-reason" id={`${ids}-reveal-reason`}>{REVEAL_REASON}</span></span>
+            </label>}
+          </fieldset>}
+          {gated && <label>{msg('admin-access-request-text')}<textarea value={accessRequestText} rows={3} onChange={(event) => setAccessRequestText(event.target.value)} /></label>}
+          <label>{msg('admin-label-elig-event')}<input value={eligibilityEventId} maxLength={80} placeholder={msg('admin-elig-event-ph')} {...invalid('eligibilityEventId')} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
+          <FieldError field="eligibilityEventId" />
+          <label>{msg('admin-label-elig-label')}<input value={eligibilityLabel} maxLength={255} placeholder={msg('admin-elig-label-ph')} {...invalid('eligibilityLabel')} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
+          <FieldError field="eligibilityLabel" />
           <div className="settings-eligibility" data-configured={data.eligibility.configured}>
             <strong>Eligibility {data.eligibility.configured ? 'configured' : 'not configured'}</strong>
             {data.eligibility.label && <span>{data.eligibility.label}</span>}
@@ -101,11 +281,17 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
             </label>
           ))}</fieldset>
         </section>
-        {data.capabilities.edit ? <footer>
-          <button type="submit" disabled={mutation.isPending}>{mutation.isPending ? 'Saving…' : 'Save settings'}</button>
+        {canEdit && <footer>
+          {confirming ? <div className="access-confirm" tabIndex={-1} ref={confirmRef}>
+            <p>{msg('admin-access-narrowing-confirm')}</p>
+            <button type="submit">{msg('admin-access-narrowing-continue')}</button>
+            <button type="button" onClick={() => setConfirming(false)}>{msg('common-cancel')}</button>
+          </div> : <button type="submit" disabled={mutation.isPending}>
+            {mutation.isPending ? 'Saving…' : msg('adminconv-save-settings')}
+          </button>}
           {mutation.data && <p role="status">{mutation.data.changed ? 'Settings saved.' : 'Settings already up to date.'}</p>}
-          {error && <p role="alert">{error}</p>}
-        </footer> : <p className="settings-readonly">Your role can inspect but not change these settings.</p>}
+          {generalError && <p role="alert">{generalError}</p>}
+        </footer>}
       </form>
     </main>
   );

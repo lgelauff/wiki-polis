@@ -242,7 +242,7 @@ test('pauses and resumes from the legacy lifecycle control', async () => {
 
 test('edits settings and legacy eligibility through one typed command', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings']}><App /></MemoryRouter></QueryClientProvider>);
-  expect(await screen.findByRole('heading', {name: 'Conversation settings'})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Access', level: 1})).toBeVisible();
   expect(screen.getByText('Extended-confirmed editors')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'experienced-editors'}});
   fireEvent.change(screen.getByLabelText('Eligibility label'), {target: {value: 'Experienced editors'}});

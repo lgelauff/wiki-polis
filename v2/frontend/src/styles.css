@@ -824,6 +824,27 @@ a { color: inherit; }
 .settings-form > footer { display: flex; align-items: center; gap: 1rem; padding-top: 2rem; }
 .settings-form > footer button { padding: .7rem 1rem; border: 0; color: white; background: var(--ink); cursor: pointer; }
 .settings-form > footer p { color: var(--consensus); font-size: .72rem; }
+
+/* Access page: one plain-worded choice per row. */
+.access-choices { margin: 1.75rem 0; }
+.access-choices legend { margin-bottom: .7rem; font-size: .72rem; font-weight: 650; }
+.access-choice { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: .75rem; min-height: 44px; padding: .35rem 0; font-size: .78rem; cursor: pointer; }
+.access-choice input { width: 18px; height: 18px; margin: 0; accent-color: var(--civic); }
+.settings-form .access-choice input { display: inline-block; width: 18px; margin-top: 0; padding: 0; border: 0; background: none; }
+/* Inactive because the functionality does not exist yet: muted, never merely faint. */
+.access-unavailable, .access-unavailable input { color: var(--muted); cursor: default; }
+.access-reason { display: block; font-size: .7rem; color: var(--muted); }
+.access-answer { margin: 1.75rem 0; }
+.access-answer-legend { margin: 0 0 .35rem; font-size: .72rem; font-weight: 650; }
+.access-answer-value { display: flex; align-items: center; gap: .4rem; margin: 0; font-size: .78rem; }
+.access-lock { display: inline-flex; color: var(--muted); }
+.access-summary { margin-bottom: 1.5rem; padding: .85rem 1rem; border-left: 4px solid var(--dissent); background: var(--surface); }
+.access-summary ul { margin: 0; padding-inline-start: 1.1rem; color: var(--dissent); font-size: .74rem; }
+.access-field-error { margin: .35rem 0 0; color: var(--dissent); font-size: .72rem; }
+.access-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: .85rem 1rem; border-left: 4px solid var(--signal); background: var(--surface); }
+.access-confirm p { margin: 0; font-size: .78rem; }
+.access-confirm button { min-height: 44px; padding: .7rem 1rem; border: 1px solid var(--ink); background: var(--surface); cursor: pointer; }
+.access-confirm button[type="submit"] { border: 0; color: white; background: var(--ink); }
 .termination-shell { width: min(920px, calc(100% - 40px)); margin-inline: auto; padding: 2.5rem 0 7rem; }
 .termination-heading { padding: clamp(3rem, 7vw, 6rem) 0 2rem; border-bottom: 1px solid var(--ink); }
 .termination-heading h1, .termination-receipt h1 { margin: .3rem 0 1rem; font-size: clamp(3rem, 8vw, 6rem); line-height: .9; letter-spacing: -.07em; }
