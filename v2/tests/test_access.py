@@ -35,11 +35,12 @@ def test_existing_participation_does_not_short_circuit_invite_check(
     assert decision.reason == 'access-invite-required'
 
 
-def test_unknown_provider_keeps_viewer_relationship_and_certainty(
+def test_unimplemented_provider_keeps_viewer_relationship_and_certainty(
     app, conversation, participant,
 ):
+    # wiki_based is still fail-closed (the canivote provider hasn't landed yet).
     conversation.gated = True
-    conversation.gating_type = 'voucher'
+    conversation.gating_type = 'wiki_based'
     db.session.add(Participation(
         participant_id=participant.id,
         conversation_id=conversation.id,

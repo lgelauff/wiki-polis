@@ -373,3 +373,32 @@ test.each([
     expect(document.title).toBe(`(forbidden-elig-doc-title: ${TITLE})`);
   },
 );
+
+function serveVoucherSession() {
+  server.use(http.get(url('/api/v1/session'), () => HttpResponse.json({data: {
+    state: 'voucher',
+    user: null,
+    capabilities: {administerSite: false},
+    csrfToken: 'test-csrf-token',
+    developerLogins: [],
+    gitVersion: 'test-version',
+    locales: {current: 'en', available: [{code: 'en', name: 'English'}]},
+    links: {login: '/login', logout: '/logout'},
+  }})));
+}
+
+test('a voucher account can join, without Wikimedia notification options', async () => {
+  serveVoucherSession();
+  serveJoinEntry({emailable: false});
+  renderJoin();
+  await joinForm();
+
+  // Catches the join screen bouncing a voucher account to the Wikimedia login, and catches it
+  // offering an email or talk page the account does not have.
+  expect(screen.queryByRole('checkbox', {name: testMessages['accept-notify-talk']!})).toBeNull();
+  expect(screen.queryByRole('heading', {name: testMessages['accept-notify-heading']!})).toBeNull();
+  expect(screen.queryByRole('link', {name: /Check your email settings/})).toBeNull();
+  // The header names the account kind where a username would be, and still offers log out.
+  expect(screen.getByText(testMessages['base-voucher-account']!)).toBeVisible();
+  expect(screen.getByRole('button', {name: testMessages['base-log-out']!})).toBeVisible();
+});

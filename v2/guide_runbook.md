@@ -14,6 +14,36 @@ them:
 - **Deploy a new version** → [Ongoing deploys](guide_deployment.md#ongoing-deploys) (or `bash ~/wiki-polis/deploy.sh`).
 - **Run a database migration** → [Database migrations](guide_deployment.md#database-migrations) (must run inside the webservice shell).
 - **Toolforge quirks** → [Toolforge gotchas](guide_deployment.md#toolforge-gotchas).
+- **Create voucher codes** → [Voucher codes](#voucher-codes) below (until the organizer screens exist).
+
+## Voucher codes
+
+Until the organizer screens exist (#368), codes for a voucher-gated process are created
+from the shell. On Toolforge, run these inside the webservice shell, like a migration
+([Database migrations](guide_deployment.md#database-migrations)): the database settings
+only exist there.
+
+```bash
+# Generate 200 codes and save them. They are printed once and cannot be shown again:
+# only their HMACs are stored.
+flask --app app vouchers generate <slug> 200 --label "Workshop Utrecht 12 Oct" > codes.txt
+
+# Import the organizers' own codes, one per line (a file, or - for stdin).
+flask --app app vouchers import <slug> organizer-codes.txt --label "Printed cards"
+```
+
+- **Same codes in several processes:** import the same list into each process. Each
+  process stores its own HMACs, and each code makes a separate account per process.
+  Generated codes cannot be copied afterwards, so for shared codes, import.
+- **Import rules:** capitals, spaces and hyphens are ignored; a code must then be 5–64
+  letters and digits. Lines that are not are listed so the file can be fixed; a code
+  already in the process is skipped and counted.
+- **Short codes are guessable.** An imported code is only as strong as it is long and
+  random, and sequential lists (`ROOM001`, `ROOM002`) are trivially guessed. The only
+  other guard is the rate limit on the entry page.
+- **Handle the output as credentials.** Whoever holds a code is that participant.
+  Delete `codes.txt` from the shell once it has been handed over.
+- **Revoking** has no command yet (`services.vouchers.revoke_voucher` exists).
 
 ## Monitoring & health
 
