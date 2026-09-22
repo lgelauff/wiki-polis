@@ -13,6 +13,8 @@ import {
 import {LegacyShell} from '../legacy/legacy-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
+import {useMessage} from '../../i18n/messages';
+import {accessPolicyLabel} from '../../i18n/server-labels';
 
 type Catalog = components['schemas']['AdminCatalog'];
 type CreateRequest = components['schemas']['AdminConversationCreateRequest'];
@@ -30,6 +32,7 @@ function errorMessage(error: Error | null) {
 }
 
 export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
+  const msg = useMessage();
   const navigate = useNavigate();
   const options = adminCatalogQuery();
   const {data} = useSuspenseQuery(options);
@@ -116,13 +119,20 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
             <tr key={conversation.id}>
               <td><InternalLink href={conversation.links.participant}>{conversation.title}</InternalLink></td>
               <td><code>{conversation.slug}</code></td>
-              <td>{conversation.accessPolicy}</td>
+              <td>{accessPolicyLabel(msg, conversation.accessPolicy)}</td>
               <td>{conversation.status === 'active'
                 ? <span className="badge-active-inline">active</span>
                 : conversation.status === 'paused'
                   ? <span className="badge-paused-inline">paused</span>
                   : <span className="badge-inactive">closed</span>}</td>
-              <td><InternalLink href={conversation.links.manage} className="btn-small">manage</InternalLink></td>
+              {/* The settings page hangs off the manage path the server itself builds
+                  (`_admin_client_link` in app.py), so the link is derived from that link
+                  rather than from a second copy of the admin route table here. */}
+              <td>
+                <InternalLink href={conversation.links.manage} className="btn-small">manage</InternalLink>
+                {' '}
+                <InternalLink href={`${conversation.links.manage}/settings`} className="btn-small">{msg('admin-btn-settings')}</InternalLink>
+              </td>
             </tr>
           ))}</tbody>
         </table>
@@ -133,7 +143,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
             <div className="edit-row-fields">
               <label>Slug (URL-safe, immutable)<input type="text" placeholder="e.g. rfc-2024-adminship" required pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Lowercase letters, numbers, and hyphens only — no spaces or special characters (e.g. climate-2026)" value={draft.slug} onChange={(event) => setDraft({...draft, slug: event.target.value})} /></label>
               <label>Title<input type="text" required value={draft.title} onChange={(event) => setDraft({...draft, title: event.target.value})} /></label>
-              <label>Access policy<select value={draft.accessPolicy} onChange={(event) => setDraft({...draft, accessPolicy: event.target.value as CreateRequest['accessPolicy']})}><option value="public">public</option><option value="invite_only">invite_only</option><option value="demo">demo</option></select></label>
+              <label>Access policy<select value={draft.accessPolicy} onChange={(event) => setDraft({...draft, accessPolicy: event.target.value as CreateRequest['accessPolicy']})}><option value="public">{msg('admin-access-policy-public')}</option><option value="invite_only">{msg('admin-access-policy-invite_only')}</option><option value="demo">{msg('admin-access-policy-demo')}</option></select></label>
               <label>Route<select value={draft.phaseRoute} onChange={(event) => setDraft({...draft, phaseRoute: event.target.value})}>{data.phaseRoutes.map((route) => <option key={route.key} value={route.key}>{route.label}</option>)}</select></label>
               <label>Eligibility event ID<input type="text" maxLength={80} placeholder="optional AccountEligibility event" value={draft.eligibilityEventId} onChange={(event) => setDraft({...draft, eligibilityEventId: event.target.value})} /></label>
               <label>Eligibility label<input type="text" maxLength={255} placeholder="optional criteria summary" value={draft.eligibilityLabel} onChange={(event) => setDraft({...draft, eligibilityLabel: event.target.value})} /></label>

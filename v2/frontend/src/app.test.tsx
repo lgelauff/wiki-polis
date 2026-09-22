@@ -100,6 +100,11 @@ test('runs site-wide administration without falling back to Jinja forms', async 
 
   expect(await screen.findByRole('heading', {name: 'Admin panel'})).toBeVisible();
   expect(screen.getByRole('link', {name: 'manage'})).toHaveAttribute('href', '/admin/conversations/7');
+  // The settings page used to be reachable only by typing its URL.
+  expect(screen.getByRole('link', {name: 'settings'})).toHaveAttribute('href', '/admin/conversations/7/settings');
+  // The Policy cell names the stored value in words instead of printing "public".
+  expect(screen.getByRole('cell', {name: 'Anyone with a Wikimedia account'})).toBeVisible();
+  expect(screen.queryByText('invite_only')).not.toBeInTheDocument();
   expect(screen.getByText('Admin')).toHaveClass('header-mode-badge');
   expect(screen.getByRole('heading', {name: 'New conversation'})).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Example editor'}});
