@@ -708,7 +708,7 @@ def _build_phase6_results(
     client = _polis_server_client()
 
     # Phase 2 counts keyed by polis_statement_id (Phase 2 tid).
-    p2_tids = [fs.polis_statement_id for fs in confirmed if fs.polis_statement_id]
+    p2_tids = [fs.polis_statement_id for fs in confirmed if fs.polis_statement_id is not None]
 
     # ── Aggregate fetches (cached) ────────────────────────────────────────────
     # ~5 Postgres/Particiapi round trips, identical for every viewer. Memoise them
@@ -786,7 +786,7 @@ def _build_phase6_results(
         p2_tid = fs.polis_statement_id
 
         p6_row = (p6_counts or {}).get(p6_tid, {'n_agree': 0, 'n_disagree': 0, 'n_pass': 0, 'n_voters': 0})
-        p2_row = (p2_counts_raw or {}).get(p2_tid, None) if p2_tid else None
+        p2_row = (p2_counts_raw or {}).get(p2_tid, None) if p2_tid is not None else None
 
         p6_n = p6_row['n_voters']
         p6_pct_agree    = _pct(p6_row['n_agree'],    p6_n)
