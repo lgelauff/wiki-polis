@@ -198,7 +198,7 @@ test('under qqx, the moderation log names an unknown participant or moderator fr
   // Catches a null name rendering as an empty cell, or the server's old English fallback.
   const [unknown] = [...document.querySelectorAll('tbody tr')];
   expect([unknown?.children[2]?.textContent, unknown?.children[4]?.textContent]).toEqual(
-    ['(modlog-unknown-participant)', '(modlog-unknown-moderator)'],
+    ['(modlog-unknown)', '(modlog-unknown)'],
   );
   // Catches the fallback styled like a real pseudonym or username.
   expect(unknown?.children[2]?.querySelector('.muted')).not.toBeNull();
