@@ -63,6 +63,7 @@ def _settings_body(conv, **overrides):
         'title': conv.title, 'introHtml': '', 'outroHtml': '',
         'accessPolicy': conv.access_policy, 'eligibilityEventId': '',
         'eligibilityLabel': '', 'recommendationTier': 'medium',
+        'adminNotes': '',
     }
     body.update(overrides)
     return body
