@@ -17,21 +17,20 @@ identity-reveal page. The admin lifecycle console is wired too.
 
 Still English, on purpose, and listed with reasons in
 [#399](https://github.com/lgelauff/wiki-polis/issues/399): the two help pages
-(`guidance-*`, pending an English review), the rest of the admin console (stage 5), which
-still shows some API errors' server `message`, and the moderation log's server fallbacks
-([#398](https://github.com/lgelauff/wiki-polis/issues/398)). Participant screens map an API
-error's `code` to catalogue copy instead
+(`guidance-*`, pending an English review) and the rest of the admin console (stage 5), which
+still shows some API errors' server `message`. Participant screens map an API error's `code`
+to catalogue copy instead
 ([#397](https://github.com/lgelauff/wiki-polis/issues/397)); the tables are in
 `frontend/src/i18n/server-labels.ts`.
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (975 keys, 100% documented; 597 offered to translators, 378 held back) | ✅ committed |
+| `en.json` + `qqq.json` (978 keys, 100% documented; 600 offered to translators, 378 held back) | ✅ committed |
 | `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
 | Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
 | `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
 | React SPA reads it via `banana-i18n` | ✅ participant interface; 🟡 help pages and admin console (see above) |
-| Locales offered to users (`ENABLED_LOCALES`) | English and Dutch (`nl.json`, 541 keys) |
+| Locales offered to users (`ENABLED_LOCALES`) | English and Dutch (`nl.json`, 542 keys) |
 
 `ENABLED_LOCALES` defaults to `en,nl` when unset (`app.py`), so the language switcher is visible
 and Dutch is live wherever the variable is left alone. The keys are the durable asset: they were authored against the Jinja UI, which has since been deleted, but
@@ -60,7 +59,12 @@ rather than rendering the server's `message`, so those strings stay developer-fa
 
 Translate on **translatewiki.net**, not here. `qqq.json` gives the context for each message.
 Placeholders `$1`, `$2`, … must be preserved, and no others added. `{{PLURAL:$1|singular|plural}}`
-selects a form by the number in `$1` — use the plural forms your language needs.
+selects a form by the number in `$1` — use the plural forms your language needs, in CLDR's
+category order (zero, one, two, few, many, other), writing only the categories your language
+has: Russian is `{{PLURAL:$1|one|few|many|other}}`, Arabic
+`{{PLURAL:$1|zero|one|two|few|many|other}}`. If you give fewer forms, the last one is used for
+the rest. A form for one exact number, like `0=no votes`, may be added anywhere; it does not
+take the place of a category.
 
 A translation that breaks these rules is not shown; English is shown in its place:
 
@@ -231,12 +235,14 @@ New locales arrive as `i18n/<code>.json` from TWN. Enable them for users by addi
 `ENABLED_LOCALES` (see `.env.example`); setting the variable replaces the `en,nl` default, so
 list every locale to offer. Until enabled, a locale is present in the repo but not offered.
 
-### Before enabling a non-English locale — two tracked follow-ups
+### Before enabling a non-English locale
 
-1. **CLDR plural rules.** Server-side `{{PLURAL:}}` currently uses the English rule (`n == 1` →
-   singular, else plural). Languages with more than two plural forms (Arabic, Polish, Russian,
-   …) need their CLDR rule wired into `i18n._plural_index` before their counts read correctly.
-   (The client side gets this for free: `banana-i18n` applies CLDR rules itself.)
+1. **CLDR plural rules — done (#436).** `banana-i18n` in the browser takes its rules from
+   `Intl.PluralRules`; the server has the same CLDR rules written out in `i18n._PLURAL_RULES`,
+   and `tests/test_i18n.py` checks it picks the form banana picks. The table covers
+   the languages likely to be enabled (among them fr, ru, uk, pl, ar, cy, ga, he, ja, zh);
+   **a language not in it gets the English rule on the server**, so add it there first;
+   `test_every_shipped_locale_has_a_plural_rule` fails when a `<code>.json` lands without one.
 2. **RTL CSS audit.** `<html dir>` is already driven by `i18n.text_direction(locale)`, so RTL
    locales render right-to-left today — but `static/style.css` / `static/redesign.css` still use
    a handful of *physical* properties (`margin-left`, `text-align:left`, `left:`) that should be

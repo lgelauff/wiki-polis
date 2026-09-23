@@ -685,7 +685,7 @@ test('renders preliminary results from the message catalogue, not from source li
       () => HttpResponse.json({
         ...testMessages,
         'conv-p6-table-aria': 'CATALOGUE TABLE LABEL',
-        'conv-bar-label': '$1 pct agree and $2 pct pass',
+        'conv-bar-label': '$1 in favour and $2 abstaining',
         'conv-participant-count': '$1 {{PLURAL:$1|voter|voters}}',
       }),
     ),
@@ -737,7 +737,7 @@ test('renders preliminary results from the message catalogue, not from source li
   // aria-label resolved through the catalogue
   expect(screen.getByRole('table', {name: 'CATALOGUE TABLE LABEL'})).toBeVisible();
   // $1/$2 substitution, and the original English is gone
-  expect(screen.getByText('70.0 pct agree and 20.0 pct pass')).toBeVisible();
+  expect(screen.getByText('70.0% in favour and 20.0% abstaining')).toBeVisible();
   expect(screen.queryByText('70.0% agree · 20.0% pass')).not.toBeInTheDocument();
   // {{PLURAL:}} selects the plural form for 22 participants
   expect(screen.getByText('22 voters')).toBeVisible();

@@ -35,14 +35,17 @@ _CROCKFORD_BITS = 60  # 12 chars × 5 bits
 # says so, so the holder can check what they typed.
 _EXCLUDED_LETTERS = frozenset('ILOU')
 
-# An imported code, after normalize_code(). Imported codes are only as hard to
-# guess as the organizers made them; the minimum length is a floor, not a
-# guarantee (a sequential list such as WIKI0001, WIKI0002 is trivially guessed).
-IMPORTED_CODE_MIN_LENGTH = 5
-IMPORTED_CODE_MAX_LENGTH = 64
-_IMPORTED_CODE_RE = re.compile(
-    rf'^[0-9A-Z]{{{IMPORTED_CODE_MIN_LENGTH},{IMPORTED_CODE_MAX_LENGTH}}}$'
-)
+# Any code, after normalize_code(): generated codes are 12 characters, imported
+# ones 5-64 letters and digits. Entry refuses a shorter input up front, since it
+# cannot be any code. Imported codes are only as hard to guess as the organizers
+# made them; the minimum length is a floor, not a guarantee (a sequential list
+# such as WIKI0001, WIKI0002 is trivially guessed), hence weak_codes().
+CODE_MIN_LENGTH = 5
+CODE_MAX_LENGTH = 64
+_IMPORTED_CODE_RE = re.compile(rf'^[0-9A-Z]{{{CODE_MIN_LENGTH},{CODE_MAX_LENGTH}}}$')
+# Below this, or digits only, an imported code is easy to guess within the
+# failed-attempt budget: 200 five-digit PINs give about 170 hits a day.
+WEAK_CODE_LENGTH = 8
 
 
 def _voucher_hmac_secret() -> str:
@@ -64,6 +67,21 @@ def _naive_utc(value: datetime | None) -> datetime | None:
 def normalize_code(code: str) -> str:
     """Upper-case, strip whitespace and hyphens."""
     return re.sub(r'[\s\-]+', '', code).upper()
+
+
+def is_too_short(code: str) -> bool:
+    """Whether *code* is shorter than any code can be (after normalising)."""
+    return len(normalize_code(code)) < CODE_MIN_LENGTH
+
+
+def weak_codes(codes: Iterable[str]) -> list[str]:
+    """Normalised codes that are digits only or shorter than WEAK_CODE_LENGTH."""
+    weak = []
+    for code in codes:
+        normalized = normalize_code(code)
+        if normalized.isdigit() or len(normalized) < WEAK_CODE_LENGTH:
+            weak.append(normalized)
+    return weak
 
 
 def has_excluded_letters(code: str) -> bool:
