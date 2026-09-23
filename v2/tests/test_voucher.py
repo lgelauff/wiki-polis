@@ -448,10 +448,14 @@ def test_short_imported_code_redeems(app, client, voucher_conv):
     assert _redeem(client, voucher_conv, code='k7q2m').status_code == 302
 
 
+# The two time-based cases are offsets, resolved when the test runs. As absolute times built
+# at import they were a stopwatch: a suite that took longer than the reservation to reach this
+# test found it expired, and an expired reservation is claimable (services/vouchers.py:225),
+# so the code redeemed instead of being refused.
 @pytest.mark.parametrize('kwargs', [
     {'status': 'revoked'},
-    {'expires_at': datetime.now(timezone.utc) - timedelta(days=1)},
-    {'status': 'reserved', 'reserved_until': datetime.now(timezone.utc) + timedelta(minutes=5)},
+    {'expires_at': -timedelta(days=1)},
+    {'status': 'reserved', 'reserved_until': timedelta(minutes=5)},
 ])
 @pytest.mark.parametrize('code,wrong_code', [
     (CODE, 'ZZZZZZZZZZZZ'),
@@ -460,6 +464,8 @@ def test_short_imported_code_redeems(app, client, voucher_conv):
 def test_unusable_codes_get_the_same_answer_as_a_wrong_code(
     app, client, voucher_conv, kwargs, code, wrong_code,
 ):
+    now = datetime.now(timezone.utc)
+    kwargs = {k: (now + v if isinstance(v, timedelta) else v) for k, v in kwargs.items()}
     _make_voucher(voucher_conv, code=code, **kwargs)
     wrong = _redeem(client, voucher_conv, code=wrong_code).data.decode()
     unusable = _redeem(client, voucher_conv, code=code).data.decode()
