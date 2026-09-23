@@ -237,7 +237,7 @@ pseudonym; a **NULL `proposer_pseudonym` (seeded argument) is exempt** (SQL
 `id` PK · `argument_id` FK (CASCADE) · `participant_id` FK (CASCADE) · `value` int
 (nullable) · `created_at`. Unique `(argument_id, participant_id)`.
 - `value` interpretation depends on `conversation.argument_vote_method`: **kApproval →
-  `value` is null** (row presence = approval); ranking → rank position. **⚠ `(pending)`:**
+  `value` is null** (row presence = approval); ranking → rank position. **`(pending)`:**
   the ranking path is unimplemented — only kApproval is live, so `value` is currently a
   dead column.
 

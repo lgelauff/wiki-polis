@@ -399,7 +399,7 @@ toolforge envvars create RATELIMIT_IDENTITY_SECRET
 toolforge envvars create PARTICIAPI_SUB_SECRET
 ```
 
-> ⚠️ **`PARTICIAPI_SUB_SECRET` is a long-lived master credential.** It lets the proxy
+> **`PARTICIAPI_SUB_SECRET` is a long-lived master credential.** It lets the proxy
 > assert any logged-in user's identity to Particiapi (cross-device stable participant).
 > It must match Particiapi's config key `TRUSTED_SUB_SECRET` — which is set from the
 > environment variable **`PARTICIAPI_TRUSTED_SUB_SECRET`**, since the image loads config

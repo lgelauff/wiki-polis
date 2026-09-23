@@ -64,21 +64,19 @@ of the 551 are pre-authored copy awaiting the component that will use it.
 
 Counts come from a heuristic scan of JSX text nodes, user-visible attributes, and string
 literals. It over-collects, so read the string totals as **upper bounds** and the
-already-keyed share as a floor. (`i18n/README.md` claims 72% of SPA copy has a key; the scan
-says ~51%. The scan is the pessimistic one because it counts non-copy strings that could
-never have a key.)
+already-keyed share as a floor.
 
-**Participant — 15 components, ≤304 strings, 154 already keyed.** These carry the 514
-messages offered for translation; the other 356 are the admin console, held back under
-rule 8.
+**Participant — 13 components, ≤279 strings, 152 already keyed.** These carry the
+messages offered for translation; the admin console's are held back under rule 8. The
+current counts of each are in `i18n/README.md`.
 
 **Participant components:**
 `argument-mapping-panel` (56/23 keyed), `conversation-lane-page` (38/19),
 `guidance-pages` (35/12), `conversation-read-pages` (34/22),
 `participation-entry-page` (33/28), `identity-reveal-page` (25/19),
-`informed-voting-panel` (23/16), `statement-composer` (14/0), `public-pages` (13/2),
-`content-flag-control` (11/2), `legacy-shell` (9/3), `intermediate-results-panel` (5/4),
-`legacy-content-flag` (5/3), `app.tsx` (2/1), `main.tsx` (1/0).
+`informed-voting-panel` (23/16), `public-pages` (13/2), `legacy-shell` (9/3),
+`intermediate-results-panel` (5/4), `legacy-content-flag` (5/3), `app.tsx` (2/1),
+`main.tsx` (1/0).
 
 **Admin — 11 components, ≤170 strings, 98 already keyed.** Deferred; see stage 5.
 
@@ -116,10 +114,10 @@ Settled. Changing one is a plan change, not an implementation detail.
 2. **Every `en.json` message has a `qqq.json` entry.** CI fails otherwise.
 3. **Interface copy is keyed; participant-authored content never is.** Statements, arguments,
    titles, and usernames pass through untranslated.
-4. **Server-side error copy is not keyed.** 112 distinct strings across 138
-   `error_response(...)` / `abort(description=...)` call sites stay developer-facing; the SPA
-   maps `error.code` to its own keyed copy. (`i18n/README.md` says 122 — reconcile once and
-   delete one of the two figures so it has a single home.)
+4. **Server-side error copy is not keyed.** 122 distinct strings across 140
+   `error_response(...)` / `abort(description=...)` call sites in `v2/*.py`, `v2/api/` and
+   `v2/services/` (recounted 2026-09-21) stay developer-facing; the SPA maps `error.code` to
+   its own keyed copy. This is the figure's only home; `i18n/README.md` refers here.
 5. **One message per concept, not one per surface.** Reuse before minting; when two surfaces
    show the same words for the same thing they share a key, and the `qqq` names every surface
    ([#369](https://github.com/lgelauff/wiki-polis/pull/369)). Whenever MediaWiki core has an
@@ -222,18 +220,18 @@ reintroduction fails CI.
 > land before Dutch is switched on, and deleting the two components nothing renders
 > ([#387](https://github.com/lgelauff/wiki-polis/issues/387)).
 
-Fifteen components, ordered as a participant encounters them, so that partial progress
+Thirteen components, ordered as a participant encounters them, so that partial progress
 covers a continuous journey rather than scattered screens:
 
 1. `public-pages`, `legacy-shell`, `app.tsx`, `main.tsx` — the frame and landing.
 2. `participation-entry-page` (33 strings, 28 keyed) — join, consent, licence.
 3. `conversation-lane-page` (38/19) and `conversation-read-pages` (34/22).
 4. `guidance-pages` (35/12) — the explainers before each task.
-5. `statement-composer` (14/0) and `argument-mapping-panel` (56/23) — the largest single
-   component, and the one with the most minting.
+5. `argument-mapping-panel` (56/23) — the largest single component, and the one with the
+   most minting.
 6. `informed-voting-panel` (23/16), `intermediate-results-panel` (5/4).
 7. `identity-reveal-page` (25/19) — privacy-critical copy; review wording, do not just map.
-8. `content-flag-control` (11/2), `legacy-content-flag` (5/3).
+8. `legacy-content-flag` (5/3).
 
 Reuse before minting (rule 5). Prove each wiring non-vacuously, per
 [#357](https://github.com/lgelauff/wiki-polis/pull/357) — a test that passes identically
