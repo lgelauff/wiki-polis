@@ -42,11 +42,13 @@ _REDACTIONS = [
     # credentials embedded in a URL: scheme://[user]:PASSWORD@host -> scheme://[user]:***@host
     # (username optional so scheme://:password@host is also caught)
     (re.compile(r'(://[^:/?#\s]*:)[^@/?#\s]+(@)'), r'\1***\2'),
-    # Voucher credentials arrive as /v/<code>. Redact the whole path segment so
-    # the rule is independent of the code alphabet and also covers future lengths.
-    # This is intentionally over-broad: any segment after /v/ may be a credential
-    # before route validation, so do not narrow it to today's 12-character format.
+    # Voucher credentials arrive as ?v=<code> on /c/<slug>/v or /c/<slug>.
+    # The /v/<code> path rule is kept so the credential stays out of
+    # logs even when a client sends the path form #412 first proposed. The query
+    # rule is intentionally broad (it also masks the ?v=<git-sha> asset buster):
+    # any v= value may be a credential before route validation.
     (re.compile(r'(?i)(/v/)[^/?#\s]+'), r'\1[redacted]'),
+    (re.compile(r'([?&])v=[^&\s]+'), r'\1v=[redacted]'),
     # xid / sha256-shaped hex (reversible identifier, #96)
     (re.compile(r'\b[0-9a-fA-F]{64}\b'), '[redacted-hash]'),
     # key=value / key: value for sensitive keys — redact the whole value run (handles

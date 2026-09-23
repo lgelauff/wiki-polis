@@ -59,10 +59,53 @@ def test_public_moderation_log_excludes_ids_and_private_notes(
         'pseudonym': 'quiet-otter',
         'scope': 'conversation',
         'actor': 'adminuser',
+        'actorKind': None,
     }]
     serialized = json.dumps(data)
     assert 'private moderator note' not in serialized
     assert participant.xid not in serialized
+
+
+def test_public_moderation_log_sends_null_for_unknown_names(
+    client, conversation, participant,
+):
+    """Unresolved names are null, and a site administrator's ban says whose it was.
+
+    Catches the server filling either gap with English ('participant', 'administrator'),
+    which the page would then show untranslated, and actorKind being dropped, which would
+    show a site administrator's ban as an unknown moderator.
+    """
+    _join(conversation, participant, pseudonym='')
+    db.session.add_all([
+        AuditEvent(
+            ts=datetime(2026, 8, 14, 9, 30, tzinfo=timezone.utc),
+            actor_participant_id=None,
+            conversation_id=conversation.id,
+            operation='participant.unban',
+            target_type='participant',
+            target_id='424242',
+        ),
+        AuditEvent(
+            ts=datetime(2026, 8, 14, 9, 31, tzinfo=timezone.utc),
+            actor_participant_id=None,
+            conversation_id=conversation.id,
+            operation='participant.ban',
+            target_type='participant',
+            target_id=str(participant.id),
+            detail={'actor_kind': 'env_admin', 'scope': 'conversation'},
+        ),
+    ])
+    db.session.commit()
+
+    events = client.get(
+        '/api/v1/conversations/test-conv/moderation-log',
+    ).get_json()['data']['events']
+
+    # The target of the second event has an empty pseudonym, which is null here too.
+    assert [(e['pseudonym'], e['actor'], e['actorKind']) for e in events] == [
+        (None, None, 'site_admin'),
+        (None, None, None),
+    ]
 
 
 def test_output_contract_requires_authentication(client, conversation):

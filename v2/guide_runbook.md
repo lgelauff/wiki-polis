@@ -14,6 +14,64 @@ them:
 - **Deploy a new version** → [Ongoing deploys](guide_deployment.md#ongoing-deploys) (or `bash ~/wiki-polis/deploy.sh`).
 - **Run a database migration** → [Database migrations](guide_deployment.md#database-migrations) (must run inside the webservice shell).
 - **Toolforge quirks** → [Toolforge gotchas](guide_deployment.md#toolforge-gotchas).
+- **Create voucher codes** → [Voucher codes](#voucher-codes) below (until the organizer screens exist).
+
+## Voucher codes
+
+Until the organizer screens exist (#368), codes for a voucher-gated process are created
+from the shell. On Toolforge, run these inside the webservice shell, like a migration
+([Database migrations](guide_deployment.md#database-migrations)): the database settings
+only exist there.
+
+```bash
+# Generate 200 codes and save them. They are printed once and cannot be shown again:
+# only their HMACs are stored.
+flask --app app vouchers generate <slug> 200 --label "Workshop Utrecht 12 Oct" > codes.txt
+
+# Import the organizers' own codes, one per line (a file, or - for stdin).
+flask --app app vouchers import <slug> organizer-codes.txt --label "Printed cards"
+```
+
+- **Same codes in several processes:** import the same list into each process. Each
+  process stores its own HMACs, and each code makes a separate account per process.
+  Generated codes cannot be copied afterwards, so for shared codes, import.
+- **Import rules:** capitals, spaces and hyphens are ignored; a code must then be 5–64
+  letters and digits (entry tells anyone typing fewer than 5 that codes are longer).
+  Lines that are not valid are listed so the file can be fixed; a code already in the
+  process is skipped and counted. The import warns, without printing them, about codes
+  that are digits only or shorter than 8 characters.
+- **How guessable codes are.** A new browser session costs nothing, so a determined
+  guesser is held back only by the per-process budget: 60 wrong codes a minute, about
+  86,000 a day. And because a code signs back into its account (#412), a hit on a code
+  that was already used takes over that participant's account. Expected hits per day,
+  guessing flat out:
+
+  | Codes in the process | Hits |
+  |---|---|
+  | 200 five-digit numbers | about 170 a day |
+  | 500 random 5 letters+digits | about one every 1–2 days |
+  | 500 random 6 letters+digits | about one every 50 days |
+  | 500 random 8 letters+digits | effectively never |
+  | generated (12 characters) | never |
+
+  Sequential or patterned lists (`ROOM001`, `ROOM002`) are guessable at any length. For
+  organizer-made codes, ask for 8 or more random letters and digits.
+- **"voucher failed-attempt budget … exhausted" in the logs** (logged at most once a
+  minute per process) means more than 60 wrong codes in a minute on that process —
+  most likely guessing, though a very large room with many typos can do it too. While
+  the budget is spent, **valid codes and links are refused as well** (only people
+  already signed in carry on): letting valid codes through would let a guesser test
+  codes unthrottled. The pause lasts as long as the wrong codes keep coming, so one
+  script sending a wrong code every second keeps entry to that process closed. Nothing
+  is locked or invalidated; entry resumes within a minute of it stopping.
+  - To let a big room in, or to ride out an attack, raise the budget with the Toolforge
+    envvar `VOUCHER_PROCESS_FAILURE_LIMIT` (e.g. `300 per minute`) and restart the
+    webservice. The per-browser budget is `VOUCHER_SESSION_FAILURE_LIMIT` (default
+    `10 per minute`). A higher budget also lets a guesser try more codes.
+  - If it repeats, consider longer codes or revoking and reissuing the batch.
+- **Handle the output as credentials.** Whoever holds a code is that participant.
+  Delete `codes.txt` from the shell once it has been handed over.
+- **Revoking** has no command yet (`services.vouchers.revoke_voucher` exists).
 
 ## Monitoring & health
 
