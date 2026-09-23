@@ -4,6 +4,7 @@ import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
+import {usePercentFormat} from '../../i18n/numbers';
 import {outputMethod, outputPhase} from '../../i18n/server-labels';
 
 type Report = components['schemas']['ResultsReport'];
@@ -14,13 +15,10 @@ function truncated(value: string, length: number) {
   return value.length > length ? `${value.slice(0, length - 1)}…` : value;
 }
 
-function percentage(value: number) {
-  return value.toFixed(1);
-}
-
 function LegacyVoteBar({tally}: {tally: Tally}) {
   const {percentages, counts} = tally;
   const msg = useMessage();
+  const percentage = usePercentFormat();
   const title = msg('report-bar-title', percentage(percentages.agree), percentage(percentages.disagree), percentage(percentages.pass));
   return <>
     <div className="p6-vote-bar" title={title}>
@@ -131,6 +129,7 @@ function InitialOpinions({statements}: {statements: Statement[]}) {
 
 function OpinionShift({statements}: {statements: Statement[]}) {
   const msg = useMessage();
+  const percentage = usePercentFormat();
   if (statements.length === 0) return null;
   return <div className="report-section">
     <h2 className="report-section-heading">{msg('report-shift-heading')} <span className="report-section-sub">{msg('report-shift-sub')}</span></h2>
@@ -148,7 +147,7 @@ function OpinionShift({statements}: {statements: Statement[]}) {
         <td className="p6-col-phase">{statement.informed && <LegacyVoteBar tally={statement.informed} />}</td>
         <td className="p6-col-shift">{statement.agreementShift === null
           ? <span className="muted">—</span>
-          : <span className={`p6-shift${statement.agreementShift > 0 ? ' p6-shift--up' : statement.agreementShift < 0 ? ' p6-shift--down' : ''}`}>{`${statement.agreementShift > 0 ? '+' : ''}${percentage(statement.agreementShift)}%`}</span>}
+          : <span className={`p6-shift${statement.agreementShift > 0 ? ' p6-shift--up' : statement.agreementShift < 0 ? ' p6-shift--down' : ''}`}>{percentage(statement.agreementShift, {signed: true})}</span>}
         </td>
       </tr>)}</tbody>
     </table>
@@ -157,6 +156,7 @@ function OpinionShift({statements}: {statements: Statement[]}) {
 
 function OpinionGroups({report}: {report: Report}) {
   const msg = useMessage();
+  const percentage = usePercentFormat();
   if (report.opinionGroups.length === 0) return null;
   return <div className="report-section">
     <h2 className="report-section-heading">{msg('report-groups-heading')} <span className="report-section-sub">{msg('report-groups-sub', report.opinionGroups.length)}</span></h2>
@@ -166,7 +166,7 @@ function OpinionGroups({report}: {report: Report}) {
       {group.positions.map((position, index) => <div className="results-row" key={`${position.choice}-${index}`}>
         <span className={`results-badge results-${position.choice}`}>{position.choice === 'agree' ? msg('report-badge-agree') : msg('report-badge-disagree')}</span>
         <span className="results-text">{msg('conv-results-quoted', position.statement)}</span>
-        {!!position.percentage && <span className="results-pct">{`${Math.trunc(position.percentage)}%`}</span>}
+        {!!position.percentage && <span className="results-pct">{percentage(Math.trunc(position.percentage), {digits: 0})}</span>}
       </div>)}
     </div>)}
   </div>;

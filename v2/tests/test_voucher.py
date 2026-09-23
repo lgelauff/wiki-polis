@@ -2,6 +2,9 @@
 
 import re
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
+
+from flask import g
 
 import pytest
 
@@ -286,7 +289,7 @@ def test_voucher_page_renders_form_with_csrf_field(app, client, voucher_conv):
     assert voucher_conv.title in html
     assert 'name="csrf_token"' in html
     assert resp.headers['Cache-Control'] == 'no-store'
-    assert resp.headers['Referrer-Policy'] == 'no-referrer'
+    assert resp.headers['Referrer-Policy'] == 'strict-origin'
 
 
 def test_voucher_page_renders_from_the_message_catalogue(app, client, voucher_conv):
@@ -327,6 +330,55 @@ def test_typed_code_redeems_with_csrf_enabled(app, client, voucher_conv):
     assert _session_xid(client) is not None
 
 
+def _https_form(app, conv):
+    """A fresh HTTPS browser on the entry page: (client, csrf token)."""
+    # The test app keeps one app context, so Flask-WTF's per-request token cache
+    # in g would otherwise hand this browser the previous browser's token.
+    g.pop('csrf_token', None)
+    client = app.test_client()
+    page = client.get(f'/c/{conv.slug}/v', base_url='https://localhost')
+    assert page.headers['Referrer-Policy'] == 'strict-origin'
+    token = re.search(r'name="csrf_token" value="([^"]+)"', page.data.decode()).group(1)
+    return client, token
+
+
+def test_https_form_post_needs_the_referer_the_page_policy_allows(app, voucher_conv):
+    """Over HTTPS Flask-WTF refuses a POST without a Referer, so the page's referrer
+    policy must let the browser send one (staging: "The referrer header is
+    missing" under no-referrer). Each POST uses its own fresh session, so the
+    refusal can only come from the Referer check."""
+    _make_voucher(voucher_conv)
+    app.config['WTF_CSRF_ENABLED'] = True
+    url = f'/c/{voucher_conv.slug}/v'
+
+    client, token = _https_form(app, voucher_conv)
+    refused = client.post(url, base_url='https://localhost',
+                          data={'code': CODE, 'csrf_token': token})
+    assert refused.status_code == 400
+    assert b'referrer header is missing' in refused.data
+
+    # Under strict-origin the browser sends just the origin, which is enough.
+    client, token = _https_form(app, voucher_conv)
+    accepted = client.post(url, base_url='https://localhost',
+                           data={'code': CODE, 'csrf_token': token},
+                           headers={'Referer': 'https://localhost/'})
+    assert accepted.status_code == 302, accepted.data[-300:]
+
+
+def test_forms_post_back_without_the_code_in_the_address(app, client, voucher_conv):
+    """A page reached with ?v=<code> posts to the bare entry path, so the code
+    never rides along as the form post's Referer."""
+    html = client.get(f'/c/{voucher_conv.slug}/v?v=WRONG-9999').data.decode()
+    assert f'action="/c/{voucher_conv.slug}/v"' in html
+
+
+def test_too_short_input_says_so_and_keeps_what_was_typed(app, client, voucher_conv):
+    html = _redeem(client, voucher_conv, code='ab-c').data.decode()
+    assert 'at least 5 characters' in html
+    assert 'value="ab-c"' in html
+    assert 'not valid' not in html
+
+
 def test_post_without_csrf_token_is_refused_when_csrf_is_enabled(app, client, voucher_conv):
     _make_voucher(voucher_conv)
     app.config['WTF_CSRF_ENABLED'] = True
@@ -357,7 +409,7 @@ def test_code_on_the_conversation_link_redeems(app, client, voucher_conv):
     first = client.get(f'/c/{voucher_conv.slug}?v={CODE}')
     assert first.status_code == 302
     assert first.headers['Location'] == f'/c/{voucher_conv.slug}/v?v={CODE}'
-    assert first.headers['Referrer-Policy'] == 'no-referrer'
+    assert first.headers['Referrer-Policy'] == 'strict-origin'
 
     landed = client.get(first.headers['Location'])
     assert landed.headers['Location'] == f'/c/{voucher_conv.slug}'
@@ -455,6 +507,18 @@ def test_cli_imports_codes_and_reports_skips(app, voucher_conv, tmp_path):
     assert lookup_voucher('room 101', voucher_conv.id) is not None
 
 
+def test_cli_import_warns_about_weak_codes_without_printing_them(app, voucher_conv, tmp_path):
+    source = tmp_path / 'codes.txt'
+    source.write_text('12345\n67890\nK7Q2M-X9Z\nROOMCODE-2024\n', encoding='utf-8')
+    result = app.test_cli_runner().invoke(
+        args=['vouchers', 'import', voucher_conv.slug, str(source)],
+    )
+    assert result.exit_code == 0, result.output
+    assert 'Imported 4 codes.' in result.output
+    assert 'Warning: 2 of these codes are digits only or shorter than 8' in result.output
+    assert '12345' not in result.output
+
+
 def test_cli_refuses_an_unknown_conversation(app, tmp_path):
     result = app.test_cli_runner().invoke(args=['vouchers', 'generate', 'no-such-slug', '1'])
     assert result.exit_code != 0
@@ -549,6 +613,28 @@ def test_reopening_your_own_code_keeps_the_session(app, client, voucher_conv):
     resp = client.get(f'/c/{voucher_conv.slug}/v?v={CODE}')
     assert resp.status_code == 302
     assert _session_xid(client) == xid
+
+
+def test_voucher_account_joins_without_the_wikimedia_eligibility_check(
+    app, client, voucher_conv,
+):
+    """The #146 eligibility gate checks a Wikimedia username; a voucher account has
+    none, and holding the voucher is its admission (staging: eligibility_unavailable)."""
+    voucher_conv.eligibility_event_id = 'some-canivote-policy'
+    db.session.commit()
+    _make_voucher(voucher_conv)
+    _redeem(client, voucher_conv)
+
+    with patch('app.requests.get') as upstream:
+        joined = client.post(
+            f'/api/v1/conversations/{voucher_conv.slug}/participation',
+            json={'pseudonym': 'quiet-otter'},
+        )
+    assert joined.status_code == 201, joined.get_data(as_text=True)
+    assert joined.get_json()['data']['eligibilityStatus'] == 'not_required'
+    upstream.assert_not_called()
+    participation = Participation.query.filter_by(conversation_id=voucher_conv.id).one()
+    assert participation.eligibility_detail == {'reason': 'voucher admission'}
 
 
 # ── Access provider ───────────────────────────────────────────────────────────

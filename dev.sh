@@ -30,7 +30,8 @@ source "$SESSION_FILE"
 session_set() {
   local key="$1" val="$2"
   if grep -q "^${key}=" "$SESSION_FILE" 2>/dev/null; then
-    sed -i '' "s|^${key}=.*|${key}=${val}|" "$SESSION_FILE"
+    # -i.bak rather than -i '': GNU sed (Linux) rejects the BSD empty-suffix form.
+    sed -i.bak "s|^${key}=.*|${key}=${val}|" "$SESSION_FILE" && rm -f "$SESSION_FILE.bak"
   else
     echo "${key}=${val}" >> "$SESSION_FILE"
   fi
