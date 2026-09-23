@@ -130,6 +130,8 @@ TAGS:
     - adminconv-card-participants
     - adminconv-card-participants-desc
     - adminconv-card-roles-desc
+    - adminconv-card-settings
+    - adminconv-card-settings-desc
     - adminconv-card-statements
     - adminconv-card-statements-desc
     - adminconv-cleanup-li1
@@ -230,7 +232,6 @@ TAGS:
     - adminconv-roles-summary
     - adminconv-roles-summary-count
     - adminconv-save-phases
-    - adminconv-save-rec
     - adminconv-save-settings
     - adminconv-schedule-title
     - adminconv-scheduled-aria
@@ -238,7 +239,6 @@ TAGS:
     - adminconv-scheduling-why
     - adminconv-select-placeholder
     - adminconv-set
-    - adminconv-settings-summary
     - adminconv-several-open
     - adminconv-statements-voted-on
     - adminconv-stats-below
