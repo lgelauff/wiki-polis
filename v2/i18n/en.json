@@ -492,7 +492,7 @@
     "conv-bar-label": "$1% agree · $2% pass",
     "conv-network-error": "Network error. Please try again.",
     "conv-network-error-retry": "Network error — try again",
-    "conv-err-similarity": "This statement looks quite different from the original. Keep it closer to the original statement, or submit your text as a new statement instead.",
+    "conv-err-similarity": "This statement seems to deviate a lot from the original. Keep it closer to the original statement, or submit your text as a new statement instead.",
     "conv-err-proposal-limit": "You have reached the proposal limit for this consultation.",
     "conv-err-submit-statement": "Could not submit statement. Please try again.",
     "conv-err-change-vote": "Could not change your vote. Please try again.",
