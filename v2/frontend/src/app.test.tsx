@@ -379,6 +379,9 @@ test('adds and removes invitations through convergent admin commands', async () 
 
   expect(await screen.findByRole('heading', {name: 'Invites — Community strategy'})).toBeVisible();
   expect(screen.getByText('Existing editor')).toBeVisible();
+  expect(screen.getByText('1 invited · 1 signed in · 0 not signed in yet')).toBeVisible();
+  const existingRow = screen.getByText('Existing editor').closest('tr');
+  expect(within(existingRow!).getByText('Signed in')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia usernames (one per line)'), {
     target: {value: 'New editor\nNew editor'},
   });
@@ -388,11 +391,13 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(screen.getByRole('status')).toHaveTextContent('Invites: 1 added; 1 duplicate input.');
   const newEditorRow = screen.getByText('New editor').closest('tr');
   expect(newEditorRow).not.toBeNull();
+  expect(within(newEditorRow!).getByText('Not signed in yet')).toBeVisible();
+  expect(screen.getByText('2 invited · 1 signed in · 1 not signed in yet')).toBeVisible();
   fireEvent.click(within(newEditorRow!).getByRole('button', {name: 'remove'}));
   expect(await screen.findByText('No invites yet.')).toBeVisible();
 });
 
-test('restores the legacy cleared form and toast after an invitation save error', async () => {
+test('keeps the typed invitation list and shows a toast after a save error', async () => {
   server.use(http.put(
     new URL(
       '/api/v1/admin/conversations/7/invitations',
@@ -417,7 +422,7 @@ test('restores the legacy cleared form and toast after an invitation save error'
   expect(await screen.findByRole('alert')).toHaveTextContent(
     "Couldn't save invites — please review the list and retry.",
   );
-  expect(input).toHaveValue('');
+  expect(input).toHaveValue('New editor');
 });
 
 test('replaces a conversation role set from the admin workspace', async () => {

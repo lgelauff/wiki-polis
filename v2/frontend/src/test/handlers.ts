@@ -231,7 +231,7 @@ export const handlers = [
     new URL('/api/v1/admin/conversations/7/invitations', globalThis.location.origin).toString(),
     () => HttpResponse.json({data: {
       conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'invite_only'},
-      invitations: [{id: 51, username: 'Existing editor', createdAt: '2026-08-01T10:00:00Z'}],
+      invitations: [{id: 51, username: 'Existing editor', createdAt: '2026-08-01T10:00:00Z', signedIn: true}],
       capabilities: {manageInvitations: true},
       links: {self: '/api/v1/admin/conversations/7/invitations', conversation: '/admin/conversations/7'},
     }}),
@@ -243,8 +243,8 @@ export const handlers = [
       return HttpResponse.json({data: {
         outcome: {added: 1, alreadyPresent: 0, concurrentConflicts: 0, duplicateInputs: body.usernames.length - 1},
         invitations: [
-          {id: 51, username: 'Existing editor', createdAt: '2026-08-01T10:00:00Z'},
-          {id: 52, username: body.usernames[0], createdAt: '2026-08-13T10:00:00Z'},
+          {id: 51, username: 'Existing editor', createdAt: '2026-08-01T10:00:00Z', signedIn: true},
+          {id: 52, username: body.usernames[0], createdAt: '2026-08-13T10:00:00Z', signedIn: false},
         ],
         links: {invitations: '/api/v1/admin/conversations/7/invitations'},
       }});

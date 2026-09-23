@@ -61,7 +61,8 @@ export function AdminInvitationsPage({
       setInput('');
     },
     onError: () => {
-      setInput('');
+      // The list stays in the textarea: the save failed, so whoever typed it
+      // still needs it to retry or to correct one name.
       setToast({
         id: Date.now(),
         category: 'error',
@@ -88,6 +89,8 @@ export function AdminInvitationsPage({
   }
 
   const title = data.conversation.title;
+  const invited = data.invitations.length;
+  const signedIn = data.invitations.filter((invitation) => invitation.signedIn).length;
   return (
     <LegacyShell
       headerMode="admin"
@@ -108,8 +111,11 @@ export function AdminInvitationsPage({
         <h2>
           Invites — <Link to={`/c/${data.conversation.slug}/about`}>{title}</Link>
         </h2>
-        <p className="muted" style={{marginBottom: '1.25rem'}}>
+        <p className="muted" style={{marginBottom: '.25rem'}}>
           Access policy: <strong>{data.conversation.accessPolicy}</strong>
+        </p>
+        <p className="muted" style={{marginBottom: '1.25rem'}}>
+          {invited} invited · {signedIn} signed in · {invited - signedIn} not signed in yet
         </p>
 
         {data.conversation.accessPolicy !== 'invite_only' && (
@@ -140,13 +146,16 @@ export function AdminInvitationsPage({
 
         <table className="admin-table">
           <thead>
-            <tr><th>Username</th><th>Added</th><th /></tr>
+            <tr><th>Username</th><th>Added</th><th>Status</th><th /></tr>
           </thead>
           <tbody>
             {data.invitations.map((invitation) => (
               <tr key={invitation.id}>
                 <td>{invitation.username}</td>
                 <td className="muted">{formatLegacyDate(invitation.createdAt)}</td>
+                <td className={invitation.signedIn ? undefined : 'muted'}>
+                  {invitation.signedIn ? 'Signed in' : 'Not signed in yet'}
+                </td>
                 <td>
                   <form
                     onSubmit={(event) => {
@@ -161,7 +170,7 @@ export function AdminInvitationsPage({
               </tr>
             ))}
             {!data.invitations.length && (
-              <tr><td colSpan={3} className="muted">No invites yet.</td></tr>
+              <tr><td colSpan={4} className="muted">No invites yet.</td></tr>
             )}
           </tbody>
         </table>
