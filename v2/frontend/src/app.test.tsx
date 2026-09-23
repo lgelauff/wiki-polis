@@ -393,8 +393,12 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(newEditorRow).not.toBeNull();
   expect(within(newEditorRow!).getByText('Not signed in yet')).toBeVisible();
   expect(screen.getByText('2 invited · 1 signed in · 1 not signed in yet')).toBeVisible();
-  fireEvent.click(within(newEditorRow!).getByRole('button', {name: 'remove'}));
+  fireEvent.click(within(newEditorRow!).getByRole('button', {
+    name: 'Remove invitation for New editor',
+  }));
   expect(await screen.findByText('No invites yet.')).toBeVisible();
+  expect(screen.getByText('No invites yet.').closest('td')).toHaveAttribute('colspan', '4');
+  expect(screen.queryByText(/invited ·/)).not.toBeInTheDocument();
 });
 
 test('keeps the typed invitation list and shows a toast after a save error', async () => {

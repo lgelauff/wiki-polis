@@ -114,9 +114,11 @@ export function AdminInvitationsPage({
         <p className="muted" style={{marginBottom: '1.25rem'}}>
           Access policy: <strong>{data.conversation.accessPolicy}</strong>
         </p>
-        <p className="muted" style={{marginBottom: '1.25rem'}}>
-          {invited} invited · {signedIn} signed in · {invited - signedIn} not signed in yet
-        </p>
+        {invited > 0 && (
+          <p className="muted" style={{marginBottom: '1.25rem'}}>
+            {invited} invited · {signedIn} signed in · {invited - signedIn} not signed in yet
+          </p>
+        )}
 
         {data.conversation.accessPolicy !== 'invite_only' && (
           <div className="landing-section">
@@ -146,16 +148,14 @@ export function AdminInvitationsPage({
 
         <table className="admin-table">
           <thead>
-            <tr><th>Username</th><th>Added</th><th>Status</th><th /></tr>
+            <tr><th>Username</th><th>Status</th><th>Added</th><th /></tr>
           </thead>
           <tbody>
             {data.invitations.map((invitation) => (
               <tr key={invitation.id}>
                 <td>{invitation.username}</td>
+                <td>{invitation.signedIn ? 'Signed in' : 'Not signed in yet'}</td>
                 <td className="muted">{formatLegacyDate(invitation.createdAt)}</td>
-                <td className={invitation.signedIn ? undefined : 'muted'}>
-                  {invitation.signedIn ? 'Signed in' : 'Not signed in yet'}
-                </td>
                 <td>
                   <form
                     onSubmit={(event) => {
@@ -164,7 +164,13 @@ export function AdminInvitationsPage({
                     }}
                     style={{display: 'inline'}}
                   >
-                    <button type="submit" className="btn-small btn-danger">remove</button>
+                    <button
+                      type="submit"
+                      className="btn-small btn-danger"
+                      aria-label={`Remove invitation for ${invitation.username}`}
+                    >
+                      remove
+                    </button>
                   </form>
                 </td>
               </tr>
