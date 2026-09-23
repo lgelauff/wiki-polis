@@ -491,7 +491,7 @@
     "conv-bar-label": "Label under a preliminary-results vote bar. $1 is the agree percentage, $2 the pass percentage. Keep the middle dot.",
     "conv-network-error": "Generic network-error message.",
     "conv-network-error-retry": "Short network-error badge on the informed opinion card.",
-    "conv-err-similarity": "Error under the \"suggest different wording\" composer on the voting tab, when the rewording is too different from the original statement to count as the same claim.",
+    "conv-err-similarity": "Error under the \"suggest different wording\" composer on the voting tab, when the rewording is too far from the original statement for the automatic similarity check. It says what the participant can do about it: stay closer to the original, or use the \"propose a new statement\" option instead. The check is off unless an organizer configures a threshold.",
     "conv-err-proposal-limit": "Error under the statement composer on the voting tab, when the participant has already used every new statement this consultation allows. Here a \"proposal\" is a new statement.",
     "conv-err-submit-statement": "Error under the statement composer on the voting tab, when submitting a statement failed for any reason without a message of its own (for example, the voting service being unavailable). Pressing the button again retries.",
     "conv-err-change-vote": "Error when changing a recorded vote fails.",
