@@ -826,8 +826,18 @@ a { color: inherit; }
 .settings-form > footer p { color: var(--consensus); font-size: .72rem; }
 
 /* Access page: one plain-worded choice per row. */
-.access-choices { margin: 1.75rem 0; }
+/* The bottom margin is the gap that keeps one question's last line off the next question's
+   legend: the "also coming" hint lives inside the fieldset, closing its own group. The
+   selector carries `.settings-form` because `.settings-form fieldset` above is more
+   specific than a bare `.access-choices` and was zeroing this margin. */
+.settings-form .access-choices { margin: 1.75rem 0 2.5rem; }
+/* A refusal about this group is the one thing that must stay next to it, so the gap closes
+   while one is on screen. Where `:has()` is not understood the group keeps the wider gap,
+   which is the pre-refusal layout -- the error is still linked by `aria-describedby` and
+   repeated in the summary that takes focus. */
+.settings-form .access-choices:has(+ .access-field-error) { margin-bottom: .6rem; }
 .access-choices legend { margin-bottom: .7rem; font-size: .72rem; font-weight: 650; }
+.access-choices > .settings-hint { margin: .75rem 0 0; line-height: 1.45; }
 .access-choice { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: .75rem; min-height: 44px; padding: .35rem 0; font-size: .78rem; cursor: pointer; }
 .access-choice input { width: 18px; height: 18px; margin: 0; accent-color: var(--civic); }
 .settings-form .access-choice input { display: inline-block; width: 18px; margin-top: 0; padding: 0; border: 0; background: none; }

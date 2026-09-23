@@ -105,15 +105,19 @@ test('shows who can take part as one plain-worded choice per row', async () => {
   // No internal value reaches the screen, and the combination the server refuses --
   // gated with no type -- cannot be expressed by a radio group.
   expect(screen.queryByText(/invite_only|gating type/i)).toBeNull();
-  // Functionality that does not exist yet is named in prose under the group, not mimed
-  // with a control: the group offers three answers and every one of them works.
+  // Functionality that does not exist yet is named in prose at the foot of the group, not
+  // mimed with a control: the group offers three answers and every one of them works.
   expect(within(admission).getAllByRole('radio')).toHaveLength(3);
   expect(screen.queryByRole('radio', {name: /Wiki policy/})).toBeNull();
-  const coming = screen.getByText(
+  const coming = within(admission).getByText(
     'Also coming: a policy based on wiki activity — not available yet (#406)',
   );
   expect(coming).toBeVisible();
   expect(coming.tagName).toBe('P');
+  // Inside the fieldset and last in it, so it closes the question it is about instead of
+  // sitting flush against the next question's legend.
+  expect(coming.parentElement).toBe(admission);
+  expect(admission.lastElementChild).toBe(coming);
   // Visibility answers belong to a gated consultation only, as they do today.
   expect(screen.queryByRole('group', {name: 'What people without access can see'})).toBeNull();
 });
@@ -133,13 +137,15 @@ test('renders a locked admission answer as text with the reason on its lock', as
   const visibility = screen.getByRole('group', {name: 'What people without access can see'});
   expect(visibility).toBeVisible();
   expect(screen.getByRole('checkbox', {name: 'The results'})).toBeEnabled();
-  // The username-reveal option has no consumer yet, so it is named under the group in
-  // prose and sent back unchanged -- not offered as a checkbox nobody can tick.
+  // The username-reveal option has no consumer yet, so it is named at the foot of the
+  // group in prose and sent back unchanged -- not offered as a checkbox nobody can tick.
   expect(screen.queryByRole('checkbox', {name: /Show usernames in shared results/})).toBeNull();
   expect(within(visibility).getAllByRole('checkbox')).toHaveLength(3);
-  expect(screen.getByText(
+  const reveal = within(visibility).getByText(
     'Also coming: participants choosing to show their username — not available yet',
-  )).toBeVisible();
+  );
+  expect(reveal).toBeVisible();
+  expect(visibility.lastElementChild).toBe(reveal);
 });
 
 test('asks once before narrowing access and saves only after Continue', async () => {

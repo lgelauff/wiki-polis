@@ -29,8 +29,9 @@ type Tier = Settings['recommendations']['tier'];
  *
  * Neither appears as a greyed control: a control that cannot be operated is still a tab
  * stop, is still announced as a radio, and invites a click that does nothing. What is
- * genuinely missing is said once in prose under the group instead (`COMING_*` below), so
- * the group contains only answers that work. A row already storing one of the two keeps
+ * genuinely missing is said once in prose at the foot of the group instead (`COMING_*`
+ * below -- inside the fieldset, so it closes its own question rather than running into the
+ * next legend), so the group contains only answers that work. A row already storing one of the two keeps
  * it -- nothing here rewrites it -- but it shows as no answer selected, the same as today
  * for `unset`. */
 type Admission = 'anyone' | 'invite_only' | 'voucher' | 'wiki_based' | 'unset';
@@ -253,9 +254,9 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
               <input type="radio" name="admission" value="voucher" checked={admission === 'voucher'} {...admissionInvalid} onChange={() => setAdmission('voucher')} />
               <span>{msg('admin-access-admission-voucher')}</span>
             </label>
+            <p className="settings-hint">{COMING_ADMISSION}</p>
           </fieldset>}
-          {!admissionLocked && <p className="settings-hint">{COMING_ADMISSION}</p>}
-          {admissionMessages.length > 0 && <p className="access-field-error" id={`${ids}-gated-error`}>{admissionMessages.join(' ')}</p>}
+          {admissionMessages.length > 0 &&<p className="access-field-error" id={`${ids}-gated-error`}>{admissionMessages.join(' ')}</p>}
           {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
           {!gated && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
             <option value="public">Not gated</option><option value="demo">Demo</option>
@@ -274,8 +275,8 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
               <input type="checkbox" checked={resultsShared} onChange={(event) => setResultsShared(event.target.checked)} />
               <span>{msg('admin-access-visibility-results')}</span>
             </label>
+            <p className="settings-hint">{COMING_REVEAL}</p>
           </fieldset>}
-          {gated && <p className="settings-hint">{COMING_REVEAL}</p>}
           {gated && <label>{msg('admin-access-request-label')}<textarea value={accessRequestText} rows={3} onChange={(event) => setAccessRequestText(event.target.value)} /></label>}
           <label>{msg('admin-label-elig-event')}<input value={eligibilityEventId} maxLength={80} placeholder={msg('admin-elig-event-ph')} {...invalid('eligibilityEventId')} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
           <FieldError field="eligibilityEventId" />
