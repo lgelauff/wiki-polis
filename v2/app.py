@@ -2581,6 +2581,7 @@ def _moderation_log_api_payload(slug: str) -> dict:
                 'pseudonym': row['pseudonym'],
                 'scope': row['scope'],
                 'actor': row['actor'],
+                'actorKind': row['actor_kind'],
             }
             for row in _conversation_ban_log_rows(conv)
         ],
@@ -4901,8 +4902,14 @@ def _conversation_ban_log_rows(conv: Conversation) -> list[dict]:
         rows.append({
             'action': 'Unbanned' if event.operation == 'participant.unban' else 'Banned',
             'ts': event.ts,
-            'pseudonym': pseudonyms.get(target_id, 'participant'),
-            'actor': actors.get(event.actor_participant_id, 'administrator'),
+            'pseudonym': pseudonyms.get(target_id) or None,
+            'actor': actors.get(event.actor_participant_id) or None,
+            # record_audit marks a ban by an env-listed admin, who has no Participant row, so
+            # the page can name them rather than show an unknown moderator.
+            'actor_kind': ('site_admin'
+                           if event.actor_participant_id is None
+                           and (event.detail or {}).get('actor_kind') == 'env_admin'
+                           else None),
             'scope': 'conversation',
         })
     return rows
