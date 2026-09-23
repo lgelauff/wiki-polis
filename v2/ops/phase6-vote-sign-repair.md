@@ -29,7 +29,7 @@ is a separate Polis conversation. Every phase-6 zinvite in this list needs repai
 
 ## 2. Cloud VPS — prove the bug on your own data
 
-⚠️ **Pin the container name.** Production and staging Polis run side by side on that host:
+**Pin the container name.** Production and staging Polis run side by side on that host:
 `particiapp-docker_postgres_1` (port 5432, **production**) and `wiki-polis-staging_postgres_1`
 (port 5442). A grepped name matches both. Confirm which you are on before any write — query
 `zinvites` for your phase-6 zinvite; a `zid` back means production, empty means staging.
@@ -43,7 +43,7 @@ docker exec -it wiki-polis-staging_postgres_1 psql -U polis -d polis  # staging
 
 ### The decisive check: cast one vote whose intent you know
 
-> ⚠️ **The round must not be paused, and the consultation must be active.** Both write
+> **The round must not be paused, and the consultation must be active.** Both write
 > paths refuse otherwise — the API returns `409 Informed voting is not open.`, the legacy
 > route `403` — and a paused round is the state this runbook otherwise wants the tool in.
 > Record `active` and `paused` in step 1, unpause for this check and for step 7, and
@@ -105,7 +105,7 @@ repair, or as a fixture for a regression test against real data. Negating them d
 
 ### Two tables, not one
 
-⚠️ **This is the part that makes or breaks the repair.**
+**This is the part that makes or breaks the repair.**
 
 - `votes(zid, pid, tid, vote, created)` — append-only history. Has `created`, **no `modified`**.
 - `votes_latest_unique(zid, pid, tid, vote, modified)` — **the authoritative current vote**, and
@@ -153,7 +153,7 @@ Each pair must match. This is also your real rollback: the pre-repair state surv
 > data repaired, even runs leave it broken — so if you are unsure whether it has already
 > run, do **not** re-run "to be safe". Check first with the known-intent vote from step 2.
 
-⚠️ **Not idempotent.** Running it twice returns the data to broken. Run once, verify, do not
+**Not idempotent.** Running it twice returns the data to broken. Run once, verify, do not
 re-run. The `NOT EXISTS` guard protects the *backup*, not this.
 
 Because the frontend is down, every stored phase-6 vote is uniformly inverted — no time bound is
@@ -192,7 +192,7 @@ unchanged), and this reads **both** tables so a divergence is visible *before* y
 SELECT 'votes' AS t, vote, count(*) FROM votes WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') GROUP BY vote UNION ALL SELECT 'votes_latest_unique', vote, count(*) FROM votes_latest_unique WHERE zid=(SELECT zid FROM zinvites WHERE zinvite='<PHASE6_ZINVITE>') GROUP BY vote ORDER BY t, vote;
 ```
 
-⚠️ Verifying against `votes` alone is the trap this runbook previously walked into: it shows a
+Verifying against `votes` alone is the trap this runbook previously walked into: it shows a
 perfectly mirrored distribution while every participant-facing number stays inverted.
 
 Then `COMMIT;` — or `ROLLBACK;` if anything is off.
@@ -218,7 +218,7 @@ them stay backwards.
 > a few hours and re-read `math_tick`. The routes below are for when it has not moved, when
 > the conversation is outside that window, or when you cannot wait.
 
-⚠️ **Queueing a task does not work on our deployment, and this is not a transient
+**Queueing a task does not work on our deployment, and this is not a transient
 fault.** `queue_math_recompute` writes a `worker_tasks` row, but only polismath's `tasks`
 run mode consumes that table, and our container runs `full`. In `system.clj`,
 `full-system` merges `poller-system` alone — the vote and moderation pollers — while the

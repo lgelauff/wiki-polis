@@ -22,11 +22,11 @@ error messages ([#397](https://github.com/lgelauff/wiki-polis/issues/397)).
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (972 keys, 100% documented; 594 offered to translators, 378 held back) | ✅ committed |
-| `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
-| Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
-| `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
-| React SPA reads it via `banana-i18n` | ✅ participant interface; 🟡 help pages and admin console (see above) |
+| `en.json` + `qqq.json` (972 keys, 100% documented; 594 offered to translators, 378 held back) | committed |
+| `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | committed |
+| Per-request locale negotiation (`g.locale`, `g.dir`) | committed |
+| `GET /api/v1/i18n/<locale>` — the catalogue as JSON | committed |
+| React SPA reads it via `banana-i18n` | participant interface; not yet the help pages and admin console (see above) |
 | Locales offered to users (`ENABLED_LOCALES`) | English and Dutch (`nl.json`, 533 keys) |
 
 `ENABLED_LOCALES` defaults to `en,nl` when unset (`app.py`), so the language switcher is visible
