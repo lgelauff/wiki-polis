@@ -43,8 +43,9 @@ const settings: Settings = {
   links: {self: SETTINGS_URL, lifecycle: '/admin/conversations/7'},
 };
 
-/** Invitation-list access with the three visibility answers on, and the Explore flag
- *  raised, which is what locks the admission answer today. */
+/** Invitation-list access with every stored visibility value on, and the Explore flag
+ *  raised, which is what locks the admission answer today. Nothing reads those values, so
+ *  the page no longer offers them -- it only has to hand them back untouched. */
 const lockedSettings: Settings = {
   ...settings,
   conversation: {
@@ -118,8 +119,10 @@ test('shows who can take part as one plain-worded choice per row', async () => {
   // sitting flush against the next question's legend.
   expect(coming.parentElement).toBe(admission);
   expect(admission.lastElementChild).toBe(coming);
-  // Visibility answers belong to a gated consultation only, as they do today.
+  // The visibility answers are gone from the page altogether, and their placeholder is a
+  // gated-only line, so an ungated consultation shows neither.
   expect(screen.queryByRole('group', {name: 'What people without access can see'})).toBeNull();
+  expect(screen.queryByText(/choosing what people without access can see/)).toBeNull();
 });
 
 test('renders a locked admission answer as text with the reason on its lock', async () => {
@@ -133,19 +136,24 @@ test('renders a locked admission answer as text with the reason on its lock', as
   expect(screen.queryByRole('group', {name: 'Who can take part'})).toBeNull();
   const lock = screen.getByRole('img', {name: 'Locked while Explore is open'});
   expect(lock).toHaveAttribute('title', 'Locked while Explore is open');
-  // What the lock does not cover stays editable: the three visibility answers never lock.
-  const visibility = screen.getByRole('group', {name: 'What people without access can see'});
-  expect(visibility).toBeVisible();
-  expect(screen.getByRole('checkbox', {name: 'The results'})).toBeEnabled();
-  // The username-reveal option has no consumer yet, so it is named at the foot of the
-  // group in prose and sent back unchanged -- not offered as a checkbox nobody can tick.
+  // The visibility answers and the "how to ask for access" text are stored and read by
+  // nothing, so the page no longer asks about them: no fieldset, no checkboxes, no field.
+  expect(screen.queryByRole('group', {name: 'What people without access can see'})).toBeNull();
+  expect(screen.queryByRole('checkbox', {name: 'The results'})).toBeNull();
+  expect(screen.queryByRole('checkbox', {name: 'That this consultation exists'})).toBeNull();
+  expect(screen.queryByRole('checkbox', {name: 'The introduction, phase and dates'})).toBeNull();
   expect(screen.queryByRole('checkbox', {name: /Show usernames in shared results/})).toBeNull();
-  expect(within(visibility).getAllByRole('checkbox')).toHaveLength(3);
-  const reveal = within(visibility).getByText(
-    'Also coming: participants choosing to show their username — not available yet',
+  expect(screen.queryByRole('textbox', {name: 'How to ask for access'})).toBeNull();
+  // What they promised is one muted line instead, beside the username-reveal one.
+  const coming = screen.getByText(
+    'Also coming: choosing what people without access can see, and what to tell them'
+    + ' — not available yet',
   );
-  expect(reveal).toBeVisible();
-  expect(visibility.lastElementChild).toBe(reveal);
+  expect(coming).toBeVisible();
+  expect(coming.tagName).toBe('P');
+  expect(screen.getByText(
+    'Also coming: participants choosing to show their username — not available yet',
+  )).toBeVisible();
 });
 
 test('asks once before narrowing access and saves only after Continue', async () => {
@@ -279,23 +287,37 @@ test('drops the question when the answer stops narrowing', async () => {
 
 test('what is not available yet is prose, not a control that does nothing', async () => {
   // This test used to click a greyed radio and check that nothing happened. The option is
-  // gone, so what is pinned now is that the two "also coming" lines are inert: no role, no
+  // gone, so what is pinned now is that the "also coming" lines are inert: no role, no
   // tab stop, nothing to click, and no effect on what a save sends.
   serve({...lockedSettings, conversation: {...lockedSettings.conversation, showUsernames: true}});
   const sent = recordPuts();
   renderPage();
 
   await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
-  const note = screen.getByText(
-    'Also coming: participants choosing to show their username — not available yet',
-  );
-  expect(note).not.toHaveAttribute('tabindex');
-  expect(note.querySelector('input, button, a, [role]')).toBeNull();
+  for (const note of [
+    screen.getByText(
+      'Also coming: choosing what people without access can see, and what to tell them'
+      + ' — not available yet',
+    ),
+    screen.getByText(
+      'Also coming: participants choosing to show their username — not available yet',
+    ),
+  ]) {
+    expect(note).not.toHaveAttribute('tabindex');
+    expect(note).not.toHaveAttribute('role');
+    expect(note.querySelector('input, button, a, [role]')).toBeNull();
+  }
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
-  // The stored value behind the line still goes back exactly as it was read.
-  expect(sent[0]).toMatchObject({showUsernames: true});
+  // Every stored value behind those lines goes back exactly as it was read: the endpoint
+  // takes one complete key set and would refuse the save without them, and a default would
+  // quietly rewrite what an organizer set before the controls went away.
+  expect(sent[0]).toMatchObject({
+    announce: true, information: true, resultsShared: true, showUsernames: true,
+    accessRequestText: 'Write to the organizers.',
+  });
+  expect(await screen.findByText('Settings saved.')).toBeVisible();
 });
 
 test('a role that may not edit gets the reason and no way to save', async () => {

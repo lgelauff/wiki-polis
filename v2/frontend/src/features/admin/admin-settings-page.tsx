@@ -38,11 +38,23 @@ type Admission = 'anyone' | 'invite_only' | 'voucher' | 'wiki_based' | 'unset';
 
 /** What does not exist yet, said in prose rather than mimed with a dead control.
  *
+ * A control that saves a value nothing reads is the same bug as a control the server
+ * silently ignores: the organizer is told their answer took effect and no page ever acts
+ * on it. `announce`, `information`, `results_shared`, `show_usernames` and
+ * `access_request_text` are written and read back by the settings endpoint and by nothing
+ * else -- no participant-facing page, lane query, about payload, results report or
+ * identity-reveal step consults them -- so what they promise is named here instead of
+ * offered. The stored values still travel out and back untouched (see the mutation below):
+ * the page stops asking about them, it does not clear them.
+ *
  * Hardcoded English on purpose: a placeholder for unshipped functionality gets no message
  * key and no qqq entry, so translators are not asked to carry a string that leaves again
  * when the functionality lands (`.claude/admin-review/message-key-convention.md`). */
 const COMING_ADMISSION
   = 'Also coming: a policy based on wiki activity — not available yet (#406)';
+const COMING_VISIBILITY
+  = 'Also coming: choosing what people without access can see, and what to tell them'
+    + ' — not available yet';
 const COMING_REVEAL
   = 'Also coming: participants choosing to show their username — not available yet';
 
@@ -107,12 +119,6 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   const [outroHtml, setOutroHtml] = useState(data.conversation.outroHtml);
   const [accessPolicy, setAccessPolicy] = useState<Policy>(data.conversation.accessPolicy);
   const [admission, setAdmission] = useState<Admission>(admissionOf(data.conversation));
-  const [announce, setAnnounce] = useState(data.conversation.announce);
-  const [information, setInformation] = useState(data.conversation.information);
-  const [resultsShared, setResultsShared] = useState(data.conversation.resultsShared);
-  const [accessRequestText, setAccessRequestText] = useState(
-    data.conversation.accessRequestText ?? '',
-  );
   const [eligibilityEventId, setEligibilityEventId] = useState(data.eligibility.eventId);
   const [eligibilityLabel, setEligibilityLabel] = useState(data.eligibility.label ?? '');
   const [tier, setTier] = useState<Tier>(data.recommendations.tier);
@@ -126,9 +132,15 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   // which is what today's page does by disabling both of its access controls.
   const admissionLocked = Boolean(data.locks?.gated || data.locks?.gatingType);
   const stored = admissionOf(data.conversation);
-  // The username-reveal option is sent back exactly as it was read, so it can never be the
-  // field a 409 names; it is kept out of component state for that reason.
-  const showUsernames = data.conversation.showUsernames;
+  // The five settings nothing reads are sent back exactly as they were read, so none of
+  // them can ever be the field a 409 names, and a save cannot quietly rewrite a value the
+  // page no longer shows. They are kept out of component state for that reason. The
+  // endpoint takes one of three complete key sets and refuses anything else
+  // ("Provide the complete settings representation.", `api/admin_routes.py`), so dropping
+  // the keys from the body is not an option: the whole save would 400.
+  const {
+    announce, information, resultsShared, showUsernames, accessRequestText,
+  } = data.conversation;
   const gated = admission !== 'anyone';
 
   const mutation = useMutation({
@@ -146,11 +158,10 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   // render: after a save the stored answers are the new baseline. Every move to a different
   // gated answer counts, not only anyone -> gated: invitation list -> voucher, and the
   // legacy `unset` row -> a real gate, both take access away from people who have it today.
-  // Only a move *to* "anyone" widens.
-  const narrowing = (stored !== admission && admission !== 'anyone')
-    || (data.conversation.announce && !announce)
-    || (data.conversation.information && !information)
-    || (data.conversation.resultsShared && !resultsShared);
+  // Only a move *to* "anyone" widens. The admission answer is the only thing left that can
+  // narrow: the visibility settings are no longer editable here, so a save cannot take
+  // visibility away from anybody.
+  const narrowing = stored !== admission && admission !== 'anyone';
 
   const fields = fieldErrors(mutation.error);
   const fieldMessages = Object.values(fields).flat();
@@ -261,23 +272,10 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
           {!gated && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
             <option value="public">Not gated</option><option value="demo">Demo</option>
           </select></label>}
-          {gated && <fieldset className="access-choices">
-            <legend>{msg('admin-access-visibility-legend')}</legend>
-            <label className="access-choice">
-              <input type="checkbox" checked={announce} onChange={(event) => setAnnounce(event.target.checked)} />
-              <span>{msg('admin-access-visibility-announce')}</span>
-            </label>
-            <label className="access-choice">
-              <input type="checkbox" checked={information} onChange={(event) => setInformation(event.target.checked)} />
-              <span>{msg('admin-access-visibility-information')}</span>
-            </label>
-            <label className="access-choice">
-              <input type="checkbox" checked={resultsShared} onChange={(event) => setResultsShared(event.target.checked)} />
-              <span>{msg('admin-access-visibility-results')}</span>
-            </label>
+          {gated && <>
+            <p className="settings-hint">{COMING_VISIBILITY}</p>
             <p className="settings-hint">{COMING_REVEAL}</p>
-          </fieldset>}
-          {gated && <label>{msg('admin-access-request-label')}<textarea value={accessRequestText} rows={3} onChange={(event) => setAccessRequestText(event.target.value)} /></label>}
+          </>}
           <label>{msg('admin-label-elig-event')}<input value={eligibilityEventId} maxLength={80} placeholder={msg('admin-elig-event-ph')} {...invalid('eligibilityEventId')} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
           <FieldError field="eligibilityEventId" />
           <label>{msg('admin-label-elig-label')}<input value={eligibilityLabel} maxLength={255} placeholder={msg('admin-elig-label-ph')} {...invalid('eligibilityLabel')} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
