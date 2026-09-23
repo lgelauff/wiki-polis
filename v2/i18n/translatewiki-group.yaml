@@ -106,6 +106,8 @@ TAGS:
     - admin-label-wm-username
     - admin-nav-panel
     - admin-new-conv-heading
+    - admin-overview-card-settings
+    - admin-overview-card-settings-desc
     - admin-slug-title
     - admin-status-active
     - admin-status-closed
@@ -130,8 +132,6 @@ TAGS:
     - adminconv-card-participants
     - adminconv-card-participants-desc
     - adminconv-card-roles-desc
-    - adminconv-card-settings
-    - adminconv-card-settings-desc
     - adminconv-card-statements
     - adminconv-card-statements-desc
     - adminconv-cleanup-li1
