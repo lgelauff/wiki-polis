@@ -237,7 +237,7 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
           {admissionLocked ? <div className="access-answer">
             <p className="access-answer-legend">{msg('admin-access-admission-legend')}</p>
             <p className="access-answer-value">
-              {admissionLabel(msg, stored)} <LockGlyph label={msg('admin-access-locked')} />
+              {admissionLabel(msg, stored)} <LockGlyph label={msg('admin-access-locked-note')} />
             </p>
           </div> : <fieldset className="access-choices">
             <legend>{msg('admin-access-admission-legend')}</legend>
@@ -276,7 +276,7 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
             </label>
           </fieldset>}
           {gated && <p className="settings-hint">{COMING_REVEAL}</p>}
-          {gated && <label>{msg('admin-access-request-text')}<textarea value={accessRequestText} rows={3} onChange={(event) => setAccessRequestText(event.target.value)} /></label>}
+          {gated && <label>{msg('admin-access-request-label')}<textarea value={accessRequestText} rows={3} onChange={(event) => setAccessRequestText(event.target.value)} /></label>}
           <label>{msg('admin-label-elig-event')}<input value={eligibilityEventId} maxLength={80} placeholder={msg('admin-elig-event-ph')} {...invalid('eligibilityEventId')} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
           <FieldError field="eligibilityEventId" />
           <label>{msg('admin-label-elig-label')}<input value={eligibilityLabel} maxLength={255} placeholder={msg('admin-elig-label-ph')} {...invalid('eligibilityLabel')} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
