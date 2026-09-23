@@ -341,7 +341,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
         {submitted && (
           <div id="propose-submitted" className="propose-submitted" role="status">
             <span className="check-pill">✓</span><span className="propose-submitted-label">{msg('conv-proposed')}</span>
-            <button type="button" className="propose-next-btn" onClick={next}>{msg('conv-propose-next')} <span aria-hidden="true">→</span></button>
+            <button type="button" className="propose-next-btn" onClick={next}>{msg('conv-propose-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
           </div>
         )}
         {allDone && (
@@ -370,12 +370,12 @@ function ClosedWorkspace({data}: {data: Workspace}) {
           <p className="muted" dangerouslySetInnerHTML={richHtml(msg('conv-closed-on', escapeHtml(dates.date(reveal.closedAt))))} />
           <RevealTimeline state={reveal.state} closedAt={reveal.closedAt} opensAt={reveal.opensAt} closesAt={reveal.closesAt} cooldownDays={reveal.cooldownDays} windowDays={reveal.windowDays} countdownTargetAt={reveal.countdownTargetAt} onBoundary={refreshWorkspace} />
           {reveal.state === 'revealed' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}} dangerouslySetInnerHTML={richHtml(msg('conv-revealed-text', pseudonym))} />}
-          {reveal.state === 'open' && <div className="reveal-callout"><p className="reveal-callout-text" dangerouslySetInnerHTML={richHtml(msg('reveal-callout-open-text', pseudonym))} /><InternalLink className="reveal-callout-link" href={`/c/${data.slug}/reveal`}>{msg('reveal-callout-link')} <span aria-hidden="true">→</span></InternalLink></div>}
+          {reveal.state === 'open' && <div className="reveal-callout"><p className="reveal-callout-text" dangerouslySetInnerHTML={richHtml(msg('reveal-callout-open-text', pseudonym))} /><InternalLink className="reveal-callout-link" href={`/c/${data.slug}/reveal`}>{msg('reveal-callout-link')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></div>}
           {reveal.state === 'pending' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>{msg('conv-reveal-pending-opens', dates.date(reveal.opensAt))}</p>}
           {reveal.state === 'expired' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>{msg('conv-reveal-expired')}</p>}
         </>
       ) : <p className="muted">{msg('conv-closed-simple')}</p>}
-      {data.links.results && <p style={{marginTop: '1rem', fontSize: 14}}><InternalLink href={`/c/${data.slug}/report`}>{msg('conv-read-report')} <span aria-hidden="true">→</span></InternalLink></p>}
+      {data.links.results && <p style={{marginTop: '1rem', fontSize: 14}}><InternalLink href={`/c/${data.slug}/report`}>{msg('conv-read-report')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></p>}
     </div>
   );
 }

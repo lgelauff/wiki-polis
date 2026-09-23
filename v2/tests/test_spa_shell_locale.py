@@ -58,7 +58,7 @@ def test_a_requested_locale_reaches_the_shell(client, shell, app, tmp_path):
     directory.mkdir()
     (directory / 'en.json').write_text(
         '{"base-skip-to-content": "Skip to main content", '
-        '"common-loading": "Loading\\u2026"}', encoding='utf-8')
+        '"common-loading": "CATALOGUE-EN-LOADING"}', encoding='utf-8')
     (directory / 'nl.json').write_text('{"base-skip-to-content": "Ga naar de inhoud"}',
                                        encoding='utf-8')
     i18n.load(str(directory))
@@ -68,7 +68,7 @@ def test_a_requested_locale_reaches_the_shell(client, shell, app, tmp_path):
         assert 'lang="nl"' in tag
         assert 'data-msg-skip="Ga naar de inhoud"' in tag
         # Untranslated in nl, so English fills it — the same per-key fallback the SPA gets.
-        assert 'data-msg-loading="Loading…"' in tag
+        assert 'data-msg-loading="CATALOGUE-EN-LOADING"' in tag
     finally:
         i18n.load()
 
@@ -146,6 +146,7 @@ def test_a_missing_catalogue_stamps_english_not_a_key_marker(client, shell, tmp_
         tag = _html_tag(client.get('/').get_data(as_text=True))
         assert i18n._MISSING_L not in tag
         assert 'data-msg-skip="Jump to content"' in tag
+        # The hardcoded fallback in app.py, not a catalogue value: there is no catalogue.
         assert 'data-msg-loading="Loading…"' in tag
     finally:
         i18n.load()

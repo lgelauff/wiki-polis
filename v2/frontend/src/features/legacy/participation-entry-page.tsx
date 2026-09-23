@@ -187,7 +187,7 @@ function JoinPage({data, csrfToken, voucher}: {data: JoinEntry; csrfToken: strin
             <div className="pseudonym-card-header">
               <div className="pseudonym-card-title" id="pseudonym-title">{msg('accept-choose-pseudonym')}</div>
               <button type="button" className="reroll-btn" aria-controls="pseudonym-options" aria-label={msg('accept-reroll-aria')} disabled={reroll.isPending} onClick={() => reroll.mutate()}>
-                <span aria-hidden="true">↻</span> {reroll.isPending ? msg('common-loading') : msg('accept-reroll')}
+                <span aria-hidden="true">↻</span> {reroll.isPending ? msg('accept-reroll-loading') : msg('accept-reroll')}
               </button>
             </div>
             <div className="pseudonym-card-sub" id="pseudonym-help">
@@ -293,7 +293,7 @@ function EligibilityDeniedPage({data, error}: {data: JoinEntry; error: ApiContra
               : msg('forbidden-elig-requirement')}
           </p>
           <p className="muted">{message}</p>
-          <p style={{marginTop: '1rem'}}><InternalLink href={data.links.home}>{msg('common-return-home')} <span aria-hidden="true">→</span></InternalLink></p>
+          <p style={{marginTop: '1rem'}}><InternalLink href={data.links.home}>{msg('common-return-home')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></p>
         </div>
       </div>
     </LegacyShell>

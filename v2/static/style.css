@@ -4055,6 +4055,12 @@ a { color: var(--pass); }
   transform: translateY(-50%) rotate(45deg);
 }
 [dir="rtl"] .flow-step + .flow-step::before { transform: translateY(-50%) rotate(-135deg); }
+
+/* Decorative direction glyphs (← → between steps, on links and pager buttons). The arrow
+   characters are not bidi-mirrored by Unicode, so a right-to-left page has to flip them;
+   an arrow that lives inside a message is the translator's to mirror, not this rule's. */
+.dir-glyph { display: inline-block; }
+[dir="rtl"] .dir-glyph { transform: scaleX(-1); }
 .flow-step-title {
   margin: 0 0 .6rem;
   padding-bottom: .6rem;

@@ -73,10 +73,10 @@ function Completion({workspace, onSelectPreliminary}: {
       ) : workspace.status === 'open' ? (
         <p className="p6-done-text">{msg('conv-p6-done-willpublish')}</p>
       ) : (
-        <p className="p6-done-text">{msg('conv-p6-done-closed')} <InternalLink href={workspace.links.results}>{msg('conv-read-report')} <span aria-hidden="true">→</span></InternalLink></p>
+        <p className="p6-done-text">{msg('conv-p6-done-closed')} <InternalLink href={workspace.links.results}>{msg('conv-read-report')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></p>
       )}
       {workspace.reveal?.state === 'open' ? (
-        <p className="p6-done-reveal p6-done-reveal--open">{withNodes(msg('conv-p6-reveal-recorded', nodeSlot(0)), <strong>{workspace.viewer.pseudonym}</strong>)} {withNodes(msg('conv-p6-reveal-open', nodeSlot(0)), <InternalLink href={`/c/${workspace.slug}/reveal`}>{msg('conv-p6-reveal-link')} <span aria-hidden="true">→</span></InternalLink>)}</p>
+        <p className="p6-done-reveal p6-done-reveal--open">{withNodes(msg('conv-p6-reveal-recorded', nodeSlot(0)), <strong>{workspace.viewer.pseudonym}</strong>)} {withNodes(msg('conv-p6-reveal-open', nodeSlot(0)), <InternalLink href={`/c/${workspace.slug}/reveal`}>{msg('conv-p6-reveal-link')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink>)}</p>
       ) : workspace.reveal?.state !== 'revealed' && workspace.reveal?.state !== 'expired' ? (
         <p className="p6-done-reveal">{withNodes(msg('conv-p6-reveal-recorded', nodeSlot(0)), <strong>{workspace.viewer.pseudonym}</strong>)} {msg('conv-p6-reveal-pending')}</p>
       ) : null}
@@ -193,9 +193,9 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
           </div>
         </div>
         <div className="p6-nav">
-          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={currentIndex === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => showCard(currentIndex - 1)}><span aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
+          <button type="button" className="p6-navbtn p6-navbtn--prev" disabled={currentIndex === 0} aria-label={msg('conv-nav-prev-aria')} onClick={() => showCard(currentIndex - 1)}><span className="dir-glyph" aria-hidden="true">←</span> {msg('conv-nav-prev')}</button>
           <span className="p6-nav-counter" aria-live="polite">{msg('conv-of', currentIndex + 1, data.cards.length)}</span>
-          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={currentIndex === data.cards.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => showCard(currentIndex + 1)}>{msg('conv-nav-next')} <span aria-hidden="true">→</span></button>
+          <button type="button" className="p6-navbtn p6-navbtn--next" disabled={currentIndex === data.cards.length - 1} aria-label={msg('conv-nav-next-aria')} onClick={() => showCard(currentIndex + 1)}>{msg('conv-nav-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
         </div>
       </div>;
     })}
