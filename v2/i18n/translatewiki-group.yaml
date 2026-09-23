@@ -70,15 +70,14 @@ INSERTABLES:
 # translation, not that they are permanently untranslatable.
 TAGS:
   ignored:
-    - admin-access-policy-demo
-    - admin-access-policy-invite_only
-    - admin-access-policy-public
     - admin-btn-add
     - admin-btn-create-conv
     - admin-btn-grant
     - admin-btn-manage
     - admin-btn-remove
-    - admin-btn-settings
+    - admin-common-policy-invited
+    - admin-common-policy-open
+    - admin-common-policy-practice
     - admin-convs-heading
     - admin-crumb-aria
     - admin-elig-event-ph
@@ -98,6 +97,9 @@ TAGS:
     - admin-label-wm-username
     - admin-nav-panel
     - admin-new-conv-heading
+    - admin-overview-card-settings
+    - admin-overview-card-settings-desc
+    - admin-site-link-settings
     - admin-slug-title
     - admin-status-active
     - admin-status-closed
@@ -122,8 +124,6 @@ TAGS:
     - adminconv-card-participants
     - adminconv-card-participants-desc
     - adminconv-card-roles-desc
-    - adminconv-card-settings
-    - adminconv-card-settings-desc
     - adminconv-card-statements
     - adminconv-card-statements-desc
     - adminconv-cleanup-li1

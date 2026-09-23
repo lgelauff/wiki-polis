@@ -15,8 +15,8 @@ const CATALOGUE: Record<string, string> = {
   'output-report-label': 'CATALOGUE report',
   'output-report-tooltip': 'CATALOGUE report tooltip',
   'output-report-pending': 'CATALOGUE report pending',
-  'admin-access-policy-public': 'CATALOGUE anyone with an account',
-  'admin-access-policy-invite_only': 'CATALOGUE only people given access',
+  'admin-common-policy-open': 'CATALOGUE anyone with an account',
+  'admin-common-policy-invited': 'CATALOGUE only people given access',
 };
 
 /** Stands in for banana: returns the key itself for a message it does not hold, which is
@@ -91,7 +91,7 @@ describe('server identifier -> message', () => {
     expect(accessPolicyLabel(msg, 'public')).toBe('CATALOGUE anyone with an account');
     expect(accessPolicyLabel(msg, 'invite_only')).toBe('CATALOGUE only people given access');
     // 'demo' is in the table; its message is absent from CATALOGUE, so a naive
-    // implementation would render the bare key 'admin-access-policy-demo'.
+    // implementation would render the bare key 'admin-common-policy-practice'.
     expect(accessPolicyLabel(msg, 'demo')).toBe('demo');
     expect(accessPolicyLabel(msg, null)).toBe('');
   });

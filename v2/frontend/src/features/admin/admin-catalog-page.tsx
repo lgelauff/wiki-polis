@@ -131,7 +131,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
               <td>
                 <InternalLink href={conversation.links.manage} className="btn-small">manage</InternalLink>
                 {' '}
-                <InternalLink href={`${conversation.links.manage}/settings`} className="btn-small">{msg('admin-btn-settings')}</InternalLink>
+                <InternalLink href={`${conversation.links.manage}/settings`} className="btn-small">{msg('admin-site-link-settings')}</InternalLink>
               </td>
             </tr>
           ))}</tbody>
@@ -143,7 +143,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
             <div className="edit-row-fields">
               <label>Slug (URL-safe, immutable)<input type="text" placeholder="e.g. rfc-2024-adminship" required pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Lowercase letters, numbers, and hyphens only — no spaces or special characters (e.g. climate-2026)" value={draft.slug} onChange={(event) => setDraft({...draft, slug: event.target.value})} /></label>
               <label>Title<input type="text" required value={draft.title} onChange={(event) => setDraft({...draft, title: event.target.value})} /></label>
-              <label>Access policy<select value={draft.accessPolicy} onChange={(event) => setDraft({...draft, accessPolicy: event.target.value as CreateRequest['accessPolicy']})}><option value="public">{msg('admin-access-policy-public')}</option><option value="invite_only">{msg('admin-access-policy-invite_only')}</option><option value="demo">{msg('admin-access-policy-demo')}</option></select></label>
+              <label>Access policy<select value={draft.accessPolicy} onChange={(event) => setDraft({...draft, accessPolicy: event.target.value as CreateRequest['accessPolicy']})}><option value="public">{msg('admin-common-policy-open')}</option><option value="invite_only">{msg('admin-common-policy-invited')}</option><option value="demo">{msg('admin-common-policy-practice')}</option></select></label>
               <label>Route<select value={draft.phaseRoute} onChange={(event) => setDraft({...draft, phaseRoute: event.target.value})}>{data.phaseRoutes.map((route) => <option key={route.key} value={route.key}>{route.label}</option>)}</select></label>
               <label>Eligibility event ID<input type="text" maxLength={80} placeholder="optional AccountEligibility event" value={draft.eligibilityEventId} onChange={(event) => setDraft({...draft, eligibilityEventId: event.target.value})} /></label>
               <label>Eligibility label<input type="text" maxLength={255} placeholder="optional criteria summary" value={draft.eligibilityLabel} onChange={(event) => setDraft({...draft, eligibilityLabel: event.target.value})} /></label>

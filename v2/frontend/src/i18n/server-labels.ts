@@ -170,9 +170,9 @@ export const moderationScope = (msg: Message, id: string | null | undefined) =>
  *  words below therefore describe the three states that value can stand for, not the
  *  invitation list specifically. */
 const ACCESS_POLICY_MESSAGES: Record<string, string> = {
-  public: 'admin-access-policy-public',
-  invite_only: 'admin-access-policy-invite_only',
-  demo: 'admin-access-policy-demo',
+  public: 'admin-common-policy-open',
+  invite_only: 'admin-common-policy-invited',
+  demo: 'admin-common-policy-practice',
 };
 
 export const accessPolicyLabel = (msg: Message, id: string | null | undefined) =>
