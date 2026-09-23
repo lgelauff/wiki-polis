@@ -170,8 +170,8 @@ _SPA_BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stati
 # find, and stamping that marker would put it in the skip link — the first thing a keyboard
 # or screen-reader user meets. Same discipline as error_pages._t.
 _SPA_BOOTSTRAP_MESSAGES = {
-    'skip': ('base-skip-to-content', 'Skip to main content'),
-    'loading': ('base-loading-conversations', 'Loading conversations…'),
+    'skip': ('base-skip-to-content', 'Jump to content'),
+    'loading': ('common-loading', 'Loading…'),
 }
 # Matched structurally, not as a literal: v2/static/spa is gitignored and built at deploy
 # time, so a build tool that emits <html lang=en> or reorders attributes would silently turn
@@ -2581,6 +2581,7 @@ def _moderation_log_api_payload(slug: str) -> dict:
                 'pseudonym': row['pseudonym'],
                 'scope': row['scope'],
                 'actor': row['actor'],
+                'actorKind': row['actor_kind'],
             }
             for row in _conversation_ban_log_rows(conv)
         ],
@@ -3290,7 +3291,7 @@ def _statement_api_payload(
         try:
             parent_text = _statement_text_map(conv.polis_id).get(derived_from)
         except PolisParticipantError as exc:
-            raise ExploreUpstreamError('Could not load the original statement.') from exc
+            raise StatementPreparationUnavailable() from exc
         if parent_text is None:
             raise UnknownParentStatement(derived_from)
         scores = _statement_similarity_scores(text_value, parent_text)
@@ -4901,8 +4902,14 @@ def _conversation_ban_log_rows(conv: Conversation) -> list[dict]:
         rows.append({
             'action': 'Unbanned' if event.operation == 'participant.unban' else 'Banned',
             'ts': event.ts,
-            'pseudonym': pseudonyms.get(target_id, 'participant'),
-            'actor': actors.get(event.actor_participant_id, 'administrator'),
+            'pseudonym': pseudonyms.get(target_id) or None,
+            'actor': actors.get(event.actor_participant_id) or None,
+            # record_audit marks a ban by an env-listed admin, who has no Participant row, so
+            # the page can name them rather than show an unknown moderator.
+            'actor_kind': ('site_admin'
+                           if event.actor_participant_id is None
+                           and (event.detail or {}).get('actor_kind') == 'env_admin'
+                           else None),
             'scope': 'conversation',
         })
     return rows

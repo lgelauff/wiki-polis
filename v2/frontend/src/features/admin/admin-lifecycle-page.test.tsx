@@ -176,7 +176,7 @@ test('a transition under a minute away shows its countdown instead of blanking t
   // Under a minute, the countdown uses adminconv-countdown-lt1m on its own.
   serve(dueShortly());
   renderConsole();
-  expect(await screen.findByText('under 1m')).toBeVisible();
+  expect(await screen.findByText('under 1 min')).toBeVisible();
 });
 
 test('a message banana cannot parse degrades to its key, not to a blank page', async () => {

@@ -13,7 +13,7 @@ the pieces relate, and the handful of conventions that surprise people.
 
 ---
 
-## ⚠️ wiki-polis integration notes
+## wiki-polis integration notes
 
 These notes document where wiki-polis's assumptions need to agree with the Polis schema.
 
