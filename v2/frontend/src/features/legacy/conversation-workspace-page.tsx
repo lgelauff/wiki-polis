@@ -210,7 +210,7 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
       <div className="v2-composer-header">
         <div>
           <div className="v2-composer-title" id={suggest ? 'composer-suggest-title' : 'composer-newstmt-title'}>{title}</div>
-          <div className="v2-composer-helper" id={helperId}>{suggest ? msg('conv-suggest-helper') : msg('conv-newstmt-helper')}{' '}<InternalLink href="/help/statements" target="_blank" rel="noopener">{msg('conv-writing-tips')}<span className="sr-only">{msg('common-opens-in-new-tab')}</span></InternalLink></div>
+          <div className="v2-composer-helper" id={helperId}>{suggest ? msg('conv-suggest-helper') : msg('conv-newstmt-helper')}{' '}<InternalLink href="/help/statements" target="_blank" rel="noopener">{msg('conv-writing-tips')}<span className="sr-only">{' '}{msg('common-opens-in-new-tab')}</span></InternalLink></div>
         </div>
         <span className="propose-charcount">{msg('conv-composer-charcount', text.length)}</span>
       </div>
@@ -341,7 +341,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
         {submitted && (
           <div id="propose-submitted" className="propose-submitted" role="status">
             <span className="check-pill">✓</span><span className="propose-submitted-label">{msg('conv-proposed')}</span>
-            <button type="button" className="propose-next-btn" onClick={next}>{msg('conv-propose-next')} <span aria-hidden="true">→</span></button>
+            <button type="button" className="propose-next-btn" onClick={next}>{msg('conv-propose-next')} <span className="dir-glyph" aria-hidden="true">→</span></button>
           </div>
         )}
         {allDone && (
@@ -370,12 +370,12 @@ function ClosedWorkspace({data}: {data: Workspace}) {
           <p className="muted" dangerouslySetInnerHTML={richHtml(msg('conv-closed-on', escapeHtml(dates.date(reveal.closedAt))))} />
           <RevealTimeline state={reveal.state} closedAt={reveal.closedAt} opensAt={reveal.opensAt} closesAt={reveal.closesAt} cooldownDays={reveal.cooldownDays} windowDays={reveal.windowDays} countdownTargetAt={reveal.countdownTargetAt} onBoundary={refreshWorkspace} />
           {reveal.state === 'revealed' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}} dangerouslySetInnerHTML={richHtml(msg('conv-revealed-text', pseudonym))} />}
-          {reveal.state === 'open' && <div className="reveal-callout"><p className="reveal-callout-text" dangerouslySetInnerHTML={richHtml(msg('reveal-callout-open-text', pseudonym))} /><InternalLink className="reveal-callout-link" href={`/c/${data.slug}/reveal`}>{msg('reveal-callout-link')} <span aria-hidden="true">→</span></InternalLink></div>}
+          {reveal.state === 'open' && <div className="reveal-callout"><p className="reveal-callout-text" dangerouslySetInnerHTML={richHtml(msg('reveal-callout-open-text', pseudonym))} /><InternalLink className="reveal-callout-link" href={`/c/${data.slug}/reveal`}>{msg('reveal-callout-link')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></div>}
           {reveal.state === 'pending' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>{msg('conv-reveal-pending-opens', dates.date(reveal.opensAt))}</p>}
           {reveal.state === 'expired' && <p className="muted" style={{marginTop: '.5rem', fontSize: 13}}>{msg('conv-reveal-expired')}</p>}
         </>
       ) : <p className="muted">{msg('conv-closed-simple')}</p>}
-      {data.links.results && <p style={{marginTop: '1rem', fontSize: 14}}><InternalLink href={`/c/${data.slug}/report`}>{msg('conv-read-report')} <span aria-hidden="true">→</span></InternalLink></p>}
+      {data.links.results && <p style={{marginTop: '1rem', fontSize: 14}}><InternalLink href={`/c/${data.slug}/report`}>{msg('conv-read-report')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></p>}
     </div>
   );
 }
@@ -442,7 +442,7 @@ export function ConversationWorkspacePage() {
     document.head.appendChild(meta);
     return () => meta.remove();
   }, [workspace.data?.space]);
-  if (workspace.isPending) return <p className="loading-state" role="status">{msg('conv-loading')}</p>;
+  if (workspace.isPending) return <p className="loading-state" role="status">{msg('common-loading')}</p>;
   if (workspace.error instanceof ApiContractError && workspace.error.code === 'unauthorized') {
     return <NavigationRedirect href={session.links.login} />;
   }

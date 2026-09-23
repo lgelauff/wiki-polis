@@ -113,8 +113,8 @@ function bootstrapMessage(name: 'skip' | 'loading', fallback: string) {
 export function App() {
   return (
     <>
-      <a className="skip-link" href="#main">{bootstrapMessage('skip', 'Skip to main content')}</a>
-      <Suspense fallback={<p className="loading-state" role="status">{bootstrapMessage('loading', 'Loading conversations…')}</p>}>
+      <a className="skip-link" href="#main">{bootstrapMessage('skip', 'Jump to content')}</a>
+      <Suspense fallback={<p className="loading-state" role="status">{bootstrapMessage('loading', 'Loading…')}</p>}>
         {/* Inside the existing boundary on purpose: the catalogue fetch reuses this
             fallback instead of adding a second async gate in front of every route. */}
         <MessageProvider>

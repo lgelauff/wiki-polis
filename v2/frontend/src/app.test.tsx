@@ -18,7 +18,7 @@ test('renders a conversation lane from the API contract', async () => {
     </QueryClientProvider>,
   );
 
-  expect(screen.getByRole('status')).toHaveTextContent('Loading conversations');
+  expect(screen.getByRole('status')).toHaveTextContent('Loading…');
   expect(await screen.findByRole('heading', {name: 'Needs attention'})).toBeVisible();
   expect(await screen.findByRole('link', {name: /Community strategy.*continue/}))
     .toHaveAttribute('href', '/c/community-strategy');
@@ -673,7 +673,7 @@ test('stays usable when the message catalogue is unavailable', async () => {
   // is ugly but usable -- the alternative is a page stuck on a loading state.
   expect(await screen.findByRole('heading', {name: 'home-section-needs-attention'}, {timeout: 5000})).toBeVisible();
   expect(screen.getByRole('link', {name: /Community strategy/})).toHaveAttribute('href', '/c/community-strategy');
-  expect(screen.queryByText('Loading conversations…')).not.toBeInTheDocument();
+  expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
 });
 
 test('renders preliminary results from the message catalogue, not from source literals', async () => {

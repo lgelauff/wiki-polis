@@ -149,7 +149,7 @@ test('the licence link lands where the message puts it, not where the code does'
   // language that puts the object first.
   const section = document.getElementById('accept-licence-note')!;
   const link = within(section).getByRole('link', {name: /CC0/});
-  expect(link.closest('p')!.textContent).toBe(`BEFORE ${testMessages['accept-licence-link']}${testMessages['common-opens-in-new-tab']} AFTER`);
+  expect(link.closest('p')!.textContent).toBe(`BEFORE ${testMessages['accept-licence-link']} ${testMessages['common-opens-in-new-tab']} AFTER`);
 });
 
 test('the reveal window puts its two day counts where the message asks for them', async () => {
@@ -289,7 +289,7 @@ test('without a confirmed email the note keeps its link inside the sentence', as
   expect(screen.queryByRole('checkbox', {name: testMessages['accept-notify-email']!})).toBeNull();
   const link = screen.getByRole('link', {name: /Check your email settings on Meta-Wiki/});
   const note = link.closest('p')!;
-  expect(note.textContent).toBe('Email notifications are unavailable because your Wikimedia account cannot receive email. Check your email settings on Meta-Wiki (opens in a new tab) and return to enable this.');
+  expect(note.textContent).toBe('Email notifications are unavailable because your Wikimedia account cannot receive email. Check your email settings on Meta-Wiki (opens in new window) and return to enable this.');
   expect(link).toHaveAttribute('href', 'https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal');
   // Catches the new tab going unannounced: the participant leaves to set an address and has
   // to come back to this form, so the page says both that it opens away and to return.
