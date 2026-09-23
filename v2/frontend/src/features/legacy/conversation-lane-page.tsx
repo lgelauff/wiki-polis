@@ -7,6 +7,7 @@ import {
   sessionQuery,
   type ConversationSpace,
 } from '../../api/queries';
+import {ConsultationFlow} from './consultation-flow';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
@@ -419,7 +420,7 @@ export function ConversationLanePage({space}: {space: ConversationSpace}) {
           <AnonymousLane conversations={groups.available} developerLogins={session.developerLogins} loginHref={session.links.login} />
         ) : <>
           <h1 className="sr-only">{msg('home-heading')}</h1>
-          <img src="/static/wiki-polis-flow.svg" alt={msg('home-flow-alt')} style={{width: '100%', maxWidth: 900, display: 'block', margin: '0 auto 1.5rem'}} />
+          <ConsultationFlow />
           <PhaseLegend />
           <div className="home-mode-toggle" role="group" aria-label={msg('home-view-mode-aria')}>
             <button className={`home-mode-btn${mode === 'yours' ? ' home-mode-btn--active' : ''}`} data-target="yours" type="button" aria-pressed={mode === 'yours'} onClick={() => changeMode('yours')}>{msg('home-mode-yours')}</button>

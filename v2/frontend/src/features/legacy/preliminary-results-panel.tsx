@@ -3,15 +3,13 @@ import {useSuspenseQuery} from '@tanstack/react-query';
 import type {components} from '../../api/schema';
 import {resultsReportQuery} from '../../api/queries';
 import {useMessage, type Message} from '../../i18n/messages';
+import {usePercentFormat} from '../../i18n/numbers';
 
 type Tally = components['schemas']['VoteTally'];
 
-function percentage(value: number) {
-  return value.toFixed(1);
-}
-
 function VoteBar({tally, msg}: {tally: Tally; msg: Message}) {
   const {percentages} = tally;
+  const percentage = usePercentFormat();
   const title = msg('conv-bar-title', percentage(percentages.agree), percentage(percentages.disagree), percentage(percentages.pass));
   return <>
     <div className="p6-vote-bar" title={title}>
@@ -26,6 +24,7 @@ function VoteBar({tally, msg}: {tally: Tally; msg: Message}) {
 export function LegacyPreliminaryResultsPanel({slug}: {slug: string}) {
   const {data} = useSuspenseQuery(resultsReportQuery(slug));
   const msg = useMessage();
+  const percentage = usePercentFormat();
   return <div className="landing-section results-section">
     <div className="results-block p6-results-block">
       <div className="p6-results-header">
@@ -50,7 +49,7 @@ export function LegacyPreliminaryResultsPanel({slug}: {slug: string}) {
             <td className="p6-col-phase">{statement.informed ? <VoteBar tally={statement.informed} msg={msg} /> : <span className="muted">—</span>}</td>
             <td className="p6-col-shift">{statement.agreementShift === null
               ? <span className="muted">—</span>
-              : <span className={`p6-shift${statement.agreementShift > 0 ? ' p6-shift--up' : statement.agreementShift < 0 ? ' p6-shift--down' : ''}`}>{statement.agreementShift > 0 ? '+' : ''}{percentage(statement.agreementShift)}%</span>}
+              : <span className={`p6-shift${statement.agreementShift > 0 ? ' p6-shift--up' : statement.agreementShift < 0 ? ' p6-shift--down' : ''}`}>{percentage(statement.agreementShift, {signed: true})}</span>}
             </td>
             {data.viewer.participating && <td className="p6-col-mine">{statement.viewerChoice
               ? statement.viewerChoice === 'agree' ? <span className="p6-my-vote p6-my-vote--agreed">{msg('conv-p6-voted-agree')}</span>
