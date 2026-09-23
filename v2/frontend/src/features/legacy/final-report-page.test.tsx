@@ -11,6 +11,7 @@ import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
 import {testMessages} from '../../test/handlers';
+import dutch from '../../../../i18n/nl.json';
 
 /** The page takes its report as a prop, so this renders the screen itself rather than
  *  booting the whole app: only the session and the catalogue are fetched. */
@@ -49,12 +50,12 @@ const reportFixture: components['schemas']['ResultsReport'] = {
   },
 };
 
-function renderReport() {
+function renderReport(report = reportFixture, locale = 'en') {
   return render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter>
         <Suspense fallback={null}>
-          <MessageProvider locale="en"><FinalReportLegacyPage report={reportFixture} /></MessageProvider>
+          <MessageProvider locale={locale}><FinalReportLegacyPage report={report} /></MessageProvider>
         </Suspense>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -92,7 +93,7 @@ test('renders report text from the catalogue, not from source literals', async (
         'report-table-aria': 'CATALOGUE TABLE LABEL',
         'report-featured-count': 'Featured count is $1',
         'report-groups-sub': '$1 {{PLURAL:$1|cluster|clusters}} found',
-        'report-bar-label': '$1 pct agree, $2 pct pass, over $3 {{PLURAL:$3|ballot|ballots}}',
+        'report-bar-label': '$1 in favour, $2 abstaining, over $3 {{PLURAL:$3|ballot|ballots}}',
         'report-methodology-shift-body': 'Computed as <em>CATALOGUE FORMULA</em>.',
         'report-badge-agree': 'in favour',
         'report-status-final': 'CATALOGUE STATUS',
@@ -106,7 +107,7 @@ test('renders report text from the catalogue, not from source literals', async (
   expect(screen.getByRole('table', {name: 'CATALOGUE TABLE LABEL'})).toBeVisible();
   expect(screen.getByText('Featured count is 1')).toBeVisible();
   expect(screen.getByText('1 cluster found')).toBeVisible();
-  expect(screen.getAllByText('60.0 pct agree, 15.0 pct pass, over 20 ballots')[0]).toBeVisible();
+  expect(screen.getAllByText('60.0% in favour, 15.0% abstaining, over 20 ballots')[0]).toBeVisible();
   expect(screen.getByText('in favour')).toBeVisible();
   expect(screen.getByText('CATALOGUE STATUS')).toBeVisible();
   // Inline markup in a catalogue message stays markup rather than being escaped into text.
@@ -129,4 +130,19 @@ test('opinion groups are numbered from the catalogue, not the server label', asy
   // Catches the server's group label rendering in place of report-group-label.
   expect((await screen.findAllByText(/Group 1/, {selector: '.results-group-heading'}))[0]).toBeInTheDocument();
   expect(document.body.textContent).not.toContain('SERVER GROUP');
+});
+
+test('under nl, percentages are written the Dutch way, with a decimal comma', async () => {
+  // toFixed would write "62.5" whatever the language; the number, not the message, owns the %.
+  server.use(http.get(new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(), () => HttpResponse.json(dutch)));
+  const first = reportFixture.statements[0]!;
+  renderReport({
+    ...reportFixture,
+    statements: [{...first, initial: {counts: first.initial!.counts, percentages: {agree: 62.5, pass: 15, disagree: 22.5}}, agreementShift: 7.5}],
+  }, 'nl');
+
+  expect((await screen.findAllByText('62,5% eens · 15,0% overgeslagen · 20 antwoorden', {}, {timeout: 5000}))[0]).toBeVisible();
+  expect(screen.getAllByTitle('Eens 62,5% · Oneens 22,5% · Overgeslagen 15,0%')[0]).toBeInTheDocument();
+  expect(screen.getByText('+7,5%')).toBeVisible();
+  expect(screen.getByText('82%')).toBeVisible();
 });

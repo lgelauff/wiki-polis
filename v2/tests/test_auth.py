@@ -184,3 +184,54 @@ def test_protected_api_denies_unauthenticated_and_leaks_nothing(client, conversa
         # The denial must not carry the payload it denied.
         assert b'Test Conversation' not in resp.data, path
         assert b'abc1234567' not in resp.data, path
+
+
+def _oauth_login(client, app, *, username, sub):
+    app.config['OAUTH_CLIENT_ID'] = 'cid'
+    app.config['OAUTH_CLIENT_SECRET'] = 'csecret'
+    app.config['OAUTH_REDIRECT_URI'] = 'http://localhost/oauth-callback'
+    with client.session_transaction() as sess:
+        sess['oauth_state'] = 'valid-state'
+        sess['oauth_code_verifier'] = 'verifier'
+    token_resp = MagicMock()
+    token_resp.json.return_value = {'access_token': 'tok'}
+    profile_resp = MagicMock()
+    profile_resp.json.return_value = {'username': username, 'sub': sub}
+    with patch('app.requests.post', return_value=token_resp), \
+         patch('app.requests.get', return_value=profile_resp), \
+         patch('app._is_emailable', return_value=False):
+        return client.get('/oauth-callback?code=abc&state=valid-state')
+
+
+def test_someone_invited_before_their_first_login_is_admitted(client, app, conversation):
+    """An invite added by username before the account exists has no user id; the
+    invite-only check matches ids only, so the first login must claim it
+    (production 2026-09-22: such invitees were refused)."""
+    from db import ConversationInvite
+    from services.access import check_access
+    from services.invites import add_conversation_invites
+    conversation.access_policy = 'invite_only'
+    conversation.gated = True
+    conversation.gating_type = 'invite_only'
+    db.session.commit()
+    add_conversation_invites(db.session, conversation_id=conversation.id,
+                             usernames=['Newcomer'])
+    assert ConversationInvite.query.one().mw_user_id is None
+
+    assert _oauth_login(client, app, username='Newcomer', sub=777).status_code == 302
+
+    newcomer = Participant.query.filter_by(mw_user_id=777).one()
+    assert ConversationInvite.query.one().mw_user_id == 777
+    assert check_access(conversation, newcomer).allowed is True
+
+
+def test_login_does_not_take_over_an_invite_already_bound_to_another_account(
+    client, app, conversation,
+):
+    """A reused or renamed username must not claim someone else's invitation."""
+    from db import ConversationInvite
+    db.session.add(ConversationInvite(conversation_id=conversation.id,
+                                      mw_username='Samename', mw_user_id=111))
+    db.session.commit()
+    _oauth_login(client, app, username='Samename', sub=222)
+    assert ConversationInvite.query.one().mw_user_id == 111

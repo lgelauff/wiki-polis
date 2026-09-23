@@ -3992,6 +3992,188 @@ a { color: var(--pass); }
 }
 .home-banner a { color: var(--pass); }
 
+/* ── Homepage: how a consultation process works ─────────────────────────────
+   Three rounds and their outcome, as HTML so the text comes from the catalogue and wraps in
+   any language. The cards share their rows through subgrid, so when one heading wraps to an
+   extra line in a translation, the drawings, lines and boxes below still line up. */
+
+.flow {
+  /* The pale blue of the learn and outcome boxes, mixed from --pass rather than fixed. */
+  --flow-tint: color-mix(in srgb, var(--pass) 9%, var(--surface));
+  --flow-tint-line: color-mix(in srgb, var(--pass) 28%, var(--surface));
+  max-width: 900px;
+  margin: 0 auto 1.5rem;
+  padding: 1.5rem 1.75rem 1.75rem;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+}
+.flow-title {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.flow-subtitle {
+  margin: .35rem 0 1.25rem;
+  font-size: 15px;
+  color: var(--muted);
+}
+.flow-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 1.75rem;
+  row-gap: 1.75rem;
+}
+.flow-step {
+  position: relative;
+  display: grid;
+  grid-row: span 4;
+  grid-template-rows: subgrid;
+  row-gap: 0;
+  padding: 1rem 1.1rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+}
+/* The chevron between two rounds sits in the gap, pointing to the next one. Logical
+   properties, so that in a right-to-left page it sits on the right and points left. */
+.flow-step + .flow-step::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -1.2rem;
+  top: 50%;
+  width: .6rem;
+  height: .6rem;
+  border-top: 2.4px solid var(--muted);
+  border-right: 2.4px solid var(--muted);
+  transform: translateY(-50%) rotate(45deg);
+}
+[dir="rtl"] .flow-step + .flow-step::before { transform: translateY(-50%) rotate(-135deg); }
+.flow-step-title {
+  margin: 0 0 .6rem;
+  padding-bottom: .6rem;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.flow-glyph {
+  display: block;
+  width: 100%;
+  max-width: 190px;
+  height: auto;
+  margin: .25rem auto .5rem;
+}
+.flow-step-body {
+  margin: 0 0 .9rem;
+  font-size: 14px;
+  font-style: italic;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--muted);
+}
+.flow-learn {
+  padding: .6rem .75rem .7rem;
+  background: var(--flow-tint);
+  border: 1px solid var(--flow-tint-line);
+  border-radius: 10px;
+}
+.flow-learn-label {
+  display: block;
+  margin-bottom: .35rem;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--blue-dark);
+}
+.flow-learn-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+.flow-learn-icon {
+  flex: none;
+  width: 40px;
+  height: 32px;
+}
+.flow-learn-row p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--body);
+}
+.flow-merge {
+  display: block;
+  width: 100%;
+  height: 48px;
+}
+.flow-outcome {
+  display: flex;
+  align-items: center;
+  gap: .9rem;
+  margin: 0;
+  padding: .8rem 1.25rem;
+  background: var(--flow-tint);
+  border: 1px solid var(--flow-tint-line);
+  border-radius: 14px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.flow-outcome-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  background: var(--surface);
+  border: 1px solid var(--flow-tint-line);
+  border-radius: 9px;
+}
+.flow-outcome-icon svg { width: 22px; height: 22px; }
+
+/* The drawings' colours, from the tokens. Stroke widths and shapes stay in the markup. */
+.flow-svg-surface { fill: var(--surface); stroke: var(--hairline); }
+.flow-svg-copy { fill: none; stroke: #cfcdc6; }
+.flow-svg-pass { fill: var(--pass); }
+.flow-svg-spot { fill: var(--spot); }
+.flow-svg-ink { fill: var(--ink); }
+.flow-svg-line { fill: none; stroke: var(--pass); }
+.flow-svg-agree { fill: none; stroke: var(--agree); }
+.flow-svg-disagree { fill: none; stroke: var(--disagree); }
+.flow-svg-con { fill: none; stroke: var(--muted); }
+.flow-svg-agree-box { fill: color-mix(in srgb, var(--agree) 12%, transparent); stroke: var(--agree); }
+.flow-svg-pro-box { fill: color-mix(in srgb, var(--agree) 6%, transparent); stroke: var(--agree); }
+.flow-svg-disagree-box { fill: color-mix(in srgb, var(--disagree) 10%, transparent); stroke: var(--disagree); }
+.flow-svg-con-box { fill: var(--surface2); stroke: var(--muted); }
+.flow-svg-pro-fill { fill: color-mix(in srgb, var(--agree) 7%, transparent); }
+.flow-svg-con-fill { fill: var(--surface2); }
+
+@media (max-width: 680px) {
+  .flow { padding: 1.1rem 1rem 1.25rem; }
+  .flow-steps { grid-template-columns: minmax(0, 1fr); row-gap: 2rem; }
+  /* Stacked, the chevron points down into the next round. */
+  .flow-step + .flow-step::before,
+  [dir="rtl"] .flow-step + .flow-step::before {
+    inset-inline-start: auto;
+    left: 50%;
+    top: -1.35rem;
+    transform: translateX(-50%) rotate(135deg);
+  }
+  /* The three-into-one connector needs three columns; a single stroke replaces it. */
+  .flow-merge { width: 2px; height: 1.5rem; margin: 0 auto; background: var(--pass); }
+  .flow-merge g { display: none; }
+}
+
 /* ── Homepage: phase journey legend ───────────────────────────────────────── */
 
 .phase-legend {
