@@ -111,7 +111,7 @@ export function AdminInvitationsPage({
         <h2>
           Invites — <Link to={`/c/${data.conversation.slug}/about`}>{title}</Link>
         </h2>
-        <p className="muted" style={{marginBottom: '.25rem'}}>
+        <p className="muted" style={{marginBottom: '1.25rem'}}>
           Access policy: <strong>{data.conversation.accessPolicy}</strong>
         </p>
         <p className="muted" style={{marginBottom: '1.25rem'}}>
