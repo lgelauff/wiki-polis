@@ -170,8 +170,8 @@ _SPA_BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stati
 # find, and stamping that marker would put it in the skip link — the first thing a keyboard
 # or screen-reader user meets. Same discipline as error_pages._t.
 _SPA_BOOTSTRAP_MESSAGES = {
-    'skip': ('base-skip-to-content', 'Skip to main content'),
-    'loading': ('base-loading-conversations', 'Loading conversations…'),
+    'skip': ('base-skip-to-content', 'Jump to content'),
+    'loading': ('common-loading', 'Loading…'),
 }
 # Matched structurally, not as a literal: v2/static/spa is gitignored and built at deploy
 # time, so a build tool that emits <html lang=en> or reorders attributes would silently turn
@@ -3291,7 +3291,7 @@ def _statement_api_payload(
         try:
             parent_text = _statement_text_map(conv.polis_id).get(derived_from)
         except PolisParticipantError as exc:
-            raise ExploreUpstreamError('Could not load the original statement.') from exc
+            raise StatementPreparationUnavailable() from exc
         if parent_text is None:
             raise UnknownParentStatement(derived_from)
         scores = _statement_similarity_scores(text_value, parent_text)

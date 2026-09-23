@@ -18,7 +18,7 @@ test('renders a conversation lane from the API contract', async () => {
     </QueryClientProvider>,
   );
 
-  expect(screen.getByRole('status')).toHaveTextContent('Loading conversations');
+  expect(screen.getByRole('status')).toHaveTextContent('Loading…');
   expect(await screen.findByRole('heading', {name: 'Needs attention'})).toBeVisible();
   expect(await screen.findByRole('link', {name: /Community strategy.*continue/}))
     .toHaveAttribute('href', '/c/community-strategy');
@@ -673,7 +673,7 @@ test('stays usable when the message catalogue is unavailable', async () => {
   // is ugly but usable -- the alternative is a page stuck on a loading state.
   expect(await screen.findByRole('heading', {name: 'home-section-needs-attention'}, {timeout: 5000})).toBeVisible();
   expect(screen.getByRole('link', {name: /Community strategy/})).toHaveAttribute('href', '/c/community-strategy');
-  expect(screen.queryByText('Loading conversations…')).not.toBeInTheDocument();
+  expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
 });
 
 test('renders preliminary results from the message catalogue, not from source literals', async () => {
@@ -830,7 +830,11 @@ test('freezes a statement attempt when the upstream outcome is unknown', async (
   });
   fireEvent.click(screen.getByRole('button', {name: 'Submit & next'}));
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('may have reached the voting service');
+  // The catalogue's warning, not the server's developer-facing message (rule 4). It has to
+  // say not to start over, since a fresh composer means a fresh key and a possible duplicate.
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent(testMessages['conv-err-outcome-unknown']!);
+  expect(alert).not.toHaveTextContent('may have reached the voting service');
   expect(screen.getByRole('textbox', {name: 'Propose a new statement'})).toBeEnabled();
   expect(screen.getByRole('button', {name: 'Submit & next'})).toBeEnabled();
 });
