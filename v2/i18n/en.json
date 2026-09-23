@@ -519,6 +519,8 @@
     "modlog-action-banned": "Banned",
     "modlog-action-unbanned": "Unbanned",
     "modlog-scope-conversation": "consultation",
+    "modlog-unknown": "unknown",
+    "modlog-actor-site-admin": "site administrator",
     "admin-convs-heading": "Consultations",
     "admin-th-title": "Title",
     "admin-th-slug": "Slug",

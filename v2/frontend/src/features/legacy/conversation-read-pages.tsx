@@ -169,9 +169,9 @@ export function ModerationLogPage() {
                 <tr key={`${event.occurredAt}-${event.pseudonym}-${index}`}>
                   <td className="muted">{event.occurredAt && <time dateTime={event.occurredAt}>{dates.dateTime(event.occurredAt)}</time>}</td>
                   <td>{moderationAction(msg, event.action)}</td>
-                  <td>{event.pseudonym}</td>
+                  <td>{event.pseudonym ?? <span className="muted">{msg('modlog-unknown')}</span>}</td>
                   <td>{moderationScope(msg, event.scope)}</td>
-                  <td>{event.actor}</td>
+                  <td>{event.actor ?? <span className="muted">{event.actorKind === 'site_admin' ? msg('modlog-actor-site-admin') : msg('modlog-unknown')}</span>}</td>
                 </tr>
               ))}
             </tbody>

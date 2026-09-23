@@ -473,6 +473,8 @@
     "modlog-action-banned": "Geblokkeerd",
     "modlog-action-unbanned": "Gedeblokkeerd",
     "modlog-scope-conversation": "raadpleging",
+    "modlog-unknown": "onbekend",
+    "modlog-actor-site-admin": "sitebeheerder",
     "phase-label-preparation": "Voorbereiding",
     "phase-label-submission": "Inventarisatie",
     "phase-label-featured_selection": "Uitlichten",

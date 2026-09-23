@@ -518,6 +518,8 @@
     "modlog-action-banned": "Action in the public moderation log: a moderator banned the participant from this consultation. Describes what happened to the participant.\n{{Identical|Banned}}",
     "modlog-action-unbanned": "Action in the public moderation log: a moderator lifted a participant's ban. Describes what happened to the participant.",
     "modlog-scope-conversation": "Scope in the Scope column of the public moderation log: the ban or unban applies to this consultation only. Lowercase, as the value of a table cell.",
+    "modlog-unknown": "Shown in the public moderation log in place of a name that is not on record: in the Pseudonym column ({{msg-proto|modlog-th-pseudonym}}) when the participant's record in this consultation no longer exists, and in the Moderator column ({{msg-proto|modlog-th-moderator}}) when the account that made the ban or unban is gone, for example because it was deleted. A ban by a site administrator without an account shows {{msg-proto|modlog-actor-site-admin}} instead. The column says what the name would have been, so this is only the word \"unknown\". Lowercase, as the value of a table cell.\n{{Identical|Unknown}}",
+    "modlog-actor-site-admin": "Shown in the Moderator column ({{msg-proto|modlog-th-moderator}}) of the public moderation log in place of a username, when the ban or unban was made by a site administrator who has no account on this site, so there is no username to show. Names a role, not a person. Lowercase, as the value of a table cell.",
     "admin-convs-heading": "Section heading listing all consultations.\n{{Identical|Consultations}}",
     "admin-th-title": "Table column header: conversation title.\n{{Identical|Title}}",
     "admin-th-slug": "Table column header: conversation slug.",
