@@ -69,7 +69,7 @@
 <rect x="48" y="506" width="1104" height="64" rx="14" fill="#eef3fb" stroke="#c9d6ef"></rect>
 <rect x="68" y="520" width="36" height="36" rx="9" fill="#ffffff" stroke="#c9d6ef"></rect>
 <g transform="translate(75,527)" fill="none" stroke="#3d6dba" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M9 14l2 2 4-4" stroke="#15734a"></path>
+  <path d="M5 2h9l5 5v15H5z"></path><path d="M14 2v5h5"></path><path d="M9 14l2 2 4-4" stroke="#15734a"></path>
 </g>
 <text x="124" y="544" font-family="&#39;Inter Tight&#39;,sans-serif" font-size="19" font-weight="700" letter-spacing="-0.4" fill="#0c0c0e">A more balanced policy draft</text>
 </svg>
