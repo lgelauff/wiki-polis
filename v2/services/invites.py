@@ -49,6 +49,11 @@ def build_invitation_roster(
             'id': row.id,
             'username': row.mw_username,
             'createdAt': _utc_iso(row.created_at),
+            # Bound to a Wikimedia account id, which only a login can produce:
+            # either the name already belonged to an account that had logged in
+            # (add_conversation_invites) or that account has logged in since
+            # (claim_username_invites). It says nothing about this consultation.
+            'signedIn': row.mw_user_id is not None,
         } for row in rows],
         'capabilities': {'manageInvitations': True},
         'links': {'self': self_link, 'conversation': conversation_link},
