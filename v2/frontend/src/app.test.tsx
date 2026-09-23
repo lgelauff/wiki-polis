@@ -379,7 +379,7 @@ test('adds and removes invitations through convergent admin commands', async () 
 
   expect(await screen.findByRole('heading', {name: 'Invites — Community strategy'})).toBeVisible();
   expect(screen.getByText('Existing editor')).toBeVisible();
-  expect(screen.getByText('1 invited · 1 linked · 0 not linked yet')).toBeVisible();
+  expect(screen.getByText('1 invited · 1 linked · 0 never logged in')).toBeVisible();
   const existingRow = screen.getByText('Existing editor').closest('tr');
   expect(within(existingRow!).getByText('Linked')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia usernames (one per line)'), {
@@ -391,8 +391,8 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(screen.getByRole('status')).toHaveTextContent('Invites: 1 added; 1 duplicate input.');
   const newEditorRow = screen.getByText('New editor').closest('tr');
   expect(newEditorRow).not.toBeNull();
-  expect(within(newEditorRow!).getByText('Not linked yet')).toBeVisible();
-  expect(screen.getByText('2 invited · 1 linked · 1 not linked yet')).toBeVisible();
+  expect(within(newEditorRow!).getByText('Never logged in')).toBeVisible();
+  expect(screen.getByText('2 invited · 1 linked · 1 never logged in')).toBeVisible();
   fireEvent.click(within(newEditorRow!).getByRole('button', {
     name: 'Remove invitation for New editor',
   }));

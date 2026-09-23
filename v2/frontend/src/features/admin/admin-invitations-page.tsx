@@ -92,7 +92,9 @@ export function AdminInvitationsPage({
   const invited = data.invitations.length;
   // "Linked" = the invitation is bound to a Wikimedia account by user id, which
   // happens at that account's first login to the site. It says nothing about
-  // whether that person has joined *this* consultation.
+  // whether that person has joined *this* consultation. "Never logged in" = no
+  // account with this exact name has logged in to the site yet, so the
+  // invitation is not bound to an account.
   const linked = data.invitations.filter((invitation) => invitation.signedIn).length;
   return (
     <LegacyShell
@@ -119,7 +121,7 @@ export function AdminInvitationsPage({
         </p>
         {invited > 0 && (
           <p className="muted" style={{marginBottom: '1.25rem'}}>
-            {invited} invited · {linked} linked · {invited - linked} not linked yet
+            {invited} invited · {linked} linked · {invited - linked} never logged in
           </p>
         )}
 
@@ -157,7 +159,7 @@ export function AdminInvitationsPage({
             {data.invitations.map((invitation) => (
               <tr key={invitation.id}>
                 <td>{invitation.username}</td>
-                <td>{invitation.signedIn ? 'Linked' : 'Not linked yet'}</td>
+                <td>{invitation.signedIn ? 'Linked' : 'Never logged in'}</td>
                 <td className="muted">{formatLegacyDate(invitation.createdAt)}</td>
                 <td>
                   <form
