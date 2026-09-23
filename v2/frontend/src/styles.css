@@ -831,13 +831,6 @@ a { color: inherit; }
 .access-choice { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: .75rem; min-height: 44px; padding: .35rem 0; font-size: .78rem; cursor: pointer; }
 .access-choice input { width: 18px; height: 18px; margin: 0; accent-color: var(--civic); }
 .settings-form .access-choice input { display: inline-block; width: 18px; margin-top: 0; padding: 0; border: 0; background: none; }
-/* Inactive because the functionality does not exist yet: muted, never merely faint. The
-   control itself has to grey too -- `color` does not paint a radio or a checkbox, so an
-   already-stored option would otherwise sit there in full-strength accent blue, looking
-   switched on. */
-.access-unavailable, .access-unavailable input { color: var(--muted); cursor: default; }
-.access-unavailable input { accent-color: var(--muted); filter: grayscale(1); opacity: .6; }
-.access-reason { display: block; font-size: .75rem; color: var(--muted); }
 .access-answer { margin: 1.75rem 0; }
 .access-answer-legend { margin: 0 0 .35rem; font-size: .72rem; font-weight: 650; }
 .access-answer-value { display: flex; align-items: center; gap: .4rem; margin: 0; font-size: .78rem; }

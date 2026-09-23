@@ -1,6 +1,6 @@
 import {Suspense} from 'react';
 import {QueryClientProvider} from '@tanstack/react-query';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test} from 'vitest';
@@ -105,10 +105,15 @@ test('shows who can take part as one plain-worded choice per row', async () => {
   // No internal value reaches the screen, and the combination the server refuses --
   // gated with no type -- cannot be expressed by a radio group.
   expect(screen.queryByText(/invite_only|gating type/i)).toBeNull();
-  // Functionality that does not exist yet is greyed with its reason, not hidden.
-  const wiki = screen.getByRole('radio', {name: /Wiki policy/});
-  expect(wiki).toHaveAttribute('aria-disabled', 'true');
-  expect(screen.getByText('Not available yet (issue 406)')).toBeVisible();
+  // Functionality that does not exist yet is named in prose under the group, not mimed
+  // with a control: the group offers three answers and every one of them works.
+  expect(within(admission).getAllByRole('radio')).toHaveLength(3);
+  expect(screen.queryByRole('radio', {name: /Wiki policy/})).toBeNull();
+  const coming = screen.getByText(
+    'Also coming: a policy based on wiki activity — not available yet (#406)',
+  );
+  expect(coming).toBeVisible();
+  expect(coming.tagName).toBe('P');
   // Visibility answers belong to a gated consultation only, as they do today.
   expect(screen.queryByRole('group', {name: 'What people without access can see'})).toBeNull();
 });
@@ -128,9 +133,13 @@ test('renders a locked admission answer as text with the reason on its lock', as
   const visibility = screen.getByRole('group', {name: 'What people without access can see'});
   expect(visibility).toBeVisible();
   expect(screen.getByRole('checkbox', {name: 'The results'})).toBeEnabled();
-  // The username-reveal option has no consumer yet: shown, greyed, sent back unchanged.
-  const reveal = screen.getByRole('checkbox', {name: /Show usernames in shared results/});
-  expect(reveal).toHaveAttribute('aria-disabled', 'true');
+  // The username-reveal option has no consumer yet, so it is named under the group in
+  // prose and sent back unchanged -- not offered as a checkbox nobody can tick.
+  expect(screen.queryByRole('checkbox', {name: /Show usernames in shared results/})).toBeNull();
+  expect(within(visibility).getAllByRole('checkbox')).toHaveLength(3);
+  expect(screen.getByText(
+    'Also coming: participants choosing to show their username — not available yet',
+  )).toBeVisible();
 });
 
 test('asks once before narrowing access and saves only after Continue', async () => {
@@ -262,18 +271,25 @@ test('drops the question when the answer stops narrowing', async () => {
   expect(sent).toHaveLength(0);
 });
 
-test('an unavailable option cannot become the answer', async () => {
-  serve(settings);
+test('what is not available yet is prose, not a control that does nothing', async () => {
+  // This test used to click a greyed radio and check that nothing happened. The option is
+  // gone, so what is pinned now is that the two "also coming" lines are inert: no role, no
+  // tab stop, nothing to click, and no effect on what a save sends.
+  serve({...lockedSettings, conversation: {...lockedSettings.conversation, showUsernames: true}});
   const sent = recordPuts();
   renderPage();
 
   await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
-  fireEvent.click(screen.getByRole('radio', {name: /Wiki policy/}));
-  expect(screen.getByRole('radio', {name: 'Anyone with a Wikimedia account'})).toBeChecked();
+  const note = screen.getByText(
+    'Also coming: participants choosing to show their username — not available yet',
+  );
+  expect(note).not.toHaveAttribute('tabindex');
+  expect(note.querySelector('input, button, a, [role]')).toBeNull();
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
-  expect(sent[0]).toMatchObject({gated: false, gatingType: null});
+  // The stored value behind the line still goes back exactly as it was read.
+  expect(sent[0]).toMatchObject({showUsernames: true});
 });
 
 test('a role that may not edit gets the reason and no way to save', async () => {

@@ -21,20 +21,29 @@ type Tier = Settings['recommendations']['tier'];
  * -- unreachable from the page: the server refuses it for any row that is not already
  * gated ("a gated conversation needs a gating type", `services/admin_settings.py`).
  *
- * `unset` is not offered as a choice. It is the read-back of a legacy row that is gated
- * with no stored type; such a row may be saved unchanged (the server's own exception for
- * it), so the page carries that state rather than silently rewriting it. */
+ * Two of the five are carried but never offered. `unset` is the read-back of a legacy row
+ * that is gated with no stored type; such a row may be saved unchanged (the server's own
+ * exception for it), so the page carries that state rather than silently rewriting it.
+ * `wiki_based` is stored and accepted but admits nobody (`services/access.py` answers
+ * `unknown` for every account), so it is not a thing anyone should be able to choose.
+ *
+ * Neither appears as a greyed control: a control that cannot be operated is still a tab
+ * stop, is still announced as a radio, and invites a click that does nothing. What is
+ * genuinely missing is said once in prose under the group instead (`COMING_*` below), so
+ * the group contains only answers that work. A row already storing one of the two keeps
+ * it -- nothing here rewrites it -- but it shows as no answer selected, the same as today
+ * for `unset`. */
 type Admission = 'anyone' | 'invite_only' | 'voucher' | 'wiki_based' | 'unset';
 
-/** `wiki_based` is stored and accepted but admits nobody (`services/access.py` answers
- *  `unknown` for every account), so it is shown as an unavailable option rather than as a
- *  choice. Its label and reason stay hardcoded English until the provider ships. */
-const WIKI_BASED_REASON = 'Not available yet (issue 406)';
-
-/** The username-reveal option has no reader anywhere in the code: it is stored and sent
- *  back unchanged. Greyed out for the same reason, without an issue number because none
- *  has been filed for it yet. */
-const REVEAL_REASON = 'Not available yet';
+/** What does not exist yet, said in prose rather than mimed with a dead control.
+ *
+ * Hardcoded English on purpose: a placeholder for unshipped functionality gets no message
+ * key and no qqq entry, so translators are not asked to carry a string that leaves again
+ * when the functionality lands (`.claude/admin-review/message-key-convention.md`). */
+const COMING_ADMISSION
+  = 'Also coming: a policy based on wiki activity — not available yet (#406)';
+const COMING_REVEAL
+  = 'Also coming: participants choosing to show their username — not available yet';
 
 function admissionOf(conversation: Settings['conversation']): Admission {
   if (!conversation.gated) return 'anyone';
@@ -244,14 +253,8 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
               <input type="radio" name="admission" value="voucher" checked={admission === 'voucher'} {...admissionInvalid} onChange={() => setAdmission('voucher')} />
               <span>{msg('admin-access-admission-voucher')}</span>
             </label>
-            {/* The reason is inside the label, so it is part of the option's own name; it is
-                deliberately not also an `aria-describedby` target, which would read it twice. */}
-            <label className="access-choice access-unavailable" aria-disabled="true">
-              <input type="radio" name="admission" value="wiki_based" checked={admission === 'wiki_based'}
-                aria-disabled="true" readOnly onClick={(event) => event.preventDefault()} />
-              <span>Wiki policy <span className="access-reason">{WIKI_BASED_REASON}</span></span>
-            </label>
           </fieldset>}
+          {!admissionLocked && <p className="settings-hint">{COMING_ADMISSION}</p>}
           {admissionMessages.length > 0 && <p className="access-field-error" id={`${ids}-gated-error`}>{admissionMessages.join(' ')}</p>}
           {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
           {!gated && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
@@ -271,12 +274,8 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
               <input type="checkbox" checked={resultsShared} onChange={(event) => setResultsShared(event.target.checked)} />
               <span>{msg('admin-access-visibility-results')}</span>
             </label>
-            {resultsShared && <label className="access-choice access-unavailable" aria-disabled="true">
-              <input type="checkbox" checked={showUsernames} aria-disabled="true" readOnly
-                onClick={(event) => event.preventDefault()} />
-              <span>Show usernames in shared results <span className="access-reason">{REVEAL_REASON}</span></span>
-            </label>}
           </fieldset>}
+          {gated && <p className="settings-hint">{COMING_REVEAL}</p>}
           {gated && <label>{msg('admin-access-request-text')}<textarea value={accessRequestText} rows={3} onChange={(event) => setAccessRequestText(event.target.value)} /></label>}
           <label>{msg('admin-label-elig-event')}<input value={eligibilityEventId} maxLength={80} placeholder={msg('admin-elig-event-ph')} {...invalid('eligibilityEventId')} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
           <FieldError field="eligibilityEventId" />
