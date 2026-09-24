@@ -40,35 +40,31 @@ flask --app app vouchers import <slug> organizer-codes.txt --label "Printed card
   Lines that are not valid are listed so the file can be fixed; a code already in the
   process is skipped and counted. The import warns, without printing them, about codes
   that are digits only or shorter than 8 characters.
-- **How guessable codes are.** A new browser session costs nothing, so a determined
-  guesser is held back only by the per-process budget: 60 wrong codes a minute, about
-  86,000 a day. And because a code signs back into its account (#412), a hit on a code
-  that was already used takes over that participant's account. Expected hits per day,
-  guessing flat out:
+- **Wrong codes lock out the guesser, never the process.** After 3 wrong codes in a
+  minute, that browser session waits until the minute is up ("That was too many wrong
+  codes. Wait N seconds"). Everyone else keeps getting in. The limit is the Toolforge
+  envvar `VOUCHER_SESSION_FAILURE_LIMIT` (default `3 per minute`); change it and restart
+  the webservice.
+- **How guessable codes are.** A guesser who discards their cookie gets a fresh
+  budget each time, so the real cap is the site-wide limit on unauthenticated requests,
+  600 a minute (shared with Wikimedia login), about 860,000 guesses a day. An IP-based
+  lockout would close that gap but depends on what Toolforge passes (#458, #411). And
+  because a code signs back into its account (#412), a hit on a code that was already
+  used takes over that participant's account. Expected hits, guessing flat out:
 
   | Codes in the process | Hits |
   |---|---|
-  | 200 five-digit numbers | about 170 a day |
-  | 500 random 5 letters+digits | about one every 1–2 days |
-  | 500 random 6 letters+digits | about one every 50 days |
+  | 200 five-digit numbers | over 1,000 a day |
+  | 500 random 5 letters+digits | about 7 a day |
+  | 500 random 6 letters+digits | about one every 5 days |
   | 500 random 8 letters+digits | effectively never |
   | generated (12 characters) | never |
 
   Sequential or patterned lists (`ROOM001`, `ROOM002`) are guessable at any length. For
-  organizer-made codes, ask for 8 or more random letters and digits.
-- **"voucher failed-attempt budget … exhausted" in the logs** (logged at most once a
-  minute per process) means more than 60 wrong codes in a minute on that process —
-  most likely guessing, though a very large room with many typos can do it too. While
-  the budget is spent, **valid codes and links are refused as well** (only people
-  already signed in carry on): letting valid codes through would let a guesser test
-  codes unthrottled. The pause lasts as long as the wrong codes keep coming, so one
-  script sending a wrong code every second keeps entry to that process closed. Nothing
-  is locked or invalidated; entry resumes within a minute of it stopping.
-  - To let a big room in, or to ride out an attack, raise the budget with the Toolforge
-    envvar `VOUCHER_PROCESS_FAILURE_LIMIT` (e.g. `300 per minute`) and restart the
-    webservice. The per-browser budget is `VOUCHER_SESSION_FAILURE_LIMIT` (default
-    `10 per minute`). A higher budget also lets a guesser try more codes.
-  - If it repeats, consider longer codes or revoking and reissuing the batch.
+  organizer-made codes, ask for 8 or more random letters and digits; short codes are
+  only safe with IP lockout (#458) or for low-stakes processes.
+- **If guessing happens,** it shows as a spike in 429s on `/c/<slug>/v` and in
+  unauthenticated traffic generally. Revoke and reissue the batch with longer codes.
 - **Handle the output as credentials.** Whoever holds a code is that participant.
   Delete `codes.txt` from the shell once it has been handed over.
 - **Revoking** has no command yet (`services.vouchers.revoke_voucher` exists).
