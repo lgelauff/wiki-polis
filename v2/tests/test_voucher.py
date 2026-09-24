@@ -428,6 +428,41 @@ def test_code_on_a_conversation_without_vouchers_is_dropped(app, client, convers
     assert _voucher_participants() == []
 
 
+# qqx is never an enabled locale, so no cookie remembers it: only the address can.
+
+def test_other_parameters_survive_a_linked_code(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    first = client.get(f'/c/{voucher_conv.slug}?v={CODE}&uselang=qqx')
+    assert first.headers['Location'] == f'/c/{voucher_conv.slug}/v?v={CODE}&uselang=qqx'
+
+    landed = client.get(first.headers['Location'])
+    assert landed.headers['Location'] == f'/c/{voucher_conv.slug}?uselang=qqx'
+
+
+def test_other_parameters_survive_a_typed_code(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    html = client.get(f'/c/{voucher_conv.slug}/v?v=WRONG-9999&uselang=qqx').data.decode()
+    assert f'action="/c/{voucher_conv.slug}/v?uselang=qqx"' in html
+
+    resp = client.post(f'/c/{voucher_conv.slug}/v?uselang=qqx', data={'code': CODE})
+    assert resp.headers['Location'] == f'/c/{voucher_conv.slug}?uselang=qqx'
+
+
+def test_other_parameters_survive_a_dropped_code(app, client, conversation):
+    resp = client.get(f'/c/{conversation.slug}?v={CODE}&uselang=qqx&v=again')
+    assert resp.headers['Location'] == f'/c/{conversation.slug}?uselang=qqx'
+
+
+def test_switch_page_cancel_keeps_other_parameters(app, client, voucher_conv, participant):
+    _make_voucher(voucher_conv)
+    with client.session_transaction() as sess:
+        sess['username'] = 'testuser'
+        sess['xid'] = participant.xid
+    html = client.get(f'/c/{voucher_conv.slug}/v?v={CODE}&uselang=qqx').data.decode()
+    assert f'action="/c/{voucher_conv.slug}/v?uselang=qqx"' in html
+    assert f'href="/c/{voucher_conv.slug}?uselang=qqx"' in html
+
+
 def test_missed_code_with_excluded_letters_gets_a_hint(app, client, voucher_conv):
     """A misread 0 or 1 is pointed out rather than silently corrected."""
     _make_voucher(voucher_conv, code='0011ABCDEFGH')
