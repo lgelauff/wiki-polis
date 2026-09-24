@@ -270,7 +270,7 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
           {admissionMessages.length > 0 &&<p className="access-field-error" id={`${ids}-gated-error`}>{admissionMessages.join(' ')}</p>}
           {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
           {!gated && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
-            <option value="public">Not gated</option><option value="demo">Demo</option>
+            <option value="public">Not gated</option><option value="demo">Practice</option>
           </select></label>}
           {gated && <>
             <p className="settings-hint">{COMING_VISIBILITY}</p>
