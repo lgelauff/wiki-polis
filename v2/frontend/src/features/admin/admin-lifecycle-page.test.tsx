@@ -95,7 +95,8 @@ test('renders the admin console from the catalogue English', async () => {
 test('links to the settings page instead of editing the same settings itself', async () => {
   // The owner's condition: one setting, one place that edits it. The console used to carry
   // a second copy of the settings form -- title, intro, outro, the eligibility pair and the
-  // complexity tier -- writing the same two endpoints the settings page writes.
+  // complexity tier -- writing the same two endpoints the settings page writes. The
+  // lifecycle payload has carried links.settings all along; this card is how it is reached.
   serve(lifecycle);
   renderConsole();
 
@@ -117,6 +118,17 @@ test('links to the settings page instead of editing the same settings itself', a
   expect(screen.getByText(/Route \(locked after launch\)/)).toBeVisible();
   expect(screen.getByText(/Polis ID/)).toBeVisible();
   expect(screen.getByText(/Complexity tier/)).toBeVisible();
+});
+
+test('the access policy is named in plain words, not by its stored value', async () => {
+  serve({...lifecycle, conversation: {...lifecycle.conversation, accessPolicy: 'invite_only'}});
+  renderConsole();
+
+  await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
+  // The line under the title is where the stored value used to reach the screen.
+  expect(document.querySelector('.console-sub')?.textContent)
+    .toContain('Only people who have been given access');
+  expect(document.querySelector('.console-sub')?.textContent).not.toContain('invite_only');
 });
 
 test('renders the closed-consultation description from parameterised sentences', async () => {

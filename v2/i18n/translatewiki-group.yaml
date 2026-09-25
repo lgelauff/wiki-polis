@@ -84,6 +84,9 @@ TAGS:
     - admin-btn-grant
     - admin-btn-manage
     - admin-btn-remove
+    - admin-common-policy-invited
+    - admin-common-policy-open
+    - admin-common-policy-practice
     - admin-convs-heading
     - admin-crumb-aria
     - admin-elig-event-ph
@@ -104,6 +107,7 @@ TAGS:
     - admin-new-conv-heading
     - admin-overview-card-settings
     - admin-overview-card-settings-desc
+    - admin-site-link-settings
     - admin-slug-title
     - admin-status-active
     - admin-status-closed

@@ -100,6 +100,11 @@ test('runs site-wide administration without falling back to Jinja forms', async 
 
   expect(await screen.findByRole('heading', {name: 'Admin panel'})).toBeVisible();
   expect(screen.getByRole('link', {name: 'manage'})).toHaveAttribute('href', '/admin/conversations/7');
+  // The settings page used to be reachable only by typing its URL.
+  expect(screen.getByRole('link', {name: 'settings'})).toHaveAttribute('href', '/admin/conversations/7/settings');
+  // The Policy cell names the stored value in words instead of printing "public".
+  expect(screen.getByRole('cell', {name: 'Anyone with a Wikimedia account'})).toBeVisible();
+  expect(screen.queryByText('invite_only')).not.toBeInTheDocument();
   expect(screen.getByText('Admin')).toHaveClass('header-mode-badge');
   expect(screen.getByRole('heading', {name: 'New conversation'})).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Example editor'}});
@@ -368,6 +373,9 @@ test('adds and removes invitations through convergent admin commands', async () 
   );
 
   expect(await screen.findByRole('heading', {name: 'Invites — Community strategy'})).toBeVisible();
+  // The access policy reads in words; the stored value never reaches the page.
+  expect(screen.getByText('Only people who have been given access')).toBeVisible();
+  expect(screen.queryByText('invite_only', {exact: false})).not.toBeInTheDocument();
   expect(screen.getByText('Existing editor')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia usernames (one per line)'), {
     target: {value: 'New editor\nNew editor'},
@@ -380,6 +388,37 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(newEditorRow).not.toBeNull();
   fireEvent.click(within(newEditorRow!).getByRole('button', {name: 'remove'}));
   expect(await screen.findByText('No invites yet.')).toBeVisible();
+});
+
+test('warns that invites are inert in words, not in stored values', async () => {
+  // The default roster fixture is invite_only, so the warning branch never renders there.
+  // This is the only prose this scope rewrites, and it names two access-policy labels.
+  server.use(http.get(
+    new URL('/api/v1/admin/conversations/7/invitations', globalThis.location.origin).toString(),
+    () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public'},
+      invitations: [],
+      capabilities: {manageInvitations: true},
+      links: {self: '/api/v1/admin/conversations/7/invitations', conversation: '/admin/conversations/7'},
+    }}),
+  ));
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/admin/conversations/7/invitations']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  const note = await screen.findByText(/Invites only take effect/);
+  expect(note).toHaveTextContent(
+    'Access is set to Anyone with a Wikimedia account. '
+    + 'Invites only take effect when access is limited to an invitation list.',
+  );
+  // Neither stored value reaches the note, including the one hardcoded in the sentence.
+  // Scoped to the note: the page footer legitimately says "public domain".
+  expect(note.textContent).not.toContain('invite_only');
+  expect(note.textContent).not.toMatch(/\bpublic\b/);
 });
 
 test('restores the legacy cleared form and toast after an invitation save error', async () => {
