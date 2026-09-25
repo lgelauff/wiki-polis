@@ -74,7 +74,7 @@ function admissionLabel(msg: Message, admission: Admission): string {
     case 'anyone': return msg('admin-access-admission-anyone');
     case 'invite_only': return msg('admin-access-admission-invited');
     case 'voucher': return msg('admin-access-admission-voucher');
-    case 'wiki_based': return 'Wiki policy';
+    case 'wiki_based': return msg('admin-access-admission-wiki');
     default: return '—';
   }
 }
@@ -124,6 +124,8 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   const [tier, setTier] = useState<Tier>(data.recommendations.tier);
   const [confirming, setConfirming] = useState(false);
   const confirmRef = useRef<HTMLDivElement>(null);
+  const saveRef = useRef<HTMLButtonElement>(null);
+  const wasConfirming = useRef(false);
   const summaryRef = useRef<HTMLDivElement>(null);
   const ids = useId();
   const canEdit = data.capabilities.edit;
@@ -149,9 +151,13 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
       eligibilityLabel, recommendationTier: tier, ...admissionWire(admission),
       announce, information, resultsShared, showUsernames, accessRequestText,
     }, csrfToken),
-    onSuccess: (receipt) => queryClient.setQueryData<Settings>(
-      options.queryKey, receipt.settings,
-    ),
+    onSuccess: (receipt) => {
+      queryClient.setQueryData<Settings>(options.queryKey, receipt.settings);
+      // The server clears the eligibility pair when the invitation list is chosen; show
+      // what it stored, not what was typed, or the inputs keep an event ID that is gone.
+      setEligibilityEventId(receipt.settings.eligibility.eventId);
+      setEligibilityLabel(receipt.settings.eligibility.label ?? '');
+    },
   });
 
   // Narrowing is measured against what the server last told us, not against the first
@@ -178,8 +184,12 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
     ? (fieldMessages.length || locked ? null : serverMessage)
     : mutation.error ? 'Settings could not be saved.' : null;
 
+  // The question takes focus when it opens; when it closes, by Cancel or by Continue, the
+  // buttons that held focus are gone, so focus goes back to the Save button.
   useEffect(() => {
     if (confirming) confirmRef.current?.focus();
+    else if (wasConfirming.current) saveRef.current?.focus();
+    wasConfirming.current = confirming;
   }, [confirming]);
   // The question is about a change that is on screen: put the widest answer back and it has
   // nothing left to ask about, so it goes away with the narrowing it was asking about.
@@ -297,11 +307,11 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
           ))}</fieldset>
         </section>
         {canEdit && <footer>
-          {confirming ? <div className="access-confirm" tabIndex={-1} ref={confirmRef}>
-            <p>{msg('admin-access-narrowing-confirm')}</p>
+          {confirming ? <div className="access-confirm" role="group" aria-labelledby={`${ids}-confirm`} tabIndex={-1} ref={confirmRef}>
+            <p id={`${ids}-confirm`}>{msg('admin-access-narrowing-confirm')}</p>
             <button type="submit" disabled={mutation.isPending}>{msg('admin-access-narrowing-continue')}</button>
             <button type="button" onClick={() => setConfirming(false)}>{msg('common-cancel')}</button>
-          </div> : <button type="submit" disabled={mutation.isPending}>
+          </div> : <button type="submit" disabled={mutation.isPending} ref={saveRef}>
             {mutation.isPending ? 'Saving…' : msg('adminconv-save-settings')}
           </button>}
           {mutation.data && <p role="status">{mutation.data.changed ? 'Settings saved.' : 'Settings already up to date.'}</p>}

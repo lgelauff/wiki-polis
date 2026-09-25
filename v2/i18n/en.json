@@ -541,6 +541,7 @@
     "admin-access-admission-anyone": "Anyone with a Wikimedia account",
     "admin-access-admission-invited": "Only people on the invitation list",
     "admin-access-admission-voucher": "Anyone with a voucher code",
+    "admin-access-admission-wiki": "A policy based on wiki activity",
     "admin-access-locked-note": "Locked while Explore is open",
     "admin-access-narrowing-confirm": "Some people will lose access. Continue?",
     "admin-access-narrowing-continue": "Continue",

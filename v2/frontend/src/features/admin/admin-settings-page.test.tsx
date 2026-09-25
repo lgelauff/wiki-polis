@@ -168,15 +168,58 @@ test('asks once before narrowing access and saves only after Continue', async ()
   expect(screen.getByText('Some people will lose access. Continue?')).toBeVisible();
   expect(sent).toHaveLength(0);
 
+  expect(screen.getByRole('group', {name: 'Some people will lose access. Continue?'}))
+    .toHaveFocus();
   fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
   expect(screen.queryByText('Some people will lose access. Continue?')).toBeNull();
   expect(screen.getByRole('radio', {name: /Only people on the invitation list/})).toBeChecked();
+  // The button that held focus is gone; focus goes back to Save, not to the page.
+  expect(screen.getByRole('button', {name: 'Save settings'})).toHaveFocus();
 
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
   fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toMatchObject({gated: true, gatingType: 'invite_only'});
+});
+
+test('after a save the eligibility inputs show what the server stored', async () => {
+  // Choosing the invitation list makes the server clear the eligibility pair; the inputs
+  // must not keep showing an event ID that is no longer stored.
+  serve({...settings, eligibility: {
+    ...settings.eligibility, configured: true, eventId: 'event-42', label: 'Active editors',
+  }});
+  server.use(http.put(SETTINGS_URL, async ({request}) => {
+    const payload = await request.json() as Record<string, unknown>;
+    return HttpResponse.json({data: {
+      changed: true, changedFields: ['gated', 'gatingType', 'eligibilityEventId'],
+      settings: {
+        ...settings, conversation: {...settings.conversation, ...payload},
+        eligibility: {...settings.eligibility, configured: false, eventId: '', label: null},
+      },
+    }});
+  }));
+  renderPage();
+
+  const eventId = await screen.findByLabelText('Eligibility event ID', {}, {timeout: 10_000});
+  expect(eventId).toHaveValue('event-42');
+  fireEvent.click(screen.getByRole('radio', {name: /Only people on the invitation list/}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
+
+  await waitFor(() => expect(screen.getByLabelText('Eligibility event ID')).toHaveValue(''));
+  expect(screen.getByLabelText('Eligibility label')).toHaveValue('');
+});
+
+test('names a stored wiki-activity policy in words, not by its stored value', async () => {
+  serve({...lockedSettings, conversation: {
+    ...lockedSettings.conversation, gatingType: 'wiki_based',
+  }});
+  renderPage();
+
+  expect(await screen.findByText('A policy based on wiki activity', {exact: false},
+    {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByText(/wiki_based|Wiki policy/)).toBeNull();
 });
 
 test('widening saves at once, without the question', async () => {
