@@ -423,7 +423,7 @@ test('warns that invites are inert in words, not in stored values', async () => 
   const note = await screen.findByText(/Invites only take effect/);
   expect(note).toHaveTextContent(
     'Access is set to Anyone with a Wikimedia account. '
-    + 'Invites only take effect when it is set to Only people who have been given access.',
+    + 'Invites only take effect when access is limited to an invitation list.',
   );
   // Neither stored value reaches the note, including the one hardcoded in the sentence.
   // Scoped to the note: the page footer legitimately says "public domain".

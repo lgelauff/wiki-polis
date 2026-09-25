@@ -129,7 +129,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
                   (`_admin_client_link` in app.py), so the link is derived from that link
                   rather than from a second copy of the admin route table here. */}
               <td>
-                <InternalLink href={conversation.links.manage} className="btn-small">manage</InternalLink>
+                <InternalLink href={conversation.links.manage} className="btn-small">{msg('admin-btn-manage')}</InternalLink>
                 {' '}
                 <InternalLink href={`${conversation.links.manage}/settings`} className="btn-small">{msg('admin-site-link-settings')}</InternalLink>
               </td>

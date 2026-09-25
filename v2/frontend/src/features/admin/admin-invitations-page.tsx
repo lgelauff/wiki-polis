@@ -119,8 +119,7 @@ export function AdminInvitationsPage({
           <div className="landing-section">
             <p className="muted">
               Access is set to <strong>{accessPolicyLabel(msg, data.conversation.accessPolicy)}</strong>.
-              {' '}Invites only take effect when it is set to{' '}
-              <strong>{accessPolicyLabel(msg, 'invite_only')}</strong>.
+              {' '}Invites only take effect when access is limited to an invitation list.
             </p>
           </div>
         )}
