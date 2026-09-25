@@ -171,44 +171,34 @@ test('advances a conversation from the server-described lifecycle console', asyn
   );
 });
 
-test('saves lifecycle recommendations without submitting unsaved settings', async () => {
-  let recommendationBody: unknown;
-  let settingsWrites = 0;
+test('the lifecycle console writes no setting of its own, and points at the page that does', async () => {
+  // This test used to drive the console's own settings and recommendation-tier forms. Both
+  // edited fields the settings page edits too, so they were removed; what is pinned now is
+  // the absence. Both endpoints are wired to fail, so any surviving writer would be loud.
+  let writes = 0;
+  const refuse = () => {writes += 1; return HttpResponse.error();};
   server.use(
     http.put(
-      new URL('/api/v1/admin/conversations/7/recommendation-tier', globalThis.location.origin).toString(),
-      async ({request}) => {
-        recommendationBody = await request.json();
-        return HttpResponse.json({data: {
-          changed: true,
-          recommendations: {
-            tier: 'complex',
-            tiers: [
-              {key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5}},
-              {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8}},
-              {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}},
-            ],
-          },
-        }});
-      },
+      new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(),
+      refuse,
     ),
     http.put(
-      new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(),
-      () => {
-        settingsWrites += 1;
-        return HttpResponse.error();
-      },
+      new URL('/api/v1/admin/conversations/7/recommendation-tier', globalThis.location.origin).toString(),
+      refuse,
     ),
   );
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
 
   await screen.findByRole('heading', {name: 'Community strategy'});
-  fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Unsaved title'} });
-  fireEvent.change(screen.getByLabelText('Complexity tier'), {target: {value: 'complex'}});
-  fireEvent.click(screen.getByRole('button', {name: 'Save recommendations'}));
-
-  await waitFor(() => expect(recommendationBody).toEqual({tier: 'complex'}));
-  expect(settingsWrites).toBe(0);
+  expect(screen.getByRole('link', {name: /Settings/})).toHaveAttribute(
+    'href', '/admin/conversations/7/settings',
+  );
+  expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Save recommendations'})).toBeNull();
+  expect(screen.queryByLabelText('Complexity tier')).toBeNull();
+  // The tier is still reported, as the fact the readiness checks are measured against.
+  expect(screen.getByText(/Complexity tier/)).toBeVisible();
+  expect(writes).toBe(0);
 });
 
 test('schedules and cancels a lifecycle transition', async () => {
@@ -247,7 +237,7 @@ test('pauses and resumes from the legacy lifecycle control', async () => {
 
 test('edits settings and legacy eligibility through one typed command', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings']}><App /></MemoryRouter></QueryClientProvider>);
-  expect(await screen.findByRole('heading', {name: 'Conversation settings'})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Access', level: 1})).toBeVisible();
   expect(screen.getByText('Extended-confirmed editors')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'experienced-editors'}});
   fireEvent.change(screen.getByLabelText('Eligibility label'), {target: {value: 'Experienced editors'}});
