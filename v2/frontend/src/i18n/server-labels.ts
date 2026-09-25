@@ -163,6 +163,22 @@ export const moderationAction = (msg: Message, id: string | null | undefined) =>
 export const moderationScope = (msg: Message, id: string | null | undefined) =>
   resolve(MODLOG_SCOPE_MESSAGES, msg, id, id);
 
+/** Access-policy values from `Conversation.access_policy`, as they reach the admin DTOs.
+ *
+ *  The column is the legacy representation and is recomputed on every save from the
+ *  explicit gating settings (`services/admin_settings.py`): `demo` stays `demo`, anything
+ *  gated becomes `invite_only` whatever its gating type, everything else `public`. The
+ *  words below therefore describe the three states that value can stand for, not the
+ *  invitation list specifically. */
+const ACCESS_POLICY_MESSAGES: Record<string, string> = {
+  public: 'admin-common-policy-open',
+  invite_only: 'admin-common-policy-invited',
+  demo: 'admin-common-policy-practice',
+};
+
+export const accessPolicyLabel = (msg: Message, id: string | null | undefined) =>
+  resolve(ACCESS_POLICY_MESSAGES, msg, id, id);
+
 /** Rule 4 of `plan_i18n.md`: an API error's `message` is for developers, never for the page.
  *
  *  Each form that can fail maps the error's `code` to its own copy, and anything it does not
