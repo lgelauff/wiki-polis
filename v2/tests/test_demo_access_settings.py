@@ -203,6 +203,23 @@ def test_organizer_saves_a_demo_consultation_and_its_answers_stay_fixed(
     assert _stored(conversation) == FIXED
 
 
+def test_saving_without_the_legacy_alias_keeps_a_demo_item_in_demo(
+    admin_client, conversation,
+):
+    """The field set without accessPolicy must not read as "switch to public"."""
+    conversation.access_policy = 'demo'
+    db.session.commit()
+    body = _body(conversation)
+    del body['accessPolicy']
+
+    response = admin_client.put(_endpoint(conversation), json=body)
+
+    assert response.status_code == 200, response.get_json()
+    db.session.refresh(conversation)
+    assert conversation.access_policy == 'demo'
+    assert _stored(conversation) == FIXED
+
+
 def test_organizer_may_edit_but_not_switch_demo(client, conversation, participant):
     _organizer(client, conversation, participant)
 

@@ -334,10 +334,9 @@ def register_admin_routes(
                 details={'fields': fields},
             )
         if access_policy is None:
-            body = {
-                **body,
-                'accessPolicy': 'invite_only' if body.get('gated') else 'public',
-            }
+            # Resolved against the stored conversation (see the settings update in
+            # app.py), so omitting the legacy alias never moves an item out of demo.
+            body = {**body, 'accessPolicy': None}
         try:
             data = update_admin_settings(conversation_id, body)
         except AccessSettingsLocked as exc:
