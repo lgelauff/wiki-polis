@@ -91,7 +91,7 @@ export function AdminInvitationsPage({
   const title = data.conversation.title;
   const invited = data.invitations.length;
   // "Linked" = the invitation is bound to a Wikimedia account by user id, which
-  // happens at that account's first login to the site. It says nothing about
+  // happens when that account logs in to the site. It says nothing about
   // whether that person has joined *this* consultation. "Never logged in" = no
   // account with this exact name has logged in to the site yet, so the
   // invitation is not bound to an account.

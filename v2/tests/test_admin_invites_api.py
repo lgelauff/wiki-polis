@@ -3,7 +3,7 @@
 from unittest.mock import patch
 
 from db import AuditEvent, Conversation, ConversationInvite, Participant, db
-from services.invites import InviteBatchSaveError
+from services.invites import InviteBatchSaveError, claim_username_invites
 
 
 def test_admin_invitation_roster_reports_policy_and_sorted_usernames(
@@ -131,6 +131,25 @@ def test_admin_invitation_roster_reports_whether_the_account_has_signed_in(
     assert {row['username']: row['signedIn'] for row in rows} == {
         'Bound': True, 'Unbound': False,
     }
+
+
+def test_invitation_made_before_first_login_reads_linked_once_claimed(
+    admin_client, conversation,
+):
+    """The #457 path: invited by name, then the account logs in and claims it."""
+    conversation.access_policy = 'invite_only'
+    db.session.add(ConversationInvite(conversation_id=conversation.id, mw_username='Newcomer'))
+    db.session.commit()
+    roster_url = f'/api/v1/admin/conversations/{conversation.id}/invitations'
+
+    before = admin_client.get(roster_url).get_json()['data']['invitations']
+    assert [(row['username'], row['signedIn']) for row in before] == [('Newcomer', False)]
+
+    assert claim_username_invites(db.session, mw_user_id=9911, mw_username='Newcomer') == 1
+    db.session.commit()
+
+    after = admin_client.get(roster_url).get_json()['data']['invitations']
+    assert [(row['username'], row['signedIn']) for row in after] == [('Newcomer', True)]
 
 
 def test_bulk_invitation_receipt_reports_signed_in_for_a_known_account(
