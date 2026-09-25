@@ -15,7 +15,7 @@ export function ForkPage() {
       <div className="container home-container">
         <div className="home-banner" dangerouslySetInnerHTML={richHtml(msg('home-banner-prototype',
           `<a href="https://github.com/lgelauff/wiki-polis/issues/new" target="_blank" rel="noopener">`
-          + `${escapeHtml(msg('home-banner-open-issue'))}<span class="sr-only">${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
+          + `${escapeHtml(msg('home-banner-open-issue'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
 
         <div className="landing-section">
           <h1 style={{fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 12}}>{msg('home-hero-heading')}</h1>

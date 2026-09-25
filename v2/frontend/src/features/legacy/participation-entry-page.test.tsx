@@ -51,7 +51,8 @@ function serveJoinEntry(overrides: Partial<JoinEntry> = {}, conversation: Partia
 }
 
 /** The 403 the participation POST returns when the eligibility check refuses or cannot run.
- *  `displayMessage` is the checker's own reason, which the page prefers over the catalogue. */
+ *  `displayMessage` carries Proto's own English diagnostic about the checker, which the page
+ *  must ignore in favour of the catalogue. */
 function serveEligibilityRefusal(status: 'ineligible' | 'unavailable', displayMessage: string | null = null) {
   server.use(http.post(PARTICIPATION_URL, () => HttpResponse.json({error: {
     code: status === 'unavailable' ? 'eligibility_unavailable' : 'eligibility_denied',
@@ -148,7 +149,7 @@ test('the licence link lands where the message puts it, not where the code does'
   // language that puts the object first.
   const section = document.getElementById('accept-licence-note')!;
   const link = within(section).getByRole('link', {name: /CC0/});
-  expect(link.closest('p')!.textContent).toBe(`BEFORE ${testMessages['accept-licence-link']}${testMessages['common-opens-in-new-tab']} AFTER`);
+  expect(link.closest('p')!.textContent).toBe(`BEFORE ${testMessages['accept-licence-link']} ${testMessages['common-opens-in-new-tab']} AFTER`);
 });
 
 test('the reveal window puts its two day counts where the message asks for them', async () => {
@@ -221,18 +222,61 @@ test('a checker that cannot answer says so, rather than refusing the participant
   expect(screen.queryByText(testMessages['forbidden-elig-criteria']!)).toBeNull();
 });
 
-test('a reason sent by the checker is shown in place of the generic one', async () => {
+test('the not-eligible page takes focus from the form it replaces', async () => {
   serveJoinEntry();
-  serveEligibilityRefusal('ineligible', 'You need 500 edits.');
+  serveEligibilityRefusal('ineligible');
   renderJoin();
   await submitJoin();
-  await screen.findByRole('heading', {name: testMessages['forbidden-elig-heading']!});
+  const heading = await screen.findByRole('heading', {name: testMessages['forbidden-elig-heading']!});
 
-  // Catches the upstream reason being dropped for the generic one, which leaves a participant
-  // with no idea which criterion they missed.
-  expect(screen.getByText('You need 500 edits.')).toBeVisible();
-  expect(screen.queryByText(testMessages['forbidden-elig-criteria']!)).toBeNull();
+  // Catches focus left on a submit button that no longer exists, which drops a keyboard or
+  // screen-reader user at the top of the document with nothing announced.
+  await waitFor(() => expect(heading).toHaveFocus());
+  expect(heading).toHaveAttribute('tabindex', '-1');
 });
+
+test.each([
+  ['ineligible', 'forbidden-elig-criteria'],
+  ['unavailable', 'forbidden-elig-unavailable'],
+] as const)(
+  'a %s refusal ignores the English diagnostic the API sends alongside it',
+  async (status, key) => {
+    renderAsQqx();
+    serveJoinEntry();
+    serveEligibilityRefusal(status, 'The eligibility checker is not configured.');
+    renderJoin();
+    await submitJoin();
+    await screen.findByRole('heading', {name: '(forbidden-elig-heading)'});
+
+    // Catches `displayMessage` coming back: it is Proto's own English about its checker,
+    // which no participant can act on and no translator ever sees.
+    expect(screen.getByText(`(${key})`)).toBeVisible();
+    expect(screen.queryByText(/eligibility checker/)).toBeNull();
+  },
+);
+
+test.each([
+  ['pseudonym_unavailable', 409, 'accept-js-taken'],
+  ['validation_failed', 400, 'accept-err-join'],
+  ['conflict', 409, 'accept-err-join'],
+  ['rate_limited', 429, 'accept-err-join'],
+  ['unauthorized', 401, 'common-err-nologin'],
+] as const)(
+  'a %s from the join form shows catalogue copy, not the server message',
+  async (code, status, key) => {
+    renderAsQqx();
+    serveJoinEntry();
+    server.use(http.post(PARTICIPATION_URL, () => HttpResponse.json(
+      {error: {code, message: 'Server-side English that must not reach the page.'}}, {status},
+    )));
+    renderJoin();
+    await submitJoin();
+
+    // Catches the server's English reaching the participant under the submit button.
+    expect(await screen.findByRole('alert')).toHaveTextContent(`(${key})`);
+    expect(document.body).not.toHaveTextContent('Server-side English');
+  },
+);
 
 test('without a confirmed email the note keeps its link inside the sentence', async () => {
   serveJoinEntry({emailable: false});
@@ -245,7 +289,7 @@ test('without a confirmed email the note keeps its link inside the sentence', as
   expect(screen.queryByRole('checkbox', {name: testMessages['accept-notify-email']!})).toBeNull();
   const link = screen.getByRole('link', {name: /Check your email settings on Meta-Wiki/});
   const note = link.closest('p')!;
-  expect(note.textContent).toBe('Email notifications are unavailable because your Wikimedia account cannot receive email. Check your email settings on Meta-Wiki (opens in a new tab) and return to enable this.');
+  expect(note.textContent).toBe('Email notifications are unavailable because your Wikimedia account cannot receive email. Check your email settings on Meta-Wiki (opens in new window) and return to enable this.');
   expect(link).toHaveAttribute('href', 'https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal');
   // Catches the new tab going unannounced: the participant leaves to set an address and has
   // to come back to this form, so the page says both that it opens away and to return.

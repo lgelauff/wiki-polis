@@ -10,6 +10,8 @@ import {
 } from '../../api/queries';
 import {LegacyShell} from '../legacy/legacy-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
+import {useMessage} from '../../i18n/messages';
+import {accessPolicyLabel} from '../../i18n/server-labels';
 
 type Roster = components['schemas']['AdminInvitationRoster'];
 
@@ -39,6 +41,7 @@ export function AdminInvitationsPage({
   conversationId: number;
   csrfToken: string;
 }) {
+  const msg = useMessage();
   const queryClient = useQueryClient();
   const {data} = useSuspenseQuery(adminInvitationRosterQuery(conversationId));
   const [input, setInput] = useState('');
@@ -61,7 +64,8 @@ export function AdminInvitationsPage({
       setInput('');
     },
     onError: () => {
-      setInput('');
+      // The list stays in the textarea: the save failed, so whoever typed it
+      // still needs it to retry or to correct one name.
       setToast({
         id: Date.now(),
         category: 'error',
@@ -88,6 +92,13 @@ export function AdminInvitationsPage({
   }
 
   const title = data.conversation.title;
+  const invited = data.invitations.length;
+  // "Linked" = the invitation is bound to a Wikimedia account by user id, which
+  // happens when that account logs in to the site. It says nothing about
+  // whether that person has joined *this* consultation. "Never logged in" = no
+  // account with this exact name has logged in to the site yet, so the
+  // invitation is not bound to an account.
+  const linked = data.invitations.filter((invitation) => invitation.signedIn).length;
   return (
     <LegacyShell
       headerMode="admin"
@@ -109,14 +120,19 @@ export function AdminInvitationsPage({
           Invites — <Link to={`/c/${data.conversation.slug}/about`}>{title}</Link>
         </h2>
         <p className="muted" style={{marginBottom: '1.25rem'}}>
-          Access policy: <strong>{data.conversation.accessPolicy}</strong>
+          Access policy: <strong>{accessPolicyLabel(msg, data.conversation.accessPolicy)}</strong>
         </p>
+        {invited > 0 && (
+          <p className="muted" style={{marginBottom: '1.25rem'}}>
+            {invited} invited · {linked} linked · {invited - linked} never logged in
+          </p>
+        )}
 
         {data.conversation.accessPolicy !== 'invite_only' && (
           <div className="landing-section">
             <p className="muted">
-              This conversation uses <strong>{data.conversation.accessPolicy}</strong> access.
-              {' '}Invites only take effect when the policy is set to <strong>invite_only</strong>.
+              Access is set to <strong>{accessPolicyLabel(msg, data.conversation.accessPolicy)}</strong>.
+              {' '}Invites only take effect when access is limited to an invitation list.
             </p>
           </div>
         )}
@@ -140,12 +156,13 @@ export function AdminInvitationsPage({
 
         <table className="admin-table">
           <thead>
-            <tr><th>Username</th><th>Added</th><th /></tr>
+            <tr><th>Username</th><th>Status</th><th>Added</th><th /></tr>
           </thead>
           <tbody>
             {data.invitations.map((invitation) => (
               <tr key={invitation.id}>
                 <td>{invitation.username}</td>
+                <td>{invitation.signedIn ? 'Linked' : 'Never logged in'}</td>
                 <td className="muted">{formatLegacyDate(invitation.createdAt)}</td>
                 <td>
                   <form
@@ -155,13 +172,19 @@ export function AdminInvitationsPage({
                     }}
                     style={{display: 'inline'}}
                   >
-                    <button type="submit" className="btn-small btn-danger">remove</button>
+                    <button
+                      type="submit"
+                      className="btn-small btn-danger"
+                      aria-label={`Remove invitation for ${invitation.username}`}
+                    >
+                      remove
+                    </button>
                   </form>
                 </td>
               </tr>
             ))}
             {!data.invitations.length && (
-              <tr><td colSpan={3} className="muted">No invites yet.</td></tr>
+              <tr><td colSpan={4} className="muted">No invites yet.</td></tr>
             )}
           </tbody>
         </table>

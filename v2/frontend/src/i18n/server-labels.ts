@@ -1,3 +1,4 @@
+import {ApiContractError} from '../api/client';
 import type {Message} from './messages';
 
 /** Rule 6 of `plan_i18n.md`: a UI label is never shipped from the server as English.
@@ -161,3 +162,79 @@ export const moderationAction = (msg: Message, id: string | null | undefined) =>
 
 export const moderationScope = (msg: Message, id: string | null | undefined) =>
   resolve(MODLOG_SCOPE_MESSAGES, msg, id, id);
+
+/** Access-policy values from `Conversation.access_policy`, as they reach the admin DTOs.
+ *
+ *  The column is the legacy representation and is recomputed on every save from the
+ *  explicit gating settings (`services/admin_settings.py`): `demo` stays `demo`, anything
+ *  gated becomes `invite_only` whatever its gating type, everything else `public`. The
+ *  words below therefore describe the three states that value can stand for, not the
+ *  invitation list specifically. */
+const ACCESS_POLICY_MESSAGES: Record<string, string> = {
+  public: 'admin-common-policy-open',
+  invite_only: 'admin-common-policy-invited',
+  demo: 'admin-common-policy-practice',
+};
+
+export const accessPolicyLabel = (msg: Message, id: string | null | undefined) =>
+  resolve(ACCESS_POLICY_MESSAGES, msg, id, id);
+
+/** Rule 4 of `plan_i18n.md`: an API error's `message` is for developers, never for the page.
+ *
+ *  Each form that can fail maps the error's `code` to its own copy, and anything it does not
+ *  know — a new code, a rate limit, a network failure that never reached the server — gets
+ *  that form's generic message rather than the server's English. That generic message is
+ *  the table's `_fallback` entry, kept in the table rather than beside it so that the audience
+ *  and key-existence scans see it, and passed where the other helpers pass the server label,
+ *  so `resolve()` never sees server text. */
+function apiErrorCode(error: unknown) {
+  return error instanceof ApiContractError ? error.code : null;
+}
+
+/** `POST /conversations/<slug>/statements`, from the Explore composer. */
+const STATEMENT_ERROR_MESSAGES: Record<string, string> = {
+  statement_quota_exceeded: 'conv-err-proposal-limit',
+  derivative_similarity_too_low: 'conv-err-similarity',
+  unknown_parent_statement: 'conv-err-original-unavailable',
+  // The statement was sent and may have landed. Nothing reconciles the pending attempt, so
+  // pressing submit again only brings this message back, and edited text under the same key
+  // comes back as an idempotency conflict: the same case, so the same message. It tells the
+  // participant they need not send it again, rather than inviting a retry.
+  command_outcome_unknown: 'conv-err-outcome-unknown',
+  idempotency_conflict: 'conv-err-outcome-unknown',
+  // Nothing was sent upstream, and the server says a retry with the same key is safe.
+  upstream_unavailable: 'conv-err-submit-statement',
+  // Refusals a retry cannot change: voting has closed or the participant has not joined
+  // (409), or they are banned from this consultation (403).
+  conflict: 'conv-err-submissions-closed',
+  forbidden: 'conv-err-submissions-closed',
+  // A session that expired mid-consultation: a retry fails the same way, so say to log in.
+  unauthorized: 'common-err-nologin',
+  _fallback: 'conv-err-submit-statement',
+};
+
+/** `GET /conversations/<slug>/workspace`, when it fails with anything but a sign-in or an
+ *  access refusal, which have their own pages. A 401 redirects to the login before it gets
+ *  here, so it has no entry. */
+const WORKSPACE_ERROR_MESSAGES: Record<string, string> = {
+  not_found: 'errorpage-404-message',
+  _fallback: 'conv-unavailable-body',
+};
+
+/** `POST /conversations/<slug>/participation`, on the join form. The eligibility refusals
+ *  never reach this: they replace the form with the not-eligible page. */
+const JOIN_ERROR_MESSAGES: Record<string, string> = {
+  pseudonym_unavailable: 'accept-js-taken',
+  // The session expired while the form was open.
+  unauthorized: 'common-err-nologin',
+  _fallback: 'accept-err-join',
+};
+
+export const statementErrorCopy = (msg: Message, error: unknown) =>
+  resolve(STATEMENT_ERROR_MESSAGES, msg, apiErrorCode(error), msg(STATEMENT_ERROR_MESSAGES._fallback!));
+
+export const workspaceErrorCopy = (msg: Message, error: unknown) =>
+  resolve(WORKSPACE_ERROR_MESSAGES, msg, apiErrorCode(error), msg(WORKSPACE_ERROR_MESSAGES._fallback!));
+
+export const joinErrorCopy = (msg: Message, error: unknown) =>
+  resolve(JOIN_ERROR_MESSAGES, msg, apiErrorCode(error), msg(JOIN_ERROR_MESSAGES._fallback!));

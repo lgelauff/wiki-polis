@@ -1,4 +1,4 @@
-import {useState, type FormEvent} from 'react';
+import {useEffect, useRef, useState, type FormEvent} from 'react';
 import {useMutation, useSuspenseQuery} from '@tanstack/react-query';
 import {useParams} from 'react-router-dom';
 
@@ -14,6 +14,7 @@ import {NavigationRedirect} from './external-redirect';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
 import {useMessage} from '../../i18n/messages';
+import {joinErrorCopy} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 
 function requiredSlug(value: string | undefined) {
@@ -151,11 +152,7 @@ function JoinPage({data, csrfToken, voucher}: {data: JoinEntry; csrfToken: strin
     join.mutate();
   }
 
-  const formError = join.error instanceof ApiContractError
-    ? (join.error.code === 'pseudonym_unavailable'
-      ? msg('accept-js-taken')
-      : join.error.message)
-    : null;
+  const formError = join.error ? joinErrorCopy(msg, join.error) : null;
 
   return (
     <LegacyShell headerCrumb={(
@@ -190,7 +187,7 @@ function JoinPage({data, csrfToken, voucher}: {data: JoinEntry; csrfToken: strin
             <div className="pseudonym-card-header">
               <div className="pseudonym-card-title" id="pseudonym-title">{msg('accept-choose-pseudonym')}</div>
               <button type="button" className="reroll-btn" aria-controls="pseudonym-options" aria-label={msg('accept-reroll-aria')} disabled={reroll.isPending} onClick={() => reroll.mutate()}>
-                {reroll.isPending ? msg('accept-reroll-loading') : msg('accept-reroll')}
+                <span aria-hidden="true">↻</span> {reroll.isPending ? msg('accept-reroll-loading') : msg('accept-reroll')}
               </button>
             </div>
             <div className="pseudonym-card-sub" id="pseudonym-help">
@@ -225,7 +222,7 @@ function JoinPage({data, csrfToken, voucher}: {data: JoinEntry; csrfToken: strin
               <p className="muted" style={{marginTop: '.25rem'}} dangerouslySetInnerHTML={richHtml(
                   msg('accept-notify-email-unavailable',
                     `<a href="https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal" target="_blank" rel="noopener">`
-                    + `${escapeHtml(msg('accept-notify-add-email'))}<span class="sr-only">${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
+                    + `${escapeHtml(msg('accept-notify-add-email'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
             )}
             <label className="checkbox-label" style={{marginTop: '.5rem'}}>
               <input type="checkbox" name="notify_talk_page" value="1" checked={notifyTalkPage} onChange={(event) => setNotifyTalkPage(event.target.checked)} />
@@ -251,7 +248,7 @@ function JoinPage({data, csrfToken, voucher}: {data: JoinEntry; csrfToken: strin
             <h2>{msg('accept-licence-heading')}</h2>
             <p dangerouslySetInnerHTML={richHtml(msg('accept-licence-intro',
               `<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">`
-              + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only">${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
+              + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
             <p className="muted">
               {msg('accept-licence-scope')}
             </p>
@@ -275,16 +272,20 @@ function JoinPage({data, csrfToken, voucher}: {data: JoinEntry; csrfToken: strin
 
 function EligibilityDeniedPage({data, error}: {data: JoinEntry; error: ApiContractError}) {
   const msg = useMessage();
-  const details = error.details as {status?: string; displayMessage?: string | null} | undefined;
-  const message = details?.displayMessage
-    ?? (details?.status === 'unavailable'
-      ? msg('forbidden-elig-unavailable')
-      : msg('forbidden-elig-criteria'));
+  // The error's `details.displayMessage` is Proto's own English diagnostic about the checker,
+  // not a reason written for the participant, so the reason comes from the code alone.
+  const message = error.code === 'eligibility_unavailable'
+    ? msg('forbidden-elig-unavailable')
+    : msg('forbidden-elig-criteria');
+  // This page replaces the form the participant just submitted, so focus would otherwise fall
+  // to the document body and a screen reader would announce nothing.
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []);
   return (
     <LegacyShell title={msg('forbidden-elig-doc-title', data.conversation.title)}>
       <div className="container">
         <div className="landing-section">
-          <h1>{msg('forbidden-elig-heading')}</h1>
+          <h1 ref={heading} tabIndex={-1}>{msg('forbidden-elig-heading')}</h1>
           <p className="muted">
             {data.conversation.eligibilityLabel
               ? <span dangerouslySetInnerHTML={richHtml(msg('forbidden-elig-requirement-named',
@@ -292,7 +293,7 @@ function EligibilityDeniedPage({data, error}: {data: JoinEntry; error: ApiContra
               : msg('forbidden-elig-requirement')}
           </p>
           <p className="muted">{message}</p>
-          <p style={{marginTop: '1rem'}}><InternalLink href={data.links.home}>{msg('common-return-home')} <span aria-hidden="true">→</span></InternalLink></p>
+          <p style={{marginTop: '1rem'}}><InternalLink href={data.links.home}>{msg('common-return-home')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></p>
         </div>
       </div>
     </LegacyShell>

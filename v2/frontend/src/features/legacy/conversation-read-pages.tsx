@@ -169,9 +169,9 @@ export function ModerationLogPage() {
                 <tr key={`${event.occurredAt}-${event.pseudonym}-${index}`}>
                   <td className="muted">{event.occurredAt && <time dateTime={event.occurredAt}>{dates.dateTime(event.occurredAt)}</time>}</td>
                   <td>{moderationAction(msg, event.action)}</td>
-                  <td>{event.pseudonym}</td>
+                  <td>{event.pseudonym ?? <span className="muted">{msg('modlog-unknown')}</span>}</td>
                   <td>{moderationScope(msg, event.scope)}</td>
-                  <td>{event.actor}</td>
+                  <td>{event.actor ?? <span className="muted">{event.actorKind === 'site_admin' ? msg('modlog-actor-site-admin') : msg('modlog-unknown')}</span>}</td>
                 </tr>
               ))}
             </tbody>
@@ -207,7 +207,7 @@ export function ConversationOutputPage() {
       <div className="container" style={{maxWidth: 800}}>
         <p style={{marginBottom: '1.25rem'}}>
           <InternalLink href={`/c/${data.slug}`} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>
-            <span aria-hidden="true">←</span> {data.title}
+            <span className="dir-glyph" aria-hidden="true">←</span> {data.title}
           </InternalLink>
         </p>
 
@@ -249,12 +249,12 @@ function OutputBody({slug, output}: {
   if (output.key === 'argument-map') return <>
     <h2 className="report-section-heading">{msg('output-argument-map-heading')}</h2>
     <p className="muted">{msg('output-argument-map-body')}</p>
-    <p><InternalLink href={`/c/${slug}#tab-arguments`}>{msg('output-argument-map-link')} <span aria-hidden="true">→</span></InternalLink></p>
+    <p><InternalLink href={`/c/${slug}#tab-arguments`}>{msg('output-argument-map-link')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></p>
   </>;
   if (output.key === 'preliminary-results') return <>
     <h2 className="report-section-heading">{msg('output-preliminary-heading')}</h2>
     <p className="muted">{msg('output-preliminary-body')}</p>
-    <p><InternalLink href={`/c/${slug}#tab-p6-results`}>{msg('output-preliminary-link')} <span aria-hidden="true">→</span></InternalLink></p>
+    <p><InternalLink href={`/c/${slug}#tab-p6-results`}>{msg('output-preliminary-link')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></p>
   </>;
   if (output.key === 'dataset') return <>
     <h2 className="report-section-heading">{msg('output-dataset-heading')}</h2>

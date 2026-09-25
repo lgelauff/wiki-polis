@@ -1,21 +1,18 @@
-"""Failed-attempt budgets on voucher entry (#368).
+"""Failed-attempt budget on voucher entry (#368).
 
-Run with the limiter ON (see test_api_rate_limits). Only misses spend a budget:
-a room entering valid codes never trips it, while guessing does, both from one
-browser session and spread across many. Nothing is locked or invalidated.
+Run with the limiter ON (see test_api_rate_limits). Only misses spend it, and it
+locks out the guessing browser, never the consultation: other people keep
+getting in. Nothing is locked or invalidated.
 """
-import logging
 
 import pytest
 
-from app import (_VOUCHER_PROCESS_FAILURE_LIMIT, _VOUCHER_SESSION_FAILURE_LIMIT,
-                 limiter)
+from app import _VOUCHER_SESSION_FAILURE_LIMIT, limiter
 from db import Conversation, VoucherBatch, VoucherCode, db
 from services.vouchers import import_voucher_codes
 from tests.test_api_rate_limits import limited_app  # noqa: F401  (fixture)
 
 SESSION_BUDGET = int(_VOUCHER_SESSION_FAILURE_LIMIT.split()[0])
-PROCESS_BUDGET = int(_VOUCHER_PROCESS_FAILURE_LIMIT.split()[0])
 CODE = 'ROOM-2024'
 
 
@@ -51,7 +48,7 @@ def test_a_session_is_throttled_after_its_budget_of_misses(limited_app, conv):  
     breach = _try(client, conv, 'WRONG9999')
     assert breach.status_code == 429
     assert 0 < int(breach.headers['Retry-After']) <= 60
-    assert 'Too many codes were tried here' in breach.data.decode()
+    assert 'too many wrong codes' in breach.data.decode()
     assert breach.headers['Cache-Control'] == 'no-store'
 
     # While throttled even a valid code waits, but it is not spent or locked.
@@ -69,29 +66,6 @@ def test_empty_submissions_are_not_counted_as_guesses(limited_app, conv):  # noq
     client = limited_app.test_client()
     for _ in range(SESSION_BUDGET + 1):
         assert _try(client, conv, '').status_code == 200
-
-
-def test_the_process_budget_catches_guessing_spread_over_sessions(
-    limited_app, conv, caplog,  # noqa: F811
-):
-    """A fresh session per guess escapes the session budget, not the process one."""
-    for i in range(PROCESS_BUDGET):
-        assert _try(limited_app.test_client(), conv, f'GUESS{i:04d}').status_code == 200
-
-    with caplog.at_level(logging.WARNING):
-        breach = _try(limited_app.test_client(), conv, 'GUESS9999')
-    assert breach.status_code == 429
-    assert f'conversation {conv.id} exhausted' in caplog.text
-    assert 'GUESS' not in caplog.text
-
-
-def test_each_process_has_its_own_budget(limited_app, conv):  # noqa: F811
-    other = _process('other-room')
-    for i in range(PROCESS_BUDGET):
-        _try(limited_app.test_client(), conv, f'GUESS{i:04d}')
-    assert _try(limited_app.test_client(), conv, 'GUESS9999').status_code == 429
-
-    assert _try(limited_app.test_client(), other, CODE).status_code == 302
 
 
 def test_a_valid_code_redeems_once_the_window_has_passed(limited_app, conv):  # noqa: F811
@@ -133,7 +107,7 @@ def test_the_blank_form_and_what_was_typed_survive_throttling(limited_app, conv)
 
 def test_unknown_slugs_and_short_inputs_are_not_charged(limited_app, conv):  # noqa: F811
     client = limited_app.test_client()
-    for i in range(PROCESS_BUDGET + 10):
+    for i in range(SESSION_BUDGET + 10):
         assert client.post('/c/no-such-process/v', data={'code': f'WRONG{i:04d}'}).status_code == 404
     for _ in range(SESSION_BUDGET + 1):
         assert _try(client, conv, 'AB-C').status_code == 200
@@ -174,20 +148,25 @@ def test_checking_codes_through_the_switch_page_is_charged(limited_app, conv):  
     assert _try(client, conv, CODE).status_code == 429
 
 
-def test_the_exhausted_warning_is_logged_once_per_window(limited_app, conv, caplog):  # noqa: F811
-    for i in range(PROCESS_BUDGET):
-        _try(limited_app.test_client(), conv, f'GUESS{i:04d}')
-    with caplog.at_level(logging.WARNING):
-        for i in range(5):
-            assert _try(limited_app.test_client(), conv, f'MORE{i:04d}').status_code == 429
-    assert caplog.text.count('exhausted') == 1
+def test_many_browsers_guessing_never_locks_the_consultation(limited_app, conv):  # noqa: F811
+    """A guess from each of many fresh sessions is answered 'not valid', never
+    throttled, and a real holder still gets in: the consultation is not locked."""
+    for i in range(100):
+        assert _try(limited_app.test_client(), conv, f'GUESS{i:04d}').status_code == 200
+    assert _try(limited_app.test_client(), conv, CODE).status_code == 302
 
 
-def test_operators_can_change_the_process_budget(limited_app, conv):  # noqa: F811
-    limited_app.config['VOUCHER_PROCESS_FAILURE_LIMIT'] = '3 per minute'
+def test_the_browser_budget_is_three_wrong_codes(limited_app, conv):  # noqa: F811
+    assert SESSION_BUDGET == 3
+    client = limited_app.test_client()
+    assert [_try(client, conv, f'WRONG{i}0000').status_code for i in range(4)] == [200, 200, 200, 429]
+
+
+def test_operators_can_change_the_browser_budget(limited_app, conv):  # noqa: F811
+    limited_app.config['VOUCHER_SESSION_FAILURE_LIMIT'] = '5 per minute'
     try:
-        for i in range(3):
-            assert _try(limited_app.test_client(), conv, f'GUESS{i:04d}').status_code == 200
-        assert _try(limited_app.test_client(), conv, 'GUESS9999').status_code == 429
+        client = limited_app.test_client()
+        statuses = [_try(client, conv, f'WRONG{i}0000').status_code for i in range(6)]
+        assert statuses == [200] * 5 + [429]
     finally:
-        limited_app.config.pop('VOUCHER_PROCESS_FAILURE_LIMIT')
+        limited_app.config.pop('VOUCHER_SESSION_FAILURE_LIMIT')

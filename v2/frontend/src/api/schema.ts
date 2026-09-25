@@ -1462,6 +1462,8 @@ export interface components {
             };
             capabilities: {
                 edit: boolean;
+                /** @description Whether this viewer may move the consultation into or out of demo (site admins only). */
+                switchDemo: boolean;
             };
             locks: {
                 gated: boolean;
@@ -1776,6 +1778,7 @@ export interface components {
             username: string;
             /** Format: date-time */
             createdAt: string;
+            signedIn: boolean;
         };
         AdminInvitationBatchRequest: {
             usernames: string[];
@@ -2034,10 +2037,12 @@ export interface components {
             occurredAt: string | null;
             /** @enum {string} */
             action: "Banned" | "Unbanned";
-            pseudonym: string;
+            pseudonym: string | null;
             /** @enum {string} */
             scope: "conversation";
-            actor: string;
+            actor: string | null;
+            /** @enum {string|null} */
+            actorKind: "site_admin" | null;
         };
         ConversationOutputPageResponse: {
             data: components["schemas"]["ConversationOutputPage"];

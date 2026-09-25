@@ -17,24 +17,25 @@ identity-reveal page. The admin lifecycle console is wired too.
 
 Still English, on purpose, and listed with reasons in
 [#399](https://github.com/lgelauff/wiki-polis/issues/399): the two help pages
-(`guidance-*`, pending an English review), the rest of the admin console (stage 5), server
-error messages ([#397](https://github.com/lgelauff/wiki-polis/issues/397)) and the moderation
-log's server fallbacks ([#398](https://github.com/lgelauff/wiki-polis/issues/398)).
+(`guidance-*`, pending an English review) and the rest of the admin console (stage 5), which
+still shows some API errors' server `message`. Participant screens map an API error's `code`
+to catalogue copy instead
+([#397](https://github.com/lgelauff/wiki-polis/issues/397)); the tables are in
+`frontend/src/i18n/server-labels.ts`.
 
 | Piece | State |
 |---|---|
-| `en.json` + `qqq.json` (948 keys, 100% documented; 570 offered to translators, 378 held back) | ✅ committed |
-| `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | ✅ committed |
-| Per-request locale negotiation (`g.locale`, `g.dir`) | ✅ committed |
-| `GET /api/v1/i18n/<locale>` — the catalogue as JSON | ✅ committed |
-| React SPA reads it via `banana-i18n` | ✅ participant interface; 🟡 help pages and admin console (see above) |
-| Locales offered to users (`ENABLED_LOCALES`) | English and Dutch (`nl.json`, 532 keys) |
+| `en.json` + `qqq.json` (971 keys, 100% documented; 593 offered to translators, 378 held back) | committed |
+| `i18n.py` resolver (fallback, `$1`, `{{PLURAL:}}`, `qqx`, RTL direction) | committed |
+| Per-request locale negotiation (`g.locale`, `g.dir`) | committed |
+| `GET /api/v1/i18n/<locale>` — the catalogue as JSON | committed |
+| React SPA reads it via `banana-i18n` | participant interface; not yet the help pages and admin console (see above) |
+| Locales offered to users (`ENABLED_LOCALES`) | English and Dutch (`nl.json`, 541 keys) |
 
 `ENABLED_LOCALES` defaults to `en,nl` when unset (`app.py`), so the language switcher is visible
-and Dutch is live wherever the variable is left alone. The keys are the durable asset: they were authored against the Jinja UI, which has since been deleted, but
-**562 of the SPA's 785 distinct strings (72%) already have an equivalent here** — 495 exact
-matches plus 67 that JSX splits around inline markup. So wiring the SPA is mostly mapping
-existing keys, not authoring a second catalogue.
+and Dutch is live wherever the variable is left alone. Most keys were authored against the
+Jinja UI, since deleted; wiring the SPA mostly mapped its strings onto them rather than
+authoring a second catalogue.
 
 ## Who consumes this
 
@@ -45,19 +46,23 @@ once and feeds the map to `banana-i18n`, which parses this exact format and brin
 plural rules.
 
 Freeze the key namespace before TWN onboarding: renaming keys after translators start costs
-them their work. The sequence for getting there — and the reconciliation of the 551 keys no
-call site references, most of which an unwired component still needs — is in
-[`../plan_i18n.md`](../plan_i18n.md). This file is the status; that one is the plan.
+them their work. The sequence for getting there — including the review of keys no call site
+references yet (stage 4) — is in [`../plan_i18n.md`](../plan_i18n.md). This file is the status; that one is the plan.
 
-**Server-side copy is deliberately not keyed.** 122 user-visible English strings live in
-`error_response(...)` and `abort(description=...)`. The SPA maps `error.code` to its own copy
+**Server-side copy is deliberately not keyed.** The user-visible English in
+`error_response(...)` and `abort(description=...)` is counted under rule 4 of the plan. The SPA maps `error.code` to its own copy
 rather than rendering the server's `message`, so those strings stay developer-facing.
 
 ## For translators
 
 Translate on **translatewiki.net**, not here. `qqq.json` gives the context for each message.
 Placeholders `$1`, `$2`, … must be preserved, and no others added. `{{PLURAL:$1|singular|plural}}`
-selects a form by the number in `$1` — use the plural forms your language needs.
+selects a form by the number in `$1` — use the plural forms your language needs, in CLDR's
+category order (zero, one, two, few, many, other), writing only the categories your language
+has: Russian is `{{PLURAL:$1|one|few|many|other}}`, Arabic
+`{{PLURAL:$1|zero|one|two|few|many|other}}`. If you give fewer forms, the last one is used for
+the rest. A form for one exact number, like `0=no votes`, may be added anywhere; it does not
+take the place of a category.
 
 A translation that breaks these rules is not shown; English is shown in its place:
 
@@ -77,6 +82,22 @@ exactly as typed.
 1. **Reuse before you mint.** Search `en.json` for the English text first. A large fraction of
    the SPA's copy already has a key here under a name derived from the page it came
    from. Reusing it keeps one message for translators instead of two.
+
+   Then, before minting a message — error messages above all — look for an equivalent in
+   MediaWiki core or one of its components (a skin, an extension, OOUI), through the API
+   (`https://www.mediawiki.org/w/api.php?action=query&meta=allmessages&ammessages=<key>&amlang=<lang>`)
+   or translatewiki's message search. If one fits, copy its English text exactly and point to
+   it in `qqq.json` with `{{msg-mw|<key>}}`: the wording is already familiar to Wikimedia
+   users, and translation memory then offers translators the translations that already exist
+   in hundreds of languages. `common-err-nologin` is core's `exception-nologin-text`.
+
+   Copied text keeps its licence. Copy only from a source whose licence is compatible with
+   Proto's GPL-3.0: MediaWiki core (including its Codex messages) and most skins and
+   extensions are GPL-2.0-or-later, while OOUI and VisualEditor are MIT, whose notice
+   [`ATTRIBUTION.md`](ATTRIBUTION.md) carries. Check the source's own `COPYING`, `LICENSE` or
+   `extension.json` `license-name`. Record the message in `ATTRIBUTION.md` with its source
+   key, source file and licence, and name the licence in its `qqq` entry next to the
+   `{{msg-mw}}` citation; `tests/test_i18n.py` fails if the two disagree.
 2. Add a key to **`en.json`** (English text) and a one-line context note to **`qqq.json`**.
    Never leave a message in `en.json` without a `qqq.json` entry — CI fails on it.
 3. Use it:
@@ -145,9 +166,10 @@ that list.
 
 Append **`?uselang=qqx`** to any page: every externalised string renders as its key
 (`(base-log-out)`). Any real English still visible = a string that still needs extracting.
-A missing key renders loudly as `⧼key⧽`. Only the wired surfaces render as keys throughout
-today; everywhere else is still un-externalised, so this remains a tool for the conversion
-phases rather than a passing check.
+A missing key renders loudly as `⧼key⧽`. Most of the participant interface renders as keys.
+The exceptions are listed in [#399](https://github.com/lgelauff/wiki-polis/issues/399): the
+help pages, most of the admin console, and the server error messages participant screens
+still show ([#397](https://github.com/lgelauff/wiki-polis/issues/397)).
 
 `qqx` shows a message's parameters too, as MediaWiki does: `(key: a, b)`. So English passed
 *into* a message — a link label, a phase name — is as visible as English written around one.
@@ -200,19 +222,21 @@ A class of genuinely-*interface* strings is defined in **module-level Python dat
 (`PHASE_SEQUENCE`, `PHASE_ROUTES`, `PHASE_TRANSITIONS`, `OUTPUT_DEFINITIONS`, the recommendation
 tiers) and reaches the UI as `label` / `effect` / `tooltip` fields. Because those constants are
 evaluated once at import, `_()` cannot wrap the literals in place — it would resolve to the
-source locale forever. They have to be localised **per request at the context boundary**,
-keying off each item's stable `key`/`id`, so that all logic branching on those identifiers is
-unaffected.
+source locale forever. So the server keeps sending the English, and the SPA localises
+instead, keying off each item's stable `key`/`id`, so that all logic branching on those
+identifiers is unaffected.
 
 Keys for this are already in the catalogue — `phase-label-<key>`, `phase-effect-<key>`,
 `phase-route-<key>`, `precond-<id>`, `output-<key>-{label,tooltip,pending,phase,method}`,
 `output-status-<value>`, `rec-tier-<key>`, `rec-field-<key>`, `role-{global-admin,organizer,
-moderator}` — generated by introspecting the live structures. **The localizers themselves are
-not written yet.** They belong wherever these structures are consumed, which since the service
-extraction is largely `v2/services/`, not `app.py`.
+moderator}` — generated by introspecting the live structures. `frontend/src/i18n/server-labels.ts`
+maps each identifier to its key and ignores the server's label, which it shows only when the
+identifier or the key is unknown. It covers phase names, workspace tabs, phase routes, the
+consultation outputs and the public moderation log. `phase-effect-*`, `precond-*`, `rec-*` and
+`role-*` belong to the admin console and are not mapped yet (stage 5).
 
-These keys are built by concatenation, so the CI key-existence guard cannot verify them
-statically; it skips runtime-assembled keys by design.
+Those maps are written out key by key rather than concatenated, and `tests/test_i18n.py` scans
+them (`_MAP_KEY_RE`), so the key-existence guard covers them.
 
 ## Enabling a locale
 
@@ -220,12 +244,14 @@ New locales arrive as `i18n/<code>.json` from TWN. Enable them for users by addi
 `ENABLED_LOCALES` (see `.env.example`); setting the variable replaces the `en,nl` default, so
 list every locale to offer. Until enabled, a locale is present in the repo but not offered.
 
-### Before enabling a non-English locale — two tracked follow-ups
+### Before enabling a non-English locale
 
-1. **CLDR plural rules.** Server-side `{{PLURAL:}}` currently uses the English rule (`n == 1` →
-   singular, else plural). Languages with more than two plural forms (Arabic, Polish, Russian,
-   …) need their CLDR rule wired into `i18n._plural_index` before their counts read correctly.
-   (The client side gets this for free: `banana-i18n` applies CLDR rules itself.)
+1. **CLDR plural rules — done (#436).** `banana-i18n` in the browser takes its rules from
+   `Intl.PluralRules`; the server has the same CLDR rules written out in `i18n._PLURAL_RULES`,
+   and `tests/test_i18n.py` checks it picks the form banana picks. The table covers
+   the languages likely to be enabled (among them fr, ru, uk, pl, ar, cy, ga, he, ja, zh);
+   **a language not in it gets the English rule on the server**, so add it there first;
+   `test_every_shipped_locale_has_a_plural_rule` fails when a `<code>.json` lands without one.
 2. **RTL CSS audit.** `<html dir>` is already driven by `i18n.text_direction(locale)`, so RTL
    locales render right-to-left today — but `static/style.css` / `static/redesign.css` still use
    a handful of *physical* properties (`margin-left`, `text-align:left`, `left:`) that should be

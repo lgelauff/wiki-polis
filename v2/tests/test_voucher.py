@@ -32,6 +32,11 @@ from services.vouchers import (
     voucher_code_hmac,
 )
 
+# Any time before the suite runs, and any time after it: the unusable-code cases below
+# care about which side of now a date falls, never about how far.
+_LONG_PAST = datetime(2020, 1, 1, tzinfo=timezone.utc)
+_LONG_FUTURE = datetime(2099, 1, 1, tzinfo=timezone.utc)
+
 CODE = 'X7F3K9M2ABCD'
 
 
@@ -423,6 +428,41 @@ def test_code_on_a_conversation_without_vouchers_is_dropped(app, client, convers
     assert _voucher_participants() == []
 
 
+# qqx is never an enabled locale, so no cookie remembers it: only the address can.
+
+def test_other_parameters_survive_a_linked_code(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    first = client.get(f'/c/{voucher_conv.slug}?v={CODE}&uselang=qqx')
+    assert first.headers['Location'] == f'/c/{voucher_conv.slug}/v?v={CODE}&uselang=qqx'
+
+    landed = client.get(first.headers['Location'])
+    assert landed.headers['Location'] == f'/c/{voucher_conv.slug}?uselang=qqx'
+
+
+def test_other_parameters_survive_a_typed_code(app, client, voucher_conv):
+    _make_voucher(voucher_conv)
+    html = client.get(f'/c/{voucher_conv.slug}/v?v=WRONG-9999&uselang=qqx').data.decode()
+    assert f'action="/c/{voucher_conv.slug}/v?uselang=qqx"' in html
+
+    resp = client.post(f'/c/{voucher_conv.slug}/v?uselang=qqx', data={'code': CODE})
+    assert resp.headers['Location'] == f'/c/{voucher_conv.slug}?uselang=qqx'
+
+
+def test_other_parameters_survive_a_dropped_code(app, client, conversation):
+    resp = client.get(f'/c/{conversation.slug}?v={CODE}&uselang=qqx&v=again')
+    assert resp.headers['Location'] == f'/c/{conversation.slug}?uselang=qqx'
+
+
+def test_switch_page_cancel_keeps_other_parameters(app, client, voucher_conv, participant):
+    _make_voucher(voucher_conv)
+    with client.session_transaction() as sess:
+        sess['username'] = 'testuser'
+        sess['xid'] = participant.xid
+    html = client.get(f'/c/{voucher_conv.slug}/v?v={CODE}&uselang=qqx').data.decode()
+    assert f'action="/c/{voucher_conv.slug}/v?uselang=qqx"' in html
+    assert f'href="/c/{voucher_conv.slug}?uselang=qqx"' in html
+
+
 def test_missed_code_with_excluded_letters_gets_a_hint(app, client, voucher_conv):
     """A misread 0 or 1 is pointed out rather than silently corrected."""
     _make_voucher(voucher_conv, code='0011ABCDEFGH')
@@ -448,23 +488,28 @@ def test_short_imported_code_redeems(app, client, voucher_conv):
     assert _redeem(client, voucher_conv, code='k7q2m').status_code == 302
 
 
-@pytest.mark.parametrize('kwargs', [
-    {'status': 'revoked'},
-    {'expires_at': datetime.now(timezone.utc) - timedelta(days=1)},
-    {'status': 'reserved', 'reserved_until': datetime.now(timezone.utc) + timedelta(minutes=5)},
+# Sentinel dates, not offsets from now: the cases only need "already over" and "not over
+# yet", and a date cannot be overtaken by a slow suite. A reservation five minutes ahead,
+# computed when this file was imported, could be: a run that took longer than that to reach
+# this test found it expired, and an expired reservation is claimable
+# (services/vouchers.py:225), so the code redeemed instead of being refused.
+@pytest.mark.parametrize('unusable', [
+    pytest.param({'status': 'revoked'}, id='revoked'),
+    pytest.param({'expires_at': _LONG_PAST}, id='expired'),
+    pytest.param({'status': 'reserved', 'reserved_until': _LONG_FUTURE}, id='reserved'),
 ])
 @pytest.mark.parametrize('code,wrong_code', [
     (CODE, 'ZZZZZZZZZZZZ'),
     ('OLIU2024', 'OLIU2025'),  # the excluded-letter hint depends on the input only
 ])
 def test_unusable_codes_get_the_same_answer_as_a_wrong_code(
-    app, client, voucher_conv, kwargs, code, wrong_code,
+    app, client, voucher_conv, unusable, code, wrong_code,
 ):
-    _make_voucher(voucher_conv, code=code, **kwargs)
+    _make_voucher(voucher_conv, code=code, **unusable)
     wrong = _redeem(client, voucher_conv, code=wrong_code).data.decode()
-    unusable = _redeem(client, voucher_conv, code=code).data.decode()
-    assert 'not valid' in unusable
-    assert unusable.replace(code, wrong_code) == wrong
+    refused = _redeem(client, voucher_conv, code=code).data.decode()
+    assert 'not valid' in refused
+    assert refused.replace(code, wrong_code) == wrong
     assert _voucher_participants() == []
 
 

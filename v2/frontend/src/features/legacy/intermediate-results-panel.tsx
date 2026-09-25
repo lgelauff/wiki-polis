@@ -3,15 +3,17 @@ import {useSuspenseQuery} from '@tanstack/react-query';
 import type {components} from '../../api/schema';
 import {intermediateResultsQuery} from '../../api/queries';
 import {useMessage} from '../../i18n/messages';
+import {usePercentFormat} from '../../i18n/numbers';
 import {richHtml} from '../../i18n/rich-html';
 
 type Position = components['schemas']['IntermediateResultPosition'];
 
 function ResultRow({position}: {position: Position}) {
   const msg = useMessage();
+  const percentage = usePercentFormat();
   return <div className="results-row">
     <span className={`results-badge results-${position.choice}`}>{position.choice === 'agree' ? msg('conv-badge-agree') : msg('conv-badge-disagree')}</span>
-    <span className="results-pct">{position.percentage}%</span>
+    <span className="results-pct">{percentage(position.percentage, {digits: 0})}</span>
     <span className="results-text">{msg('conv-results-quoted', position.statement)}</span>
   </div>;
 }

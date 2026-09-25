@@ -139,6 +139,7 @@ Polis system account after the Docker stack is running:
 
 ```bash
 curl -s -X POST http://127.0.0.1:8003/api/v3/auth/new \
+  -H 'X-Forwarded-Proto: https' \
   -H 'Content-Type: application/json' \
   -d '{
     "email": "wiki-polis-system@internal.invalid",
@@ -147,6 +148,9 @@ curl -s -X POST http://127.0.0.1:8003/api/v3/auth/new \
     "gatekeeperTosPrivacy": true
   }'
 ```
+
+Polis refuses a plain-HTTP POST with "Please use HTTPS when submitting data."; the
+`X-Forwarded-Proto` header tells it the request arrived over HTTPS.
 
 Then put those credentials in `v2/.env`.
 

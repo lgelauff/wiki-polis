@@ -1190,7 +1190,7 @@
         "conversation": {"type": "object", "required": ["id", "slug", "title", "introHtml", "outroHtml", "accessPolicy", "gated", "gatingType", "announce", "information", "resultsShared", "showUsernames", "accessRequestText", "phaseRoute", "phaseRouteLabel", "polisId"], "additionalProperties": false, "properties": {"id": {"type": "integer", "minimum": 1}, "slug": {"type": "string"}, "title": {"type": "string"}, "introHtml": {"type": "string"}, "outroHtml": {"type": "string"}, "accessPolicy": {"type": "string", "enum": ["public", "invite_only", "demo"]}, "gated": {"type": "boolean"}, "gatingType": {"type": ["string", "null"], "enum": ["invite_only", "voucher", "wiki_based", null]}, "announce": {"type": "boolean"}, "information": {"type": "boolean"}, "resultsShared": {"type": "boolean"}, "showUsernames": {"type": "boolean"}, "accessRequestText": {"type": ["string", "null"]}, "phaseRoute": {"type": "string"}, "phaseRouteLabel": {"type": "string"}, "polisId": {"type": "string"}}},
         "recommendations": {"$ref": "#/components/schemas/AdminRecommendations"},
         "eligibility": {"type": "object", "required": ["configured", "eventId", "label", "configurationMode", "note"], "additionalProperties": false, "properties": {"configured": {"type": "boolean"}, "eventId": {"type": "string"}, "label": {"type": ["string", "null"]}, "configurationMode": {"type": "string", "const": "editable"}, "note": {"type": "string"}}},
-        "capabilities": {"type": "object", "required": ["edit"], "additionalProperties": false, "properties": {"edit": {"type": "boolean"}}},
+        "capabilities": {"type": "object", "required": ["edit", "switchDemo"], "additionalProperties": false, "properties": {"edit": {"type": "boolean"}, "switchDemo": {"type": "boolean", "description": "Whether this viewer may move the consultation into or out of demo (site admins only)."}}},
         "locks": {"type": "object", "required": ["gated", "gatingType", "showUsernames"], "additionalProperties": false, "properties": {"gated": {"type": "boolean"}, "gatingType": {"type": "boolean"}, "showUsernames": {"type": "boolean"}}},
         "links": {"type": "object", "required": ["self", "lifecycle"], "additionalProperties": false, "properties": {"self": {"type": "string"}, "lifecycle": {"type": "string"}}}
       }},
@@ -1356,8 +1356,8 @@
         }
       },
       "AdminInvitation": {
-        "type": "object", "required": ["id", "username", "createdAt"], "additionalProperties": false,
-        "properties": {"id": {"type": "integer", "minimum": 1}, "username": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}
+        "type": "object", "required": ["id", "username", "createdAt", "signedIn"], "additionalProperties": false,
+        "properties": {"id": {"type": "integer", "minimum": 1}, "username": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "signedIn": {"type": "boolean"}}
       },
       "AdminInvitationBatchRequest": {
         "type": "object", "required": ["usernames"], "additionalProperties": false,
@@ -1785,14 +1785,15 @@
       },
       "ModerationLogEvent": {
         "type": "object",
-        "required": ["occurredAt", "action", "pseudonym", "scope", "actor"],
+        "required": ["occurredAt", "action", "pseudonym", "scope", "actor", "actorKind"],
         "additionalProperties": false,
         "properties": {
           "occurredAt": {"type": ["string", "null"], "format": "date-time"},
           "action": {"type": "string", "enum": ["Banned", "Unbanned"]},
-          "pseudonym": {"type": "string"},
+          "pseudonym": {"type": ["string", "null"]},
           "scope": {"type": "string", "enum": ["conversation"]},
-          "actor": {"type": "string"}
+          "actor": {"type": ["string", "null"]},
+          "actorKind": {"type": ["string", "null"], "enum": ["site_admin", null]}
         }
       },
       "ConversationOutputPageResponse": {
