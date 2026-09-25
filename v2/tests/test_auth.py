@@ -1,6 +1,8 @@
 """Tests for login, OAuth callback, and logout flows."""
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from flask import session
 
 from db import Participant, db
@@ -166,6 +168,18 @@ def test_login_next_rejects_external_url(client, app):
     assert resp.status_code == 302
     with client.session_transaction() as sess:
         assert sess.get('next') != 'https://evil.example/steal'
+        assert sess.get('next') == '/'
+
+
+@pytest.mark.parametrize('target', [
+    '//evil.example', '/\\evil.example', '\\\\evil.example', '/\\/evil.example',
+    '/\t/evil.example', 'https://evil.example', 'evil.example',
+])
+def test_login_next_never_leaves_the_site(client, app, target):
+    """Browsers read a backslash as a slash, so these would all leave the site."""
+    app.config['OAUTH_CLIENT_ID'] = 'cid'
+    client.get('/login', query_string={'next': target})
+    with client.session_transaction() as sess:
         assert sess.get('next') == '/'
 
 

@@ -1868,6 +1868,12 @@ def _safe_redirect(target: str, fallback: str) -> str:
     """Return target if it is a same-host relative URL, otherwise fallback."""
     if not target:
         return fallback
+    # Only a plain path on this site. Browsers read a backslash as a slash and drop
+    # tabs and newlines, so "/\evil.example" would pass the host check below and still
+    # leave the site; "//host" is protocol-relative. (#432 feeds ?next= in here.)
+    if (not target.startswith('/') or target.startswith('//')
+            or any(ch in target for ch in '\\\t\r\n')):
+        return fallback
     ref  = urlparse(request.host_url)
     test = urlparse(urljoin(request.host_url, target))
     if test.scheme in ('http', 'https') and test.netloc == ref.netloc:
