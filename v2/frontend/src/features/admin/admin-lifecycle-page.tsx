@@ -1,4 +1,4 @@
-import {Fragment, useCallback, useLayoutEffect, useState, type FormEvent} from 'react';
+import {Fragment, useCallback, useLayoutEffect, useState} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 
@@ -15,10 +15,8 @@ import {
   putAdminPause,
   putAdminPhase,
   putAdminPhases,
-  putAdminRecommendationTier,
   putAdminRoles,
   putAdminSchedule,
-  putAdminSettings,
 } from '../../api/queries';
 import {LegacyShell} from '../legacy/legacy-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
@@ -180,49 +178,36 @@ function RoleSection({conversationId, csrfToken, roster, refresh, fail}: {
   </div>;
 }
 
-function ConfigurationSection({conversationId, csrfToken, settings, refresh, fail}: {
-  conversationId: number; csrfToken: string; settings: Settings;
-  refresh: () => void; fail: (error: Error) => void;
-}) {
+/** What the console knows about the consultation's configuration but does not own.
+ *
+ * Until this change the section carried a second copy of the settings form: title,
+ * introduction, closing text, the eligibility event and label, and the complexity tier --
+ * every one of them a field the settings page edits too. One setting with two editors is
+ * how a change made on one screen gets silently written back by a stale copy held on the
+ * other: the settings endpoint takes the whole representation at once, so each form had to
+ * echo the other's fields untouched to avoid clobbering them. Editing now lives on the
+ * settings page alone, which the management grid above links to.
+ *
+ * What is left is read-only, and is deliberately what the settings page does *not* show:
+ * the phase route and the Polis conversation id, neither of them writable after launch,
+ * and the quantities the chosen tier recommends, which the readiness checks further up
+ * this page are measured against. The tier is named here but chosen on the settings
+ * page. */
+function ConfigurationSection({settings}: {settings: Settings}) {
   const msg = useMessage();
-  const [title, setTitle] = useState(settings.conversation.title);
-  const [introHtml, setIntroHtml] = useState(settings.conversation.introHtml);
-  const [outroHtml, setOutroHtml] = useState(settings.conversation.outroHtml);
-  const [accessPolicy, setAccessPolicy] = useState(settings.conversation.accessPolicy);
-  const [eventId, setEventId] = useState(settings.eligibility.eventId);
-  const [eligibilityLabel, setEligibilityLabel] = useState(settings.eligibility.label ?? '');
-  const [tier, setTier] = useState(settings.recommendations.tier);
-  const settingsMutation = useMutation({
-    mutationFn: () => putAdminSettings(conversationId, {title, introHtml, outroHtml, accessPolicy, eligibilityEventId: eventId, eligibilityLabel, recommendationTier: settings.recommendations.tier, gated: settings.conversation.gated, gatingType: settings.conversation.gatingType, announce: settings.conversation.announce, information: settings.conversation.information, resultsShared: settings.conversation.resultsShared, showUsernames: settings.conversation.showUsernames, accessRequestText: settings.conversation.accessRequestText}, csrfToken),
-    onSuccess: refresh,
-    onError: fail,
-  });
-  const recommendationMutation = useMutation({
-    mutationFn: () => putAdminRecommendationTier(conversationId, {tier}, csrfToken),
-    onSuccess: refresh,
-    onError: fail,
-  });
+  const tier = settings.recommendations.tiers.find(
+    (item) => item.key === settings.recommendations.tier,
+  );
+  const factStyle = {fontSize: 13, margin: '.25rem 0'};
   return <div className="console-section">
     <div className="console-section-label">{msg('adminconv-config-label')}</div>
-    <details className="phase-advanced"><summary>{msg('adminconv-settings-summary')}</summary>
-      <form className="panel" style={{marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); settingsMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} />
-        <div className="edit-row-fields">
-          <label>{msg('admin-label-title')}<input type="text" required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-          <label>{msg('adminconv-label-route-locked')}<input type="text" readOnly value={routeLabel(msg, settings.conversation.phaseRoute, settings.conversation.phaseRouteLabel)} style={{background: '#f5f5f5', color: '#666'}} /></label>
-          <label>{msg('adminconv-label-polis-id')}<input type="text" readOnly value={settings.conversation.polisId} style={{background: '#f5f5f5', color: '#666'}} /></label>
-          <label>{msg('admin-label-access')}<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as typeof accessPolicy)}><option value="public">public</option><option value="invite_only">invite_only</option><option value="demo">demo</option></select></label>
-          <label>{msg('admin-label-elig-event')}<input type="text" maxLength={80} value={eventId} onChange={(event) => setEventId(event.target.value)} /></label>
-          <label>{msg('admin-label-elig-label')}<input type="text" maxLength={255} value={eligibilityLabel} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
-        </div>
-        <div className="edit-row-texts"><label>{msg('admin-label-intro')}<textarea rows={4} value={introHtml} onChange={(event) => setIntroHtml(event.target.value)} /></label><label>{msg('admin-label-outro')}<textarea rows={4} value={outroHtml} onChange={(event) => setOutroHtml(event.target.value)} /></label></div>
-        <button type="submit">{msg('adminconv-save-settings')}</button>
-      </form>
-    </details>
+    <p className="muted" style={factStyle}>{msg('adminconv-label-route-locked')}: <strong>{routeLabel(msg, settings.conversation.phaseRoute, settings.conversation.phaseRouteLabel)}</strong></p>
+    <p className="muted" style={factStyle}>{msg('adminconv-label-polis-id')}: <code>{settings.conversation.polisId}</code></p>
+    <p className="muted" style={factStyle}>{msg('adminconv-label-tier')}: <strong>{tier?.label ?? settings.recommendations.tier}</strong></p>
     <details className="phase-advanced"><summary>{msg('adminconv-rec-summary')}</summary>
-      <form className="panel" style={{marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); recommendationMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><p className="section-help">{msg('adminconv-rec-help')}</p>
-        <div className="edit-row-fields"><label>{msg('adminconv-label-tier')}<select value={tier} onChange={(event) => setTier(event.target.value as typeof tier)}>{settings.recommendations.tiers.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>{Object.entries(settings.recommendations.tiers.find((item) => item.key === tier)?.quantities ?? {}).map(([key, value]) => <div className="recommendation-value" key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}</strong></div>)}</div>
-        <button type="submit">{msg('adminconv-save-rec')}</button>
-      </form>
+      <div className="panel" style={{marginTop: '.75rem'}}><p className="section-help">{msg('adminconv-rec-help')}</p>
+        <div className="edit-row-fields">{Object.entries(tier?.quantities ?? {}).map(([key, value]) => <div className="recommendation-value" key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}</strong></div>)}</div>
+      </div>
     </details>
   </div>;
 }
@@ -331,9 +316,10 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
         <Link className="manage-card" to={data.links.participants}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-joined', data.counts.participants)}</span></div><div className="manage-card-title">{msg('adminconv-card-participants')}</div><div className="manage-card-desc">{msg('adminconv-card-participants-desc')}</div></Link>
         <Link className="manage-card" to={data.links.moderation}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-open-count', data.counts.openFlags)}</span></div><div className="manage-card-title">{msg('adminconv-card-modqueue')}</div><div className="manage-card-desc">{msg('adminconv-card-modqueue-desc')}</div></Link>
         <Link className="manage-card" to={data.links.roles}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-assigned-count', roleCount)}</span></div><div className="manage-card-title">{msg('adminconv-roles-label')}</div><div className="manage-card-desc">{msg('adminconv-card-roles-desc')}</div></Link>
+        <Link className="manage-card" to={data.links.settings}><div className="manage-card-title">{msg('admin-overview-card-settings')}</div><div className="manage-card-desc">{msg('admin-overview-card-settings-desc')}</div></Link>
       </div></div>
       <RoleSection conversationId={conversationId} csrfToken={csrfToken} roster={roles} refresh={refreshSupporting} fail={fail} />
-      {canOrganize && <ConfigurationSection conversationId={conversationId} csrfToken={csrfToken} settings={settings} refresh={refreshSupporting} fail={fail} />}
+      {canOrganize && <ConfigurationSection settings={settings} />}
       {isAdmin && <DangerSection conversationId={conversationId} csrfToken={csrfToken} lifecycle={data} fail={fail} />}
     </div>
   </LegacyShell>;

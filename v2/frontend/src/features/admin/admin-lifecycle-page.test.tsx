@@ -92,6 +92,33 @@ test('renders the admin console from the catalogue English', async () => {
   expect(screen.getByText('Every statement has been moderated', {exact: false})).toBeVisible();
 });
 
+test('links to the settings page instead of editing the same settings itself', async () => {
+  // The owner's condition: one setting, one place that edits it. The console used to carry
+  // a second copy of the settings form -- title, intro, outro, the eligibility pair and the
+  // complexity tier -- writing the same two endpoints the settings page writes.
+  serve(lifecycle);
+  renderConsole();
+
+  const settings = await screen.findByRole('link', {name: /Settings/}, {timeout: 10_000});
+  expect(settings).toHaveAttribute('href', '/admin/conversations/7/settings');
+  expect(within(settings).getByText('Title, introduction and access')).toBeVisible();
+
+  // Nothing on this page writes a setting any more. Queried by accessible name, so a
+  // control that merely moved elsewhere on the page would still fail this.
+  for (const name of ['Title', 'Intro text (HTML, optional)', 'Outro text (HTML, optional)',
+    'Eligibility event ID', 'Eligibility label']) {
+    expect(screen.queryByLabelText(name)).toBeNull();
+  }
+  expect(screen.queryByRole('combobox', {name: 'Complexity tier'})).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Save recommendations'})).toBeNull();
+
+  // What stays is what the settings page does not show, plus the tier as a fact.
+  expect(screen.getByText(/Route \(locked after launch\)/)).toBeVisible();
+  expect(screen.getByText(/Polis ID/)).toBeVisible();
+  expect(screen.getByText(/Complexity tier/)).toBeVisible();
+});
+
 test('renders the closed-consultation description from parameterised sentences', async () => {
   serve(closedLifecycle);
   renderConsole();
