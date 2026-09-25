@@ -7,6 +7,7 @@ import {
   sessionQuery,
   type ConversationSpace,
 } from '../../api/queries';
+import {ConsultationFlow} from './consultation-flow';
 import {LegacyShell} from './legacy-shell';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
@@ -413,13 +414,13 @@ export function ConversationLanePage({space}: {space: ConversationSpace}) {
       <div className="container home-container">
         <div className="home-banner" dangerouslySetInnerHTML={richHtml(msg('home-banner-prototype',
           `<a href="https://github.com/lgelauff/wiki-polis/issues/new" target="_blank" rel="noopener">`
-          + `${escapeHtml(msg('home-banner-open-issue'))}<span class="sr-only">${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
+          + `${escapeHtml(msg('home-banner-open-issue'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
 
         {!data.authenticated ? (
           <AnonymousLane conversations={groups.available} developerLogins={session.developerLogins} loginHref={session.links.login} />
         ) : <>
           <h1 className="sr-only">{msg('home-heading')}</h1>
-          <img src="/static/wiki-polis-flow.svg" alt={msg('home-flow-alt')} style={{width: '100%', maxWidth: 900, display: 'block', margin: '0 auto 1.5rem'}} />
+          <ConsultationFlow />
           <PhaseLegend />
           <div className="home-mode-toggle" role="group" aria-label={msg('home-view-mode-aria')}>
             <button className={`home-mode-btn${mode === 'yours' ? ' home-mode-btn--active' : ''}`} data-target="yours" type="button" aria-pressed={mode === 'yours'} onClick={() => changeMode('yours')}>{msg('home-mode-yours')}</button>

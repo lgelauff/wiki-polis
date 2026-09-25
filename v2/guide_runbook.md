@@ -2,8 +2,8 @@
 
 > **Status — operational.** Production is **live** at `wiki-polis.toolforge.org` (VPS
 > backend up). This is the day-2 operations guide — people follow it to actually run
-> things, so anything **not yet live or unverified in production is flagged inline with
-> ⚠️ not live yet**. Unmarked procedures are live. First-time provisioning lives in
+> things, so anything not yet live or unverified in production is flagged inline with a
+> **not live yet** tag. Unmarked procedures are live. First-time provisioning lives in
 > [`guide_deployment.md`](guide_deployment.md); env vars are in its Environment variables reference.
 
 ## Routine procedures
@@ -14,6 +14,60 @@ them:
 - **Deploy a new version** → [Ongoing deploys](guide_deployment.md#ongoing-deploys) (or `bash ~/wiki-polis/deploy.sh`).
 - **Run a database migration** → [Database migrations](guide_deployment.md#database-migrations) (must run inside the webservice shell).
 - **Toolforge quirks** → [Toolforge gotchas](guide_deployment.md#toolforge-gotchas).
+- **Create voucher codes** → [Voucher codes](#voucher-codes) below (until the organizer screens exist).
+
+## Voucher codes
+
+Until the organizer screens exist (#368), codes for a voucher-gated process are created
+from the shell. On Toolforge, run these inside the webservice shell, like a migration
+([Database migrations](guide_deployment.md#database-migrations)): the database settings
+only exist there.
+
+```bash
+# Generate 200 codes and save them. They are printed once and cannot be shown again:
+# only their HMACs are stored.
+flask --app app vouchers generate <slug> 200 --label "Workshop Utrecht 12 Oct" > codes.txt
+
+# Import the organizers' own codes, one per line (a file, or - for stdin).
+flask --app app vouchers import <slug> organizer-codes.txt --label "Printed cards"
+```
+
+- **Same codes in several processes:** import the same list into each process. Each
+  process stores its own HMACs, and each code makes a separate account per process.
+  Generated codes cannot be copied afterwards, so for shared codes, import.
+- **Import rules:** capitals, spaces and hyphens are ignored; a code must then be 5–64
+  letters and digits (entry tells anyone typing fewer than 5 that codes are longer).
+  Lines that are not valid are listed so the file can be fixed; a code already in the
+  process is skipped and counted. The import warns, without printing them, about codes
+  that are digits only or shorter than 8 characters.
+- **Wrong codes lock out the guesser, never the process.** After 3 wrong codes in a
+  minute, that browser session waits until the minute is up ("That was too many wrong
+  codes. Wait N seconds"). Everyone else keeps getting in. The limit is the Toolforge
+  envvar `VOUCHER_SESSION_FAILURE_LIMIT` (default `3 per minute`); change it and restart
+  the webservice.
+- **How guessable codes are.** A guesser who discards their cookie gets a fresh
+  budget each time, so the real cap is the site-wide limit on unauthenticated requests,
+  600 a minute (shared with Wikimedia login), about 860,000 guesses a day. An IP-based
+  lockout would close that gap but depends on what Toolforge passes (#458, #411). And
+  because a code signs back into its account (#412), a hit on a code that was already
+  used takes over that participant's account. Expected hits, guessing flat out:
+
+  | Codes in the process | Hits |
+  |---|---|
+  | 200 five-digit numbers | over 1,000 a day |
+  | 500 random 5 letters+digits | about 7 a day |
+  | 500 random 6 letters+digits | about one every 5 days |
+  | 500 random 8 letters+digits | effectively never |
+  | generated (12 characters) | never |
+
+  Sequential or patterned lists (`ROOM001`, `ROOM002`) are guessable at any length. For
+  organizer-made codes, ask for 8 or more random letters and digits; short codes are
+  only safe with IP lockout (#458) or for low-stakes processes.
+- **If guessing happens,** it shows as a spike in 429s on `/c/<slug>/v` and in
+  unauthenticated traffic generally. Revoke and reissue the batch with longer codes.
+- **Handle the output as credentials.** Whoever holds a code is that participant.
+  Delete `codes.txt` from the shell once it has been handed over.
+- **Revoking** has no command yet (`services.vouchers.revoke_voucher` exists).
 
 ## Monitoring & health
 
@@ -30,7 +84,7 @@ them:
   `MICROSERVICE_HEALTHCHECKS_URL` (repo secret, optional dead-man ping). Manual run:
   `python v2/ops/microservice_smoke.py --wiki-base-url https://wiki-polis-dev.toolforge.org`.
 - Centralised log aggregation across the VPS + Toolforge is configured in code and
-  sample VPS files, but **⚠️ not live yet** until the Loki/Grafana compose stack and
+  sample VPS files, but **not live yet** until the Loki/Grafana compose stack and
   Toolforge `LOKI_*` envvars are installed. See [Central log aggregation](#central-log-aggregation).
 - **Scheduled phase transitions (`phase-scheduler` job).** A Toolforge scheduled job, defined
   in `jobs.yaml` at the repo root, runs `v2/bin/phase-scheduler.sh` →
@@ -58,7 +112,7 @@ them:
 
 ### Central log aggregation
 
-**⚠️ not live yet:** these are the install steps for #49. They are additive; logs still
+**not live yet:** these are the install steps for #49. They are additive; logs still
 go to `uwsgi.log` and Docker stdout.
 
 1. Copy `v2/ops/logging/` to the VPS, set `GRAFANA_ADMIN_PASSWORD` in an `.env` file,
@@ -111,7 +165,7 @@ When a 5xx is reported (by a soak run, monitoring, or a user), work outside-in:
 
        grep -a "<path fragment>" /data/project/<tool>/uwsgi.log | tail -20
 
-   **⚠️ Read the status correctly.** A uwsgi access line ends with the real status in
+   **Read the status correctly.** A uwsgi access line ends with the real status in
    `(HTTP/1.1 NNN)`. The `req: 503/1521` field near the *start* of the line is uwsgi's
    request counter — **not** an HTTP 503. Don't be fooled by grepping for `503`.
    - request appears with `(HTTP/1.1 5xx)` → the app (or a backend it proxied to)
@@ -156,7 +210,7 @@ Key tables (Polis schema):
   so a re-vote flips `vote` and bumps `modified` here while leaving a second history row in
   `votes`.
 
-> ⚠️ **The raw vote sign is inverted vs the Polis CSV export — don't "correct" it.**
+> **The raw vote sign is inverted vs the Polis CSV export — don't "correct" it.**
 > In these raw tables (and in our app's vote API) `vote = -1` is **agree**, `+1` is
 > **disagree**, `0` is pass — matching the web component's `Vote` enum (`Agree:-1,
 > Disagree:1`). Polis's **official `participants-votes` export flips the sign** to the
@@ -229,7 +283,7 @@ docker exec -it $CID psql -U polis -d polis -c \
    ORDER BY created DESC LIMIT 5;"
 ```
 
-⚠️ **That query cannot tell you whether the worker ran.** No code in polis writes
+**That query cannot tell you whether the worker ran.** No code in polis writes
 `attempts` (it is the schema default), and no `update_math` dispatch path sets
 `finished_time` — so both columns look identical whether the row was consumed or ignored.
 Worse, on our deployment nothing consumes it at all: the math container runs polismath's
@@ -313,7 +367,7 @@ MIGRATION_MODE=1 flask --app app db current        # expect: <head> (head)
   staging Polis Postgres from the VPS containers, uploads to Backblaze B2 via `rclone`,
   deletes the local copy, and pings a dead-man URL. `backup_toolsdb_b2.sh` does the same
   for ToolsDB from Toolforge using `mysqldump` and a MySQL option file.
-- **Status:** **⚠️ not live yet** until cron jobs, B2 bucket, rclone config, and
+- **Status:** **not live yet** until cron jobs, B2 bucket, rclone config, and
   Healthchecks URLs are installed and the first restore drill succeeds.
 - **Daily verification:** check the dead-man dashboard first. If it missed a run, SSH to
   the relevant host and run the backup script manually with the same envvars.
@@ -365,7 +419,7 @@ side by side; staging and production never share a database:
 staging conversation/vote data lives in the **staging** Polis Postgres. Mutating staging —
 e.g. synthetic traffic on the `test` conversation — never touches production.
 
-**⚠️ Gotcha — the staging compose project name.** The staging stack was brought up under
+**Gotcha — the staging compose project name.** The staging stack was brought up under
 project name **`wiki-polis-staging`**, not its directory name (`particiapp-docker-staging`).
 So `docker-compose ps` *inside that directory shows nothing*. Manage it with the project
 flag (or `docker ps`, which always shows the truth — staging containers are
@@ -439,7 +493,7 @@ afterward. Candidates to rotate on a schedule or on suspected compromise: `SECRE
 
 ## Responding to an outage
 
-**⚠️ not live yet:** these steps are standard but have not been exercised against a real
+**not live yet:** these steps are standard but have not been exercised against a real
 production incident — treat them as a starting point, not a tested procedure.
 
 - **App down (Toolforge):** check `/health`; `tail` the uwsgi log; restart from the

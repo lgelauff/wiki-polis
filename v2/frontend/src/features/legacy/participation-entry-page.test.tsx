@@ -51,7 +51,8 @@ function serveJoinEntry(overrides: Partial<JoinEntry> = {}, conversation: Partia
 }
 
 /** The 403 the participation POST returns when the eligibility check refuses or cannot run.
- *  `displayMessage` is the checker's own reason, which the page prefers over the catalogue. */
+ *  `displayMessage` carries Proto's own English diagnostic about the checker, which the page
+ *  must ignore in favour of the catalogue. */
 function serveEligibilityRefusal(status: 'ineligible' | 'unavailable', displayMessage: string | null = null) {
   server.use(http.post(PARTICIPATION_URL, () => HttpResponse.json({error: {
     code: status === 'unavailable' ? 'eligibility_unavailable' : 'eligibility_denied',
@@ -121,7 +122,7 @@ test('the invite-only page names the consultation inside one sentence', async ()
   server.use(http.get(
     ENTRY_URL,
     () => HttpResponse.json({data: {
-      state: 'invite_denied',
+      state: 'invite_denied', viewer: 'refused', certainty: 'known', reason: 'access-invite-required',
       conversation: {id: 7, slug: 'community-strategy', title: TITLE},
       canModerate: false,
       links: {home: '/', manageInvites: null},
@@ -148,7 +149,7 @@ test('the licence link lands where the message puts it, not where the code does'
   // language that puts the object first.
   const section = document.getElementById('accept-licence-note')!;
   const link = within(section).getByRole('link', {name: /CC0/});
-  expect(link.closest('p')!.textContent).toBe(`BEFORE ${testMessages['accept-licence-link']}${testMessages['common-opens-in-new-tab']} AFTER`);
+  expect(link.closest('p')!.textContent).toBe(`BEFORE ${testMessages['accept-licence-link']} ${testMessages['common-opens-in-new-tab']} AFTER`);
 });
 
 test('the reveal window puts its two day counts where the message asks for them', async () => {
@@ -221,18 +222,61 @@ test('a checker that cannot answer says so, rather than refusing the participant
   expect(screen.queryByText(testMessages['forbidden-elig-criteria']!)).toBeNull();
 });
 
-test('a reason sent by the checker is shown in place of the generic one', async () => {
+test('the not-eligible page takes focus from the form it replaces', async () => {
   serveJoinEntry();
-  serveEligibilityRefusal('ineligible', 'You need 500 edits.');
+  serveEligibilityRefusal('ineligible');
   renderJoin();
   await submitJoin();
-  await screen.findByRole('heading', {name: testMessages['forbidden-elig-heading']!});
+  const heading = await screen.findByRole('heading', {name: testMessages['forbidden-elig-heading']!});
 
-  // Catches the upstream reason being dropped for the generic one, which leaves a participant
-  // with no idea which criterion they missed.
-  expect(screen.getByText('You need 500 edits.')).toBeVisible();
-  expect(screen.queryByText(testMessages['forbidden-elig-criteria']!)).toBeNull();
+  // Catches focus left on a submit button that no longer exists, which drops a keyboard or
+  // screen-reader user at the top of the document with nothing announced.
+  await waitFor(() => expect(heading).toHaveFocus());
+  expect(heading).toHaveAttribute('tabindex', '-1');
 });
+
+test.each([
+  ['ineligible', 'forbidden-elig-criteria'],
+  ['unavailable', 'forbidden-elig-unavailable'],
+] as const)(
+  'a %s refusal ignores the English diagnostic the API sends alongside it',
+  async (status, key) => {
+    renderAsQqx();
+    serveJoinEntry();
+    serveEligibilityRefusal(status, 'The eligibility checker is not configured.');
+    renderJoin();
+    await submitJoin();
+    await screen.findByRole('heading', {name: '(forbidden-elig-heading)'});
+
+    // Catches `displayMessage` coming back: it is Proto's own English about its checker,
+    // which no participant can act on and no translator ever sees.
+    expect(screen.getByText(`(${key})`)).toBeVisible();
+    expect(screen.queryByText(/eligibility checker/)).toBeNull();
+  },
+);
+
+test.each([
+  ['pseudonym_unavailable', 409, 'accept-js-taken'],
+  ['validation_failed', 400, 'accept-err-join'],
+  ['conflict', 409, 'accept-err-join'],
+  ['rate_limited', 429, 'accept-err-join'],
+  ['unauthorized', 401, 'common-err-nologin'],
+] as const)(
+  'a %s from the join form shows catalogue copy, not the server message',
+  async (code, status, key) => {
+    renderAsQqx();
+    serveJoinEntry();
+    server.use(http.post(PARTICIPATION_URL, () => HttpResponse.json(
+      {error: {code, message: 'Server-side English that must not reach the page.'}}, {status},
+    )));
+    renderJoin();
+    await submitJoin();
+
+    // Catches the server's English reaching the participant under the submit button.
+    expect(await screen.findByRole('alert')).toHaveTextContent(`(${key})`);
+    expect(document.body).not.toHaveTextContent('Server-side English');
+  },
+);
 
 test('without a confirmed email the note keeps its link inside the sentence', async () => {
   serveJoinEntry({emailable: false});
@@ -245,7 +289,7 @@ test('without a confirmed email the note keeps its link inside the sentence', as
   expect(screen.queryByRole('checkbox', {name: testMessages['accept-notify-email']!})).toBeNull();
   const link = screen.getByRole('link', {name: /Check your email settings on Meta-Wiki/});
   const note = link.closest('p')!;
-  expect(note.textContent).toBe('Email notifications are unavailable because your Wikimedia account cannot receive email. Check your email settings on Meta-Wiki (opens in a new tab) and return to enable this.');
+  expect(note.textContent).toBe('Email notifications are unavailable because your Wikimedia account cannot receive email. Check your email settings on Meta-Wiki (opens in new window) and return to enable this.');
   expect(link).toHaveAttribute('href', 'https://meta.wikimedia.org/wiki/Special:Preferences#mw-prefsection-personal');
   // Catches the new tab going unannounced: the participant leaves to set an address and has
   // to come back to this form, so the page says both that it opens away and to return.
@@ -256,7 +300,7 @@ test('without a confirmed email the note keeps its link inside the sentence', as
 
 test('a hostile consultation title stays text on the invite-only page', async () => {
   server.use(http.get(ENTRY_URL, () => HttpResponse.json({data: {
-    state: 'invite_denied',
+    state: 'invite_denied', viewer: 'refused', certainty: 'known', reason: 'access-invite-required',
     conversation: {id: 7, slug: 'community-strategy', title: HOSTILE},
     canModerate: false,
     links: {home: '/', manageInvites: null},
@@ -303,10 +347,41 @@ test.each([true, false])(
   },
 );
 
+test.each([
+  ['invite_denied', 'access-invite-required', 'known', 'forbidden-invite-heading', true],
+  ['access_lost', 'access-invite-required', 'known', 'forbidden-lost-invite-heading', true],
+  ['invite_denied', 'access-not-eligible', 'known', 'forbidden-access-heading', false],
+  ['access_lost', 'access-not-eligible', 'known', 'forbidden-lost-heading', false],
+  ['invite_denied', 'access-could-not-confirm', 'temporary', 'forbidden-unconfirmed-heading', false],
+  ['access_lost', 'access-could-not-confirm', 'inconclusive', 'forbidden-unconfirmed-heading', false],
+  ['invite_denied', 'access-invite-required', 'inconclusive', 'forbidden-unconfirmed-heading', false],
+] as const)(
+  'a %s refusal (%s, %s) says why, in the catalogue',
+  async (state, reason, certainty, heading, moderatorNote) => {
+    renderAsQqx();
+    server.use(http.get(ENTRY_URL, () => HttpResponse.json({data: {
+      state, reason, certainty,
+      viewer: state === 'access_lost' ? 'access_lost' : 'refused',
+      conversation: {id: 7, slug: 'community-strategy', title: TITLE},
+      canModerate: true,
+      links: {home: '/', manageInvites: '/admin/conversations/7/invites'},
+    }})));
+    renderJoin();
+
+    // Catches every refusal reading as a missing invitation: someone whose wiki-based access
+    // lapsed, or whose check could not be decided, was told they were not on an invite list.
+    await screen.findByRole('heading', {name: `(${heading})`});
+    expect(untranslatedCopy([document.querySelector('.container')], [TITLE])).toEqual([]);
+    // The note sends an organizer to the invite list, which only helps when an invitation is
+    // what is missing.
+    expect(screen.queryByText('(forbidden-invite-mod-lead)') !== null).toBe(moderatorNote);
+  },
+);
+
 test('under qqx, nothing on the invite-only page is English', async () => {
   renderAsQqx();
   server.use(http.get(ENTRY_URL, () => HttpResponse.json({data: {
-    state: 'invite_denied',
+    state: 'invite_denied', viewer: 'refused', certainty: 'known', reason: 'access-invite-required',
     conversation: {id: 7, slug: 'community-strategy', title: TITLE},
     canModerate: true,
     links: {home: '/', manageInvites: '/admin/conversations/7/invites'},
@@ -342,3 +417,32 @@ test.each([
     expect(document.title).toBe(`(forbidden-elig-doc-title: ${TITLE})`);
   },
 );
+
+function serveVoucherSession() {
+  server.use(http.get(url('/api/v1/session'), () => HttpResponse.json({data: {
+    state: 'voucher',
+    user: null,
+    capabilities: {administerSite: false},
+    csrfToken: 'test-csrf-token',
+    developerLogins: [],
+    gitVersion: 'test-version',
+    locales: {current: 'en', available: [{code: 'en', name: 'English'}]},
+    links: {login: '/login', logout: '/logout'},
+  }})));
+}
+
+test('a voucher account can join, without Wikimedia notification options', async () => {
+  serveVoucherSession();
+  serveJoinEntry({emailable: false});
+  renderJoin();
+  await joinForm();
+
+  // Catches the join screen bouncing a voucher account to the Wikimedia login, and catches it
+  // offering an email or talk page the account does not have.
+  expect(screen.queryByRole('checkbox', {name: testMessages['accept-notify-talk']!})).toBeNull();
+  expect(screen.queryByRole('heading', {name: testMessages['accept-notify-heading']!})).toBeNull();
+  expect(screen.queryByRole('link', {name: /Check your email settings/})).toBeNull();
+  // The header names the account kind where a username would be, and still offers log out.
+  expect(screen.getByText(testMessages['base-voucher-account']!)).toBeVisible();
+  expect(screen.getByRole('button', {name: testMessages['base-log-out']!})).toBeVisible();
+});

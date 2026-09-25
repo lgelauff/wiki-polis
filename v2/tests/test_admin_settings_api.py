@@ -234,3 +234,74 @@ def test_migrated_unconfigured_gate_can_choose_provider_after_explore(
 
     assert response.status_code == 200
     assert conversation.gating_type == 'wiki_based'
+
+
+def test_a_new_gate_is_refused_without_a_type(admin_client, conversation):
+    """The refusal the Access page is built around.
+
+    A consultation that is not gated yet cannot become gated without saying how people
+    get in, so the page offers the answer as one choice (anyone / invited / voucher)
+    rather than as a switch plus a separate type.
+    """
+    response = admin_client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/settings',
+        json={
+            'title': conversation.title,
+            'introHtml': '',
+            'outroHtml': '',
+            'accessPolicy': 'public',
+            'gated': True,
+            'gatingType': None,
+            'announce': False,
+            'information': False,
+            'resultsShared': False,
+            'showUsernames': False,
+            'accessRequestText': None,
+            'eligibilityEventId': '',
+            'eligibilityLabel': '',
+            'recommendationTier': 'medium',
+        },
+    )
+
+    assert response.status_code == 400
+    error = response.get_json()['error']
+    assert error['code'] == 'validation_failed'
+    assert error['message'] == 'a gated conversation needs a gating type'
+    assert conversation.gated is not True
+
+
+def test_a_legacy_gate_without_a_type_may_be_saved_unchanged(
+    admin_client, conversation,
+):
+    """The exception that keeps a migrated row editable.
+
+    Such a row reads back as gated with no type; the page shows no admission answer
+    selected and sends the pair back untouched, which the server still accepts.
+    """
+    conversation.gated = True
+    conversation.gating_type = None
+    db.session.commit()
+
+    response = admin_client.put(
+        f'/api/v1/admin/conversations/{conversation.id}/settings',
+        json={
+            'title': conversation.title,
+            'introHtml': '',
+            'outroHtml': '',
+            'accessPolicy': 'public',
+            'gated': True,
+            'gatingType': None,
+            'announce': False,
+            'information': False,
+            'resultsShared': False,
+            'showUsernames': False,
+            'accessRequestText': None,
+            'eligibilityEventId': 'legacy-event',
+            'eligibilityLabel': 'Legacy eligibility',
+            'recommendationTier': 'medium',
+        },
+    )
+
+    assert response.status_code == 200
+    assert conversation.gated is True
+    assert conversation.gating_type is None

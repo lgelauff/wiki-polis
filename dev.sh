@@ -30,7 +30,8 @@ source "$SESSION_FILE"
 session_set() {
   local key="$1" val="$2"
   if grep -q "^${key}=" "$SESSION_FILE" 2>/dev/null; then
-    sed -i '' "s|^${key}=.*|${key}=${val}|" "$SESSION_FILE"
+    # -i.bak rather than -i '': GNU sed (Linux) rejects the BSD empty-suffix form.
+    sed -i.bak "s|^${key}=.*|${key}=${val}|" "$SESSION_FILE" && rm -f "$SESSION_FILE.bak"
   else
     echo "${key}=${val}" >> "$SESSION_FILE"
   fi
@@ -67,7 +68,9 @@ COMPOSE+=(
 # since a mismatched secret still returns 200. Read it from v2/.env when the shell does
 # not already provide one. Unset is fine and means anonymous, exactly as before.
 if [ -z "${PARTICIAPI_SUB_SECRET:-}" ] && [ -f "$FLASK_DIR/.env" ]; then
-  PARTICIAPI_SUB_SECRET="$(grep -E '^PARTICIAPI_SUB_SECRET=' "$FLASK_DIR/.env" | tail -1 | cut -d= -f2- | tr -d '\042\047')"
+  # `|| true`: a v2/.env without the key (as copied from .env.example) makes grep
+  # return 1, which pipefail and set -e turned into a silent exit before any output.
+  PARTICIAPI_SUB_SECRET="$( (grep -E '^PARTICIAPI_SUB_SECRET=' "$FLASK_DIR/.env" || true) | tail -1 | cut -d= -f2- | tr -d '\042\047')"
 fi
 export PARTICIAPI_SUB_SECRET="${PARTICIAPI_SUB_SECRET:-}"
 if [ -n "$PARTICIAPI_SUB_SECRET" ]; then
@@ -191,4 +194,10 @@ if [ ! -f "$FLASK_DIR/static/spa/index.html" ]; then
 fi
 
 uv run flask --app app init-db
-exec uv run flask --app app run --host 127.0.0.1 --port "$FLASK_PORT"
+# Not exec: exec replaced this shell, and the stop_docker EXIT trap went with it, so
+# stopping Flask left the whole Docker stack running. Flask runs as a child instead;
+# Ctrl-C or a TERM to this script stops it, and the script's exit then runs the trap.
+uv run flask --app app run --host 127.0.0.1 --port "$FLASK_PORT" &
+FLASK_PID=$!
+trap 'kill "$FLASK_PID" 2>/dev/null || true' INT TERM
+wait "$FLASK_PID"

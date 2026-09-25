@@ -68,7 +68,7 @@ function AuthenticatedIdentityReveal({slug, csrfToken}: {slug: string; csrfToken
     )}>
       <div className="container" style={{maxWidth: 660}}>
         <p style={{marginBottom: '1.25rem'}}>
-          <InternalLink href={data.links.conversation} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}>{`← ${data.title}`}</InternalLink>
+          <InternalLink href={data.links.conversation} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}><><span className="dir-glyph" aria-hidden="true">←</span> {data.title}</></InternalLink>
         </p>
 
         {data.state === 'revealed' ? (

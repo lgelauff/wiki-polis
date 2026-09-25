@@ -42,7 +42,9 @@ from services.admin_catalog import (
     ConversationCreationSaveFailed, ConversationCreationUpstreamFailed,
     ConversationSlugConflict, GlobalAdminParticipantNotFound,
 )
-from services.admin_settings import AccessSettingsLocked, InvalidAccessSettings
+from services.admin_settings import (
+    AccessSettingsLocked, DemoSwitchForbidden, InvalidAccessSettings,
+)
 
 
 def register_admin_routes(
@@ -332,10 +334,9 @@ def register_admin_routes(
                 details={'fields': fields},
             )
         if access_policy is None:
-            body = {
-                **body,
-                'accessPolicy': 'invite_only' if body.get('gated') else 'public',
-            }
+            # Resolved against the stored conversation (see the settings update in
+            # app.py), so omitting the legacy alias never moves an item out of demo.
+            body = {**body, 'accessPolicy': None}
         try:
             data = update_admin_settings(conversation_id, body)
         except AccessSettingsLocked as exc:
@@ -348,6 +349,12 @@ def register_admin_routes(
         except InvalidAccessSettings as exc:
             return error_response(
                 'validation_failed', str(exc), 400,
+            )
+        except DemoSwitchForbidden:
+            return error_response(
+                'forbidden',
+                'Only a site admin can switch a consultation to or from demo.',
+                403,
             )
         return _no_store(jsonify({'data': data}))
 

@@ -139,6 +139,8 @@ export function LegacyShell({
   const activeLocale = useLocale();
   const {data: session} = useSuspenseQuery(sessionQuery());
   const authenticated = session.state === 'authenticated';
+  // A voucher account is signed in but has no username to show (#368).
+  const signedIn = authenticated || session.state === 'voucher';
   useLegacyDocument({demo: headerMode === 'demo' || headerMode === 'conversation-demo', title});
 
   return (
@@ -192,11 +194,11 @@ export function LegacyShell({
             )}
           </div>
           <div className="header-identity">
-            {authenticated ? (
+            {signedIn ? (
               <>
                 <span className="header-user-chip">
                   <span className="header-user-chip-dot" />
-                  {session.user?.username}
+                  {authenticated ? session.user?.username : msg('base-voucher-account')}
                 </span>
                 <form method="post" action={session.links.logout} style={{display: 'inline'}}>
                   <input type="hidden" name="csrf_token" value={session.csrfToken} />
@@ -215,7 +217,7 @@ export function LegacyShell({
       <footer style={{display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '.5rem 1rem', fontSize: 11, color: 'var(--muted)'}}>
         <span dangerouslySetInnerHTML={richHtml(msg('base-footer-licence',
           `<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener" style="color:inherit">`
-          + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only">${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
+          + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
         <code>{session.gitVersion}</code>
       </footer>
     </>

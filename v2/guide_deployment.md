@@ -399,7 +399,7 @@ toolforge envvars create RATELIMIT_IDENTITY_SECRET
 toolforge envvars create PARTICIAPI_SUB_SECRET
 ```
 
-> ⚠️ **`PARTICIAPI_SUB_SECRET` is a long-lived master credential.** It lets the proxy
+> **`PARTICIAPI_SUB_SECRET` is a long-lived master credential.** It lets the proxy
 > assert any logged-in user's identity to Particiapi (cross-device stable participant).
 > It must match Particiapi's config key `TRUSTED_SUB_SECRET` — which is set from the
 > environment variable **`PARTICIAPI_TRUSTED_SUB_SECRET`**, since the image loads config
@@ -615,7 +615,9 @@ Run inside the webservice shell, where pod envvars are present (here you do **no
 
 ### Migration history
 
-Ordered chain (oldest → newest); the current head is `d5e6f7a8b9c0`. Run `flask --app app db upgrade` to apply everything up to the head — you do not apply these individually.
+Ordered chain (oldest → newest); the current head is `d3e4f5a6b7c8`. Run `flask --app app db upgrade` to apply everything up to the head — you do not apply these individually.
+
+The chain is linear except for one fork: rows 25 and 26 both descend from row 24 (`a8b9c0d1e2f3`) and were developed in parallel, and row 27 is a merge revision (empty `upgrade()`/`downgrade()`) whose `down_revision` is the tuple of both. Alembic applies 25 and 26 in either order; `db upgrade` handles this automatically. Issue numbers come from each migration's docstring; where the docstring has none, the PR that merged it is given instead.
 
 | Order | Revision | Description |
 |---|---|---|
@@ -639,9 +641,18 @@ Ordered chain (oldest → newest); the current head is `d5e6f7a8b9c0`. Run `flas
 | 18 | `a4b5c6d7e8fa` | Widens the `admin_roles.role` enum to add the organizer role (#154). |
 | 19 | `b4c5d6e7f8a9` | Adds `participations.last_engagement` (#42). |
 | 20 | `c4d5e6f7a8b9` | Adds the `conversation_bans` table (#60). |
-| 21 | `d5e6f7a8b9c0` | Adds the `content_flags` table (statement/argument moderation flags) (#138). **Current head.** |
+| 21 | `d5e6f7a8b9c0` | Adds the `content_flags` table (statement/argument moderation flags) (#138). |
+| 22 | `e6f7a8b9c0d1` | Adds the `command_receipts` table (durable, idempotent browser command receipts) (PR #303). |
+| 23 | `f7a8b9c0d1e2` | Adds the `statement_pass_signals` table (optional `unsure`/`confusing` pass reasons) (PR #303). |
+| 24 | `a8b9c0d1e2f3` | Adds `conversations.statement_moderation_policy` (`moderate`/`auto_approve`, nullable) (PR #303). **Fork point** — rows 25 and 26 both revise this. |
+| 25 | `b0c1d2e3f4a5` | ↳ *Branch A.* Adds gated-process access settings to `conversations` (`gated`, `gating_type`, `announce`, `information`, `results_shared`, `show_usernames`, `access_request_text`) and `conversation_invites` (`mw_user_id`, `invited_by`); migrates legacy admission and backfills invites (PR #427). |
+| 26 | `6a7090c4c5d7` | ↳ *Branch B.* Adds `participants.account_kind` (default `wikimedia`) and `participants.conversation_id`; makes `mw_user_id`/`mw_username` nullable for voucher identities (PR #426). |
+| 27 | `c1d2e3f4a5b6` | **Merge revision** of `b0c1d2e3f4a5` + `6a7090c4c5d7` — no schema change (PR #439). |
+| 28 | `d3e4f5a6b7c8` | Adds the `voucher_batches` and `voucher_codes` tables (codes stored only as an HMAC; at most one code per participant) (PR #442). **Current head.** |
 
-Verify the live head with `flask --app app db current`; confirm it matches `d5e6f7a8b9c0` after deploying. When new migrations land, append them here.
+Verify the live head with `flask --app app db current`; confirm it matches `d3e4f5a6b7c8` after deploying. When new migrations land, append them here. `flask --app app db heads` must print exactly one revision; if it prints two, parallel branches have each added a migration and a merge revision (`flask --app app db merge -m "..." <head1> <head2>`) is needed before deploying.
+
+> **If `db upgrade`/`db stamp` ever fails with `Can't locate revision identified by '...'`:** the live `alembic_version` table is stamped at a revision that no longer exists in this chain — almost certainly a squashed/renamed migration from a branch that was reconciled differently than what actually got deployed (this happened once, 2026-07-10, after a long-overdue big-bang deploy). Diagnose with `flask --app app db history` and compare against the table above to find where the live stamp actually sits in the *real* chain, then re-point it with `flask --app app db stamp --purge <correct-revision>` (`--purge` is required — a plain `stamp` still tries to resolve the invalid current value and fails the same way) before running `db upgrade` again. Back up any table a skipped/renamed migration touches first.
 
 ### Check whether a migration is needed
 

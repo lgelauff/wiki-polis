@@ -8,7 +8,7 @@ import requests
 from db import (AuditEvent, CommandReceipt, ConversationBan, Participation,
                 StatementPassSignal, StatementProvenance,
                 StatementSimilarityScore, db)
-from polis_admin import PolisServerError
+from polis_admin import PolisParticipantError, PolisServerError
 from services.explore import (ExploreGateway, ParticiapiSessionState,
                               build_explore_state)
 
@@ -640,6 +640,30 @@ def test_statement_command_releases_receipt_when_session_bootstrap_fails(
     assert response.status_code == 502
     assert response.get_json()['error']['code'] == 'upstream_unavailable'
     assert CommandReceipt.query.count() == 0
+
+
+def test_statement_command_parent_lookup_failure_is_safe_to_retry(
+    auth_client, participant, conversation,
+):
+    """The original statement is read before anything is sent upstream, so a failed read is
+    a plain retryable outage. Reported as an unknown outcome, it told the participant a
+    statement might have been created when none could have been."""
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    with (
+        patch('app._statement_text_map', side_effect=PolisParticipantError('down')),
+        patch('app.polis_http.post') as upstream_post,
+    ):
+        response = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'Clearer original claim', 'derivedFromStatementId': 7},
+            headers={'Idempotency-Key': 'statement-key-46'},
+        )
+
+    assert response.status_code == 502
+    assert response.get_json()['error']['code'] == 'upstream_unavailable'
+    upstream_post.assert_not_called()
+    assert CommandReceipt.query.filter_by(state='pending').count() == 0
 
 
 def test_derivative_statement_records_provenance_without_consuming_quota(

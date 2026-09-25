@@ -1,4 +1,4 @@
-import {Fragment, useCallback, useLayoutEffect, useState, type FormEvent} from 'react';
+import {Fragment, useCallback, useLayoutEffect, useState} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 
@@ -15,16 +15,14 @@ import {
   putAdminPause,
   putAdminPhase,
   putAdminPhases,
-  putAdminRecommendationTier,
   putAdminRoles,
   putAdminSchedule,
-  putAdminSettings,
 } from '../../api/queries';
 import {LegacyShell} from '../legacy/legacy-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
-import {phaseLabel, routeLabel} from '../../i18n/server-labels';
+import {accessPolicyLabel, phaseLabel, routeLabel} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
 
@@ -180,49 +178,36 @@ function RoleSection({conversationId, csrfToken, roster, refresh, fail}: {
   </div>;
 }
 
-function ConfigurationSection({conversationId, csrfToken, settings, refresh, fail}: {
-  conversationId: number; csrfToken: string; settings: Settings;
-  refresh: () => void; fail: (error: Error) => void;
-}) {
+/** What the console knows about the consultation's configuration but does not own.
+ *
+ * Until this change the section carried a second copy of the settings form: title,
+ * introduction, closing text, the eligibility event and label, and the complexity tier --
+ * every one of them a field the settings page edits too. One setting with two editors is
+ * how a change made on one screen gets silently written back by a stale copy held on the
+ * other: the settings endpoint takes the whole representation at once, so each form had to
+ * echo the other's fields untouched to avoid clobbering them. Editing now lives on the
+ * settings page alone, which the management grid above links to.
+ *
+ * What is left is read-only, and is deliberately what the settings page does *not* show:
+ * the phase route and the Polis conversation id, neither of them writable after launch,
+ * and the quantities the chosen tier recommends, which the readiness checks further up
+ * this page are measured against. The tier is named here but chosen on the settings
+ * page. */
+function ConfigurationSection({settings}: {settings: Settings}) {
   const msg = useMessage();
-  const [title, setTitle] = useState(settings.conversation.title);
-  const [introHtml, setIntroHtml] = useState(settings.conversation.introHtml);
-  const [outroHtml, setOutroHtml] = useState(settings.conversation.outroHtml);
-  const [accessPolicy, setAccessPolicy] = useState(settings.conversation.accessPolicy);
-  const [eventId, setEventId] = useState(settings.eligibility.eventId);
-  const [eligibilityLabel, setEligibilityLabel] = useState(settings.eligibility.label ?? '');
-  const [tier, setTier] = useState(settings.recommendations.tier);
-  const settingsMutation = useMutation({
-    mutationFn: () => putAdminSettings(conversationId, {title, introHtml, outroHtml, accessPolicy, eligibilityEventId: eventId, eligibilityLabel, recommendationTier: settings.recommendations.tier, gated: settings.conversation.gated, gatingType: settings.conversation.gatingType, announce: settings.conversation.announce, information: settings.conversation.information, resultsShared: settings.conversation.resultsShared, showUsernames: settings.conversation.showUsernames, accessRequestText: settings.conversation.accessRequestText}, csrfToken),
-    onSuccess: refresh,
-    onError: fail,
-  });
-  const recommendationMutation = useMutation({
-    mutationFn: () => putAdminRecommendationTier(conversationId, {tier}, csrfToken),
-    onSuccess: refresh,
-    onError: fail,
-  });
+  const tier = settings.recommendations.tiers.find(
+    (item) => item.key === settings.recommendations.tier,
+  );
+  const factStyle = {fontSize: 13, margin: '.25rem 0'};
   return <div className="console-section">
     <div className="console-section-label">{msg('adminconv-config-label')}</div>
-    <details className="phase-advanced"><summary>{msg('adminconv-settings-summary')}</summary>
-      <form className="panel" style={{marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); settingsMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} />
-        <div className="edit-row-fields">
-          <label>{msg('admin-label-title')}<input type="text" required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-          <label>{msg('adminconv-label-route-locked')}<input type="text" readOnly value={routeLabel(msg, settings.conversation.phaseRoute, settings.conversation.phaseRouteLabel)} style={{background: '#f5f5f5', color: '#666'}} /></label>
-          <label>{msg('adminconv-label-polis-id')}<input type="text" readOnly value={settings.conversation.polisId} style={{background: '#f5f5f5', color: '#666'}} /></label>
-          <label>{msg('admin-label-access')}<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as typeof accessPolicy)}><option value="public">public</option><option value="invite_only">invite_only</option><option value="demo">demo</option></select></label>
-          <label>{msg('admin-label-elig-event')}<input type="text" maxLength={80} value={eventId} onChange={(event) => setEventId(event.target.value)} /></label>
-          <label>{msg('admin-label-elig-label')}<input type="text" maxLength={255} value={eligibilityLabel} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
-        </div>
-        <div className="edit-row-texts"><label>{msg('admin-label-intro')}<textarea rows={4} value={introHtml} onChange={(event) => setIntroHtml(event.target.value)} /></label><label>{msg('admin-label-outro')}<textarea rows={4} value={outroHtml} onChange={(event) => setOutroHtml(event.target.value)} /></label></div>
-        <button type="submit">{msg('adminconv-save-settings')}</button>
-      </form>
-    </details>
+    <p className="muted" style={factStyle}>{msg('adminconv-label-route-locked')}: <strong>{routeLabel(msg, settings.conversation.phaseRoute, settings.conversation.phaseRouteLabel)}</strong></p>
+    <p className="muted" style={factStyle}>{msg('adminconv-label-polis-id')}: <code>{settings.conversation.polisId}</code></p>
+    <p className="muted" style={factStyle}>{msg('adminconv-label-tier')}: <strong>{tier?.label ?? settings.recommendations.tier}</strong></p>
     <details className="phase-advanced"><summary>{msg('adminconv-rec-summary')}</summary>
-      <form className="panel" style={{marginTop: '.75rem'}} onSubmit={(event) => {event.preventDefault(); recommendationMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><p className="section-help">{msg('adminconv-rec-help')}</p>
-        <div className="edit-row-fields"><label>{msg('adminconv-label-tier')}<select value={tier} onChange={(event) => setTier(event.target.value as typeof tier)}>{settings.recommendations.tiers.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>{Object.entries(settings.recommendations.tiers.find((item) => item.key === tier)?.quantities ?? {}).map(([key, value]) => <div className="recommendation-value" key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}</strong></div>)}</div>
-        <button type="submit">{msg('adminconv-save-rec')}</button>
-      </form>
+      <div className="panel" style={{marginTop: '.75rem'}}><p className="section-help">{msg('adminconv-rec-help')}</p>
+        <div className="edit-row-fields">{Object.entries(tier?.quantities ?? {}).map(([key, value]) => <div className="recommendation-value" key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}</strong></div>)}</div>
+      </div>
     </details>
   </div>;
 }
@@ -262,7 +247,7 @@ function DangerSection({conversationId, csrfToken, lifecycle, fail}: {
   const closed = lifecycle.conversation.status === 'closed';
   const cleanup = lifecycle.publicationReadiness.windowOpen;
   return <div className="console-section"><div className="console-section-label" style={{color: 'var(--disagree)'}}>{msg('adminconv-danger-label')}</div><div className="danger-zone">
-    {closed ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-perm-closed')} · <InternalLink href={`/c/${lifecycle.conversation.slug}/report`} style={{fontWeight: 400, fontSize: 13}}>{msg('adminconv-view-report')} <span aria-hidden="true">→</span></InternalLink></div><div className="danger-row-desc"><ClosedDescription lifecycle={lifecycle} /></div></div></div> : <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-publish-report')}</div>{cleanup ? <div className="danger-row-desc" dangerouslySetInnerHTML={richHtml(msg('adminconv-publish-irrev', escapeHtml(`/c/${lifecycle.conversation.slug}/report`)))} /> : <div className="danger-row-desc">{msg('adminconv-publish-unavailable')}</div>}</div>{cleanup ? <form className="cleanup-publish-form" onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm(msg('adminconv-confirm-publish'))) publication.mutate(confirmed);}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness cleanup-readiness">{lifecycle.publicationReadiness.preconditions.map((row) => <li key={row.id}>{row.met === null ? <label><input type="checkbox" checked={confirmed.includes(row.id)} onChange={() => setConfirmed((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /> <span className="readiness-label">{row.label}</span></label> : <span className="readiness-label">{row.label} {row.met ? <span className="readiness-note">({msg('adminconv-met')})</span> : <span className="phase-check-unmet">{msg('adminconv-not-met')}</span>}</span>}</li>)}</ul><button type="submit" className="btn-small btn-danger">{msg('adminconv-publish-report')}</button></form> : <button type="button" className="btn-small btn-danger" disabled>{msg('adminconv-publish-report')}</button>}</div>}
+    {closed ? <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-perm-closed')} · <InternalLink href={`/c/${lifecycle.conversation.slug}/report`} style={{fontWeight: 400, fontSize: 13}}>{msg('adminconv-view-report')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink></div><div className="danger-row-desc"><ClosedDescription lifecycle={lifecycle} /></div></div></div> : <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-publish-report')}</div>{cleanup ? <div className="danger-row-desc" dangerouslySetInnerHTML={richHtml(msg('adminconv-publish-irrev', escapeHtml(`/c/${lifecycle.conversation.slug}/report`)))} /> : <div className="danger-row-desc">{msg('adminconv-publish-unavailable')}</div>}</div>{cleanup ? <form className="cleanup-publish-form" onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm(msg('adminconv-confirm-publish'))) publication.mutate(confirmed);}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness cleanup-readiness">{lifecycle.publicationReadiness.preconditions.map((row) => <li key={row.id}>{row.met === null ? <label><input type="checkbox" checked={confirmed.includes(row.id)} onChange={() => setConfirmed((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /> <span className="readiness-label">{row.label}</span></label> : <span className="readiness-label">{row.label} {row.met ? <span className="readiness-note">({msg('adminconv-met')})</span> : <span className="phase-check-unmet">{msg('adminconv-not-met')}</span>}</span>}</li>)}</ul><button type="submit" className="btn-small btn-danger">{msg('adminconv-publish-report')}</button></form> : <button type="button" className="btn-small btn-danger" disabled>{msg('adminconv-publish-report')}</button>}</div>}
     <div className="danger-row"><div className="danger-row-main"><div className="danger-row-title">{msg('adminconv-delete-title')}</div><div className="danger-row-desc">{msg('adminconv-delete-desc')} {data.deletion.state === 'unavailable' ? msg('adminconv-delete-unverified') : data.deletion.validVoteCount === 0 ? msg('adminconv-delete-available') : msg('adminconv-delete-hasvotes', data.deletion.validVoteCount ?? 0)}</div></div><form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); if (globalThis.confirm(msg('adminconv-confirm-delete'))) deletion.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className="btn-small btn-danger" disabled={data.deletion.state !== 'eligible'} aria-disabled={data.deletion.state !== 'eligible'}>{msg('adminconv-delete-btn')}</button></form></div>
   </div></div>;
 }
@@ -307,7 +292,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
     <div className="role-bar"><div className="role-bar-inner"><span className={`role-chip${isAdmin ? ' role-chip--admin' : ''}`} title={msg('adminconv-role-title')}><span className="role-chip-dot" />{data.operator.roleLabel}</span><span className="role-bar-context">{msg('adminconv-managing')}&nbsp;<strong>{data.conversation.title}</strong></span><span className="role-bar-spacer" /><InternalLink className="view-as-btn" href={data.links.participantView}>{msg('adminconv-view-as')}</InternalLink></div></div>
     <div className="console">
       <div className="console-head"><h1 className="console-title">{data.conversation.title}</h1><span className={`status-pill status-pill--${!isActive ? 'closed' : data.conversation.status === 'paused' ? 'paused' : data.conversation.status === 'scheduled' ? 'scheduled' : 'active'}`}><span className="status-pill-dot" />{!isActive ? msg('adminconv-status-closed') : data.conversation.status === 'paused' ? msg('adminconv-status-paused') : data.conversation.status === 'scheduled' ? msg('adminconv-status-scheduled') : msg('adminconv-status-active')}</span></div>
-      <p className="console-sub"><code>/c/{data.conversation.slug}</code> &nbsp;·&nbsp; {data.conversation.accessPolicy} &nbsp;·&nbsp; {msg('adminconv-joined', data.counts.participants)}</p>
+      <p className="console-sub"><code>/c/{data.conversation.slug}</code> &nbsp;·&nbsp; {accessPolicyLabel(msg, data.conversation.accessPolicy)} &nbsp;·&nbsp; {msg('adminconv-joined', data.counts.participants)}</p>
 
       <div className="console-section" id="phaseControl" data-mode={advanced ? 'advanced' : 'simple'}><div className="phase-hero"><div className="phase-hero-top"><span className="phase-now-kicker">{msg('adminconv-phase-control')}</span></div>
         <ol className="journey phase-stepper" aria-label={msg('adminconv-journey-aria')}>{data.phase.steps.map((step, index) => {const active = step.state === 'current'; const done = data.phase.linear && step.state === 'completed'; return <li key={step.key} className={`journey-step${active ? ' journey-step--current' : done ? ' journey-step--done' : ''}`} aria-current={active ? 'step' : undefined}><span className="journey-dot">{done ? '✓' : index + 1}</span><span className="journey-label">{phaseLabel(msg, step.key, step.label)}</span><span className="sr-only">{active ? msg('adminconv-step-current') : done ? msg('adminconv-step-completed') : msg('adminconv-step-upcoming')}</span></li>;})}</ol>
@@ -316,7 +301,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
         {isAdmin && isActive && <div className="phase-foot phase-pause-row"><form style={{display: 'inline'}} onSubmit={(event) => {event.preventDefault(); pauseMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><button type="submit" className={`btn-small ${data.conversation.status === 'paused' ? 'btn-approve' : 'btn-pause'}`}>{data.conversation.status === 'paused' ? msg('adminconv-resume') : msg('adminconv-pause')}</button></form>{data.conversation.status === 'paused' ? <span className="muted" style={{fontSize: 13}} dangerouslySetInnerHTML={richHtml(msg('adminconv-paused-note'))} /> : <span className="muted" style={{fontSize: 13}}>{msg('adminconv-pause-note')}</span>}</div>}
       </div>
 
-      <div className="mode-guided-part">{transition ? canOrganize ? <><div className="phase-foot"><div className={`phase-foot-ready ${unmet ? 'phase-foot-ready--wait' : 'phase-foot-ready--go'}`}><span className="phase-foot-ready-icon" aria-hidden="true">{unmet ? '!' : '✓'}</span><span>{unmet ? msg('adminconv-readiness-unmet', unmet, phaseLabel(msg, transition.target.key, transition.target.label)) : msg('adminconv-no-blocking', phaseLabel(msg, transition.target.key, transition.target.label))}</span></div></div><div className="moveon phase-move-box"><div className="moveon-head"><span className="moveon-from">{phaseLabel(msg, transition.source.key, transition.source.label)}</span><span className="moveon-arrow" aria-hidden="true">→</span><span>{phaseLabel(msg, transition.target.key, transition.target.label)}</span></div><div className="moveon-body"><ul className="consequence"><li><span className="consequence-tag consequence-tag--opens">{msg('adminconv-tag-opens')}</span><span>{transition.consequence.opens}</span></li>{transition.consequence.closes && <li><span className="consequence-tag consequence-tag--closes">{msg('adminconv-tag-closes')}</span><span>{transition.consequence.closes}</span></li>}<li><span className="consequence-tag" style={{background: 'var(--surface2)', color: 'var(--muted)'}}>{msg('adminconv-tag-undo')}</span><span>{msg('adminconv-undo-text')}</span></li></ul><div className="console-section-label" style={{marginBottom: 8}}>{msg('adminconv-readiness-label')}</div><form className="phase-move-form" onSubmit={(event) => {event.preventDefault(); phaseMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness">{transition.preconditions.map((row) => <li key={row.id}><label><input type="checkbox" className="phase-move-check moveon-check" checked={phaseChecks.includes(row.id)} onChange={() => setPhaseChecks((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /><span className="readiness-label">{row.label} {row.met === true && <span className="readiness-note">({row.note || msg('adminconv-met')})</span>}{row.met === false && <><span className="phase-check-unmet"><span aria-hidden="true">✗</span> {msg('adminconv-not-met')}</span>{row.note && <span className="readiness-note">({row.note})</span>}</>}</span></label></li>)}</ul><p className="phase-move-hint moveon-hint muted">{msg('adminconv-move-hint')}</p><button type="submit" className="rd-btn-primary phase-move-submit" disabled={unmet > 0 || !allChecked}>{msg('adminconv-move-on-to', phaseLabel(msg, transition.target.key, transition.target.label))}</button></form>{transition.showPauseGuidance && <p className="muted" style={{fontSize: 12, marginTop: 10}}>{msg('adminconv-need-time')}</p>}</div></div></> : <><p className="muted" style={{fontSize: 13, marginTop: 14}}>{msg('adminconv-only-organizer')}</p><button type="button" className="btn-small" disabled title={msg('adminconv-only-organizer')}>{msg('adminconv-move-on-to', phaseLabel(msg, transition.target.key, transition.target.label))}</button></> : !data.phase.linear ? <p className="muted" style={{marginTop: 14, fontSize: 13}}><span aria-hidden="true">⚠️</span> {msg('adminconv-custom-state')} {isAdmin ? msg('adminconv-use-advanced') : msg('adminconv-admin-can-adjust')}</p> : <p className="muted" style={{marginTop: 14, fontSize: 13}} dangerouslySetInnerHTML={richHtml(msg(data.conversation.closedAt ? 'adminconv-report-published-note' : 'adminconv-report-unpublished-note'))} />}
+      <div className="mode-guided-part">{transition ? canOrganize ? <><div className="phase-foot"><div className={`phase-foot-ready ${unmet ? 'phase-foot-ready--wait' : 'phase-foot-ready--go'}`}><span className="phase-foot-ready-icon" aria-hidden="true">{unmet ? '!' : '✓'}</span><span>{unmet ? msg('adminconv-readiness-unmet', unmet, phaseLabel(msg, transition.target.key, transition.target.label)) : msg('adminconv-no-blocking', phaseLabel(msg, transition.target.key, transition.target.label))}</span></div></div><div className="moveon phase-move-box"><div className="moveon-head"><span className="moveon-from">{phaseLabel(msg, transition.source.key, transition.source.label)}</span><span className="moveon-arrow dir-glyph" aria-hidden="true">→</span><span>{phaseLabel(msg, transition.target.key, transition.target.label)}</span></div><div className="moveon-body"><ul className="consequence"><li><span className="consequence-tag consequence-tag--opens">{msg('adminconv-tag-opens')}</span><span>{transition.consequence.opens}</span></li>{transition.consequence.closes && <li><span className="consequence-tag consequence-tag--closes">{msg('adminconv-tag-closes')}</span><span>{transition.consequence.closes}</span></li>}<li><span className="consequence-tag" style={{background: 'var(--surface2)', color: 'var(--muted)'}}>{msg('adminconv-tag-undo')}</span><span>{msg('adminconv-undo-text')}</span></li></ul><div className="console-section-label" style={{marginBottom: 8}}>{msg('adminconv-readiness-label')}</div><form className="phase-move-form" onSubmit={(event) => {event.preventDefault(); phaseMutation.mutate();}}><input type="hidden" name="csrf_token" value={csrfToken} /><ul className="readiness">{transition.preconditions.map((row) => <li key={row.id}><label><input type="checkbox" className="phase-move-check moveon-check" checked={phaseChecks.includes(row.id)} onChange={() => setPhaseChecks((items) => items.includes(row.id) ? items.filter((item) => item !== row.id) : [...items, row.id])} /><span className="readiness-label">{row.label} {row.met === true && <span className="readiness-note">({row.note || msg('adminconv-met')})</span>}{row.met === false && <><span className="phase-check-unmet"><span aria-hidden="true">✗</span> {msg('adminconv-not-met')}</span>{row.note && <span className="readiness-note">({row.note})</span>}</>}</span></label></li>)}</ul><p className="phase-move-hint moveon-hint muted">{msg('adminconv-move-hint')}</p><button type="submit" className="rd-btn-primary phase-move-submit" disabled={unmet > 0 || !allChecked}>{msg('adminconv-move-on-to', phaseLabel(msg, transition.target.key, transition.target.label))}</button></form>{transition.showPauseGuidance && <p className="muted" style={{fontSize: 12, marginTop: 10}}>{msg('adminconv-need-time')}</p>}</div></div></> : <><p className="muted" style={{fontSize: 13, marginTop: 14}}>{msg('adminconv-only-organizer')}</p><button type="button" className="btn-small" disabled title={msg('adminconv-only-organizer')}>{msg('adminconv-move-on-to', phaseLabel(msg, transition.target.key, transition.target.label))}</button></> : !data.phase.linear ? <p className="muted" style={{marginTop: 14, fontSize: 13}}><span aria-hidden="true">⚠️</span> {msg('adminconv-custom-state')} {isAdmin ? msg('adminconv-use-advanced') : msg('adminconv-admin-can-adjust')}</p> : <p className="muted" style={{marginTop: 14, fontSize: 13}} dangerouslySetInnerHTML={richHtml(msg(data.conversation.closedAt ? 'adminconv-report-published-note' : 'adminconv-report-unpublished-note'))} />}
         {isAdmin && data.schedule.canSchedule && <div className="schedule-card" style={{marginTop: 14}}><div className="schedule-main"><div className="schedule-title">{msg('adminconv-schedule-title', phaseLabel(msg, data.schedule.targetKey, data.schedule.targetLabel))}</div><div className="schedule-when">{data.schedule.scheduledAt ? <>{new Date(data.schedule.scheduledAt).toISOString().slice(0, 16).replace('T', ' ')} <span className="schedule-utc">UTC</span> · <span className="countdown-mini">{countdown(msg, data.schedule.scheduledAt)}</span>{data.schedule.frozen && ` · ${msg('adminconv-frozen')}`}</> : msg('adminconv-no-schedule')}</div></div><form className="schedule-actions" onSubmit={(event) => {event.preventDefault(); scheduleMutation.mutate({scheduledAt: new Date(`${scheduleAt}:00Z`).toISOString(), frozen: false});}}><input type="hidden" name="csrf_token" value={csrfToken} /><label className="sr-only" htmlFor="scheduled-at">{msg('adminconv-utc-timestamp')}</label><input id="scheduled-at" type="datetime-local" aria-label={msg('adminconv-scheduled-aria')} value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} /><span className="schedule-utc" aria-hidden="true">UTC</span><button type="submit" className="btn-ghost">{data.schedule.scheduledAt ? msg('adminconv-edit') : msg('adminconv-set')}</button></form>{data.schedule.scheduledAt && <><form className="schedule-actions" onSubmit={(event) => {event.preventDefault(); scheduleMutation.mutate({scheduledAt: data.schedule.scheduledAt, frozen: !data.schedule.frozen});}}><button type="submit" className="btn-ghost">{data.schedule.frozen ? msg('adminconv-unfreeze') : msg('adminconv-freeze')}</button></form><form className="schedule-actions" onSubmit={(event) => {event.preventDefault(); scheduleMutation.mutate({scheduledAt: null, frozen: false});}}><button type="submit" className="btn-ghost">{msg('common-cancel')}</button></form></>}</div>}
         {isAdmin && transition && !data.schedule.canSchedule && <div className="locked-control" style={{marginTop: 14}}><strong>{msg('adminconv-scheduling-unavailable')}</strong><span className="locked-why">{msg('adminconv-scheduling-why')}</span></div>}
       </div>
@@ -331,9 +316,10 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
         <Link className="manage-card" to={data.links.participants}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-joined', data.counts.participants)}</span></div><div className="manage-card-title">{msg('adminconv-card-participants')}</div><div className="manage-card-desc">{msg('adminconv-card-participants-desc')}</div></Link>
         <Link className="manage-card" to={data.links.moderation}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-open-count', data.counts.openFlags)}</span></div><div className="manage-card-title">{msg('adminconv-card-modqueue')}</div><div className="manage-card-desc">{msg('adminconv-card-modqueue-desc')}</div></Link>
         <Link className="manage-card" to={data.links.roles}><div className="manage-card-top"><span className="manage-card-count">{msg('adminconv-assigned-count', roleCount)}</span></div><div className="manage-card-title">{msg('adminconv-roles-label')}</div><div className="manage-card-desc">{msg('adminconv-card-roles-desc')}</div></Link>
+        <Link className="manage-card" to={data.links.settings}><div className="manage-card-title">{msg('admin-overview-card-settings')}</div><div className="manage-card-desc">{msg('admin-overview-card-settings-desc')}</div></Link>
       </div></div>
       <RoleSection conversationId={conversationId} csrfToken={csrfToken} roster={roles} refresh={refreshSupporting} fail={fail} />
-      {canOrganize && <ConfigurationSection conversationId={conversationId} csrfToken={csrfToken} settings={settings} refresh={refreshSupporting} fail={fail} />}
+      {canOrganize && <ConfigurationSection settings={settings} />}
       {isAdmin && <DangerSection conversationId={conversationId} csrfToken={csrfToken} lifecycle={data} fail={fail} />}
     </div>
   </LegacyShell>;

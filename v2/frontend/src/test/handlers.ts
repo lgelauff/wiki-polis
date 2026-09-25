@@ -150,14 +150,14 @@ export const handlers = [
       {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12, featured_statements: 24}},
     ]},
     eligibility: {configured: true, eventId: 'extended-confirmed', label: 'Extended-confirmed editors', configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'},
-    capabilities: {edit: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
+    capabilities: {edit: true, switchDemo: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
   }})),
   http.put(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), async ({request}) => {
     const body = await request.json() as {title: string; introHtml: string; outroHtml: string; accessPolicy: 'public' | 'invite_only' | 'demo'; gated: boolean; gatingType: 'invite_only' | 'voucher' | 'wiki_based' | null; announce: boolean; information: boolean; resultsShared: boolean; showUsernames: boolean; accessRequestText: string | null; eligibilityEventId: string; eligibilityLabel: string; recommendationTier: 'simple' | 'medium' | 'complex'};
     return HttpResponse.json({data: {changed: true, changedFields: ['title'], settings: {
       conversation: {id: 7, slug: 'community-strategy', title: body.title.trim(), introHtml: body.introHtml, outroHtml: body.outroHtml, accessPolicy: body.accessPolicy, gated: body.gated, gatingType: body.gatingType, announce: body.announce, information: body.information, resultsShared: body.resultsShared, showUsernames: body.showUsernames, accessRequestText: body.accessRequestText, phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},
       recommendations: {tier: body.recommendationTier, tiers: [{key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5}}, {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8}}, {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}}]},
-      eligibility: {configured: Boolean(body.eligibilityEventId), eventId: body.eligibilityEventId, label: body.eligibilityLabel || null, configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'}, capabilities: {edit: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
+      eligibility: {configured: Boolean(body.eligibilityEventId), eventId: body.eligibilityEventId, label: body.eligibilityLabel || null, configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'}, capabilities: {edit: true, switchDemo: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
     }}});
   }),
   http.put(new URL('/api/v1/admin/conversations/7/recommendation-tier', globalThis.location.origin).toString(), async ({request}) => {
@@ -231,7 +231,7 @@ export const handlers = [
     new URL('/api/v1/admin/conversations/7/invitations', globalThis.location.origin).toString(),
     () => HttpResponse.json({data: {
       conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'invite_only'},
-      invitations: [{id: 51, username: 'Existing editor', createdAt: '2026-08-01T10:00:00Z'}],
+      invitations: [{id: 51, username: 'Existing editor', createdAt: '2026-08-01T10:00:00Z', signedIn: true}],
       capabilities: {manageInvitations: true},
       links: {self: '/api/v1/admin/conversations/7/invitations', conversation: '/admin/conversations/7'},
     }}),
@@ -243,8 +243,8 @@ export const handlers = [
       return HttpResponse.json({data: {
         outcome: {added: 1, alreadyPresent: 0, concurrentConflicts: 0, duplicateInputs: body.usernames.length - 1},
         invitations: [
-          {id: 51, username: 'Existing editor', createdAt: '2026-08-01T10:00:00Z'},
-          {id: 52, username: body.usernames[0], createdAt: '2026-08-13T10:00:00Z'},
+          {id: 51, username: 'Existing editor', createdAt: '2026-08-01T10:00:00Z', signedIn: true},
+          {id: 52, username: body.usernames[0], createdAt: '2026-08-13T10:00:00Z', signedIn: false},
         ],
         links: {invitations: '/api/v1/admin/conversations/7/invitations'},
       }});
@@ -373,8 +373,8 @@ export const handlers = [
       slug: String(params.slug),
       title: 'Community strategy',
       events: [
-        {occurredAt: '2026-08-14T09:30:00Z', action: 'Banned', pseudonym: 'quiet-otter', scope: 'conversation', actor: 'adminuser'},
-        {occurredAt: '2026-08-13T08:15:00Z', action: 'Unbanned', pseudonym: 'patient-fox', scope: 'conversation', actor: 'mod-kestrel'},
+        {occurredAt: '2026-08-14T09:30:00Z', action: 'Banned', pseudonym: 'quiet-otter', scope: 'conversation', actor: 'adminuser', actorKind: null},
+        {occurredAt: '2026-08-13T08:15:00Z', action: 'Unbanned', pseudonym: 'patient-fox', scope: 'conversation', actor: 'mod-kestrel', actorKind: null},
       ],
       links: {self: `/api/v1/conversations/${String(params.slug)}/moderation-log`, conversation: `/c/${String(params.slug)}`, about: `/c/${String(params.slug)}/about`},
     }}),

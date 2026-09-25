@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
 
 import type {Message} from './messages';
-import {outputLabel, outputPending, outputTooltip, phaseLabel, routeLabel, tabLabel} from './server-labels';
+import {accessPolicyLabel, outputLabel, outputPending, outputTooltip, phaseLabel, routeLabel, tabLabel} from './server-labels';
 
 /** A catalogue whose values are deliberately UNLIKE the server's English. Every assertion
  *  below distinguishes "read the catalogue" from "echoed the server label" -- which the
@@ -15,6 +15,8 @@ const CATALOGUE: Record<string, string> = {
   'output-report-label': 'CATALOGUE report',
   'output-report-tooltip': 'CATALOGUE report tooltip',
   'output-report-pending': 'CATALOGUE report pending',
+  'admin-common-policy-open': 'CATALOGUE anyone with an account',
+  'admin-common-policy-invited': 'CATALOGUE only people given access',
 };
 
 /** Stands in for banana: returns the key itself for a message it does not hold, which is
@@ -81,5 +83,16 @@ describe('server identifier -> message', () => {
     expect(outputTooltip(msg, 'report', 'After closing')).toBe('CATALOGUE report tooltip');
     expect(outputPending(msg, 'report', 'Published after cleanup')).toBe('CATALOGUE report pending');
     expect(outputLabel(msg, 'dataset', 'Dataset')).toBe('Dataset');
+  });
+
+  test('an access-policy value is read from the catalogue, never printed raw', () => {
+    // The admin DTOs send no display label beside accessPolicy, so the identifier is the
+    // only fallback -- which is exactly the raw word this table exists to keep off screen.
+    expect(accessPolicyLabel(msg, 'public')).toBe('CATALOGUE anyone with an account');
+    expect(accessPolicyLabel(msg, 'invite_only')).toBe('CATALOGUE only people given access');
+    // 'demo' is in the table; its message is absent from CATALOGUE, so a naive
+    // implementation would render the bare key 'admin-common-policy-practice'.
+    expect(accessPolicyLabel(msg, 'demo')).toBe('demo');
+    expect(accessPolicyLabel(msg, null)).toBe('');
   });
 });

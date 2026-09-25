@@ -1401,7 +1401,7 @@ export interface components {
             /** @enum {string} */
             accessPolicy: "public" | "invite_only" | "demo";
             gated: boolean;
-            /** @enum {string} */
+            /** @enum {string|null} */
             gatingType: "invite_only" | "voucher" | "wiki_based" | null;
             announce: boolean;
             information: boolean;
@@ -1440,7 +1440,7 @@ export interface components {
                 /** @enum {string} */
                 accessPolicy: "public" | "invite_only" | "demo";
                 gated: boolean;
-                /** @enum {string} */
+                /** @enum {string|null} */
                 gatingType: "invite_only" | "voucher" | "wiki_based" | null;
                 announce: boolean;
                 information: boolean;
@@ -1462,6 +1462,8 @@ export interface components {
             };
             capabilities: {
                 edit: boolean;
+                /** @description Whether this viewer may move the consultation into or out of demo (site admins only). */
+                switchDemo: boolean;
             };
             locks: {
                 gated: boolean;
@@ -1776,6 +1778,7 @@ export interface components {
             username: string;
             /** Format: date-time */
             createdAt: string;
+            signedIn: boolean;
         };
         AdminInvitationBatchRequest: {
             usernames: string[];
@@ -1944,8 +1947,11 @@ export interface components {
             data: components["schemas"]["Session"];
         };
         Session: {
-            /** @enum {string} */
-            state: "anonymous" | "authenticated" | "demo";
+            /**
+             * @description voucher: signed in with a voucher account, which has no username (#368).
+             * @enum {string}
+             */
+            state: "anonymous" | "authenticated" | "demo" | "voucher";
             user: components["schemas"]["SessionUser"] | null;
             capabilities: components["schemas"]["SiteCapabilities"];
             csrfToken: string;
@@ -2031,10 +2037,12 @@ export interface components {
             occurredAt: string | null;
             /** @enum {string} */
             action: "Banned" | "Unbanned";
-            pseudonym: string;
+            pseudonym: string | null;
             /** @enum {string} */
             scope: "conversation";
-            actor: string;
+            actor: string | null;
+            /** @enum {string|null} */
+            actorKind: "site_admin" | null;
         };
         ConversationOutputPageResponse: {
             data: components["schemas"]["ConversationOutputPage"];

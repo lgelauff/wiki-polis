@@ -70,11 +70,25 @@ INSERTABLES:
 # translation, not that they are permanently untranslatable.
 TAGS:
   ignored:
+    - admin-access-admission-anyone
+    - admin-access-admission-invited
+    - admin-access-admission-legend
+    - admin-access-admission-practice
+    - admin-access-admission-voucher
+    - admin-access-admission-wiki
+    - admin-access-heading
+    - admin-access-locked-note
+    - admin-access-narrowing-confirm
+    - admin-access-narrowing-continue
+    - admin-access-practice
     - admin-btn-add
     - admin-btn-create-conv
     - admin-btn-grant
     - admin-btn-manage
     - admin-btn-remove
+    - admin-common-policy-invited
+    - admin-common-policy-open
+    - admin-common-policy-practice
     - admin-convs-heading
     - admin-crumb-aria
     - admin-elig-event-ph
@@ -83,7 +97,6 @@ TAGS:
     - admin-globals-heading
     - admin-globals-intro
     - admin-grant-heading
-    - admin-label-access
     - admin-label-elig-event
     - admin-label-elig-label
     - admin-label-intro
@@ -94,6 +107,9 @@ TAGS:
     - admin-label-wm-username
     - admin-nav-panel
     - admin-new-conv-heading
+    - admin-overview-card-settings
+    - admin-overview-card-settings-desc
+    - admin-site-link-settings
     - admin-slug-title
     - admin-status-active
     - admin-status-closed
@@ -218,7 +234,6 @@ TAGS:
     - adminconv-roles-summary
     - adminconv-roles-summary-count
     - adminconv-save-phases
-    - adminconv-save-rec
     - adminconv-save-settings
     - adminconv-schedule-title
     - adminconv-scheduled-aria
@@ -226,7 +241,6 @@ TAGS:
     - adminconv-scheduling-why
     - adminconv-select-placeholder
     - adminconv-set
-    - adminconv-settings-summary
     - adminconv-several-open
     - adminconv-statements-voted-on
     - adminconv-stats-below

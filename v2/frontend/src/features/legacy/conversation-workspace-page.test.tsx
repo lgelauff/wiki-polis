@@ -1,6 +1,6 @@
 import {Suspense} from 'react';
 import {QueryClientProvider} from '@tanstack/react-query';
-import {render, screen, within} from '@testing-library/react';
+import {fireEvent, render, screen, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
 import {expect, test} from 'vitest';
@@ -17,6 +17,7 @@ type Explore = components['schemas']['ExploreState'];
 
 const WORKSPACE_URL = new URL('/api/v1/conversations/community-strategy/workspace', globalThis.location.origin).toString();
 const EXPLORE_URL = new URL('/api/v1/conversations/community-strategy/explore', globalThis.location.origin).toString();
+const STATEMENTS_URL = new URL('/api/v1/conversations/community-strategy/statements', globalThis.location.origin).toString();
 const I18N_URL = new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString();
 
 /** An open real-space consultation on the voting tab, with the space warning and a
@@ -79,13 +80,14 @@ const explore = {
 } as Explore;
 
 /** The page reads its slug from the route, so this mounts just that route rather than
- *  booting the whole app through <App/>, which destabilises the neighbouring tests. */
-function renderWorkspace() {
+ *  booting the whole app through <App/>, which destabilises the neighbouring tests. The
+ *  locale is passed straight to the provider, so `qqx` is set here rather than in the URL. */
+function renderWorkspace(locale = 'en') {
   return render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/c/community-strategy']}>
         <Suspense fallback={null}>
-          <MessageProvider locale="en">
+          <MessageProvider locale={locale}>
             <Routes><Route path="/c/:slug" element={<ConversationWorkspacePage />} /></Routes>
           </MessageProvider>
         </Suspense>
@@ -207,4 +209,129 @@ test('keeps the real-space and demo-space ballot warnings in separate messages',
   const warning = await screen.findByRole('alert', {}, {timeout: 10_000});
   expect(warning).toHaveTextContent('Live consultation. These are active consultation processes with real responses.');
   expect(warning).not.toHaveTextContent('CHANGED DEMO');
+});
+
+/** English no catalogue message contains, standing in for the server's developer-facing
+ *  `message`. Rule 4 of `plan_i18n.md`: the page must never show it. */
+const SERVER_ENGLISH = 'Server-side English that must not reach the page.';
+
+/** Opens the new-statement composer under qqx and submits it into an API error. */
+async function submitFailingStatement(code: string, status: number) {
+  serve(workspace, {
+    ...explore,
+    progress: {completed: 12, total: 12, remaining: 0, allDone: true},
+    newStatement: {unlocked: true, unlockAfter: 4, quota: 3, used: 0, remaining: 3},
+  });
+  server.use(http.post(STATEMENTS_URL, () => HttpResponse.json(
+    {error: {code, message: SERVER_ENGLISH}}, {status},
+  )));
+  renderWorkspace('qqx');
+
+  fireEvent.click(await screen.findByRole('button', {name: /conv-triad-newstmt-title/}, {timeout: 10_000}));
+  fireEvent.change(document.querySelector('.v2-composer-textarea')!, {target: {value: 'A new angle.'}});
+  fireEvent.click(screen.getByRole('button', {name: '(conv-composer-submit)'}));
+}
+
+test.each([
+  ['statement_quota_exceeded', 409, 'conv-err-proposal-limit'],
+  ['derivative_similarity_too_low', 409, 'conv-err-similarity'],
+  ['unknown_parent_statement', 400, 'conv-err-original-unavailable'],
+  ['command_outcome_unknown', 502, 'conv-err-outcome-unknown'],
+  ['idempotency_conflict', 409, 'conv-err-outcome-unknown'],
+  ['upstream_unavailable', 502, 'conv-err-submit-statement'],
+  ['validation_failed', 400, 'conv-err-submit-statement'],
+  ['rate_limited', 429, 'conv-err-submit-statement'],
+  ['conflict', 409, 'conv-err-submissions-closed'],
+  ['forbidden', 403, 'conv-err-submissions-closed'],
+  ['unauthorized', 401, 'common-err-nologin'],
+] as const)(
+  'a %s from the statement composer shows catalogue copy, not the server message',
+  async (code, status, key) => {
+    await submitFailingStatement(code, status);
+
+    // Catches the server's English reaching the participant, and a code falling to the wrong
+    // message: an unknown outcome read as a plain failure invites a duplicate statement.
+    const alert = await screen.findByText(`(${key})`);
+    expect(alert).toHaveAttribute('role', 'alert');
+    expect(document.body).not.toHaveTextContent(SERVER_ENGLISH);
+  },
+);
+
+test.each([
+  ['derivative_similarity_too_low', 409, 'true'],
+  ['statement_quota_exceeded', 409, null],
+] as const)(
+  'a %s error is tied to the composer field for assistive technology',
+  async (code, status, invalid) => {
+    await submitFailingStatement(code, status);
+    const message = await screen.findByText(/^\(conv-err-/);
+    const field = document.querySelector('.v2-composer-textarea')!;
+
+    // Catches an error a screen reader announces once and then loses: the field it is about
+    // must point at it, and only a rejection of the text itself marks the text invalid.
+    expect(message).toHaveAttribute('id', 'composer-newstmt-error');
+    expect(message).toHaveClass('error');
+    expect(field.getAttribute('aria-describedby')?.split(' ')).toEqual(['composer-newstmt-helper', 'composer-newstmt-error']);
+    expect(field.getAttribute('aria-invalid')).toBe(invalid);
+  },
+);
+
+test.each([
+  ['not_found', 404, 'errorpage-404-title', 'errorpage-404-message'],
+  ['forbidden', 403, 'conv-unavailable-heading', 'conv-unavailable-body'],
+] as const)(
+  'a workspace that fails with %s explains itself from the catalogue',
+  async (code, status, heading, key) => {
+    server.use(http.get(WORKSPACE_URL, () => HttpResponse.json(
+      {error: {code, message: SERVER_ENGLISH}}, {status},
+    )));
+    renderWorkspace('qqx');
+
+    // Catches the server's English under the heading, which a Dutch reader cannot read.
+    // A consultation that does not exist is not "unavailable": the heading says so too.
+    await screen.findByRole('heading', {name: `(${heading})`}, {timeout: 10_000});
+    expect(screen.getByText(`(${key})`)).toBeVisible();
+    expect(document.body).not.toHaveTextContent(SERVER_ENGLISH);
+  },
+);
+
+/** The 403 the workspace returns for a voucher-gated consultation. */
+function serveVoucherRefusal(details: Record<string, unknown>) {
+  server.use(http.get(WORKSPACE_URL, () => HttpResponse.json({error: {
+    code: 'access_required',
+    message: 'Access to this consultation is required.',
+    details: {
+      slug: 'community-strategy', title: 'Community strategy', gatingType: 'voucher',
+      viewer: 'logged_out', certainty: 'known', reason: null, loginOptions: [], sharedResults: [],
+      ...details,
+    },
+  }}, {status: 403})));
+}
+
+test('a voucher consultation points a visitor at the voucher page, not at invitations', async () => {
+  serveVoucherRefusal({});
+  renderWorkspace();
+
+  // Catches every refusal reading as a missing invitation, which leaves a voucher holder with
+  // no way to find where the code goes.
+  expect(await screen.findByRole('heading', {name: testMessages['forbidden-voucher-heading']!}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByText(testMessages['forbidden-invite-heading']!)).toBeNull();
+  expect(screen.getByRole('link', {name: testMessages['forbidden-voucher-link']!}))
+    .toHaveAttribute('href', '/c/community-strategy/v');
+});
+
+test('a voucher account on another consultation is told so, with no code entry', async () => {
+  serveVoucherRefusal({gatingType: null, viewer: 'refused', reason: 'access-voucher-other'});
+  renderWorkspace();
+
+  expect(await screen.findByRole('heading', {name: testMessages['forbidden-voucher-other-heading']!}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByRole('link', {name: testMessages['forbidden-voucher-link']!})).toBeNull();
+});
+
+test('a revoked voucher reads as access withdrawn', async () => {
+  serveVoucherRefusal({viewer: 'access_lost', reason: 'access-voucher-revoked'});
+  renderWorkspace();
+
+  expect(await screen.findByRole('heading', {name: testMessages['forbidden-lost-voucher-heading']!}, {timeout: 10_000})).toBeVisible();
+  expect(screen.queryByRole('link', {name: testMessages['forbidden-voucher-link']!})).toBeNull();
 });

@@ -24,22 +24,23 @@ from urllib.parse import unquote
 
 import requests
 from dotenv import load_dotenv
-from flask import (Flask, abort, current_app, g, jsonify,
+from flask import (Flask, abort, current_app, g, jsonify, make_response,
                    has_request_context, redirect, request, send_from_directory, session, url_for)
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 from sqlalchemy import text as _sa_text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
-from db import (AdminRole, Argument,
+from db import (ACCOUNT_KIND_VOUCHER, AdminRole, Argument,
                 ArgumentSideState, ArgumentVote, AuditEvent, ContentFlag, Conversation,
                 ConversationBan, ConversationInvite, FeaturedStatement, Participant,
-                Participation, StatementProvenance, StatementSimilarityScore, db)
+                Participation, StatementProvenance, StatementSimilarityScore,
+                VoucherBatch, db)
 from polis_admin import (PolisParticipantClient, PolisParticipantError,
                          PolisServerClient, PolisServerError,
                          polis_server_config_error)
@@ -52,9 +53,11 @@ from api.v1 import (
     create_api_v1_blueprint, http_exception_json, is_api_request,
     register_api_error_handlers,
 )
-from services.identity import reconcile_participant_login
+from services.identity import (
+    create_voucher_participant, reconcile_participant_login,
+)
 from services.access import (
-    AccessRequired, check_access, is_gated_conversation,
+    AccessRequired, check_access, conversation_gating_type, is_gated_conversation,
 )
 from services.identity_reveal import (
     REVEAL_COOLDOWN_DAYS, REVEAL_WINDOW_DAYS, build_reveal_context as _reveal_context,
@@ -65,6 +68,7 @@ from services.results_report import build_results_report
 from services.intermediate_results import build_intermediate_results
 from services.invites import (
     InvitationNotInConversation, add_conversation_invites, build_invitation_roster,
+    claim_username_invites,
     remove_conversation_invite,
 )
 from services.conversation_about import build_conversation_about
@@ -82,6 +86,11 @@ from services.argument_commands import (
     submit_argument as submit_argument_command,
 )
 from services.content_flags import submit_content_flag
+from services.vouchers import (
+    CODE_MIN_LENGTH, WEAK_CODE_LENGTH, classify_voucher, generate_voucher_codes,
+    has_excluded_letters, import_voucher_codes, is_too_short, redeem_voucher_code,
+    weak_codes,
+)
 from services.admin_participants import (
     ParticipantNotInConversation, build_admin_participant_roster,
     set_participant_access,
@@ -94,8 +103,8 @@ from services.admin_roles import (
     replace_conversation_roles,
 )
 from services.admin_settings import (
-    build_admin_settings, update_conversation_settings,
-    update_recommendation_tier,
+    apply_demo_access_settings, build_admin_settings,
+    update_conversation_settings, update_recommendation_tier,
 )
 from services.admin_termination import (
     build_termination_state,
@@ -160,8 +169,8 @@ _SPA_BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stati
 # find, and stamping that marker would put it in the skip link — the first thing a keyboard
 # or screen-reader user meets. Same discipline as error_pages._t.
 _SPA_BOOTSTRAP_MESSAGES = {
-    'skip': ('base-skip-to-content', 'Skip to main content'),
-    'loading': ('base-loading-conversations', 'Loading conversations…'),
+    'skip': ('base-skip-to-content', 'Jump to content'),
+    'loading': ('common-loading', 'Loading…'),
 }
 # Matched structurally, not as a literal: v2/static/spa is gitignored and built at deploy
 # time, so a build tool that emits <html lang=en> or reorders attributes would silently turn
@@ -239,6 +248,307 @@ def _spa_shell_response():
     return response.make_conditional(request)
 
 
+# Copy for the voucher entry page, each with the English it falls back to (same
+# discipline as _spa_bootstrap_text: a missing catalogue must not put ⧼key⧽ on the page).
+_VOUCHER_MESSAGES = {
+    'doc-title': ('voucher-page-doc-title', 'Voucher code — $1'),
+    'intro': ('voucher-page-intro', 'You need a voucher code to take part in this consultation.'),
+    'label': ('voucher-page-label', 'Voucher code'),
+    'hint': ('voucher-page-hint', 'Capitals, spaces and hyphens do not matter.'),
+    'submit': ('voucher-page-submit', 'Continue'),
+    'empty': ('voucher-error-empty', 'Enter a voucher code.'),
+    'too-short': ('voucher-error-too-short', 'Voucher codes are at least $1 characters long.'),
+    'invalid': ('voucher-invalid', 'That code is not valid for this consultation.'),
+    'throttled': ('voucher-throttled',
+                  'That was too many wrong codes. Wait $1 seconds and try again.'),
+    'invalid-excluded': ('voucher-invalid-excluded-letters',
+                         'That code is not valid for this consultation. If it contains '
+                         'I, L, O or U, check whether those should be the numbers 1 and 0.'),
+    'joined': ('voucher-already-joined',
+               'You already take part in this consultation with a voucher in this browser. '
+               'Log out first to use a different code.'),
+    'switch-heading': ('voucher-switch-heading', 'You are signed in with another account'),
+    'switch-body': ('voucher-switch-body',
+                    'Continuing signs you out of your current account in this browser. '
+                    'You then take part in this consultation with the voucher account.'),
+    'switch-confirm': ('voucher-switch-confirm', 'Sign out and continue'),
+    'switch-cancel': ('voucher-switch-cancel', 'Cancel'),
+}
+
+_VOUCHER_PAGE = (
+    '<!DOCTYPE html><html lang="{lang}" dir="{dir}"><head>'
+    '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    '<meta name="robots" content="noindex,nofollow">'
+    '<title>{doc_title}</title>'
+    '<style>'
+    'body{{font-family:system-ui,-apple-system,sans-serif;max-width:28rem;margin:4rem auto;padding:0 1rem;line-height:1.5;color:#222}}'
+    'h1{{font-size:1.25rem;font-weight:600;margin-bottom:.5rem}}'
+    'p{{color:#555;margin-top:0}}'
+    'label{{display:block;font-weight:500;margin-bottom:.25rem}}'
+    'input{{width:100%;box-sizing:border-box;padding:.5rem;font-size:1rem;border:1px solid #767676;border-radius:4px}}'
+    'input:focus{{border-color:#36c;outline:2px solid #36c;outline-offset:1px}}'
+    '.hint{{font-size:.875rem;margin:.25rem 0 0}}'
+    '.error{{color:#b32424;font-size:.875rem;margin:.25rem 0 0}}'
+    'button{{margin-top:.75rem;padding:.5rem 1.25rem;font-size:1rem;border:none;border-radius:4px;background:#36c;color:#fff;cursor:pointer}}'
+    'button:hover{{background:#25a}}'
+    'a{{color:#36c}}'
+    '</style></head><body><main>'
+    '<h1>{heading}</h1>'
+    '{body}'
+    '</main></body></html>'
+)
+
+
+def _voucher_text(name: str, *params) -> str:
+    """Escaped copy for the voucher page in this request's locale."""
+    key, english = _VOUCHER_MESSAGES[name]
+    text = i18n.resolve(key, g.get('locale') or i18n.SOURCE_LOCALE, params)
+    if text.startswith(i18n._MISSING_L):
+        text = english
+        for index, value in enumerate(params, start=1):
+            text = text.replace(f'${index}', str(value))
+    return html.escape(text)
+
+
+def _voucher_response(conv, heading: str, body: str):
+    """Self-contained page: it carries a credential, so it is never cached."""
+    locale = g.get('locale') or i18n.SOURCE_LOCALE
+    response = make_response(_VOUCHER_PAGE.format(
+        lang=html.escape(locale), dir=i18n.text_direction(locale),
+        doc_title=_voucher_text('doc-title', conv.title),
+        heading=heading, body=body,
+    ))
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Vary'] = 'Cookie'
+    return response
+
+
+def _keep_other_params(path: str, **first) -> str:
+    """*path* with *first*, then this request's query parameters except the code.
+
+    Every voucher hop drops ``v`` and keeps the rest, so ``?uselang=`` and the
+    like survive the redirects; a language that is not enabled has no cookie to
+    fall back on.
+    """
+    pairs = list(first.items()) + [
+        (key, value) for key, value in request.args.items(multi=True) if key != 'v'
+    ]
+    return f'{path}?{urlencode(pairs)}' if pairs else path
+
+
+def _voucher_form_action(conv) -> str:
+    """Post back without the code, so a ?v=<code> in the address never rides
+    along as the Referer of the form post."""
+    return _keep_other_params(_path_conversation(conv.slug, page='v'))
+
+
+def _voucher_form_page(conv, *, error: str | None = None, code_value: str = '',
+                       error_params: tuple = ()):
+    """The typed-code form. The error is tied to the field for assistive tech."""
+    described_by = 'code-hint code-error' if error else 'code-hint'
+    invalid_attr = ' aria-invalid="true"' if error else ''
+    body = (
+        f'<p>{_voucher_text("intro")}</p>'
+        f'<form method="post" action="{html.escape(_voucher_form_action(conv))}"'
+        ' autocomplete="off" novalidate>'
+        f'<input type="hidden" name="csrf_token" value="{html.escape(generate_csrf())}">'
+        f'<label for="code">{_voucher_text("label")}</label>'
+        f'<input id="code" name="code" type="text" value="{html.escape(code_value)}"'
+        ' autocapitalize="characters" spellcheck="false"'
+        f' aria-describedby="{described_by}"'
+        f'{invalid_attr} autofocus>'
+        f'<p class="hint" id="code-hint">{_voucher_text("hint")}</p>'
+        + (f'<p class="error" id="code-error">{_voucher_text(error, *error_params)}</p>'
+           if error else '')
+        + f'<button type="submit">{_voucher_text("submit")}</button>'
+        '</form>'
+    )
+    return _voucher_response(conv, html.escape(conv.title), body)
+
+
+def _voucher_switch_page(conv, code: str):
+    """Ask before a voucher replaces the identity already in this browser."""
+    body = (
+        f'<p>{_voucher_text("switch-body")}</p>'
+        f'<form method="post" action="{html.escape(_voucher_form_action(conv))}"'
+        ' autocomplete="off">'
+        f'<input type="hidden" name="csrf_token" value="{html.escape(generate_csrf())}">'
+        f'<input type="hidden" name="code" value="{html.escape(code)}">'
+        '<input type="hidden" name="confirm" value="1">'
+        f'<button type="submit">{_voucher_text("switch-confirm")}</button>'
+        '</form>'
+        f'<p><a href="{html.escape(_keep_other_params(_path_conversation(conv.slug)))}">'
+        f'{_voucher_text("switch-cancel")}</a></p>'
+    )
+    return _voucher_response(conv, _voucher_text('switch-heading'), body)
+
+
+_CONVERSATION_PAGE_RE = re.compile(r'/c/([^/]+)')
+
+
+def _linked_voucher_redirect():
+    """Accept a voucher link on the conversation page itself: /c/<slug>?v=<code>.
+
+    The code is handed to the entry route (/c/<slug>/v), so rate limits, gating
+    and the identity checks stay in one place. On a conversation that is not
+    voucher-gated the parameter is dropped, so a stray code never lingers in the
+    address bar. Returns None when the request carries no code.
+    """
+    code = request.args.get('v', '')
+    match = _CONVERSATION_PAGE_RE.fullmatch(request.path)
+    if not code.strip() or match is None:
+        return None
+    slug = match.group(1)
+    conv = Conversation.query.filter_by(slug=slug).first()
+    if (conv is not None and is_gated_conversation(conv)
+            and conversation_gating_type(conv) == 'voucher'):
+        return redirect(_keep_other_params(_path_conversation(slug, page='v'), v=code))
+    return redirect(_keep_other_params(_path_conversation(slug)))
+
+
+def _start_voucher_session(participant) -> None:
+    """One identity per browser session (#368): nothing from a previous login,
+    demo guest or voucher account survives into the voucher session."""
+    session.clear()
+    session['xid'] = participant.xid
+    session['emailable'] = False
+    g.pop('participant', None)  # resolved earlier in this request, before the switch
+
+
+def _voucher_identity_conflict(conv, target) -> str | None:
+    """How the identity already in this session relates to the voucher entry.
+
+    ``None``: nothing to lose (no session, a demo guest, or the same account).
+    ``'joined'``: this browser already takes part here with another voucher, and
+    the code would mint a second account, which #368 refuses.
+    ``'switch'``: another account would be signed out; ask first.
+    """
+    current = _current_participant()
+    if 'username' in session:
+        return 'switch'
+    if current is None or current.is_demo:
+        return None
+    if target is not None and current.id == target.id:
+        return None
+    if (current.account_kind == ACCOUNT_KIND_VOUCHER
+            and current.conversation_id == conv.id and target is None):
+        return 'joined'
+    return 'switch'
+
+
+def _voucher_not_valid(conv, code: str):
+    """One answer for wrong, revoked, expired-unused and in-flight codes alike.
+
+    Codes may be imported in any shape, so nothing is refused before the lookup.
+    The only variation depends on what was typed, never on the code's state: a
+    code with I, L, O or U gets a hint about 1 and 0 and stays in the field to
+    correct; any other miss is not echoed back.
+    """
+    g.voucher_attempt_failed = True  # spends the failed-attempt budgets below
+    if has_excluded_letters(code):
+        return _voucher_form_page(conv, error='invalid-excluded', code_value=code)
+    return _voucher_form_page(conv, error='invalid')
+
+
+# Failed-attempt budget for voucher entry (#368): it locks out the guesser,
+# never the consultation. Only misses are counted, so people entering valid
+# codes never trip it. After 3 wrong codes in a minute a browser session (or
+# signed-in account) waits until the minute is up, per consultation; the answer
+# is voucher-throttled (429 + Retry-After), no code is locked or invalidated.
+# It does not depend on the client address, which Toolforge may not pass (#411);
+# an IP-based lockout is tracked in #458. Someone who discards their cookie can
+# keep guessing, capped only by the site-wide unauthenticated limit.
+_VOUCHER_SESSION_FAILURE_LIMIT = '3 per minute'
+
+
+def _voucher_limit_setting(name: str, default: str) -> str:
+    return current_app.config.get(name) or os.environ.get(name, '').strip() or default
+
+
+def _voucher_session_failure_limit() -> str:
+    return _voucher_limit_setting('VOUCHER_SESSION_FAILURE_LIMIT', _VOUCHER_SESSION_FAILURE_LIMIT)
+
+
+def _voucher_budget_exempt() -> bool:
+    """The blank form (a GET without ?v=) is never throttled: it tests nothing."""
+    return request.method == 'GET' and not request.args.get('v', '').strip()
+
+
+def _voucher_slug() -> str:
+    return (request.view_args or {}).get('slug', '')
+
+
+def _voucher_session_budget_key() -> str:
+    """This browser session (or signed-in account) on this process."""
+    identity = _ratelimit_digest(_ratelimit_account_or_session_identity())
+    return f'session:{_voucher_slug()}:{identity}'
+
+
+def _voucher_attempt_failed(_response) -> bool:
+    return bool(g.get('voucher_attempt_failed'))
+
+
+def _voucher_throttled(request_limit):
+    """The voucher page's own 429: the form, with how long to wait.
+
+    What was typed (or linked) stays in the field, so it can be sent again once
+    the wait is over. That depends only on the input, not on the code's state.
+    """
+    conv = Conversation.query.filter_by(slug=_voucher_slug()).first()
+    if conv is None:
+        return None  # fall back to the generic 429
+    wait = max(1, int(request_limit.reset_at - time.time()))
+    typed = request.form.get('code', '') or request.args.get('v', '')
+    response = _voucher_form_page(conv, error='throttled', code_value=typed,
+                                  error_params=(wait,))
+    response.status_code = 429
+    response.headers['Retry-After'] = str(wait)
+    return response
+
+
+def _voucher_submit(conv, code: str, *, confirmed: bool):
+    """Redeem or resume *code* on *conv*, then send the holder to the process.
+
+    The code leaves the address bar on success: the redirect target carries none.
+    """
+    if not code.strip():
+        return _voucher_form_page(conv, error='empty')
+    # Shorter than any code can be: say so, and don't count it as a guess.
+    if is_too_short(code):
+        return _voucher_form_page(conv, error='too-short', code_value=code,
+                                  error_params=(CODE_MIN_LENGTH,))
+
+    entry = classify_voucher(code, conv.id)
+    if entry.outcome == 'invalid':
+        return _voucher_not_valid(conv, code)
+
+    # Both answers below reveal that the code is valid without using it, so they
+    # spend the failed-attempt budgets like a miss: otherwise a signed-in browser
+    # could test codes unthrottled.
+    conflict = _voucher_identity_conflict(conv, entry.participant)
+    if conflict == 'joined':
+        g.voucher_attempt_failed = True
+        return _voucher_form_page(conv, error='joined')
+    if conflict == 'switch' and not confirmed:
+        g.voucher_attempt_failed = True
+        return _voucher_switch_page(conv, code)
+
+    participant = entry.participant
+    if entry.outcome == 'redeem':
+        participant = redeem_voucher_code(
+            entry.voucher, conv.id,
+            lambda: create_voucher_participant(
+                conversation_id=conv.id,
+                xid=_derive_xid(f'voucher:{secrets.token_urlsafe(16)}'),
+            ),
+        )
+        if participant is None:
+            return _voucher_not_valid(conv, code)
+
+    _start_voucher_session(participant)
+    return redirect(_keep_other_params(_path_conversation(conv.slug)))
+
+
 _TEXT_ALLOWED_TAGS  = {'p', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'br'}
 _TEXT_ALLOWED_ATTRS = {'a': {'href', 'title'}}
 _POLIS_ID_RE     = re.compile(r'^[A-Za-z0-9]{6,20}$')
@@ -266,6 +576,16 @@ def _truthy(value) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _claim_invites_at_login(participant) -> None:
+    """Bind invitations made by user name before this account existed (see
+    services.invites.claim_username_invites). Logged by participant id only."""
+    claimed = claim_username_invites(db.session, mw_user_id=participant.mw_user_id,
+                                     mw_username=participant.mw_username)
+    if claimed:
+        current_app.logger.info('login bound %d invitation(s) to participant %s',
+                                claimed, participant.id)
 
 
 def _derive_xid(subject: str) -> str:
@@ -493,7 +813,7 @@ def _build_phase6_results(
     client = _polis_server_client()
 
     # Phase 2 counts keyed by polis_statement_id (Phase 2 tid).
-    p2_tids = [fs.polis_statement_id for fs in confirmed if fs.polis_statement_id]
+    p2_tids = [fs.polis_statement_id for fs in confirmed if fs.polis_statement_id is not None]
 
     # ── Aggregate fetches (cached) ────────────────────────────────────────────
     # ~5 Postgres/Particiapi round trips, identical for every viewer. Memoise them
@@ -571,7 +891,7 @@ def _build_phase6_results(
         p2_tid = fs.polis_statement_id
 
         p6_row = (p6_counts or {}).get(p6_tid, {'n_agree': 0, 'n_disagree': 0, 'n_pass': 0, 'n_voters': 0})
-        p2_row = (p2_counts_raw or {}).get(p2_tid, None) if p2_tid else None
+        p2_row = (p2_counts_raw or {}).get(p2_tid, None) if p2_tid is not None else None
 
         p6_n = p6_row['n_voters']
         p6_pct_agree    = _pct(p6_row['n_agree'],    p6_n)
@@ -1411,7 +1731,7 @@ def _unauthenticated_site_rate_limit_value() -> str:
 def _unauthenticated_site_limit():
     """Decorate an unauthenticated entry point with the shared site ceiling.
 
-    Use ``shared_limit`` so /login, /oauth-callback, and the future /v/<code>
+    Use ``shared_limit`` so /login, /oauth-callback, and the voucher entry
     route spend the same budget even though they are different Flask endpoints.
     """
     return limiter.shared_limit(
@@ -1514,18 +1834,23 @@ def _ratelimit_identity_key() -> str:
         client_identity = get_remote_address()
         identity_kind, identity_value = 'ip', client_identity
 
-    # Production startup requires RATELIMIT_IDENTITY_SECRET. Local and staging
-    # configurations may omit it, but must still hash the value: a durable xid
-    # must never land verbatim in limiter storage or limiter-side logs.
+    return f'{identity_kind}:{_ratelimit_digest(identity_value)}'
+
+
+def _ratelimit_digest(value: str) -> str:
+    """Keyed hash of a limiter identity.
+
+    Production startup requires RATELIMIT_IDENTITY_SECRET. Local and staging
+    configurations may omit it, but must still hash the value: a durable xid
+    must never land verbatim in limiter storage or limiter-side logs.
+    """
     identity_secret = (
         current_app.config.get('RATELIMIT_IDENTITY_SECRET')
         or current_app.config.get('SECRET_KEY')
         or 'wiki-polis-dev-ratelimit-fallback'
     )
-    digest = hmac.new(str(identity_secret).encode('utf-8'),
-                      identity_value.encode('utf-8'),
-                      hashlib.sha256).hexdigest()
-    return f'{identity_kind}:{digest}'
+    return hmac.new(str(identity_secret).encode('utf-8'), value.encode('utf-8'),
+                    hashlib.sha256).hexdigest()
 
 
 limiter = Limiter(key_func=_ratelimit_identity_key, default_limits=[])
@@ -1811,6 +2136,13 @@ def _check_join_eligibility(conversation, participant) -> tuple[bool, str, dict]
     policy_id = (conversation.eligibility_event_id or '').strip()
     if not policy_id:
         return True, 'not_required', {}
+    # Wikimedia eligibility is checked by username, which a voucher account does
+    # not have: holding the voucher for this process is its admission (#368).
+    # (The access check already refuses a voucher account elsewhere; the scope
+    # test here keeps the skip from ever widening beyond that.)
+    if (participant.account_kind == ACCOUNT_KIND_VOUCHER
+            and participant.conversation_id == conversation.id):
+        return True, 'not_required', {'reason': 'voucher admission'}
     base_url = current_app.config.get('ACCOUNT_ELIGIBILITY_URL', '').strip()
     if not base_url:
         return False, 'unavailable', {'reason': 'eligibility checker is not configured'}
@@ -2090,7 +2422,7 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
     """Return the page-composition state previously owned by the Jinja route."""
     conv = Conversation.query.filter_by(slug=slug).first()
     if conv is None:
-        if 'username' not in session and not _is_demo_session():
+        if _current_participant() is None:
             abort(401)
         abort(404)
 
@@ -2100,11 +2432,14 @@ def _conversation_workspace_api_payload(slug: str) -> dict:
     else:
         if _is_demo_session():
             _exit_demo_session()
-        if 'username' not in session:
+            g.pop('participant', None)
+        # A Wikimedia login and a voucher account are both signed-in identities;
+        # the session's xid, not its username, is what says who this is.
+        participant = _current_participant()
+        if participant is None:
             if is_gated_conversation(conv):
                 _check_conversation_access(conv, None)
             abort(401)
-        participant = _current_participant()
         participation = None
 
     _check_conversation_access(conv, participant)
@@ -2224,6 +2559,7 @@ def _moderation_log_api_payload(slug: str) -> dict:
                 'pseudonym': row['pseudonym'],
                 'scope': row['scope'],
                 'actor': row['actor'],
+                'actorKind': row['actor_kind'],
             }
             for row in _conversation_ban_log_rows(conv)
         ],
@@ -2384,7 +2720,9 @@ def _join_conversation_api_payload(slug: str, body: dict) -> tuple[dict, int]:
         participant=participant,
         pseudonym=body['pseudonym'],
         notify_email=body.get('notifyEmail', False),
-        notify_talk_page=body.get('notifyTalkPage', False),
+        # A voucher account has no Wikimedia talk page to notify (#368).
+        notify_talk_page=(body.get('notifyTalkPage', False)
+                          and participant.account_kind != ACCOUNT_KIND_VOUCHER),
         emailable=bool(session.get('emailable')),
         check_eligibility=_check_join_eligibility,
     )
@@ -2931,7 +3269,7 @@ def _statement_api_payload(
         try:
             parent_text = _statement_text_map(conv.polis_id).get(derived_from)
         except PolisParticipantError as exc:
-            raise ExploreUpstreamError('Could not load the original statement.') from exc
+            raise StatementPreparationUnavailable() from exc
         if parent_text is None:
             raise UnknownParentStatement(derived_from)
         scores = _statement_similarity_scores(text_value, parent_text)
@@ -3174,14 +3512,9 @@ def _create_admin_conversation_api_payload(body: dict) -> dict:
         abort(400, description='Invalid conversation slug or phase route.')
     if not managed and not _valid_polis_id(body['polisId'] or ''):
         abort(400, description='A valid Polis conversation ID is required in manual mode.')
-    result = create_admin_conversation(
-        fields={**body, 'polis_id': body['polisId']},
-        existing_slug=Conversation.query.filter_by(slug=body['slug']).first() is not None,
-        managed_creation=managed,
-        create_upstream=lambda title: _polis_server_client().create_conversation(
-            title, strict_moderation=True,
-        ),
-        conversation_factory=lambda polis_id: Conversation(
+
+    def new_conversation(polis_id):
+        conversation = Conversation(
             slug=body['slug'], title=body['title'].strip(), polis_id=polis_id,
             active=True, access_policy=body['accessPolicy'],
             phase_route=body['phaseRoute'],
@@ -3190,7 +3523,19 @@ def _create_admin_conversation_api_payload(body: dict) -> dict:
             eligibility_event_id=body['eligibilityEventId'] or None,
             eligibility_label=body['eligibilityLabel'] or None,
             statement_moderation_policy='moderate',
+        )
+        if conversation.access_policy == 'demo':
+            apply_demo_access_settings(conversation)
+        return conversation
+
+    result = create_admin_conversation(
+        fields={**body, 'polis_id': body['polisId']},
+        existing_slug=Conversation.query.filter_by(slug=body['slug']).first() is not None,
+        managed_creation=managed,
+        create_upstream=lambda title: _polis_server_client().create_conversation(
+            title, strict_moderation=True,
         ),
+        conversation_factory=new_conversation,
         session=db.session,
         audit=lambda conversation_id, slug: record_audit(
             'conversation.create', conv_id=conversation_id, slug=slug,
@@ -3420,6 +3765,7 @@ def _admin_settings_api_payload(conv_id: int) -> dict:
             conv.phase_route, PHASE_ROUTES['default_7'],
         )['label'],
         can_edit=_can_organize(conv),
+        can_switch_demo=_is_global_admin(),
         self_link=url_for(
             'api_v1.get_admin_conversation_settings', conversation_id=conv.id,
         ),
@@ -3883,10 +4229,18 @@ def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
 
 def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
     conv = _require_organizer_for_conv(conv_id)
+    access_policy = body['accessPolicy']
+    if access_policy is None:
+        # The field set without the legacy alias: a demo item stays demo (a gate on it is
+        # then refused as a gate, not as a switch); anything else is derived from the
+        # gate. Only an explicit accessPolicy moves an item in or out of demo, and only
+        # for a site admin.
+        access_policy = ('demo' if conv.access_policy == 'demo'
+                         else 'invite_only' if body.get('gated') else 'public')
     result = update_conversation_settings(
         conversation=conv,
         title=body['title'], intro_html=body['introHtml'],
-        outro_html=body['outroHtml'], access_policy=body['accessPolicy'],
+        outro_html=body['outroHtml'], access_policy=access_policy,
         eligibility_event_id=body['eligibilityEventId'],
         eligibility_label=body['eligibilityLabel'],
         tier=body['recommendationTier'], sanitise=_sanitise_text,
@@ -3898,6 +4252,7 @@ def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
         results_shared=body.get('resultsShared', False),
         show_usernames=body.get('showUsernames', False),
         access_request_text=body.get('accessRequestText'),
+        may_switch_demo=_is_global_admin(),
     )
     return {
         'changed': result.changed,
@@ -4542,8 +4897,14 @@ def _conversation_ban_log_rows(conv: Conversation) -> list[dict]:
         rows.append({
             'action': 'Unbanned' if event.operation == 'participant.unban' else 'Banned',
             'ts': event.ts,
-            'pseudonym': pseudonyms.get(target_id, 'participant'),
-            'actor': actors.get(event.actor_participant_id, 'administrator'),
+            'pseudonym': pseudonyms.get(target_id) or None,
+            'actor': actors.get(event.actor_participant_id) or None,
+            # record_audit marks a ban by an env-listed admin, who has no Participant row, so
+            # the page can name them rather than show an unknown moderator.
+            'actor_kind': ('site_admin'
+                           if event.actor_participant_id is None
+                           and (event.detail or {}).get('actor_kind') == 'env_admin'
+                           else None),
             'scope': 'conversation',
         })
     return rows
@@ -5166,6 +5527,69 @@ def create_app(test_config: dict | None = None) -> Flask:
             _upgrade()
             click.echo('Database migrated to head revision.')
 
+    # Until the organizer screens exist (#368), codes are created from the shell:
+    #   flask --app app vouchers generate <slug> <count> [--label TEXT]
+    #   flask --app app vouchers import <slug> <file|-> [--label TEXT]
+    # Only HMACs are stored, so generated codes are printed once and cannot be
+    # shown again. To use the same codes in several processes, import one list
+    # into each of them.
+    vouchers_cli = click.Group('vouchers', help='Create voucher codes for a process.')
+    app.cli.add_command(vouchers_cli)
+
+    def _voucher_batch_for(slug: str, label: str | None):
+        conv = Conversation.query.filter_by(slug=slug).first()
+        if conv is None:
+            raise click.ClickException(f'No conversation with slug {slug!r}.')
+        if not (is_gated_conversation(conv) and conversation_gating_type(conv) == 'voucher'):
+            click.echo(f'Warning: {slug!r} is not voucher-gated yet; the codes will not '
+                       'work until its gating type is set to voucher.', err=True)
+        batch = VoucherBatch(conversation_id=conv.id, label=label)
+        db.session.add(batch)
+        return batch
+
+    @vouchers_cli.command('generate')
+    @click.argument('slug')
+    @click.argument('count', type=click.IntRange(1, 20000))
+    @click.option('--label', default=None, help='Batch label, e.g. "Workshop Utrecht 12 Oct".')
+    def vouchers_generate_cmd(slug, count, label):
+        """Generate COUNT codes and print them, one per line. Shown only once."""
+        codes = generate_voucher_codes(_voucher_batch_for(slug, label), count)
+        db.session.commit()
+        for code in codes:
+            click.echo(' '.join(code[i:i + 4] for i in range(0, len(code), 4)))
+
+    @vouchers_cli.command('import')
+    @click.argument('slug')
+    @click.argument('source', type=click.File('r', encoding='utf-8'))
+    @click.option('--label', default=None, help='Batch label, e.g. "Workshop Utrecht 12 Oct".')
+    def vouchers_import_cmd(slug, source, label):
+        """Import organizer-made codes from SOURCE (a file, or - for stdin), one per line.
+
+        Capitals, spaces and hyphens do not matter. Codes must be 5-64 letters and
+        digits; a code is only as hard to guess as it is long and random.
+        """
+        result = import_voucher_codes(_voucher_batch_for(slug, label), source)
+        if not result.added:
+            db.session.rollback()
+            raise click.ClickException('No codes imported.')
+        db.session.commit()
+        click.echo(f'Imported {len(result.added)} codes.')
+        weak = weak_codes(result.added)
+        if weak:
+            # Counted, not printed: they are live codes now.
+            click.echo(f'Warning: {len(weak)} of these codes are digits only or shorter '
+                       f'than {WEAK_CODE_LENGTH} characters, and easy to guess. See '
+                       'guide_runbook.md, "Voucher codes".', err=True)
+        if result.duplicates:
+            # Counted, not printed: a duplicate may be a live code.
+            click.echo(f'Skipped {len(result.duplicates)} duplicates.', err=True)
+        if result.rejected:
+            # Not stored, so not credentials: list them so the file can be fixed.
+            click.echo(f'Rejected {len(result.rejected)} lines that are not 5-64 letters '
+                       'and digits:', err=True)
+            for line in result.rejected:
+                click.echo(f'  {line}', err=True)
+
     @app.cli.command('process-phase-schedules')
     def process_phase_schedules_cmd():
         """Fire due scheduled active-to-passive phase transitions."""
@@ -5247,6 +5671,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     def _serve_canonical_spa_request():
         if request.method != 'GET' or not _is_canonical_spa_path(request.path):
             return None
+        linked = _linked_voucher_redirect()
+        if linked is not None:
+            return linked
         # Accessing ``request.host`` applies Flask's TRUSTED_HOSTS validation.
         # Route dispatch normally triggers it later, but this before-request SPA
         # response intentionally bypasses route dispatch.
@@ -5267,11 +5694,14 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
         response.headers['Content-Security-Policy'] = csp
         response.headers['X-Content-Type-Options']  = 'nosniff'
-        # Adopted voucher links carry the credential in a path segment. Keep it
-        # out of referrers on both the typed /v page and /v/<code> routes.
+        # A linked voucher code arrives as /c/<slug>/v?v=<code> or
+        # /c/<slug>?v=<code>. 'strict-origin' sends only this site's origin, and
+        # only over HTTPS: the code never leaves in a Referer, while the entry
+        # form's own POST still carries the Referer that Flask-WTF requires over
+        # HTTPS (no-referrer made it fail with "The referrer header is missing").
         response.headers['Referrer-Policy'] = (
-            'no-referrer'
-            if request.path == '/v' or request.path.startswith('/v/')
+            'strict-origin'
+            if request.path.endswith('/v') or 'v' in request.args
             else 'strict-origin-when-cross-origin'
         )
         # X-Frame-Options superseded by frame-ancestors in CSP above, but kept for old browsers
@@ -5434,6 +5864,7 @@ def _register_routes(app: Flask) -> None:
             )
             if participant.id is None:
                 db.session.add(participant)
+            _claim_invites_at_login(participant)
             db.session.commit()
             session['username']  = username
             session['xid']       = participant.xid
@@ -5484,6 +5915,7 @@ def _register_routes(app: Flask) -> None:
             )
             if participant.id is None:
                 db.session.add(participant)
+            _claim_invites_at_login(participant)
             db.session.commit()
             session['username']  = username
             session['xid']       = participant.xid
@@ -5538,6 +5970,31 @@ def _register_routes(app: Flask) -> None:
     def spa_shell(spa_path: str = ''):
         """Serve the built React shell; client routing owns the remaining path."""
         return _spa_shell_response()
+
+
+    # ── Voucher redemption (#368) ──────────────────────────────────────────────
+    # A linked code arrives as ?v=<code> and is redeemed (or resumed) on open.
+
+    @app.route('/c/<slug>/v', methods=['GET', 'POST'])
+    @_unauthenticated_site_limit()
+    @limiter.limit(_voucher_session_failure_limit, key_func=_voucher_session_budget_key,
+                   scope='voucher-failures-session', deduct_when=_voucher_attempt_failed,
+                   exempt_when=_voucher_budget_exempt, on_breach=_voucher_throttled)
+    def voucher_entry(slug: str):
+        conv = Conversation.query.filter_by(slug=slug).first()
+        if (conv is None or not is_gated_conversation(conv)
+                or conversation_gating_type(conv) != 'voucher'):
+            abort(404)
+
+        if request.method == 'POST':
+            return _voucher_submit(
+                conv, request.form.get('code', ''),
+                confirmed=request.form.get('confirm') == '1',
+            )
+        code = request.args.get('v', '')
+        if code.strip():
+            return _voucher_submit(conv, code, confirmed=False)
+        return _voucher_form_page(conv)
 
 
     # ── OAuth ─────────────────────────────────────────────────────────────────
@@ -5641,6 +6098,7 @@ def _register_routes(app: Flask) -> None:
         )
         if participant.id is None:
             db.session.add(participant)
+        _claim_invites_at_login(participant)
         db.session.commit()
 
         next_url = session.pop('next', None)
