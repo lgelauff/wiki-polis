@@ -165,8 +165,8 @@ function OpinionGroups({report}: {report: Report}) {
       <p className="results-group-heading">{`\n        ${msg('report-group-label', groupIndex + 1)}\n        `}{!!group.memberCount && <span className="muted" style={{fontWeight: 400, fontSize: 12}}>{msg('report-group-members', group.memberCount)}</span>}{'\n      '}</p>
       {group.positions.map((position, index) => <div className="results-row" key={`${position.choice}-${index}`}>
         <span className={`results-badge results-${position.choice}`}>{position.choice === 'agree' ? msg('report-badge-agree') : msg('report-badge-disagree')}</span>
-        <span className="results-text">{msg('conv-results-quoted', position.statement)}</span>
         {!!position.percentage && <span className="results-pct">{percentage(Math.trunc(position.percentage), {digits: 0})}</span>}
+        <span className="results-text">{msg('conv-results-quoted', position.statement)}</span>
       </div>)}
     </div>)}
   </div>;

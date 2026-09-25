@@ -13,8 +13,8 @@ function ResultRow({position}: {position: Position}) {
   const percentage = usePercentFormat();
   return <div className="results-row">
     <span className={`results-badge results-${position.choice}`}>{position.choice === 'agree' ? msg('conv-badge-agree') : msg('conv-badge-disagree')}</span>
-    <span className="results-text">{msg('conv-results-quoted', position.statement)}</span>
     <span className="results-pct">{percentage(position.percentage, {digits: 0})}</span>
+    <span className="results-text">{msg('conv-results-quoted', position.statement)}</span>
   </div>;
 }
 
