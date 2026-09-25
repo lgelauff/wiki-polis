@@ -323,10 +323,23 @@ def _voucher_response(conv, heading: str, body: str):
     return response
 
 
+def _keep_other_params(path: str, **first) -> str:
+    """*path* with *first*, then this request's query parameters except the code.
+
+    Every voucher hop drops ``v`` and keeps the rest, so ``?uselang=`` and the
+    like survive the redirects; a language that is not enabled has no cookie to
+    fall back on.
+    """
+    pairs = list(first.items()) + [
+        (key, value) for key, value in request.args.items(multi=True) if key != 'v'
+    ]
+    return f'{path}?{urlencode(pairs)}' if pairs else path
+
+
 def _voucher_form_action(conv) -> str:
-    """Post back without the query string, so a ?v=<code> in the address never
-    rides along as the Referer of the form post."""
-    return _path_conversation(conv.slug, page='v')
+    """Post back without the code, so a ?v=<code> in the address never rides
+    along as the Referer of the form post."""
+    return _keep_other_params(_path_conversation(conv.slug, page='v'))
 
 
 def _voucher_form_page(conv, *, error: str | None = None, code_value: str = '',
@@ -364,7 +377,8 @@ def _voucher_switch_page(conv, code: str):
         '<input type="hidden" name="confirm" value="1">'
         f'<button type="submit">{_voucher_text("switch-confirm")}</button>'
         '</form>'
-        f'<p><a href="{html.escape(_path_conversation(conv.slug))}">{_voucher_text("switch-cancel")}</a></p>'
+        f'<p><a href="{html.escape(_keep_other_params(_path_conversation(conv.slug)))}">'
+        f'{_voucher_text("switch-cancel")}</a></p>'
     )
     return _voucher_response(conv, _voucher_text('switch-heading'), body)
 
@@ -388,8 +402,8 @@ def _linked_voucher_redirect():
     conv = Conversation.query.filter_by(slug=slug).first()
     if (conv is not None and is_gated_conversation(conv)
             and conversation_gating_type(conv) == 'voucher'):
-        return redirect(f"{_path_conversation(slug, page='v')}?{urlencode({'v': code})}")
-    return redirect(_path_conversation(slug))
+        return redirect(_keep_other_params(_path_conversation(slug, page='v'), v=code))
+    return redirect(_keep_other_params(_path_conversation(slug)))
 
 
 def _start_voucher_session(participant) -> None:
@@ -532,7 +546,7 @@ def _voucher_submit(conv, code: str, *, confirmed: bool):
             return _voucher_not_valid(conv, code)
 
     _start_voucher_session(participant)
-    return redirect(_path_conversation(conv.slug))
+    return redirect(_keep_other_params(_path_conversation(conv.slug)))
 
 
 _TEXT_ALLOWED_TAGS  = {'p', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'br'}
