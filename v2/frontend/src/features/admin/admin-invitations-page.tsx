@@ -64,7 +64,8 @@ export function AdminInvitationsPage({
       setInput('');
     },
     onError: () => {
-      setInput('');
+      // The list stays in the textarea: the save failed, so whoever typed it
+      // still needs it to retry or to correct one name.
       setToast({
         id: Date.now(),
         category: 'error',
@@ -91,6 +92,13 @@ export function AdminInvitationsPage({
   }
 
   const title = data.conversation.title;
+  const invited = data.invitations.length;
+  // "Linked" = the invitation is bound to a Wikimedia account by user id, which
+  // happens when that account logs in to the site. It says nothing about
+  // whether that person has joined *this* consultation. "Never logged in" = no
+  // account with this exact name has logged in to the site yet, so the
+  // invitation is not bound to an account.
+  const linked = data.invitations.filter((invitation) => invitation.signedIn).length;
   return (
     <LegacyShell
       headerMode="admin"
@@ -114,6 +122,11 @@ export function AdminInvitationsPage({
         <p className="muted" style={{marginBottom: '1.25rem'}}>
           Access policy: <strong>{accessPolicyLabel(msg, data.conversation.accessPolicy)}</strong>
         </p>
+        {invited > 0 && (
+          <p className="muted" style={{marginBottom: '1.25rem'}}>
+            {invited} invited · {linked} linked · {invited - linked} never logged in
+          </p>
+        )}
 
         {data.conversation.accessPolicy !== 'invite_only' && (
           <div className="landing-section">
@@ -143,12 +156,13 @@ export function AdminInvitationsPage({
 
         <table className="admin-table">
           <thead>
-            <tr><th>Username</th><th>Added</th><th /></tr>
+            <tr><th>Username</th><th>Status</th><th>Added</th><th /></tr>
           </thead>
           <tbody>
             {data.invitations.map((invitation) => (
               <tr key={invitation.id}>
                 <td>{invitation.username}</td>
+                <td>{invitation.signedIn ? 'Linked' : 'Never logged in'}</td>
                 <td className="muted">{formatLegacyDate(invitation.createdAt)}</td>
                 <td>
                   <form
@@ -158,13 +172,19 @@ export function AdminInvitationsPage({
                     }}
                     style={{display: 'inline'}}
                   >
-                    <button type="submit" className="btn-small btn-danger">remove</button>
+                    <button
+                      type="submit"
+                      className="btn-small btn-danger"
+                      aria-label={`Remove invitation for ${invitation.username}`}
+                    >
+                      remove
+                    </button>
                   </form>
                 </td>
               </tr>
             ))}
             {!data.invitations.length && (
-              <tr><td colSpan={3} className="muted">No invites yet.</td></tr>
+              <tr><td colSpan={4} className="muted">No invites yet.</td></tr>
             )}
           </tbody>
         </table>

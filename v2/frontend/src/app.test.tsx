@@ -377,6 +377,9 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(screen.getByText('Only people who have been given access')).toBeVisible();
   expect(screen.queryByText('invite_only', {exact: false})).not.toBeInTheDocument();
   expect(screen.getByText('Existing editor')).toBeVisible();
+  expect(screen.getByText('1 invited · 1 linked · 0 never logged in')).toBeVisible();
+  const existingRow = screen.getByText('Existing editor').closest('tr');
+  expect(within(existingRow!).getByText('Linked')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia usernames (one per line)'), {
     target: {value: 'New editor\nNew editor'},
   });
@@ -386,13 +389,19 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(screen.getByRole('status')).toHaveTextContent('Invites: 1 added; 1 duplicate input.');
   const newEditorRow = screen.getByText('New editor').closest('tr');
   expect(newEditorRow).not.toBeNull();
-  fireEvent.click(within(newEditorRow!).getByRole('button', {name: 'remove'}));
+  expect(within(newEditorRow!).getByText('Never logged in')).toBeVisible();
+  expect(screen.getByText('2 invited · 1 linked · 1 never logged in')).toBeVisible();
+  fireEvent.click(within(newEditorRow!).getByRole('button', {
+    name: 'Remove invitation for New editor',
+  }));
   expect(await screen.findByText('No invites yet.')).toBeVisible();
+  expect(screen.getByText('No invites yet.').closest('td')).toHaveAttribute('colspan', '4');
+  expect(screen.queryByText(/invited ·/)).not.toBeInTheDocument();
 });
 
 test('warns that invites are inert in words, not in stored values', async () => {
   // The default roster fixture is invite_only, so the warning branch never renders there.
-  // This is the only prose this scope rewrites, and it names two access-policy labels.
+  // This is the only prose this scope rewrites, and it names one access-policy label.
   server.use(http.get(
     new URL('/api/v1/admin/conversations/7/invitations', globalThis.location.origin).toString(),
     () => HttpResponse.json({data: {
@@ -421,7 +430,7 @@ test('warns that invites are inert in words, not in stored values', async () => 
   expect(note.textContent).not.toMatch(/\bpublic\b/);
 });
 
-test('restores the legacy cleared form and toast after an invitation save error', async () => {
+test('keeps the typed invitation list and shows a toast after a save error', async () => {
   server.use(http.put(
     new URL(
       '/api/v1/admin/conversations/7/invitations',
@@ -446,7 +455,7 @@ test('restores the legacy cleared form and toast after an invitation save error'
   expect(await screen.findByRole('alert')).toHaveTextContent(
     "Couldn't save invites — please review the list and retry.",
   );
-  expect(input).toHaveValue('');
+  expect(input).toHaveValue('New editor');
 });
 
 test('replaces a conversation role set from the admin workspace', async () => {

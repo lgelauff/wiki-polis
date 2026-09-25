@@ -1356,8 +1356,8 @@
         }
       },
       "AdminInvitation": {
-        "type": "object", "required": ["id", "username", "createdAt"], "additionalProperties": false,
-        "properties": {"id": {"type": "integer", "minimum": 1}, "username": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}
+        "type": "object", "required": ["id", "username", "createdAt", "signedIn"], "additionalProperties": false,
+        "properties": {"id": {"type": "integer", "minimum": 1}, "username": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "signedIn": {"type": "boolean"}}
       },
       "AdminInvitationBatchRequest": {
         "type": "object", "required": ["usernames"], "additionalProperties": false,

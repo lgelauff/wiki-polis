@@ -1776,6 +1776,7 @@ export interface components {
             username: string;
             /** Format: date-time */
             createdAt: string;
+            signedIn: boolean;
         };
         AdminInvitationBatchRequest: {
             usernames: string[];
