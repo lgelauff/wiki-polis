@@ -129,6 +129,10 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   const summaryRef = useRef<HTMLDivElement>(null);
   const ids = useId();
   const canEdit = data.capabilities.edit;
+  // Only a site admin moves a consultation into or out of the Practice Environment (#472);
+  // everyone else sees whether it is in it, as a fact, never as a choice.
+  const canSwitchDemo = data.capabilities.switchDemo;
+  const practice = accessPolicy === 'demo';
   // Both flags carry the same server predicate (the Explore phase flag); either one being
   // true means the stored admission answer cannot change, so the row renders as text --
   // which is what today's page does by disabling both of its access controls.
@@ -256,7 +260,12 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
         </section>
         <section aria-label={msg('admin-access-heading')}>
           <header><span>02</span><div><p>Who can discover and join this consultation.</p></div></header>
-          {admissionLocked ? <div className="access-answer">
+          {practice ? <div className="access-answer">
+            {/* Practice has one fixed answer, stored by the server whatever is sent, so it is
+                stated rather than offered: a gate here would only be refused. */}
+            <p className="access-answer-legend">{msg('admin-access-admission-legend')}</p>
+            <p className="access-answer-value">{msg('admin-access-admission-practice')}</p>
+          </div> : admissionLocked ? <div className="access-answer">
             <p className="access-answer-legend">{msg('admin-access-admission-legend')}</p>
             <p className="access-answer-value">
               {admissionLabel(msg, stored)} <LockGlyph label={msg('admin-access-locked-note')} />
@@ -279,7 +288,8 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
           </fieldset>}
           {admissionMessages.length > 0 &&<p className="access-field-error" id={`${ids}-gated-error`}>{admissionMessages.join(' ')}</p>}
           {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
-          {!gated && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
+          {!canSwitchDemo && practice && <p className="access-answer-value">{msg('admin-access-practice')}</p>}
+          {!gated && canSwitchDemo && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
             <option value="public">Not gated</option><option value="demo">Practice</option>
           </select></label>}
           {gated && <>
