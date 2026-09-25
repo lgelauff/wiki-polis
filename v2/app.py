@@ -4217,11 +4217,12 @@ def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
     conv = _require_organizer_for_conv(conv_id)
     access_policy = body['accessPolicy']
     if access_policy is None:
-        # The field set without the legacy alias: derive it from the gate, but keep a
-        # demo item in demo. Only an explicit accessPolicy moves it, and only for a
-        # site admin.
-        access_policy = ('invite_only' if body.get('gated')
-                         else 'demo' if conv.access_policy == 'demo' else 'public')
+        # The field set without the legacy alias: a demo item stays demo (a gate on it is
+        # then refused as a gate, not as a switch); anything else is derived from the
+        # gate. Only an explicit accessPolicy moves an item in or out of demo, and only
+        # for a site admin.
+        access_policy = ('demo' if conv.access_policy == 'demo'
+                         else 'invite_only' if body.get('gated') else 'public')
     result = update_conversation_settings(
         conversation=conv,
         title=body['title'], intro_html=body['introHtml'],

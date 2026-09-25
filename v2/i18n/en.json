@@ -537,7 +537,7 @@
     "admin-elig-label-ph": "optional criteria summary",
     "admin-access-heading": "Access",
     "admin-access-admission-legend": "Who can take part",
-    "admin-access-admission-practice": "Anyone, also without logging in",
+    "admin-access-admission-practice": "Anyone, including people who are not logged in",
     "admin-access-admission-anyone": "Anyone with a Wikimedia account",
     "admin-access-admission-invited": "Only people on the invitation list",
     "admin-access-admission-voucher": "Anyone with a voucher code",

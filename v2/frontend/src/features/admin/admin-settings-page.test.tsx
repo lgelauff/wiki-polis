@@ -380,7 +380,13 @@ test('an organizer sees a practice item as a fact with its fixed answer', async 
 
   await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
   expect(screen.getByText('Practice Environment')).toBeVisible();
-  expect(screen.getByText('Anyone, also without logging in')).toBeVisible();
+  expect(screen.getByText('Anyone, including people who are not logged in')).toBeVisible();
+  // The fixed answer reads as the answer to its question, and the fact comes before it.
+  expect(within(screen.getByRole('group', {name: 'Who can take part'}))
+    .getByText('Anyone, including people who are not logged in')).toBeVisible();
+  expect(screen.getByText('Practice Environment').compareDocumentPosition(
+    screen.getByRole('group', {name: 'Who can take part'}),
+  ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   // One fixed answer: nothing to choose, so no radio and no select.
   expect(screen.queryAllByRole('radio', {name: /invitation list|voucher code/})).toHaveLength(0);
   expect(screen.queryByRole('combobox', {name: /Legacy access mode/})).toBeNull();
@@ -401,11 +407,32 @@ test('a site admin moves an item into the Practice Environment and sees its fixe
 
   // While Practice is selected the admission row states its one answer instead of offering
   // gates the server would refuse.
-  expect(screen.getByText('Anyone, also without logging in')).toBeVisible();
+  expect(screen.getByText('Anyone, including people who are not logged in')).toBeVisible();
   expect(screen.queryByRole('radio', {name: /Only people on the invitation list/})).toBeNull();
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toMatchObject({accessPolicy: 'demo', gated: false, gatingType: null});
+});
+
+test('a site admin sees the switch, not the fact, on a practice item', async () => {
+  serve({...settings, capabilities: {edit: true, switchDemo: true},
+    conversation: {...settings.conversation, accessPolicy: 'demo'}});
+  renderPage();
+
+  const mode = await screen.findByRole('combobox', {name: /Legacy access mode/}, {timeout: 10_000});
+  expect(mode).toHaveValue('demo');
+  expect(screen.queryByText('Practice Environment')).toBeNull();
+  fireEvent.change(mode, {target: {value: 'public'}});
+  expect(screen.getByRole('radio', {name: /Only people on the invitation list/})).toBeVisible();
+});
+
+test('no Practice switch while Explore locks access', async () => {
+  serve({...settings, capabilities: {edit: true, switchDemo: true},
+    locks: {gated: true, gatingType: true, showUsernames: true}});
+  renderPage();
+
+  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  expect(screen.queryByRole('combobox', {name: /Legacy access mode/})).toBeNull();
 });
 
 test('a role that may not edit gets the reason and no way to save', async () => {

@@ -260,10 +260,13 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
         </section>
         <section aria-label={msg('admin-access-heading')}>
           <header><span>02</span><div><p>Who can discover and join this consultation.</p></div></header>
-          {practice ? <div className="access-answer">
+          {/* Stated before the answer it explains, so it is read as a fact about the item,
+              not as a second part of the answer. */}
+          {!canSwitchDemo && practice && <p className="access-answer-value">{msg('admin-access-practice')}</p>}
+          {practice ? <div className="access-answer" role="group" aria-labelledby={`${ids}-practice-legend`}>
             {/* Practice has one fixed answer, stored by the server whatever is sent, so it is
                 stated rather than offered: a gate here would only be refused. */}
-            <p className="access-answer-legend">{msg('admin-access-admission-legend')}</p>
+            <p className="access-answer-legend" id={`${ids}-practice-legend`}>{msg('admin-access-admission-legend')}</p>
             <p className="access-answer-value">{msg('admin-access-admission-practice')}</p>
           </div> : admissionLocked ? <div className="access-answer">
             <p className="access-answer-legend">{msg('admin-access-admission-legend')}</p>
@@ -288,8 +291,9 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
           </fieldset>}
           {admissionMessages.length > 0 &&<p className="access-field-error" id={`${ids}-gated-error`}>{admissionMessages.join(' ')}</p>}
           {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
-          {!canSwitchDemo && practice && <p className="access-answer-value">{msg('admin-access-practice')}</p>}
-          {!gated && canSwitchDemo && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
+          {/* Hidden while Explore locks access: moving into or out of Practice rewrites the
+              locked settings, which the server refuses then. */}
+          {!gated && canSwitchDemo && !admissionLocked && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
             <option value="public">Not gated</option><option value="demo">Practice</option>
           </select></label>}
           {gated && <>

@@ -220,6 +220,41 @@ def test_saving_without_the_legacy_alias_keeps_a_demo_item_in_demo(
     assert _stored(conversation) == FIXED
 
 
+def test_organizer_saves_a_demo_item_without_the_legacy_alias(
+    client, conversation, participant,
+):
+    conversation.access_policy = 'demo'
+    db.session.commit()
+    _organizer(client, conversation, participant)
+    body = _body(conversation, title='Renamed')
+    del body['accessPolicy']
+
+    response = client.put(_endpoint(conversation), json=body)
+
+    assert response.status_code == 200, response.get_json()
+    db.session.refresh(conversation)
+    assert conversation.access_policy == 'demo'
+
+
+def test_a_gate_on_a_demo_item_without_the_alias_is_refused_not_a_switch(
+    admin_client, conversation,
+):
+    """gated=true without accessPolicy is a gate on a demo item, not a move out of demo."""
+    conversation.access_policy = 'demo'
+    db.session.commit()
+    before = _stored(conversation)
+    body = _body(conversation, gated=True, gatingType='invite_only')
+    del body['accessPolicy']
+
+    response = admin_client.put(_endpoint(conversation), json=body)
+
+    assert response.status_code == 400
+    assert response.get_json()['error']['message'] == 'A demo consultation cannot be gated.'
+    db.session.refresh(conversation)
+    assert conversation.access_policy == 'demo'
+    assert _stored(conversation) == before
+
+
 def test_organizer_may_edit_but_not_switch_demo(client, conversation, participant):
     _organizer(client, conversation, participant)
 
