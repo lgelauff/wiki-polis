@@ -103,8 +103,8 @@ from services.admin_roles import (
     replace_conversation_roles,
 )
 from services.admin_settings import (
-    build_admin_settings, update_conversation_settings,
-    update_recommendation_tier,
+    apply_demo_access_settings, build_admin_settings,
+    update_conversation_settings, update_recommendation_tier,
 )
 from services.admin_termination import (
     build_termination_state,
@@ -3498,14 +3498,9 @@ def _create_admin_conversation_api_payload(body: dict) -> dict:
         abort(400, description='Invalid conversation slug or phase route.')
     if not managed and not _valid_polis_id(body['polisId'] or ''):
         abort(400, description='A valid Polis conversation ID is required in manual mode.')
-    result = create_admin_conversation(
-        fields={**body, 'polis_id': body['polisId']},
-        existing_slug=Conversation.query.filter_by(slug=body['slug']).first() is not None,
-        managed_creation=managed,
-        create_upstream=lambda title: _polis_server_client().create_conversation(
-            title, strict_moderation=True,
-        ),
-        conversation_factory=lambda polis_id: Conversation(
+
+    def new_conversation(polis_id):
+        conversation = Conversation(
             slug=body['slug'], title=body['title'].strip(), polis_id=polis_id,
             active=True, access_policy=body['accessPolicy'],
             phase_route=body['phaseRoute'],
@@ -3514,7 +3509,19 @@ def _create_admin_conversation_api_payload(body: dict) -> dict:
             eligibility_event_id=body['eligibilityEventId'] or None,
             eligibility_label=body['eligibilityLabel'] or None,
             statement_moderation_policy='moderate',
+        )
+        if conversation.access_policy == 'demo':
+            apply_demo_access_settings(conversation)
+        return conversation
+
+    result = create_admin_conversation(
+        fields={**body, 'polis_id': body['polisId']},
+        existing_slug=Conversation.query.filter_by(slug=body['slug']).first() is not None,
+        managed_creation=managed,
+        create_upstream=lambda title: _polis_server_client().create_conversation(
+            title, strict_moderation=True,
         ),
+        conversation_factory=new_conversation,
         session=db.session,
         audit=lambda conversation_id, slug: record_audit(
             'conversation.create', conv_id=conversation_id, slug=slug,
@@ -3744,6 +3751,7 @@ def _admin_settings_api_payload(conv_id: int) -> dict:
             conv.phase_route, PHASE_ROUTES['default_7'],
         )['label'],
         can_edit=_can_organize(conv),
+        can_switch_demo=_is_global_admin(),
         self_link=url_for(
             'api_v1.get_admin_conversation_settings', conversation_id=conv.id,
         ),
@@ -4207,10 +4215,18 @@ def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
 
 def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
     conv = _require_organizer_for_conv(conv_id)
+    access_policy = body['accessPolicy']
+    if access_policy is None:
+        # The field set without the legacy alias: a demo item stays demo (a gate on it is
+        # then refused as a gate, not as a switch); anything else is derived from the
+        # gate. Only an explicit accessPolicy moves an item in or out of demo, and only
+        # for a site admin.
+        access_policy = ('demo' if conv.access_policy == 'demo'
+                         else 'invite_only' if body.get('gated') else 'public')
     result = update_conversation_settings(
         conversation=conv,
         title=body['title'], intro_html=body['introHtml'],
-        outro_html=body['outroHtml'], access_policy=body['accessPolicy'],
+        outro_html=body['outroHtml'], access_policy=access_policy,
         eligibility_event_id=body['eligibilityEventId'],
         eligibility_label=body['eligibilityLabel'],
         tier=body['recommendationTier'], sanitise=_sanitise_text,
@@ -4222,6 +4238,7 @@ def _update_admin_settings_api_payload(conv_id: int, body: dict) -> dict:
         results_shared=body.get('resultsShared', False),
         show_usernames=body.get('showUsernames', False),
         access_request_text=body.get('accessRequestText'),
+        may_switch_demo=_is_global_admin(),
     )
     return {
         'changed': result.changed,

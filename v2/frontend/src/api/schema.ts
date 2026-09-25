@@ -1462,6 +1462,8 @@ export interface components {
             };
             capabilities: {
                 edit: boolean;
+                /** @description Whether this viewer may move the consultation into or out of demo (site admins only). */
+                switchDemo: boolean;
             };
             locks: {
                 gated: boolean;

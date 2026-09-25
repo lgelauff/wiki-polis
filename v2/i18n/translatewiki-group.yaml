@@ -73,12 +73,14 @@ TAGS:
     - admin-access-admission-anyone
     - admin-access-admission-invited
     - admin-access-admission-legend
+    - admin-access-admission-practice
     - admin-access-admission-voucher
     - admin-access-admission-wiki
     - admin-access-heading
     - admin-access-locked-note
     - admin-access-narrowing-confirm
     - admin-access-narrowing-continue
+    - admin-access-practice
     - admin-btn-add
     - admin-btn-create-conv
     - admin-btn-grant

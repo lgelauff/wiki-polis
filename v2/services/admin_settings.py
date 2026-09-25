@@ -18,9 +18,35 @@ class InvalidAccessSettings(ValueError):
     """Raised when the explicit gated settings are internally inconsistent."""
 
 
+class DemoSwitchForbidden(PermissionError):
+    """Raised when someone other than a site admin moves a process into or out of demo."""
+
+
+# A demo process has no access settings of its own: anyone may enter (logged out
+# too), nothing gates it, everyone can see it, and usernames are never shown. These
+# are the values stored for every demo row, by migration e1f2a3b4c5d6 for existing
+# rows and by every write since, so the stored settings say what demo means instead
+# of leaving it implied by ``access_policy``.
+DEMO_ACCESS_SETTINGS = {
+    'gated': False,
+    'gating_type': None,
+    'announce': True,
+    'information': True,
+    'results_shared': True,
+    'show_usernames': False,
+}
+
+
+def apply_demo_access_settings(conversation) -> None:
+    """Store demo's fixed access answers on a new demo conversation."""
+    for field, value in DEMO_ACCESS_SETTINGS.items():
+        setattr(conversation, field, value)
+
+
 def build_admin_settings(
     *, conversation, recommendation_tiers: dict, recommendation_profile: dict,
     phase_route_label: str, can_edit: bool, self_link: str, lifecycle_link: str,
+    can_switch_demo: bool = False,
 ) -> dict:
     return {
         'conversation': {
@@ -59,7 +85,7 @@ def build_admin_settings(
             'configurationMode': 'editable',
             'note': 'Leave the event ID blank when no external eligibility check applies.',
         },
-        'capabilities': {'edit': can_edit},
+        'capabilities': {'edit': can_edit, 'switchDemo': can_edit and can_switch_demo},
         'locks': {
             'gated': bool(conversation.phase_submission),
             'gatingType': bool(conversation.phase_submission),
@@ -96,6 +122,7 @@ def update_conversation_settings(
     announce: bool = False, information: bool = False,
     results_shared: bool = False, show_usernames: bool = False,
     access_request_text: str | None = None,
+    may_switch_demo: bool = False,
 ) -> SettingsUpdateResult:
     # The legacy access-policy representation remains accepted for old clients,
     # but every new write is normalised to the explicit gated settings.
@@ -106,6 +133,20 @@ def update_conversation_settings(
             gating_type = 'invite_only'
     if not isinstance(gated, bool):
         raise InvalidAccessSettings('gated must be boolean')
+
+    demo = access_policy == 'demo'
+    if (demo != (conversation.access_policy == 'demo')) and not may_switch_demo:
+        # Switching is for correcting a mistake, so it stays with site admins.
+        raise DemoSwitchForbidden()
+    if demo:
+        if gated:
+            raise InvalidAccessSettings('A demo consultation cannot be gated.')
+        gated = DEMO_ACCESS_SETTINGS['gated']
+        gating_type = DEMO_ACCESS_SETTINGS['gating_type']
+        announce = DEMO_ACCESS_SETTINGS['announce']
+        information = DEMO_ACCESS_SETTINGS['information']
+        results_shared = DEMO_ACCESS_SETTINGS['results_shared']
+        show_usernames = DEMO_ACCESS_SETTINGS['show_usernames']
     if gating_type is not None and gating_type not in GATING_TYPES:
         raise InvalidAccessSettings('unsupported gating type')
     if gated and gating_type is None:

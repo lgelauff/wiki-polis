@@ -4756,6 +4756,8 @@ body[data-demo] {
   }
   .header-controls {
     flex-basis: 100%;
+    flex-wrap: wrap;
+    row-gap: 8px;
     margin-left: 0;
     order: 3;
     justify-content: space-between;
