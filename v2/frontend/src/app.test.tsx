@@ -18,7 +18,7 @@ test('renders a conversation lane from the API contract', async () => {
     </QueryClientProvider>,
   );
 
-  expect(screen.getByRole('status')).toHaveTextContent('Loading conversations');
+  expect(screen.getByRole('status')).toHaveTextContent('Loading…');
   expect(await screen.findByRole('heading', {name: 'Needs attention'})).toBeVisible();
   expect(await screen.findByRole('link', {name: /Community strategy.*continue/}))
     .toHaveAttribute('href', '/c/community-strategy');
@@ -100,6 +100,11 @@ test('runs site-wide administration without falling back to Jinja forms', async 
 
   expect(await screen.findByRole('heading', {name: 'Admin panel'})).toBeVisible();
   expect(screen.getByRole('link', {name: 'manage'})).toHaveAttribute('href', '/admin/conversations/7');
+  // The settings page used to be reachable only by typing its URL.
+  expect(screen.getByRole('link', {name: 'settings'})).toHaveAttribute('href', '/admin/conversations/7/settings');
+  // The Policy cell names the stored value in words instead of printing "public".
+  expect(screen.getByRole('cell', {name: 'Anyone with a Wikimedia account'})).toBeVisible();
+  expect(screen.queryByText('invite_only')).not.toBeInTheDocument();
   expect(screen.getByText('Admin')).toHaveClass('header-mode-badge');
   expect(screen.getByRole('heading', {name: 'New conversation'})).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Example editor'}});
@@ -166,44 +171,34 @@ test('advances a conversation from the server-described lifecycle console', asyn
   );
 });
 
-test('saves lifecycle recommendations without submitting unsaved settings', async () => {
-  let recommendationBody: unknown;
-  let settingsWrites = 0;
+test('the lifecycle console writes no setting of its own, and points at the page that does', async () => {
+  // This test used to drive the console's own settings and recommendation-tier forms. Both
+  // edited fields the settings page edits too, so they were removed; what is pinned now is
+  // the absence. Both endpoints are wired to fail, so any surviving writer would be loud.
+  let writes = 0;
+  const refuse = () => {writes += 1; return HttpResponse.error();};
   server.use(
     http.put(
-      new URL('/api/v1/admin/conversations/7/recommendation-tier', globalThis.location.origin).toString(),
-      async ({request}) => {
-        recommendationBody = await request.json();
-        return HttpResponse.json({data: {
-          changed: true,
-          recommendations: {
-            tier: 'complex',
-            tiers: [
-              {key: 'simple', label: 'Simple topic', quantities: {seed_statements: 5}},
-              {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8}},
-              {key: 'complex', label: 'Complex topic', quantities: {seed_statements: 12}},
-            ],
-          },
-        }});
-      },
+      new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(),
+      refuse,
     ),
     http.put(
-      new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(),
-      () => {
-        settingsWrites += 1;
-        return HttpResponse.error();
-      },
+      new URL('/api/v1/admin/conversations/7/recommendation-tier', globalThis.location.origin).toString(),
+      refuse,
     ),
   );
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
 
   await screen.findByRole('heading', {name: 'Community strategy'});
-  fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Unsaved title'} });
-  fireEvent.change(screen.getByLabelText('Complexity tier'), {target: {value: 'complex'}});
-  fireEvent.click(screen.getByRole('button', {name: 'Save recommendations'}));
-
-  await waitFor(() => expect(recommendationBody).toEqual({tier: 'complex'}));
-  expect(settingsWrites).toBe(0);
+  expect(screen.getByRole('link', {name: /Settings/})).toHaveAttribute(
+    'href', '/admin/conversations/7/settings',
+  );
+  expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Save recommendations'})).toBeNull();
+  expect(screen.queryByLabelText('Complexity tier')).toBeNull();
+  // The tier is still reported, as the fact the readiness checks are measured against.
+  expect(screen.getByText(/Complexity tier/)).toBeVisible();
+  expect(writes).toBe(0);
 });
 
 test('schedules and cancels a lifecycle transition', async () => {
@@ -242,7 +237,7 @@ test('pauses and resumes from the legacy lifecycle control', async () => {
 
 test('edits settings and legacy eligibility through one typed command', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings']}><App /></MemoryRouter></QueryClientProvider>);
-  expect(await screen.findByRole('heading', {name: 'Conversation settings'})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Access', level: 1})).toBeVisible();
   expect(screen.getByText('Extended-confirmed editors')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'experienced-editors'}});
   fireEvent.change(screen.getByLabelText('Eligibility label'), {target: {value: 'Experienced editors'}});
@@ -378,6 +373,9 @@ test('adds and removes invitations through convergent admin commands', async () 
   );
 
   expect(await screen.findByRole('heading', {name: 'Invites — Community strategy'})).toBeVisible();
+  // The access policy reads in words; the stored value never reaches the page.
+  expect(screen.getByText('Only people who have been given access')).toBeVisible();
+  expect(screen.queryByText('invite_only', {exact: false})).not.toBeInTheDocument();
   expect(screen.getByText('Existing editor')).toBeVisible();
   expect(screen.getByText('1 invited · 1 linked · 0 never logged in')).toBeVisible();
   const existingRow = screen.getByText('Existing editor').closest('tr');
@@ -399,6 +397,37 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(await screen.findByText('No invites yet.')).toBeVisible();
   expect(screen.getByText('No invites yet.').closest('td')).toHaveAttribute('colspan', '4');
   expect(screen.queryByText(/invited ·/)).not.toBeInTheDocument();
+});
+
+test('warns that invites are inert in words, not in stored values', async () => {
+  // The default roster fixture is invite_only, so the warning branch never renders there.
+  // This is the only prose this scope rewrites, and it names one access-policy label.
+  server.use(http.get(
+    new URL('/api/v1/admin/conversations/7/invitations', globalThis.location.origin).toString(),
+    () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public'},
+      invitations: [],
+      capabilities: {manageInvitations: true},
+      links: {self: '/api/v1/admin/conversations/7/invitations', conversation: '/admin/conversations/7'},
+    }}),
+  ));
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/admin/conversations/7/invitations']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  const note = await screen.findByText(/Invites only take effect/);
+  expect(note).toHaveTextContent(
+    'Access is set to Anyone with a Wikimedia account. '
+    + 'Invites only take effect when access is limited to an invitation list.',
+  );
+  // Neither stored value reaches the note, including the one hardcoded in the sentence.
+  // Scoped to the note: the page footer legitimately says "public domain".
+  expect(note.textContent).not.toContain('invite_only');
+  expect(note.textContent).not.toMatch(/\bpublic\b/);
 });
 
 test('keeps the typed invitation list and shows a toast after a save error', async () => {
@@ -682,7 +711,7 @@ test('stays usable when the message catalogue is unavailable', async () => {
   // is ugly but usable -- the alternative is a page stuck on a loading state.
   expect(await screen.findByRole('heading', {name: 'home-section-needs-attention'}, {timeout: 5000})).toBeVisible();
   expect(screen.getByRole('link', {name: /Community strategy/})).toHaveAttribute('href', '/c/community-strategy');
-  expect(screen.queryByText('Loading conversations…')).not.toBeInTheDocument();
+  expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
 });
 
 test('renders preliminary results from the message catalogue, not from source literals', async () => {
@@ -839,7 +868,11 @@ test('freezes a statement attempt when the upstream outcome is unknown', async (
   });
   fireEvent.click(screen.getByRole('button', {name: 'Submit & next'}));
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('may have reached the voting service');
+  // The catalogue's warning, not the server's developer-facing message (rule 4). It has to
+  // say not to start over, since a fresh composer means a fresh key and a possible duplicate.
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent(testMessages['conv-err-outcome-unknown']!);
+  expect(alert).not.toHaveTextContent('may have reached the voting service');
   expect(screen.getByRole('textbox', {name: 'Propose a new statement'})).toBeEnabled();
   expect(screen.getByRole('button', {name: 'Submit & next'})).toBeEnabled();
 });

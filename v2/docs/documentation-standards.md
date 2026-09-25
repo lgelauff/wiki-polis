@@ -74,8 +74,8 @@ prefix, names are lowercase with hyphens.
   required to.
 - **Operational docs mark per-procedure liveness.** In a runbook/ops doc people follow
   to *run* things, any procedure not yet live or unverified in production carries an
-  inline **⚠️ not live yet** tag; unmarked steps are live. Clear the tag once it's been
-  run for real. (Different axis from `pending`: `pending` flags a doc/spec gap; **⚠️ not
+  inline **not live yet** tag; unmarked steps are live. Clear the tag once it's been
+  run for real. (Different axis from `pending`: `pending` flags a doc/spec gap; **not
   live yet** flags operational readiness.)
 - **Generate, don't transcribe.** Facts that live in code (the schema, route lists,
   API shapes) should be derived from the source, not hand-copied into prose. A

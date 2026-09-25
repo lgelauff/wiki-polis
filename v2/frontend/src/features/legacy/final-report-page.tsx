@@ -229,7 +229,7 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
     <span>{msg('report-crumb')}</span>
   </span>}>
     <div className="container" style={{maxWidth: 800}}>
-      <p style={{marginBottom: '1.25rem'}}><InternalLink href={report.links.conversation} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}><span aria-hidden="true">←</span> {report.title}</InternalLink></p>
+      <p style={{marginBottom: '1.25rem'}}><InternalLink href={report.links.conversation} style={{fontSize: 13, color: 'var(--muted)', textDecoration: 'none'}}><span className="dir-glyph" aria-hidden="true">←</span> {report.title}</InternalLink></p>
       <div className="report-header">
         <div>
           <h1 className="report-title">{report.title}</h1>
@@ -252,7 +252,7 @@ export function FinalReportLegacyPage({report}: {report: Report}) {
       <ResultsBody report={report} />
       {report.viewer.revealState === 'open' && report.viewer.participating && <div className="reveal-callout" style={{marginTop: '2rem'}}>
         <p className="reveal-callout-text" dangerouslySetInnerHTML={richHtml(msg('reveal-callout-open-text', escapeHtml(report.viewer.pseudonym ?? '')))} />
-        <InternalLink className="reveal-callout-link" href={report.links.identityReveal}>{msg('reveal-callout-link')} <span aria-hidden="true">→</span></InternalLink>
+        <InternalLink className="reveal-callout-link" href={report.links.identityReveal}>{msg('reveal-callout-link')} <span className="dir-glyph" aria-hidden="true">→</span></InternalLink>
       </div>}
     </div>
   </LegacyShell>;

@@ -10,6 +10,8 @@ import {
 } from '../../api/queries';
 import {LegacyShell} from '../legacy/legacy-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
+import {useMessage} from '../../i18n/messages';
+import {accessPolicyLabel} from '../../i18n/server-labels';
 
 type Roster = components['schemas']['AdminInvitationRoster'];
 
@@ -39,6 +41,7 @@ export function AdminInvitationsPage({
   conversationId: number;
   csrfToken: string;
 }) {
+  const msg = useMessage();
   const queryClient = useQueryClient();
   const {data} = useSuspenseQuery(adminInvitationRosterQuery(conversationId));
   const [input, setInput] = useState('');
@@ -117,7 +120,7 @@ export function AdminInvitationsPage({
           Invites — <Link to={`/c/${data.conversation.slug}/about`}>{title}</Link>
         </h2>
         <p className="muted" style={{marginBottom: '1.25rem'}}>
-          Access policy: <strong>{data.conversation.accessPolicy}</strong>
+          Access policy: <strong>{accessPolicyLabel(msg, data.conversation.accessPolicy)}</strong>
         </p>
         {invited > 0 && (
           <p className="muted" style={{marginBottom: '1.25rem'}}>
@@ -128,8 +131,8 @@ export function AdminInvitationsPage({
         {data.conversation.accessPolicy !== 'invite_only' && (
           <div className="landing-section">
             <p className="muted">
-              This conversation uses <strong>{data.conversation.accessPolicy}</strong> access.
-              {' '}Invites only take effect when the policy is set to <strong>invite_only</strong>.
+              Access is set to <strong>{accessPolicyLabel(msg, data.conversation.accessPolicy)}</strong>.
+              {' '}Invites only take effect when access is limited to an invitation list.
             </p>
           </div>
         )}

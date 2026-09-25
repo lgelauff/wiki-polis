@@ -92,6 +92,45 @@ test('renders the admin console from the catalogue English', async () => {
   expect(screen.getByText('Every statement has been moderated', {exact: false})).toBeVisible();
 });
 
+test('links to the settings page instead of editing the same settings itself', async () => {
+  // The owner's condition: one setting, one place that edits it. The console used to carry
+  // a second copy of the settings form -- title, intro, outro, the eligibility pair and the
+  // complexity tier -- writing the same two endpoints the settings page writes. The
+  // lifecycle payload has carried links.settings all along; this card is how it is reached.
+  serve(lifecycle);
+  renderConsole();
+
+  const settings = await screen.findByRole('link', {name: /Settings/}, {timeout: 10_000});
+  expect(settings).toHaveAttribute('href', '/admin/conversations/7/settings');
+  expect(within(settings).getByText('Title, introduction and access')).toBeVisible();
+
+  // Nothing on this page writes a setting any more. Queried by accessible name, so a
+  // control that merely moved elsewhere on the page would still fail this.
+  for (const name of ['Title', 'Intro text (HTML, optional)', 'Outro text (HTML, optional)',
+    'Eligibility event ID', 'Eligibility label']) {
+    expect(screen.queryByLabelText(name)).toBeNull();
+  }
+  expect(screen.queryByRole('combobox', {name: 'Complexity tier'})).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Save recommendations'})).toBeNull();
+
+  // What stays is what the settings page does not show, plus the tier as a fact.
+  expect(screen.getByText(/Route \(locked after launch\)/)).toBeVisible();
+  expect(screen.getByText(/Polis ID/)).toBeVisible();
+  expect(screen.getByText(/Complexity tier/)).toBeVisible();
+});
+
+test('the access policy is named in plain words, not by its stored value', async () => {
+  serve({...lifecycle, conversation: {...lifecycle.conversation, accessPolicy: 'invite_only'}});
+  renderConsole();
+
+  await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
+  // The line under the title is where the stored value used to reach the screen.
+  expect(document.querySelector('.console-sub')?.textContent)
+    .toContain('Only people who have been given access');
+  expect(document.querySelector('.console-sub')?.textContent).not.toContain('invite_only');
+});
+
 test('renders the closed-consultation description from parameterised sentences', async () => {
   serve(closedLifecycle);
   renderConsole();
@@ -152,7 +191,7 @@ test('a transition under a minute away shows its countdown instead of blanking t
   // Under a minute, the countdown uses adminconv-countdown-lt1m on its own.
   serve(dueShortly());
   renderConsole();
-  expect(await screen.findByText('under 1m')).toBeVisible();
+  expect(await screen.findByText('under 1 min')).toBeVisible();
 });
 
 test('a message banana cannot parse degrades to its key, not to a blank page', async () => {

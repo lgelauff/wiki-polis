@@ -1785,14 +1785,15 @@
       },
       "ModerationLogEvent": {
         "type": "object",
-        "required": ["occurredAt", "action", "pseudonym", "scope", "actor"],
+        "required": ["occurredAt", "action", "pseudonym", "scope", "actor", "actorKind"],
         "additionalProperties": false,
         "properties": {
           "occurredAt": {"type": ["string", "null"], "format": "date-time"},
           "action": {"type": "string", "enum": ["Banned", "Unbanned"]},
-          "pseudonym": {"type": "string"},
+          "pseudonym": {"type": ["string", "null"]},
           "scope": {"type": "string", "enum": ["conversation"]},
-          "actor": {"type": "string"}
+          "actor": {"type": ["string", "null"]},
+          "actorKind": {"type": ["string", "null"], "enum": ["site_admin", null]}
         }
       },
       "ConversationOutputPageResponse": {

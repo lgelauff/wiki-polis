@@ -991,7 +991,7 @@ class PolisServerClient:
     def queue_math_recompute(self, zinvite: str) -> bool:
         """Insert a worker_tasks row to trigger a polismath recompute for one conversation.
 
-        ⚠️ **Only the `tasks` run mode consumes these rows, and our math container runs
+        **Only the `tasks` run mode consumes these rows, and our math container runs
         `full`.** In polismath's `system.clj`, `full-system` merges `poller-system` alone
         — the vote and moderation pollers — while the `TaskPoller` that reads
         `worker_tasks` belongs to `task-system`. Upstream carries the merge of the two as
