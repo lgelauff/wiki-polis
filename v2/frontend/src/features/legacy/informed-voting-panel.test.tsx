@@ -203,13 +203,15 @@ test('leaving the tab and coming back does not forget a vote just cast', async (
   await screen.findByText(STATEMENT);
   fireEvent.click(screen.getAllByRole('button', {name: 'Agree'})[0]!);
   expect(await screen.findByText('Agreed')).toBeVisible();
-  await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2));
+  // Leave at once: the cache must already know, whether or not the refetch has landed.
   first.unmount();
 
   // Same query client, as a tab switch keeps it: the first render must already know.
   mount();
   await screen.findByText(STATEMENT);
   expect(panel()!.querySelector('.p6-card[data-fs-id="31"]')).toHaveClass('p6-card--done');
+  // And the server still gets the last word.
+  await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2));
 });
 
 test('the card navigation is named for the statements it moves between', async () => {

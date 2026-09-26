@@ -132,9 +132,22 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
       setTerminalIds(nextTerminal);
       setNetworkErrorId(null);
       // The cached deck still says this card is unvoted. Leaving the tab and coming back
-      // re-seeds the panel from that cache before any refetch lands, which put the
-      // participant back on the card they had just answered (#317).
-      void queryClient.invalidateQueries({queryKey: informedVotingQuery(workspace.slug).queryKey});
+      // re-seeds the panel from that cache on its first render, which put the participant
+      // back on the card they had just answered (#317). Mark it answered in the cache at
+      // once, so no tab switch can race a refetch, then let the server have the last word.
+      const {queryKey} = informedVotingQuery(workspace.slug);
+      queryClient.setQueryData(queryKey, (deck) => {
+        if (!deck) return deck;
+        const cards = deck.cards.map((card) => (
+          card.featuredStatementId === receipt.featuredStatementId ? {...card, voted: true} : card
+        ));
+        const completed = cards.filter((card) => card.voted).length;
+        return {...deck, cards, progress: {
+          ...deck.progress, completed, remaining: cards.length - completed,
+          allDone: completed === cards.length,
+        }};
+      });
+      void queryClient.invalidateQueries({queryKey});
       if (nextTerminal.size === data.cards.length) setDone(true);
       const forward = data.cards.findIndex((card, index) => index > currentIndex && !nextTerminal.has(card.featuredStatementId));
       const wrapped = forward < 0 ? data.cards.findIndex((card) => !nextTerminal.has(card.featuredStatementId)) : forward;
