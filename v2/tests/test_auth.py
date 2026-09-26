@@ -1,6 +1,8 @@
 """Tests for login, OAuth callback, and logout flows."""
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from flask import session
 
 from db import Participant, db
@@ -148,6 +150,75 @@ def test_current_participant_rejects_invalid_xid_even_if_username_matches(app, p
         session['username'] = participant.mw_username
         session['xid'] = 'not-the-participant-xid'
         assert _current_participant() is None
+
+
+def test_login_stores_same_origin_next_for_callback(client, app):
+    """A deep link's ?next= survives the OAuth round trip (#432)."""
+    app.config['OAUTH_CLIENT_ID'] = 'cid'
+    resp = client.get('/login?next=/c/some-slug')
+    assert resp.status_code == 302
+    with client.session_transaction() as sess:
+        assert sess.get('next') == '/c/some-slug'
+
+
+def test_login_next_rejects_external_url(client, app):
+    """An absolute external ?next= falls back to '/', never an open redirect."""
+    app.config['OAUTH_CLIENT_ID'] = 'cid'
+    resp = client.get('/login?next=https://evil.example/steal')
+    assert resp.status_code == 302
+    with client.session_transaction() as sess:
+        assert sess.get('next') != 'https://evil.example/steal'
+        assert sess.get('next') == '/'
+
+
+@pytest.mark.parametrize('target', [
+    '//evil.example', '/\\evil.example', '\\\\evil.example', '/\\/evil.example',
+    '/\t/evil.example', 'https://evil.example', 'evil.example',
+])
+def test_login_next_never_leaves_the_site(client, app, target):
+    """Browsers read a backslash as a slash, so these would all leave the site."""
+    app.config['OAUTH_CLIENT_ID'] = 'cid'
+    client.get('/login', query_string={'next': target})
+    with client.session_transaction() as sess:
+        assert sess.get('next') == '/'
+
+
+def test_login_round_trip_returns_to_the_page_it_started_on(client, app):
+    """/login?next= survives the OAuth round trip and the callback lands there (#432)."""
+    app.config['OAUTH_CLIENT_ID'] = 'cid'
+    app.config['OAUTH_CLIENT_SECRET'] = 'csecret'
+    app.config['OAUTH_REDIRECT_URI'] = 'http://localhost/oauth-callback'
+
+    start = client.get('/login?next=/accept/community-strategy%3Fuselang%3Dnl')
+    assert start.status_code == 302
+    assert start.headers['Location'].startswith('https://meta.wikimedia.org/')
+    with client.session_transaction() as sess:
+        state = sess['oauth_state']
+
+    token_resp = MagicMock()
+    token_resp.json.return_value = {'access_token': 'tok'}
+    token_resp.raise_for_status = MagicMock()
+    profile_resp = MagicMock()
+    profile_resp.json.return_value = {'username': 'RoundTrip', 'sub': 4321}
+    profile_resp.raise_for_status = MagicMock()
+    with patch('app.requests.post', return_value=token_resp), \
+         patch('app.requests.get', return_value=profile_resp), \
+         patch('app._is_emailable', return_value=False):
+        back = client.get(f'/oauth-callback?code=abc&state={state}')
+
+    assert back.status_code == 302
+    assert back.headers['Location'] == '/accept/community-strategy?uselang=nl'
+    with client.session_transaction() as sess:
+        assert sess.get('username') == 'RoundTrip'
+        assert 'next' not in sess
+
+
+def test_login_without_next_leaves_session_clean(client, app):
+    app.config['OAUTH_CLIENT_ID'] = 'cid'
+    resp = client.get('/login')
+    assert resp.status_code == 302
+    with client.session_transaction() as sess:
+        assert 'next' not in sess
 
 
 def test_logout_clears_session(auth_client):

@@ -15,6 +15,7 @@ import {AdminRolesPage} from './admin-roles-page';
 import {AdminSettingsPage} from './admin-settings-page';
 import {AdminStatementsPage} from './admin-statements-page';
 import {AdminTerminationPage} from './admin-termination-page';
+import {useLoginHref} from '../../login-href';
 
 function OrbitMark() {
   return (
@@ -28,6 +29,7 @@ function OrbitMark() {
 
 function AdminHeader() {
   const {data: session} = useSuspenseQuery(sessionQuery());
+  const login = useLoginHref(session.links.login);
   return (
     <header className="app-header">
       <div className="app-header__inner">
@@ -41,7 +43,7 @@ function AdminHeader() {
           <InternalLink href="/consultations">Participant view</InternalLink>
         </nav>
         {session.state === 'anonymous' ? (
-          <InternalLink className="account-link" href={session.links.login}>Log in</InternalLink>
+          <InternalLink className="account-link" href={login}>Log in</InternalLink>
         ) : (
           <form method="post" action={session.links.logout} className="account-form">
             <span>{session.user?.username ?? 'Demo session'}</span>

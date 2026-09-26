@@ -1868,6 +1868,12 @@ def _safe_redirect(target: str, fallback: str) -> str:
     """Return target if it is a same-host relative URL, otherwise fallback."""
     if not target:
         return fallback
+    # Only a plain path on this site. Browsers read a backslash as a slash and drop
+    # tabs and newlines, so "/\evil.example" would pass the host check below and still
+    # leave the site; "//host" is protocol-relative. (#432 feeds ?next= in here.)
+    if (not target.startswith('/') or target.startswith('//')
+            or any(ch in target for ch in '\\\t\r\n')):
+        return fallback
     ref  = urlparse(request.host_url)
     test = urlparse(urljoin(request.host_url, target))
     if test.scheme in ('http', 'https') and test.netloc == ref.netloc:
@@ -6007,6 +6013,13 @@ def _register_routes(app: Flask) -> None:
             if app.debug and _dev_login_user and not _on_toolforge:
                 return redirect(url_for('dev_login'))
             return 'OAuth not configured — set OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_REDIRECT_URI', 503
+
+        # Deep links arrive as /login?next=/c/<slug> (SPA client routes are not
+        # behind login_required, so the decorator's session['next'] never fires).
+        # Store the validated same-origin path for the OAuth callback (#432).
+        next_url = request.args.get('next', '').strip()
+        if next_url:
+            session['next'] = _safe_redirect(next_url, '/')
 
         code_verifier  = secrets.token_urlsafe(64)
         code_challenge = base64.urlsafe_b64encode(

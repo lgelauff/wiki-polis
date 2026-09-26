@@ -54,6 +54,10 @@ test('renders server-projected developer login shortcuts without environment log
     'href', '/dev/login/dev-user-1',
   );
   expect(screen.getByTitle('Log in as dev-user-2')).toBeVisible();
+  // The header's own login link brings the visitor back here afterwards (#432).
+  expect(screen.getByRole('link', {name: 'log in'})).toHaveAttribute(
+    'href', '/login?next=%2Fapp%2Fparity%2Ffork',
+  );
 });
 
 test('renders the complete statement-writing guide', async () => {
