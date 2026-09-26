@@ -92,7 +92,12 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
   const msg = useMessage();
   const {data} = useSuspenseQuery(informedVotingQuery(workspace.slug));
   const queryClient = useQueryClient();
-  const [currentIndex, setCurrentIndex] = useState(0);
+  // Open on the first card still to answer, so a participant who comes back mid-deck is
+  // not put back on a card they already answered (#317). With every card answered this
+  // falls back to the first; the completion panel is what shows then.
+  const [currentIndex, setCurrentIndex] = useState(
+    () => Math.max(0, data.cards.findIndex((card) => !card.voted)),
+  );
   const [votes, setVotes] = useState<Record<number, Choice>>({});
   // Seed from the server, not from an empty set. The API already reports which cards
   // this participant has answered; starting empty threw that away and rendered an

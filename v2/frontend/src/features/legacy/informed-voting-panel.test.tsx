@@ -214,6 +214,17 @@ test('leaving the tab and coming back does not forget a vote just cast', async (
   await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2));
 });
 
+test('a participant coming back mid-deck resumes at the first card still to answer', async () => {
+  // Answered first, so a panel that starts at the first card lands on the wrong one.
+  renderPanel(workspace(), [answered, unanswered]);
+  await screen.findByText(STATEMENT);
+
+  const card = (id: number) => panel()!.querySelector(`.p6-card[data-fs-id="${id}"]`)!;
+  expect(card(31)).not.toHaveClass('p6-card--hidden');
+  expect(card(32)).toHaveClass('p6-card--hidden');
+  expect(card(32)).toHaveClass('p6-card--done');
+});
+
 test('the card navigation is named for the statements it moves between', async () => {
   renderPanel(workspace(), [unanswered, answered]);
   await screen.findByText(STATEMENT);
