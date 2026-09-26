@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {useMutation, useSuspenseQuery} from '@tanstack/react-query';
+import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
 import {informedVotingQuery, putInformedVote} from '../../api/queries';
@@ -91,6 +91,7 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
 }) {
   const msg = useMessage();
   const {data} = useSuspenseQuery(informedVotingQuery(workspace.slug));
+  const queryClient = useQueryClient();
   // Open on the first card still to answer, so a participant who comes back mid-deck is
   // not put back on a card they already answered (#317). With every card answered this
   // falls back to the first; the completion panel is what shows then.
@@ -135,6 +136,23 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
       setVotes((existing) => ({...existing, [receipt.featuredStatementId]: receipt.choice}));
       setTerminalIds(nextTerminal);
       setNetworkErrorId(null);
+      // The cached deck still says this card is unvoted. Leaving the tab and coming back
+      // re-seeds the panel from that cache on its first render, which put the participant
+      // back on the card they had just answered (#317). Mark it answered in the cache at
+      // once, so no tab switch can race a refetch, then let the server have the last word.
+      const {queryKey} = informedVotingQuery(workspace.slug);
+      queryClient.setQueryData(queryKey, (deck) => {
+        if (!deck) return deck;
+        const cards = deck.cards.map((card) => (
+          card.featuredStatementId === receipt.featuredStatementId ? {...card, voted: true} : card
+        ));
+        const completed = cards.filter((card) => card.voted).length;
+        return {...deck, cards, progress: {
+          ...deck.progress, completed, remaining: cards.length - completed,
+          allDone: completed === cards.length,
+        }};
+      });
+      void queryClient.invalidateQueries({queryKey});
       if (nextTerminal.size === data.cards.length) setDone(true);
       const forward = data.cards.findIndex((card, index) => index > currentIndex && !nextTerminal.has(card.featuredStatementId));
       const wrapped = forward < 0 ? data.cards.findIndex((card) => !nextTerminal.has(card.featuredStatementId)) : forward;
