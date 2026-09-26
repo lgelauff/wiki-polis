@@ -1,5 +1,5 @@
 import {QueryClientProvider} from '@tanstack/react-query';
-import {fireEvent, render, screen, within} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
 import {MemoryRouter} from 'react-router-dom';
 import {expect, test} from 'vitest';
@@ -35,12 +35,16 @@ function workspace(overrides: Partial<Workspace> = {}): Workspace {
 }
 
 function deck(cards: Card[]) {
-  return http.get(url('/api/v1/conversations/community-strategy/informed-voting'), () => HttpResponse.json({data: {
+  return http.get(url('/api/v1/conversations/community-strategy/informed-voting'), () => deckResponse(cards));
+}
+
+function deckResponse(cards: Card[]) {
+  return HttpResponse.json({data: {
     slug: 'community-strategy', title: 'Community strategy', pseudonym: 'quiet-otter', cards,
     progress: {completed: cards.filter((c) => c.voted).length, total: cards.length, remaining: cards.filter((c) => !c.voted).length, allDone: cards.every((c) => c.voted)},
     capabilities: {vote: true},
     links: {self: '/api/v1/conversations/community-strategy/informed-voting', about: '/c/community-strategy/about', conversation: '/c/community-strategy', explore: '/c/community-strategy', arguments: '/c/community-strategy#tab-arguments'},
-  }}));
+  }});
 }
 
 const unanswered: Card = {
@@ -171,6 +175,41 @@ test('a pass is confirmed as "Passed"', async () => {
   // Catches the pass branch falling back to another choice's message.
   fireEvent.click(screen.getAllByRole('button', {name: 'Pass'})[0]!);
   expect(await screen.findByText('Passed')).toBeVisible();
+});
+
+test('leaving the tab and coming back does not forget a vote just cast', async () => {
+  // The server's deck follows the vote, as the real one does.
+  let voted = false;
+  let reads = 0;
+  server.use(
+    http.get(url('/api/v1/conversations/community-strategy/workspace'), () => HttpResponse.json({data: workspace()})),
+    http.get(url('/api/v1/conversations/community-strategy/informed-voting'), () => {
+      reads += 1;
+      return deckResponse([{...unanswered, voted}, answered]);
+    }),
+    http.put(url('/api/v1/conversations/community-strategy/featured-statements/31/informed-vote'), () => {
+      voted = true;
+      return HttpResponse.json({data: {featuredStatementId: 31, choice: 'agree', links: {informedVoting: '/api/v1/conversations/community-strategy/informed-voting'}}});
+    }),
+  );
+  const client = createQueryClient();
+  const mount = () => render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/informed-voting']}><App /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  const first = mount();
+  await screen.findByText(STATEMENT);
+  fireEvent.click(screen.getAllByRole('button', {name: 'Agree'})[0]!);
+  expect(await screen.findByText('Agreed')).toBeVisible();
+  await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2));
+  first.unmount();
+
+  // Same query client, as a tab switch keeps it: the first render must already know.
+  mount();
+  await screen.findByText(STATEMENT);
+  expect(panel()!.querySelector('.p6-card[data-fs-id="31"]')).toHaveClass('p6-card--done');
 });
 
 test('the card navigation is named for the statements it moves between', async () => {

@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {useMutation, useSuspenseQuery} from '@tanstack/react-query';
+import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
 import {informedVotingQuery, putInformedVote} from '../../api/queries';
@@ -91,6 +91,7 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
 }) {
   const msg = useMessage();
   const {data} = useSuspenseQuery(informedVotingQuery(workspace.slug));
+  const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [votes, setVotes] = useState<Record<number, Choice>>({});
   // Seed from the server, not from an empty set. The API already reports which cards
@@ -130,6 +131,10 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
       setVotes((existing) => ({...existing, [receipt.featuredStatementId]: receipt.choice}));
       setTerminalIds(nextTerminal);
       setNetworkErrorId(null);
+      // The cached deck still says this card is unvoted. Leaving the tab and coming back
+      // re-seeds the panel from that cache before any refetch lands, which put the
+      // participant back on the card they had just answered (#317).
+      void queryClient.invalidateQueries({queryKey: informedVotingQuery(workspace.slug).queryKey});
       if (nextTerminal.size === data.cards.length) setDone(true);
       const forward = data.cards.findIndex((card, index) => index > currentIndex && !nextTerminal.has(card.featuredStatementId));
       const wrapped = forward < 0 ? data.cards.findIndex((card) => !nextTerminal.has(card.featuredStatementId)) : forward;
