@@ -199,7 +199,9 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
         </div>
         <div className="p6-card-inner">
           <div className="p6-statement-col">
-            <p className="p6-statement-text">{card.statement}</p>
+            {/* The statement heads its card: page <h1>, then this <h2>, then the "In favour"
+                and "Against" <h3>s below it, so the outline skips no level (#157). */}
+            <h2 className="p6-statement-text">{card.statement}</h2>
             {answeredEarlier && <p className="p6-answered-hint">
               {msg('conv-p6-already-voted-hint')}
             </p>}
