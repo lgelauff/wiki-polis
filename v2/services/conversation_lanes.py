@@ -262,7 +262,9 @@ def build_conversation_lane(
         conv for conv in lane.moderating
         if (conv.access_policy == 'demo') == demo
     ]
-    lane.available = [conv for conv in lane.available if conv.id not in moderated_ids]
+    # A consultation you moderate but have not joined stays in `available`: that is the
+    # only place to join it. Its card carries the admin link too. (A site admin moderates
+    # everything, so filtering here emptied their list.)
     lane.pseudonym_map = {part.conversation_id: part for part in lane_parts}
 
     all_conversations = joined_conversations + lane.available
