@@ -1,8 +1,11 @@
 # Wiki Polis frontend
 
-React/TypeScript SPA developed against the versioned Flask browser API. This is an
-additive strangler application: migrated participant and admin workflows live under
-`/app`, while Jinja routes remain temporary compatibility adapters.
+React/TypeScript SPA developed against the versioned Flask browser API. It is the only
+browser surface: the Jinja frontend it replaced was deleted in #351, so there are no
+compatibility adapters left. Every route has a canonical path at the site root
+(`/c/<slug>`, `/admin/conversations/<id>/settings`, …); the `/app/*` forms are the
+temporary names the migration used, they still resolve, and `src/client-routes.ts` maps
+them onto the canonical ones for links.
 
 ## Commands
 
@@ -25,7 +28,8 @@ CSRF behavior is preserved without CORS.
 
 Feature code must use the typed adapters in `src/api/queries.ts`. Direct `fetch` calls,
 legacy `/admin` form actions, and browser calls to Polis or Particiapi are contract
-violations. API links between migrated screens must point to `/app/...` routes.
+violations. API links between screens must point at the canonical paths, which
+`canonicalClientPath()` in `src/client-routes.ts` resolves for you.
 
 ## State ownership
 

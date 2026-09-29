@@ -17,14 +17,14 @@ banner at the top.
 
 | Class | Changes… | Trigger to update | Trust rule | Examples |
 |---|---|---|---|---|
-| **Tracks-code reference** | whenever the code does | schema / API / dependency change | only trust with a current "verified against `<ref>`" stamp | data-model reference, `reference/particiapi-api.md`, `reference/web-components.md` |
+| **Tracks-code reference** | whenever the code does | schema / API / dependency change | only trust with a current "verified against `<ref>`" stamp | `ref_data-model.md`, [`route_authorization_matrix.md`](route_authorization_matrix.md), `reference/particiapi-api.md` |
 | **Deliberate spec** | rarely, on purpose | a decision to change the product | authoritative for how the system is *meant to work*; divergences are bugs/gaps tracked elsewhere | `spec_functional-design.md`, `spec_architecture.md`, `spec_design-principles.md` |
-| **Proposal (under discussion)** | during discussion | consensus reached → adopted or rejected | **not** describing what's built; do not implement from it | `prop_phase-model.md` |
-| **Forward plan** | often (weekly-ish) | priorities shift | reflects intent, not commitments | roadmap |
-| **Append-only history** | never edited retroactively | a release / merge happens | a faithful record; old entries stay as written | changelog / build log |
-| **Operational** | when infra changes | provisioning / monitoring / backup changes | must match the live deployment | `guide_deployment.md`, runbook |
-| **Public-facing** | rarely, with review | product or policy change | nothing ships without human/comms (and for privacy, legal) review | privacy statement, participant help pages |
-| **Draft research** | until verified | a fact-check pass | carries a "not fact-checked" banner until cleared | `docs/research/01–06` |
+| **Proposal (under discussion)** | during discussion | consensus reached → adopted or rejected | **not** describing what's built; do not implement from it | *no `prop_` doc exists today* |
+| **Forward plan** | often (weekly-ish) | priorities shift | reflects intent, not commitments | `plan_roadmap.md`, `plan_i18n.md` |
+| **Append-only history** | never edited retroactively | a release / merge happens | a faithful record; old entries stay as written | `log_changelog.md` |
+| **Operational** | when infra changes | provisioning / monitoring / backup changes | must match the live deployment | `guide_deployment.md`, `guide_runbook.md` |
+| **Public-facing** | rarely, with review | product or policy change | nothing ships without human/comms (and for privacy, legal) review | `pub_privacy.md`, `../../guidance/pub_participant-help.md` |
+| **Draft research** | until verified | a fact-check pass | carries a "not fact-checked" banner until cleared | `../../docs/research/` |
 
 A doc that mixes classes is the warning sign — that's what produced the
 roadmap/changelog tangle. When in doubt, split.
@@ -41,13 +41,13 @@ prefix, names are lowercase with hyphens.
 | Prefix | Role (lifespan class) | Examples |
 |---|---|---|
 | `spec_` | deliberate spec — current truth | `spec_functional-design.md`, `spec_architecture.md`, `spec_design-principles.md` |
-| `ref_` | tracks-code / external reference | `ref_data-model.md`, `ref_particiapi-api.md`, `ref_web-components.md` |
-| `guide_` | how-to for humans | `guide_local-dev.md`, `guide_deployment.md`, `guide_organizer.md`, `guide_contributing.md` |
-| `plan_` | forward-looking plan | `plan_roadmap.md`, `plan_doc-improvement.md` |
-| `prop_` | proposal under discussion | `prop_phase-model.md` |
+| `ref_` | tracks-code / external reference | `ref_data-model.md`, `ref_polis-data-model.md`, `ref_cross-device-identity.md` |
+| `guide_` | how-to for humans | `guide_local-dev.md`, `guide_deployment.md`, `guide_runbook.md`, `../../guidance/guide_organizer.md` |
+| `plan_` | forward-looking plan | `plan_roadmap.md`, `plan_i18n.md` |
+| `prop_` | proposal under discussion | *none at present — see the lifespan table* |
 | `log_` | append-only history | `log_changelog.md` |
-| `pub_` | public-facing participant copy | `pub_privacy.md`, `pub_participant-help.md` |
-| `research_` | draft research synthesis | `research_statements.md`, `research_terminology.md` |
+| `pub_` | public-facing participant copy | `pub_privacy.md`, `../../guidance/pub_participant-help.md` |
+| `research_` | draft research synthesis | *not used — research is directory-grouped instead* |
 
 - **Role change = deliberate rename.** When a proposal is adopted, `prop_` → `spec_`
   is an intentional rename that signals the transition; update inbound links in the
@@ -57,8 +57,8 @@ prefix, names are lowercase with hyphens.
   leave the tracked repo so they don't clutter it or distract readers, while staying on
   disk for whoever keeps the local copy (and in git history up to removal).
 - **Directory-grouped sets keep the directory as their role marker.** `reference/` and
-  `docs/research/` are classified by folder, so files inside them aren't individually
-  prefixed (e.g. `reference/particiapi-api.md`, `docs/research/02-…`).
+  the repo-root `docs/research/` are classified by folder, so files inside them aren't
+  individually prefixed (e.g. `reference/particiapi-api.md`, `docs/research/02-…`).
 
 ---
 
@@ -114,15 +114,28 @@ The one doc to trust for each concept (others should link here, not restate):
 | Concept | Canonical source |
 |---|---|
 | What the app does today (product behaviour) | `spec_functional-design.md` |
-| Where the product might go next (not built) | `prop_phase-model.md` (proposal) |
 | System shape, components, data flow | `spec_architecture.md` |
-| Database schema & data ownership | [`ref_data-model.md`](../ref_data-model.md) (derived from `db.py`) |
 | Stable design rules | `spec_design-principles.md` |
-| What changed and when | changelog / build-log (to be created) |
-| What's planned next | roadmap (to be created) |
-| How to run it in production | `guide_deployment.md` + runbook (to be created) |
+| Database schema & data ownership | [`ref_data-model.md`](../ref_data-model.md) (derived from `db.py`) |
+| Which route requires which authorization | [`route_authorization_matrix.md`](route_authorization_matrix.md) |
+| Browser/API contract | [`../openapi.json`](../openapi.json); the SPA's types are generated from it |
+| Accessibility conventions | `spec_accessibility.md` |
+| What changed and when | `log_changelog.md` (append-only) |
+| What's planned next | `plan_roadmap.md` (forward-looking) |
 | How to develop locally | `guide_local-dev.md` |
-| Particiapi / web-component externals | `reference/*` (with version stamp) |
+| How to run and test it | `guide_testing-tiers.md` |
+| How to run it in production | `guide_deployment.md` + `guide_runbook.md` |
+| Logging and observability | `guide_logging.md` |
+| How messages are translated | [`../i18n/README.md`](../i18n/README.md) + `i18n/translatewiki-group.yaml` |
+| Particiapi / Polis externals | `reference/particiapi-api.md`, `ref_polis-data-model.md`, `ref_polis-routing.md` |
+| Why a non-obvious decision was made | `adr/` — one file per decision |
+| Organizer & participant guidance | [`../../guidance/`](../../guidance/) |
+| Privacy commitments (needs review to change) | `pub_privacy.md` |
 
 This map is itself maintained — when a canonical doc is created or moves, update the
-row.
+row. Where a concept has no home yet, say so in the row rather than leaving a
+"(to be created)" that nobody can check.
+
+`archive/`, `cache/`, `tmp/`, `private/` and `design_handoff_propose_and_arguments/` are
+git-ignored, so they are absent from a fresh clone. If a doc points into one of them, the
+content is local-only and the pointer is stale.

@@ -325,7 +325,11 @@ exclusion sets applied uniformly across all result surfaces:
   issue #60 ships the admin ban UI). The field exists so results can be recomputed with
   exclusions without a schema change.
 
-**Result surfaces.** Three surfaces are built from the same `_build_phase6_results` helper:
-1. **Surface A — preliminary** (results tab in `conversation.html` while round is live).
-2. **Surface B — final report** (`/c/<slug>/report`, public after close).
+**Result surfaces.** Three surfaces are built from the same `_build_phase6_results` helper
+(`app.py:750`):
+1. **Surface A — preliminary** (`GET /api/v1/conversations/<slug>/intermediate-results`,
+   `app.py:3065`), shown in the SPA's intermediate-results panel while the round is live.
+2. **Surface B — final report** (`GET /api/v1/conversations/<slug>/results`,
+   `app.py:3023`), and the per-output pages at
+   `GET /api/v1/conversations/<slug>/outputs/<output_key>` (`app.py:2574`).
 3. **Surface C — self-comparison** (placeholder in the final report; full implementation deferred).

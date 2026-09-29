@@ -17,7 +17,38 @@ detail that matters for agents is **how to use tier 3 responsibly**, below.
 
 - **What:** `v2/tests/` against SQLite, with Polis/Particiapi mocked or absent.
 - **When:** pure logic, helpers, routes that don't need the real backend.
-- **How:** `cd v2 && uv run pytest` (hermetic; the canonical CI command).
+- **How:** the canonical CI command is `cd v2 && uv sync && uv run pytest`, but that only
+  works once the environment is set up. `v2/app.py` calls `create_app()` at **import**
+  time (`app.py:6135`) and `v2/tests/conftest.py` imports it, so merely *collecting* the
+  suite runs the production startup guards. From a clean checkout, set three variables
+  first:
+
+  ```bash
+  cd v2
+  export DATABASE_URL="sqlite:///:memory:"
+  export SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+  export FLASK_DEBUG=1
+  uv sync          # or: uv run pytest, which syncs for you
+  uv run pytest -q
+  ```
+
+  `FLASK_DEBUG=1` is the one that is not obvious: it is the only thing that satisfies the
+  four `not app.debug and not app.testing and not _migration_mode` startup guards
+  (`TRUSTED_HOSTS`, Redis-backed rate-limit storage, the rate-limit key prefix, and the
+  rate-limit identity secret — `app.py:5428-5482`). Without it you get three consecutive
+  `RuntimeError`s naming whichever variable is missing first — `DATABASE_URL`
+  (`app.py:5303`), then `SECRET_KEY` (`app.py:5314`), then `TRUSTED_HOSTS` — none of which
+  mention that the fix is a debug flag. `app.testing` does not help: it is only true
+  inside the per-test app, which is built too late to help collection.
+- **Install path:** `uv sync` only. The dev tools are in the PEP 735 `[dependency-groups]`
+  `dev` group in `v2/pyproject.toml`, which is a uv concept — `pip install -e ".[dev]"`
+  exits 0 with a `does not provide the extra 'dev'` warning and silently installs no
+  `pytest` at all. If you use pip, install the test tools explicitly.
+- **Also run before pushing:** `uvx ruff check .` from `v2/` (pyflakes only — undefined
+  names, unused imports), and the frontend gate in `v2/frontend/`:
+  `npm ci && npm run typecheck && npm test && npm run build`. `typecheck` regenerates
+  `src/api/schema.ts` from `v2/openapi.json`, so a spec change that the SPA has not
+  absorbed fails here rather than in the browser.
 - **Limits:** can't exercise real voting / results / clustering / featured-statement text —
   those degrade to fallbacks. A bug in a live-backend path **passes here**. That's the
   reason tiers 2 and 3 exist.
