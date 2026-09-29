@@ -78,9 +78,9 @@ action. The distinction between the two 403s is deliberate and the SPA depends o
 
 **Ordering caveat for security review:** the API blueprints validate the request body
 *before* delegating, so on a malformed body an unauthenticated caller gets
-`400 validation_failed` rather than `401`/`403`. This is visible on 20 of the write
-endpoints. It leaks nothing beyond "this request shape is or is not well formed", but it
-does mean a naive "does an anonymous caller get 401?" probe returns a misleading answer
+`400 validation_failed` rather than `401`/`403`. This is visible on the write endpoints
+that take a body. It leaks nothing beyond "this request shape is or is not well formed",
+but it does mean a naive "does an anonymous caller get 401?" probe returns a misleading answer
 on those routes — send a schema-valid body when sweeping.
 
 ---
@@ -93,16 +93,16 @@ on those routes — send a schema-valid body when sweeping.
 | Route | Method | Authorization | Enforced by |
 |---|---|---|---|
 | `/api/v1/conversations` | GET | public; personalised when logged in | `_conversation_lane_api_payload` (app.py:2395) |
-| `/api/v1/conversations/<slug>/about` | GET | conversation access policy + logged-in participant | `_conversation_about_api_payload` (app.py:2531) |
+| `/api/v1/conversations/<slug>/about` | GET | conversation access policy; no login check of its own | `_conversation_about_api_payload` (app.py:2531) |
 | `/api/v1/conversations/<slug>/workspace` | GET | conversation access policy + logged-in participant | `_conversation_workspace_api_payload` (app.py:2421) |
-| `/api/v1/conversations/<slug>/moderation-log` | GET | conversation access policy + logged-in participant | `_moderation_log_api_payload` (app.py:2542) |
+| `/api/v1/conversations/<slug>/moderation-log` | GET | conversation access policy; no login check of its own | `_moderation_log_api_payload` (app.py:2542) |
 | `/api/v1/conversations/<slug>/outputs/<output_key>` | GET | conversation access policy + logged-in participant | `_conversation_output_api_payload` (app.py:2574) |
 | `/api/v1/conversations/<slug>/participation-entry` | GET | conversation access policy + logged-in participant | `_participation_entry_api_payload` (app.py:2694) |
 | `/api/v1/conversations/<slug>/pseudonym-suggestions` | GET | conversation access policy + logged-in participant | `_pseudonym_suggestions_api_payload` (app.py:2703) |
 | `/api/v1/conversations/<slug>/participation` | POST | conversation access policy; runs the join-eligibility check | `_join_conversation_api_payload` (app.py:2710) |
 | `/api/v1/conversations/<slug>/results` | GET | conversation access policy; **no login needed once `phase_public_results` is set** — 401 only while the conversation is personal-results-only, 409 before results are published | `_results_report_api_payload` (app.py:3023) |
 | `/api/v1/conversations/<slug>/intermediate-results` | GET | conversation access policy; **no login needed once `phase_public_results` is set** — 401 only while the conversation is personal-results-only, 409 before results are published | `_intermediate_results_api_payload` (app.py:3065) |
-| `/api/v1/conversations/<slug>/flags` | POST | conversation access policy + logged-in participant | `_submit_content_flag_api_payload` (app.py:3200) |
+| `/api/v1/conversations/<slug>/flags` | POST | logged-in participant + access policy + joined, flags open, not banned | `_submit_content_flag_api_payload` (app.py:3200) |
 | `/api/v1/conversations/<slug>/identity-reveal` | GET | conversation access policy + logged-in participant | `_identity_reveal_api_payload` (app.py:2659) |
 | `/api/v1/conversations/<slug>/identity-reveal` | POST | conversation access policy + logged-in participant | `_reveal_identity_api_payload` (app.py:2663) |
 | `/api/v1/conversations/<slug>/explore` | GET | participation + explore phase open | `_explore_api_payload` (app.py:2817) |
@@ -275,11 +275,10 @@ routes are gone. They were removed with the Jinja frontend (ADR 0004, #351).
 
 ## Coverage
 
-The v2 audit probed all 36 admin `(method, path)` pairs — anonymous, as a
-non-privileged participant, and as a global admin, with schema-valid bodies — and found
-no route where a non-privileged caller is not denied (36/36 denied, 0 leaks). A separate
-role-boundary probe confirmed an organizer of conversation A is denied on conversation B,
-and that a moderator is denied the organizer- and global-admin-tier routes.
+A one-off probe on 2026-09-28 (not in the repo) called all 36 admin `(method, path)` pairs
+anonymously, as a non-privileged participant and as a global admin, with schema-valid bodies,
+and found every non-privileged call denied; it also found an organizer of conversation A
+denied on conversation B.
 
 That probe is not in the suite. The 11 `tests/test_admin*.py` files contain 13 lines
 that assert a 403, and two of them (`test_admin_featured_api.py`,
