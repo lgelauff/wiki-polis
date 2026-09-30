@@ -392,7 +392,9 @@ _SCAN_GLOBS = (
 # map values instead, keyed on the `<id>: 'message-key',` shape those tables use. Without
 # this the explicit tables are exactly as invisible to the guard as the concatenated key they
 # were written to replace -- which is how the previous generation of these keys rotted.
-_MAP_KEY_RE = _re.compile(r"""^\s*'?[A-Za-z0-9_-]+'?\s*:\s*'([a-z0-9][a-z0-9._-]*)'\s*,""", _re.M)
+# The id may contain a space: ROLE_MESSAGES keys on 'Global admin', the string app.py sends
+# for a site administrator, because the console's own word for the role is not the server's.
+_MAP_KEY_RE = _re.compile(r"""^\s*'?[A-Za-z0-9_ -]+'?\s*:\s*'([a-z0-9][a-z0-9._-]*)'\s*,""", _re.M)
 
 _INDIRECT_KEY_FILES = ('frontend/src/i18n/server-labels.ts',)
 
