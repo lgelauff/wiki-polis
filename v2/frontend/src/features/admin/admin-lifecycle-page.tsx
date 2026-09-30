@@ -18,7 +18,7 @@ import {
   putAdminRoles,
   putAdminSchedule,
 } from '../../api/queries';
-import {LegacyShell} from '../legacy/legacy-shell';
+import {AdminShell} from './admin-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
@@ -61,10 +61,6 @@ export function phaseTransitionToast(
 type Settings = components['schemas']['AdminSettings'];
 type RoleRoster = components['schemas']['AdminRoleRoster'];
 type Role = 'moderator' | 'organizer';
-
-function legacyTruncate(value: string, length = 34, leeway = 5): string {
-  return value.length <= length + leeway ? value : `${value.slice(0, length - 1)}…`;
-}
 
 /** The server's own error copy is deliberately not keyed (see v2/i18n/README.md), so a
  *  contract error is shown verbatim; only the fallback comes from the catalogue. */
@@ -288,8 +284,12 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
   const allChecked = Boolean(transition) && transition!.preconditions.every((row) => phaseChecks.includes(row.id));
   const roleCount = roles.assignments.reduce((total, row) => total + row.roles.length, 0);
 
-  return <LegacyShell headerMode="admin" title={msg('adminconv-doc-title', data.conversation.title)} headerCrumb={<nav className="header-crumb" aria-label={msg('admin-crumb-aria')}><span className="header-crumb-sep">/</span><Link to="/admin">{msg('admin-nav-panel')}</Link><span className="header-crumb-sep">/</span><span>{legacyTruncate(data.conversation.title)}</span></nav>} toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}>
-    <div className="role-bar"><div className="role-bar-inner"><span className={`role-chip${isAdmin ? ' role-chip--admin' : ''}`} title={msg('adminconv-role-title')}><span className="role-chip-dot" />{data.operator.roleLabel}</span><span className="role-bar-context">{msg('adminconv-managing')}&nbsp;<strong>{data.conversation.title}</strong></span><span className="role-bar-spacer" /><InternalLink className="view-as-btn" href={data.links.participantView}>{msg('adminconv-view-as')}</InternalLink></div></div>
+  return <AdminShell
+    title={msg('adminconv-doc-title', data.conversation.title)}
+    data={data}
+    gatingType={settings.conversation.gatingType}
+    toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
+  >
     <div className="console">
       <div className="console-head"><h1 className="console-title">{data.conversation.title}</h1><span className={`status-pill status-pill--${!isActive ? 'closed' : data.conversation.status === 'paused' ? 'paused' : data.conversation.status === 'scheduled' ? 'scheduled' : 'active'}`}><span className="status-pill-dot" />{!isActive ? msg('adminconv-status-closed') : data.conversation.status === 'paused' ? msg('adminconv-status-paused') : data.conversation.status === 'scheduled' ? msg('adminconv-status-scheduled') : msg('adminconv-status-active')}</span></div>
       <p className="console-sub"><code>/c/{data.conversation.slug}</code> &nbsp;·&nbsp; {accessPolicyLabel(msg, data.conversation.accessPolicy)} &nbsp;·&nbsp; {msg('adminconv-joined', data.counts.participants)}</p>
@@ -322,5 +322,5 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
       {canOrganize && <ConfigurationSection settings={settings} />}
       {isAdmin && <DangerSection conversationId={conversationId} csrfToken={csrfToken} lifecycle={data} fail={fail} />}
     </div>
-  </LegacyShell>;
+  </AdminShell>;
 }

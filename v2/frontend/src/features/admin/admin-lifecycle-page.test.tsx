@@ -1,4 +1,5 @@
 import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 
 import {Suspense} from 'react';
 import {QueryClientProvider} from '@tanstack/react-query';
@@ -85,7 +86,7 @@ test('the page renders the console shell, not the legacy header and role bar', a
   // The two things this issue removes, checked in the source rather than the DOM: an
   // import left behind would still pull the legacy header onto the page, and the role
   // bar would still be in the document even if CSS hid it.
-  const source = readFileSync(new URL('./admin-lifecycle-page.tsx', import.meta.url), 'utf8');
+  const source = readFileSync(resolve(process.cwd(), 'src/features/admin/admin-lifecycle-page.tsx'), 'utf8');
   expect(source).not.toMatch(/legacy-shell/);
   expect(source).not.toContain('role-bar');
 });
@@ -120,7 +121,9 @@ test('links to the settings page instead of editing the same settings itself', a
   serve(lifecycle);
   renderConsole();
 
-  const settings = await screen.findByRole('link', {name: /Settings/}, {timeout: 10_000});
+  // Named by its description as well as its title, because the shell's sidebar now carries
+  // a Settings link of its own -- two different destinations, so the card is named whole.
+  const settings = await screen.findByRole('link', {name: 'Settings Title, introduction and access'}, {timeout: 10_000});
   expect(settings).toHaveAttribute('href', '/admin/conversations/7/settings');
   expect(within(settings).getByText('Title, introduction and access')).toBeVisible();
 
