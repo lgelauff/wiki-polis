@@ -60,7 +60,7 @@ function renderShell(options: {data?: Lifecycle; gatingType?: 'invite_only' | 'v
   return render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/admin/conversations/7']}>
-        <MessageProvider locale="en">
+        <MessageProvider>
           <AdminShell
             title="Community strategy"
             data={options.data ?? lifecycle}
@@ -99,24 +99,29 @@ test('the sidebar names the four sections and points each at the fixture href', 
   expect(within(nav).getByRole('link', {name: 'Settings'})).toHaveAttribute('href', '/admin/conversations/7/settings');
   expect(within(nav).getByRole('link', {name: /^Moderation/})).toHaveAttribute('href', '/admin/conversations/7/flags');
   expect(within(nav).getByRole('link', {name: 'Content'})).toHaveAttribute('href', '/admin/conversations/7/statements');
-  // Overview is the page the frame is on, so it is marked as the current one.
+  // Overview is the page the frame is on, so it is marked as the current one and points
+  // at the current path: the DTO's links.* cover the other sections, not this one.
+  expect(within(nav).getByRole('link', {name: 'Overview'})).toHaveAttribute('href', '/admin/conversations/7');
   expect(within(nav).getByRole('link', {name: 'Overview'})).toHaveAttribute('aria-current', 'page');
   // No sub-page links: a leaf is reached from the page it belongs to, not from the frame.
   expect(within(nav).queryByRole('link', {name: /Participants|Invitations|Roles|Featured/})).toBeNull();
 });
 
-test('the moderation badge counts open flags and disappears when there are none', async () => {
+test('the moderation badge counts the open flags', async () => {
   serveSession();
   renderShell();
 
   const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
   expect(within(nav).getByText('3 open flags')).toBeVisible();
+});
 
+test('a consultation with no open flags carries no badge', async () => {
   // A zero is not worth a badge: an empty counter is noise, not information.
-  screen.getByRole('link', {name: 'Log out'});
-  const quiet = renderShell({data: {...lifecycle, counts: {...lifecycle.counts, openFlags: 0}}});
-  const quietNav = within(quiet.container).getByRole('navigation', {name: 'Admin sections'});
-  expect(within(quietNav).queryByText(/open flag/)).toBeNull();
+  serveSession();
+  renderShell({data: {...lifecycle, counts: {...lifecycle.counts, openFlags: 0}}});
+
+  const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
+  expect(within(nav).queryByText(/open flag/)).toBeNull();
 });
 
 test('the breadcrumb ends at the current section', async () => {
@@ -135,10 +140,14 @@ test('the session is ended by a form posting the CSRF token to the server link',
   serveSession();
   const {container} = renderShell();
 
-  const form = (await screen.findAllByRole('form')).find((node) => node.getAttribute('action') === '/logout');
-  expect(form).toBeDefined();
+  // A form has no accessible name here, so it has no role to query by; the logout is the
+  // one that posts to the link the session DTO carries.
+  await screen.findByRole('button', {name: 'log out'});
+  const form = container.querySelector('form[action="/logout"]');
+  expect(form).not.toBeNull();
+  expect(form!.getAttribute('method')).toBe('post');
   expect(form!.querySelector('input[name="csrf_token"]')).toHaveValue('test-csrf-token');
-  expect(within(form!).getByRole('button', {name: 'Log out'})).toBeVisible();
+  // The notification slot is the console's own, not the legacy fixed overlay.
   expect(container.querySelector('#toast-container')).toBeNull();
 });
 
@@ -180,18 +189,20 @@ test('the participant view is labelled plainly when the consultation is not gate
   expect(screen.queryByRole('link', {name: 'Participant (preview)'})).toBeNull();
 });
 
-test('the mark links to Admin home only for a site administrator', async () => {
+test('the mark links to Admin home for a site administrator', async () => {
   serveSession({capabilities: {administerSite: true}});
-  const admin = renderShell();
+  renderShell();
 
+  expect(await screen.findByRole('link', {name: 'Admin'})).toHaveAttribute('href', '/admin');
+});
+
+test('an organizer sees the mark as plain text, not as a link to a 403', async () => {
   // Today's crumb sends an organizer to a 403, so the frame only offers the link to
   // someone who can open the page behind it.
-  expect(await screen.findByRole('link', {name: 'Admin'})).toHaveAttribute('href', '/admin');
-
   serveSession({capabilities: {administerSite: false}});
-  const organizer = renderShell();
-  await screen.findAllByRole('navigation', {name: 'Admin sections'});
-  const nav = within(organizer.container).getByRole('navigation', {name: 'Admin sections'});
+  renderShell();
+
+  const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
   expect(within(nav).queryByRole('link', {name: 'Admin'})).toBeNull();
   expect(within(nav).getByText('Admin')).toBeVisible();
 });
@@ -227,7 +238,7 @@ test('the two "also coming" lines are muted text, not controls', async () => {
 
   // A control whose value nothing reads is not a control: the line says so, in English,
   // and takes no focus, so nobody tabs into a dead end.
-  const lines = screen.getAllByText(/^Also coming:/);
+  const lines = await screen.findAllByText(/^Also coming:/);
   expect(lines).toHaveLength(2);
   for (const line of lines) {
     expect(line.closest('a, button, [tabindex]')).toBeNull();
@@ -246,6 +257,7 @@ test('the frame has one main, one polite live region and no other landmark', asy
   serveSession();
   const {container} = renderShell();
 
+  await screen.findByRole('navigation', {name: 'Admin sections'});
   expect(container.querySelectorAll('main')).toHaveLength(1);
   expect(container.querySelector('main')).toHaveAttribute('id', 'main');
   expect(container.querySelector('main')).toHaveAttribute('tabindex', '-1');
@@ -263,8 +275,10 @@ test('under qqx the frame is all keys but the two "also coming" lines', async ()
   const {container} = renderShell();
 
   await screen.findByRole('navigation', {name: '(admin-shell-nav-aria)'});
+  // The two "also coming" lines are the exception the issue allows, and the locale
+  // autonyms in the switcher are never translated, so both count as content here.
   expect(untranslatedCopy([container.querySelector('.admin-shell')], [
-    'Community strategy', 'Example editor',
+    'Community strategy', 'Example editor', 'English', 'Nederlands',
     'Also coming: Admin home — not available yet (#473)',
     'Also coming: switching between consultations — not available yet (#473)',
   ])).toEqual([]);

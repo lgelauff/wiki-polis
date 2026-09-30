@@ -14,7 +14,7 @@ server.listen({onUnhandledRequest: 'error'});
 afterEach(() => {
   cleanup();
   server.resetHandlers();
-  // renderAsQqx() (src/test/i18n.ts) sets ?uselang= on the real location, which the
+  // renderAsQqx() (src/test/i18n.ts) sets ?uselang= on the real location, which is the
   // message provider reads; leaving it would put every later test in that locale.
   globalThis.history.replaceState(null, '', '/');
   globalThis.sessionStorage.clear();
@@ -23,3 +23,20 @@ afterEach(() => {
   }
 });
 afterAll(() => server.close());
+
+/** jsdom implements no `matchMedia`, so a component that asks about a viewport width
+ *  throws a TypeError instead of rendering. The stub answers "no match" — the desktop
+ *  case, which is the default the suites were written against — and a test that needs the
+ *  other answer replaces it (see `features/admin/admin-shell.test.tsx`). */
+if (typeof globalThis.matchMedia !== 'function') {
+  globalThis.matchMedia = ((query: string) => ({
+    media: query,
+    matches: false,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  })) as MediaQueryList['matchMedia'];
+}
