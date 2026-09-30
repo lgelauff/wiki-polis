@@ -1,6 +1,3 @@
-import {readFileSync} from 'node:fs';
-import {resolve} from 'node:path';
-
 import {Suspense} from 'react';
 import {QueryClientProvider} from '@tanstack/react-query';
 import {render, screen, within} from '@testing-library/react';
@@ -83,12 +80,13 @@ test('the page renders the console shell, not the legacy header and role bar', a
   expect(container.querySelector('.admin-shell')).not.toBeNull();
   expect(container.querySelectorAll('main')).toHaveLength(1);
 
-  // The two things this issue removes, checked in the source rather than the DOM: an
-  // import left behind would still pull the legacy header onto the page, and the role
-  // bar would still be in the document even if CSS hid it.
-  const source = readFileSync(resolve(process.cwd(), 'src/features/admin/admin-lifecycle-page.tsx'), 'utf8');
-  expect(source).not.toMatch(/legacy-shell/);
-  expect(source).not.toContain('role-bar');
+  // The two things this issue removes, by the marks they left in the document: the legacy
+  // shell's header, crumb, main and toast container, and the role bar. (The import itself
+  // is a property of the diff, which the reviewer reads; its consequence is what a test
+  // can see -- a class of LegacyShell on the page means the header is still in the tree.)
+  for (const mark of ['.site-header', '.header-crumb', '.legacy-main', '#toast-container', '.role-bar']) {
+    expect(container.querySelector(mark)).toBeNull();
+  }
 });
 
 test('renders the admin console from the catalogue English', async () => {

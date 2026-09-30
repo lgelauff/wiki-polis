@@ -190,7 +190,9 @@ test('the lifecycle console writes no setting of its own, and points at the page
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
 
   await screen.findByRole('heading', {name: 'Community strategy'});
-  expect(screen.getByRole('link', {name: /Settings/})).toHaveAttribute(
+  // #477: the console shell's sidebar carries a Settings link of its own, so the card is
+  // named whole (title and description) to tell the two apart.
+  expect(screen.getByRole('link', {name: 'Settings Title, introduction and access'})).toHaveAttribute(
     'href', '/admin/conversations/7/settings',
   );
   expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();

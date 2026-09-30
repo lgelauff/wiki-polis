@@ -66,6 +66,7 @@ function renderShell(options: {data?: Lifecycle; gatingType?: 'invite_only' | 'v
             data={options.data ?? lifecycle}
             gatingType={options.gatingType ?? null}
             toast={options.toast ?? null}
+            children={null}
           />
         </MessageProvider>
       </MemoryRouter>
@@ -81,7 +82,7 @@ function stubNarrowViewport(narrow: boolean) {
     media: query, matches: narrow, onchange: null,
     addEventListener() {}, removeEventListener() {},
     addListener() {}, removeListener() {}, dispatchEvent: () => false,
-  })) as MediaQueryList['matchMedia'];
+  })) as typeof globalThis.matchMedia;
   return () => { globalThis.matchMedia = original; };
 }
 

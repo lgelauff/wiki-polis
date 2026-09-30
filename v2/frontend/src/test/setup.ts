@@ -38,5 +38,5 @@ if (typeof globalThis.matchMedia !== 'function') {
     addListener: () => {},
     removeListener: () => {},
     dispatchEvent: () => false,
-  })) as MediaQueryList['matchMedia'];
+  })) as typeof globalThis.matchMedia;
 }
