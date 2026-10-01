@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from db import (Conversation, ConversationInvite, Participant, Participation,
+from db import (AdminRole, Conversation, ConversationInvite, Participant, Participation,
                 db)
 
 from tests.conftest import login
@@ -178,6 +178,53 @@ def test_consultations_excludes_demo_from_logged_in_joined_list(auth_client, par
     assert 'Demo Joined' not in _lane_titles(real)     # the demo one never does
     # Control: the demo participation is real and does show in the demo space.
     assert 'Demo Joined' in _lane_titles(_lane(auth_client, 'demo'))
+
+
+def test_site_admin_is_offered_consultations_they_have_not_joined(admin_client, app):
+    # A site admin moderates every consultation. That must not hide the ones they
+    # have not joined from "New consultations": it is the only place to join them.
+    conv = Conversation(slug='open-conv', polis_id='openconv001', title='Open Conv',
+                        active=True, access_policy='public')
+    db.session.add(conv)
+    db.session.commit()
+
+    data = _lane(admin_client, 'real')
+
+    assert _lane_slugs(data, 'available') == ['open-conv']
+    card = data['groups']['available'][0]
+    assert card['capabilities']['join'] is True
+    assert card['capabilities']['moderate'] is True
+    assert 'admin' in card['links']
+    assert _lane_slugs(data, 'moderating') == ['open-conv']
+
+
+def test_conversation_moderator_is_offered_a_consultation_they_have_not_joined(
+        auth_client, participant, app):
+    conv = Conversation(slug='modded', polis_id='modded001', title='Modded',
+                        active=True, access_policy='public')
+    db.session.add(conv)
+    db.session.commit()
+    db.session.add(AdminRole(participant_id=participant.id, conversation_id=conv.id,
+                             role='moderator'))
+    db.session.commit()
+
+    data = _lane(auth_client, 'real')
+
+    assert _lane_slugs(data, 'available') == ['modded']
+    assert data['groups']['available'][0]['capabilities']['join'] is True
+    assert _lane_slugs(data, 'moderating') == ['modded']
+
+
+def test_a_joined_moderated_consultation_is_not_offered_again(
+        auth_client, participant, participation, conv):
+    db.session.add(AdminRole(participant_id=participant.id, conversation_id=conv.id,
+                             role='moderator'))
+    db.session.commit()
+
+    data = _lane(auth_client, 'real')
+
+    assert _lane_slugs(data, 'available') == []
+    assert 'test-conv' in _lane_slugs(data, 'moderating')
 
 
 def test_consultations_moderating_excludes_demo_for_admin(admin_client, app):
