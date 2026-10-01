@@ -246,11 +246,12 @@ def build_conversation_lane(
                       .filter(~Conversation.id.in_(joined_ids or [0]))
                       .order_by(Conversation.created_at.desc()).all())
 
-    moderated_ids: set[int] = set()
+    # A consultation you moderate but have not joined stays in `available` (the only place to
+    # join it); you moderate it, so the API card also carries the admin link, which the home page
+    # shows only under "You moderate". A site admin moderates everything.
     if participant:
         if global_admin:
             lane.moderating = Conversation.query.order_by(Conversation.created_at.desc()).all()
-            moderated_ids = {conv.id for conv in lane.moderating}
         else:
             roles = AdminRole.query.filter_by(participant_id=participant.id).all()
             moderated_ids = {role.conversation_id for role in roles}
@@ -262,9 +263,6 @@ def build_conversation_lane(
         conv for conv in lane.moderating
         if (conv.access_policy == 'demo') == demo
     ]
-    # A consultation you moderate but have not joined stays in `available`: that is the
-    # only place to join it. Its card carries the admin link too. (A site admin moderates
-    # everything, so filtering here emptied their list.)
     lane.pseudonym_map = {part.conversation_id: part for part in lane_parts}
 
     all_conversations = joined_conversations + lane.available
