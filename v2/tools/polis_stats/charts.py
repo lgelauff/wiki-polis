@@ -110,14 +110,14 @@ def _columns(values: list[tuple[str, int]], title: str, x_label: str, y_label: s
 def votes_per_participant(counts: list[int]) -> str:
     """Histogram of how many statements each participant voted on (current votes)."""
     if not counts:
-        return _columns([], 'Votes per participant', 'votes', 'participants')
+        return _columns([], 'Votes per participant (all statements)', 'votes', 'participants')
     top = max(counts)
     size = max(1, -(-top // 30))                           # at most ~30 bins
     bins = [0] * (top // size + 1)
     for c in counts:
         bins[c // size] += 1
     labels = [(f'{i * size}' if size == 1 else f'{i * size}–{i * size + size - 1}', n) for i, n in enumerate(bins)]
-    return _columns(labels, 'Votes per participant', 'votes cast', 'participants')
+    return _columns(labels, 'Votes per participant (all statements)', 'votes cast', 'participants')
 
 
 def votes_per_day(days: list[tuple[str, int]]) -> str:

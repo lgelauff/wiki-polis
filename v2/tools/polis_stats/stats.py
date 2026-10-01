@@ -153,7 +153,7 @@ def compute(export: Export, thresholds: Thresholds | None = None) -> Report:
         'statements_rejected': sum(1 for r in rows if r.moderated == -1),
         'statements_seed': sum(1 for r in rows if r.is_seed),
         'statements_meta': sum(1 for r in rows if r.is_meta),
-        'participants_voting': len(participants),      # on any statement, rejected and meta included
+        'participants_voting': len(participants),      # on any statement, rejected and meta included (labelled so)
         'authors': len(authors),
         'votes_current': len(export.votes),             # all statements; 'opinion_votes' excludes rejected and meta
         'vote_rows_including_history': len(export.votes_all),
@@ -167,7 +167,8 @@ def compute(export: Export, thresholds: Thresholds | None = None) -> Report:
     }
 
     groups: dict[str, dict] = {}
-    clustered = {pid: g for pid, g in export.groups.items() if g is not None}
+    voters = {voter for voter, _ in export.votes}
+    clustered = {pid: g for pid, g in export.groups.items() if g is not None and pid in voters}
     if clustered:
         by_group: dict[int, dict[int, Counter]] = defaultdict(lambda: defaultdict(Counter))
         for (voter, sid), vote in export.votes.items():

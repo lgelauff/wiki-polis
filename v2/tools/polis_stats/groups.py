@@ -24,6 +24,8 @@ from .export import Export
 GROUP_LIGHT = ['#eb6834', '#1baf7a', '#4a3aa7', '#eda100', '#e87ba4', '#008300']
 GROUP_DARK = ['#d95926', '#199e70', '#9085e9', '#c98500', '#d55181', '#008300']
 MAX_GROUPS = len(GROUP_LIGHT)
+SPREAD_MIN = 10    # decided votes a group needs before it counts in the spread (a descriptive gap, not a test)
+MAP_MIN_VOTES = 7  # opinion votes a participant needs to be placed on the map
 
 
 def load_groups(path: str | Path) -> dict[int, int | None]:
@@ -33,9 +35,15 @@ def load_groups(path: str | Path) -> dict[int, int | None]:
     if not rows or not {'participant', 'group'} <= set(rows[0]):
         raise ValueError(f'{path}: need a header with participant,group')
     out: dict[int, int | None] = {}
-    for r in rows:
-        g = (r['group'] or '').strip()
-        out[int(r['participant'])] = int(g) if g else None
+    for line, r in enumerate(rows, start=2):
+        p, g = (r['participant'] or '').strip(), (r['group'] or '').strip()
+        try:
+            pid, gid = int(p), (int(g) if g else None)
+        except ValueError:
+            raise ValueError(f'{path}, line {line}: participant and group must be whole numbers') from None
+        if pid in out:
+            raise ValueError(f'{path}, line {line}: participant {pid} appears twice')
+        out[pid] = gid
     return out
 
 
@@ -73,16 +81,18 @@ def _cell_fill(share: float) -> tuple[str, float]:
 def heatmap(statements, groups: dict[str, dict], min_n: int = 5,
             title: str = 'Agree share per statement and group') -> str:
     rows = [s for s in statements if s.moderated != -1 and not s.is_meta]
-    rows.sort(key=lambda s: (-(spread(groups, s.id, min_n) or -1), s.id))
+    rows.sort(key=lambda s: (-(spread(groups, s.id, SPREAD_MIN) or -1), s.id))
     names = list(groups)
-    label_w, cell_w, cell_h, top = 64, 112, 26, 86
+    label_w, cell_w, cell_h, top = 64, 112, 26, 102
     width = label_w + cell_w * len(names) + 150
     height = top + cell_h * max(len(rows), 1) + 24
     body = [f'<text class="t1" x="0" y="16" style="font-weight:600">{escape(title)}</text>',
             f'<text class="t2 small" x="0" y="34">Cell: agree as a share of agree + disagree within the group '
             f'(blue = agree, red = disagree, grey = split).</text>'
             f'<text class="t2 small" x="0" y="50">Dashed: fewer than {min_n} votes. Rows: largest difference '
-            f'between groups first.</text>']
+            f'between groups first.</text>'
+            f'<text class="t2 small" x="0" y="66">Spread counts groups with at least {SPREAD_MIN} votes; it is '
+            f'descriptive, not a test.</text>']
     for j, g in enumerate(names):
         cx = label_w + j * cell_w + cell_w / 2
         body.append(f'<rect class="{_cls(j)}" x="{cx - 34}" y="{top - 22}" width="10" height="10" rx="2"/>'
@@ -97,7 +107,7 @@ def heatmap(statements, groups: dict[str, dict], min_n: int = 5,
             tip = f'#{s.id} · group {g}: ' + (f"{c['agree']} agree, {c['disagree']} disagree, {c['pass']} pass" if c else 'no votes')
             if n < min_n:
                 body.append(f'<rect class="s" x="{x + 1}" y="{y + 1}" width="{cell_w - 2}" height="{cell_h - 2}" rx="3" '
-                            f'style="stroke:#c9c7c0;stroke-dasharray:2 3"><title>{escape(tip)} — {s.text[:120]}</title></rect>'
+                            f'style="stroke:#c9c7c0;stroke-dasharray:2 3"><title>{escape(tip)} — {escape(s.text[:120])}</title></rect>'
                             f'<text class="mu small" x="{x + cell_w / 2}" y="{y + 17}" text-anchor="middle">n={n}</text>')
                 continue
             share = c['agree'] / n
@@ -106,7 +116,7 @@ def heatmap(statements, groups: dict[str, dict], min_n: int = 5,
                         f'fill-opacity="{op:.2f}"><title>{escape(tip)} — {escape(s.text[:120])}</title></rect>'
                         f'<text class="t1 small" x="{x + cell_w / 2}" y="{y + 17}" text-anchor="middle">'
                         f'{100 * share:.0f}% <tspan class="t2">n={n}</tspan></text>')
-        sp = spread(groups, s.id, min_n)
+        sp = spread(groups, s.id, SPREAD_MIN)
         body.append(f'<text class="mu small" x="{label_w + cell_w * len(names) + 8}" y="{y + 17}">'
                     f'{"spread " + format(sp * 100, ".0f") + " pts" if sp is not None else "—"}</text>')
     return _svg(width, height, group_style() + ''.join(body), title)
@@ -114,7 +124,13 @@ def heatmap(statements, groups: dict[str, dict], min_n: int = 5,
 
 # ── participant map ────────────────────────────────────────────────────────────────────────
 
-def project(export: Export, min_votes: int = 7, iterations: int = 200) -> dict[int, tuple[float, float]]:
+def map_cutoff(export: Export, min_votes: int = MAP_MIN_VOTES) -> int:
+    """Opinion votes needed to be placed: ``min_votes``, capped at half the opinion statements."""
+    n = sum(1 for s in export.statements.values() if s.moderated != -1 and not s.is_meta)
+    return min(min_votes, max(2, n // 2))
+
+
+def project(export: Export, min_votes: int = MAP_MIN_VOTES, iterations: int = 200) -> dict[int, tuple[float, float]]:
     """Two-component PCA of the participant × statement vote matrix (stdlib only).
 
     Rows: participants with at least ``min_votes`` current votes (Polis's own cut-off is 7; for a
@@ -129,7 +145,7 @@ def project(export: Export, min_votes: int = 7, iterations: int = 200) -> dict[i
     for (voter, sid), v in export.votes.items():
         if sid in col:
             by_voter.setdefault(voter, {})[sid] = v.value
-    cutoff = min(min_votes, max(2, len(sids) // 2))
+    cutoff = map_cutoff(export, min_votes)
     voters = sorted(p for p, vs in by_voter.items() if len(vs) >= cutoff)
     if len(voters) < 3 or len(sids) < 2:
         return {}
@@ -152,20 +168,31 @@ def project(export: Export, min_votes: int = 7, iterations: int = 200) -> dict[i
             norm = math.sqrt(sum(a * a for a in w)) or 1.0
             v = [a / norm for a in w]
         comps.append(v)
-    return {p: (sum(a * b for a, b in zip(row, comps[0])), sum(a * b for a, b in zip(row, comps[1])))
-            for p, row in zip(voters, X)}
+    # Like Polis, scale each participant by sqrt(statements / own votes), so that people who
+    # voted on few statements are not pulled towards the centre by the imputed zeros.
+    out = {}
+    for p, row in zip(voters, X):
+        scale = math.sqrt(len(sids) / len(by_voter[p]))
+        out[p] = (scale * sum(a * b for a, b in zip(row, comps[0])),
+                  scale * sum(a * b for a, b in zip(row, comps[1])))
+    return out
 
 
 def participant_map(points: dict[int, tuple[float, float]], groups: dict[int, int | None],
-                    group_order: list[str], source: str, title: str = 'Participants by opinion group') -> str:
-    size, pad, top = 440, 28, 82
+                    group_order: list[str], source: str, title: str = 'Participants by opinion group',
+                    cutoff: int = MAP_MIN_VOTES) -> str:
+    size, pad, top = 440, 28, 98
+    grouped = sum(1 for g in groups.values() if g is not None)
+    placed = sum(1 for p in points if groups.get(p) is not None)
     width, height = size + 2 * pad + 180, size + top + pad
     body = [f'<text class="t1" x="0" y="16" style="font-weight:600">{escape(title)}</text>',
             f'<text class="t2 small" x="0" y="34">Our own 2-component PCA of the vote matrix; position is '
             f'not Polis’s map.</text>'
             f'<text class="t2 small" x="0" y="50">Colour: {escape(source)}.</text>'
             f'<text class="t2 small" x="0" y="66">Dots are nudged slightly so that participants who voted '
-            f'identically do not hide each other.</text>']
+            f'identically do not hide each other.</text>'
+            f'<text class="t2 small" x="0" y="82">Placed: {placed} of {grouped} participants with a group '
+            f'(those with at least {cutoff} opinion votes; Polis uses its own rule).</text>']
     if not points:
         return _svg(width, height, ''.join(body) + f'<text class="t2" x="{pad}" y="{top + 20}">Too few participants to project.</text>', title)
     xs, ys = [p[0] for p in points.values()], [p[1] for p in points.values()]
@@ -201,8 +228,11 @@ def participant_map(points: dict[int, tuple[float, float]], groups: dict[int, in
         body.append(f'<circle class="{_cls(i)}" cx="{lx + 5}" cy="{top + 10 + i * 20}" r="5"/>'
                     f'<text class="t2 small" x="{lx + 16}" y="{top + 14 + i * 20}">Group {escape(gname)} · {n}</text>')
     ungrouped = sum(1 for p in points if groups.get(p) is None)
+    k = len(group_order)
+    if k > MAX_GROUPS:                                      # colours are never reused; say so
+        body.append(f'<text class="mu small" x="{lx}" y="{top + 14 + (k + 1) * 20}">Groups after the '
+                    f'{MAX_GROUPS}th share the grey outline.</text>')
     if ungrouped:
-        k = len(group_order)
         body.append(f'<circle class="gx" cx="{lx + 5}" cy="{top + 10 + k * 20}" r="4.5" stroke-width="1.5"/>'
                     f'<text class="t2 small" x="{lx + 16}" y="{top + 14 + k * 20}">no group · {ungrouped}</text>')
     return _svg(width, height, group_style() + ''.join(body), title)

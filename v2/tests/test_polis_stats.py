@@ -357,3 +357,51 @@ def test_a_missing_meta_column_is_reported(export_dir):
     with open(path / 'comments.csv', 'w', newline='') as fh:
         csv.writer(fh).writerows(rows)
     assert any(i.code == 'no-meta-column' for i in read_export(path).issues)
+
+
+def test_statement_html_is_escaped_in_low_vote_heatmap_cells(export_dir, tmp_path):
+    path, _ = export_dir
+    rows = list(csv.reader(open(path / 'comments.csv')))
+    for r in rows[1:]:
+        if r[1] == '3':                                   # statement 3: too few votes, dashed cells
+            r[-1] = '<img src=x onerror=alert(1)>'
+    with open(path / 'comments.csv', 'w', newline='') as fh:
+        csv.writer(fh).writerows(rows)
+    out = tmp_path / 'out'
+    assert main([str(path), '-o', str(out)]) == 0
+    for name in ('report.html', 'charts/groups-heatmap.svg'):
+        text = (out / name).read_text()
+        assert '<img' not in text and '&lt;img src=x' in text
+
+
+@pytest.mark.parametrize('body, message', [
+    ('participant,group\n1,a\n', 'line 2: participant and group must be whole numbers'),
+    ('participant,group\n1,0\n1,1\n', 'line 3: participant 1 appears twice'),
+])
+def test_a_bad_groups_file_names_the_line(export_dir, tmp_path, capsys, body, message):
+    path, _ = export_dir
+    groups = tmp_path / 'g.csv'
+    groups.write_text(body)
+    assert main([str(path), '-o', str(tmp_path / 'out'), '--groups', str(groups)]) == 2
+    assert message in capsys.readouterr().err
+
+
+def test_meta_difference_needs_enough_votes_on_both_sides(export_dir):
+    from tools.polis_stats.report import _meta_html
+    path, _ = export_dir
+    report = compute(read_export(path))
+    html = _meta_html(report)
+    row3 = html[html.index('<td class="n">3</td>'):]
+    row3 = row3[:row3.index('</tr>')]
+    assert row3.endswith('<td class="n">—</td>')        # statement 3 has n=1 vs n=3
+    assert html.index('<td class="n">3</td>') > html.index('<td class="n">2</td>')   # unrated rows last
+
+
+def test_the_map_says_how_many_grouped_participants_it_placed(export_dir):
+    from tools.polis_stats.groups import map_cutoff, participant_map, project
+    path, _ = export_dir
+    export = read_export(path)
+    report = compute(export)
+    svg = participant_map(project(export), export.groups, list(report.groups), export.group_source,
+                          cutoff=map_cutoff(export))
+    assert f'Placed: {len(project(export))} of 60 participants with a group' in svg
