@@ -174,6 +174,9 @@ def test_login_next_rejects_external_url(client, app):
 @pytest.mark.parametrize('target', [
     '//evil.example', '/\\evil.example', '\\\\evil.example', '/\\/evil.example',
     '/\t/evil.example', 'https://evil.example', 'evil.example',
+    # Dot segments that a browser resolves to the path "//evil.example".
+    '/.//evil.example', '/..//evil.example', '/c/.././/evil.example',
+    '/%2e//evil.example', '/%2E%2E//evil.example',
 ])
 def test_login_next_never_leaves_the_site(client, app, target):
     """Browsers read a backslash as a slash, so these would all leave the site."""
@@ -181,6 +184,17 @@ def test_login_next_never_leaves_the_site(client, app, target):
     client.get('/login', query_string={'next': target})
     with client.session_transaction() as sess:
         assert sess.get('next') == '/'
+
+
+@pytest.mark.parametrize('target', [
+    '/c/some-slug', '/c/some-slug?tab=arguments', '/accept/x?uselang=nl', '/c/v1.2', '/c/some-slug#tab-explore',
+])
+def test_login_next_keeps_ordinary_paths(client, app, target):
+    """The dot-segment check must not reject real paths that merely contain dots."""
+    app.config['OAUTH_CLIENT_ID'] = 'cid'
+    client.get('/login', query_string={'next': target})
+    with client.session_transaction() as sess:
+        assert sess.get('next') == target
 
 
 def test_login_round_trip_returns_to_the_page_it_started_on(client, app):

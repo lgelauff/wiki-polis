@@ -1874,6 +1874,12 @@ def _safe_redirect(target: str, fallback: str) -> str:
     if (not target.startswith('/') or target.startswith('//')
             or any(ch in target for ch in '\\\t\r\n')):
         return fallback
+    # Dot segments: a browser resolves "/.//evil.example" and "/..//evil.example" (also
+    # spelled with %2e) to the path "//evil.example", which reads as protocol-relative
+    # wherever the path is reused on its own. Our own links never contain them.
+    path = target.split('?', 1)[0].split('#', 1)[0]
+    if any(seg.lower().replace('%2e', '.') in ('.', '..') for seg in path.split('/')):
+        return fallback
     ref  = urlparse(request.host_url)
     test = urlparse(urljoin(request.host_url, target))
     if test.scheme in ('http', 'https') and test.netloc == ref.netloc:
