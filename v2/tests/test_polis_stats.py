@@ -34,7 +34,7 @@ def test_labels_follow_the_thresholds(export_dir):
     report = compute(read_export(path), t)
     expected = {'agree': [], 'disagree': [], 'split': [], 'pass': [], 'few': []}
     for sid, c in sorted(data['truth'].items()):
-        if sid == 4:                                   # rejected: counted, never classified
+        if sid == 4 or sid in synth.META:              # rejected, and meta: counted, never labelled
             continue
         decided, votes = c['agree'] + c['disagree'], c['agree'] + c['disagree'] + c['pass']
         if decided < t.min_votes:
@@ -244,3 +244,116 @@ def test_the_tallest_histogram_bar_is_labelled():
     svg = votes_per_participant([5] * 40 + [1, 2, 9, 12, 20, 25, 30])      # most participants cast 5 votes
     ticks = [t.split('<')[0] for t in svg.split('text-anchor="middle">')[1:]]
     assert '5' in ticks
+
+
+def test_groups_come_from_the_participant_matrix(export_dir):
+    path, _ = export_dir
+    report = compute(read_export(path))
+    assert sorted(report.groups) == ['0', '1', '2']
+    assert sum(g['members'] for g in report.groups.values()) == 60
+    g0, g1 = report.groups['0']['statements'][2], report.groups['1']['statements'][2]
+    assert g0['agree'] > g0['disagree'] and g1['disagree'] > g1['agree']
+
+
+def test_our_projection_separates_the_groups_that_vote_apart(export_dir):
+    from tools.polis_stats.groups import project
+    path, _ = export_dir
+    export = read_export(path)
+    points = project(export)
+    assert len(points) == 60
+    centroid = {}
+    for g in (0, 1):
+        xs = [points[p] for p in points if export.groups[p] == g]
+        centroid[g] = (sum(x for x, _ in xs) / len(xs), sum(y for _, y in xs) / len(xs))
+    within = max(abs(points[p][0] - centroid[export.groups[p]][0]) for p in points if export.groups[p] in (0, 1))
+    assert abs(centroid[0][0] - centroid[1][0]) > 0.5 * within      # groups 0 and 1 split on statement 2
+
+
+def test_heatmap_lists_the_most_dividing_statement_first(export_dir):
+    from tools.polis_stats.groups import heatmap, spread
+    path, _ = export_dir
+    report = compute(read_export(path))
+    spreads = {s.id: spread(report.groups, s.id, 5) for s in report.opinions()}
+    assert max(spreads, key=lambda k: spreads[k] or -1) == 2
+    svg = heatmap(report.statements, report.groups)
+    assert svg.index('>#2<') < svg.index('>#0<') and '>#4<' not in svg   # rejected statement left out
+    assert '>#6<' not in svg                                              # meta statement left out
+
+
+def test_a_groups_file_replaces_polis_clusters(export_dir, tmp_path):
+    path, _ = export_dir
+    groups = tmp_path / 'g.csv'
+    groups.write_text('participant,group\n' + ''.join(f'{p},{p % 2}\n' for p in range(60)) + '999,1\n')
+    out = tmp_path / 'out'
+    assert main([str(path), '-o', str(out), '--groups', str(groups)]) == 0
+    stats = json.loads((out / 'stats.json').read_text())
+    assert stats['summary']['groups'] == 2
+    codes = {i['code'] for i in stats['issues']}
+    assert {'groups-from-file', 'groups-unknown-participants'} <= codes
+    html = (out / 'report.html').read_text()
+    assert 'groups from' in html and (out / 'charts' / 'participant-map.svg').exists()
+
+
+def test_groups_beyond_the_palette_share_the_neutral_style_instead_of_cycling():
+    from tools.polis_stats.groups import MAX_GROUPS, _cls
+    assert _cls(MAX_GROUPS - 1) != _cls(0)
+    assert _cls(MAX_GROUPS) == 'gx' and _cls(MAX_GROUPS + 3) == 'gx'
+
+
+def test_the_full_table_lists_every_statement_with_its_group_numbers(export_dir, tmp_path):
+    path, data = export_dir
+    out = tmp_path / 'out'
+    assert main([str(path), '-o', str(out)]) == 0
+    rows = list(csv.DictReader(open(out / 'statements.csv')))
+    assert [int(r['statement']) for r in rows] == sorted(data['truth'])            # rejected #4 included
+    assert {'group_0_agree', 'group_2_agree_of_decided', 'group_spread'} <= set(rows[0])
+    report = compute(read_export(path))
+    for r in rows:
+        sid = int(r['statement'])
+        for g, d in report.groups.items():
+            c = d['statements'].get(sid, {'agree': 0})
+            assert int(r[f'group_{g}_agree']) == c['agree']
+    html = (out / 'report.html').read_text()
+    table = html[html.index('<h2>All statements</h2>'):]
+    assert all(f'<td class="n">{sid}</td>' in table for sid in data['truth'])
+    assert table.count('<th>Group ') - table.count('<th>Group spread') == 3 and 'Group spread' in table
+
+
+def test_meta_statements_are_demographics_not_opinions(export_dir):
+    path, data = export_dir
+    report = compute(read_export(path))
+    labelled = report.majority_agree + report.majority_disagree + report.split + report.mostly_pass + report.too_few_votes
+    assert 6 not in labelled and 6 not in [s.id for s in report.opinions()]
+    opinion = [data['truth'][sid] for sid in data['truth'] if sid not in (4, 6)]
+    assert report.summary['agree'] == sum(c['agree'] for c in opinion)
+    assert report.summary['statements_meta'] == 1
+
+
+def test_meta_votes_never_move_the_participant_map(export_dir):
+    from tools.polis_stats.groups import project
+    path, _ = export_dir
+    export = read_export(path)
+    before = project(export)
+    for (voter, sid), vote in export.votes.items():
+        if sid == 6:
+            vote.value = -vote.value                                  # flip every meta answer
+    assert project(export) == before
+
+
+def test_meta_crosstab_splits_every_opinion_by_the_meta_answer(export_dir):
+    path, _ = export_dir
+    export = read_export(path)
+    report = compute(export)
+    table = report.meta[6]['statements']
+    assert 6 not in table and 4 not in table                          # only opinion statements
+    for sid, by_answer in table.items():
+        both = sum(1 for (voter, s) in export.votes if s == sid and (voter, 6) in export.votes)
+        assert sum(sum(c.values()) for c in by_answer.values()) == both
+
+
+def test_a_missing_meta_column_is_reported(export_dir):
+    path, _ = export_dir
+    rows = [r[:6] + r[7:] for r in csv.reader(open(path / 'comments.csv'))]     # drop is-meta
+    with open(path / 'comments.csv', 'w', newline='') as fh:
+        csv.writer(fh).writerows(rows)
+    assert any(i.code == 'no-meta-column' for i in read_export(path).issues)

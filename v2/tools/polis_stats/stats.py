@@ -61,6 +61,10 @@ class Report:
     votes_per_participant: list[int]
     votes_per_day: list[tuple[str, int]]
     thresholds: Thresholds = field(default_factory=Thresholds)
+    groups: dict[str, dict] = field(default_factory=dict)
+    # meta statement id -> {'answers': {'agree': n, 'disagree': n, 'pass': n},
+    #                       'statements': {opinion id: {'agree': {...}, 'disagree': {...}, 'pass': {...}}}}
+    meta: dict[int, dict] = field(default_factory=dict)
 
     def opinions(self) -> list[StatementStats]:
         """Statements analysed as opinions: not rejected, and not meta (meta statements ask about
@@ -110,6 +114,7 @@ def compute(export: Export, thresholds: Thresholds | None = None) -> Report:
     ]
     # Rejected statements are counted, not analysed; meta statements are not opinions.
     shown = [r for r in rows if r.moderated != -1 and not r.is_meta]
+    opinion_ids = {r.id for r in shown}
 
     majority_agree, majority_disagree, split, mostly_pass, too_few = [], [], [], [], []
     for r in shown:
@@ -161,9 +166,42 @@ def compute(export: Export, thresholds: Thresholds | None = None) -> Report:
         'last_vote': max((v.at for v in export.votes_all), default=None),
     }
 
+    groups: dict[str, dict] = {}
+    clustered = {pid: g for pid, g in export.groups.items() if g is not None}
+    if clustered:
+        by_group: dict[int, dict[int, Counter]] = defaultdict(lambda: defaultdict(Counter))
+        for (voter, sid), vote in export.votes.items():
+            g = clustered.get(voter)
+            if g is not None:
+                by_group[g][sid][vote.value] += 1
+        for g in sorted(by_group):
+            members = sum(1 for x in clustered.values() if x == g)
+            groups[str(g)] = {
+                'members': members,
+                'statements': {
+                    sid: {'agree': c[AGREE], 'disagree': c[DISAGREE], 'pass': c[PASS]}
+                    for sid, c in sorted(by_group[g].items())
+                },
+            }
+    meta: dict[int, dict] = {}
+    for m in (r for r in rows if r.is_meta and r.moderated != -1):
+        answer = {voter: v.value for (voter, sid), v in export.votes.items() if sid == m.id}
+        table: dict[int, dict] = {}
+        for (voter, sid), v in export.votes.items():
+            if sid in opinion_ids and voter in answer:
+                key = {AGREE: 'agree', DISAGREE: 'disagree', PASS: 'pass'}[answer[voter]]
+                cell = table.setdefault(sid, {k: {'agree': 0, 'disagree': 0, 'pass': 0} for k in ('agree', 'disagree', 'pass')})
+                cell[key][{AGREE: 'agree', DISAGREE: 'disagree', PASS: 'pass'}[v.value]] += 1
+        meta[m.id] = {
+            'answers': {'agree': m.agree, 'disagree': m.disagree, 'pass': m.passes},
+            'statements': dict(sorted(table.items())),
+        }
+    summary['groups'] = len(groups)
+    summary['participants_in_groups'] = len(clustered)
+
     return Report(
         summary=summary, statements=rows, majority_agree=majority_agree,
         majority_disagree=majority_disagree, split=split, mostly_pass=mostly_pass, too_few_votes=too_few,
         votes_per_participant=sorted(per_participant.values()),
-        votes_per_day=sorted(per_day.items()), thresholds=t,
+        votes_per_day=sorted(per_day.items()), thresholds=t, groups=groups, meta=meta,
     )

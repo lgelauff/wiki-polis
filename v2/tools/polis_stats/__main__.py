@@ -14,7 +14,8 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .export import ExportError, read_export
+from .export import ExportError, Issue, read_export
+from .groups import load_groups
 from .report import write
 from .stats import Thresholds, compute
 
@@ -29,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument('--majority', type=float, default=Thresholds.majority_share)
     p.add_argument('--split', type=float, default=Thresholds.split_min_share)
     p.add_argument('--max-pass', type=float, default=Thresholds.max_pass_share)
+    p.add_argument('--groups', metavar='CSV', help='use this participant,group assignment instead of Polis\'s clusters')
     p.add_argument('--allow-errors', action='store_true', help='write the report even if a cross-check failed')
     a = p.parse_args(argv)
     try:
@@ -36,6 +38,21 @@ def main(argv: list[str] | None = None) -> int:
     except (ExportError, OSError, ValueError) as e:
         print(f'polis_stats: cannot read export: {e}', file=sys.stderr)
         return 2
+    if a.groups:
+        try:
+            export.groups = load_groups(a.groups)
+        except (OSError, ValueError) as e:
+            print(f'polis_stats: cannot read groups: {e}', file=sys.stderr)
+            return 2
+        export.group_source = f'groups from {a.groups}'
+        voters = {voter for voter, _ in export.votes}
+        absent = sum(1 for p in export.groups if p not in voters)
+        unassigned = sum(1 for p in voters if export.groups.get(p) is None)
+        export.issues.append(Issue('note', 'groups-from-file', f'groups taken from {a.groups}, not from Polis', len(export.groups)))
+        if absent:
+            export.issues.append(Issue('warning', 'groups-unknown-participants', 'participants in the groups file who cast no current vote', absent))
+        if unassigned:
+            export.issues.append(Issue('note', 'groups-unassigned', 'voting participants without a group in the groups file', unassigned))
     for i in export.issues:
         print(f'{i.level:7} {i.code} ({i.count}): {i.message}', file=sys.stderr)
     errors = [i for i in export.issues if i.level == 'error']
