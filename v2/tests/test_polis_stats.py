@@ -237,3 +237,10 @@ def test_the_statement_chart_leaves_out_rejected_and_puts_thin_statements_last(e
     assert svg.index('>#3<') > max(svg.index(f'>#{i}<') for i in (0, 1, 2, 5))
     assert 'few votes' in svg
 
+
+
+def test_the_tallest_histogram_bar_is_labelled():
+    from tools.polis_stats.charts import votes_per_participant
+    svg = votes_per_participant([5] * 40 + [1, 2, 9, 12, 20, 25, 30])      # most participants cast 5 votes
+    ticks = [t.split('<')[0] for t in svg.split('text-anchor="middle">')[1:]]
+    assert '5' in ticks

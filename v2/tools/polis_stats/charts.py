@@ -11,10 +11,10 @@ from html import escape
 
 STYLE = """<style>
 .s{fill:#fcfcfb}.ag{fill:#2a78d6}.di{fill:#e34948}.pa{fill:#c9c7c0}.bar{fill:#2a78d6}
-.t1{fill:#0b0b0b}.t2{fill:#52514e}.mu{fill:#898781}.grid{stroke:#e1e0d9;stroke-width:1}
+.t1{fill:#0b0b0b}.t2{fill:#52514e}.mu{fill:#6b6a66}.grid{stroke:#e1e0d9;stroke-width:1}
 text{font:12px system-ui,-apple-system,Segoe UI,sans-serif}.small{font-size:11px}
 @media (prefers-color-scheme:dark){.s{fill:#1a1a19}.ag{fill:#3987e5}.di{fill:#e66767}
-.pa{fill:#5c5b57}.bar{fill:#3987e5}.t1{fill:#fff}.t2{fill:#c3c2b7}.grid{stroke:#2c2c2a}}
+.pa{fill:#5c5b57}.bar{fill:#3987e5}.t1{fill:#fff}.t2{fill:#c3c2b7}.mu{fill:#9a9891}.grid{stroke:#2c2c2a}}
 </style>"""
 
 
@@ -96,6 +96,9 @@ def _columns(values: list[tuple[str, int]], title: str, x_label: str, y_label: s
         body.append(f'<path class="bar" d="{_bar_path(x, y, w, max(h, 0.5), True, True) if h >= 8 else f"M{x:.1f},{y:.1f}h{w:.1f}v{max(h, 0.5):.1f}h{-w:.1f}Z"}">'
                     f'<title>{escape(f"{x_label} {label}: {n}")}</title></path>')
     ticks = {0, len(values) - 1}
+    peak_i = max(range(len(values)), key=lambda i: values[i][1])
+    if all(abs(peak_i - i) * step >= 48 for i in ticks):   # label the tallest bar unless it would collide
+        ticks.add(peak_i)
     for i in sorted(ticks):
         body.append(f'<text class="mu small" x="{left + i * step + step / 2:.1f}" y="{top + plot_h + 16}" '
                     f'text-anchor="middle">{escape(values[i][0])}</text>')
