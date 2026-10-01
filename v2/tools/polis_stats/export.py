@@ -93,6 +93,7 @@ class Export:
     issues: list[Issue] = field(default_factory=list)
     source: str = ''
     vote_sign: str = 'polis-export'
+    group_source: str = 'Polis clusters (group-id in participants-votes.csv)'
 
 
 # ── reading ─────────────────────────────────────────────────────────────────────────────
@@ -216,6 +217,8 @@ def _read(path: Path, vote_sign: str) -> Export:
 
     statements: dict[int, Statement] = {}
     comment_rows = _rows(files['comments.csv'], ('comment-id', 'comment-body'), 'comments.csv')
+    if comment_rows and 'is-meta' not in comment_rows[0]:
+        issues.append(Issue('warning', 'no-meta-column', 'comments.csv has no is-meta column: meta (demographic) statements cannot be told apart and are treated as opinions'))
     bad_statement = 0
     for row in comment_rows:
         try:

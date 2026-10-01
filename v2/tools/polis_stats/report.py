@@ -8,7 +8,7 @@ from datetime import datetime
 from html import escape
 from pathlib import Path
 
-from . import charts
+from . import charts, groups as groupviz
 from .export import Export
 from .stats import Report, wilson
 
@@ -26,21 +26,53 @@ def write(export: Export, report: Report, out: str | Path) -> Path:
         'votes-per-participant.svg': charts.votes_per_participant(report.votes_per_participant),
         'votes-per-day.svg': charts.votes_per_day(report.votes_per_day),
     }
+    if report.groups:
+        svgs['groups-heatmap.svg'] = groupviz.heatmap(report.statements, report.groups)
+        svgs['participant-map.svg'] = groupviz.participant_map(
+            groupviz.project(export), export.groups, list(report.groups), export.group_source,
+            cutoff=groupviz.map_cutoff(export))
     for name, svg in svgs.items():
         (out / 'charts' / name).write_text(svg, encoding='utf-8')
 
     with open(out / 'statements.csv', 'w', newline='', encoding='utf-8') as fh:
         w = csv.writer(fh)
-        w.writerow(['statement', 'moderated', 'seed', 'votes', 'agree', 'disagree', 'pass',
+        w.writerow(['statement', 'moderated', 'seed', 'meta', 'votes', 'agree', 'disagree', 'pass',
                     'agree_share', 'disagree_share', 'pass_share', 'agree_of_decided',
-                    'agree_of_decided_ci_low', 'agree_of_decided_ci_high', 'label', 'text'])
+                    'agree_of_decided_ci_low', 'agree_of_decided_ci_high', 'label',
+                    *(f'group_{g}_{k}' for g in report.groups for k in ('agree', 'disagree', 'pass', 'agree_of_decided')),
+                    *(['group_spread'] if report.groups else []), 'text'])
         for s in report.statements:
             ci = wilson(s.agree, s.decided)
-            w.writerow([s.id, s.moderated, '' if s.is_seed is None else int(s.is_seed), s.votes, s.agree,
+            gcols = []
+            for d in report.groups.values():
+                c = d['statements'].get(s.id) or {'agree': 0, 'disagree': 0, 'pass': 0}
+                dec = c['agree'] + c['disagree']
+                gcols += [c['agree'], c['disagree'], c['pass'], f"{c['agree'] / dec:.4f}" if dec else '']
+            if report.groups:
+                sp = groupviz.spread(report.groups, s.id, groupviz.SPREAD_MIN)
+                gcols.append(f'{sp:.4f}' if sp is not None else '')
+            w.writerow([s.id, s.moderated, '' if s.is_seed is None else int(s.is_seed), int(s.is_meta), s.votes, s.agree,
                         s.disagree, s.passes,
                         *(f'{x:.4f}' if x is not None else '' for x in (s.share(s.agree), s.share(s.disagree), s.share(s.passes), s.agree_of_decided())),
                         *((f'{x:.4f}' for x in ci) if ci else ('', '')),
-                        report.label(s.id), _cell(s.text)])
+                        report.label(s.id), *gcols, _cell(s.text)])
+
+    if report.groups:
+        with open(out / 'groups.csv', 'w', newline='', encoding='utf-8') as fh:
+            w = csv.writer(fh)
+            w.writerow(['group', 'members', 'statement', 'agree', 'disagree', 'pass'])
+            for g, data in report.groups.items():
+                for sid, c in data['statements'].items():
+                    w.writerow([g, data['members'], sid, c['agree'], c['disagree'], c['pass']])
+
+    if report.meta:
+        with open(out / 'meta_crosstab.csv', 'w', newline='', encoding='utf-8') as fh:
+            w = csv.writer(fh)
+            w.writerow(['meta_statement', 'meta_answer', 'statement', 'agree', 'disagree', 'pass'])
+            for mid, m in report.meta.items():
+                for sid, by_answer in m['statements'].items():
+                    for answer, c in by_answer.items():
+                        w.writerow([mid, answer, sid, c['agree'], c['disagree'], c['pass']])
 
     with open(out / 'issues.csv', 'w', newline='', encoding='utf-8') as fh:
         w = csv.writer(fh)
@@ -72,12 +104,14 @@ def _html(export: Export, report: Report, svgs: dict[str, str], data: dict) -> s
     s, t = report.summary, report.thresholds
     by_id = {x.id: x for x in report.statements}
     tiles = [
-        ('Participants who voted', s['participants_voting']),
+        ('Participants who voted (any statement)', s['participants_voting']),
         ('Statements (accepted / unmoderated / rejected)',
          f"{s['statements_accepted']} / {s['statements_unmoderated']} / {s['statements_rejected']}"),
+        ('Meta (demographic) statements', s['statements_meta']),
         ('Current votes (all statements)', s['votes_current']),
         ('Opinion votes: agree · pass · disagree', f"{_pct(s['agree'], s['opinion_votes'])} · {_pct(s['pass'], s['opinion_votes'])} · {_pct(s['disagree'], s['opinion_votes'])}"),
-        ('Median votes per participant', s['votes_per_participant_median'] if s['votes_per_participant_median'] is not None else '—'),
+        ('Opinion groups', s['groups']),
+        ('Median votes per participant (all statements)', s['votes_per_participant_median'] if s['votes_per_participant_median'] is not None else '—'),
     ]
     issue_rows = ''.join(
         f'<tr><td>{escape(i.level)}</td><td><code>{escape(i.code)}</code></td><td class="n">{i.count}</td><td>{escape(i.message)}</td></tr>'
@@ -90,12 +124,41 @@ def _html(export: Export, report: Report, svgs: dict[str, str], data: dict) -> s
             f'<li><b>#{i}</b> {escape(by_id[i].text)} <span class="muted">— {by_id[i].agree} agree, '
             f'{by_id[i].disagree} disagree, {by_id[i].passes} pass</span></li>' for i in ids) + '</ul>'
 
+    def group_cells(sid: int) -> str:
+        cells = []
+        for d in report.groups.values():
+            c = d['statements'].get(sid)
+            dec = (c['agree'] + c['disagree']) if c else 0
+            cells.append(f'<td class="n">{_pct(c["agree"], dec) if dec else "—"}'
+                         f'<span class="muted"> n={dec}</span></td>' if c else '<td class="n muted">—</td>')
+        if report.groups:
+            sp = groupviz.spread(report.groups, sid, groupviz.SPREAD_MIN)
+            cells.append(f'<td class="n">{f"{sp * 100:.0f} pts" if sp is not None else "—"}</td>')
+        return ''.join(cells)
+
+    group_heads = ''.join(f'<th>Group {escape(g)}<br><span class="muted">n={d["members"]}</span></th>'
+                          for g, d in report.groups.items())
+    if report.groups:
+        group_heads += '<th>Group spread</th>'
     table = ''.join(
         f'<tr><td class="n">{x.id}</td><td class="txt">{escape(x.text)}</td><td>{ {1: "accepted", 0: "unmoderated", -1: "rejected"}.get(x.moderated, x.moderated)}</td>'
         f'<td class="n">{x.votes}</td><td class="n">{x.agree}</td><td class="n">{x.passes}</td><td class="n">{x.disagree}</td>'
         f'<td class="n">{_pct(x.agree, x.votes)}</td><td class="n">{_pct(x.agree, x.decided)}</td>'
-        f'<td class="lbl">{escape(report.label(x.id))}</td></tr>'
+        f'<td class="lbl">{escape("meta (demographic)" if x.is_meta else report.label(x.id))}</td>{group_cells(x.id)}</tr>'
         for x in report.statements)
+
+    groups_html = ''
+    if report.groups:
+        groups_html = (f'<h2>Opinion groups</h2><p class="muted">Groups: <b>{escape(export.group_source)}</b>. '
+                       f'Groups are an input to this report, not a finding: Polis forms them by clustering a '
+                       f'projection of the votes, and another method could draw them differently '
+                       f'(<code>--groups FILE</code> uses your own). The map below is our own projection, so it '
+                       f'shows whether these groups actually separate. It places participants with at least '
+                       f'{groupviz.map_cutoff(export)} opinion votes (7, or half the opinion statements if there are '
+                       f'fewer than 14) and, like Polis, scales up those with few votes so that they are not '
+                       f'pulled to the centre; a dot near the centre does not mean a moderate view.</p>'
+                       f'<figure>{svgs["groups-heatmap.svg"]}</figure><figure>{svgs["participant-map.svg"]}</figure>'
+                       f'<p class="muted">Every statement\'s numbers per group are in the table at the end.</p>')
 
     title = s['title'] or 'Polis export'
     period = ''
@@ -134,9 +197,55 @@ figure{{margin:16px 0;overflow-x:auto}}svg{{max-width:100%;height:auto}}code{{fo
 <h2>Participation</h2>
 <figure>{svgs['votes-per-participant.svg']}</figure>
 <figure>{svgs['votes-per-day.svg']}</figure>
+{groups_html}
+{_meta_html(report)}
 <h2>All statements</h2>
-<p class="muted">Every statement, rejected ones included. Agree %: share of all votes. Agree of decided: share of agree + disagree (passes left out). Labels use the thresholds above; rejected statements get no label.</p>
-<div class="scroll wide"><table><tr><th>#</th><th>Statement</th><th>Moderation</th><th>Votes</th><th>Agree</th><th>Pass</th><th>Disagree</th><th>Agree %</th><th>Agree of decided</th><th>Label</th></tr>{table}</table></div>
-<p class="muted">Also written next to this file: stats.json, statements.csv (with 95% Wilson intervals), issues.csv, charts/*.svg.</p>
+<p class="muted">Every statement, rejected ones included. Agree %: share of all votes. Agree of decided: share of agree + disagree (passes left out). Group columns: agree of decided within the group, with its number of decided votes; spread: largest difference between groups (groups with fewer than 10 decided votes left out; descriptive, not a test). Labels use the thresholds above; rejected statements get no label, and meta statements are marked as demographic (for them the group columns describe who the groups are, not an opinion).</p>
+<div class="scroll wide"><table><tr><th>#</th><th>Statement</th><th>Moderation</th><th>Votes</th><th>Agree</th><th>Pass</th><th>Disagree</th><th>Agree %</th><th>Agree of decided</th><th>Label</th>{group_heads}</tr>{table}</table></div>
+<p class="muted">Also written next to this file: stats.json, statements.csv (with 95% Wilson intervals), groups.csv, meta_crosstab.csv, issues.csv, charts/*.svg.</p>
 </body></html>"""
 
+
+def _meta_html(report: Report) -> str:
+    """Meta statements as demographics: who answered what, and how each answer group voted."""
+    metas = [x for x in report.statements if x.is_meta]
+    if not metas:
+        return ''
+    by_id = {x.id: x for x in report.statements}
+    out = ['<h2>Meta statements (demographics)</h2>',
+           '<p class="muted">Meta statements ask about the participant, not about the topic (for example '
+           '\u201cI am an administrator\u201d), so they are treated as demographics: they are left out of the '
+           'opinion totals, the statement labels, the group heatmap and the participant map. '
+           'Polis also leaves them out of its clustering (they still count towards who it includes). Below: how many answered each way, and how '
+           'every opinion statement was voted by those who agreed with the meta statement compared with '
+           'those who disagreed (agree as a share of agree + disagree, with the number of decided votes). '
+           'Difference: agreed minus disagreed, shown only when both sides have at least 10 decided votes; '
+           'rows sorted by its size. Participants who passed on the meta statement are in meta_crosstab.csv only.</p>']
+    for m in metas:
+        if m.moderated == -1:
+            out.append(f'<h3>#{m.id} {escape(m.text)}</h3><p class="muted">Rejected; not analysed.</p>')
+            continue
+        data = report.meta.get(m.id, {'answers': {}, 'statements': {}})
+        a = data['answers']
+        total = sum(a.values())
+        out.append(f'<h3>#{m.id} {escape(m.text)}</h3><p>Agree {a.get("agree", 0)} ({_pct(a.get("agree", 0), total)}) · '
+                   f'disagree {a.get("disagree", 0)} ({_pct(a.get("disagree", 0), total)}) · '
+                   f'pass {a.get("pass", 0)} ({_pct(a.get("pass", 0), total)}) · {total} answered</p>')
+        rows = []
+        for sid, by_answer in data['statements'].items():
+            ya, na = by_answer['agree'], by_answer['disagree']
+            yd, nd = ya['agree'] + ya['disagree'], na['agree'] + na['disagree']
+            enough = yd >= groupviz.SPREAD_MIN and nd >= groupviz.SPREAD_MIN
+            diff = (ya['agree'] / yd - na['agree'] / nd) if enough else None
+            rows.append((diff, sid, ya, yd, na, nd))
+        rows.sort(key=lambda r: (r[0] is None, -abs(r[0] or 0), r[1]))
+        body = ''.join(
+            f'<tr><td class="n">{sid}</td><td class="txt">{escape(by_id[sid].text)}</td>'
+            f'<td class="n">{_pct(ya["agree"], yd)}<span class="muted"> n={yd}</span></td>'
+            f'<td class="n">{_pct(na["agree"], nd)}<span class="muted"> n={nd}</span></td>'
+            f'<td class="n">{f"{diff * 100:+.0f} pts" if diff is not None else "—"}</td></tr>'
+            for diff, sid, ya, yd, na, nd in rows)
+        out.append('<div class="scroll"><table><tr><th>#</th><th>Opinion statement</th>'
+                   '<th>Agreed with meta</th><th>Disagreed with meta</th><th>Difference</th></tr>'
+                   f'{body or "<tr><td colspan=5>No overlapping votes.</td></tr>"}</table></div>')
+    return ''.join(out)

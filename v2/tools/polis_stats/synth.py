@@ -26,8 +26,11 @@ STATEMENTS = {
     3: ('Hardly anyone saw this.', 1, False, None),
     4: ('A statement moderated out.', -1, False, {0: (0.5, 0.5), 1: (0.5, 0.5), 2: (0.5, 0.5)}),
     5: ('Still waiting for moderation.', 0, False, {0: (0.4, 0.2), 1: (0.4, 0.2), 2: (0.4, 0.2)}),
+    # a meta (demographic) statement: answers line up with group 1, so leaking it into the
+    # opinion analysis would visibly move things
+    6: ('I am an administrator on a Wikimedia project.', 1, True, {0: (0.1, 0.9), 1: (0.9, 0.1), 2: (0.1, 0.9)}),
 }
-META: set[int] = set()
+META = {6}
 
 
 def build(seed: int = 7, participants: int = 60, raw_sign: bool = False) -> dict:

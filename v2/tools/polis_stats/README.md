@@ -11,7 +11,8 @@ python -m tools.polis_stats.synth /tmp/synthetic && python -m tools.polis_stats 
 
 Output in `out/`: `report.html` (summary, checks, charts, the full statement table; light and dark),
 `stats.json` (summary, labels, checks), `statements.csv` (every statement: counts, shares, 95% Wilson
-interval, label), `issues.csv` (every check result), `charts/*.svg`.
+interval, label, per-group numbers), `groups.csv`, `meta_crosstab.csv`, `issues.csv` (every check
+result), `charts/*.svg`.
 Exit code 0 = written; 1 = a cross-check failed (nothing written unless `--allow-errors`);
 2 = unreadable export.
 
@@ -53,3 +54,26 @@ convention; a mismatch between files is reported as `vote-sign-inverted`.
   group-informed consensus or representativeness, which are group-aware.
 - the 95% Wilson interval describes these votes; participants chose to take part, so it is not an
   estimate for any wider population
+
+## Opinion groups
+
+Groups are an input, not a finding. By default they are Polis's own clusters (`group-id` in
+participants-votes.csv); `--groups FILE` (a CSV with `participant,group`) uses any other assignment.
+The report shows a heatmap of agree share per statement and group (rows with the largest difference
+between groups first) and a participant map: our own two-component PCA of the vote matrix, not
+Polis's map, coloured by group, so one can see whether the groups really separate. Participants
+need at least 7 opinion votes to be placed (half the opinion statements, for small conversations),
+and, as in Polis, those with few votes are scaled so that they are not pulled to the centre. Polis
+decides whom to cluster by its own rule, so the map says how many grouped participants it placed.
+The group spread (largest gap in agree share between groups with at least 10 decided votes) is a
+descriptive number, not a significance test.
+
+## Meta statements
+
+Statements with `is-meta = true` ask about the participant, not the topic, so they are treated as
+demographics: they are left out of the opinion totals, the statement labels, the statement chart, the group
+heatmap and spread, and the participant map (Polis also leaves them out of its clustering, though
+they still count towards which participants it includes). The
+report gives each meta statement its own section: how many answered each way, and how every
+opinion statement was voted by those who agreed versus disagreed with it (`meta_crosstab.csv`).
+An export without an `is-meta` column is reported, not guessed at.
