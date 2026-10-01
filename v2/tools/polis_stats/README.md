@@ -1,7 +1,7 @@
 # polis_stats
 
-Basic statistics from a Polis conversation export, with the export cross-checked before anything
-is counted. Standard library only.
+Basic statistics and charts from a Polis conversation export, with the export cross-checked
+before anything is counted. Standard library only; no plotting dependency.
 
 ```bash
 cd v2
@@ -9,8 +9,9 @@ python -m tools.polis_stats path/to/export-folder-or.zip -o out/
 python -m tools.polis_stats.synth /tmp/synthetic && python -m tools.polis_stats /tmp/synthetic -o /tmp/report   # try it
 ```
 
-Output in `out/`: `stats.json` (summary, labels, checks), `statements.csv` (every statement: counts,
-shares, 95% Wilson interval, label), `issues.csv` (every check result).
+Output in `out/`: `report.html` (summary, checks, charts, the full statement table; light and dark),
+`stats.json` (summary, labels, checks), `statements.csv` (every statement: counts, shares, 95% Wilson
+interval, label), `issues.csv` (every check result), `charts/*.svg`.
 Exit code 0 = written; 1 = a cross-check failed (nothing written unless `--allow-errors`);
 2 = unreadable export.
 
@@ -31,7 +32,7 @@ negates its stored votes on export (in its database and in wiki-polis's vote API
 An export cannot reveal its own sign, so pass `--vote-sign raw` for data in the database
 convention; a mismatch between files is reported as `vote-sign-inverted`.
 
-## Checks (all reported in stats.json and issues.csv; nothing is dropped silently)
+## Checks (all reported in the HTML, stats.json and issues.csv; nothing is dropped silently)
 
 - votes for statements missing from comments.csv; malformed vote rows; votes without time
 - participants-votes.csv differs from the latest votes in votes.csv (cell by cell)
@@ -42,7 +43,7 @@ convention; a mismatch between files is reported as `vote-sign-inverted`.
 
 - current vote: latest row per (voter, statement) in votes.csv; equal timestamps keep file order,
   the same tie-break Polis uses for participants-votes.csv
-- rejected statements (moderated = -1) are counted but not classified; pending ones (0) are
+- rejected statements (moderated = -1) are counted but not charted or classified; pending ones (0) are
   classified like accepted ones, so check the `moderated` column if strict moderation was on
 - meta statements (`is-meta`) ask about the participant, not the topic: no opinion label
 - labels describe the overall vote on one statement, among statements with at least `--min-votes`

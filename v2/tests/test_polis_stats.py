@@ -131,7 +131,8 @@ def test_cli_writes_the_report_and_refuses_on_errors(export_dir, tmp_path, capsy
     path, _ = export_dir
     out = tmp_path / 'out'
     assert main([str(path), '-o', str(out)]) == 0
-    for name in ('stats.json', 'statements.csv', 'issues.csv'):
+    for name in ('report.html', 'stats.json', 'statements.csv', 'issues.csv',
+                 'charts/statements.svg', 'charts/votes-per-participant.svg', 'charts/votes-per-day.svg'):
         assert (out / name).exists(), name
     stats = json.loads((out / 'stats.json').read_text())
     assert stats['summary']['participants_voting'] == 60 and 0 in stats['labels']['majority_agree']
@@ -139,7 +140,7 @@ def test_cli_writes_the_report_and_refuses_on_errors(export_dir, tmp_path, capsy
     assert (tmp_path / 'forced' / 'stats.json').exists()
     synth.write(tmp_path / 'raw', raw_sign=True)
     assert main([str(tmp_path / 'raw'), '-o', str(tmp_path / 'raw-out')]) == 1
-    assert not (tmp_path / 'raw-out' / 'stats.json').exists()
+    assert not (tmp_path / 'raw-out' / 'report.html').exists()
     assert main(['/nonexistent/export']) == 2
 
 
@@ -215,4 +216,24 @@ def test_meta_statements_get_no_opinion_label(export_dir):
     report = compute(export)
     assert report.label(1) == 'meta' and 1 not in report.majority_disagree
     assert 1 not in [s.id for s in report.opinions()]
+
+
+def test_the_report_table_lists_every_statement(export_dir, tmp_path):
+    path, data = export_dir
+    out = tmp_path / 'out'
+    assert main([str(path), '-o', str(out)]) == 0
+    html = (out / 'report.html').read_text()
+    table = html[html.index('<h2>All statements</h2>'):]
+    assert all(f'<td class="n">{sid}</td>' in table for sid in data['truth'])     # rejected #4 included
+    assert 'too-few-votes' in table and 'consensus' not in table
+
+
+def test_the_statement_chart_leaves_out_rejected_and_puts_thin_statements_last(export_dir):
+    from tools.polis_stats.charts import statement_bars
+    path, _ = export_dir
+    report = compute(read_export(path))
+    svg = statement_bars(report.opinions(), min_votes=report.thresholds.min_votes)
+    assert '>#4<' not in svg
+    assert svg.index('>#3<') > max(svg.index(f'>#{i}<') for i in (0, 1, 2, 5))
+    assert 'few votes' in svg
 
