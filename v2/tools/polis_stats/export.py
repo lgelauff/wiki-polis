@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -29,6 +30,8 @@ from pathlib import Path
 
 AGREE, PASS, DISAGREE = 1, 0, -1
 FILES = ('summary.csv', 'comments.csv', 'votes.csv', 'participants-votes.csv')
+MAX_FILE_BYTES = 200 * 1024 * 1024      # per export file, uncompressed; larger is refused, not read
+csv.field_size_limit(16 * 1024 * 1024)  # long statement texts are legal; the default 128 KB is not enough
 
 # Polis writes lower-case hyphenated headers in its CSV export and title-case ones in its Excel
 # export; accept both, case-insensitively.
@@ -110,13 +113,17 @@ def _open_source(path: Path) -> dict[str, str]:
         for f in sorted(path.rglob('*.csv')):
             name = _classify(f.name)
             if name and name not in found:
+                if f.stat().st_size > MAX_FILE_BYTES:
+                    raise ExportError(f'{f.name} is larger than {MAX_FILE_BYTES // 2**20} MB')
                 found[name] = f.read_text(encoding='utf-8-sig')
     elif zipfile.is_zipfile(path):
         with zipfile.ZipFile(path) as z:
-            for entry in sorted(z.namelist()):
-                name = _classify(entry.rsplit('/', 1)[-1])
+            for info in sorted(z.infolist(), key=lambda i: i.filename):
+                name = _classify(info.filename.rsplit('/', 1)[-1])
                 if name and name not in found:
-                    found[name] = z.read(entry).decode('utf-8-sig')
+                    if info.file_size > MAX_FILE_BYTES:   # the uncompressed size, checked before reading
+                        raise ExportError(f'{info.filename} unpacks to more than {MAX_FILE_BYTES // 2**20} MB')
+                    found[name] = z.read(info).decode('utf-8-sig')
     else:
         raise ExportError(f'{path} is neither a folder nor a zip file')
     missing = [n for n in ('comments.csv', 'votes.csv') if n not in found]
@@ -139,10 +146,17 @@ def _rows(text: str, required: tuple[str, ...], name: str) -> list[dict[str, str
 
 
 def _int(value: str | None) -> int | None:
+    """An integer cell; '' is None. Anything else that is not a whole number raises ValueError."""
     value = (value or '').strip()
     if value == '':
         return None
-    return int(float(value))
+    try:
+        number = float(value)
+    except ValueError:
+        raise ValueError(f'not a number: {value[:20]!r}') from None
+    if not math.isfinite(number) or number != int(number):
+        raise ValueError(f'not a whole number: {value[:20]!r}')
+    return int(number)
 
 
 def _bool(value: str | None) -> bool | None:
@@ -166,15 +180,29 @@ def _time(value: str | None) -> datetime | None:
             return None
         return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
     seconds = number / 1000.0 if number > 1e11 else number
-    return datetime.fromtimestamp(seconds, tz=timezone.utc)
+    try:
+        return datetime.fromtimestamp(seconds, tz=timezone.utc)
+    except (ValueError, OverflowError, OSError):
+        return None
 
 
 def read_export(path: str | Path, *, vote_sign: str = 'polis-export') -> Export:
-    """Read and check an export. ``vote_sign`` is 'polis-export' (agree=+1) or 'raw' (agree=-1)."""
+    """Read and check an export. ``vote_sign`` is 'polis-export' (agree=+1) or 'raw' (agree=-1).
+
+    Raises ExportError when the export cannot be read at all; everything else becomes an Issue.
+    """
     if vote_sign not in ('polis-export', 'raw'):
         raise ValueError("vote_sign must be 'polis-export' or 'raw'")
+    try:
+        return _read(Path(path), vote_sign)
+    except csv.Error as e:
+        raise ExportError(f'malformed CSV: {e}') from None
+    except UnicodeDecodeError as e:
+        raise ExportError(f'not UTF-8 text: {e.reason}') from None
+
+
+def _read(path: Path, vote_sign: str) -> Export:
     flip = -1 if vote_sign == 'raw' else 1
-    path = Path(path)
     files = _open_source(path)
     issues: list[Issue] = []
 
@@ -188,26 +216,38 @@ def read_export(path: str | Path, *, vote_sign: str = 'polis-export') -> Export:
 
     statements: dict[int, Statement] = {}
     comment_rows = _rows(files['comments.csv'], ('comment-id', 'comment-body'), 'comments.csv')
+    bad_statement = 0
     for row in comment_rows:
-        sid = _int(row['comment-id'])
+        try:
+            sid = _int(row['comment-id'])
+            statement = Statement(
+                id=sid, author=_int(row.get('author-id')), created=_time(row.get('timestamp')),
+                moderated=_int(row.get('moderated')) or 0,
+                is_seed=_bool(row.get('is-seed')), is_meta=_bool(row.get('is-meta')),
+                text=row.get('comment-body', ''),
+                reported_agrees=_int(row.get('agrees')), reported_disagrees=_int(row.get('disagrees')),
+            )
+        except ValueError:
+            bad_statement += 1
+            continue
         if sid is None:
-            issues.append(Issue('error', 'statement-without-id', 'a comments.csv row has no comment-id'))
+            bad_statement += 1
             continue
         if sid in statements:
             issues.append(Issue('error', 'duplicate-statement', f'statement {sid} appears twice in comments.csv'))
             continue
-        statements[sid] = Statement(
-            id=sid, author=_int(row.get('author-id')), created=_time(row.get('timestamp')),
-            moderated=_int(row.get('moderated')) or 0,
-            is_seed=_bool(row.get('is-seed')), is_meta=_bool(row.get('is-meta')),
-            text=row.get('comment-body', ''),
-            reported_agrees=_int(row.get('agrees')), reported_disagrees=_int(row.get('disagrees')),
-        )
+        statements[sid] = statement
+    if bad_statement:
+        issues.append(Issue('error', 'bad-statement-row', 'comments.csv rows with no comment-id or a malformed number (excluded)', bad_statement))
 
     votes_all: list[Vote] = []
     unknown_statement = bad_value = no_time = 0
     for row in _rows(files['votes.csv'], ('comment-id', 'voter-id', 'vote'), 'votes.csv'):
-        sid, voter, raw = _int(row['comment-id']), _int(row['voter-id']), _int(row['vote'])
+        try:
+            sid, voter, raw = _int(row['comment-id']), _int(row['voter-id']), _int(row['vote'])
+        except ValueError:
+            bad_value += 1
+            continue
         if raw not in (-1, 0, 1) or sid is None or voter is None:
             bad_value += 1
             continue
@@ -256,28 +296,41 @@ def _check_matrix(text: str, latest: dict, flip: int, issues: list[Issue]) -> di
     statement_cols = [(i, int(k)) for i, k in enumerate(keys) if k.strip().lstrip('-').isdigit()]
     gi = keys.index('group-id') if 'group-id' in keys else None
     groups: dict[int, int | None] = {}
-    mismatched = 0
+    mismatched = bad_rows = 0
     seen: set[tuple[int, int]] = set()
     for row in reader:
         if not any(c.strip() for c in row):
             continue
-        pid = _int(row[keys.index('participant')])
+        try:
+            pid = _int(row[keys.index('participant')])
+            group = _int(row[gi]) if gi is not None and gi < len(row) else None
+            cells = [(sid, _int(row[i]) if i < len(row) else None) for i, sid in statement_cols]
+        except ValueError:
+            bad_rows += 1
+            continue
         if pid is None:
             continue
-        groups[pid] = _int(row[gi]) if gi is not None and gi < len(row) else None
-        for i, sid in statement_cols:
-            cell = _int(row[i]) if i < len(row) else None
+        groups[pid] = group
+        for sid, cell in cells:
             if cell is None:
                 continue
             seen.add((pid, sid))
             vote = latest.get((pid, sid))
             if vote is None or vote.value != cell * flip:
                 mismatched += 1
+    # Polis writes a row for every voter and a column for every statement anyone voted on
+    # (moderated-out ones included), so both kinds of absence point at a damaged export.
+    voters = {voter for voter, _ in latest}
+    absent = voters - set(groups)
     missing = sum(1 for key in latest if key not in seen and key[0] in groups)
+    if bad_rows:
+        issues.append(Issue('error', 'matrix-bad-row', 'participants-votes.csv rows with a malformed number (skipped)', bad_rows))
     if mismatched:
         issues.append(Issue('error', 'matrix-mismatch', 'participants-votes.csv cells that differ from the latest vote in votes.csv', mismatched))
+    if absent:
+        issues.append(Issue('error', 'matrix-missing-participant', 'participants who voted (votes.csv) but have no row in participants-votes.csv', len(absent)))
     if missing:
-        issues.append(Issue('warning', 'matrix-missing-votes', 'latest votes absent from participants-votes.csv (e.g. moderated-out statements dropped from the matrix)', missing))
+        issues.append(Issue('error', 'matrix-missing-votes', 'latest votes absent from the rows of participants-votes.csv', missing))
     return groups
 
 

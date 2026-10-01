@@ -40,8 +40,15 @@ convention; a mismatch between files is reported as `vote-sign-inverted`.
 
 ## Definitions (all thresholds are options)
 
-- current vote: latest row per (voter, statement) in votes.csv
-- rejected statements (moderated = -1) are counted but not classified
-- consensus: agree (or disagree) ≥ `--consensus` (0.70) of agree + disagree, with at least
-  `--min-votes` (10) agree + disagree votes; divisive: both sides ≥ `--divisive` (0.35)
-- passes are reported, never counted in those shares
+- current vote: latest row per (voter, statement) in votes.csv; equal timestamps keep file order,
+  the same tie-break Polis uses for participants-votes.csv
+- rejected statements (moderated = -1) are counted but not classified; pending ones (0) are
+  classified like accepted ones, so check the `moderated` column if strict moderation was on
+- meta statements (`is-meta`) ask about the participant, not the topic: no opinion label
+- labels describe the overall vote on one statement, among statements with at least `--min-votes`
+  (10) agree + disagree votes: `mostly-pass` if passes are over `--max-pass` (0.50) of all votes;
+  otherwise `majority-agree` / `majority-disagree` if one side has at least `--majority` (0.70) of
+  agree + disagree; `split` if both sides have at least `--split` (0.35). They are **not** Polis's
+  group-informed consensus or representativeness, which are group-aware.
+- the 95% Wilson interval describes these votes; participants chose to take part, so it is not an
+  estimate for any wider population

@@ -47,12 +47,17 @@ def build(seed: int = 7, participants: int = 60, raw_sign: bool = False) -> dict
                 vote = 1 if r < pa else (-1 if r < pa + pd else 0)
             t += 60_000
             rows.append([t, pid, sid, vote])
-    # re-votes: 5 participants change their mind on statement 2 later (latest must win)
+    # re-votes: 5 participants change their mind on statement 2 later (latest must win) ...
     for pid in range(5):
         t += 3_600_000
         rows.append([t, pid, 2, -1])
+    # ... and participant 5 votes twice on statement 0 in the same millisecond: file order decides
+    t += 3_600_000
+    rows += [[t, 5, 0, 1], [t, 5, 0, -1]]
+    # Polis writes votes ordered by statement, participant, time (export.clj get-conversation-votes*)
+    rows.sort(key=lambda r: (r[2], r[1], r[0]))
     latest = {}
-    for ts, pid, sid, vote in rows:
+    for ts, pid, sid, vote in rows:                 # in that order, the last row of a pair wins
         latest[(pid, sid)] = vote
     truth = {sid: {'agree': 0, 'disagree': 0, 'pass': 0} for sid in STATEMENTS}
     for (pid, sid), vote in latest.items():
@@ -63,7 +68,7 @@ def build(seed: int = 7, participants: int = 60, raw_sign: bool = False) -> dict
     flip = -1 if raw_sign else 1
     from datetime import datetime, timezone
     votes_csv = [['timestamp', 'datetime', 'comment-id', 'voter-id', 'vote']] + [
-        [ts, datetime.fromtimestamp(ts / 1000, tz=timezone.utc).strftime('%a %b %d %Y %H:%M:%S GMT+0000'), sid, pid, vote * flip]
+        [ts, datetime.fromtimestamp(ts / 1000, tz=timezone.utc).strftime('%a %b %d %H:%M:%S UTC %Y'), sid, pid, vote * flip]
         for ts, pid, sid, vote in rows]
     comments_csv = [['timestamp', 'comment-id', 'author-id', 'agrees', 'disagrees', 'moderated',
                      'is-meta', 'is-seed', 'group-informed-consensus', 'comment-body']] + [
@@ -74,12 +79,13 @@ def build(seed: int = 7, participants: int = 60, raw_sign: bool = False) -> dict
     matrix = [['participant', 'group-id', 'n-comments', 'n-votes', 'n-agree', 'n-disagree'] + [str(s) for s in sids]]
     for pid in range(participants):
         cells = [latest.get((pid, sid)) for sid in sids]
-        matrix.append([pid, group[pid], 0, sum(c is not None for c in cells), cells.count(1), cells.count(-1)]
+        authored = sum(1 for sid in STATEMENTS if sid % 3 == pid)
+        matrix.append([pid, group[pid], authored, sum(c is not None for c in cells), cells.count(1), cells.count(-1)]
                       + ['' if c is None else c * flip for c in cells])
     summary_csv = [['topic', 'Synthetic test conversation'], ['url', 'https://example.invalid/synthetic'],
                    ['views', participants], ['voters', participants], ['comments', len(STATEMENTS)], ['groups', 3]]
     return {'summary.csv': summary_csv, 'comments.csv': comments_csv, 'votes.csv': votes_csv,
-            'participants-votes.csv': matrix, 'truth': truth, 'revotes': 5}
+            'participants-votes.csv': matrix, 'truth': truth, 'revotes': len(rows) - len(latest)}
 
 
 def write(out: str | Path, **kwargs) -> dict:

@@ -26,7 +26,7 @@ def write(export: Export, report: Report, out: str | Path) -> Path:
                         s.disagree, s.passes,
                         *(f'{x:.4f}' if x is not None else '' for x in (s.share(s.agree), s.share(s.disagree), s.share(s.passes), s.agree_of_decided())),
                         *((f'{x:.4f}' for x in ci) if ci else ('', '')),
-                        _label(report, s.id), s.text])
+                        report.label(s.id), _cell(s.text)])
 
     with open(out / 'issues.csv', 'w', newline='', encoding='utf-8') as fh:
         w = csv.writer(fh)
@@ -39,23 +39,15 @@ def write(export: Export, report: Report, out: str | Path) -> Path:
         'generated': datetime.now().astimezone().isoformat(timespec='seconds'),
         'summary': {k: (v.isoformat() if isinstance(v, datetime) else v) for k, v in report.summary.items()},
         'thresholds': vars(report.thresholds),
-        'consensus_agree': report.consensus_agree,
-        'consensus_disagree': report.consensus_disagree,
-        'divisive': report.divisive,
-        'too_few_votes': report.too_few_votes,
+        'labels': {'majority_agree': report.majority_agree, 'majority_disagree': report.majority_disagree,
+                   'split': report.split, 'mostly_pass': report.mostly_pass, 'too_few_votes': report.too_few_votes},
+        'labels_note': 'Overall vote per statement. Not Polis group-informed consensus or representativeness.',
         'issues': [vars(i) for i in export.issues],
     }
     (out / 'stats.json').write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding='utf-8')
     return out / 'stats.json'
 
 
-def _label(report: Report, sid: int) -> str:
-    if sid in report.consensus_agree:
-        return 'consensus-agree'
-    if sid in report.consensus_disagree:
-        return 'consensus-disagree'
-    if sid in report.divisive:
-        return 'divisive'
-    if sid in report.too_few_votes:
-        return 'too-few-votes'
-    return ''
+def _cell(text: str) -> str:
+    """Neutralise spreadsheet formulas: a cell starting with = + - @ (or tab/CR) gets a leading quote."""
+    return "'" + text if text[:1] in ('=', '+', '-', '@', '\t', '\r') else text
