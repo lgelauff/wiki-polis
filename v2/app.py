@@ -1380,43 +1380,72 @@ def _publish_final_report(conv) -> Phase6ResultsFilter:
 
 
 def _process_due_scheduled_transitions(now: datetime | None = None) -> dict:
+    """Fire every due scheduled phase transition, each exactly once even if runs overlap.
+
+    jobs.yaml runs this every five minutes, and a run can overlap another (a manual re-run,
+    ``toolforge jobs restart``, a second pod). The phase change is idempotent, but the
+    append-only ``phase.schedule.fire`` / ``.abort`` audit rows are not. So the candidate
+    list is read without a lock, and each conversation is then handled in its own transaction:
+    locked with a plain ``SELECT … FOR UPDATE`` (any MariaDB version), re-checked, acted on and
+    committed. A second run that reaches the same row waits for the first to commit, then finds
+    the schedule cleared or frozen and skips it. A crash leaves nothing half-claimed: an
+    uncommitted lock is simply released. One conversation that raises is rolled back, logged and
+    counted as failed; the others still run.
+    """
     now = now or datetime.now(timezone.utc)
-    due = Conversation.query.filter(
+    candidate_ids = [cid for (cid,) in db.session.query(Conversation.id).filter(
         Conversation.active.is_(True),
         Conversation.scheduled_transition_at.isnot(None),
         Conversation.scheduled_transition_frozen.is_(False),
-    ).all()
-    fired = aborted = skipped = 0
-    for conv in due:
-        scheduled_at = _normalise_utc(conv.scheduled_transition_at)
-        if scheduled_at is None or scheduled_at > now:
-            skipped += 1
-            continue
-        ctx = _transition_context(conv)
-        if (
-            not _is_schedulable_transition(ctx)
-            or conv.scheduled_transition_target != ctx['target']['key']
-            or any(p.get('met') is False for p in ctx['preconditions'])
-        ):
-            conv.scheduled_transition_frozen = True
-            db.session.commit()
-            record_audit('phase.schedule.abort', conv_id=conv.id,
-                         target_type='phase',
-                         target_id=conv.scheduled_transition_target,
-                         outcome='blocked')
-            aborted += 1
-            continue
-        source, target = _apply_phase_transition(conv, ctx)
+    ).order_by(Conversation.id).all()]
+    db.session.rollback()                     # end the read; no row is held while we work
+    counts = {'fired': 0, 'aborted': 0, 'skipped': 0, 'failed': 0}
+    for conv_id in candidate_ids:
+        try:
+            counts[_process_one_scheduled_transition(conv_id, now)] += 1
+        except Exception:                      # noqa: BLE001 — one bad row must not block the rest
+            db.session.rollback()
+            current_app.logger.exception('Scheduled transition failed for conversation %s', conv_id)
+            counts['failed'] += 1
+    return counts
+
+
+def _process_one_scheduled_transition(conv_id: int, now: datetime) -> str:
+    """Lock one conversation, re-check that its schedule is still due, act, and commit.
+
+    Returns 'fired', 'aborted' or 'skipped'. The re-check is what makes an overlapping run
+    harmless: by the time it holds the lock, the first run has cleared or frozen the schedule.
+    """
+    conv = (Conversation.query.filter_by(id=conv_id)
+            .with_for_update().populate_existing().first())
+    scheduled_at = _normalise_utc(conv.scheduled_transition_at) if conv else None
+    if (conv is None or not conv.active or conv.scheduled_transition_frozen
+            or scheduled_at is None or scheduled_at > now):
+        db.session.rollback()                 # release the lock; nothing to do
+        return 'skipped'
+    ctx = _transition_context(conv)
+    if (
+        not _is_schedulable_transition(ctx)
+        or conv.scheduled_transition_target != ctx['target']['key']
+        or any(p.get('met') is False for p in ctx['preconditions'])
+    ):
+        conv.scheduled_transition_frozen = True
         db.session.commit()
-        record_audit('phase.schedule.fire', conv_id=conv.id,
-                     target_type='phase', target_id=target,
-                     from_phase=source)
-        if not _sync_vis_type(conv):
-            current_app.logger.warning(
-                'Scheduled phase transition fired for %s but vis_type sync failed',
-                conv.slug)
-        fired += 1
-    return {'fired': fired, 'aborted': aborted, 'skipped': skipped}
+        record_audit('phase.schedule.abort', conv_id=conv.id,
+                     target_type='phase',
+                     target_id=conv.scheduled_transition_target,
+                     outcome='blocked')
+        return 'aborted'
+    source, target = _apply_phase_transition(conv, ctx)
+    db.session.commit()
+    record_audit('phase.schedule.fire', conv_id=conv.id,
+                 target_type='phase', target_id=target,
+                 from_phase=source)
+    if not _sync_vis_type(conv):
+        current_app.logger.warning(
+            'Scheduled phase transition fired for %s but vis_type sync failed',
+            conv.slug)
+    return 'fired'
 
 
 OUTPUT_DEFINITIONS = [
@@ -5597,8 +5626,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         click.echo(
             'Scheduled transitions: '
             f'{result["fired"]} fired, {result["aborted"]} aborted, '
-            f'{result["skipped"]} not due.'
+            f'{result["skipped"]} not due or already handled, {result["failed"]} failed.'
         )
+        if result['failed']:
+            raise SystemExit(1)                # the job's failure email names the run; logs name the conversation
 
     # UI locale config: which locales are offered (CSV) + the fallback. Defaults to
     # English and the in-repo translations, so the language switcher is visible as
