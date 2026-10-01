@@ -1,10 +1,10 @@
-"""polis_stats — basic statistics from a Polis conversation export.
+"""polis_stats — basic statistics and charts from a Polis conversation export.
 
     python -m tools.polis_stats EXPORT [-o OUT] [--vote-sign polis-export|raw]
                                 [--min-votes 10] [--majority 0.70] [--split 0.35] [--max-pass 0.50] [--allow-errors]
 
 EXPORT is a folder or a .zip with Polis's CSV export (summary.csv, comments.csv, votes.csv,
-participants-votes.csv). Writes stats.json, statements.csv and issues.csv to OUT.
+participants-votes.csv). Writes report.html, stats.json, statements.csv, issues.csv and charts/*.svg to OUT.
 Exit codes: 0 written; 1 the export failed a cross-check (report written
 only with --allow-errors); 2 the export could not be read.
 """
