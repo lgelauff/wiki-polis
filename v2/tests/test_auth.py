@@ -1,4 +1,5 @@
 """Tests for login, OAuth callback, and logout flows."""
+import pytest
 from unittest.mock import MagicMock, patch
 
 from flask import session
@@ -22,6 +23,26 @@ def test_login_with_oauth_redirects_to_wikimedia(client, app):
 def test_oauth_callback_state_mismatch_redirects_to_login(client):
     """Bad state in callback → redirect to /login, no session set."""
     resp = client.get('/oauth-callback?code=abc&state=bad-state')
+    assert resp.status_code == 302
+    assert '/login' in resp.headers['Location']
+    with client.session_transaction() as sess:
+        assert 'username' not in sess
+
+
+@pytest.mark.parametrize('query', ['code=abc', 'code=abc&state='])
+def test_oauth_callback_without_a_started_login_is_refused(client, app, query):
+    """No state in the session and none (or an empty one) in the callback must not log anyone in."""
+    app.config['OAUTH_CLIENT_ID'] = 'cid'
+    token_resp = MagicMock()
+    token_resp.json.return_value = {'access_token': 'tok'}
+    profile_resp = MagicMock()
+    profile_resp.json.return_value = {'username': 'SomeoneElse', 'sub': 99}
+    with patch('app.requests.post', return_value=token_resp) as post, \
+         patch('app.requests.get', return_value=profile_resp) as get, \
+         patch('app._is_emailable', return_value=False):
+        resp = client.get(f'/oauth-callback?{query}')
+    post.assert_not_called()
+    get.assert_not_called()
     assert resp.status_code == 302
     assert '/login' in resp.headers['Location']
     with client.session_transaction() as sess:
