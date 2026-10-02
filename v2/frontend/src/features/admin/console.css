@@ -40,6 +40,10 @@
 /* ── Top bar ───────────────────────────────────────────────────────────────── */
 
 .admin-shell__topbar {
+  /* static/style.css fixes every <header> at 56px; this one wraps onto a second row
+     when the tools do not fit beside the breadcrumb, so it takes its content's height. */
+  block-size: auto;
+  min-block-size: 56px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
