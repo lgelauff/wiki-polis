@@ -76,7 +76,7 @@ def test_counts_window_exclusion_and_renumbering(tmp_path):
     assert (a['0']['All_agree'], a['0']['All_disagree'], a['0']['All_pass']) == ('5', '1', '0')
     # participant 2's latest vote on statement 3 is pass
     assert (a['3']['All_agree'], a['3']['All_disagree'], a['3']['All_pass']) == ('4', '1', '1')
-    assert a['4']['label'] == 'role' and a['2']['label'] == 'reject'
+    assert a['4']['label'] == 'role' and a['2']['label'] == '≥70% disagree'
     # Poll B is reported with Poll A's numbers: 'S zero' is B's own id 1 but appears as #0
     b = {r['statement']: r for r in rows(out / 'poll-b-statements.csv')}
     assert b['0']['text'] == 'S zero'
@@ -119,3 +119,24 @@ def test_comparison_skipped_without_xid_files(tmp_path):
     (tmp_path / 'config.json').write_text(json.dumps(cfg))
     out = polis_report.run(tmp_path / 'config.json', pdf=False)
     assert (out / 'poll-a-report.html').exists() and not (out / 'poll-ab-transitions.html').exists()
+
+
+def test_small_groups_are_merged_and_never_crossed_with_roles(tmp_path):
+    out = build(tmp_path)
+    page = (out / 'poll-a-report.html').read_text(encoding='utf-8')
+    # both synthetic groups have 3 members: merged into Other, so the group-difference measure is not computed
+    assert 'Not computed: fewer than two Polis groups have at least 5 members' in page
+    a = {r['statement']: r for r in rows(out / 'poll-a-statements.csv')}
+    assert a['4']['Other_agree'] == ''                       # role answers are not shown for Other
+    assert a['0']['Other_agree'] == '5'                      # opinion counts of 3+ are shown as they are
+    assert a['2']['Other_agree'] == '<3'        # counts of 1-2 are suppressed
+    assert 'self-selected' in page.lower()
+
+
+def test_power_and_baseline_lines(tmp_path):
+    out = build(tmp_path)
+    page = (out / 'poll-ab-transitions.html').read_text(encoding='utf-8')
+    m = {r['statement']: r for r in rows(out / 'movers.csv')}
+    assert m['0']['movers'] == '1' and m['0']['smallest_reachable_p'] == '1.0000'
+    assert 'could not reach p &lt; 0.05 even without correction' in page
+    assert 'answered role question #4 differently' in page
