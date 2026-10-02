@@ -24,6 +24,7 @@ import {useMessage, type Message} from '../../i18n/messages';
 import {phaseLabel, statementErrorCopy, tabLabel, workspaceErrorCopy} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useDateFormat} from '../../i18n/dates';
+import {loginHref} from '../../login-href';
 
 type Workspace = components['schemas']['ConversationWorkspace'];
 type WorkspaceTab = components['schemas']['ConversationWorkspaceTab']['key'];
@@ -444,7 +445,7 @@ export function ConversationWorkspacePage() {
   }, [workspace.data?.space]);
   if (workspace.isPending) return <p className="loading-state" role="status">{msg('common-loading')}</p>;
   if (workspace.error instanceof ApiContractError && workspace.error.code === 'unauthorized') {
-    return <NavigationRedirect href={session.links.login} />;
+    return <NavigationRedirect href={loginHref(session.links.login, location)} />;
   }
   const restricted = inviteOnlyDetails(workspace.error);
   if (restricted) return <InviteOnlyPage details={restricted} />;
