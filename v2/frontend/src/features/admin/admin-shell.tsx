@@ -6,6 +6,7 @@ import type {components} from '../../api/schema';
 import {sessionQuery} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
 import {useLocale, useMessage, type Message} from '../../i18n/messages';
+import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {roleLabel} from '../../i18n/server-labels';
 import './console.css';
 
@@ -26,12 +27,14 @@ function ConsoleMark() {
   );
 }
 
-/** The role glyph. It stands beside the role word rather than replacing it, so it explains
- *  itself through that word and carries no name of its own for a screen reader. */
-function RoleGlyph() {
+/** The role glyph. It stands beside the role word and says what that word is -- the
+ *  operator's role -- so it explains itself on hover (the <title>) and carries the same
+ *  words as its accessible name, read just before the role word. */
+function RoleGlyph({label}: {label: string}) {
   return (
     <svg className="admin-shell__role-glyph" width="14" height="14" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true" focusable="false">
+      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" role="img" aria-label={label} focusable="false">
+      <title>{label}</title>
       <circle cx="12" cy="8.5" r="3.75" />
       <path d="M4.75 20a7.25 7.25 0 0 1 14.5 0" />
     </svg>
@@ -210,7 +213,7 @@ export function AdminShell({children, data, gatingType, title, toast}: {
           </div>
           <div className="admin-shell__identity">
             <span className="admin-shell__user">{authenticated ? session.user?.username : msg('base-voucher-account')}</span>
-            <span className="admin-shell__role"><RoleGlyph /><span>{roleLabel(msg, data.operator.roleLabel)}</span></span>
+            <span className="admin-shell__role"><RoleGlyph label={msg('adminconv-role-title')} /><span>{roleLabel(msg, data.operator.roleLabel)}</span></span>
             {signedIn && (
               <form method="post" action={session.links.logout} className="admin-shell__logout">
                 <input type="hidden" name="csrf_token" value={session.csrfToken} />
@@ -276,6 +279,14 @@ export function AdminShell({children, data, gatingType, title, toast}: {
           {children}
         </main>
       </div>
+
+      {/* The one licence line the legacy footer carried: admin-written texts are CC0 as well
+          (epic #473 decisions). Quiet text, the git version left out. */}
+      <footer className="admin-shell__footer">
+        <span dangerouslySetInnerHTML={richHtml(msg('base-footer-licence',
+          '<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">'
+          + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
+      </footer>
     </div>
   );
 }

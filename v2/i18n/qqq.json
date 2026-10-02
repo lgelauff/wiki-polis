@@ -699,7 +699,7 @@
     "stmts-hidden-heading": "Section heading for hidden statements. Text copied from MediaWiki core's {{msg-mw|revdelete-radio-set}} (GPL-2.0-or-later; see i18n/ATTRIBUTION.md); use that message's translation, lowercased where the English is.\n{{Identical|Hidden}}",
     "stmts-hidden-empty": "Empty state for the hidden list.",
     "adminconv-doc-title": "Browser tab title for a conversation's admin console. $1 is the consultation title, which is participant/organizer content and is never translated.",
-    "adminconv-role-title": "Tooltip on the role chip in the admin role bar.",
+    "adminconv-role-title": "Hover text and accessible name of the small person glyph just before the role word (e.g. {{msg-proto|admin-shell-role-organizer}}) in the top bar of a consultation's admin console. Says what that word is. Admin-only.",
     "adminconv-managing": "Label in the role bar before the (bold) conversation title.",
     "adminconv-view-as": "Link to view the consultation as a participant. Arrow decorative.",
     "adminconv-status-closed": "Status pill: the consultation is closed.\n{{Identical|Closed}}",

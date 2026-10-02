@@ -21,7 +21,7 @@
   --shell-gap: 1rem;
 
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-block-size: 100%;
   color: var(--shell-body);
   background: var(--shell-sunken);
@@ -293,6 +293,19 @@
 
 .admin-shell__announcer {
   margin: 0;
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+
+.admin-shell__footer {
+  padding: .5rem 1.25rem;
+  border-block-start: 1px solid var(--shell-line);
+  color: var(--shell-muted);
+  font-size: 12px;
+}
+
+.admin-shell__footer a {
+  color: inherit;
 }
 
 /* ── Narrow ───────────────────────────────────────────────────────────────── */

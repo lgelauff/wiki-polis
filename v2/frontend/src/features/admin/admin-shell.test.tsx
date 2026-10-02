@@ -165,11 +165,35 @@ test('the role word comes from the catalogue, not from the server string', async
   renderShell();
 
   // The server still sends "Global admin"; the console says "Site admin" (spec: never
-  // "Global admin" on screen). A glyph explains itself through the word beside it, so
-  // the glyph itself carries nothing for a screen reader.
+  // "Global admin" on screen).
   expect(await screen.findByText('Site admin')).toBeVisible();
   expect(screen.queryByText('Global admin')).toBeNull();
   expect(screen.queryByTitle('Global admin')).toBeNull();
+});
+
+test('the role glyph explains itself on hover and to a screen reader', async () => {
+  serveSession();
+  renderShell();
+
+  // A symbol explains on hover (the SVG <title>) and, since it says what the word beside it
+  // is, it carries the same words as its accessible name.
+  const glyph = await screen.findByRole('img', {name: 'Your assigned role on this platform'});
+  expect(glyph.querySelector('title')).toHaveTextContent('Your assigned role on this platform');
+  expect(glyph.parentElement).toHaveTextContent('Site admin');
+});
+
+test('the footer keeps the CC0 licence line, as quiet text with one link', async () => {
+  serveSession();
+  const {container} = renderShell();
+
+  await screen.findByRole('navigation', {name: 'Admin sections'});
+  const footer = container.querySelector('footer.admin-shell__footer')!;
+  expect(footer).toHaveTextContent('Statements and arguments are released into the public domain (CC0');
+  const link = within(footer as HTMLElement).getByRole('link', {name: /^CC0/});
+  expect(link).toHaveAttribute('href', 'https://creativecommons.org/publicdomain/zero/1.0/');
+  expect(footer.querySelectorAll('a, button, input, select')).toHaveLength(1);
+  // No git version: one line, not the legacy footer's second item.
+  expect(footer.querySelector('code')).toBeNull();
 });
 
 test('the language switcher moves with the shell', async () => {
