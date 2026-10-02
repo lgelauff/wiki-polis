@@ -1,6 +1,7 @@
 """Explore-phase read and vote API contract tests."""
 
 import json
+import time
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -10,7 +11,8 @@ from db import (AuditEvent, CommandReceipt, ConversationBan, Participation,
                 StatementSimilarityScore, db)
 from polis_admin import PolisParticipantError, PolisServerError
 from services.explore import (ExploreGateway, ParticiapiSessionState,
-                              build_explore_state)
+                              build_explore_state, subject_digest)
+from tests.conftest import particiapi_state
 
 
 def _response(payload=None, *, status=200, cookies=None):
@@ -109,9 +111,13 @@ def test_explore_api_owns_upstream_session_and_returns_privacy_safe_state(
     assert post.call_args.kwargs['headers']['X-Particiapi-Sub'] != participant.xid
     with auth_client.session_transaction() as browser_session:
         stored = browser_session['particiapi_api_sessions'][str(conversation.id)]
-    assert stored == {
-        'cookie': 'upstream-cookie', 'csrfToken': 'upstream-csrf',
-    }
+    assert (stored['cookie'], stored['csrfToken']) == ('upstream-cookie', 'upstream-csrf')
+    # The bind is dated and fingerprinted, never stored as the subject itself.
+    assert isinstance(stored['boundAt'], float)
+    assert stored['subjectDigest'] == subject_digest(
+        post.call_args.kwargs['headers']['X-Particiapi-Sub'],
+    )
+    assert post.call_args.kwargs['headers']['X-Particiapi-Sub'] not in json.dumps(stored)
 
 
 def test_banned_participant_can_read_explore_but_cannot_vote(
@@ -155,9 +161,7 @@ def test_explore_vote_is_idempotent_put_and_translates_agree_sign(
     participation = _join(participant, conversation)
     with auth_client.session_transaction() as browser_session:
         browser_session['particiapi_api_sessions'] = {
-            str(conversation.id): {
-                'cookie': 'existing-cookie', 'csrfToken': 'existing-csrf',
-            },
+            str(conversation.id): particiapi_state('existing-cookie', 'existing-csrf'),
         }
     statements = _response({'7': {'id': 7, 'text': 'Vote on this'}})
     upstream_participant = _response({'votes': [], 'statements': []})
@@ -300,7 +304,10 @@ def test_explore_gateway_refreshes_stale_session_for_reads_and_votes():
     gateway = ExploreGateway(
         base_url='https://particiapi.example',
         transport=transport,
-        state=ParticiapiSessionState('stale-cookie', 'stale-csrf'),
+        state=ParticiapiSessionState(
+            'stale-cookie', 'stale-csrf', bound_at=time.time(),
+            subject_digest=subject_digest('scoped-subject'),
+        ),
         subject='scoped-subject',
         subject_secret='binding-secret',
     )
@@ -321,9 +328,9 @@ def test_explore_gateway_refreshes_stale_session_for_reads_and_votes():
     assert transport.put.call_args_list[1].kwargs['headers']['X-CSRF-Token'] == (
         'fresh-csrf-2'
     )
-    assert gateway.state.to_dict() == {
-        'cookie': 'fresh-cookie-2', 'csrfToken': 'fresh-csrf-2',
-    }
+    assert (gateway.state.cookie, gateway.state.csrf_token) == (
+        'fresh-cookie-2', 'fresh-csrf-2',
+    )
 
 
 def test_explore_api_rejects_malformed_upstream_payload(
@@ -382,9 +389,7 @@ def test_openapi_documents_idempotent_explore_vote(client):
 def _store_upstream_session(client, conversation):
     with client.session_transaction() as browser_session:
         browser_session['particiapi_api_sessions'] = {
-            str(conversation.id): {
-                'cookie': 'existing-cookie', 'csrfToken': 'existing-csrf',
-            },
+            str(conversation.id): particiapi_state('existing-cookie', 'existing-csrf'),
         }
 
 

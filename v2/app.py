@@ -41,8 +41,8 @@ from db import (ACCOUNT_KIND_VOUCHER, AdminRole, Argument,
                 ConversationBan, ConversationInvite, FeaturedStatement, Participant,
                 Participation, StatementProvenance, StatementSimilarityScore,
                 VoucherBatch, db)
-from polis_admin import (PolisParticipantClient, PolisParticipantError,
-                         PolisServerClient, PolisServerError,
+from polis_admin import (DEFAULT_PARTICIAPI_ISSUER, PolisParticipantClient,
+                         PolisParticipantError, PolisServerClient, PolisServerError,
                          polis_server_config_error)
 from http_pool import session as polis_http
 from seed_csv import (MAX_ROWS, MAX_TEXT_CHARS, strip_formula_prefixes)
@@ -76,9 +76,9 @@ from services.conversation_lanes import (build_conversation_lane)
 from services.conversation_workspace import build_conversation_workspace
 from services.participations import (join_conversation)
 from services.participation_entry import build_participation_entry
-from services.explore import (ExploreGateway, ParticiapiSessionState,
-                              ExploreUpstreamError, build_explore_state,
-                              normalise_statements)
+from services.explore import (DEFAULT_SESSION_MAX_AGE_SECONDS, ExploreGateway,
+                              ParticiapiSessionState, ExploreUpstreamError,
+                              build_explore_state, normalise_statements)
 from services.explore_votes import update_pass_signal
 from services.argument_mapping import build_argument_mapping_state
 from services.argument_commands import (
@@ -692,7 +692,7 @@ _phase6_agg_lock = threading.Lock()
 # fix is to bind the Phase-6 session to the trusted-sub subject (idempotent uid).
 _p6_bootstrap_locks: dict = {}
 _p6_bootstrap_locks_guard = threading.Lock()
-_p6_session_cache: dict = {}  # (xid, conv_id) -> (pa_cookie, csrf_token)
+_p6_session_cache: dict = {}  # (xid, conv_id) -> ParticiapiSessionState.to_dict()
 
 
 def _p6_bootstrap_lock(key):
@@ -2304,6 +2304,7 @@ def _polis_server_client() -> PolisServerClient:
         current_app.config.get('POLIS_ADMIN_EMAIL', ''),
         current_app.config.get('POLIS_ADMIN_PASSWORD', ''),
         db_url=current_app.config.get('POLIS_DATABASE_URL', ''),
+        particiapi_issuer=current_app.config.get('PARTICIAPI_SUB_ISSUER', ''),
     )
 
 
@@ -2417,6 +2418,7 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
         output_items=_output_items,
         reveal_context=_reveal_context,
         polis_client=_polis_server_client(),
+        participant_subject=_progress_subject,
     )
     return lane.to_api(
         conversation_link=_conversation_client_link,
@@ -2536,6 +2538,7 @@ def _conversation_about_model(conv: Conversation, participant: Participant | Non
         phase_labels=phase_labels,
         output_items=_output_items,
         polis_client=_polis_server_client(),
+        participant_subject=_progress_subject,
         can_moderate=_can_moderate(conv, participant),
     )
 
@@ -2772,17 +2775,47 @@ def _require_explore_api_context(slug: str, *, allow_banned_read: bool = False):
     return conv, participant, participation
 
 
-def _explore_gateway(conv: Conversation, participant: Participant):
-    states = dict(session.get('particiapi_api_sessions') or {})
-    state = ParticiapiSessionState.from_dict(states.get(str(conv.id)))
+def _particiapi_gateway(conv: Conversation, participant: Participant,
+                        state: ParticiapiSessionState, phase: str) -> ExploreGateway:
+    """One participant's Particiapi gateway for one conversation round.
+
+    Shared by Explore (phase 2) and informed voting (phase 6): both bind the same
+    conversation-scoped subject, re-bind before Particiapi's session lifetime runs out,
+    and check Particiapi's participant reads against Polis Postgres (the answer guard),
+    so an expired session can neither show answered statements again nor overwrite them.
+    """
     subject_secret = current_app.config.get('PARTICIAPI_SUB_SECRET')
-    gateway = ExploreGateway(
+    subject = _conversation_subject(participant.xid, conv) if subject_secret else None
+    expected_vote_count = None
+    if subject and current_app.config.get('POLIS_DATABASE_URL'):
+        polis_client = _polis_server_client()
+
+        def expected_vote_count(zinvite: str):
+            return polis_client.get_participant_vote_count(zinvite, subject)
+    elif subject:
+        # Without Polis Postgres there is nothing to check Particiapi against: only the
+        # age and subject re-binds protect this session.
+        current_app.logger.info('Particiapi answer guard skipped: POLIS_DATABASE_URL not set '
+                                'phase=%s conversation_id=%s', phase, conv.id)
+
+    return ExploreGateway(
         base_url=current_app.config['PARTICIAPI_BASE'],
         transport=polis_http,
         state=state,
-        subject=_conversation_subject(participant.xid, conv) if subject_secret else None,
+        subject=subject,
         subject_secret=subject_secret,
+        max_age_seconds=current_app.config.get(
+            'PARTICIAPI_SESSION_MAX_AGE_SECONDS', DEFAULT_SESSION_MAX_AGE_SECONDS,
+        ),
+        expected_vote_count=expected_vote_count,
+        log_context={'phase': phase, 'conversation_id': conv.id},
     )
+
+
+def _explore_gateway(conv: Conversation, participant: Participant):
+    states = dict(session.get('particiapi_api_sessions') or {})
+    state = ParticiapiSessionState.from_dict(states.get(str(conv.id)))
+    gateway = _particiapi_gateway(conv, participant, state, 'explore')
     return gateway, states
 
 
@@ -2934,22 +2967,17 @@ def _phase6_gateway(conv: Conversation, participant: Participant):
     # two rounds could not be joined per participant and no before/after comparison was
     # possible. Confirmed on staging 2026-09-03: of 8 Phase 6 voters, 0 had a bound
     # subject, against 3 of 14 in the same conversation's Phase 2 round.
-    subject_secret = current_app.config.get('PARTICIAPI_SUB_SECRET')
-    gateway = ExploreGateway(
-        base_url=current_app.config['PARTICIAPI_BASE'],
-        transport=polis_http,
-        state=state,
-        subject=_conversation_subject(participant.xid, conv) if subject_secret else None,
-        subject_secret=subject_secret,
-    )
-    if not (state.cookie and state.csrf_token):
+    gateway = _particiapi_gateway(conv, participant, state, 'informed_voting')
+    if gateway.rebind_reason() is not None:
         with _p6_bootstrap_lock(key):
-            shared = _p6_session_cache.get(key)
-            if shared:
-                state.cookie, state.csrf_token = shared
-            else:
+            # Another request in this worker may have just bound: use its session only
+            # if it is itself usable (fresh, same subject), else bind here.
+            shared = ParticiapiSessionState.from_dict(_p6_session_cache.get(key))
+            gateway.state = shared
+            if gateway.rebind_reason() is not None:
+                gateway.state = state
                 gateway.ensure_session()
-                _p6_session_cache[key] = (state.cookie, state.csrf_token)
+            _p6_session_cache[key] = gateway.state.to_dict()
     return gateway, key, states
 
 
@@ -2958,7 +2986,7 @@ def _save_phase6_gateway(
 ) -> None:
     states[str(conv.id)] = gateway.state.to_dict()
     session[_PHASE6_SESSION_KEY] = states
-    _p6_session_cache[key] = (gateway.state.cookie, gateway.state.csrf_token)
+    _p6_session_cache[key] = gateway.state.to_dict()
 
 
 def _informed_voting_api_payload(slug: str) -> dict:
@@ -3011,6 +3039,11 @@ def _informed_vote_api_payload(
         abort(404, description='Featured statement is not available in this round.')
     gateway, key, states = _phase6_gateway(conv, participant)
     try:
+        # Refuse before voting if Particiapi's view of this participant is incomplete:
+        # an expired session would otherwise re-bind on the vote's 403 and overwrite an
+        # earlier answer. (Explore's vote path reads the participant first, which runs
+        # the same check.)
+        gateway.verify_answers(conv.phase6_polis_conversation_id)
         polis_values = {'agree': -1, 'pass': 0, 'disagree': 1}
         gateway.vote(
             conv.phase6_polis_conversation_id,
@@ -3417,15 +3450,11 @@ def _require_organizer_for_conv(conv_id: int) -> 'Conversation':
 
 
 def _admin_participant_roster_model(conv: Conversation):
-    scoped_subjects = bool(current_app.config.get('PARTICIAPI_SUB_SECRET'))
     return build_admin_participant_roster(
         conversation=conv,
         polis_client=_polis_server_client(),
         polis_pg_configured=bool(current_app.config.get('POLIS_DATABASE_URL')),
-        participant_subject=(
-            lambda participant: _conversation_subject(participant.xid, conv)
-            if scoped_subjects else participant.xid
-        ),
+        participant_subject=lambda participant: _progress_subject(participant, conv),
     )
 
 
@@ -4555,6 +4584,17 @@ def _check_conversation_access(conversation, participant):
 
 # ── Per-conversation Polis identity ───────────────────────────────────────────
 
+def _progress_subject(participant: Participant, conv) -> str:
+    """The subject Polis Postgres knows this participant by in this conversation.
+
+    With trusted-sub binding on, that is the conversation-scoped subject sent to
+    Particiapi; without it nothing is bound and the xid is the only stable key.
+    """
+    if current_app.config.get('PARTICIAPI_SUB_SECRET'):
+        return _conversation_subject(participant.xid, conv)
+    return participant.xid
+
+
 def _conversation_subject(xid: str, conv) -> str:
     """Conversation-scoped participant subject for Particiapi's trusted-sub binding.
 
@@ -5367,6 +5407,24 @@ def create_app(test_config: dict | None = None) -> Flask:
     # TRUSTED_SUB_SECRET. Unset → falls back to the old anonymous-per-session behaviour.
     app.config['PARTICIAPI_SUB_SECRET'] = (_read_secret('particiapi-sub-secret')
                                            or os.environ.get('PARTICIAPI_SUB_SECRET', ''))
+    # The issuer Particiapi files those bindings under (particiapi_issuers.issuer); the
+    # Polis Postgres progress queries and the Explore answer guard look subjects up by it.
+    app.config['PARTICIAPI_SUB_ISSUER'] = (os.environ.get('PARTICIAPI_SUB_ISSUER', '').strip()
+                                           or DEFAULT_PARTICIAPI_ISSUER)
+    # Particiapi rejects its session cookie after 7 days (PERMANENT_SESSION_LIFETIME),
+    # and wiki-polis keeps the cookie in its own 30-day session. Re-bind before then.
+    # Must stay below Particiapi's lifetime; see ref_cross-device-identity.md.
+    _max_age = int(os.environ.get(
+        'PARTICIAPI_SESSION_MAX_AGE_SECONDS', str(DEFAULT_SESSION_MAX_AGE_SECONDS),
+    ))
+    if not 0 < _max_age <= DEFAULT_SESSION_MAX_AGE_SECONDS:
+        # Longer than 6 days runs into Particiapi's 7-day lifetime and silently drops the
+        # protection; zero or negative would re-bind on every request.
+        raise RuntimeError(
+            'PARTICIAPI_SESSION_MAX_AGE_SECONDS must be between 1 and '
+            f'{DEFAULT_SESSION_MAX_AGE_SECONDS} (6 days, below Particiapi\'s 7-day lifetime).'
+        )
+    app.config['PARTICIAPI_SESSION_MAX_AGE_SECONDS'] = _max_age
     app.config['POLIS_DATABASE_URL'] = (_read_secret('polis-database-url')
                                         or os.environ.get('POLIS_DATABASE_URL', ''))
     app.config['POLIS_SERVER_URL']   = (_read_secret('polis-server-url')

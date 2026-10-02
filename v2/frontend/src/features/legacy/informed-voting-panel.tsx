@@ -6,6 +6,7 @@ import {informedVotingQuery, putInformedVote} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {nodeSlot, withNodes} from '../../i18n/message-nodes';
+import {isAnswersUnavailable} from './answers-unavailable';
 
 type Workspace = components['schemas']['ConversationWorkspace'];
 type Card = components['schemas']['InformedVotingCard'];
@@ -204,6 +205,11 @@ export function LegacyInformedVotingPanel({workspace, csrfToken, onSelectPrelimi
             <h2 className="p6-statement-text">{card.statement}</h2>
             {answeredEarlier && <p className="p6-answered-hint">
               {msg('conv-p6-already-voted-hint')}
+            </p>}
+            {/* The vote was refused because earlier answers could not be loaded: say why,
+                beside the short badge, so "try again" is not read as "press it again now". */}
+            {error && isAnswersUnavailable(vote.error) && <p className="p6-answered-hint">
+              {msg('conv-err-answers-unavailable')}
             </p>}
             {card.canVote && <div className="vote-choice-row p6-vote-row"
                  aria-describedby={answeredEarlier ? `answered-${card.featuredStatementId}` : undefined}>

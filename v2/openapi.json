@@ -413,7 +413,7 @@
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
           },
           "502": {
-            "description": "Voting service unavailable",
+            "description": "Voting service unavailable (`upstream_unavailable`), or `answers_unavailable` when the participant's earlier responses could not be loaded; no state is returned then",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
           }
         }
@@ -466,7 +466,7 @@
           "401": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "403": {"description": "Conversation access is denied or participant is banned", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "409": {"description": "Participation or informed-voting phase is not active", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-          "502": {"description": "Voting service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+          "502": {"description": "Voting service unavailable (`upstream_unavailable`), or `answers_unavailable` when the participant's earlier responses could not be loaded; no state is returned then", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
       }
     },
@@ -512,7 +512,7 @@
           "400": {"description": "Invalid choice", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "404": {"description": "Featured statement is not available in this round", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
           "409": {"description": "Informed voting is not active", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-          "502": {"description": "Voting service unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+          "502": {"description": "Voting service unavailable (`upstream_unavailable`), or `answers_unavailable` when the participant's earlier responses could not be loaded; the vote is not sent then", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
         }
       }
     },
@@ -651,7 +651,7 @@
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
           },
           "502": {
-            "description": "Voting service unavailable",
+            "description": "Voting service unavailable (`upstream_unavailable`), or `answers_unavailable` when the participant's earlier responses could not be loaded; the vote is not sent then",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
           }
         }

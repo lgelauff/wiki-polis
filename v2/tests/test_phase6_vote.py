@@ -28,6 +28,7 @@ from unittest.mock import MagicMock, patch
 import app as app_module
 from db import Conversation, FeaturedStatement, Participation, db
 from tests.conftest import login
+from tests.conftest import particiapi_state
 
 
 def _p6_conv():
@@ -124,7 +125,7 @@ def test_phase6_vote_rebootstraps_on_stale_token(auth_client, participant):
     # session (see test_phase6_session_scope.py).
     with auth_client.session_transaction() as sess:
         sess['phase6_api_sessions'] = {
-            str(c.id): {'cookie': 'OLD', 'csrfToken': 'STALE'},
+            str(c.id): particiapi_state('OLD', 'STALE'),
         }
 
     with patch.object(app_module.polis_http, 'post',
