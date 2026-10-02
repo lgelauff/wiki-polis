@@ -508,7 +508,7 @@
     "admin-shell-participant": "Participant",
     "admin-shell-participant-preview": "Participant (preview)",
     "admin-shell-switch-aria": "Admin or participant view",
-    "admin-shell-open-flags": "$1 open flags",
+    "admin-shell-open-flags": "$1 open {{PLURAL:$1|flag|flags}}",
     "admin-shell-role-site-admin": "Site admin",
     "admin-shell-role-organizer": "Organizer",
     "admin-shell-role-moderator": "Moderator",

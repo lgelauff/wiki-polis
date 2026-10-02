@@ -116,6 +116,14 @@ test('the moderation badge counts the open flags', async () => {
   expect(within(nav).getByText('3 open flags')).toBeVisible();
 });
 
+test('one open flag reads in the singular', async () => {
+  serveSession();
+  renderShell({data: {...lifecycle, counts: {...lifecycle.counts, openFlags: 1}}});
+
+  const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
+  expect(within(nav).getByText('1 open flag')).toBeVisible();
+});
+
 test('a consultation with no open flags carries no badge', async () => {
   // A zero is not worth a badge: an empty counter is noise, not information.
   serveSession();
