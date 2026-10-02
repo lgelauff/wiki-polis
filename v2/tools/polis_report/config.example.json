@@ -1,0 +1,18 @@
+{
+ "title": "Conversation title",
+ "banner": "PRELIMINARY",
+ "out": "out",
+ "since": "2026-10-01T23:00:00Z",
+ "label_share": 0.7,
+ "n_differ": 5,
+ "meta": [
+  "I'm here today as an employee of a cultural heritage institution.",
+  "I'm here today as someone who can help influence or shape policy."
+ ],
+ "polls": [
+  {"key": "a", "name": "Poll A", "dir": "data/poll-a", "report": "<report id of poll A>", "url": "pol.is/<conversation A>",
+   "xid": "data/xid/poll-a-xid.csv", "exclude_participants": ["0"]},
+  {"key": "b", "name": "Poll B", "dir": "data/poll-b", "report": "<report id of poll B>", "url": "pol.is/<conversation B>",
+   "xid": "data/xid/poll-b-xid.csv", "exclude_participants": ["0"]}
+ ]
+}
