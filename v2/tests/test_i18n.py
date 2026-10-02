@@ -791,14 +791,33 @@ def test_a_translation_that_drops_what_the_reader_needs_is_refused(translation, 
     assert i18n.markup_problem(translation, english) == reason
 
 
+def _thread_clock_tick() -> float:
+    """The smallest step time.thread_time() takes: get_clock_info() reports the unit (100 ns on
+    Windows), not how often the clock advances (every 15.6 ms there)."""
+    import time
+    steps = []
+    for _ in range(3):
+        start = time.thread_time()
+        while (now := time.thread_time()) == start:
+            pass
+        steps.append(now - start)
+    return min(steps)
+
+
 @pytest.mark.parametrize('hostile, scans', [
-    # Inputs the scanner reads to the end before refusing: their time grows with their length.
-    pytest.param(lambda n: '<a' + ' ' * n, True, id='spaces'),
-    pytest.param(lambda n: '<a' + 'b' * n, True, id='name'),            # quadratic for the old regex
-    pytest.param(lambda n: '<a>x</a' + 'b' * n, True, id='closing-name'),
+    # Inputs the scanner reads to the end before refusing, one per loop in _Scanner: their time
+    # grows with their length. A loop with no input here can turn quadratic unnoticed.
     pytest.param(lambda n: '<b>' + 'dag' * (n // 3), True, id='text'),
-    pytest.param(lambda n: 'Klik <b' + 'dag' * (n // 3), True, id='name-after-text'),
+    pytest.param(lambda n: '<b>$' + '1' * n, True, id='placeholder'),
+    pytest.param(lambda n: '<b>x</b>' * (n // 8) + '<', True, id='siblings'),
+    pytest.param(lambda n: '<a' + 'b' * n, True, id='name'),            # quadratic for the old regex
+    pytest.param(lambda n: '<a' + ' ' * n, True, id='spaces'),
     pytest.param(lambda n: '<a' + ' x="' * (n // 4), True, id='attributes'),
+    pytest.param(lambda n: '<a>x</a' + 'b' * n, True, id='closing-name'),
+    pytest.param(lambda n: '{{' + 'P' * n, True, id='function-name'),
+    pytest.param(lambda n: '{{PLURAL:$' + '1' * n, True, id='function-placeholder'),
+    pytest.param(lambda n: '{{GRAMMAR:' + 'a' * n, True, id='grammar-argument'),
+    pytest.param(lambda n: '{{PLURAL:$1|' + 'a' * n, True, id='branch'),
     # Inputs refused within the first characters, or at the nesting cap: constant time.
     pytest.param(lambda n: '<' + ' ' * n, False, id='stray-lt'),
     pytest.param(lambda n: '</a' + 'b' * n, False, id='stray-closing-tag'),   # quadratic for the old regex
@@ -806,8 +825,9 @@ def test_a_translation_that_drops_what_the_reader_needs_is_refused(translation, 
     pytest.param(lambda n: '<b>' * (n // 3), False, id='nesting'),
 ])
 def test_the_check_takes_linear_time_on_hostile_input(hostile, scans):
-    # Catches a scanner that backtracks or recurses without bound: load() runs this over every
-    # message of every translation at import, in every worker.
+    # Catches a scanner that backtracks or rescans: load() runs this over every message of every
+    # translation at import, in every worker. Exponential time inside one call would hang the
+    # test rather than fail it.
     #
     # A wall-clock limit fails on a loaded machine, so this counts the CPU time of this thread,
     # which leaves out the time the scheduler gives to other processes, and checks how it grows
@@ -819,9 +839,10 @@ def test_the_check_takes_linear_time_on_hostile_input(hostile, scans):
     #
     # Caps on the probe and on each size make a slow scan fail in seconds instead of the
     # hours the old regex would spend on 400,000 characters (2 s at 5,000, 16x more for each
-    # 4x). An exponential scan would still hang inside a single call.
+    # 4x).
+    import re
     import time
-    if time.get_clock_info('thread_time').resolution > 1e-4:
+    if _thread_clock_tick() > 1e-4:
         pytest.skip('the thread CPU clock is too coarse to time milliseconds')
 
     def cpu_seconds(text):
@@ -832,18 +853,22 @@ def test_the_check_takes_linear_time_on_hostile_input(hostile, scans):
     probe = cpu_seconds(hostile(5_000))
     assert probe < 0.25, f'{probe:.1f} s of CPU at 5,000 characters'
     small, large = hostile(25_000), hostile(400_000)
+    if scans:
+        # Refused at its last characters, so the timing below covers a scan of all of it.
+        problem = i18n.markup_problem(large, '<a href="/">x</a>')
+        at = re.search(r'at character (\d+)', problem or '')
+        assert at and int(at.group(1)) >= len(large) - 8, f'refused before the end: {(problem or "accepted")[:200]}'
     best_small = best_large = float('inf')
-    for _ in range(5):
+    for round_ in range(5):
         best_small = min(best_small, cpu_seconds(small))
         assert best_small < 1, f'{best_small:.1f} s of CPU at 25,000 characters'
         best_large = min(best_large, cpu_seconds(large))
         assert best_large < 4, f'{best_large:.1f} s of CPU at 400,000 characters'
-    timings = f'{best_small * 1000:.2f} ms at 25,000 characters, {best_large * 1000:.2f} ms at 400,000'
-    if scans:
-        # Under 1 ms the scanner did not read the input, and the ratio would measure nothing.
-        assert best_large >= 0.001, f'refused without scanning: {timings}'
+        if round_ >= 1 and best_large < 24 * best_small:
+            break                                       # clearly linear; more rounds add nothing
     # Under 1 ms for 400,000 characters is linear whatever the ratio, which is noise there.
-    assert best_large < 0.001 or best_large < 32 * best_small, timings
+    assert best_large < 0.001 or best_large < 32 * best_small, (
+        f'{best_small * 1000:.2f} ms at 25,000 characters, {best_large * 1000:.2f} ms at 400,000')
 
 
 def test_a_refusal_says_why():
