@@ -225,6 +225,19 @@ test('a participant coming back mid-deck resumes at the first card still to answ
   expect(card(32)).toHaveClass('p6-card--done');
 });
 
+test('the heading outline of the deck skips no level', async () => {
+  renderPanel(workspace(), [unanswered, answered]);
+  await screen.findByText(STATEMENT);
+
+  // What a screen-reader user tabs through: the card on screen, not the hidden ones.
+  const card = panel()!.querySelector('.p6-card:not(.p6-card--hidden)')!;
+  const levels = [...card.querySelectorAll('h1, h2, h3, h4, h5, h6')].map((h) => Number(h.tagName[1]));
+  expect(levels[0]).toBe(2);
+  expect(within(card as HTMLElement).getByRole('heading', {level: 2})).toHaveTextContent(STATEMENT);
+  levels.slice(1).forEach((level, i) => expect(level - (levels[i] ?? level)).toBeLessThanOrEqual(1));
+  expect(within(card as HTMLElement).getAllByRole('heading', {level: 3}).length).toBeGreaterThan(0);
+});
+
 test('the card navigation is named for the statements it moves between', async () => {
   renderPanel(workspace(), [unanswered, answered]);
   await screen.findByText(STATEMENT);
