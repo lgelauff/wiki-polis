@@ -788,6 +788,8 @@ export DATABASE_URL
 | `OAUTH_REDIRECT_URI` | yes (prod) | Must match registered callback URL |
 | `PARTICIAPI_BASE_URL` | yes | Internal URL of Particiapi (e.g. `http://10.x.x.x:8000`) — **must be encrypted (TLS) or loopback if `PARTICIAPI_SUB_SECRET` is set** |
 | `PARTICIAPI_SUB_SECRET` | no | Shared master secret for cross-device identity binding; must be set on Particiapi as env var `PARTICIAPI_TRUSTED_SUB_SECRET` (config key `TRUSTED_SUB_SECRET`; the bare env name is ignored). Unset → anonymous-per-session. Only set it when the transport is encrypted (TLS) or loopback |
+| `PARTICIAPI_SUB_ISSUER` | no | Issuer name Particiapi records trusted-sub bindings under (`particiapi_issuers.issuer`); the Polis Postgres progress queries and the Explore answer guard filter on it. Default `wiki-polis` |
+| `PARTICIAPI_SESSION_MAX_AGE_SECONDS` | no | Re-bind the cached Particiapi session after this many seconds. Default `518400` (6 days); must stay below Particiapi's 7-day `PERMANENT_SESSION_LIFETIME` (see `ref_cross-device-identity.md`, Session expiry) |
 | `DATABASE_URL` | yes (prod) | SQLAlchemy DB URL; defaults to `sqlite:///dev.db` |
 | `POLIS_SERVER_URL` | yes | Direct Polis server URL (e.g. `http://10.x.x.x:8001`) — required for conversation creation |
 | `POLIS_ADMIN_EMAIL` | yes | Email of the Polis system account (created once on VPS) |

@@ -32,11 +32,18 @@ xid never reached Polis).
 Give Particiapi a **stable subject** for the logged-in user so it uses
 `get_or_create_uid("wiki-polis", xid)` instead of `create_uid()`.
 
-**wiki-polis proxy** (`v2/app.py`, `_proxy_to_particiapi`) — on **`POST /api/session`**
-only, when the user is logged in and `PARTICIAPI_SUB_SECRET` is set:
-- sends `X-Particiapi-Sub: <xid>` + `X-Particiapi-Sub-Secret: <secret>`, and
-- **drops any forwarded `pa_session` cookie** so a stale anonymous session can't pin the
-  user to a throwaway uid (forces a clean re-bind to the xid).
+**wiki-polis** — today the server-side gateway (`ExploreGateway.ensure_session` in
+`v2/services/explore.py`; the browser never talks to Particiapi). On **`POST /api/session`**,
+when the user is logged in and `PARTICIAPI_SUB_SECRET` is set, it:
+- sends `X-Particiapi-Sub: <subject>` + `X-Particiapi-Sub-Secret: <secret>` (the subject is
+  conversation-scoped since #246, see below), and
+- sends **no** existing Particiapi cookie, so a stale anonymous session can't pin the user to a
+  throwaway uid (forces a clean bind to the subject).
+
+(The original #245 version did this in a browser-facing proxy, `_proxy_to_particiapi`, with a
+browser `pa_session` cookie. That proxy is gone; the gateway keeps the Particiapi session
+server-side and re-binds it before it expires, see
+[Session expiry](#session-expiry-7-days-and-the-re-bind).)
 
 **Particiapi** (companion change, on the fork — see below) — in `session_()`, when an
 unauthenticated request presents `X-Particiapi-Sub` and `X-Particiapi-Sub-Secret` matches
@@ -308,10 +315,13 @@ stability #245 bought.
   Deterministic per `(person, conversation)`: same person + same conversation → same subject →
   same `uid` (across devices); different conversation → different subject → different `uid`.
   `conv.id` (not the zid) keys it, so a conversation's P2/P6 zids share one uid.
-- New route `/c/<slug>/proxy/particiapi/<path>`; the participant client's proxy root points at it.
-  The `pa_session` cookie is **path-scoped** to `/c/<slug>/proxy/particiapi`, so the browser only
-  returns it on that conversation's calls — each conversation gets its own Polis session/uid with
-  no extra client logic. Legacy root route kept for back-compat (`conv=None` → bare-xid).
+- Each conversation gets its own Particiapi session. Originally (#247) that was a browser
+  `pa_session` cookie path-scoped to a `/c/<slug>/proxy/particiapi` route; both the route and
+  the browser cookie have since been removed. Now the server-side gateway keeps one Particiapi
+  session per conversation and round in the participant's wiki-polis session:
+  `session['particiapi_api_sessions'][str(conv.id)]` (Explore, phase 2) and
+  `session['phase6_api_sessions'][str(conv.id)]` (informed voting, phase 6, plus the per-worker
+  `_p6_session_cache`). Both rounds bind the same subject, so they resolve to the same uid.
 
 **What it changes about the privacy posture above:**
 - The operator can **no longer link a person across conversations** at the Polis layer (different
@@ -334,3 +344,62 @@ recipe above (`DELETE FROM sessions` on the app DB — run with the venv interpr
 webservice shell so `sqlalchemy`/`DATABASE_URL` are present), so everyone re-binds per-conversation.
 The per-person uid minted by #245 on prod (uid 57, subject `480f…`) orphans the same way the stale
 staging rows did — acceptable (~1 day of test data, no anon→identity merge exists anyway).
+
+## Session expiry (7 days) and the re-bind
+
+> **Production bug, confirmed 2026-10-02.** Participants who came back more than 7 days after
+> they logged in saw a full Explore deck (every statement unanswered), and answering a card again
+> overwrote their earlier vote on it.
+
+**Mechanism.** Particiapi uses Flask signed-cookie sessions with
+`PERMANENT_SESSION_LIFETIME = 7 days` (`particiapi/config_defaults.py`), checked server-side.
+wiki-polis stored the Particiapi cookie once, at bind time, in its own Flask session (lifetime
+30 days), and never refreshed it. After 7 days:
+
+- `GET /api/conversations/<id>/participant` does **not** fail: without a session it returns 200
+  with an **empty** participant (`particiapi/api.py`, the `not have_session()` branch). wiki-polis
+  only re-bound on 401/403, so the deck was built from "no votes".
+- `PUT .../votes/<tid>` does fail (403 `SESSION_REQUIRED`, `particiapi/utils.py`
+  `session_required`). wiki-polis then re-bound — to the correct uid, because the subject is
+  deterministic — and sent the vote, which **replaced** the earlier one (Polis keeps the latest
+  vote per pid and tid in `votes_latest_unique`).
+
+The binding itself was intact: the subject resolved to the participant's uid/pid with all votes,
+and a fresh login (new wiki-polis session, fresh bind) showed the deck correctly.
+
+**The fix** (`v2/services/explore.py`, `v2/app.py` `_particiapi_gateway`):
+
+1. **Re-bind before the lifetime runs out.** The cached state carries `boundAt` (epoch seconds)
+   and `subjectDigest` (sha256 of the subject, never the subject). `ensure_session` re-binds when
+   the cookie or CSRF token is missing, when `boundAt` is missing (state cached before this fix),
+   when it is older than `PARTICIAPI_SESSION_MAX_AGE_SECONDS` (default 6 days, deliberately below
+   Particiapi's 7), or when the digest differs from the current subject. Phase 2, phase 6 and the
+   phase-6 per-worker cache all use the same rule.
+2. **Answer guard.** When Polis Postgres is configured, every participant read is checked
+   against Polis: `PolisServerClient.get_participant_vote_count` counts the subject's answers via
+   `particiapi_users` → `participants` → `votes_latest_unique` (the same rows Particiapi lists).
+   Postgres is read first, so a concurrent vote cannot cause a false alarm. If Particiapi reports
+   fewer answers, the gateway forces one re-bind and reads again; if it still reports fewer, it
+   raises `ParticipantAnswersUnavailable`. The API then answers 502 `answers_unavailable`: the
+   Explore and informed-voting reads show `conv-err-answers-unavailable` instead of a deck, and
+   both vote endpoints refuse **before** sending the vote. Without Polis Postgres, or when it
+   cannot be reached, the guard is skipped (logged) and only the re-bind rule protects the session.
+3. **Logging.** Each bind logs `reason=missing|legacy|age|subject|rejected|mismatch` and each
+   mismatch logs both counts, with the phase and wiki-polis conversation id only — never the xid,
+   subject, username or pid.
+
+**Not repaired:** votes already overwritten before the fix. `votes_latest_unique` only keeps the
+latest vote; the append-only `votes` table may still hold the earlier ones.
+
+| Side | Var | Notes |
+|---|---|---|
+| wiki-polis | `PARTICIAPI_SESSION_MAX_AGE_SECONDS` | Default 518400 (6 days). Must stay below Particiapi's `PERMANENT_SESSION_LIFETIME`. |
+| wiki-polis | `PARTICIAPI_SUB_ISSUER` | Default `wiki-polis`. The `particiapi_issuers.issuer` the Postgres lookups filter on; must match what the Particiapi fork binds under. |
+
+**Related: the progress queries.** The home-page "N to vote" count, the About page's personal
+vote count and the admin Participants page used to map a participant to Polis through
+`xids … x.zid`. `xids.zid` comes from Polis migration 000015, which production's Polis Postgres
+does not have, and nothing writes `xids` under trusted-sub, so those queries failed
+(`column x.zid does not exist`). They now use the same `particiapi_users` join, keyed by the
+conversation-scoped subject.
+

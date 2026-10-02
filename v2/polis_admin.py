@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 _SAFE_ZINVITE = re.compile(r'^[A-Za-z0-9]{6,20}$')
 
+# Particiapi stores trusted-sub bindings per issuer (particiapi_issuers.issuer). wiki-polis
+# binds as "wiki-polis" (ref_cross-device-identity.md); PARTICIAPI_SUB_ISSUER overrides it.
+DEFAULT_PARTICIAPI_ISSUER = 'wiki-polis'
+
 
 # ── Direct-Postgres connection pool ───────────────────────────────────────────
 # Stats / results / progress reads to Polis Postgres used to open and close a fresh
@@ -234,24 +238,41 @@ _PHASE6_PARTICIPANT_COUNT_SQL = """
       AND NOT (v.pid = ANY(%s))
 """
 
-# Statements remaining to vote on, across multiple conversations, for one participant.
-# Identified by xid (our SHA-256 of mw_user_id — stored in xids.xid).
-# Returns one row per zinvite: total approved statements and how many the participant
-# has already cast a non-pass vote on (pass counts as "voted" for progress purposes).
-# zinvites is an ARRAY of text; only zinvites present in the xids table for this xid
-# are counted (i.e. conversations the participant has actually joined in Polis).
+# ── Participant identity in Polis Postgres ────────────────────────────────────
+# wiki-polis binds each participant to Particiapi with a per-conversation SUBJECT
+# (``_conversation_subject`` in app.py) over the trusted-sub headers. Particiapi records
+# that binding in its own tables, ``particiapi_users(subject, issid, uid)`` joined to
+# ``particiapi_issuers(issid, issuer)`` (particiapi/schema.sql), and the uid then maps to
+# the conversation's pid through ``participants(uid, zid)``. That is the only mapping
+# these queries use.
+#
+# They used to go through ``xids`` instead, which is wrong twice over: under trusted-sub
+# nothing writes ``xids`` at all, and ``xids.zid`` only exists from Polis migration 000015,
+# which the production database does not have, so every such query failed with
+# "column x.zid does not exist". tests/test_polis_admin.py asserts no query here mentions
+# xids again.
+
+# Statement vote progress per conversation for one participant, across several
+# conversations. The subject differs per conversation, so the request is a list of
+# (zinvite, subject) pairs passed as two parallel text arrays, plus the issuer.
+# Returns one row per zinvite that has approved statements: total approved statements
+# and how many of them the participant has answered (a pass counts as answered).
 _STATEMENTS_REMAINING_BULK_SQL = """
-    WITH zmap AS (
-        SELECT zi.zinvite, zi.zid
+    WITH req AS (
+        SELECT r.zinvite, r.subject
+        FROM UNNEST(%s::text[], %s::text[]) AS r(zinvite, subject)
+    ),
+    zmap AS (
+        SELECT zi.zinvite, zi.zid, req.subject
         FROM zinvites zi
-        WHERE zi.zinvite = ANY(%s)
+        JOIN req ON req.zinvite = zi.zinvite
     ),
     pid_map AS (
-        SELECT p.zid, p.pid
-        FROM participants p
-        JOIN xids x ON x.uid = p.uid AND x.zid = p.zid
-        WHERE x.xid = %s
-          AND p.zid IN (SELECT zid FROM zmap)
+        SELECT zmap.zid, p.pid
+        FROM zmap
+        JOIN particiapi_users pu ON pu.subject = zmap.subject
+        JOIN particiapi_issuers pi ON pi.issid = pu.issid AND pi.issuer = %s
+        JOIN participants p ON p.uid = pu.uid AND p.zid = zmap.zid
     ),
     total_stmts AS (
         SELECT zmap.zinvite, COUNT(c.tid)::int AS n_total
@@ -280,42 +301,58 @@ _STATEMENTS_REMAINING_BULK_SQL = """
 
 # Statement vote progress for MANY participants in ONE conversation, in a single
 # query — the batched inverse of _STATEMENTS_REMAINING_BULK_SQL (one zinvite, many
-# xids, grouped by xid). Replaces the per-participant loop on the admin participants
-# page: one round trip instead of one Postgres connection per participant. The
-# xid -> Polis pid mapping mirrors the per-participant query exactly. Driving the
-# result from `req` (the requested xids) means every participant gets a row with
-# n_total filled and n_voted = 0 when they have no recorded votes.
-_STATEMENT_PROGRESS_BY_XID_SQL = """
+# subjects, grouped by subject). Used by the admin participants page: one round trip
+# instead of one Postgres connection per participant. Driving the result from `req`
+# (the requested subjects) means every participant gets a row with n_total filled and
+# n_voted = 0 when they have no recorded votes. Params: zinvite, text[] of subjects,
+# issuer.
+_STATEMENT_PROGRESS_BY_SUBJECT_SQL = """
     WITH z AS (SELECT zid FROM zinvites WHERE zinvite = %s),
-    req AS (SELECT UNNEST(%s::text[]) AS xid),
+    req AS (SELECT UNNEST(%s::text[]) AS subject),
     total AS (
         SELECT COUNT(c.tid)::int AS n_total
         FROM comments c, z
         WHERE c.zid = z.zid AND c.active = TRUE AND c.mod = 1
     ),
     pid_map AS (
-        SELECT x.xid, p.pid
-        FROM xids x
-        JOIN req ON req.xid = x.xid
-        JOIN z ON x.zid = z.zid
-        JOIN participants p ON p.uid = x.uid AND p.zid = x.zid
+        SELECT req.subject, p.pid
+        FROM req
+        JOIN particiapi_users pu ON pu.subject = req.subject
+        JOIN particiapi_issuers pi ON pi.issid = pu.issid AND pi.issuer = %s
+        JOIN z ON TRUE
+        JOIN participants p ON p.uid = pu.uid AND p.zid = z.zid
     ),
     voted AS (
-        SELECT pm.xid, COUNT(DISTINCT v.tid)::int AS n_voted
+        SELECT pm.subject, COUNT(DISTINCT v.tid)::int AS n_voted
         FROM votes_latest_unique v
         JOIN z ON v.zid = z.zid
         JOIN pid_map pm ON pm.pid = v.pid
         JOIN comments c ON c.zid = z.zid AND c.tid = v.tid
           AND c.active = TRUE AND c.mod = 1
-        GROUP BY pm.xid
+        GROUP BY pm.subject
     )
     SELECT
-        req.xid,
+        req.subject,
         (SELECT n_total FROM total)                                        AS n_total,
         COALESCE(vd.n_voted, 0)                                            AS n_voted,
         GREATEST(0, (SELECT n_total FROM total) - COALESCE(vd.n_voted, 0)) AS n_remaining
     FROM req
-    LEFT JOIN voted vd USING (xid)
+    LEFT JOIN voted vd USING (subject)
+"""
+
+# Every answer Polis holds for one subject in one conversation, counted the way
+# Particiapi's GET /conversations/<id>/participant lists them (all tids in
+# votes_latest_unique for the pid, hidden statements and passes included), so the two
+# counts are comparable. The Explore mismatch guard compares them. Params: zinvite,
+# subject, issuer.
+_PARTICIPANT_VOTE_COUNT_SQL = """
+    SELECT COUNT(DISTINCT v.tid)::int
+    FROM zinvites zi
+    JOIN particiapi_users pu ON pu.subject = %s
+    JOIN particiapi_issuers pi ON pi.issid = pu.issid AND pi.issuer = %s
+    JOIN participants p ON p.uid = pu.uid AND p.zid = zi.zid
+    JOIN votes_latest_unique v ON v.zid = p.zid AND v.pid = p.pid
+    WHERE zi.zinvite = %s
 """
 
 # Personal votes: the logged-in participant's own votes in a given conversation,
@@ -453,11 +490,13 @@ class PolisServerClient:
     """
 
     def __init__(self, polis_server_url: str, email: str, password: str,
-                 db_url: str = ''):
+                 db_url: str = '', particiapi_issuer: str = DEFAULT_PARTICIAPI_ISSUER):
         self._base     = polis_server_url.rstrip('/')
         self._email    = email
         self._password = password
         self._db_url   = db_url
+        # The issuer name Particiapi records wiki-polis's trusted-sub bindings under.
+        self._issuer   = particiapi_issuer or DEFAULT_PARTICIAPI_ISSUER
 
     # Polis rejects plain HTTP form submissions unless the request appears to
     # come via HTTPS (checked via X-Forwarded-Proto). Since we call it over the
@@ -895,37 +934,41 @@ class PolisServerClient:
 
     def get_statements_remaining_bulk(
         self,
-        zinvites: list[str],
-        xid: str,
+        subjects_by_zinvite: dict[str, str],
     ) -> dict[str, int] | None:
         """Return statements remaining to vote on per conversation for one participant.
 
-        zinvites: list of Polis zinvites (conv.polis_id values).
-        xid: the participant's xid (sha256 of mw_user_id) — used to look up their
-             Polis pid via the xids table without storing pid separately.
+        subjects_by_zinvite: Polis zinvite (conv.polis_id) -> the participant's
+            Particiapi subject in that conversation. Subjects are conversation-scoped,
+            so one participant has a different subject in every conversation.
 
-        Returns dict[zinvite → n_remaining], or None if Postgres is unavailable.
-        Conversations where the participant has no Polis record are absent from the dict.
+        Returns dict[zinvite -> n_remaining], or None if Postgres is unavailable.
         """
-        progress = self.get_statement_progress_bulk(zinvites, xid)
+        progress = self.get_statement_progress_bulk(subjects_by_zinvite)
         if progress is None:
             return None
         return {zinvite: row['remaining'] for zinvite, row in progress.items()}
 
     def get_statement_progress_bulk(
         self,
-        zinvites: list[str],
-        xid: str,
+        subjects_by_zinvite: dict[str, str],
     ) -> dict[str, dict] | None:
-        """Return statement vote progress per conversation for one participant."""
-        if not self._db_url or not zinvites or not xid:
+        """Return statement vote progress per conversation for one participant.
+
+        Same input as get_statements_remaining_bulk. Returns
+        dict[zinvite -> {total, voted, remaining}], or None if Postgres is unavailable.
+        """
+        if not self._db_url or not subjects_by_zinvite:
             return None
-        safe = [z for z in zinvites if _SAFE_ZINVITE.match(z or '')]
-        if not safe:
+        pairs = [
+            (zinvite, subject) for zinvite, subject in subjects_by_zinvite.items()
+            if _SAFE_ZINVITE.match(zinvite or '') and subject
+        ]
+        if not pairs:
             return {}
         rows = self._pg_query(
             _STATEMENTS_REMAINING_BULK_SQL,
-            (safe, xid),
+            ([z for z, _ in pairs], [s for _, s in pairs], self._issuer),
             'get_statement_progress_bulk',
         )
         if rows is None:
@@ -942,22 +985,22 @@ class PolisServerClient:
     def get_statement_progress_for_participants(
         self,
         zinvite: str,
-        xids: list[str],
+        subjects: list[str],
     ) -> dict[str, dict] | None:
         """Return statement vote progress for many participants in one query.
 
         The batched inverse of get_statement_progress_bulk: one conversation, many
-        participant xids. Returns dict[xid -> {total, voted, remaining}], or None if
-        Postgres is unavailable ({} when xids is empty). Every requested xid appears
-        with total filled and voted = 0 when it has no recorded votes.
+        participant subjects. Returns dict[subject -> {total, voted, remaining}], or None
+        if Postgres is unavailable ({} when subjects is empty). Every requested subject
+        appears with total filled and voted = 0 when it has no recorded votes.
         """
         if not self._db_url or not _SAFE_ZINVITE.match(zinvite or ''):
             return None
-        if not xids:
+        if not subjects:
             return {}
         rows = self._pg_query(
-            _STATEMENT_PROGRESS_BY_XID_SQL,
-            (zinvite, list(xids)),
+            _STATEMENT_PROGRESS_BY_SUBJECT_SQL,
+            (zinvite, list(subjects), self._issuer),
             'get_statement_progress_for_participants',
         )
         if rows is None:
@@ -966,6 +1009,25 @@ class PolisServerClient:
             r[0]: {'total': int(r[1]), 'voted': int(r[2]), 'remaining': int(r[3])}
             for r in rows
         }
+
+    def get_participant_vote_count(self, zinvite: str, subject: str) -> int | None:
+        """Return how many statements this subject has answered in one conversation.
+
+        Counts every tid in votes_latest_unique for the subject's pid — the same set
+        Particiapi's participant read lists — so the Explore guard can tell a complete
+        Particiapi read from an empty one. 0 when the subject has no Polis record yet.
+        None when Postgres is not configured or the query fails.
+        """
+        if not self._db_url or not subject or not _SAFE_ZINVITE.match(zinvite or ''):
+            return None
+        rows = self._pg_query(
+            _PARTICIPANT_VOTE_COUNT_SQL,
+            (subject, self._issuer, zinvite),
+            'get_participant_vote_count',
+        )
+        if rows is None:
+            return None
+        return int(rows[0][0]) if rows else 0
 
     def get_personal_votes(
         self,

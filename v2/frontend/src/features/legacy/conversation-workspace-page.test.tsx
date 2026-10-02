@@ -335,3 +335,37 @@ test('a revoked voucher reads as access withdrawn', async () => {
   expect(await screen.findByRole('heading', {name: testMessages['forbidden-lost-voucher-heading']!}, {timeout: 10_000})).toBeVisible();
   expect(screen.queryByRole('link', {name: testMessages['forbidden-voucher-link']!})).toBeNull();
 });
+
+const VOTE_URL = new URL('/api/v1/conversations/community-strategy/statements/12/vote', globalThis.location.origin).toString();
+
+test('an Explore read refused as answers_unavailable shows the notice instead of a deck', async () => {
+  server.use(
+    http.get(WORKSPACE_URL, () => HttpResponse.json({data: workspace})),
+    http.get(EXPLORE_URL, () => HttpResponse.json(
+      {error: {code: 'answers_unavailable', message: SERVER_ENGLISH}}, {status: 502},
+    )),
+  );
+  renderWorkspace('qqx');
+
+  // Catches a deck rendered from a participant view that lost their earlier responses:
+  // that deck re-offers answered statements, and voting on one overwrites the old answer.
+  const notice = await screen.findByText('(conv-err-answers-unavailable)', {}, {timeout: 10_000});
+  expect(notice.closest('[role="alert"]')).not.toBeNull();
+  expect(screen.queryByRole('button', {name: '(conv-vote-agree)'})).toBeNull();
+  expect(document.body).not.toHaveTextContent(SERVER_ENGLISH);
+});
+
+test('a vote refused as answers_unavailable says why, not just "try again"', async () => {
+  serve(workspace);
+  server.use(http.put(VOTE_URL, () => HttpResponse.json(
+    {error: {code: 'answers_unavailable', message: SERVER_ENGLISH}}, {status: 502},
+  )));
+  renderWorkspace('qqx');
+
+  fireEvent.click(await screen.findByRole('button', {name: '(conv-vote-agree)'}, {timeout: 10_000}));
+
+  const alert = await screen.findByText('(conv-err-answers-unavailable)');
+  expect(alert.closest('#conv-error')).not.toBeNull();
+  expect(screen.queryByText('(conv-err-submit-vote)')).toBeNull();
+  expect(document.body).not.toHaveTextContent(SERVER_ENGLISH);
+});

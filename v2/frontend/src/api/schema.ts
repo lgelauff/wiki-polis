@@ -3553,7 +3553,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Voting service unavailable */
+            /** @description Voting service unavailable (`upstream_unavailable`), or `answers_unavailable` when the participant's earlier responses could not be loaded; no state is returned then */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -3669,7 +3669,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Voting service unavailable */
+            /** @description Voting service unavailable (`upstream_unavailable`), or `answers_unavailable` when the participant's earlier responses could not be loaded; no state is returned then */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -3830,7 +3830,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Voting service unavailable */
+            /** @description Voting service unavailable (`upstream_unavailable`), or `answers_unavailable` when the participant's earlier responses could not be loaded; the vote is not sent then */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -4213,7 +4213,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Voting service unavailable */
+            /** @description Voting service unavailable (`upstream_unavailable`), or `answers_unavailable` when the participant's earlier responses could not be loaded; the vote is not sent then */
             502: {
                 headers: {
                     [name: string]: unknown;

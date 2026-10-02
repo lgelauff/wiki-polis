@@ -490,6 +490,7 @@
     "conv-err-proposal-limit": "You have reached the proposal limit for this consultation.",
     "conv-err-submit-statement": "Could not submit statement. Please try again.",
     "conv-err-submit-vote": "Could not submit your response. Try again.",
+    "conv-err-answers-unavailable": "Your earlier responses could not be loaded. To keep them safe, responding is paused for now. Reload the page in a moment to try again.",
     "conv-err-outcome-unknown": "Your statement was sent, but we could not confirm that it arrived. It may already have been added, so you do not need to send it again. You can cancel and carry on.",
     "conv-err-original-unavailable": "The statement you were rewording is no longer available, so your wording cannot be saved. Copy your text before you cancel, or it will be lost; you can then add it as a new statement.",
     "conv-err-submissions-closed": "You cannot add statements to this consultation right now.",

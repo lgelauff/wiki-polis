@@ -194,6 +194,7 @@ def build_conversation_lane(
     output_items: Callable[[Conversation], list[dict]],
     reveal_context: Callable[[Conversation, Participation | None], dict | None],
     polis_client,
+    participant_subject: Callable[[Participant, Conversation], str],
 ) -> ConversationLane:
     """Load one demo/real lane and compute participant-facing state once."""
     lane = ConversationLane(space='demo' if demo else 'real', authenticated=bool(username))
@@ -271,10 +272,14 @@ def build_conversation_lane(
     submission_conversations = [
         conv for conv in joined_conversations if conv.phase_submission and conv.active
     ]
-    zinvites = [conv.polis_id for conv in submission_conversations if conv.polis_id]
+    # The participant's subject is conversation-scoped, so it is resolved per conversation.
+    subjects_by_zinvite = {
+        conv.polis_id: participant_subject(participant, conv)
+        for conv in submission_conversations if conv.polis_id
+    } if participant else {}
     remaining_by_zinvite = {}
-    if zinvites and participant:
-        result = polis_client.get_statements_remaining_bulk(zinvites, participant.xid)
+    if subjects_by_zinvite:
+        result = polis_client.get_statements_remaining_bulk(subjects_by_zinvite)
         if result:
             remaining_by_zinvite = result
 

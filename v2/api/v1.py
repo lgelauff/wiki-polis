@@ -17,7 +17,7 @@ from api.admin_routes import register_admin_routes
 from db import ACCOUNT_KIND_VOUCHER, Participant
 from services.participations import (EligibilityDenied, InvalidPseudonym,
                                      PseudonymUnavailable)
-from services.explore import ExploreUpstreamError
+from services.explore import ExploreUpstreamError, ParticipantAnswersUnavailable
 from services.idempotency import (CommandOutcomeUnknown, IdempotencyConflict,
                                   InvalidIdempotencyKey,
                                   validate_idempotency_key)
@@ -66,6 +66,21 @@ def error_response(code: str, message: str, status: int, *, details=None):
     if details is not None:
         error['details'] = details
     return _no_store(jsonify({'error': error})), status
+
+
+def answers_unavailable_response():
+    """Particiapi's view of the participant is missing answers Polis holds.
+
+    Nothing is shown or recorded: a deck built from that view would re-offer answered
+    statements, and a vote would overwrite an earlier one. The SPA maps the code to
+    `conv-err-answers-unavailable`.
+    """
+    return error_response(
+        'answers_unavailable',
+        'Your earlier answers could not be loaded, so nothing was shown or recorded. '
+        'Try again in a moment.',
+        502,
+    )
 
 
 def create_api_v1_blueprint(
@@ -405,6 +420,8 @@ def create_api_v1_blueprint(
     def get_explore_state(slug: str):
         try:
             data = resolve_explore_state(slug)
+        except ParticipantAnswersUnavailable:
+            return answers_unavailable_response()
         except ExploreUpstreamError:
             return error_response(
                 'upstream_unavailable',
@@ -425,6 +442,8 @@ def create_api_v1_blueprint(
     def get_informed_voting(slug: str):
         try:
             data = resolve_informed_voting(slug)
+        except ParticipantAnswersUnavailable:
+            return answers_unavailable_response()
         except ExploreUpstreamError:
             return error_response(
                 'upstream_unavailable',
@@ -462,6 +481,8 @@ def create_api_v1_blueprint(
             data = submit_informed_vote(
                 slug, featured_statement_id, body['choice'],
             )
+        except ParticipantAnswersUnavailable:
+            return answers_unavailable_response()
         except ExploreUpstreamError:
             return error_response(
                 'upstream_unavailable',
@@ -596,6 +617,8 @@ def create_api_v1_blueprint(
             )
         try:
             data = submit_explore_vote(slug, statement_id, choice, pass_reason)
+        except ParticipantAnswersUnavailable:
+            return answers_unavailable_response()
         except ExploreUpstreamError:
             return error_response(
                 'upstream_unavailable',
