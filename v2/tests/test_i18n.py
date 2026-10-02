@@ -791,28 +791,38 @@ def test_a_translation_that_drops_what_the_reader_needs_is_refused(translation, 
     assert i18n.markup_problem(translation, english) == reason
 
 
-@pytest.mark.parametrize('hostile', [
-    lambda n: '<' + ' ' * n,
-    lambda n: '<a' + 'b' * n,                                          # quadratic for the old regex
-    lambda n: '</a' + 'b' * n,
-    lambda n: 'Klik <b' + 'dag' * (n // 3),
-    lambda n: '<a' + ' x="' * (n // 4),
-    lambda n: '{{PLURAL:$1|' * (n // 12),
-    lambda n: '<b>' * (n // 3),
-], ids=['spaces', 'name', 'closing-name', 'text', 'attributes', 'plural', 'nesting'])
-def test_the_check_takes_linear_time_on_hostile_input(hostile):
+@pytest.mark.parametrize('hostile, scans', [
+    # Inputs the scanner reads to the end before refusing: their time grows with their length.
+    pytest.param(lambda n: '<a' + ' ' * n, True, id='spaces'),
+    pytest.param(lambda n: '<a' + 'b' * n, True, id='name'),            # quadratic for the old regex
+    pytest.param(lambda n: '<a>x</a' + 'b' * n, True, id='closing-name'),
+    pytest.param(lambda n: '<b>' + 'dag' * (n // 3), True, id='text'),
+    pytest.param(lambda n: 'Klik <b' + 'dag' * (n // 3), True, id='name-after-text'),
+    pytest.param(lambda n: '<a' + ' x="' * (n // 4), True, id='attributes'),
+    # Inputs refused within the first characters, or at the nesting cap: constant time.
+    pytest.param(lambda n: '<' + ' ' * n, False, id='stray-lt'),
+    pytest.param(lambda n: '</a' + 'b' * n, False, id='stray-closing-tag'),   # quadratic for the old regex
+    pytest.param(lambda n: '{{PLURAL:$1|' * (n // 12), False, id='plural'),
+    pytest.param(lambda n: '<b>' * (n // 3), False, id='nesting'),
+])
+def test_the_check_takes_linear_time_on_hostile_input(hostile, scans):
     # Catches a scanner that backtracks or recurses without bound: load() runs this over every
     # message of every translation at import, in every worker.
     #
     # A wall-clock limit fails on a loaded machine, so this counts the CPU time of this thread,
-    # which does not grow while the scheduler runs something else, and checks how it grows from
-    # 50,000 to 200,000 characters: about 4x when linear, 16x when quadratic, far more when
-    # exponential. The best of interleaved runs absorbs what load still adds. Under 1 ms for
-    # 200,000 characters is linear whatever the ratio, which for microsecond timings is noise.
+    # which leaves out the time the scheduler gives to other processes, and checks how it grows
+    # from 25,000 to 400,000 characters: about 16x when linear, up to 256x when quadratic. The
+    # range is wide because a quadratic term with a small constant hides behind the linear one
+    # at small sizes: one slice of the remaining text per attribute grew 8.8x from 50,000 to
+    # 200,000 characters, against 4x for linear. Sharing a core still slows both sizes a
+    # little; the best of interleaved runs and the margin between 16x and 32x absorb it.
     #
-    # A slow scan fails on a cap first, so a regression costs seconds instead of the minutes the
-    # old regex would spend on 200,000 characters (2 s at 5,000, 16x more for each 4x).
+    # Caps on the probe and on each size make a slow scan fail in seconds instead of the
+    # hours the old regex would spend on 400,000 characters (2 s at 5,000, 16x more for each
+    # 4x). An exponential scan would still hang inside a single call.
     import time
+    if time.get_clock_info('thread_time').resolution > 1e-4:
+        pytest.skip('the thread CPU clock is too coarse to time milliseconds')
 
     def cpu_seconds(text):
         started = time.thread_time()
@@ -821,14 +831,19 @@ def test_the_check_takes_linear_time_on_hostile_input(hostile):
 
     probe = cpu_seconds(hostile(5_000))
     assert probe < 0.25, f'{probe:.1f} s of CPU at 5,000 characters'
-    small, large = hostile(50_000), hostile(200_000)
+    small, large = hostile(25_000), hostile(400_000)
     best_small = best_large = float('inf')
     for _ in range(5):
         best_small = min(best_small, cpu_seconds(small))
-        assert best_small < 1, f'{best_small:.1f} s of CPU at 50,000 characters'
+        assert best_small < 1, f'{best_small:.1f} s of CPU at 25,000 characters'
         best_large = min(best_large, cpu_seconds(large))
-    assert best_large < 0.001 or best_large < 8 * best_small, (
-        f'{best_small * 1000:.1f} ms at 50,000 characters, {best_large * 1000:.1f} ms at 200,000')
+        assert best_large < 4, f'{best_large:.1f} s of CPU at 400,000 characters'
+    timings = f'{best_small * 1000:.2f} ms at 25,000 characters, {best_large * 1000:.2f} ms at 400,000'
+    if scans:
+        # Under 1 ms the scanner did not read the input, and the ratio would measure nothing.
+        assert best_large >= 0.001, f'refused without scanning: {timings}'
+    # Under 1 ms for 400,000 characters is linear whatever the ratio, which is noise there.
+    assert best_large < 0.001 or best_large < 32 * best_small, timings
 
 
 def test_a_refusal_says_why():
