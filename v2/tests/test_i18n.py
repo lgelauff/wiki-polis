@@ -792,21 +792,43 @@ def test_a_translation_that_drops_what_the_reader_needs_is_refused(translation, 
 
 
 @pytest.mark.parametrize('hostile', [
-    '<' + ' ' * 50_000,
-    '<a' + 'b' * 50_000,                                               # quadratic for the old regex
-    '</a' + 'b' * 50_000,
-    'Klik <b' + 'dag' * 17_000,
-    '<a' + ' x="' * 20_000,
-    '{{PLURAL:$1|' * 20_000,
-    '<b>' * 20_000,
-])
+    lambda n: '<' + ' ' * n,
+    lambda n: '<a' + 'b' * n,                                          # quadratic for the old regex
+    lambda n: '</a' + 'b' * n,
+    lambda n: 'Klik <b' + 'dag' * (n // 3),
+    lambda n: '<a' + ' x="' * (n // 4),
+    lambda n: '{{PLURAL:$1|' * (n // 12),
+    lambda n: '<b>' * (n // 3),
+], ids=['spaces', 'name', 'closing-name', 'text', 'attributes', 'plural', 'nesting'])
 def test_the_check_takes_linear_time_on_hostile_input(hostile):
     # Catches a scanner that backtracks or recurses without bound: load() runs this over every
     # message of every translation at import, in every worker.
+    #
+    # A wall-clock limit fails on a loaded machine, so this counts the CPU time of this thread,
+    # which does not grow while the scheduler runs something else, and checks how it grows from
+    # 50,000 to 200,000 characters: about 4x when linear, 16x when quadratic, far more when
+    # exponential. The best of interleaved runs absorbs what load still adds. Under 1 ms for
+    # 200,000 characters is linear whatever the ratio, which for microsecond timings is noise.
+    #
+    # A slow scan fails on a cap first, so a regression costs seconds instead of the minutes the
+    # old regex would spend on 200,000 characters (2 s at 5,000, 16x more for each 4x).
     import time
-    started = time.perf_counter()
-    assert not i18n.markup_is_permitted(hostile, '<a href="/">x</a>')
-    assert time.perf_counter() - started < 0.5
+
+    def cpu_seconds(text):
+        started = time.thread_time()
+        assert not i18n.markup_is_permitted(text, '<a href="/">x</a>')
+        return time.thread_time() - started
+
+    probe = cpu_seconds(hostile(5_000))
+    assert probe < 0.25, f'{probe:.1f} s of CPU at 5,000 characters'
+    small, large = hostile(50_000), hostile(200_000)
+    best_small = best_large = float('inf')
+    for _ in range(5):
+        best_small = min(best_small, cpu_seconds(small))
+        assert best_small < 1, f'{best_small:.1f} s of CPU at 50,000 characters'
+        best_large = min(best_large, cpu_seconds(large))
+    assert best_large < 0.001 or best_large < 8 * best_small, (
+        f'{best_small * 1000:.1f} ms at 50,000 characters, {best_large * 1000:.1f} ms at 200,000')
 
 
 def test_a_refusal_says_why():
