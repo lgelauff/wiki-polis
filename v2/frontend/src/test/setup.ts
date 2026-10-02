@@ -14,7 +14,7 @@ server.listen({onUnhandledRequest: 'error'});
 afterEach(() => {
   cleanup();
   server.resetHandlers();
-  // renderAsQqx() (src/test/i18n.ts) sets ?uselang= on the real location, which is the
+  // renderAsQqx() (src/test/i18n.ts) sets ?uselang= on the real location, which the
   // message provider reads; leaving it would put every later test in that locale.
   globalThis.history.replaceState(null, '', '/');
   globalThis.sessionStorage.clear();
