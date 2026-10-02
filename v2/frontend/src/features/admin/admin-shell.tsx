@@ -212,7 +212,8 @@ export function AdminShell({children, data, gatingType, title, toast}: {
             <InternalLink href={overviewHref} className="admin-shell__jump">{msg('admin-shell-overview')}</InternalLink>
           </div>
           <div className="admin-shell__identity">
-            <span className="admin-shell__user">{authenticated ? session.user?.username : msg('base-voucher-account')}</span>
+            {/* The name is cut off with an ellipsis when long, so the whole of it is the hover title. */}
+            <span className="admin-shell__user" title={authenticated ? session.user?.username : undefined}>{authenticated ? session.user?.username : msg('base-voucher-account')}</span>
             <span className="admin-shell__role"><RoleGlyph label={msg('adminconv-role-title')} /><span>{roleLabel(msg, data.operator.roleLabel)}</span></span>
             {signedIn && (
               <form method="post" action={session.links.logout} className="admin-shell__logout">

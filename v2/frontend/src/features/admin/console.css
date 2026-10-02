@@ -22,6 +22,9 @@
 
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  /* One column that may shrink below its content's width: without it a long title in
+     the breadcrumb widens the whole frame and the page scrolls sideways at 320px. */
+  grid-template-columns: minmax(0, 1fr);
   min-block-size: 100%;
   color: var(--shell-body);
   background: var(--shell-sunken);
@@ -44,6 +47,11 @@
   padding: .625rem 1.25rem;
   background: var(--shell-surface);
   border-block-end: 1px solid var(--shell-line);
+}
+
+.admin-shell__crumbs {
+  min-inline-size: 0;
+  max-inline-size: 100%;
 }
 
 .admin-shell__crumbs ol {
@@ -72,6 +80,7 @@
 }
 
 .admin-shell__crumb[aria-current] {
+  flex: none;
   color: var(--shell-muted);
   font-weight: 400;
 }
@@ -176,6 +185,14 @@
 .admin-shell__lang {
   display: inline-flex;
   margin: 0;
+}
+
+/* 16px on a touch screen: below that iOS zooms the page when the select takes focus
+   (admin console spec: inputs 16px on touch). */
+@media (pointer: coarse) {
+  .admin-shell__lang-select {
+    font-size: 16px;
+  }
 }
 
 /* ── Sidebar ──────────────────────────────────────────────────────────────── */
