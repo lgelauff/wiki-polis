@@ -334,3 +334,15 @@ recipe above (`DELETE FROM sessions` on the app DB — run with the venv interpr
 webservice shell so `sqlalchemy`/`DATABASE_URL` are present), so everyone re-binds per-conversation.
 The per-person uid minted by #245 on prod (uid 57, subject `480f…`) orphans the same way the stale
 staging rows did — acceptable (~1 day of test data, no anon→identity merge exists anyway).
+
+## Session expiry (7 days) and the re-bind
+
+Particiapi rejects its session cookie after `PERMANENT_SESSION_LIFETIME` (7 days upstream), but
+wiki-polis caches that cookie in its own 30-day session; an expired session reads as a 200 with an
+empty participant, so the deck re-showed answered statements and a re-answer overwrote the
+earlier vote (production, 2026-10-02). `ExploreGateway` (`v2/services/explore.py`) now stores
+`boundAt` with the cookie and re-binds when it is missing (state from before this change) or
+6 days old (`SESSION_MAX_AGE_SECONDS`), and re-binds once when a cached session reads as an
+all-empty participant; each re-bind logs its reason, phase and conversation id only. The progress
+queries in `v2/polis_admin.py` map the conversation-scoped subject through `particiapi_users`
+(issuer `wiki-polis`) instead of `xids`, which nothing writes under trusted-sub.

@@ -692,7 +692,7 @@ _phase6_agg_lock = threading.Lock()
 # fix is to bind the Phase-6 session to the trusted-sub subject (idempotent uid).
 _p6_bootstrap_locks: dict = {}
 _p6_bootstrap_locks_guard = threading.Lock()
-_p6_session_cache: dict = {}  # (xid, conv_id) -> (pa_cookie, csrf_token)
+_p6_session_cache: dict = {}  # (xid, conv_id) -> ParticiapiSessionState.to_dict()
 
 
 def _p6_bootstrap_lock(key):
@@ -2446,6 +2446,7 @@ def _conversation_lane_api_payload(demo: bool) -> dict:
         output_items=_output_items,
         reveal_context=_reveal_context,
         polis_client=_polis_server_client(),
+        participant_subject=_progress_subject,
     )
     return lane.to_api(
         conversation_link=_conversation_client_link,
@@ -2565,6 +2566,7 @@ def _conversation_about_model(conv: Conversation, participant: Participant | Non
         phase_labels=phase_labels,
         output_items=_output_items,
         polis_client=_polis_server_client(),
+        participant_subject=_progress_subject,
         can_moderate=_can_moderate(conv, participant),
     )
 
@@ -2811,6 +2813,7 @@ def _explore_gateway(conv: Conversation, participant: Participant):
         state=state,
         subject=_conversation_subject(participant.xid, conv) if subject_secret else None,
         subject_secret=subject_secret,
+        log_context=f'phase=explore conversation_id={conv.id}',
     )
     return gateway, states
 
@@ -2970,15 +2973,17 @@ def _phase6_gateway(conv: Conversation, participant: Participant):
         state=state,
         subject=_conversation_subject(participant.xid, conv) if subject_secret else None,
         subject_secret=subject_secret,
+        log_context=f'phase=informed_voting conversation_id={conv.id}',
     )
-    if not (state.cookie and state.csrf_token):
+    if gateway.rebind_reason() is not None:
         with _p6_bootstrap_lock(key):
-            shared = _p6_session_cache.get(key)
-            if shared:
-                state.cookie, state.csrf_token = shared
-            else:
+            # Another request in this worker may have just bound: share its session only
+            # if it passes the same re-bind rule (fresh, dated), else bind here.
+            gateway.state = ParticiapiSessionState.from_dict(_p6_session_cache.get(key))
+            if gateway.rebind_reason() is not None:
+                gateway.state = state
                 gateway.ensure_session()
-                _p6_session_cache[key] = (state.cookie, state.csrf_token)
+            _p6_session_cache[key] = gateway.state.to_dict()
     return gateway, key, states
 
 
@@ -2987,7 +2992,7 @@ def _save_phase6_gateway(
 ) -> None:
     states[str(conv.id)] = gateway.state.to_dict()
     session[_PHASE6_SESSION_KEY] = states
-    _p6_session_cache[key] = (gateway.state.cookie, gateway.state.csrf_token)
+    _p6_session_cache[key] = gateway.state.to_dict()
 
 
 def _informed_voting_api_payload(slug: str) -> dict:
@@ -3479,15 +3484,11 @@ def _require_organizer_for_conv(conv_id: int) -> 'Conversation':
 
 
 def _admin_participant_roster_model(conv: Conversation):
-    scoped_subjects = bool(current_app.config.get('PARTICIAPI_SUB_SECRET'))
     return build_admin_participant_roster(
         conversation=conv,
         polis_client=_polis_server_client(),
         polis_pg_configured=bool(current_app.config.get('POLIS_DATABASE_URL')),
-        participant_subject=(
-            lambda participant: _conversation_subject(participant.xid, conv)
-            if scoped_subjects else participant.xid
-        ),
+        participant_subject=lambda participant: _progress_subject(participant, conv),
     )
 
 
@@ -4616,6 +4617,17 @@ def _check_conversation_access(conversation, participant):
 
 
 # ── Per-conversation Polis identity ───────────────────────────────────────────
+
+def _progress_subject(participant: Participant, conv) -> str | None:
+    """The subject Polis Postgres knows this participant by in this conversation.
+
+    Without trusted-sub binding (PARTICIAPI_SUB_SECRET unset) nothing is bound, so there is
+    no subject and the progress lookups report no count rather than "everything left".
+    """
+    if current_app.config.get('PARTICIAPI_SUB_SECRET'):
+        return _conversation_subject(participant.xid, conv)
+    return None
+
 
 def _conversation_subject(xid: str, conv) -> str:
     """Conversation-scoped participant subject for Particiapi's trusted-sub binding.
