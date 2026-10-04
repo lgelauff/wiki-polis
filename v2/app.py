@@ -6082,7 +6082,11 @@ def _register_routes(app: Flask) -> None:
     @_unauthenticated_site_limit()
     @limiter.limit('30 per minute')
     def oauth_callback():
-        if request.args.get('state') != session.pop('oauth_state', None):
+        # Both sides must be present: a callback with no state, arriving in a session
+        # that never started a login, would otherwise compare None with None.
+        expected_state = session.pop('oauth_state', None)
+        if not expected_state or request.args.get('state') != expected_state:
+            session.pop('oauth_code_verifier', None)
             app.logger.warning('OAuth callback: state mismatch (likely duplicate login tab or expired session)')
             # The failure is currently unreported to the user: they are bounced
             # back to /login with no explanation. base.html was the only consumer
