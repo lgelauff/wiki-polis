@@ -4286,7 +4286,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Quota, derivative similarity, idempotency conflict, or unknown outcome */
+            /** @description Quota, derivative similarity, identical statement already in the conversation, idempotency conflict, or unknown outcome */
             409: {
                 headers: {
                     [name: string]: unknown;

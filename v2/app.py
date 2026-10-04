@@ -77,8 +77,8 @@ from services.conversation_workspace import build_conversation_workspace
 from services.participations import (join_conversation)
 from services.participation_entry import build_participation_entry
 from services.explore import (ExploreGateway, ParticiapiSessionState,
-                              ExploreUpstreamError, build_explore_state,
-                              normalise_statements)
+                              ExploreUpstreamError, StatementAlreadyExists,
+                              build_explore_state, normalise_statements)
 from services.explore_votes import update_pass_signal
 from services.argument_mapping import build_argument_mapping_state
 from services.argument_commands import (
@@ -3335,7 +3335,11 @@ def _statement_api_payload(
             release_reservation(reservation.receipt)
             raise StatementQuotaExceeded()
 
-        statement_id = gateway.submit_statement(conv.polis_id, text_value)
+        try:
+            statement_id = gateway.submit_statement(conv.polis_id, text_value)
+        except ExploreUpstreamError as exc:
+            _log_statement_post_failure(conv, exc, derivative=derived_from is not None)
+            raise
         decision = 1 if policy == 'auto_approve' else 0
         if decision == 1:
             try:
@@ -3394,10 +3398,37 @@ def _statement_api_payload(
             # The committed pending receipt survives the rollback and blocks a
             # blind retry after an ambiguous upstream POST.
             raise
+        # A definite refusal: nothing was created upstream, so the key is free again.
         release_reservation(reservation.receipt)
+        if isinstance(exc, StatementAlreadyExists):
+            # Identical text is already in the conversation; a retry can never succeed.
+            raise
         raise StatementPreparationUnavailable() from exc
     finally:
         _save_explore_gateway_state(conv, gateway, states)
+
+
+def _log_statement_post_failure(
+    conv: 'Conversation', exc: ExploreUpstreamError, *, derivative: bool,
+) -> None:
+    """Record why Particiapi refused or failed a statement submission.
+
+    ``upstream_status`` is None when the gateway failed before a POST was answered (a
+    transport error, or a session refresh that failed).
+
+    Deliberately carries no statement text and no participant identifier (xid, subject,
+    username, pid): only what an operator needs to tell a duplicate from an outage.
+    """
+    # Upstream-controlled text: keep it short and on one log line.
+    problem_type = (
+        ''.join(ch for ch in exc.problem_type[:200] if ch.isprintable())
+        if exc.problem_type else None
+    )
+    current_app.logger.warning(
+        'statement submission to Particiapi failed: conversation_id=%s upstream_status=%s '
+        'problem_type=%s derivative=%s outcome_unknown=%s',
+        conv.id, exc.status_code, problem_type, derivative, exc.outcome_unknown,
+    )
 
 
 def _require_mod_for_conv(conv_id: int) -> 'Conversation':

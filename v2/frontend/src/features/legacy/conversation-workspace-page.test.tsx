@@ -236,6 +236,7 @@ test.each([
   ['statement_quota_exceeded', 409, 'conv-err-proposal-limit'],
   ['derivative_similarity_too_low', 409, 'conv-err-similarity'],
   ['unknown_parent_statement', 400, 'conv-err-original-unavailable'],
+  ['statement_exists', 409, 'conv-err-statement-exists'],
   ['command_outcome_unknown', 502, 'conv-err-outcome-unknown'],
   ['idempotency_conflict', 409, 'conv-err-outcome-unknown'],
   ['upstream_unavailable', 502, 'conv-err-submit-statement'],

@@ -820,6 +820,39 @@ test('submits clearer wording through the idempotent statement contract', async 
   expect(await screen.findByText('Proposed — heading to moderation')).toBeVisible();
 });
 
+test('a rewording identical to an existing statement says it is already in the consultation', async () => {
+  server.use(http.post(
+    new URL('/api/v1/conversations/community-strategy/statements', globalThis.location.origin).toString(),
+    () => HttpResponse.json({
+      error: {code: 'statement_exists', message: 'Server-side English that must not reach the page.'},
+    }, {status: 409}),
+  ));
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/explore']}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  fireEvent.click(await screen.findByRole('button', {name: 'Pass'}));
+  fireEvent.click(await screen.findByRole('button', {name: /Suggest different wording/}));
+  // The server refuses it as a duplicate; only the server can know what is already there.
+  fireEvent.change(screen.getByRole('textbox', {name: 'Suggest different wording'}), {
+    target: {value: 'Invest together in shared technical infrastructure.'},
+  });
+  fireEvent.click(screen.getByRole('button', {name: 'Submit & next'}));
+
+  // Catches a duplicate refused upstream reaching the participant as "please try again":
+  // resending the same wording can never succeed.
+  const alert = await screen.findByText(
+    'This statement already exists. Duplicates are not allowed.',
+  );
+  expect(alert).toHaveAttribute('role', 'alert');
+  expect(screen.queryByText('Could not submit statement. Please try again.')).toBeNull();
+  expect(document.body).not.toHaveTextContent('Server-side English that must not reach the page.');
+});
+
 test('submits a new statement from the Explore loop', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

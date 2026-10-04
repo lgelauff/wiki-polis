@@ -196,6 +196,9 @@ const STATEMENT_ERROR_MESSAGES: Record<string, string> = {
   statement_quota_exceeded: 'conv-err-proposal-limit',
   derivative_similarity_too_low: 'conv-err-similarity',
   unknown_parent_statement: 'conv-err-original-unavailable',
+  // Identical text is already in the consultation, so nothing was added and resending the
+  // same wording is refused every time. Say it is already there rather than inviting a retry.
+  statement_exists: 'conv-err-statement-exists',
   // The statement was sent and may have landed. Nothing reconciles the pending attempt, so
   // pressing submit again only brings this message back, and edited text under the same key
   // comes back as an idempotency conflict: the same case, so the same message. It tells the

@@ -17,7 +17,7 @@ from api.admin_routes import register_admin_routes
 from db import ACCOUNT_KIND_VOUCHER, Participant
 from services.participations import (EligibilityDenied, InvalidPseudonym,
                                      PseudonymUnavailable)
-from services.explore import ExploreUpstreamError
+from services.explore import ExploreUpstreamError, StatementAlreadyExists
 from services.idempotency import (CommandOutcomeUnknown, IdempotencyConflict,
                                   InvalidIdempotencyKey,
                                   validate_idempotency_key)
@@ -681,6 +681,13 @@ def create_api_v1_blueprint(
                 'upstream_unavailable',
                 'The voting service is temporarily unavailable. It is safe to retry with the same key.',
                 502,
+            )
+        except StatementAlreadyExists:
+            return error_response(
+                'statement_exists',
+                'A statement with this exact text already exists in this conversation. '
+                'Nothing was added; retrying the same text will not help.',
+                409,
             )
         except ExploreUpstreamError:
             return error_response(

@@ -3,13 +3,15 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
 import requests
 
 from db import (AuditEvent, CommandReceipt, ConversationBan, Participation,
                 StatementPassSignal, StatementProvenance,
                 StatementSimilarityScore, db)
 from polis_admin import PolisParticipantError, PolisServerError
-from services.explore import (ExploreGateway, ParticiapiSessionState,
+from services.explore import (ExploreGateway, ExploreUpstreamError,
+                              ParticiapiSessionState, StatementAlreadyExists,
                               build_explore_state)
 
 
@@ -719,3 +721,171 @@ def test_openapi_documents_idempotent_statement_command(client):
     )
     assert idempotency['required'] is True
     assert {'200', '201', '409', '502'} <= set(operation['responses'])
+
+
+_STATEMENT_EXISTS_PROBLEM = {
+    # The body Particiapi's problem_details_response() builds for STATEMENT_EXISTS
+    # (particiapi/problemdetails.py, api.py), raised on the conversation's unique-text index.
+    'title': 'statement already exists',
+    'type': 'tag:partici.app,2024:api:errors:statement_exists',
+    'status': 409,
+    'detail': '',
+}
+
+
+def test_identical_statement_is_reported_as_existing_and_frees_the_key(
+    auth_client, participant, conversation, caplog,
+):
+    """Particiapi refuses identical text with 409 STATEMENT_EXISTS. Reported as a generic
+    outage, it told the participant to try again, which can never succeed."""
+    participation = _join(participant, conversation)
+    participation.new_stmt_ids = [5]
+    db.session.commit()
+    _store_upstream_session(auth_client, conversation)
+    duplicate_text = 'An exact duplicate of a statement already in the pool.'
+
+    with (
+        caplog.at_level('WARNING'),
+        patch('app.polis_http.post', side_effect=[
+            _response(_STATEMENT_EXISTS_PROBLEM, status=409),
+            _response({'id': 52}, status=201),
+        ]),
+    ):
+        refused = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': duplicate_text},
+            headers={'Idempotency-Key': 'statement-key-51'},
+        )
+        assert CommandReceipt.query.count() == 0
+        db.session.refresh(participation)
+        assert participation.new_stmt_ids == [5]
+        reused = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'Different wording, same key.'},
+            headers={'Idempotency-Key': 'statement-key-51'},
+        )
+
+    assert refused.status_code == 409
+    assert refused.get_json()['error']['code'] == 'statement_exists'
+    assert reused.status_code == 201
+    assert reused.get_json()['data']['statementId'] == 52
+    db.session.refresh(participation)
+    assert participation.new_stmt_ids == [5, 52]
+    records = [r for r in caplog.records if 'statement submission to Particiapi failed' in r.getMessage()]
+    assert len(records) == 1
+    line = records[0].getMessage()
+    assert records[0].levelname == 'WARNING'
+    assert f'conversation_id={conversation.id}' in line
+    assert 'upstream_status=409' in line
+    assert 'problem_type=tag:partici.app,2024:api:errors:statement_exists' in line
+    assert 'derivative=False' in line
+    assert duplicate_text not in caplog.text
+    assert participant.mw_username not in line
+    assert participant.xid not in line
+
+
+def test_identical_derivative_records_no_provenance(
+    auth_client, participant, conversation, caplog,
+):
+    participation = _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    rewording = 'Original claim, word for word.'
+
+    with (
+        caplog.at_level('WARNING'),
+        patch('app._statement_text_map', return_value={7: 'Original claim'}),
+        patch('app._statement_similarity_scores', return_value={'char': 0.9}),
+        patch('app.polis_http.post', return_value=_response(
+            _STATEMENT_EXISTS_PROBLEM, status=409,
+        )),
+    ):
+        response = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': rewording, 'derivedFromStatementId': 7},
+            headers={'Idempotency-Key': 'statement-key-53'},
+        )
+
+    assert response.status_code == 409
+    assert response.get_json()['error']['code'] == 'statement_exists'
+    assert StatementProvenance.query.count() == 0
+    assert StatementSimilarityScore.query.count() == 0
+    assert CommandReceipt.query.count() == 0
+    db.session.refresh(participation)
+    assert not participation.new_stmt_ids
+    assert 'derivative=True' in caplog.text
+    assert rewording not in caplog.text
+
+
+@pytest.mark.parametrize('status, payload', [
+    (409, {'title': 'conversation inactive', 'status': 409,
+           'type': 'tag:partici.app,2024:api:errors:conversation_inactive'}),
+    (409, None),
+    (400, {'title': 'malformed request', 'status': 400,
+           'type': 'tag:partici.app,2024:api:errors:malformed_request'}),
+])
+def test_other_definite_statement_refusals_stay_retryable_upstream_failures(
+    auth_client, participant, conversation, caplog, status, payload,
+):
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    with (
+        caplog.at_level('WARNING'),
+        patch('app.polis_http.post', return_value=_response(payload, status=status)),
+    ):
+        response = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'A claim refused for another reason.'},
+            headers={'Idempotency-Key': 'statement-key-54'},
+        )
+
+    assert response.status_code == 502
+    assert response.get_json()['error']['code'] == 'upstream_unavailable'
+    assert CommandReceipt.query.count() == 0
+    assert f'upstream_status={status}' in caplog.text
+    assert 'A claim refused for another reason.' not in caplog.text
+
+
+def test_statement_server_error_keeps_outcome_unknown_and_is_logged(
+    auth_client, participant, conversation, caplog,
+):
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    with (
+        caplog.at_level('WARNING'),
+        patch('app.polis_http.post', return_value=_response(
+            _STATEMENT_EXISTS_PROBLEM | {'status': 500}, status=500,
+        )),
+    ):
+        response = auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'A claim that may have landed.'},
+            headers={'Idempotency-Key': 'statement-key-55'},
+        )
+
+    assert response.status_code == 502
+    assert response.get_json()['error']['code'] == 'command_outcome_unknown'
+    assert CommandReceipt.query.one().state == 'pending'
+    assert 'upstream_status=500' in caplog.text
+    assert 'outcome_unknown=True' in caplog.text
+
+
+def test_gateway_reads_problem_body_defensively():
+    """A body that is not JSON, or JSON that is not an object, is an ordinary failure."""
+    state = ParticiapiSessionState(cookie='c', csrf_token='t')
+    for body_error in (ValueError('not json'), None):
+        response = _response({}, status=409)
+        if body_error is not None:
+            response.json.side_effect = body_error
+        else:
+            response.json.return_value = ['statement_exists']
+        transport = MagicMock()
+        transport.post.return_value = response
+        gateway = ExploreGateway(
+            base_url='http://particiapi', transport=transport, state=state,
+            subject=None, subject_secret=None,
+        )
+        with pytest.raises(ExploreUpstreamError) as raised:
+            gateway.submit_statement('conv', 'text')
+        assert not isinstance(raised.value, StatementAlreadyExists)
+        assert raised.value.outcome_unknown is False
+        assert raised.value.problem_type is None
