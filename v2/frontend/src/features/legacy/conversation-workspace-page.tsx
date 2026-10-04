@@ -202,10 +202,12 @@ function Composer({mode, data, slug, csrfToken, onCancel, onSubmitted}: {
   const title = suggest ? msg('conv-triad-suggest-title') : msg('conv-triad-newstmt-title');
   const helperId = suggest ? 'composer-suggest-helper' : 'composer-newstmt-helper';
   const errorId = suggest ? 'composer-suggest-error' : 'composer-newstmt-error';
-  // Only a rewording that strayed too far is a problem with the text itself; the other
-  // failures say nothing about what was typed, so they do not mark the field invalid.
+  // Only a rejection of the text itself marks the field invalid: a rewording that strayed
+  // too far, or a text identical to an existing statement. The other failures say nothing
+  // about what was typed.
   const textRejected = mutation.error instanceof ApiContractError
-    && mutation.error.code === 'derivative_similarity_too_low';
+    && (mutation.error.code === 'derivative_similarity_too_low'
+      || mutation.error.code === 'statement_exists');
   return (
     <div id={suggest ? 'composer-suggest' : 'composer-newstmt'} className="v2-composer">
       <div className="v2-composer-header">

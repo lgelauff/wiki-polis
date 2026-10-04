@@ -9,9 +9,39 @@ import requests
 class ExploreUpstreamError(RuntimeError):
     """Particiapi could not complete an Explore read or command."""
 
-    def __init__(self, message: str, *, outcome_unknown: bool = False):
+    def __init__(self, message: str, *, outcome_unknown: bool = False,
+                 status_code: int | None = None, problem_type: str | None = None):
         super().__init__(message)
         self.outcome_unknown = outcome_unknown
+        # What Particiapi answered, for logging only: an HTTP status and the RFC 9457
+        # problem ``type`` when the body carried one. Never statement text.
+        self.status_code = status_code
+        self.problem_type = problem_type
+
+
+class StatementAlreadyExists(ExploreUpstreamError):
+    """Particiapi refused the statement because identical text is already in the conversation.
+
+    A definite refusal: nothing was created, and retrying the same text can never succeed.
+    """
+
+
+# Particiapi's problem-details ``type`` for a duplicate statement: problemdetails.py builds it
+# as ``tag:partici.app,2024:api:errors:<name>`` from ProblemDetails.STATEMENT_EXISTS, and
+# api.py returns it with HTTP 409 when the database's unique constraint on the text fires.
+_STATEMENT_EXISTS_SUFFIX = ':api:errors:statement_exists'
+
+
+def _problem_type(response) -> str | None:
+    """The problem-details ``type`` of an error response, or None. Never raises."""
+    try:
+        payload = response.json() if response.content else None
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get('type')
+    return value if isinstance(value, str) and value else None
 
 
 @dataclass
@@ -185,9 +215,17 @@ class ExploreGateway:
                 outcome_unknown=True,
             ) from exc
         if response.status_code != 201:
+            problem_type = _problem_type(response)
+            if (response.status_code == 409 and problem_type is not None
+                    and problem_type.lower().endswith(_STATEMENT_EXISTS_SUFFIX)):
+                raise StatementAlreadyExists(
+                    'Particiapi already holds a statement with this text.',
+                    status_code=409, problem_type=problem_type,
+                )
             raise ExploreUpstreamError(
                 f'Particiapi statement failed with HTTP {response.status_code}.',
                 outcome_unknown=response.status_code >= 500,
+                status_code=response.status_code, problem_type=problem_type,
             )
         payload = response.json() if response.content else {}
         statement_id = payload.get('id') if isinstance(payload, dict) else None
