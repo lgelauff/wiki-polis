@@ -1,5 +1,4 @@
 """Tests for login, OAuth callback, and logout flows."""
-import pytest
 from unittest.mock import MagicMock, patch
 
 import pytest
