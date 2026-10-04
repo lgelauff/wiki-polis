@@ -260,6 +260,7 @@ test.each([
 
 test.each([
   ['derivative_similarity_too_low', 409, 'true'],
+  ['statement_exists', 409, 'true'],
   ['statement_quota_exceeded', 409, null],
 ] as const)(
   'a %s error is tied to the composer field for assistive technology',

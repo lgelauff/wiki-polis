@@ -1,6 +1,7 @@
 """Explore-phase read and vote API contract tests."""
 
 import json
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -777,7 +778,7 @@ def test_identical_statement_is_reported_as_existing_and_frees_the_key(
     assert records[0].levelname == 'WARNING'
     assert f'conversation_id={conversation.id}' in line
     assert 'upstream_status=409' in line
-    assert 'problem_type=tag:partici.app,2024:api:errors:statement_exists' in line
+    assert "problem_type='tag:partici.app,2024:api:errors:statement_exists'" in line
     assert 'derivative=False' in line
     assert duplicate_text not in caplog.text
     assert participant.mw_username not in line
@@ -814,6 +815,36 @@ def test_identical_derivative_records_no_provenance(
     assert not participation.new_stmt_ids
     assert 'derivative=True' in caplog.text
     assert rewording not in caplog.text
+
+
+def test_upstream_problem_type_cannot_forge_log_lines_or_fields(
+    auth_client, participant, conversation, caplog,
+):
+    _join(participant, conversation)
+    _store_upstream_session(auth_client, conversation)
+    hostile = 'x\r\nstatement submission to Particiapi failed: forged=1 \u202e outcome_unknown=False'
+
+    with (
+        caplog.at_level('WARNING'),
+        patch('app.polis_http.post', return_value=_response(
+            {'title': 'x', 'status': 400, 'type': hostile}, status=400,
+        )),
+    ):
+        auth_client.post(
+            '/api/v1/conversations/test-conv/statements',
+            json={'text': 'Some new statement'},
+            headers={'Idempotency-Key': 'statement-key-hostile'},
+        )
+
+    records = [r for r in caplog.records if 'statement submission to Particiapi failed' in r.getMessage()]
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert '\n' not in message and '\r' not in message
+    # The hostile text sits inside one quoted value; the real fields follow it, in order.
+    assert re.search(
+        r"problem_type=('(?:[^'\\]|\\.)*') derivative=False outcome_unknown=False$", message,
+    )
+    assert "problem_type='x" in message
 
 
 @pytest.mark.parametrize('status, payload', [

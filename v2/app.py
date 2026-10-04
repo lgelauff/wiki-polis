@@ -3402,6 +3402,10 @@ def _statement_api_payload(
         release_reservation(reservation.receipt)
         if isinstance(exc, StatementAlreadyExists):
             # Identical text is already in the conversation; a retry can never succeed.
+            # Known gap: after an earlier submission ended outcome-unknown (timeout; its
+            # receipt stays pending), the same text under a new key lands here although the
+            # existing statement may be the participant's own, so it is reported as a
+            # duplicate and its provenance/new_stmt_ids are not recorded. Follow-up issue.
             raise
         raise StatementPreparationUnavailable() from exc
     finally:
@@ -3419,14 +3423,12 @@ def _log_statement_post_failure(
     Deliberately carries no statement text and no participant identifier (xid, subject,
     username, pid): only what an operator needs to tell a duplicate from an outage.
     """
-    # Upstream-controlled text: keep it short and on one log line.
-    problem_type = (
-        ''.join(ch for ch in exc.problem_type[:200] if ch.isprintable())
-        if exc.problem_type else None
-    )
+    # Upstream-controlled text: keep it short, and log it quoted (%r) so neither a line break
+    # nor spaces in it can fake a second line or extra key=value fields.
+    problem_type = exc.problem_type[:200] if exc.problem_type else None
     current_app.logger.warning(
         'statement submission to Particiapi failed: conversation_id=%s upstream_status=%s '
-        'problem_type=%s derivative=%s outcome_unknown=%s',
+        'problem_type=%r derivative=%s outcome_unknown=%s',
         conv.id, exc.status_code, problem_type, derivative, exc.outcome_unknown,
     )
 
