@@ -63,7 +63,7 @@ Two properties these preserve, both worth keeping in mind when reviewing a chang
 - **Roles are conversation-scoped and non-transitive.** `_require_mod_for_conv` looks up
   `AdminRole` filtered on `conversation_id`, so a moderator of conversation A gets 403 on
   conversation B. There is no "moderator of a conversation can see the admin index" path:
-  the admin catalog is `_is_global_admin()` only (`app.py:3492`).
+  the admin catalog (`_admin_catalog_api_payload`, `app.py:3492`) is `_is_global_admin()` only.
 - **A participation is not an access shortcut.** `app.py:4532-4537` states this
   explicitly: the access decision is made from the conversation's policy, and an existing
   participation is checked separately by the `_require_*_api_context` helpers.
@@ -95,23 +95,23 @@ on those routes — send a schema-valid body when sweeping.
 | `/api/v1/conversations` | GET | public; personalised when logged in | `_conversation_lane_api_payload` (app.py:2395) |
 | `/api/v1/conversations/<slug>/about` | GET | conversation access policy; no login check of its own | `_conversation_about_api_payload` (app.py:2531) |
 | `/api/v1/conversations/<slug>/workspace` | GET | conversation access policy + logged-in participant | `_conversation_workspace_api_payload` (app.py:2421) |
-| `/api/v1/conversations/<slug>/moderation-log` | GET | conversation access policy; no login check of its own | `_moderation_log_api_payload` (app.py:2542) |
+| `/api/v1/conversations/<slug>/moderation-log` | GET | conversation access policy; no login check of its own. Returns ban/unban events with pseudonym and moderator name, never the private reason | `_moderation_log_api_payload` (app.py:2542) |
 | `/api/v1/conversations/<slug>/outputs/<output_key>` | GET | conversation access policy + logged-in participant | `_conversation_output_api_payload` (app.py:2574) |
 | `/api/v1/conversations/<slug>/participation-entry` | GET | conversation access policy + logged-in participant | `_participation_entry_api_payload` (app.py:2694) |
 | `/api/v1/conversations/<slug>/pseudonym-suggestions` | GET | conversation access policy + logged-in participant | `_pseudonym_suggestions_api_payload` (app.py:2703) |
-| `/api/v1/conversations/<slug>/participation` | POST | conversation access policy; runs the join-eligibility check | `_join_conversation_api_payload` (app.py:2710) |
+| `/api/v1/conversations/<slug>/participation` | POST | conversation access policy; runs the join-eligibility check. Rate-limited 10/min | `_join_conversation_api_payload` (app.py:2710) |
 | `/api/v1/conversations/<slug>/results` | GET | conversation access policy; **no login needed once `phase_public_results` is set** — 401 only while the conversation is personal-results-only, 409 before results are published | `_results_report_api_payload` (app.py:3023) |
 | `/api/v1/conversations/<slug>/intermediate-results` | GET | conversation access policy; **no login needed once `phase_public_results` is set** — 401 only while the conversation is personal-results-only, 409 before results are published | `_intermediate_results_api_payload` (app.py:3065) |
-| `/api/v1/conversations/<slug>/flags` | POST | logged-in participant + access policy + joined, flags open, not banned | `_submit_content_flag_api_payload` (app.py:3200) |
-| `/api/v1/conversations/<slug>/identity-reveal` | GET | conversation access policy + logged-in participant | `_identity_reveal_api_payload` (app.py:2659) |
-| `/api/v1/conversations/<slug>/identity-reveal` | POST | conversation access policy + logged-in participant | `_reveal_identity_api_payload` (app.py:2663) |
+| `/api/v1/conversations/<slug>/flags` | POST | logged-in participant + access policy + joined, flags open, not banned. Category must be in the allowlist; the note is HTML-stripped and cut to 1000 characters | `_submit_content_flag_api_payload` (app.py:3200) |
+| `/api/v1/conversations/<slug>/identity-reveal` | GET | conversation access policy + logged-in participant who joined; 409 until the conversation is closed | `_identity_reveal_api_payload` (app.py:2659) |
+| `/api/v1/conversations/<slug>/identity-reveal` | POST | as the GET, plus: body must be exactly `{"confirm": true}`, accepted only while the reveal window is open, rate-limited 5/min | `_reveal_identity_api_payload` (app.py:2663) |
 | `/api/v1/conversations/<slug>/explore` | GET | participation + explore phase open | `_explore_api_payload` (app.py:2817) |
 | `/api/v1/conversations/<slug>/statements/<int:statement_id>/vote` | PUT | participation + explore phase open | `_explore_vote_api_payload` (app.py:2828) |
-| `/api/v1/conversations/<slug>/statements` | POST | participation + explore phase open | `_statement_api_payload` (app.py:3253) |
+| `/api/v1/conversations/<slug>/statements` | POST | participation + explore phase open; 1–280 characters; per-participant quota (`new_stmt_max`, default 3) | `_statement_api_payload` (app.py:3253) |
 | `/api/v1/conversations/<slug>/arguments` | GET | participation + argument phase open | `_argument_mapping_api_payload` (app.py:3085) |
 | `/api/v1/conversations/<slug>/featured-statements/<int:featured_statement_id>/arguments` | POST | participation + argument phase open | `_submit_argument_api_payload` (app.py:3133) |
 | `/api/v1/conversations/<slug>/featured-statements/<int:featured_statement_id>/contributions/<side>/skip` | PUT | participation + argument phase open | `_skip_argument_api_payload` (app.py:3161) |
-| `/api/v1/conversations/<slug>/arguments/<int:argument_id>/priority` | PUT | participation + argument phase open | `_set_argument_priority_api_payload` (app.py:3180) |
+| `/api/v1/conversations/<slug>/arguments/<int:argument_id>/priority` | PUT | participation + argument phase open; the argument must not be hidden, and the per-side contribution gate and priority budget apply | `_set_argument_priority_api_payload` (app.py:3180) |
 | `/api/v1/conversations/<slug>/informed-voting` | GET | participation + informed-voting phase open | `_informed_voting_api_payload` (app.py:2952) |
 | `/api/v1/conversations/<slug>/featured-statements/<int:featured_statement_id>/informed-vote` | PUT | participation + informed-voting phase open | `_informed_vote_api_payload` (app.py:2989) |
 
@@ -136,11 +136,10 @@ routes are organizer-or-better. Publishing the final report, pausing, archiving,
 scheduling a transition and setting the phase set are deliberately *not* available to a
 conversation organizer — a conversation-scoped organizer cannot end a consultation.
 
-Two rows carry a clarification a table of routes cannot know: role *grant* is
+One row carries a clarification a table of routes cannot know: role *grant* is
 global-admin-only even though role *listing* is moderator-gated
 (`_replace_admin_roles_api_payload` calls `_require_mod_for_conv` and then
-`_is_global_admin()` itself, `app.py:4428-4429`), and `POST …/participation`
-additionally runs the join-time eligibility check.
+`_is_global_admin()` itself, `app.py:4428-4429`).
 
 | Route | Method | Authorization | Enforced by |
 |---|---|---|---|
@@ -148,7 +147,7 @@ additionally runs the join-time eligibility check.
 | `/api/v1/admin/conversations` | POST | **global admin only** | `_create_admin_conversation_api_payload` (app.py:3507) |
 | `/api/v1/admin/global-admin-grants` | POST | **global admin only** | `_grant_global_admin_api_payload` (app.py:3559) |
 | `/api/v1/admin/global-admins/<int:participant_id>` | PUT | **global admin only** | `_set_global_admin_api_payload` (app.py:3580) |
-| `/api/v1/admin/conversations/<id>` | DELETE | **global admin only** | `_delete_admin_conversation_api_payload` (app.py:4206) |
+| `/api/v1/admin/conversations/<id>` | DELETE | **global admin only**; deletes only when Polis reports zero valid votes (`delete_empty_conversation`), otherwise refuses | `_delete_admin_conversation_api_payload` (app.py:4206) |
 | `/api/v1/admin/conversations/<id>/termination` | GET | **global admin only** | `_admin_termination_api_payload` (app.py:3776) |
 | `/api/v1/admin/conversations/<id>/pause` | PUT | **global admin only** | `_set_admin_pause_api_payload` (app.py:4332) |
 | `/api/v1/admin/conversations/<id>/archive` | PUT | **global admin only** | `_set_admin_archive_api_payload` (app.py:4347) |
@@ -157,8 +156,8 @@ additionally runs the join-time eligibility check.
 | `/api/v1/admin/conversations/<id>/publication` | POST | **global admin only** | `_publish_admin_report_api_payload` (app.py:4407) |
 | `/api/v1/admin/conversations/<id>/phase` | PUT | conversation **organizer** or global admin | `_advance_admin_phase_api_payload` (app.py:4295) |
 | `/api/v1/admin/conversations/<id>/recommendation-tier` | PUT | conversation **organizer** or global admin | `_update_admin_recommendation_tier_api_payload` (app.py:4264) |
-| `/api/v1/admin/conversations/<id>/settings` | PUT | conversation **organizer** or global admin | `_update_admin_settings_api_payload` (app.py:4230) |
-| `/api/v1/admin/conversations/<id>/settings` | GET | moderator or global admin; the demo-access switch is global-admin only | `_admin_settings_api_payload` (app.py:3758) |
+| `/api/v1/admin/conversations/<id>/settings` | PUT | conversation **organizer** or global admin; moving a consultation into or out of the Practice Environment (`demo`) is global-admin only | `_update_admin_settings_api_payload` (app.py:4230) |
+| `/api/v1/admin/conversations/<id>/settings` | GET | moderator or global admin | `_admin_settings_api_payload` (app.py:3758) |
 | `/api/v1/admin/conversations/<id>` | GET | moderator or global admin | `_admin_lifecycle_api_payload` (app.py:3622) |
 | `/api/v1/admin/conversations/<id>/roles` | GET | moderator or global admin; role grant/revoke is global-admin only | `_admin_role_roster_api_payload` (app.py:3600) |
 | `/api/v1/admin/conversations/<id>/roles/<int:participant_id>` | PUT | moderator **and** global admin | `_replace_admin_roles_api_payload` (app.py:4425) |
