@@ -1136,3 +1136,7 @@ def test_a_site_admin_is_not_offered_a_consultation_they_already_joined(admin_cl
 
     assert 'joined-conv' not in _lane_slugs(data, 'available')
     assert 'joined-conv' in _lane_slugs(data, 'moderating')
+    joined_groups = ('needsAttention', 'caughtUp', 'inactive', 'archived')
+    assert any('joined-conv' in _lane_slugs(data, group) for group in joined_groups)
+    moderating_card = next(card for card in data['groups']['moderating'] if card['slug'] == 'joined-conv')
+    assert 'admin' in moderating_card['links']

@@ -242,13 +242,14 @@ def build_conversation_lane(
                                    Conversation.id.in_(invited_ids or [0]),
                                ),
                            )))
+    # A consultation you moderate but have not joined is deliberately NOT removed from
+    # `available`: that is the only place to join it. You moderate it, so its API card also
+    # carries the admin link, which the home page shows only under "You moderate". A site admin
+    # moderates everything.
     lane.available = (available_query
                       .filter(~Conversation.id.in_(joined_ids or [0]))
                       .order_by(Conversation.created_at.desc()).all())
 
-    # A consultation you moderate but have not joined stays in `available` (the only place to
-    # join it); you moderate it, so the API card also carries the admin link, which the home page
-    # shows only under "You moderate". A site admin moderates everything.
     if participant:
         if global_admin:
             lane.moderating = Conversation.query.order_by(Conversation.created_at.desc()).all()
