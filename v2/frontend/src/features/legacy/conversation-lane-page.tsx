@@ -14,6 +14,7 @@ import {useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {outputLabel, outputPending, outputTooltip, phaseLabel} from '../../i18n/server-labels';
 import {useDateFormat} from '../../i18n/dates';
+import {useLoginHref} from '../../login-href';
 
 type ConversationCard = components['schemas']['ConversationCard'];
 type ConversationOutput = components['schemas']['ConversationOutput'];
@@ -352,6 +353,7 @@ export function ConversationLanePage({space}: {space: ConversationSpace}) {
   const msg = useMessage();
   const {data} = useSuspenseQuery(conversationLaneQuery(space));
   const {data: session} = useSuspenseQuery(sessionQuery());
+  const login = useLoginHref(session.links.login);
   const [mode, setMode] = useState<'yours' | 'browse'>(() => {
     try {
       return localStorage.getItem('home-mode') === 'browse' ? 'browse' : 'yours';
@@ -417,7 +419,7 @@ export function ConversationLanePage({space}: {space: ConversationSpace}) {
           + `${escapeHtml(msg('home-banner-open-issue'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
 
         {!data.authenticated ? (
-          <AnonymousLane conversations={groups.available} developerLogins={session.developerLogins} loginHref={session.links.login} />
+          <AnonymousLane conversations={groups.available} developerLogins={session.developerLogins} loginHref={login} />
         ) : <>
           <h1 className="sr-only">{msg('home-heading')}</h1>
           <ConsultationFlow />

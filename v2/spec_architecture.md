@@ -202,9 +202,9 @@ git SHA is surfaced separately — in the SPA footer and as `gitVersion` from
 `GET /api/v1/session` — and is what a reader should compare against a deploy.
 
 **Scope:** only truly static files benefit from this — fonts, stylesheets, and bundled JS.
-`/api/v1/*` responses and dynamically generated Polis cluster images are not under
-`/static/` and are always served fresh. The `/api/v1/*` responses that could otherwise be
-cached carry `Cache-Control: no-store` explicitly, since they are per-participant.
+`/api/v1/*` responses are not under `/static/` and are always served fresh. The
+`/api/v1/*` responses that could otherwise be cached carry `Cache-Control: no-store`
+explicitly, since they are per-participant.
 
 ---
 

@@ -77,8 +77,8 @@ from services.conversation_workspace import build_conversation_workspace
 from services.participations import (join_conversation)
 from services.participation_entry import build_participation_entry
 from services.explore import (ExploreGateway, ParticiapiSessionState,
-                              ExploreUpstreamError, build_explore_state,
-                              normalise_statements)
+                              ExploreUpstreamError, StatementAlreadyExists,
+                              build_explore_state, normalise_statements)
 from services.explore_votes import update_pass_signal
 from services.argument_mapping import build_argument_mapping_state
 from services.argument_commands import (
@@ -1380,43 +1380,72 @@ def _publish_final_report(conv) -> Phase6ResultsFilter:
 
 
 def _process_due_scheduled_transitions(now: datetime | None = None) -> dict:
+    """Fire every due scheduled phase transition, each exactly once even if runs overlap.
+
+    jobs.yaml runs this every five minutes, and a run can overlap another (a manual re-run,
+    ``toolforge jobs restart``, a second pod). The phase change is idempotent, but the
+    append-only ``phase.schedule.fire`` / ``.abort`` audit rows are not. So the candidate
+    list is read without a lock, and each conversation is then handled in its own transaction:
+    locked with a plain ``SELECT … FOR UPDATE`` (any MariaDB version), re-checked, acted on and
+    committed. A second run that reaches the same row waits for the first to commit, then finds
+    the schedule cleared or frozen and skips it. A crash leaves nothing half-claimed: an
+    uncommitted lock is simply released. One conversation that raises is rolled back, logged and
+    counted as failed; the others still run.
+    """
     now = now or datetime.now(timezone.utc)
-    due = Conversation.query.filter(
+    candidate_ids = [cid for (cid,) in db.session.query(Conversation.id).filter(
         Conversation.active.is_(True),
         Conversation.scheduled_transition_at.isnot(None),
         Conversation.scheduled_transition_frozen.is_(False),
-    ).all()
-    fired = aborted = skipped = 0
-    for conv in due:
-        scheduled_at = _normalise_utc(conv.scheduled_transition_at)
-        if scheduled_at is None or scheduled_at > now:
-            skipped += 1
-            continue
-        ctx = _transition_context(conv)
-        if (
-            not _is_schedulable_transition(ctx)
-            or conv.scheduled_transition_target != ctx['target']['key']
-            or any(p.get('met') is False for p in ctx['preconditions'])
-        ):
-            conv.scheduled_transition_frozen = True
-            db.session.commit()
-            record_audit('phase.schedule.abort', conv_id=conv.id,
-                         target_type='phase',
-                         target_id=conv.scheduled_transition_target,
-                         outcome='blocked')
-            aborted += 1
-            continue
-        source, target = _apply_phase_transition(conv, ctx)
+    ).order_by(Conversation.id).all()]
+    db.session.rollback()                     # end the read; no row is held while we work
+    counts = {'fired': 0, 'aborted': 0, 'skipped': 0, 'failed': 0}
+    for conv_id in candidate_ids:
+        try:
+            counts[_process_one_scheduled_transition(conv_id, now)] += 1
+        except Exception:                      # noqa: BLE001 — one bad row must not block the rest
+            db.session.rollback()
+            current_app.logger.exception('Scheduled transition failed for conversation %s', conv_id)
+            counts['failed'] += 1
+    return counts
+
+
+def _process_one_scheduled_transition(conv_id: int, now: datetime) -> str:
+    """Lock one conversation, re-check that its schedule is still due, act, and commit.
+
+    Returns 'fired', 'aborted' or 'skipped'. The re-check is what makes an overlapping run
+    harmless: by the time it holds the lock, the first run has cleared or frozen the schedule.
+    """
+    conv = (Conversation.query.filter_by(id=conv_id)
+            .with_for_update().populate_existing().first())
+    scheduled_at = _normalise_utc(conv.scheduled_transition_at) if conv else None
+    if (conv is None or not conv.active or conv.scheduled_transition_frozen
+            or scheduled_at is None or scheduled_at > now):
+        db.session.rollback()                 # release the lock; nothing to do
+        return 'skipped'
+    ctx = _transition_context(conv)
+    if (
+        not _is_schedulable_transition(ctx)
+        or conv.scheduled_transition_target != ctx['target']['key']
+        or any(p.get('met') is False for p in ctx['preconditions'])
+    ):
+        conv.scheduled_transition_frozen = True
         db.session.commit()
-        record_audit('phase.schedule.fire', conv_id=conv.id,
-                     target_type='phase', target_id=target,
-                     from_phase=source)
-        if not _sync_vis_type(conv):
-            current_app.logger.warning(
-                'Scheduled phase transition fired for %s but vis_type sync failed',
-                conv.slug)
-        fired += 1
-    return {'fired': fired, 'aborted': aborted, 'skipped': skipped}
+        record_audit('phase.schedule.abort', conv_id=conv.id,
+                     target_type='phase',
+                     target_id=conv.scheduled_transition_target,
+                     outcome='blocked')
+        return 'aborted'
+    source, target = _apply_phase_transition(conv, ctx)
+    db.session.commit()
+    record_audit('phase.schedule.fire', conv_id=conv.id,
+                 target_type='phase', target_id=target,
+                 from_phase=source)
+    if not _sync_vis_type(conv):
+        current_app.logger.warning(
+            'Scheduled phase transition fired for %s but vis_type sync failed',
+            conv.slug)
+    return 'fired'
 
 
 OUTPUT_DEFINITIONS = [
@@ -1867,6 +1896,18 @@ def _short_title(text: str, max_len: int = 80) -> str:
 def _safe_redirect(target: str, fallback: str) -> str:
     """Return target if it is a same-host relative URL, otherwise fallback."""
     if not target:
+        return fallback
+    # Only a plain path on this site. Browsers read a backslash as a slash and drop
+    # tabs and newlines, so "/\evil.example" would pass the host check below and still
+    # leave the site; "//host" is protocol-relative. (#432 feeds ?next= in here.)
+    if (not target.startswith('/') or target.startswith('//')
+            or any(ch in target for ch in '\\\t\r\n')):
+        return fallback
+    # Dot segments: a browser resolves "/.//evil.example" and "/..//evil.example" (also
+    # spelled with %2e) to the path "//evil.example", which reads as protocol-relative
+    # wherever the path is reused on its own. Our own links never contain them.
+    path = target.split('?', 1)[0].split('#', 1)[0]
+    if any(seg.lower().replace('%2e', '.') in ('.', '..') for seg in path.split('/')):
         return fallback
     ref  = urlparse(request.host_url)
     test = urlparse(urljoin(request.host_url, target))
@@ -3323,7 +3364,11 @@ def _statement_api_payload(
             release_reservation(reservation.receipt)
             raise StatementQuotaExceeded()
 
-        statement_id = gateway.submit_statement(conv.polis_id, text_value)
+        try:
+            statement_id = gateway.submit_statement(conv.polis_id, text_value)
+        except ExploreUpstreamError as exc:
+            _log_statement_post_failure(conv, exc, derivative=derived_from is not None)
+            raise
         decision = 1 if policy == 'auto_approve' else 0
         if decision == 1:
             try:
@@ -3382,10 +3427,39 @@ def _statement_api_payload(
             # The committed pending receipt survives the rollback and blocks a
             # blind retry after an ambiguous upstream POST.
             raise
+        # A definite refusal: nothing was created upstream, so the key is free again.
         release_reservation(reservation.receipt)
+        if isinstance(exc, StatementAlreadyExists):
+            # Identical text is already in the conversation; a retry can never succeed.
+            # Known gap: after an earlier submission ended outcome-unknown (timeout; its
+            # receipt stays pending), the same text under a new key lands here although the
+            # existing statement may be the participant's own, so it is reported as a
+            # duplicate and its provenance/new_stmt_ids are not recorded. Follow-up issue.
+            raise
         raise StatementPreparationUnavailable() from exc
     finally:
         _save_explore_gateway_state(conv, gateway, states)
+
+
+def _log_statement_post_failure(
+    conv: 'Conversation', exc: ExploreUpstreamError, *, derivative: bool,
+) -> None:
+    """Record why Particiapi refused or failed a statement submission.
+
+    ``upstream_status`` is None when the gateway failed before a POST was answered (a
+    transport error, or a session refresh that failed).
+
+    Deliberately carries no statement text and no participant identifier (xid, subject,
+    username, pid): only what an operator needs to tell a duplicate from an outage.
+    """
+    # Upstream-controlled text: keep it short, and log it quoted (%r) so neither a line break
+    # nor spaces in it can fake a second line or extra key=value fields.
+    problem_type = exc.problem_type[:200] if exc.problem_type else None
+    current_app.logger.warning(
+        'statement submission to Particiapi failed: conversation_id=%s upstream_status=%s '
+        'problem_type=%r derivative=%s outcome_unknown=%s',
+        conv.id, exc.status_code, problem_type, derivative, exc.outcome_unknown,
+    )
 
 
 def _require_mod_for_conv(conv_id: int) -> 'Conversation':
@@ -5597,8 +5671,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         click.echo(
             'Scheduled transitions: '
             f'{result["fired"]} fired, {result["aborted"]} aborted, '
-            f'{result["skipped"]} not due.'
+            f'{result["skipped"]} not due or already handled, {result["failed"]} failed.'
         )
+        if result['failed']:
+            raise SystemExit(1)                # the job's failure email names the run; logs name the conversation
 
     # UI locale config: which locales are offered (CSV) + the fallback. Defaults to
     # English and the in-repo translations, so the language switcher is visible as
@@ -6008,6 +6084,13 @@ def _register_routes(app: Flask) -> None:
                 return redirect(url_for('dev_login'))
             return 'OAuth not configured — set OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_REDIRECT_URI', 503
 
+        # Deep links arrive as /login?next=/c/<slug> (SPA client routes are not
+        # behind login_required, so the decorator's session['next'] never fires).
+        # Store the validated same-origin path for the OAuth callback (#432).
+        next_url = request.args.get('next', '').strip()
+        if next_url:
+            session['next'] = _safe_redirect(next_url, '/')
+
         code_verifier  = secrets.token_urlsafe(64)
         code_challenge = base64.urlsafe_b64encode(
             hashlib.sha256(code_verifier.encode()).digest()
@@ -6032,7 +6115,11 @@ def _register_routes(app: Flask) -> None:
     @_unauthenticated_site_limit()
     @limiter.limit('30 per minute')
     def oauth_callback():
-        if request.args.get('state') != session.pop('oauth_state', None):
+        # Both sides must be present: a callback with no state, arriving in a session
+        # that never started a login, would otherwise compare None with None.
+        expected_state = session.pop('oauth_state', None)
+        if not expected_state or request.args.get('state') != expected_state:
+            session.pop('oauth_code_verifier', None)
             app.logger.warning('OAuth callback: state mismatch (likely duplicate login tab or expired session)')
             # The failure is currently unreported to the user: they are bounced
             # back to /login with no explanation. base.html was the only consumer

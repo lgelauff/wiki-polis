@@ -4,6 +4,7 @@ import {useLocation} from 'react-router-dom';
 
 import {sessionQuery} from '../../api/queries';
 import {InternalLink} from '../../internal-link';
+import {useLoginHref} from '../../login-href';
 import {useLocale, useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 
@@ -138,6 +139,7 @@ export function LegacyShell({
   const msg = useMessage();
   const activeLocale = useLocale();
   const {data: session} = useSuspenseQuery(sessionQuery());
+  const login = useLoginHref(session.links.login);
   const authenticated = session.state === 'authenticated';
   // A voucher account is signed in but has no username to show (#368).
   const signedIn = authenticated || session.state === 'voucher';
@@ -206,7 +208,7 @@ export function LegacyShell({
                 </form>
               </>
             ) : (
-              <InternalLink href={session.links.login} className="header-login-link">{msg('base-log-in')}</InternalLink>
+              <InternalLink href={login} className="header-login-link">{msg('base-log-in')}</InternalLink>
             )}
           </div>
         </div>
