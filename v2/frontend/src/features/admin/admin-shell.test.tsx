@@ -133,6 +133,16 @@ test('a consultation with no open flags carries no badge', async () => {
   expect(within(nav).queryByText(/open flag/)).toBeNull();
 });
 
+test('the top bar repeats no section link: the sidebar is the one way in', async () => {
+  serveSession();
+  const {container} = renderShell();
+  await screen.findByRole('navigation', {name: 'Admin breadcrumb'});
+
+  const topbar = container.querySelector('.admin-shell__topbar') as HTMLElement;
+  expect(within(topbar).queryByRole('link', {name: 'Overview'})).toBeNull();
+  expect(within(topbar).queryByRole('link', {name: 'Moderation'})).toBeNull();
+});
+
 test('the breadcrumb ends at the current section', async () => {
   serveSession();
   renderShell();
@@ -177,8 +187,8 @@ test('the role glyph explains itself on hover and to a screen reader', async () 
 
   // A symbol explains on hover (the SVG <title>) and, since it says what the word beside it
   // is, it carries the same words as its accessible name.
-  const glyph = await screen.findByRole('img', {name: 'Your assigned role on this platform'});
-  expect(glyph.querySelector('title')).toHaveTextContent('Your assigned role on this platform');
+  const glyph = await screen.findByRole('img', {name: 'Your role in this consultation'});
+  expect(glyph.querySelector('title')).toHaveTextContent('Your role in this consultation');
   expect(glyph.parentElement).toHaveTextContent('Site admin');
 });
 
@@ -188,7 +198,7 @@ test('the footer keeps the CC0 licence line, as quiet text with one link', async
 
   await screen.findByRole('navigation', {name: 'Admin sections'});
   const footer = container.querySelector('footer.admin-shell__footer')!;
-  expect(footer).toHaveTextContent('Statements and arguments are released into the public domain (CC0');
+  expect(footer).toHaveTextContent('All text you write here that is intended for publication is released into the public domain (CC0');
   const link = within(footer as HTMLElement).getByRole('link', {name: /^CC0/});
   expect(link).toHaveAttribute('href', 'https://creativecommons.org/publicdomain/zero/1.0/');
   expect(footer.querySelectorAll('a, button, input, select')).toHaveLength(1);
@@ -276,6 +286,8 @@ test('the two "also coming" lines are muted text, not controls', async () => {
   for (const line of lines) {
     expect(line.closest('a, button, [tabindex]')).toBeNull();
     expect(line).toHaveClass('admin-shell__coming');
+    // Untranslated on purpose, so it says which language it is in (WCAG 3.1.2).
+    expect(line).toHaveAttribute('lang', 'en');
   }
   expect(lines[0]).toHaveTextContent('Also coming: Admin home — not available yet (#473)');
   expect(lines[1]).toHaveTextContent('Also coming: switching between consultations — not available yet (#473)');

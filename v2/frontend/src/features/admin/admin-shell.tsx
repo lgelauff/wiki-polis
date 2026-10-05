@@ -183,14 +183,14 @@ export function AdminShell({children, data, gatingType, title, toast}: {
     {id: 'settings', label: msg('admin-overview-card-settings'), href: data.links.settings},
     {id: 'moderation', label: msg('admin-shell-moderation'), href: data.links.moderation,
       // A zero is not worth a badge: an empty counter is noise, not information.
-      badge: openFlags > 0 ? msg('admin-shell-open-flags', openFlags) : null},
+      badge: openFlags > 0 ? msg('adminconv-open-count', openFlags) : null},
     {id: 'content', label: msg('admin-shell-content'), href: data.links.statements},
   ];
 
   return (
     <div className="admin-shell">
       <header className="admin-shell__topbar">
-        <p className="admin-shell__coming">Also coming: Admin home — not available yet (#473)</p>
+        <p className="admin-shell__coming" lang="en">Also coming: Admin home — not available yet (#473)</p>
         <nav className="admin-shell__crumbs" aria-label={msg('admin-crumb-aria')}>
           <ol>
             <li className="admin-shell__crumb">{data.conversation.title}</li>
@@ -206,10 +206,6 @@ export function AdminShell({children, data, gatingType, title, toast}: {
             {/* Text, not a link: the DTO carries no link to the console's own page, and a
                 link to where you already are is an action that goes nowhere. */}
             <span className="admin-shell__switch-option is-current" aria-current="true">{msg('base-admin-badge')}</span>
-          </div>
-          <div className="admin-shell__jumps">
-            <InternalLink href={data.links.moderation} className="admin-shell__jump">{msg('admin-shell-moderation')}</InternalLink>
-            <InternalLink href={overviewHref} className="admin-shell__jump">{msg('admin-shell-overview')}</InternalLink>
           </div>
           <div className="admin-shell__identity">
             {/* The name is cut off with an ellipsis when long, so the whole of it is the hover title. */}
@@ -242,7 +238,7 @@ export function AdminShell({children, data, gatingType, title, toast}: {
               </span>
             )}
           </div>
-          <p className="admin-shell__coming">Also coming: switching between consultations — not available yet (#473)</p>
+          <p className="admin-shell__coming" lang="en">Also coming: switching between consultations — not available yet (#473)</p>
           {narrow && (
             <button
               type="button"
@@ -281,10 +277,10 @@ export function AdminShell({children, data, gatingType, title, toast}: {
         </main>
       </div>
 
-      {/* The one licence line the legacy footer carried: admin-written texts are CC0 as well
-          (epic #473 decisions). Quiet text, the git version left out. */}
+      {/* Licence line for the people who write here: admin-written texts meant for publication are
+          CC0 as well (epic #473 decisions). Quiet text, the git version left out. */}
       <footer className="admin-shell__footer">
-        <span dangerouslySetInnerHTML={richHtml(msg('base-footer-licence',
+        <span dangerouslySetInnerHTML={richHtml(msg('admin-shell-licence',
           '<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">'
           + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
       </footer>

@@ -124,19 +124,6 @@
   font-weight: 500;
 }
 
-.admin-shell__jumps {
-  display: flex;
-  align-items: center;
-  gap: .875rem;
-}
-
-.admin-shell__jump {
-  color: var(--shell-body);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  white-space: nowrap;
-}
-
 .admin-shell__identity {
   display: flex;
   align-items: center;
