@@ -9,6 +9,7 @@ import {
 } from '../../api/queries';
 import {ConsultationFlow} from './consultation-flow';
 import {LegacyShell} from './legacy-shell';
+import {LoginGlobe} from './login-prompt';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
@@ -310,11 +311,7 @@ function AnonymousLane({
       <p style={{fontSize: 15, lineHeight: 1.6, color: 'var(--body)', maxWidth: 520}}>{msg('home-hero-body')}</p>
       <p style={{fontSize: 15, lineHeight: 1.6, color: 'var(--body)', maxWidth: 520}}>{msg('home-hero-detail')}</p>
       <InternalLink href={loginHref} className="login-btn" style={{marginTop: 18}}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.4 1.6" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" />
-          <ellipse cx="12" cy="12" rx="9" ry="3.5" />
-          <ellipse cx="12" cy="12" rx="3.5" ry="9" />
-        </svg>
+        <LoginGlobe />
         {msg('home-login-wikimedia')}
       </InternalLink>
       {developerLogins.length > 0 && <div style={{marginTop: '1.25rem', padding: '10px 14px', border: '1px dashed var(--spot)', borderRadius: 8, background: 'rgba(245,158,11,0.05)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap'}}>

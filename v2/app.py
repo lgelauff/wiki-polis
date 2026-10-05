@@ -6189,8 +6189,10 @@ def _register_routes(app: Flask) -> None:
 
         return redirect(_safe_redirect(next_url or '', '/'))
 
+    # Not behind login_required, which checks for a Wikimedia username: a voucher account
+    # has none, so its "log out" button used to start a Wikimedia login instead of logging
+    # out (#510). Any session that passes the CSRF check is cleared and sent home.
     @app.post('/logout')
-    @login_required
     def logout():
         session.clear()
         return redirect('/')

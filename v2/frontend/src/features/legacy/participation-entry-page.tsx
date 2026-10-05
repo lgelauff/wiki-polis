@@ -16,7 +16,7 @@ import {InternalLink} from '../../internal-link';
 import {useMessage} from '../../i18n/messages';
 import {joinErrorCopy} from '../../i18n/server-labels';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
-import {useLoginHref} from '../../login-href';
+import {LoginPrompt} from './login-prompt';
 
 function requiredSlug(value: string | undefined) {
   if (!value) throw new Error('Missing route parameter: slug');
@@ -26,10 +26,7 @@ function requiredSlug(value: string | undefined) {
 export function ParticipationEntryLegacyPage() {
   const slug = requiredSlug(useParams().slug);
   const {data: session} = useSuspenseQuery(sessionQuery());
-  const login = useLoginHref(session.links.login);
-  if (session.state !== 'authenticated' && session.state !== 'voucher') {
-    return <NavigationRedirect href={login} />;
-  }
+  if (session.state !== 'authenticated' && session.state !== 'voucher') return <LoginPrompt />;
   return <AuthenticatedParticipationEntry slug={slug} csrfToken={session.csrfToken} voucher={session.state === 'voucher'} />;
 }
 

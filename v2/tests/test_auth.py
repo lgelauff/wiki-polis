@@ -262,6 +262,19 @@ def test_logout_clears_session(auth_client):
         assert 'username' not in sess
 
 
+def test_a_voucher_account_logs_out_instead_of_being_sent_to_the_login(client, participant):
+    """A voucher session has an xid and no Wikimedia username. Its log-out button must log it
+    out, not start a Wikimedia login (#510)."""
+    with client.session_transaction() as sess:
+        sess['xid'] = participant.xid
+        sess['emailable'] = False
+    resp = client.post('/logout')
+    assert resp.status_code == 302
+    assert resp.headers['Location'] == '/'
+    with client.session_transaction() as sess:
+        assert 'xid' not in sess
+
+
 def test_protected_api_denies_unauthenticated_and_leaks_nothing(client, conversation):
     """Unauthenticated callers get no protected data.
 

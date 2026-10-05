@@ -12,7 +12,7 @@ import {useMessage} from '../../i18n/messages';
 import {nodeSlot, withNodes} from '../../i18n/message-nodes';
 import {richHtml} from '../../i18n/rich-html';
 import {RevealTimeline} from './reveal-timeline';
-import {useLoginHref} from '../../login-href';
+import {LoginPrompt} from './login-prompt';
 
 function requiredSlug(value: string | undefined) {
   if (!value) throw new Error('Missing route parameter: slug');
@@ -26,8 +26,7 @@ function daysBetween(start: string, end: string) {
 export function IdentityRevealLegacyPage() {
   const slug = requiredSlug(useParams().slug);
   const {data: session} = useSuspenseQuery(sessionQuery());
-  const login = useLoginHref(session.links.login);
-  if (session.state !== 'authenticated') return <NavigationRedirect href={login} />;
+  if (session.state !== 'authenticated') return <LoginPrompt />;
   return <AuthenticatedIdentityReveal slug={slug} csrfToken={session.csrfToken} />;
 }
 
