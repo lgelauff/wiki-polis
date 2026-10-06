@@ -557,10 +557,12 @@ test('joins a conversation through the typed command', async () => {
   fireEvent.click(screen.getByRole('checkbox', {name: /I understand that my responses/}));
   fireEvent.click(joinButton);
 
+  // The tick travels with the join: the server refuses a join without it (#341).
   await waitFor(() => expect(joined).toHaveBeenCalledWith({
     pseudonym: 'quiet-otter',
     notifyEmail: false,
     notifyTalkPage: false,
+    consent: true,
   }));
 });
 
