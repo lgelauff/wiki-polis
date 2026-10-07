@@ -273,7 +273,7 @@
    given a fixed width. The current tab is text with a rule under it, not a box: the
    section sidebar already marks where you are, and two marked places for one page is
    noise. */
-.admin-shell .settings-tabs {
+.admin-shell .admin-tabs {
   display: flex;
   flex-wrap: wrap;
   gap: .25rem 1.25rem;
@@ -281,14 +281,14 @@
   border-block-end: 1px solid var(--shell-line);
 }
 
-.admin-shell .settings-tabs__tab {
+.admin-shell .admin-tabs__tab {
   padding-block: .375rem;
   color: var(--shell-body);
   text-decoration: none;
   border-block-end: 2px solid transparent;
 }
 
-.admin-shell .settings-tabs__tab[aria-current] {
+.admin-shell .admin-tabs__tab[aria-current] {
   color: var(--shell-ink);
   font-weight: 600;
   border-block-end-color: var(--accent);

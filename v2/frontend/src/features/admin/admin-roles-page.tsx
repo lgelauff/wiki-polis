@@ -1,9 +1,14 @@
 import {useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
-import {Link} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
-import {adminRoleRosterQuery, putAdminRoles} from '../../api/queries';
+import {
+  adminLifecycleQuery,
+  adminRoleRosterQuery,
+  adminSettingsQuery,
+  putAdminRoles,
+} from '../../api/queries';
+import {AdminSettingsFrame} from './admin-settings-page';
 
 type Role = 'moderator' | 'organizer';
 type Roster = components['schemas']['AdminRoleRoster'];
@@ -13,6 +18,9 @@ export function AdminRolesPage({conversationId, csrfToken}: {
 }) {
   const queryClient = useQueryClient();
   const {data} = useSuspenseQuery(adminRoleRosterQuery(conversationId));
+  // The console frame needs the lifecycle DTO and the settings query for the tab names.
+  const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
+  const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
   const [participantId, setParticipantId] = useState<number | null>(null);
   const assignment = data.assignments.find((row) => row.participantId === participantId);
   const [chosen, setChosen] = useState<Role[]>([]);
@@ -52,13 +60,15 @@ export function AdminRolesPage({conversationId, csrfToken}: {
   }
 
   return (
-    <main className="roles-shell" id="main">
-      <nav className="record-breadcrumb" aria-label="Breadcrumb">
-        <Link to="/admin">Admin panel</Link><span>/</span>
-        <Link to={data.links.conversation}>{data.conversation.title}</Link><span>/</span><span>Roles</span>
-      </nav>
+    <AdminSettingsFrame
+      conversationId={conversationId}
+      gatingType={settings.conversation.gatingType}
+      lifecycle={lifecycle}
+      tab="roles"
+    >
+      <div className="roles-shell">
       <header className="roles-heading">
-        <p className="eyebrow">Scoped access</p><h1>Conversation roles</h1>
+        <p className="eyebrow">Scoped access</p><h2>Conversation roles</h2>
         <p>See who can moderate or organize {data.conversation.title}.</p>
       </header>
       <section className="roles-roster" aria-labelledby="role-roster-heading">
@@ -92,6 +102,7 @@ export function AdminRolesPage({conversationId, csrfToken}: {
         </section>
       )}
       {!data.capabilities.manageRoles && <p className="roles-readonly">Only a global admin can change role assignments.</p>}
-    </main>
+      </div>
+    </AdminSettingsFrame>
   );
 }

@@ -12,7 +12,7 @@ import {AdminLifecyclePage} from './admin-lifecycle-page';
 import {AdminModerationPage} from './admin-moderation-page';
 import {AdminParticipantsPage} from './admin-participants-page';
 import {AdminRolesPage} from './admin-roles-page';
-import {AdminSettingsPage} from './admin-settings-page';
+import {AdminSettingsPage, AdminSettingsVouchersPage} from './admin-settings-page';
 import {AdminStatementsPage} from './admin-statements-page';
 import {AdminTerminationPage} from './admin-termination-page';
 import {useLoginHref} from '../../login-href';
@@ -68,13 +68,14 @@ function Protected({children}: {children: ReactNode}) {
 type AdminRouteKind =
   | 'catalog'
   | 'featured'
-  | 'invitations'
   | 'lifecycle'
   | 'moderation'
   | 'participants'
-  | 'roles'
   | 'settings-access'
   | 'settings-basics'
+  | 'settings-invitations'
+  | 'settings-roles'
+  | 'settings-vouchers'
   | 'statements'
   | 'termination';
 
@@ -101,10 +102,12 @@ function AdminRouteContent({kind}: {kind: AdminRouteKind}) {
       return <AdminParticipantsPage conversationId={conversationId} csrfToken={session.csrfToken} />;
     case 'moderation':
       return <AdminModerationPage conversationId={conversationId} csrfToken={session.csrfToken} />;
-    case 'invitations':
+    case 'settings-invitations':
       return <AdminInvitationsPage conversationId={conversationId} csrfToken={session.csrfToken} />;
-    case 'roles':
-      return <><AdminHeader /><AdminRolesPage conversationId={conversationId} csrfToken={session.csrfToken} /></>;
+    case 'settings-vouchers':
+      return <AdminSettingsVouchersPage conversationId={conversationId} />;
+    case 'settings-roles':
+      return <AdminRolesPage conversationId={conversationId} csrfToken={session.csrfToken} />;
   }
 }
 
@@ -116,6 +119,18 @@ export const AdminCatalogRoute = () => <AdminRoute kind="catalog" />;
 export const AdminLifecycleRoute = () => <AdminRoute kind="lifecycle" />;
 export const AdminSettingsBasicsRoute = () => <AdminRoute kind="settings-basics" />;
 export const AdminSettingsAccessRoute = () => <AdminRoute kind="settings-access" />;
+export const AdminSettingsInvitationsRoute = () => <AdminRoute kind="settings-invitations" />;
+export const AdminSettingsVouchersRoute = () => <AdminRoute kind="settings-vouchers" />;
+export const AdminSettingsRolesRoute = () => <AdminRoute kind="settings-roles" />;
+
+/** An old admin path that now lives under a section: `<Navigate replace>` to the new one,
+ *  so the links the server still builds keep working without a second copy of every path
+ *  in `v2/app.py`. */
+export function AdminRedirectRoute({to}: {to: (conversationId: string) => string}) {
+  const {conversationId} = useParams();
+  if (!conversationId) throw new Error('Missing route parameter: conversationId');
+  return <Navigate replace to={to(conversationId)} />;
+}
 
 /** `…/settings` is the URL the lifecycle page and the sidebar still link to; Settings has
  *  tabs, so the bare path lands on Basics. `<Navigate replace>` keeps the old path out of the
@@ -131,5 +146,3 @@ export const AdminStatementsRoute = () => <AdminRoute kind="statements" />;
 export const AdminFeaturedRoute = () => <AdminRoute kind="featured" />;
 export const AdminParticipantsRoute = () => <AdminRoute kind="participants" />;
 export const AdminModerationRoute = () => <AdminRoute kind="moderation" />;
-export const AdminInvitationsRoute = () => <AdminRoute kind="invitations" />;
-export const AdminRolesRoute = () => <AdminRoute kind="roles" />;

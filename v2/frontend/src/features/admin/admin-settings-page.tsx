@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useId, useRef, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode} from 'react';
 import {useMutation, useQuery, useQueryClient, useSuspenseQuery, type QueryClient} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -12,7 +12,7 @@ import {
 } from '../../api/queries';
 import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
-import {InternalLink} from '../../internal-link';
+import {AdminTabStrip, type SectionTab} from './admin-tab-strip';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useMessage, type Message} from '../../i18n/messages';
 
@@ -23,7 +23,7 @@ type Tier = Settings['recommendations']['tier'];
 type Workspace = components['schemas']['AdminStatementWorkspace'];
 
 /** Which Settings tab a page is. The route decides; the page never reads the URL. */
-export type SettingsTab = 'basics' | 'access';
+export type SettingsTab = 'basics' | 'access' | 'invitations' | 'vouchers' | 'roles';
 
 /** The answers to "who can take part" that this page offers, as one value.
  *
@@ -179,39 +179,91 @@ function LockGlyph({label}: {label: string}) {
   );
 }
 
-/** The four Settings tabs, in the order the strip shows them.
+/**
+ * The four Settings tabs, in the order the strip shows them.
  *
  * The third is named by the answer to "who gets in": a consultation gated on voucher codes
- * has vouchers to manage, everything else has an invitation list. Both point at the page
- * that exists today (#473 moves them under this strip in the next step). */
-function SettingsTabs({conversationId, gatingType, current}: {
-  conversationId: number;
-  gatingType: GatingType;
-  current: SettingsTab;
-}) {
-  const msg = useMessage();
-  const base = `/admin/conversations/${conversationId}`;
-  const tabs = [
-    {id: 'basics', label: msg('admin-settings-tab-basics'), href: `${base}/settings/basics`},
-    {id: 'access', label: msg('admin-access-heading'), href: `${base}/settings/access`},
-    {id: 'membership', label: gatingType === 'voucher'
-      ? msg('admin-settings-tab-vouchers')
-      : msg('admin-settings-tab-invitations'), href: `${base}/invites`},
+ * has vouchers to manage, everything else has an invitation list. Both paths stay routable
+ * whichever the answer is, so a link to one of them never lands on a page that says the
+ * other thing is what this consultation uses. */
+function settingsTabs(conversationId: number, gatingType: GatingType, msg: Message): SectionTab[] {
+  const base = `/admin/conversations/${conversationId}/settings`;
+  return [
+    {id: 'basics', label: msg('admin-settings-tab-basics'), href: `${base}/basics`},
+    {id: 'access', label: msg('admin-access-heading'), href: `${base}/access`},
+    {id: gatingType === 'voucher' ? 'vouchers' : 'invitations',
+      label: gatingType === 'voucher'
+        ? msg('admin-settings-tab-vouchers')
+        : msg('admin-settings-tab-invitations'),
+      href: gatingType === 'voucher' ? `${base}/vouchers` : `${base}/invitations`},
     {id: 'roles', label: msg('admin-settings-tab-roles'), href: `${base}/roles`},
   ];
+}
+
+/** The message key that names a tab, so the strip and the breadcrumb say the same thing
+ *  about the same page. */
+function settingsTabKey(tab: SettingsTab): string {
+  switch (tab) {
+    case 'basics': return 'admin-settings-tab-basics';
+    case 'access': return 'admin-access-heading';
+    case 'invitations': return 'admin-settings-tab-invitations';
+    case 'vouchers': return 'admin-settings-tab-vouchers';
+    case 'roles': return 'admin-settings-tab-roles';
+  }
+}
+
+/** The frame every Settings page sits in: the console shell, the section heading and the
+ *  tab strip, with the page's own content under it. On every tab an h1 "Settings" and the
+ *  strip; no heading repeats the tab's name, which the strip's current tab and the
+ *  breadcrumb already say. */
+export function AdminSettingsFrame({children, conversationId, gatingType, lifecycle, tab, toast}: {
+  children: ReactNode;
+  conversationId: number;
+  gatingType: GatingType;
+  lifecycle: components['schemas']['AdminLifecycle'];
+  tab: SettingsTab;
+  toast?: ReactNode;
+}) {
+  const msg = useMessage();
   return (
-    <nav className="settings-tabs" aria-label={msg('admin-settings-tabs-aria')}>
-      {tabs.map((tab) => (
-        <InternalLink
-          key={tab.id}
-          href={tab.href}
-          className="settings-tabs__tab"
-          aria-current={tab.id === current ? 'page' : undefined}
-        >
-          {tab.label}
-        </InternalLink>
-      ))}
-    </nav>
+    <AdminShell
+      title={msg('adminconv-doc-title', lifecycle.conversation.title)}
+      data={lifecycle}
+      gatingType={gatingType}
+      section="settings"
+      subPage={msg(settingsTabKey(tab))}
+      toast={toast}
+    >
+      <div className="admin-page settings-page">
+        <h1>{msg('admin-settings-heading')}</h1>
+        <AdminTabStrip label={msg('admin-settings-tabs-aria')}
+          tabs={settingsTabs(conversationId, gatingType, msg)} current={tab} />
+        {children}
+      </div>
+    </AdminShell>
+  );
+}
+
+/**
+ * The Vouchers tab (#478 item 4): the strip and one line.
+ *
+ * Everything an organizer would do here — generate a batch, import codes, check one,
+ * withdraw it — needs an endpoint the admin API does not have today; codes are managed by
+ * the CLI (#368). A page of dead controls would be worse than this line, which says what
+ * is coming and cites the issue it waits on. */
+export function AdminSettingsVouchersPage({conversationId}: {conversationId: number}) {
+  const msg = useMessage();
+  const {data} = useSuspenseQuery(adminSettingsQuery(conversationId));
+  const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
+  return (
+    <AdminSettingsFrame
+      conversationId={conversationId}
+      gatingType={data.conversation.gatingType}
+      lifecycle={lifecycle}
+      tab="vouchers"
+    >
+      <p className="admin-coming" lang="en">Also coming: generating, importing, checking and withdrawing voucher codes here — not available yet (#368)</p>
+    </AdminSettingsFrame>
   );
 }
 
@@ -301,7 +353,7 @@ function policyErrorMessage(failure: unknown): string {
 }
 
 export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
-  conversationId: number; csrfToken: string; tab?: SettingsTab | undefined;
+  conversationId: number; csrfToken: string; tab?: 'basics' | 'access' | undefined;
 }) {
   const msg = useMessage();
   const queryClient = useQueryClient();
@@ -527,9 +579,6 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   // The Practice switch is shown only to a site admin, and not while Explore locks access.
   const canSwitchPractice = !gated && canSwitchDemo && !admissionLocked;
   const practiceSection = practice || canSwitchPractice;
-  const tabName = tab === 'basics'
-    ? msg('admin-settings-tab-basics')
-    : msg('admin-access-heading');
   // One Save per tab, shown only when something on the tab can be saved: the settings for
   // a role that may edit them, and on Basics the strict-moderation answer for a moderator.
   const canSave = canEdit || canModerate;
@@ -553,16 +602,12 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
     : policyFailure ? policyFailure.settingsChanged : null;
 
   return (
-    <AdminShell
-      title={msg('adminconv-doc-title', lifecycle.conversation.title)}
-      data={lifecycle}
+    <AdminSettingsFrame
+      conversationId={conversationId}
       gatingType={data.conversation.gatingType}
-      section="settings"
-      subPage={tabName}
+      lifecycle={lifecycle}
+      tab={tab}
     >
-      <div className="admin-page settings-page">
-        <h1>{msg('admin-settings-heading')}</h1>
-        <SettingsTabs conversationId={conversationId} gatingType={data.conversation.gatingType} current={tab} />
         <form className="settings-form" onSubmit={submit}>
           {fieldMessages.length > 0 && <div className="access-summary" role="alert" tabIndex={-1} ref={summaryRef}>
             <ul>{Object.entries(fields).map(([field, messages]) => (
@@ -678,7 +723,6 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
           </footer>}
         </form>
         {coming.map((line) => <AdminComing key={line.what} {...line} />)}
-      </div>
-    </AdminShell>
+    </AdminSettingsFrame>
   );
 }

@@ -5,19 +5,17 @@ import {Link} from 'react-router-dom';
 import type {components} from '../../api/schema';
 import {
   adminInvitationRosterQuery,
+  adminLifecycleQuery,
+  adminSettingsQuery,
   deleteAdminInvitation,
   putAdminInvitations,
 } from '../../api/queries';
-import {LegacyShell} from '../legacy/legacy-shell';
+import {AdminSettingsFrame} from './admin-settings-page';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {useMessage} from '../../i18n/messages';
 import {accessPolicyLabel} from '../../i18n/server-labels';
 
 type Roster = components['schemas']['AdminInvitationRoster'];
-
-function legacyTruncate(value: string, length = 28, leeway = 5): string {
-  return value.length <= length + leeway ? value : `${value.slice(0, length - 1)}…`;
-}
 
 function formatLegacyDate(value: string): string {
   return new Date(value).toISOString().slice(0, 10);
@@ -44,6 +42,9 @@ export function AdminInvitationsPage({
   const msg = useMessage();
   const queryClient = useQueryClient();
   const {data} = useSuspenseQuery(adminInvitationRosterQuery(conversationId));
+  // The console frame needs the lifecycle DTO and the settings query for the tab names.
+  const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
+  const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
   const [input, setInput] = useState('');
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
@@ -100,25 +101,17 @@ export function AdminInvitationsPage({
   // invitation is not bound to an account.
   const linked = data.invitations.filter((invitation) => invitation.signedIn).length;
   return (
-    <LegacyShell
-      headerMode="admin"
-      title={`Invites — ${title} — Proto`}
-      headerCrumb={(
-        <nav className="header-crumb" aria-label="Admin breadcrumb">
-          <span className="header-crumb-sep">/</span>
-          <Link to="/admin">Admin panel</Link>
-          <span className="header-crumb-sep">/</span>
-          <Link to={data.links.conversation}>{legacyTruncate(title)}</Link>
-          <span className="header-crumb-sep">/</span>
-          <span>Invites</span>
-        </nav>
-      )}
+    <AdminSettingsFrame
+      conversationId={conversationId}
+      gatingType={settings.conversation.gatingType}
+      lifecycle={lifecycle}
+      tab="invitations"
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
     >
       <div className="container">
-        <h2>
-          Invites — <Link to={`/c/${data.conversation.slug}/about`}>{title}</Link>
-        </h2>
+        <p>
+          <Link to={`/c/${data.conversation.slug}/about`}>{title}</Link>
+        </p>
         <p className="muted" style={{marginBottom: '1.25rem'}}>
           Access policy: <strong>{accessPolicyLabel(msg, data.conversation.accessPolicy)}</strong>
         </p>
@@ -189,6 +182,6 @@ export function AdminInvitationsPage({
           </tbody>
         </table>
       </div>
-    </LegacyShell>
+    </AdminSettingsFrame>
   );
 }

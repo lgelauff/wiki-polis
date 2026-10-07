@@ -382,7 +382,10 @@ test('adds and removes invitations through convergent admin commands', async () 
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {name: 'Invites — Community strategy'})).toBeVisible();
+  // #478: .../invitations is an old path that redirects to the Invitations tab, which is
+  // headed by the section like every other Settings tab.
+  expect(await screen.findByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Invitations', level: 2})).toBeVisible();
   // The access policy reads in words; the stored value never reaches the page.
   expect(screen.getByText('Only people who have been given access')).toBeVisible();
   expect(screen.queryByText('invite_only', {exact: false})).not.toBeInTheDocument();
@@ -471,7 +474,9 @@ test('keeps the typed invitation list and shows a toast after a save error', asy
 test('replaces a conversation role set from the admin workspace', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/roles']}><App /></MemoryRouter></QueryClientProvider>);
   expect(await screen.findByRole('heading', {name: 'Conversation roles'})).toBeVisible();
-  expect(screen.getByRole('listitem')).toHaveTextContent('Example editor');
+  // The roster's own row, not the username in the console's top bar.
+  const roster = screen.getByRole('heading', {name: 'Assigned'}).closest('section')!;
+  expect(within(roster).getByRole('listitem')).toHaveTextContent('Example editor');
   fireEvent.change(screen.getByLabelText('Participant'), {target: {value: '23'}});
   fireEvent.click(screen.getByRole('checkbox', {name: 'organizer'}));
   fireEvent.click(screen.getByRole('button', {name: 'Save role set'}));
