@@ -220,7 +220,11 @@ export function AdminModerationQueuePage({conversationId, csrfToken}: {
           </label>
         </div>
 
-        {rows.length ? (
+        {/* The workspace answers 200 with empty lists when the voting service could not be
+            read; that is not an empty queue, so it says what the Statements page says. */}
+        {!data.dataAvailability.statements ? (
+          <p className="admin-empty" role="alert">{msg('flash-load-statements-failed')}</p>
+        ) : rows.length ? (
           <ul className="admin-rows" ref={listRef}>
             {rows.map((statement) => (
               <QueueRow

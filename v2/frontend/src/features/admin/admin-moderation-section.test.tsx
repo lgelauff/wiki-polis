@@ -252,6 +252,22 @@ test('a queue with nothing in it says so in words', async () => {
   expect(await screen.findByText('Nothing to moderate.', undefined, {timeout: 10_000}))
     .toBeVisible();
   expect(page().queryByRole('list')).toBeNull();
+  expect(page().queryByText('Could not load statements. Check server logs.')).toBeNull();
+});
+
+test('a queue whose statements could not be loaded says so, not that it is empty', async () => {
+  // The workspace answers 200 with empty lists when the voting service is unreachable.
+  server.use(http.get(STATEMENTS_URL, () => HttpResponse.json({data: {
+    ...workspace({pending: [], approved: [], hidden: []}),
+    dataAvailability: {statements: false},
+  }})));
+  renderModeration(<AdminModerationQueuePage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/moderation/queue');
+
+  expect(await screen.findByRole('alert', undefined, {timeout: 10_000}))
+    .toHaveTextContent('Could not load statements. Check server logs.');
+  expect(page().queryByText('Nothing to moderate.')).toBeNull();
+  expect(page().queryByRole('list')).toBeNull();
 });
 
 test('the queue names the one thing it cannot show yet', async () => {

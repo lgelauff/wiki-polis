@@ -360,6 +360,7 @@ TAGS:
     - flash-already-banned
     - flash-banned
     - flash-flag-resolved
+    - flash-load-statements-failed
     - flash-move-sync-failed
     - flash-moved-to
     - flash-phases-saved-sync-failed
