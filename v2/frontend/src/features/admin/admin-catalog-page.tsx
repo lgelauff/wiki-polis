@@ -76,6 +76,15 @@ function ConversationRow({conversation}: {conversation: Row}) {
   );
 }
 
+/** The column names every table of consultations on this page shares, so a cell in a
+ *  group is named the same way as one in the main table. */
+function ColumnHeads() {
+  const msg = useMessage();
+  return (
+    <thead><tr><th>{msg('admin-th-title')}</th><th>{msg('admin-th-policy')}</th><th>{msg('admin-th-status')}</th><th /></tr></thead>
+  );
+}
+
 /**
  * A group of rows under the table, closed by default and never remembered.
  *
@@ -89,6 +98,7 @@ function Group({label, count, children}: {label: string; count: number; children
     <details className="admin-group">
       <summary>{label} ({count})</summary>
       <table className="admin-table">
+        <ColumnHeads />
         <tbody>{children}</tbody>
       </table>
     </details>
@@ -186,12 +196,11 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
       <div className="container">
         <h2>{msg('admin-site-dashboard')}</h2>
 
-        <p className="admin-coming" lang="en">Also coming: Admin home, one table of the consultations you have a role in — not available yet (#473)</p>
+        <p className="muted" lang="en">Also coming: Admin home, one table of the consultations you have a role in — not available yet (#473)</p>
 
-        <h3 className="section-heading">{msg('admin-convs-heading')}</h3>
-        <table className="admin-table">
-          <caption className="sr-only">{msg('admin-convs-heading')}</caption>
-          <thead><tr><th>{msg('admin-th-title')}</th><th>{msg('admin-th-policy')}</th><th>{msg('admin-th-status')}</th><th /></tr></thead>
+        <h3 className="section-heading" id="admin-convs-heading">{msg('admin-convs-heading')}</h3>
+        <table className="admin-table" aria-labelledby="admin-convs-heading">
+          <ColumnHeads />
           <tbody>{consultations.map((conversation) => (
             <ConversationRow key={conversation.id} conversation={conversation} />
           ))}</tbody>
@@ -209,7 +218,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
           ))}
         </Group>}
 
-        <p className="admin-coming" lang="en">Also coming: phase, participation counts, organizers, last action, and following or hiding a consultation — not available yet (#473)</p>
+        <p className="muted" lang="en">Also coming: phase, participation counts, organizers, last action, and following or hiding a consultation — not available yet (#473)</p>
 
         <div className="edit-form">
           <h3>{msg('admin-new-conv-heading')}</h3>
@@ -251,7 +260,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
           </form>
         </div>
 
-        <p className="admin-coming" lang="en">Also coming: voucher use, correct and wrong codes per consultation — not available yet (#473)</p>
+        <p className="muted" lang="en">Also coming: voucher use, correct and wrong codes per consultation — not available yet (#473)</p>
       </div>
     </LegacyShell>
   );

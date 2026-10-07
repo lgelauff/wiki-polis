@@ -68,9 +68,10 @@ test('the page is the site admin dashboard, with the columns it decides on', asy
   expect(document.title).toContain('Site admin dashboard');
   expect(screen.getByRole('navigation', {name: 'Admin breadcrumb'}))
     .toHaveTextContent('Site admin dashboard');
-  // The caption is the table's own name; the heading above it is sr-only so it is not
-  // read twice.
-  expect(within(conversationsTable()).getByText('All consultations')).toBeVisible();
+  // The heading above the table names it, and is the only copy of those words, so a
+  // screen reader does not hear them twice.
+  expect(screen.getByRole('table', {name: 'All consultations'})).toBe(conversationsTable());
+  expect(screen.getAllByText('All consultations')).toHaveLength(1);
 
   const table = conversationsTable();
   // Title · Access · Status · links. The slug is not a column: it is in the link.
@@ -91,9 +92,9 @@ test('each status says the server’s word, archived included', async () => {
   await screen.findByRole('heading', {name: 'Site admin dashboard', level: 2});
   const table = conversationsTable();
   expect(within(screen.getByText('Practice Environment (1)').closest('details')!)
-    .getByRole('row')).toHaveTextContent('active');
-  expect(within(screen.getByText('Other (1)').closest('details')!).getByRole('row'))
-    .toHaveTextContent('archived');
+    .getByRole('row', {name: /Consultation 5/})).toHaveTextContent('active');
+  expect(within(screen.getByText('Other (1)').closest('details')!)
+    .getByRole('row', {name: /Consultation 4/})).toHaveTextContent('archived');
   // The closed consultation is closed, and not called archived.
   const closed = within(table).getByRole('row', {name: /Consultation 3/});
   expect(closed).toHaveTextContent('closed');
@@ -122,6 +123,12 @@ test('the practice item and the archived one sit in collapsed groups, not in the
   expect(within(practice).getByText('Consultation 5')).not.toBeVisible();
   fireEvent.click(within(practice).getByText('Practice Environment (1)'));
   expect(within(practice).getByText('Consultation 5')).toBeVisible();
+  // Each group's table names its columns the way the main table does, so a cell in it has
+  // a column name too.
+  for (const group of [practice, other]) {
+    expect(within(group).getAllByRole('columnheader').map((cell) => cell.textContent))
+      .toEqual(['Title', 'Access', 'Status', '']);
+  }
 });
 
 test('a practice item that is also archived goes under the Practice Environment', async () => {
@@ -197,7 +204,7 @@ test('granting site admin posts the username and says so when nobody has signed 
   );
 });
 
-test('retiring a site admin puts granted:false, and a 403 shows the boundary', async () => {
+test('retiring a site admin puts granted:false', async () => {
   const sent: unknown[] = [];
   server.use(http.put(
     new URL('/api/v1/admin/global-admins/:participantId', globalThis.location.origin).toString(),
@@ -243,6 +250,10 @@ test('the three "Also coming" lines are muted English and nothing else', async (
     'Also coming: voucher use, correct and wrong codes per consultation — not available yet (#473)',
   ]);
   for (const line of lines) {
+    // Outside the console frame, so the legacy frame's muted text, not `admin-shell__coming`
+    // (whose colour token is declared on `.admin-shell` only).
+    expect(line).toHaveClass('muted');
+    expect(line).toHaveAttribute('lang', 'en');
     // `<main tabindex="-1">` is the frame's skip target, not a control these lines live in.
     expect(line.closest('a, button')).toBeNull();
     expect(line).not.toHaveAttribute('tabindex');

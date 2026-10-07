@@ -613,7 +613,7 @@
     "admin-label-outro": "Outro text (HTML, optional)",
     "admin-btn-create-conv": "Create consultation",
     "admin-globals-heading": "Site admins",
-    "admin-globals-intro": "Site admins have access to every consultation and its settings, whatever their role on it. To give someone a role on one consultation only, use <strong>manage → conversation roles</strong> on that consultation.",
+    "admin-globals-intro": "Site admins have access to every consultation and its settings, whatever their role on it. To give someone a role on one consultation only, use <strong>manage → consultation roles</strong> on that consultation.",
     "admin-th-participant": "Participant",
     "admin-globals-empty": "No site admins assigned.",
     "admin-grant-heading": "Grant site admin",
