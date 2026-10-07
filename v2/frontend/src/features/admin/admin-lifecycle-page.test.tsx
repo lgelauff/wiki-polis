@@ -70,6 +70,25 @@ function serve(payload: Lifecycle) {
   server.use(http.get(LIFECYCLE_URL, () => HttpResponse.json({data: payload})));
 }
 
+test('the page renders the console shell, not the legacy header and role bar', async () => {
+  serve(lifecycle);
+  const {container} = renderConsole();
+
+  // The frame is the shell's: the sidebar landmark, the top bar and the main region all
+  // come from AdminShell, so the page itself contributes only the content.
+  expect(await screen.findByRole('navigation', {name: 'Admin sections'})).toBeVisible();
+  expect(container.querySelector('.admin-shell')).not.toBeNull();
+  expect(container.querySelectorAll('main')).toHaveLength(1);
+
+  // The two things this issue removes, by the marks they left in the document: the legacy
+  // shell's header, crumb, main and toast container, and the role bar. (The import itself
+  // is a property of the diff, which the reviewer reads; its consequence is what a test
+  // can see -- a class of LegacyShell on the page means the header is still in the tree.)
+  for (const mark of ['.site-header', '.header-crumb', '.legacy-main', '#toast-container', '.role-bar']) {
+    expect(container.querySelector(mark)).toBeNull();
+  }
+});
+
 test('renders the admin console from the catalogue English', async () => {
   serve(lifecycle);
   renderConsole();
@@ -100,7 +119,9 @@ test('links to the settings page instead of editing the same settings itself', a
   serve(lifecycle);
   renderConsole();
 
-  const settings = await screen.findByRole('link', {name: /Settings/}, {timeout: 10_000});
+  // Named by its description as well as its title, because the shell's sidebar now carries
+  // a Settings link of its own -- two different destinations, so the card is named whole.
+  const settings = await screen.findByRole('link', {name: 'Settings Title, introduction and access'}, {timeout: 10_000});
   expect(settings).toHaveAttribute('href', '/admin/conversations/7/settings');
   expect(within(settings).getByText('Title, introduction and access')).toBeVisible();
 
