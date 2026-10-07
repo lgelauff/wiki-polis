@@ -147,6 +147,10 @@ function SpaceWarning({space}: {space: 'real' | 'demo'}) {
   );
 }
 
+/** How long the vote buttons of a freshly appeared Explore card ignore clicks (#505).
+ *  Exported so the guard's tests can wait exactly as long as the guard does. */
+export const VOTE_INPUT_GUARD_MS = 500;
+
 function VoteChoices({disabled, onVote}: {disabled: boolean; onVote: (choice: VoteChoice) => void}) {
   const msg = useMessage();
   return (
@@ -277,6 +281,16 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
   const [recordedCurrentVote, setRecordedCurrentVote] = useState(false);
   const [composer, setComposer] = useState<ComposerMode>(null);
   const [submitted, setSubmitted] = useState(false);
+  const statementId = data.currentStatement?.id ?? null;
+  // #505: the second click of a double click lands on the card that just replaced the one
+  // the first click was meant for. A card that replaces another one ignores vote clicks
+  // until it has been on screen for VOTE_INPUT_GUARD_MS. The buttons keep their normal look
+  // and their tab stop, because a disabled flash on every card reads as a broken control.
+  // Clock only: no timer to clean up, and nothing left running if the panel unmounts.
+  // `null` means this card has not replaced another one, so it is not guarded: nothing can
+  // have leaked onto it from a click meant for the previous card.
+  const seenStatement = useRef(statementId);
+  const [voteOpensAt, setVoteOpensAt] = useState<number | null>(null);
   const vote = useMutation({
     mutationFn: (choice: VoteChoice) => {
       if (!data.currentStatement) throw new Error('There is no statement to vote on.');
@@ -287,6 +301,16 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
       setRecordedCurrentVote(true);
     },
   });
+  useEffect(() => {
+    if (statementId === null || seenStatement.current === statementId) return;
+    seenStatement.current = statementId;
+    setVoteOpensAt(Date.now() + VOTE_INPUT_GUARD_MS);
+  }, [statementId]);
+  function castVote(choice: VoteChoice) {
+    if (statementId === null) return;
+    if (voteOpensAt !== null && Date.now() < voteOpensAt) return;
+    vote.mutate(choice);
+  }
   async function next() {
     setReceipt(null);
     setComposer(null);
@@ -333,7 +357,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
               )}
             </div>
             {!receipt ? <p id="statement-text" className="statement-text">{data.currentStatement.text}</p> : <p id="voted-stmt-text" className="voted-stmt-text">{data.currentStatement.text}</p>}
-            {!receipt && <VoteChoices disabled={vote.isPending} onVote={(choice) => vote.mutate(choice)} />}
+            {!receipt && <VoteChoices disabled={vote.isPending} onVote={castVote} />}
           </div>
         )}
 
