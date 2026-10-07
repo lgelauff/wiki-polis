@@ -769,8 +769,12 @@ a { color: inherit; }
 .settings-heading h1 { margin: .3rem 0 1rem; font-size: clamp(3rem, 7vw, 5.8rem); line-height: .9; letter-spacing: -.07em; }
 .settings-heading > p:last-child { max-width: 650px; color: var(--muted); line-height: 1.5; }
 .settings-form > section { padding: 3.5rem 0; border-bottom: 1px solid var(--ink); }
-.settings-form section > header { display: grid; grid-template-columns: 45px 1fr; gap: 1rem; margin-bottom: 2rem; }
-.settings-form section > header > span { color: var(--civic); font: .65rem var(--mono); }
+/* The Approval section on Basics sits after the settings form (its own form may not nest
+   inside it), so it takes the numbered-section look by class, and a top rule and margin to
+   part it from the settings form's Save button. */
+.settings-approval { margin: 3.5rem 0 1.5rem; padding: 3.5rem 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); }
+.settings-form section > header, .settings-approval > header { display: grid; grid-template-columns: 45px 1fr; gap: 1rem; margin-bottom: 2rem; }
+.settings-form section > header > span, .settings-approval > header > span { color: var(--civic); font: .65rem var(--mono); }
 .settings-form h2 { margin: 0; font-size: 1.8rem; letter-spacing: -.04em; }
 .settings-form section > header p { margin: .4rem 0 0; color: var(--muted); font-size: .78rem; }
 .settings-form section > label { display: block; margin: 1rem 0; font-size: .72rem; font-weight: 650; }

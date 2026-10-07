@@ -199,7 +199,9 @@ function ApprovalControl({conversationId, csrfToken, number}: {
     },
   });
   return (
-    <section aria-labelledby="settings-approval">
+    // `settings-approval` gives this section, outside `.settings-form`, the same header
+    // grid and spacing as the numbered sections inside it (styles.css).
+    <section className="settings-approval" aria-labelledby="settings-approval">
       <header><span>{number}</span><div><h3 id="settings-approval">{msg('stmts-modsettings-heading')}</h3></div></header>
       <form onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
         <input type="hidden" name="csrf_token" value={csrfToken} />

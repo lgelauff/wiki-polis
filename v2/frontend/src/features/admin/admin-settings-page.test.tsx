@@ -666,6 +666,24 @@ test('the Approval control moved to Basics, with the body it always sent', async
   expect(sent[0]).toEqual({mode: 'moderate'});
 });
 
+test('the Approval section has the numbered-section header, with the number outside the heading', async () => {
+  recordPolicyPuts();
+  serve(settings);
+  renderPage('basics');
+
+  const heading = await screen.findByRole('heading', {name: 'Moderation settings', level: 3},
+    {timeout: 10_000});
+  // Exactly the key's text: the section number is a sibling, not part of the heading.
+  expect(heading.textContent).toBe('Moderation settings');
+  const section = screen.getByRole('region', {name: 'Moderation settings'});
+  // Outside the settings form, so it carries the class that gives it the same header grid.
+  expect(section).toHaveClass('settings-approval');
+  expect(section.closest('form')).toBeNull();
+  const header = section.querySelector(':scope > header');
+  expect(header?.querySelector(':scope > span')?.textContent).toBe('03');
+  expect(header?.querySelector(':scope > div > h3')).toBe(heading);
+});
+
 test('saving Approval sends one policy PUT and no settings PUT', async () => {
   const policy = recordPolicyPuts();
   serve(settings);
