@@ -280,16 +280,24 @@ test('deletes a verified empty conversation through a deliberate receipt flow', 
 test('moderates statements and imports approved seeds through typed commands', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/statements']}><App /></MemoryRouter></QueryClientProvider>);
 
-  expect(await screen.findByRole('heading', {name: 'Statements — Community strategy'})).toBeVisible();
-  expect(screen.getByText('A participant proposal awaiting review.')).toBeVisible();
+  // #473: the old .../statements path redirects to Content > Statements, which is headed
+  // like every other page of the section.
+  expect(await screen.findByRole('heading', {name: 'Statements', level: 1})).toBeVisible();
+  // #473: the list is one row per statement behind the state switch, which opens on the
+  // approved ones; the waiting statement is one click away.
+  expect(screen.getByRole('button', {name: 'Show unmoderated'})).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: 'Show unmoderated'}));
+  expect(await screen.findByText('A participant proposal awaiting review.')).toBeVisible();
   expect(screen.getByText(
     'Adds a seed-marked statement that appears early in the voting sequence for participants.',
   )).toBeVisible();
   // #478: the Approval control moved to Settings > Basics, so this page no longer owns it.
   expect(screen.queryByRole('checkbox', {name: /Strict moderation/})).toBeNull();
-  expect(screen.getByRole('heading', {name: /Pending review/})).toHaveTextContent('1');
   fireEvent.click(screen.getByRole('button', {name: 'approve'}));
-  await waitFor(() => expect(screen.getByRole('heading', {name: /Approved/})).toHaveTextContent('2'));
+  // Approving takes the row out of the waiting list and into the approved one.
+  await waitFor(() => expect(screen.queryByText('A participant proposal awaiting review.')).toBeNull());
+  fireEvent.click(screen.getByRole('button', {name: 'Show approved'}));
+  await waitFor(() => expect(screen.getByText('A participant proposal awaiting review.')).toBeVisible());
 
   fireEvent.change(screen.getByLabelText('Statements'), {
     target: {value: 'First seed\nSecond seed'},
@@ -335,8 +343,10 @@ test('manages participant access in the distinct admin workspace', async () => {
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {name: 'Participants — Community strategy'})).toBeVisible();
-  expect(within(screen.getByRole('table')).getByText('Example editor')).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Participants', level: 1})).toBeVisible();
+  // The roster is a list of rows now, not a table (#473).
+  const roster = within(screen.getByRole('main')).getByRole('listitem').closest('ul')!;
+  expect(within(roster).getByText('Example editor')).toBeVisible();
   expect(screen.getByText('8 / 12')).toBeVisible();
   fireEvent.change(screen.getByPlaceholderText('Reason (optional)'), {
     target: {value: 'Repeated disruption'},

@@ -89,6 +89,11 @@ TAGS:
     - admin-common-policy-invited
     - admin-common-policy-open
     - admin-common-policy-practice
+    - admin-content-empty
+    - admin-content-search-aria
+    - admin-content-sort-aria
+    - admin-content-sort-most-votes
+    - admin-content-tabs-aria
     - admin-convs-heading
     - admin-crumb-aria
     - admin-elig-event-ph

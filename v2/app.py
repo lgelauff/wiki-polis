@@ -2425,6 +2425,8 @@ _SPA_ROUTE_PATTERNS: tuple[str, ...] = (
     r'/admin/conversations/\d+/statements',
     r'/admin/conversations/\d+/featured',
     r'/admin/conversations/\d+/participants',
+    r'/admin/conversations/\d+/content/statements',
+    r'/admin/conversations/\d+/content/participants',
     r'/admin/conversations/\d+/flags',
     r'/admin/conversations/\d+/moderation/queue',
     r'/admin/conversations/\d+/moderation/flags',

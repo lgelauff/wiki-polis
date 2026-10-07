@@ -122,7 +122,7 @@ function QueueRow({conversationId, statement, csrfToken, move, onError}: {
         {statement.text}
         <span className="admin-row__suffix">{` #${statement.id}`}</span>
         {source && (
-          <InternalLink href={`/admin/conversations/${conversationId}/statements`}
+          <InternalLink href={`/admin/conversations/${conversationId}/content/statements`}
             className="admin-row__source">{`↳ #${source.derivedFromId}`}</InternalLink>
         )}
       </div>

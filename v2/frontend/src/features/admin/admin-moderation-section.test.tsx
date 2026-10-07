@@ -156,7 +156,7 @@ test('a derived statement names its source, and "Based on" puts it under it', as
 
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const link = screen.getByRole('link', {name: '↳ #11'});
-  expect(link).toHaveAttribute('href', '/admin/conversations/7/statements');
+  expect(link).toHaveAttribute('href', '/admin/conversations/7/content/statements');
   expect(link.closest('.admin-row__text')).toHaveTextContent('A corrected version');
 
   fireEvent.change(screen.getByRole('combobox', {name: 'Sort'}), {target: {value: 'based-on'}});

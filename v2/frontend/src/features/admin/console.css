@@ -597,6 +597,64 @@
   color: var(--shell-body);
 }
 
+/* The muted paragraphs on a console page: the one fact about what the numbers mean, and
+   the line that names what is not built yet. No box, no rule: they are not controls. */
+.admin-shell .admin-note {
+  margin: .5rem 0 1rem;
+  color: var(--shell-muted);
+  font-size: 13px;
+}
+
+/* A row's counts and facts sit between the text and the actions, and wrap under the text
+   at phone width rather than squeezing it. */
+.admin-shell .admin-row__counts {
+  flex: none;
+  color: var(--shell-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.admin-shell .admin-row__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem .875rem;
+  flex: 1 1 18rem;
+  margin: 0;
+}
+
+.admin-shell .admin-row__facts > div {
+  display: flex;
+  gap: .25rem;
+}
+
+.admin-shell .admin-row__facts dt {
+  color: var(--shell-muted);
+  font-size: 12px;
+}
+
+.admin-shell .admin-row__facts dd {
+  margin: 0;
+  color: var(--shell-body);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-shell .admin-row__star {
+  color: var(--accent);
+}
+
+.admin-shell .admin-sort input[type="search"] {
+  min-block-size: 2rem;
+  padding: .125rem .5rem;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  background: var(--shell-surface);
+  color: var(--shell-body);
+  font: inherit;
+  font-size: 13px;
+}
+
 /* ── Coming lines ─────────────────────────────────────────────────────────── */
 
 .admin-shell__coming {
