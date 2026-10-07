@@ -114,17 +114,20 @@ function after(milliseconds: number) {
   vi.setSystemTime(Date.now() + milliseconds);
 }
 
-function renderApp(entry: string) {
+/** The page the way a participant meets it: the SPA router, at its own URL. */
+function renderApp() {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter initialEntries={[entry]}><App /></MemoryRouter>
+      <MemoryRouter initialEntries={['/app/conversations/community-strategy/explore']}>
+        <App />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
 test('the guard is half a second, one constant, and the first card is not guarded', async () => {
   const deck = serveTwoCards();
-  renderApp('/app/conversations/community-strategy/explore');
+  renderApp();
 
   // The card a participant lands on: nothing can have leaked onto it from another card, so
   // the click they make right after reading it counts, guard window or not.
@@ -137,7 +140,7 @@ test('the guard is half a second, one constant, and the first card is not guarde
 
 test('a vote click within the guard window of a new card sends nothing, and one after it counts', async () => {
   const deck = serveTwoCards();
-  renderApp('/app/conversations/community-strategy/explore');
+  renderApp();
 
   fireEvent.click(await screen.findByRole('button', {name: 'Agree'}, {timeout: 10_000}));
   await screen.findByText('Your response: Agree', {selector: '#voted-label'});
@@ -166,7 +169,7 @@ test('a vote click within the guard window of a new card sends nothing, and one 
 
 test('the guard covers every statement after the first, not just the second', async () => {
   const deck = serveTwoCards();
-  renderApp('/app/conversations/community-strategy/explore');
+  renderApp();
 
   fireEvent.click(await screen.findByRole('button', {name: 'Agree'}, {timeout: 10_000}));
   await screen.findByText('Your response: Agree', {selector: '#voted-label'});
