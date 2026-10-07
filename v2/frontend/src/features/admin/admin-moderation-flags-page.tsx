@@ -1,17 +1,21 @@
-import {useCallback, useState} from 'react';
+import {useCallback, useRef, useState} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
+import {ApiContractError} from '../../api/client';
 import {
   adminFlagQueueQuery,
   adminLifecycleQuery,
   adminSettingsQuery,
   putAdminFlagResolution,
 } from '../../api/queries';
+import {useDateFormat} from '../../i18n/dates';
+import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {AdminShell} from './admin-shell';
 import {AdminTabStrip} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
+import {useRowFocus} from './admin-row-focus';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 
 type Flag = components['schemas']['AdminContentFlag'];
@@ -22,24 +26,56 @@ type Target = Flag['target']['type'];
  *  lists are the same data read two ways rather than two requests. */
 type Position = Target;
 
-/** Both buttons resolve the flag: "Keep" says the content is fine as it stands, "Remove"
- *  says the content should go, which the moderator then does on the Queue or on Featured.
- *  There is no check glyph here — a check beside a flag would read as "confirm the flag",
- *  which is the opposite of what it does. */
-function ResolveFlag({conversationId, flag, csrfToken, verb, onFeedback}: {
+function errorMessage(error: Error, msg: Message): string {
+  return error instanceof ApiContractError ? error.message : msg('adminconv-command-failed');
+}
+
+/** The flagged text, on an open flag a muted "↳" to where that content is moderated, and
+ *  the reason as a muted suffix: the reason qualifies the row, it is not a second field. */
+function FlagText({flag, open}: {flag: Flag; open: boolean}) {
+  const msg = useMessage();
+  const review = msg(flag.target.type === 'statement' ? 'flags-review-statements' : 'flags-review-arguments');
+  return (
+    <div className="admin-row__text">
+      {flag.target.text}
+      {open && (
+        <>
+          {' '}
+          <InternalLink href={flag.target.reviewHref} className="admin-row__source" title={review}
+            aria-label={review}>↳</InternalLink>
+        </>
+      )}
+      <span className="admin-row__suffix">
+        {' · '}{flag.categoryLabel}{flag.detail ? ` · ${flag.detail}` : ''}
+      </span>
+    </div>
+  );
+}
+
+/** One open flag. "Keep" says the content is fine as it stands, "Remove" says the content
+ *  should go, which the moderator then does where the "↳" leads; both resolve the flag, so
+ *  they share one request and neither can be pressed while it runs. There is no check glyph
+ *  here — a check beside a flag would read as "confirm the flag", which is the opposite of
+ *  what it does. */
+function FlagRow({conversationId, flag, csrfToken, onResolved, onFeedback}: {
   conversationId: number;
   flag: Flag;
   csrfToken: string;
-  verb: 'keep' | 'remove';
-  onFeedback: (message: string, changed: boolean) => void;
+  onResolved: (flagId: number) => void;
+  onFeedback: (category: LegacyToastMessage['category'], message: string) => void;
 }) {
   const msg = useMessage();
+  const {date} = useDateFormat();
   const queryClient = useQueryClient();
+  // Set on the click itself: `isPending` reaches the buttons a render later, and a second
+  // click in between would send a second request.
+  const busy = useRef(false);
   const mutation = useMutation({
     mutationFn: () => putAdminFlagResolution(
       conversationId, flag.id, {resolved: true, note: null}, csrfToken,
     ),
     onSuccess: (receipt) => {
+      onResolved(flag.id);
       queryClient.setQueryData<Queue>(
         adminFlagQueueQuery(conversationId).queryKey,
         (queue) => {
@@ -52,44 +88,30 @@ function ResolveFlag({conversationId, flag, csrfToken, verb, onFeedback}: {
           };
         },
       );
-      onFeedback(msg('admin-moderation-flag-marked'), receipt.changed);
+      onFeedback(
+        receipt.changed ? 'success' : 'warning',
+        receipt.changed ? msg('flash-flag-resolved') : msg('admin-moderation-flag-already-resolved'),
+      );
     },
-    onError: (error: Error) => onFeedback(error.message, false),
+    onError: (error: Error) => onFeedback('error', errorMessage(error, msg)),
+    onSettled: () => {
+      busy.current = false;
+    },
   });
+  function resolve() {
+    if (busy.current) return;
+    busy.current = true;
+    mutation.mutate();
+  }
   return (
-    <button
-      type="button"
-      className="admin-row__text-button"
-      disabled={mutation.isPending}
-      onClick={() => mutation.mutate()}
-    >
-      {msg(verb === 'keep' ? 'admin-moderation-flag-keep' : 'admin-moderation-flag-remove')}
-    </button>
-  );
-}
-
-function FlagRow({conversationId, flag, csrfToken, onFeedback}: {
-  conversationId: number;
-  flag: Flag;
-  csrfToken: string;
-  onFeedback: (message: string, changed: boolean) => void;
-}) {
-  const msg = useMessage();
-  const detail = flag.detail;
-  return (
-    <li className="admin-row">
-      <div className="admin-row__text">
-        {flag.target.text}
-        {/* The reason as a muted suffix: it qualifies the row, it is not a second field. */}
-        <span className="admin-row__suffix">
-          {' · '}{flag.categoryLabel}{detail ? ` · ${detail}` : ''}
-        </span>
-      </div>
+    <li className="admin-row" data-row-id={flag.id}>
+      <FlagText flag={flag} open />
       <div className="admin-row__actions">
-        <ResolveFlag conversationId={conversationId} flag={flag} csrfToken={csrfToken}
-          verb="keep" onFeedback={onFeedback} />
-        <ResolveFlag conversationId={conversationId} flag={flag} csrfToken={csrfToken}
-          verb="remove" onFeedback={onFeedback} />
+        {flag.flaggedAt && <span className="admin-row__time">{date(flag.flaggedAt)}</span>}
+        <button type="button" className="admin-row__text-button" disabled={mutation.isPending}
+          onClick={resolve}>{msg('admin-moderation-flag-keep')}</button>
+        <button type="button" className="admin-row__text-button" disabled={mutation.isPending}
+          onClick={resolve}>{msg('admin-moderation-flag-remove')}</button>
       </div>
     </li>
   );
@@ -100,6 +122,7 @@ export function AdminModerationFlagsPage({conversationId, csrfToken}: {
   csrfToken: string;
 }) {
   const msg = useMessage();
+  const {date} = useDateFormat();
   const {data} = useSuspenseQuery(adminFlagQueueQuery(conversationId));
   const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
   const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
@@ -107,11 +130,14 @@ export function AdminModerationFlagsPage({conversationId, csrfToken}: {
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
 
-  function showFeedback(message: string, changed: boolean) {
-    setToast({id: Date.now(), category: changed ? 'success' : 'warning', message});
+  function showFeedback(category: LegacyToastMessage['category'], message: string) {
+    setToast({id: Date.now(), category, message});
   }
 
   const rows = data.open.filter((flag) => flag.target.type === position);
+  const resolved = data.resolved.filter((flag) => flag.target.type === position);
+  const count = (type: Target) => data.open.filter((flag) => flag.target.type === type).length;
+  const {listRef, emptyRef, rowRemoved} = useRowFocus(rows.map((flag) => flag.id));
 
   return (
     <AdminShell
@@ -127,22 +153,43 @@ export function AdminModerationFlagsPage({conversationId, csrfToken}: {
         <AdminTabStrip label={msg('admin-shell-moderation')}
           tabs={moderationTabs(conversationId, msg)} current="flags" />
 
+        {/* Each position says how many open flags it holds, so flags on the other one are
+            found without switching. */}
         <div className="admin-switch admin-switch--words">
-          <button type="button" aria-pressed={position === 'statement'}
-            onClick={() => setPosition('statement')}>{msg('adminconv-card-statements')}</button>
-          <button type="button" aria-pressed={position === 'argument'}
-            onClick={() => setPosition('argument')}>{msg('featured-arguments-label')}</button>
+          {([['statement', 'adminconv-card-statements'], ['argument', 'featured-arguments-label']] as const)
+            .map(([type, key]) => (
+              <button key={type} type="button" aria-pressed={position === type}
+                onClick={() => setPosition(type)}>
+                {msg(key)}{count(type) ? ` ${count(type)}` : ''}
+              </button>
+            ))}
         </div>
 
         {rows.length ? (
-          <ul className="admin-rows">
+          <ul className="admin-rows" ref={listRef}>
             {rows.map((flag) => (
               <FlagRow key={flag.id} conversationId={conversationId} flag={flag}
-                csrfToken={csrfToken} onFeedback={showFeedback} />
+                csrfToken={csrfToken} onResolved={rowRemoved} onFeedback={showFeedback} />
             ))}
           </ul>
         ) : (
-          <p className="admin-empty">{msg('flags-open-empty')}</p>
+          <p className="admin-empty" ref={emptyRef} tabIndex={-1}>{msg('flags-open-empty')}</p>
+        )}
+
+        {resolved.length > 0 && (
+          <>
+            <h2>{msg('flags-resolved-heading')}</h2>
+            <ul className="admin-rows">
+              {resolved.map((flag) => (
+                <li className="admin-row" key={flag.id}>
+                  <FlagText flag={flag} open={false} />
+                  {flag.resolution?.resolvedAt && (
+                    <span className="admin-row__time">{date(flag.resolution.resolvedAt)}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
     </AdminShell>

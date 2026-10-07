@@ -501,11 +501,22 @@
   font-size: 12px;
 }
 
+/* Shrinks and wraps rather than holding its width: the block form's input and button must
+   fit a 320px row, under the text, without pushing the page sideways. */
 .admin-shell .admin-row__actions {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
   align-items: center;
   gap: .375rem;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.admin-shell .admin-row__time {
+  color: var(--shell-muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .admin-shell .admin-row__glyph {
@@ -539,11 +550,17 @@
 
 .admin-shell .admin-row__block-form {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: .375rem;
+  min-inline-size: 0;
+  max-inline-size: 100%;
 }
 
+/* 16px: a smaller input makes iOS Safari zoom the page when it takes focus. */
 .admin-shell .admin-row__block-form input {
+  flex: 1 1 10rem;
+  min-inline-size: 0;
   min-block-size: 2rem;
   max-inline-size: 14rem;
   padding: .125rem .5rem;
@@ -552,19 +569,12 @@
   background: var(--shell-surface);
   color: var(--shell-body);
   font: inherit;
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .admin-shell .admin-empty {
   margin: 1rem 0;
   color: var(--shell-body);
-}
-
-.admin-shell .admin-coming {
-  margin: 1.25rem 0 0;
-  color: var(--shell-muted);
-  font-size: 12px;
-  font-style: italic;
 }
 
 /* ── Coming lines ─────────────────────────────────────────────────────────── */

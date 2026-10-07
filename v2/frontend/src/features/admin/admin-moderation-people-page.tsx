@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useCallback, useState} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -12,6 +12,7 @@ import {useMessage} from '../../i18n/messages';
 import {AdminShell} from './admin-shell';
 import {AdminTabStrip} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
+import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 
 type Participant = components['schemas']['AdminParticipant'];
 type Roster = components['schemas']['AdminParticipantRoster'];
@@ -25,15 +26,19 @@ function formatDate(value: string): string {
  * The server's field is a ban and the wording is the console's own: a ban takes the ability
  * to contribute away and nothing else, and the dialog on the board says so. There is no
  * "access withdrawn" state here because the API does not return one (#473 parks it). */
-function AccessControl({conversationId, participant, csrfToken}: {
+function AccessControl({conversationId, participant, csrfToken, onFeedback}: {
   conversationId: number;
   participant: Participant;
   csrfToken: string;
+  onFeedback: (toast: LegacyToastMessage) => void;
 }) {
   const msg = useMessage();
   const queryClient = useQueryClient();
   const [summary, setSummary] = useState('');
   const desiredBanned = !participant.access.banned;
+  const placeholder = msg(participant.access.banned
+    ? 'participants-unban-note-ph'
+    : 'participants-ban-reason-ph');
   const mutation = useMutation({
     mutationFn: () => putAdminParticipantAccess(
       conversationId, participant.participantId,
@@ -56,9 +61,18 @@ function AccessControl({conversationId, participant, csrfToken}: {
           )),
         } : current,
       );
-      // No toast: the row says the new state in place (its state word and its button both
-      // change), which is the whole of what happened.
       setSummary('');
+      // The row shows the new state in place; the toast is what a screen reader hears, and
+      // what says so when the person already was in the state asked for.
+      const changed = receipt.banned ? msg('flash-banned') : msg('flash-unbanned');
+      const unchanged = receipt.banned
+        ? msg('flash-already-banned')
+        : msg('admin-moderation-person-already-allowed');
+      onFeedback({
+        id: Date.now(),
+        category: receipt.changed ? 'success' : 'warning',
+        message: receipt.changed ? changed : unchanged,
+      });
     },
   });
 
@@ -71,18 +85,12 @@ function AccessControl({conversationId, participant, csrfToken}: {
       }}
     >
       <input
-        type="hidden"
-        name="csrf_token"
-        value={csrfToken}
-      />
-      <input
         type="text"
         name="summary"
         value={summary}
         onChange={(event) => setSummary(event.target.value)}
-        placeholder={msg(participant.access.banned
-          ? 'participants-unban-note-ph'
-          : 'participants-ban-reason-ph')}
+        placeholder={placeholder}
+        aria-label={placeholder}
       />
       <button type="submit" className="admin-row__text-button" disabled={mutation.isPending}>
         {msg(participant.access.banned ? 'participants-btn-unban' : 'participants-btn-ban')}
@@ -99,6 +107,8 @@ export function AdminModerationPeoplePage({conversationId, csrfToken}: {
   const {data} = useSuspenseQuery(adminParticipantRosterQuery(conversationId));
   const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
   const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
+  const [toast, setToast] = useState<LegacyToastMessage | null>(null);
+  const dismissToast = useCallback(() => setToast(null), []);
 
   return (
     <AdminShell
@@ -107,6 +117,7 @@ export function AdminModerationPeoplePage({conversationId, csrfToken}: {
       gatingType={settings.conversation.gatingType}
       section="moderation"
       subPage={msg('admin-moderation-people')}
+      toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
     >
       <div className="admin-page">
         <h1>{msg('admin-moderation-people')}</h1>
@@ -124,17 +135,20 @@ export function AdminModerationPeoplePage({conversationId, csrfToken}: {
                     {participant.access.banned
                       ? msg('participants-banned')
                       : msg('admin-moderation-person-active')}
+                    {participant.access.banned && participant.access.changedAt
+                      ? ` ${msg('participants-banned-since')} ${formatDate(participant.access.changedAt)}`
+                      : ''}
+                    {participant.access.banned && participant.access.summary
+                      ? ` · ${participant.access.summary}`
+                      : ''}
                     {participant.lastEngagementAt
                       ? ` · ${formatDate(participant.lastEngagementAt)}`
                       : ` · ${msg('participants-no-actions')}`}
-                    {participant.access.changedAt
-                      ? ` · ${msg('participants-banned-since')} ${formatDate(participant.access.changedAt)}`
-                      : ''}
                   </span>
                 </div>
                 <div className="admin-row__actions">
                   <AccessControl conversationId={conversationId} participant={participant}
-                    csrfToken={csrfToken} />
+                    csrfToken={csrfToken} onFeedback={setToast} />
                 </div>
               </li>
             ))}
@@ -145,7 +159,7 @@ export function AdminModerationPeoplePage({conversationId, csrfToken}: {
 
         {/* The moderator/organizer split, progress, batch label and joined day need fields
             the roster does not return yet (#473). */}
-        <p className="admin-coming" lang="en">Also coming: the moderator and organizer roles per person, and when they joined — not available yet (#473)</p>
+        <p className="admin-shell__coming" lang="en">Also coming: the moderator and organizer roles per person, and when they joined — not available yet (#473)</p>
       </div>
     </AdminShell>
   );

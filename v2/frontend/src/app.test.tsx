@@ -559,6 +559,50 @@ test.each([
     .querySelectorAll('[aria-current="page"]')).toHaveLength(1);
 });
 
+test.each([
+  ['/admin/conversations/7/flags', '/admin/conversations/7/moderation/flags'],
+  ['/admin/conversations/7/featured', '/admin/conversations/7/moderation/featured'],
+  // The /app/admin group's flags page was called moderation.
+  ['/app/admin/conversations/7/moderation', '/admin/conversations/7/moderation/flags'],
+  ['/app/admin/conversations/7/featured', '/admin/conversations/7/moderation/featured'],
+])('the old path %s redirects to the Moderation page %s', async (source, target) => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[source]}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await waitFor(() => expect(screen.getByLabelText('client location')).toHaveTextContent(target));
+  expect(screen.getByLabelText('client location').textContent).toBe(target);
+});
+
+test.each([
+  ['/admin', 'queue', 'Queue'],
+  ['/admin', 'flags', 'Flags'],
+  ['/admin', 'featured', 'Featured'],
+  ['/admin', 'people', 'People'],
+  ['/app/admin', 'queue', 'Queue'],
+  ['/app/admin', 'flags', 'Flags'],
+  ['/app/admin', 'featured', 'Featured'],
+  ['/app/admin', 'people', 'People'],
+])('%s/conversations/7/moderation/%s is routed to its page', async (group, page, heading) => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[`${group}/conversations/7/moderation/${page}`]}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: heading, level: 1}, {timeout: 10_000}))
+    .toBeVisible();
+  expect(within(screen.getByRole('navigation', {name: 'Moderation'})).getByRole('link', {name: heading}))
+    .toHaveAttribute('aria-current', 'page');
+});
+
 test('renders a conversation record from the generated API contract', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>

@@ -160,6 +160,43 @@ test('a derived statement names its source, and "Based on" puts it under it', as
   expect(texts[2]).toContain('A corrected version');
 });
 
+test('"Based on" puts a correction of a correction under its own source', async () => {
+  serveWorkspace({pending: [
+    statement(11),
+    statement(14, {text: 'A first correction.', provenance: {derivedFromId: 11, scores: []}}),
+    statement(15, {text: 'A second correction.', provenance: {derivedFromId: 11, scores: []}}),
+    statement(16, {text: 'A correction of the first correction.', provenance: {derivedFromId: 14, scores: []}}),
+    statement(9),
+  ]});
+  renderModeration(<AdminModerationQueuePage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/moderation/queue');
+
+  await screen.findByRole('heading', {name: 'Queue', level: 1}, {timeout: 10_000});
+  fireEvent.change(screen.getByRole('combobox', {name: 'Sort'}), {target: {value: 'based-on'}});
+  const texts = page().getAllByRole('listitem')
+    .map((row) => row.querySelector('.admin-row__text')?.firstChild?.textContent ?? '');
+  expect(texts).toEqual([
+    'A statement waiting for a decision, number 9.',
+    'A statement waiting for a decision, number 11.',
+    'A first correction.',
+    'A correction of the first correction.',
+    'A second correction.',
+  ]);
+});
+
+test('after a row leaves the queue, focus moves to the next row, then to the empty line', async () => {
+  serveWorkspace({pending: [statement(11), statement(12)]});
+  recordModeration();
+  renderModeration(<AdminModerationQueuePage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/moderation/queue');
+
+  await screen.findByRole('heading', {name: 'Queue', level: 1}, {timeout: 10_000});
+  fireEvent.click(screen.getByRole('button', {name: 'Approve statement 11'}));
+  await waitFor(() => expect(screen.getByRole('button', {name: 'Approve statement 12'})).toHaveFocus());
+  fireEvent.click(screen.getByRole('button', {name: 'Hide statement 12'}));
+  await waitFor(() => expect(screen.getByText('Nothing to moderate.')).toHaveFocus());
+});
+
 test('approve and hide are two glyphs that name the statement they act on', async () => {
   serveWorkspace({});
   const sent = recordModeration();
@@ -203,7 +240,8 @@ test('the three-position switch shows which statements are on screen', async () 
 
   fireEvent.click(screen.getByRole('button', {name: 'Show approved'}));
   expect(screen.getByText('A statement waiting for a decision, number 12.')).toBeVisible();
-  expect(screen.queryByText('number 11')).toBeNull();
+  // A pattern, not a string: a plain string only matches an element whose whole text it is.
+  expect(screen.queryByText(/number 11\./)).toBeNull();
 });
 
 test('a queue with nothing in it says so in words', async () => {
@@ -265,6 +303,12 @@ test('flags are one row each, with the reason as a suffix and two ways to close 
   await screen.findByRole('heading', {name: 'Flags', level: 1}, {timeout: 10_000});
   const row = page().getByRole('listitem');
   expect(row).toHaveTextContent('A statement with a real name in it.');
+  // The way to the flagged content, as a muted glyph that names itself.
+  const review = within(row).getByRole('link', {name: 'review statements'});
+  expect(review).toHaveAttribute('href', '/admin/conversations/7/statements');
+  expect(review).toHaveAttribute('title', 'review statements');
+  // When it was flagged, to the day.
+  expect(row.querySelector('.admin-row__time')).toHaveTextContent('13 Aug 2026');
   // The reason qualifies the row; it is not a field of its own and it is muted.
   const suffix = row.querySelector('.admin-row__suffix')!;
   expect(suffix).toHaveTextContent('Privacy violation · Includes a real name.');
@@ -273,11 +317,37 @@ test('flags are one row each, with the reason as a suffix and two ways to close 
   expect(within(row).getByRole('button', {name: 'Keep'})).toBeVisible();
   expect(within(row).getByRole('button', {name: 'Remove'})).toBeVisible();
 
+  // One request per row: a second click while the first runs sends nothing.
   fireEvent.click(within(row).getByRole('button', {name: 'Keep'}));
+  fireEvent.click(within(row).getByRole('button', {name: 'Remove'}));
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toEqual({flagId: 41, body: {resolved: true, note: null}});
-  await waitFor(() => expect(page().queryByRole('listitem')).toBeNull());
-  expect(screen.getByText('No open flags.')).toBeVisible();
+  await waitFor(() => expect(screen.getByText('No open flags.')).toHaveFocus());
+  expect(screen.queryByRole('button', {name: 'Keep'})).toBeNull();
+  expect(screen.getByRole('status')).toHaveTextContent('Flag marked resolved.');
+  // The resolved flag moves to the list below, without the way to the content.
+  const resolved = screen.getByRole('heading', {name: 'Resolved', level: 2}).nextElementSibling!;
+  expect(resolved).toHaveTextContent('A statement with a real name in it.');
+  expect(within(resolved as HTMLElement).queryByRole('link')).toBeNull();
+  expect(sent).toHaveLength(1);
+});
+
+test('a flag someone else already resolved says so', async () => {
+  server.use(http.put(
+    new URL('/api/v1/admin/conversations/7/flags/:flagId/resolution', globalThis.location.origin)
+      .toString(),
+    ({params}) => HttpResponse.json({data: {
+      flagId: Number(params.flagId), status: 'resolved', changed: false,
+      resolution: {resolvedAt: '2026-08-13T10:00:00Z', note: null},
+      links: {flags: FLAGS_URL},
+    }}),
+  ));
+  renderModeration(<AdminModerationFlagsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/moderation/flags');
+
+  await screen.findByRole('heading', {name: 'Flags', level: 1}, {timeout: 10_000});
+  fireEvent.click(screen.getByRole('button', {name: 'Remove'}));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Flag was already resolved.');
 });
 
 test('the flags page switches between statements and arguments when the data has both', async () => {
@@ -308,7 +378,12 @@ test('the flags page switches between statements and arguments when the data has
   await screen.findByRole('heading', {name: 'Flags', level: 1}, {timeout: 10_000});
   expect(screen.getByText('A flagged statement.')).toBeVisible();
   expect(screen.queryByText('A flagged argument.')).toBeNull();
-  fireEvent.click(screen.getByRole('button', {name: 'Arguments'}));
+  // Each position carries its count, so argument flags are found from the statements side.
+  expect(screen.getByRole('button', {name: 'Statements 1'})).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', {name: 'Arguments 1'})).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(screen.getByRole('button', {name: 'Arguments 1'}));
+  expect(within(page().getByRole('listitem')).getByRole('link', {name: 'review arguments'}))
+    .toHaveAttribute('href', '/admin/conversations/7/featured');
   expect(screen.getByText('A flagged argument.')).toBeVisible();
   expect(screen.queryByText('A flagged statement.')).toBeNull();
 });
@@ -338,13 +413,61 @@ test('people are one row each, with their state and the control that changes it'
   expect(row).toHaveTextContent('quiet-otter');
   expect(row).toHaveTextContent('Active');
   expect(row).toHaveTextContent('2026-08-13');
+  expect(row).not.toHaveTextContent('since');
+  expect(within(row).getByRole('textbox', {name: 'Reason (optional)'})).toBeVisible();
 
   fireEvent.click(within(row).getByRole('button', {name: 'ban'}));
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toEqual({participantId: 23, body: {banned: true, summary: null}});
-  // The row says the new state in place; there is no toast to read past.
-  await waitFor(() => expect(page().getByRole('listitem')).toHaveTextContent('Banned'));
+  // The row says the new state in place, and the toast says it to a screen reader.
+  await waitFor(() => expect(page().getByRole('listitem')).toHaveTextContent('Banned since 2026-08-14'));
   expect(screen.getByRole('button', {name: 'unban'})).toBeVisible();
+  expect(screen.getByRole('status')).toHaveTextContent('Participant banned from this conversation.');
+});
+
+test('a person shows since when and why only while blocked, and an unchanged unblock says so', async () => {
+  server.use(
+    http.get(PEOPLE_URL, () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+      participants: [
+        {
+          participantId: 31, username: 'First editor', pseudonym: 'blue-heron',
+          statementProgress: null, arguments: {submitted: 0, prioritized: 0},
+          lastEngagementAt: null,
+          access: {banned: true, changedAt: '2026-08-10T08:00:00Z', summary: 'Repeated spam.'},
+        },
+        {
+          participantId: 32, username: 'Second editor', pseudonym: 'grey-badger',
+          statementProgress: null, arguments: {submitted: 0, prioritized: 0},
+          lastEngagementAt: null,
+          access: {banned: false, changedAt: '2026-08-11T08:00:00Z', summary: null},
+        },
+      ],
+      dataAvailability: {statementProgress: true},
+      capabilities: {setParticipantAccess: true},
+      links: {self: PEOPLE_URL, conversation: '/admin/conversations/7'},
+    }})),
+    http.put(
+      new URL('/api/v1/admin/conversations/7/participants/:participantId/access', globalThis.location.origin)
+        .toString(),
+      ({params}) => HttpResponse.json({data: {
+        participantId: Number(params.participantId), banned: false, changed: false,
+        changedAt: null, summary: null, links: {participants: PEOPLE_URL},
+      }}),
+    ),
+  );
+  renderModeration(<AdminModerationPeoplePage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/moderation/people');
+
+  await screen.findByRole('heading', {name: 'People', level: 1}, {timeout: 10_000});
+  const [blocked, allowed] = page().getAllByRole('listitem');
+  expect(blocked).toHaveTextContent('Banned since 2026-08-10 · Repeated spam.');
+  expect(allowed).toHaveTextContent('Active');
+  expect(allowed).not.toHaveTextContent('since');
+
+  fireEvent.click(within(blocked!).getByRole('button', {name: 'unban'}));
+  expect(await screen.findByRole('alert'))
+    .toHaveTextContent('Participant is already allowed in this conversation.');
 });
 
 test('Featured is today’s page under the strip, arguments and all', async () => {

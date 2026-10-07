@@ -14,6 +14,7 @@ import {useMessage, type Message} from '../../i18n/messages';
 import {AdminShell} from './admin-shell';
 import {AdminTabStrip, type SectionTab} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
+import {useRowFocus} from './admin-row-focus';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 
 type Statement = components['schemas']['AdminStatement'];
@@ -40,8 +41,9 @@ const LIST: Record<Position, 'approved' | 'pending' | 'hidden'> = {
 };
 
 /** "Oldest first" works the queue in the order statements arrived. "Based on" is lineage:
- *  a derived statement sits directly under the statement it corrects, so a correction and
- *  its source are read together. Both sorts what is already loaded; nothing is refetched.
+ *  a derived statement sits directly under the statement it corrects, and a correction of
+ *  that correction under it in turn, so a whole line of corrections is read together. Both
+ *  sort what is already loaded; nothing is refetched.
  *
  *  A derived statement whose source is not in the same list is treated as a root: the
  *  grouping has nothing to attach it to, and hiding it would take a statement off the
@@ -51,20 +53,29 @@ type Sort = 'oldest' | 'based-on';
 function sortStatements(rows: Statement[], sort: Sort): Statement[] {
   const byId = [...rows].sort((left, right) => left.id - right.id);
   if (sort === 'oldest') return byId;
-  const placed = new Set<number>();
-  const out: Statement[] = [];
+  const shown = new Set(byId.map((row) => row.id));
+  const children = new Map<number, Statement[]>();
+  const roots: Statement[] = [];
   for (const row of byId) {
-    if (placed.has(row.id)) continue;
-    placed.add(row.id);
-    out.push(row);
-    for (const child of byId) {
-      if (placed.has(child.id)) continue;
-      if (child.provenance?.derivedFromId === row.id) {
-        placed.add(child.id);
-        out.push(child);
-      }
+    const source = row.provenance?.derivedFromId;
+    if (source !== undefined && source !== row.id && shown.has(source)) {
+      children.set(source, [...(children.get(source) ?? []), row]);
+    } else {
+      roots.push(row);
     }
   }
+  const placed = new Set<number>();
+  const out: Statement[] = [];
+  const place = (row: Statement) => {
+    if (placed.has(row.id)) return;
+    placed.add(row.id);
+    out.push(row);
+    for (const child of children.get(row.id) ?? []) place(child);
+  };
+  roots.forEach(place);
+  // Statements that derive from each other in a circle have no root to hang from; they
+  // still belong on the queue.
+  byId.forEach(place);
   return out;
 }
 
@@ -96,9 +107,8 @@ function QueueRow({conversationId, statement, csrfToken, move, onError}: {
   });
   const source = statement.provenance;
   return (
-    <li className="admin-row">
+    <li className="admin-row" data-row-id={statement.id}>
       <div className="admin-row__text">
-        <span className="sr-only">{msg('admin-moderation-statement', statement.id)}</span>
         {statement.text}
         {source && (
           <InternalLink href={`/admin/conversations/${conversationId}/statements`}
@@ -146,12 +156,15 @@ export function AdminModerationQueuePage({conversationId, csrfToken}: {
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
   const tabs: SectionTab[] = moderationTabs(conversationId, msg);
+  const rows = sortStatements(data.statements[LIST[position]], sort);
+  const {listRef, emptyRef, rowRemoved} = useRowFocus(rows.map((row) => row.id));
 
   function notify(category: LegacyToastMessage['category'], message: string) {
     setToast({id: Date.now(), category, message});
   }
 
   function move(statement: Statement, status: Status) {
+    if (status !== LIST[position]) rowRemoved(statement.id);
     // The receipt names the new state, so the row moves between the lists rather than
     // refetching: the queue keeps its scroll position and its sort while a moderator works.
     queryClient.setQueryData<Workspace>(options.queryKey, (workspace) => {
@@ -166,7 +179,6 @@ export function AdminModerationQueuePage({conversationId, csrfToken}: {
     });
   }
 
-  const rows = sortStatements(data.statements[LIST[position]], sort);
 
   return (
     <AdminShell
@@ -209,7 +221,7 @@ export function AdminModerationQueuePage({conversationId, csrfToken}: {
         </div>
 
         {rows.length ? (
-          <ul className="admin-rows">
+          <ul className="admin-rows" ref={listRef}>
             {rows.map((statement) => (
               <QueueRow
                 key={statement.id}
@@ -222,12 +234,12 @@ export function AdminModerationQueuePage({conversationId, csrfToken}: {
             ))}
           </ul>
         ) : (
-          <p className="admin-empty">{msg('admin-moderation-queue-empty')}</p>
+          <p className="admin-empty" ref={emptyRef} tabIndex={-1}>{msg('admin-moderation-queue-empty')}</p>
         )}
 
         {/* The waiting time on each row would need a timestamp the statements endpoint does
             not return today; the moderation log would carry it, once it exists (#473). */}
-        <p className="admin-coming" lang="en">Also coming: how long each statement has been waiting — not available yet (#473)</p>
+        <p className="admin-shell__coming" lang="en">Also coming: how long each statement has been waiting — not available yet (#473)</p>
       </div>
     </AdminShell>
   );
