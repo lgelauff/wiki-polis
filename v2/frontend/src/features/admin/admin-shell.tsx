@@ -182,8 +182,8 @@ export function AdminShell({children, data, gatingType, section, subPage, title,
   const signedIn = authenticated || session.state === 'voucher';
   // Overview is the one section `links.*` does not cover -- the DTO links the other
   // sections and the participant view, not the page this frame is built around -- so the
-  // client builds it from the conversation the lifecycle DTO names. It stays a client path
-  // like every other sidebar link, and goes through the same route helper as they do.
+  // client builds it from the conversation the lifecycle DTO names. It is an ordinary
+  // client path, rendered through InternalLink like the other sidebar links.
   const overviewHref = `/admin/conversations/${data.conversation.id}`;
   const openFlags = data.counts.openFlags;
   const sections: {id: AdminSection; label: string; href: string; badge?: string | null}[] = [
@@ -209,7 +209,8 @@ export function AdminShell({children, data, gatingType, section, subPage, title,
             {crumbs.map((crumb, index) => (
               <li
                 className="admin-shell__crumb"
-                key={crumb}
+                // By position: a consultation may be titled like a section ("Settings").
+                key={index}
                 aria-current={index === crumbs.length - 1 ? 'page' : undefined}
               >
                 {crumb}

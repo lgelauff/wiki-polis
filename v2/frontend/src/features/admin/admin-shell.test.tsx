@@ -169,6 +169,16 @@ test('the breadcrumb ends at the current section', async () => {
   expect(items[0]).not.toHaveAttribute('aria-current');
 });
 
+test('on Overview the breadcrumb is the title and Overview, and Overview is current', async () => {
+  serveSession();
+  renderShell({section: 'overview'});
+
+  const crumbs = await screen.findByRole('navigation', {name: 'Admin breadcrumb'});
+  const items = within(crumbs).getAllByRole('listitem');
+  expect(items.map((item) => item.textContent)).toEqual(['Community strategy', 'Overview']);
+  expect(items[1]).toHaveAttribute('aria-current', 'page');
+});
+
 test('a page with a name of its own adds it as the last crumb', async () => {
   serveSession();
   renderShell({section: 'content', subPage: 'Statements'});
