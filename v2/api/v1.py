@@ -349,7 +349,7 @@ def create_api_v1_blueprint(
                 'validation_failed', 'A JSON request body is required.', 400,
             )
         fields = {}
-        unknown = sorted(set(body) - {'pseudonym', 'notifyEmail', 'notifyTalkPage'})
+        unknown = sorted(set(body) - {'pseudonym', 'notifyEmail', 'notifyTalkPage', 'consent'})
         if unknown:
             fields['_request'] = [
                 f"Unknown field{'s' if len(unknown) > 1 else ''}: {', '.join(unknown)}.",
@@ -360,6 +360,11 @@ def create_api_v1_blueprint(
         for key in ('notifyEmail', 'notifyTalkPage'):
             if key in body and not isinstance(body[key], bool):
                 fields[key] = ['Use true or false.']
+        # The join page's consent tick also grants the CC0 licence on everything the
+        # participant writes, so the server checks it too; `required` in the form is
+        # only a browser nudge (#341).
+        if body.get('consent') is not True:
+            fields['consent'] = ['Tick the box to agree before you join.']
         if fields:
             return error_response(
                 'validation_failed', 'Check the highlighted fields.', 400,

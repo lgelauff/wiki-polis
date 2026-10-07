@@ -229,7 +229,7 @@ def test_migrated_public_event_rejects_fresh_join_and_imported_invite_allows(
     g.pop('participant', None)
     refused = client.post(
         '/api/v1/conversations/migrated-public-event/participation',
-        json={'pseudonym': 'fresh-fox'},
+        json={'consent': True, 'pseudonym': 'fresh-fox'},
     )
     assert refused.status_code == 403
     assert refused.get_json()['error']['details'] == {

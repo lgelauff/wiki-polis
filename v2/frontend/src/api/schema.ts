@@ -2246,6 +2246,8 @@ export interface components {
             notifyEmail: boolean;
             /** @default false */
             notifyTalkPage: boolean;
+            /** @description The join page's required consent tick, which also grants the CC0 licence on what the participant writes. Anything but true is refused with validation_failed on the consent field. */
+            consent: boolean;
         };
         ParticipationResponse: {
             data: components["schemas"]["Participation"];

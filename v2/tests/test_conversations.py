@@ -286,7 +286,7 @@ def test_accept_get_already_joined_redirects(auth_client, conv, participation):
 
 def test_accept_post_creates_participation(auth_client, conv, participant):
     resp = auth_client.post('/api/v1/conversations/test-conv/participation',
-                            json={'pseudonym': 'silly-goat'})
+                            json={'consent': True, 'pseudonym': 'silly-goat'})
 
     assert resp.status_code == 201
     p = Participation.query.filter_by(
@@ -297,7 +297,7 @@ def test_accept_post_creates_participation(auth_client, conv, participant):
 
 def test_accept_post_invalid_pseudonym_rejected(auth_client, conv, participant):
     resp = auth_client.post('/api/v1/conversations/test-conv/participation',
-                            json={'pseudonym': 'bad name!'})
+                            json={'consent': True, 'pseudonym': 'bad name!'})
 
     assert resp.status_code == 400
     error = resp.get_json()['error']
@@ -308,7 +308,7 @@ def test_accept_post_invalid_pseudonym_rejected(auth_client, conv, participant):
 
 def test_accept_post_pseudonym_too_short_rejected(auth_client, conv, participant):
     resp = auth_client.post('/api/v1/conversations/test-conv/participation',
-                            json={'pseudonym': 'a-b'})
+                            json={'consent': True, 'pseudonym': 'a-b'})
 
     assert resp.status_code == 400
     assert resp.get_json()['error']['code'] == 'validation_failed'
@@ -327,7 +327,7 @@ def test_accept_post_duplicate_pseudonym_shows_error(auth_client, conv, particip
     db.session.commit()
 
     resp = auth_client.post('/api/v1/conversations/test-conv/participation',
-                            json={'pseudonym': 'taken-name'})
+                            json={'consent': True, 'pseudonym': 'taken-name'})
 
     assert resp.status_code == 409
     assert resp.get_json()['error']['code'] == 'pseudonym_unavailable'
@@ -366,7 +366,7 @@ def test_accept_post_eligibility_gate_allows_and_caches_verdict(auth_client, con
 
     with patch('app.requests.get', return_value=_canivote_response('eligible')) as req:
         resp = auth_client.post('/api/v1/conversations/test-conv/participation',
-                                json={'pseudonym': 'silly-goat'})
+                                json={'consent': True, 'pseudonym': 'silly-goat'})
 
     assert resp.status_code == 201
     assert resp.get_json()['data']['eligibilityStatus'] == 'eligible'
@@ -402,7 +402,7 @@ def test_accept_post_eligibility_gate_blocks_ineligible(auth_client, conv, parti
 
     with patch('app.requests.get', return_value=_canivote_response('not_eligible')):
         resp = auth_client.post('/api/v1/conversations/test-conv/participation',
-                                json={'pseudonym': 'silly-goat'})
+                                json={'consent': True, 'pseudonym': 'silly-goat'})
 
     assert resp.status_code == 403
     error = resp.get_json()['error']
@@ -423,7 +423,7 @@ def test_accept_post_eligibility_gate_fails_closed_without_endpoint(
     db.session.commit()
 
     resp = auth_client.post('/api/v1/conversations/test-conv/participation',
-                            json={'pseudonym': 'silly-goat'})
+                            json={'consent': True, 'pseudonym': 'silly-goat'})
 
     assert resp.status_code == 403
     error = resp.get_json()['error']

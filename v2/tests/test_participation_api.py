@@ -101,6 +101,7 @@ def test_join_command_creates_participation_and_filters_email_preference(
     response = auth_client.post(
         '/api/v1/conversations/test-conv/participation',
         json={
+            'consent': True,
             'pseudonym': 'calm-otter',
             'notifyEmail': True,
             'notifyTalkPage': True,
@@ -140,7 +141,7 @@ def test_join_command_replay_returns_existing_participation_without_rechecking(
     with patch('app._check_join_eligibility') as eligibility:
         response = auth_client.post(
             '/api/v1/conversations/test-conv/participation',
-            json={'pseudonym': 'other-otter'},
+            json={'consent': True, 'pseudonym': 'other-otter'},
         )
 
     assert response.status_code == 200
@@ -152,7 +153,7 @@ def test_join_command_replay_returns_existing_participation_without_rechecking(
 def test_join_command_returns_field_validation_errors(auth_client, conversation):
     response = auth_client.post(
         '/api/v1/conversations/test-conv/participation',
-        json={'pseudonym': 'Bad name', 'unexpected': True},
+        json={'consent': True, 'pseudonym': 'Bad name', 'unexpected': True},
     )
 
     assert response.status_code == 400
@@ -180,7 +181,7 @@ def test_join_command_returns_pseudonym_conflict(
 
     response = auth_client.post(
         '/api/v1/conversations/test-conv/participation',
-        json={'pseudonym': 'taken-otter'},
+        json={'consent': True, 'pseudonym': 'taken-otter'},
     )
 
     assert response.status_code == 409
@@ -190,7 +191,7 @@ def test_join_command_returns_pseudonym_conflict(
 def test_join_command_requires_authentication(client, conversation):
     response = client.post(
         '/api/v1/conversations/test-conv/participation',
-        json={'pseudonym': 'calm-otter'},
+        json={'consent': True, 'pseudonym': 'calm-otter'},
     )
 
     assert response.status_code == 401
@@ -209,7 +210,7 @@ def test_join_command_returns_typed_eligibility_denial(
     ):
         response = auth_client.post(
             '/api/v1/conversations/test-conv/participation',
-            json={'pseudonym': 'calm-otter'},
+            json={'consent': True, 'pseudonym': 'calm-otter'},
         )
 
     assert response.status_code == 403

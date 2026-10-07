@@ -2139,7 +2139,7 @@
       },
       "CreateParticipationRequest": {
         "type": "object",
-        "required": ["pseudonym"],
+        "required": ["pseudonym", "consent"],
         "additionalProperties": false,
         "properties": {
           "pseudonym": {
@@ -2147,7 +2147,11 @@
             "pattern": "^[a-z]{2,20}-[a-z]{2,20}$"
           },
           "notifyEmail": {"type": "boolean", "default": false},
-          "notifyTalkPage": {"type": "boolean", "default": false}
+          "notifyTalkPage": {"type": "boolean", "default": false},
+          "consent": {
+            "type": "boolean",
+            "description": "The join page's required consent tick, which also grants the CC0 licence on what the participant writes. Anything but true is refused with validation_failed on the consent field."
+          }
         }
       },
       "ParticipationResponse": {

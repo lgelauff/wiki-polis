@@ -673,7 +673,7 @@ def test_voucher_account_joins_without_the_wikimedia_eligibility_check(
     with patch('app.requests.get') as upstream:
         joined = client.post(
             f'/api/v1/conversations/{voucher_conv.slug}/participation',
-            json={'pseudonym': 'quiet-otter'},
+            json={'consent': True, 'pseudonym': 'quiet-otter'},
         )
     assert joined.status_code == 201, joined.get_data(as_text=True)
     assert joined.get_json()['data']['eligibilityStatus'] == 'not_required'
@@ -829,7 +829,7 @@ def test_voucher_redemption_and_access_flow(app, client, voucher_conv):
     # Joining works and never opts a voucher account into talk-page notices.
     joined = client.post(
         f'/api/v1/conversations/{voucher_conv.slug}/participation',
-        json={'pseudonym': 'quiet-otter', 'notifyEmail': True, 'notifyTalkPage': True},
+        json={'consent': True, 'pseudonym': 'quiet-otter', 'notifyEmail': True, 'notifyTalkPage': True},
     )
     assert joined.status_code == 201, joined.get_data(as_text=True)
     assert joined.get_json()['data']['notifications'] == {'email': False, 'talkPage': False}
