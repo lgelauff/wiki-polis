@@ -258,6 +258,69 @@ def normalise_statements(payload: dict) -> list[dict]:
     return statements
 
 
+# #504: how many statements of another family sit between two statements of one family.
+# 1 means never back to back; it fits the packs of 10 of #505 and can be raised later.
+FAMILY_MIN_DISTANCE = 1
+
+
+def _family_root(statement_id: int, families: dict | None) -> int:
+    """The family root of a statement. A statement the caller did not pass is its own root."""
+    return (families or {}).get(statement_id, statement_id)
+
+
+def space_by_family(statements: list[dict], families: dict | None,
+                    min_distance: int = FAMILY_MIN_DISTANCE) -> list[dict]:
+    """Reorder a deck so that no two statements of one family are closer than `min_distance`.
+
+    One deterministic pass over the whole deck (#504), which keeps each family's statements
+    in the order the deck had them:
+
+    - take the first remaining statement that fits the last `min_distance` placed families;
+    - of those, serve first the family with most statements left, because that is the one
+      that runs out of room first (tie: the one earliest in the deck);
+    - when nothing fits (one family left, or `min_distance` 0), take the first remaining one,
+      so a deck of one family is still served whole and in order.
+
+    Taking the first *fitting* statement instead would waste the statements of other
+    families early: it leaves a family that is clustered late in the deck with no separator
+    left, and the rule then fails on decks where separation was possible. Ranking the
+    candidates by how many statements their family has left avoids that.
+
+    Deterministic (the same deck and families always give the same order) and a no-op when
+    every statement is its own root, so a caller that passes no families keeps the deck.
+    """
+    remaining = list(statements)
+    counts: dict[int, int] = {}
+    for statement in remaining:
+        root = _family_root(statement['id'], families)
+        counts[root] = counts.get(root, 0) + 1
+    placed: list[dict] = []
+    while remaining:
+        window = [
+            _family_root(statement['id'], families)
+            for statement in placed[-min_distance:] if min_distance > 0
+        ]
+        fitting = [
+            position for position, statement in enumerate(remaining)
+            if _family_root(statement['id'], families) not in window
+        ]
+        if fitting:
+            need = max(
+                counts[_family_root(remaining[position]['id'], families)]
+                for position in fitting
+            )
+            take = next(
+                position for position in fitting
+                if counts[_family_root(remaining[position]['id'], families)] == need
+            )
+        else:
+            take = 0
+        statement = remaining.pop(take)
+        counts[_family_root(statement['id'], families)] -= 1
+        placed.append(statement)
+    return placed
+
+
 def build_explore_state(
     *,
     statements_payload: dict,
@@ -266,8 +329,13 @@ def build_explore_state(
     new_statement_unlock_at: int,
     new_statement_max: int,
     new_statements_used: int,
+    families: dict | None = None,
 ) -> dict:
-    """Build a privacy-safe, stable participant queue projection."""
+    """Build a privacy-safe, stable participant queue projection.
+
+    `families` maps statement id to family root (#504). Without it every statement is its
+    own family and the order is exactly the pin's.
+    """
     statements = normalise_statements(statements_payload)
     voted = {int(value) for value in participant_payload.get('votes', [])}
     authored = {int(value) for value in participant_payload.get('statements', [])}
@@ -279,6 +347,13 @@ def build_explore_state(
         return (not statement['isMeta'], not statement['isSeed'], digest)
 
     statements.sort(key=order_key)
+    # Meta statements keep their place at the front of the deck and are never spaced: they
+    # are not part of a family.
+    meta = [statement for statement in statements if statement['isMeta']]
+    deck = space_by_family(
+        [statement for statement in statements if not statement['isMeta']], families,
+    )
+    statements = meta + deck
     completed_ids = voted | authored
     current = next(
         (statement for statement in statements if statement['id'] not in completed_ids),

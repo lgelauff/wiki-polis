@@ -2833,6 +2833,7 @@ def _explore_state_payload(conv: Conversation, participant: Participant,
         new_statement_unlock_at=int(config.get('new_stmt_unlock_at', 10)),
         new_statement_max=int(config.get('new_stmt_max', 3)),
         new_statements_used=len(participation.new_stmt_ids or []),
+        families=_statement_family_roots(conv.id),
     )
     links = {
         'self': url_for('api_v1.get_explore_state', slug=conv.slug),
@@ -5302,13 +5303,31 @@ def _provenance_map(conv_id, tids):
     return {r.polis_statement_id: r for r in rows}
 
 
+def _parent_map(conv_id):
+    """{tid: derived_from_tid} for the whole conversation, in one query."""
+    return {r.polis_statement_id: r.derived_from_tid
+            for r in StatementProvenance.query.filter_by(conversation_id=conv_id).all()}
+
+
+def _family_root(by_tid, tid):
+    """Walk `derived_from_tid` up from `tid` and return the root. Cycle-safe."""
+    seen = {tid}
+    cur = tid
+    while cur in by_tid:
+        parent = by_tid[cur]
+        if parent in seen:          # defensive: stop on any cycle
+            break
+        seen.add(parent)
+        cur = parent
+    return cur
+
+
 def _lineage_group(conv_id, tid):
     """Walk `derived_from_tid` from `tid` up to its root; return [tid, parent, …, root].
 
     The primitive the clustering/weighting consumers (#143 follow-ups) build on. Cycle-safe.
     """
-    by_tid = {r.polis_statement_id: r.derived_from_tid
-              for r in StatementProvenance.query.filter_by(conversation_id=conv_id).all()}
+    by_tid = _parent_map(conv_id)
     chain, seen = [tid], {tid}
     cur = tid
     while cur in by_tid:
@@ -5319,6 +5338,17 @@ def _lineage_group(conv_id, tid):
         seen.add(parent)
         cur = parent
     return chain
+
+
+def _statement_family_roots(conv_id):
+    """{statement_id: family_root} for one conversation, from one provenance query (#504).
+
+    Every statement that has a provenance row; the walk is the same cycle-safe one as
+    :func:`_lineage_group`, over the map it reads for the conversation. Statements with no
+    row are their own root and simply stay out of the map.
+    """
+    by_tid = _parent_map(conv_id)
+    return {tid: _family_root(by_tid, tid) for tid in by_tid}
 
 
 def _register_branded_error_pages(app) -> None:
