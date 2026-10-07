@@ -288,6 +288,7 @@ export function AdminLifecyclePage({conversationId, csrfToken}: {conversationId:
     title={msg('adminconv-doc-title', data.conversation.title)}
     data={data}
     gatingType={settings.conversation.gatingType}
+    section="overview"
     toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
   >
     <div className="console">

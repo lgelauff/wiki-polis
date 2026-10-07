@@ -56,15 +56,25 @@ function serveSession(overrides: Partial<Session> = {}) {
   server.use(http.get(SESSION_URL, () => HttpResponse.json({data})));
 }
 
-function renderShell(options: {data?: Lifecycle; gatingType?: 'invite_only' | 'voucher' | 'wiki_based' | null; toast?: React.ReactNode} = {}) {
+function renderShell(options: {
+  data?: Lifecycle;
+  gatingType?: 'invite_only' | 'voucher' | 'wiki_based' | null;
+  section?: 'overview' | 'settings' | 'moderation' | 'content';
+  subPage?: string;
+  path?: string;
+  toast?: React.ReactNode;
+} = {}) {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter initialEntries={['/admin/conversations/7']}>
+      {/* Any admin URL: the frame must not read where it is from the address bar. */}
+      <MemoryRouter initialEntries={[options.path ?? '/admin/conversations/7/settings/basics']}>
         <MessageProvider>
           <AdminShell
             title="Community strategy"
             data={options.data ?? lifecycle}
             gatingType={options.gatingType ?? null}
+            section={options.section ?? 'overview'}
+            subPage={options.subPage}
             toast={options.toast ?? null}
             children={null}
           />
@@ -100,8 +110,9 @@ test('the sidebar names the four sections and points each at the fixture href', 
   expect(within(nav).getByRole('link', {name: 'Settings'})).toHaveAttribute('href', '/admin/conversations/7/settings');
   expect(within(nav).getByRole('link', {name: /^Moderation/})).toHaveAttribute('href', '/admin/conversations/7/flags');
   expect(within(nav).getByRole('link', {name: 'Content'})).toHaveAttribute('href', '/admin/conversations/7/statements');
-  // Overview is the page the frame is on, so it is marked as the current one and points
-  // at the current path: the DTO's links.* cover the other sections, not this one.
+  // The DTO's links.* cover the other sections, not Overview, so the client builds that
+  // one from the conversation id -- the frame is on some other URL and Overview still
+  // points at the consultation's own page.
   expect(within(nav).getByRole('link', {name: 'Overview'})).toHaveAttribute('href', '/admin/conversations/7');
   expect(within(nav).getByRole('link', {name: 'Overview'})).toHaveAttribute('aria-current', 'page');
   // No sub-page links: a leaf is reached from the page it belongs to, not from the frame.
@@ -145,14 +156,59 @@ test('the top bar repeats no section link: the sidebar is the one way in', async
 
 test('the breadcrumb ends at the current section', async () => {
   serveSession();
-  renderShell();
+  renderShell({section: 'settings'});
 
   const crumbs = await screen.findByRole('navigation', {name: 'Admin breadcrumb'});
   const items = within(crumbs).getAllByRole('listitem');
   expect(items).toHaveLength(2);
   expect(items[0]).toHaveTextContent('Community strategy');
-  expect(items[1]).toHaveTextContent('Overview');
+  expect(items[1]).toHaveTextContent('Settings');
   expect(items[1]).toHaveAttribute('aria-current', 'page');
+  // Only the last crumb is the current page: the section is where the page sits, not
+  // the page itself, once the page has a name of its own.
+  expect(items[0]).not.toHaveAttribute('aria-current');
+});
+
+test('a page with a name of its own adds it as the last crumb', async () => {
+  serveSession();
+  renderShell({section: 'content', subPage: 'Statements'});
+
+  const crumbs = await screen.findByRole('navigation', {name: 'Admin breadcrumb'});
+  const items = within(crumbs).getAllByRole('listitem');
+  expect(items.map((item) => item.textContent)).toEqual([
+    'Community strategy', 'Content', 'Statements',
+  ]);
+  expect(items[2]).toHaveAttribute('aria-current', 'page');
+  expect(items[1]).not.toHaveAttribute('aria-current');
+});
+
+test('each section marks itself in the sidebar and no other', async () => {
+  serveSession();
+  for (const [section, name] of [
+    ['overview', 'Overview'], ['settings', 'Settings'],
+    ['moderation', 'Moderation'], ['content', 'Content'],
+  ] as const) {
+    const {unmount} = renderShell({section});
+    const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
+    expect(within(nav).getByRole('link', {name: new RegExp(`^${name}`)}))
+      .toHaveAttribute('aria-current', 'page');
+    // Exactly one section is current, so the sidebar never says "you are here" twice.
+    expect(within(nav).getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'page'))
+      .toHaveLength(1);
+    unmount();
+  }
+});
+
+test('the sidebar marks the section the frame is on, whatever the URL says', async () => {
+  // The address bar can be anything: the prop is what says which section this is.
+  serveSession();
+  renderShell({section: 'moderation', path: '/admin/conversations/7/content/statements'});
+
+  const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
+  expect(within(nav).getByRole('link', {name: /Moderation/})).toHaveAttribute('aria-current', 'page');
+  expect(within(nav).getByRole('link', {name: 'Content'})).not.toHaveAttribute('aria-current');
+  // Overview still points at the consultation's own page, not at the URL being rendered.
+  expect(within(nav).getByRole('link', {name: 'Overview'})).toHaveAttribute('href', '/admin/conversations/7');
 });
 
 test('the session is ended by a form posting the CSRF token to the server link', async () => {
