@@ -97,14 +97,21 @@ test('the statement list opens on the approved ones, most votes first', async ()
   await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
   // The state switch defaults to approved here, not to what is waiting: that is the
   // Moderation queue's default.
-  expect(screen.getByRole('button', {name: 'Show approved'})).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', {name: 'Show approved 3'})).toHaveAttribute('aria-pressed', 'true');
+  // Each position of the switch carries its count, in its accessible name too.
+  expect(screen.getByRole('button', {name: 'Show unmoderated 1'})).toBeVisible();
+  expect(screen.getByRole('button', {name: 'Show hidden'})).toBeVisible();
   expect(screen.getByRole('combobox', {name: 'Sort'})).toHaveValue('most-votes');
   const rows = list().getAllByRole('listitem')
     .map((row) => row.querySelector('.admin-row__text')?.textContent ?? '');
   expect(rows[0]).toContain('Statement number 12');
   expect(rows[2]).toContain('Statement number 13');
-  // A featured statement is starred, and a waiting one is not in this list at all.
+  // A featured statement is starred, the star explains itself, and a waiting one is not in
+  // this list at all.
   expect(rows[0]).toContain('★');
+  expect(rows[0]).toContain('Featured statement');
+  expect(list().getAllByRole('listitem')[0]!.querySelector('[title="Featured statement"]'))
+    .toHaveTextContent('★');
   expect(page().queryByText(/Statement number 20/)).toBeNull();
 });
 
@@ -123,8 +130,35 @@ test('a statement row carries its votes, muted, and where it came from', async (
   const row = list().getByRole('listitem');
   expect(row).toHaveTextContent('A corrected wording.');
   expect(row.querySelector('.admin-row__counts')).toHaveTextContent('A 12 · P 3 · D 5');
-  const source = within(row).getByRole('link', {name: '↳ #11'});
-  expect(source).toHaveAttribute('href', '/admin/conversations/7/content/statements');
+  // The source is not in this list, so there is nothing to jump to: text, not a link.
+  expect(within(row).queryByRole('link')).toBeNull();
+  const source = row.querySelector('.admin-row__source')!;
+  expect(source).toHaveTextContent('derived from statement 11');
+  expect(source).toHaveTextContent('↳ #11 · sim 1.00');
+  expect(source).toHaveAttribute('title',
+    'Derived from statement #11. Similarity 1.00 = identical. sim 1.00.');
+});
+
+test('"↳ #N" jumps to the source row when the source is in the list', async () => {
+  serveWorkspace({
+    pending: [],
+    approved: [
+      statement(11, {text: 'The original wording.'}),
+      statement(14, {text: 'The corrected wording.', provenance: {
+        derivedFromId: 11, scores: [{model: 'sim', value: 0.93}],
+      }}),
+    ],
+    hidden: [],
+  });
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  const link = list().getByRole('link', {name: 'derived from statement 11'});
+  expect(link).toHaveAttribute('href', '#statement-11');
+  expect(link).toHaveTextContent('↳ #11');
+  expect(document.getElementById('statement-11')).toHaveTextContent('The original wording.');
+  expect(link.closest('.admin-row__source')).toHaveTextContent('· sim 0.93');
 });
 
 test('the search box filters the loaded text and says when nothing is left', async () => {
@@ -143,7 +177,42 @@ test('the search box filters the loaded text and says when nothing is left', asy
   expect(page().queryByText(/Bicycle parking/)).toBeNull();
 
   fireEvent.change(screen.getByLabelText('Search statements'), {target: {value: 'nothing here'}});
+  expect(page().getByText('No statement matches the search.')).toBeVisible();
+  expect(page().queryByText('No statements yet.')).toBeNull();
+});
+
+test('the empty list says whether there are no statements at all or none in this view', async () => {
+  serveWorkspace({pending: [statement(20, {moderation: 'pending'})], approved: [], hidden: []});
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  expect(page().getByText('No approved statements.')).toBeVisible();
+  expect(page().queryByText('No statements yet.')).toBeNull();
+  fireEvent.click(screen.getByRole('button', {name: 'Show hidden'}));
+  expect(page().getByText('No hidden statements.')).toBeVisible();
+});
+
+test('a consultation without statements says so once', async () => {
+  serveWorkspace({pending: [], approved: [], hidden: []});
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
   expect(page().getByText('No statements yet.')).toBeVisible();
+});
+
+test('the switch, sort and search sit directly above the list, seeding below it', async () => {
+  serveWorkspace({pending: [], approved: [statement(11)], hidden: []});
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  const toolbar = document.querySelector('.admin-toolbar')!;
+  const rows = document.querySelector('.admin-rows')!;
+  expect(toolbar.nextElementSibling).toBe(rows);
+  const seed = screen.getByRole('button', {name: 'Add seed statement'});
+  expect(rows.compareDocumentPosition(seed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test('sorting by lineage puts a correction under its source', async () => {
@@ -213,6 +282,12 @@ test('participants are one row each, with today’s figures and the access contr
   // The access control is the same one the participants page has always had.
   expect(within(row).getByPlaceholderText('Reason (optional)')).toBeVisible();
   expect(within(row).getByRole('button', {name: 'ban'})).toBeVisible();
+
+  // Once banned, the row says "Banned since …" once, beside the name.
+  fireEvent.click(within(row).getByRole('button', {name: 'ban'}));
+  await within(row).findByRole('button', {name: 'unban'});
+  expect(row).toHaveTextContent('Example editor · Banned since 2026-08-13');
+  expect(row.textContent?.match(/since/g)).toHaveLength(1);
 });
 
 test('participants says once what the roster cannot answer yet', async () => {

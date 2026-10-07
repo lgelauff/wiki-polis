@@ -590,6 +590,7 @@
     "admin-content-sort-most-votes": "Most votes",
     "admin-content-search-aria": "Search statements",
     "admin-content-empty": "No statements yet.",
+    "admin-content-no-match": "No statement matches the search.",
     "admin-access-heading": "Access",
     "admin-access-admission-legend": "Who can take part",
     "admin-access-admission-practice": "Anyone, including people who are not logged in",

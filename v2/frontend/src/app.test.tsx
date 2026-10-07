@@ -285,8 +285,8 @@ test('moderates statements and imports approved seeds through typed commands', a
   expect(await screen.findByRole('heading', {name: 'Statements', level: 1})).toBeVisible();
   // #473: the list is one row per statement behind the state switch, which opens on the
   // approved ones; the waiting statement is one click away.
-  expect(screen.getByRole('button', {name: 'Show unmoderated'})).toBeVisible();
-  fireEvent.click(screen.getByRole('button', {name: 'Show unmoderated'}));
+  expect(screen.getByRole('button', {name: /^Show unmoderated/})).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: /^Show unmoderated/}));
   expect(await screen.findByText('A participant proposal awaiting review.')).toBeVisible();
   expect(screen.getByText(
     'Adds a seed-marked statement that appears early in the voting sequence for participants.',
@@ -296,7 +296,7 @@ test('moderates statements and imports approved seeds through typed commands', a
   fireEvent.click(screen.getByRole('button', {name: 'approve'}));
   // Approving takes the row out of the waiting list and into the approved one.
   await waitFor(() => expect(screen.queryByText('A participant proposal awaiting review.')).toBeNull());
-  fireEvent.click(screen.getByRole('button', {name: 'Show approved'}));
+  fireEvent.click(screen.getByRole('button', {name: /^Show approved/}));
   await waitFor(() => expect(screen.getByText('A participant proposal awaiting review.')).toBeVisible());
 
   fireEvent.change(screen.getByLabelText('Statements'), {
@@ -615,6 +615,50 @@ test.each([
   expect(screen.queryByRole('heading', {name: heading})).toBeNull();
   expect(within(screen.getByRole('navigation', {name: 'Moderation'})).getByRole('link', {name: heading}))
     .toHaveAttribute('aria-current', 'page');
+});
+
+test.each([
+  ['/admin/conversations/7/statements', '/admin/conversations/7/content/statements'],
+  ['/admin/conversations/7/participants', '/admin/conversations/7/content/participants'],
+  // The /app/admin group redirects into the canonical /admin group.
+  ['/app/admin/conversations/7/statements', '/admin/conversations/7/content/statements'],
+  ['/app/admin/conversations/7/participants', '/admin/conversations/7/content/participants'],
+])('the old path %s redirects to the Content page %s', async (source, target) => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[source]}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await waitFor(() => expect(screen.getByLabelText('client location')).toHaveTextContent(target));
+  expect(screen.getByLabelText('client location').textContent).toBe(target);
+});
+
+test.each([
+  ['/admin', 'statements', 'Statements'],
+  ['/admin', 'participants', 'Participants'],
+  ['/app/admin', 'statements', 'Statements'],
+  ['/app/admin', 'participants', 'Participants'],
+])('%s/conversations/7/content/%s is routed to its page', async (group, page, heading) => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[`${group}/conversations/7/content/${page}`]}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: heading, level: 1}, {timeout: 10_000}))
+    .toBeVisible();
+  expect(within(screen.getByRole('navigation', {name: 'Content'})).getByRole('link', {name: heading}))
+    .toHaveAttribute('aria-current', 'page');
+  // Routed, not redirected: the page renders at the path it was asked for.
+  expect(screen.getByLabelText('client location').textContent)
+    .toBe(`${group}/conversations/7/content/${page}`);
 });
 
 test('renders a conversation record from the generated API contract', async () => {

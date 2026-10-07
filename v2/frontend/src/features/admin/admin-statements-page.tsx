@@ -1,6 +1,5 @@
 import {Fragment, useCallback, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
-import {Link} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
@@ -13,7 +12,6 @@ import {
   putAdminStatementModeration,
 } from '../../api/queries';
 import {useMessage} from '../../i18n/messages';
-import {InternalLink} from '../../internal-link';
 import {AdminShell} from './admin-shell';
 import {AdminTabStrip} from './admin-tab-strip';
 import {contentTabs} from './admin-content-tabs';
@@ -23,10 +21,6 @@ type Workspace = components['schemas']['AdminStatementWorkspace'];
 type Statement = components['schemas']['AdminStatement'];
 type Status = Statement['moderation'];
 type Feedback = LegacyToastMessage;
-
-function legacyTruncate(value: string, length = 28, leeway = 5): string {
-  return value.length <= length + leeway ? value : `${value.slice(0, length - 1)}…`;
-}
 
 function legacyError(error: Error, fallback: string): string {
   return error instanceof ApiContractError ? error.message : fallback;
@@ -86,7 +80,7 @@ function StatementActions({
     },
   });
   return (
-    <td className="stmt-actions">
+    <div className="admin-row__actions">
       {actions[statement.moderation].map((action, index) => (
         <Fragment key={action.status}>
           {index > 0 && ' '}
@@ -107,7 +101,7 @@ function StatementActions({
           </form>
         </Fragment>
       ))}
-    </td>
+    </div>
   );
 }
 
@@ -160,26 +154,56 @@ function sortStatements(rows: Statement[], sort: Sort): Statement[] {
   return out;
 }
 
+/** Where a derived statement came from, in the words and format the old statement table
+ *  used: "↳ #N", then each similarity score, muted. "↳ #N" jumps to the source's row when
+ *  that row is in the list on screen; otherwise there is nothing to jump to and it is text. */
+function StatementSource({provenance, sourceShown}: {
+  provenance: NonNullable<Statement['provenance']>;
+  sourceShown: boolean;
+}) {
+  const id = provenance.derivedFromId;
+  const title = `Derived from statement #${id}. Similarity 1.00 = identical.${provenance.scores.map((score) => ` ${score.model} ${score.value.toFixed(2)}.`).join('')}`;
+  const marker = (
+    <>
+      <span className="sr-only">derived from statement {id}</span>
+      <span aria-hidden="true">{`↳ #${id}`}</span>
+    </>
+  );
+  return (
+    <span className="admin-row__source" title={title}>
+      {' '}
+      {sourceShown ? <a href={`#statement-${id}`}>{marker}</a> : marker}
+      {provenance.scores.map((score) => (
+        <span key={score.model}> · {score.model}&nbsp;{score.value.toFixed(2)}</span>
+      ))}
+    </span>
+  );
+}
+
 /** One statement as one row: a star when it is featured, the text, where it came from, its
- *  votes and what can be done to it. */
-function StatementRow({conversationId, statement, csrfToken, move, onError}: {
+ *  votes and what can be done to it. The row's id is the target of "↳ #N" on the rows
+ *  derived from it. */
+function StatementRow({conversationId, statement, sourceShown, csrfToken, move, onError}: {
   conversationId: number;
   statement: Statement;
+  sourceShown: boolean;
   csrfToken: string;
   move: (statement: Statement, status: Status) => void;
   onError: (message: string) => void;
 }) {
   const msg = useMessage();
-  const source = statement.provenance;
   return (
-    <li className="admin-row">
+    <li className="admin-row" id={`statement-${statement.id}`}>
       <div className="admin-row__text">
-        <span className="sr-only">{msg('admin-moderation-statement', statement.id)}</span>
-        {statement.featured && <span className="admin-row__star" aria-hidden="true">★ </span>}
+        {statement.featured && (
+          <span className="admin-row__star" title={msg('conv-arg-featured-label')}>
+            <span aria-hidden="true">★ </span>
+            <span className="sr-only">{msg('conv-arg-featured-label')}: </span>
+          </span>
+        )}
         {statement.text}
-        {source && (
-          <InternalLink href={`/admin/conversations/${conversationId}/content/statements`}
-            className="admin-row__source">{`↳ #${source.derivedFromId}`}</InternalLink>
+        {statement.provenance && (
+          <StatementSource provenance={statement.provenance} sourceShown={sourceShown} />
         )}
       </div>
       <div className="admin-row__counts">
@@ -354,11 +378,26 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   }
 
   const needle = search.trim().toLowerCase();
+  const total = data.statements.approved.length + data.statements.pending.length
+    + data.statements.hidden.length;
+  const inView = data.statements[LIST[position]];
+  // What the list says when it is empty: that there are no statements at all, that this
+  // position of the switch holds none, or that the search matched none of them.
+  const emptyPosition: Record<Position, string> = {
+    approved: msg('stmts-approved-empty'),
+    unmoderated: msg('stmts-pending-empty'),
+    hidden: msg('stmts-hidden-empty'),
+  };
+  let empty = msg('admin-content-no-match');
+  if (total === 0) empty = msg('admin-content-empty');
+  else if (inView.length === 0) empty = emptyPosition[position];
   const rows = sortStatements(
-    data.statements[LIST[position]].filter((statement) => needle === ''
+    inView.filter((statement) => needle === ''
       || statement.text.toLowerCase().includes(needle)),
     sort,
   );
+
+  const shown = new Set(rows.map((row) => row.id));
 
   return (
     <AdminShell
@@ -386,6 +425,8 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
               >
                 <span aria-hidden="true">{item.glyph}</span>
                 <span className="sr-only">{msg(item.key)}</span>
+                {data.statements[LIST[item.id]].length
+                  ? ` ${data.statements[LIST[item.id]].length}` : ''}
               </button>
             ))}
           </div>
@@ -406,6 +447,25 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
             />
           </label>
         </div>
+
+        {rows.length ? (
+          <ul className="admin-rows">
+            {rows.map((statement) => (
+              <StatementRow
+                key={statement.id}
+                conversationId={conversationId}
+                statement={statement}
+                sourceShown={!!statement.provenance
+                  && shown.has(statement.provenance.derivedFromId)}
+                csrfToken={csrfToken}
+                move={moveStatement}
+                onError={showError}
+              />
+            ))}
+          </ul>
+        ) : (
+          <p className="admin-empty">{empty}</p>
+        )}
 
         <div className="landing-section" style={{marginBottom: '1.5rem'}}>
           <h3 style={{fontSize: 16, marginBottom: '.5rem'}}>How statement management works</h3>
@@ -514,26 +574,9 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           </>
         )}
 
-        {rows.length ? (
-          <ul className="admin-rows">
-            {rows.map((statement) => (
-              <StatementRow
-                key={statement.id}
-                conversationId={conversationId}
-                statement={statement}
-                csrfToken={csrfToken}
-                move={moveStatement}
-                onError={showError}
-              />
-            ))}
-          </ul>
-        ) : (
-          <p className="admin-empty">{msg('admin-content-empty')}</p>
-        )}
-
         {/* Arguments are a page in the spec and not one here: there is no admin list endpoint
             for them yet (#473). */}
-        <p className="admin-coming" lang="en">Also coming: the arguments of this consultation as a list of their own — not available yet (#473)</p>
+        <p className="admin-shell__coming" lang="en">Also coming: the arguments of this consultation as a list of their own — not available yet (#473)</p>
 
         {/* The Approval control (strict moderation) lives on Settings › Basics (#478): it is a
             setting of the consultation, not of the statement list. */}

@@ -87,15 +87,10 @@ function ParticipantAccessControl({
   if (participant.access.banned) {
     return (
       <>
-        <div style={{fontSize: 13, marginBottom: '.5rem'}}>
-          <strong>Banned</strong>{' '}
-          {participant.access.changedAt && (
-            <span className="muted">since {formatLegacyDate(participant.access.changedAt)}</span>
-          )}
-          {participant.access.summary && (
-            <div className="muted" style={{marginTop: '.25rem'}}>{participant.access.summary}</div>
-          )}
-        </div>
+        {/* "Banned since …" is said once, beside the name. */}
+        {participant.access.summary && (
+          <div className="muted" style={{fontSize: 13, marginBottom: '.5rem'}}>{participant.access.summary}</div>
+        )}
         <form onSubmit={submit}>
           <input
             type="text"
@@ -219,7 +214,7 @@ export function AdminParticipantsPage({
 
         {/* The spec splits this page into a moderator's columns and an organizer's and adds
             the batch label and the joined day. The roster carries none of those fields yet. */}
-        <p className="admin-coming" lang="en">Also coming: the moderator and organizer roles per person, their batch, and the day they joined — not available yet (#473)</p>
+        <p className="admin-shell__coming" lang="en">Also coming: the moderator and organizer roles per person, their batch, and the day they joined — not available yet (#473)</p>
       </div>
     </AdminShell>
   );
