@@ -1,7 +1,7 @@
 import {QueryClientProvider} from '@tanstack/react-query';
 import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {http, HttpResponse} from 'msw';
-import {Link, MemoryRouter} from 'react-router-dom';
+import {Link, MemoryRouter, useLocation} from 'react-router-dom';
 import {expect, test, vi} from 'vitest';
 
 import {App} from './app';
@@ -473,15 +473,63 @@ test('keeps the typed invitation list and shows a toast after a save error', asy
 
 test('replaces a conversation role set from the admin workspace', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/roles']}><App /></MemoryRouter></QueryClientProvider>);
-  expect(await screen.findByRole('heading', {name: 'Conversation roles'})).toBeVisible();
+  // #478: Roles is a Settings tab; its own "Conversation roles" heading went with the old
+  // layout, and the roster is a subsection under the tab's h2.
+  const assigned = await screen.findByRole('heading', {name: 'Assigned', level: 3});
+  expect(screen.getByRole('heading', {name: 'Roles', level: 2})).toBeVisible();
   // The roster's own row, not the username in the console's top bar.
-  const roster = screen.getByRole('heading', {name: 'Assigned'}).closest('section')!;
+  const roster = assigned.closest('section')!;
   expect(within(roster).getByRole('listitem')).toHaveTextContent('Example editor');
   fireEvent.change(screen.getByLabelText('Participant'), {target: {value: '23'}});
   fireEvent.click(screen.getByRole('checkbox', {name: 'organizer'}));
   fireEvent.click(screen.getByRole('button', {name: 'Save role set'}));
   expect(await screen.findByRole('status')).toHaveTextContent('Added: organizer');
   expect(screen.getByText('moderator + organizer')).toBeVisible();
+});
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output aria-label="client location">{location.pathname}</output>;
+}
+
+test.each([
+  ['/admin/conversations/7/invites', '/admin/conversations/7/settings/invitations'],
+  ['/admin/conversations/7/roles', '/admin/conversations/7/settings/roles'],
+  // The /app/admin group redirects into the canonical /admin group.
+  ['/app/admin/conversations/7/invitations', '/admin/conversations/7/settings/invitations'],
+  ['/app/admin/conversations/7/roles', '/admin/conversations/7/settings/roles'],
+])('the old path %s redirects to the Settings tab %s', async (source, target) => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[source]}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await waitFor(() => expect(screen.getByLabelText('client location')).toHaveTextContent(target));
+  expect(screen.getByLabelText('client location').textContent).toBe(target);
+});
+
+test.each([
+  ['invitations', 'Invitations'],
+  ['vouchers', 'Vouchers'],
+  ['roles', 'Roles'],
+])('the Settings tab …/settings/%s is routed to its page', async (tab, heading) => {
+  // Guards the routes themselves: a later change that drops one would fall through to the
+  // not-found route instead.
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[`/admin/conversations/7/settings/${tab}`]}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000}))
+    .toBeVisible();
+  expect(screen.getByRole('heading', {name: heading, level: 2})).toBeVisible();
 });
 
 test('renders a conversation record from the generated API contract', async () => {

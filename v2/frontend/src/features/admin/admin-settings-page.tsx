@@ -191,7 +191,9 @@ function settingsTabs(conversationId: number, gatingType: GatingType, msg: Messa
   return [
     {id: 'basics', label: msg('admin-settings-tab-basics'), href: `${base}/basics`},
     {id: 'access', label: msg('admin-access-heading'), href: `${base}/access`},
-    {id: gatingType === 'voucher' ? 'vouchers' : 'invitations',
+    // One id for both kinds, so a voucher consultation sent to Invitations (or the
+    // reverse) still marks this tab as the current one.
+    {id: 'membership',
       label: gatingType === 'voucher'
         ? msg('admin-settings-tab-vouchers')
         : msg('admin-settings-tab-invitations'),
@@ -237,7 +239,8 @@ export function AdminSettingsFrame({children, conversationId, gatingType, lifecy
       <div className="admin-page settings-page">
         <h1>{msg('admin-settings-heading')}</h1>
         <AdminTabStrip label={msg('admin-settings-tabs-aria')}
-          tabs={settingsTabs(conversationId, gatingType, msg)} current={tab} />
+          tabs={settingsTabs(conversationId, gatingType, msg)}
+          current={tab === 'invitations' || tab === 'vouchers' ? 'membership' : tab} />
         {children}
       </div>
     </AdminShell>
@@ -262,7 +265,7 @@ export function AdminSettingsVouchersPage({conversationId}: {conversationId: num
       lifecycle={lifecycle}
       tab="vouchers"
     >
-      <p className="admin-coming" lang="en">Also coming: generating, importing, checking and withdrawing voucher codes here — not available yet (#368)</p>
+      <p className="admin-shell__coming" lang="en">Also coming: generating, importing, checking and withdrawing voucher codes here — not available yet (#368)</p>
     </AdminSettingsFrame>
   );
 }

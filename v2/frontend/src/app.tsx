@@ -32,8 +32,7 @@ const AdminSettingsAccessRoute = lazy(() => loadAdminRoutes().then((module) => (
 const AdminSettingsInvitationsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsInvitationsRoute})));
 const AdminSettingsVouchersRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsVouchersRoute})));
 const AdminSettingsRolesRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsRolesRoute})));
-const AdminInvitesRedirectRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminRedirectRoute})));
-const AdminRolesRedirectRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminRedirectRoute})));
+const AdminRedirectRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminRedirectRoute})));
 const AdminTerminationRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminTerminationRoute})));
 const AdminStatementsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminStatementsRoute})));
 const AdminFeaturedRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminFeaturedRoute})));
@@ -84,8 +83,8 @@ function DeferredRoutes() {
       <Route path="/admin/conversations/:conversationId/featured" element={<AdminFeaturedRoute />} />
       <Route path="/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
       <Route path="/admin/conversations/:conversationId/flags" element={<AdminModerationRoute />} />
-      <Route path="/admin/conversations/:conversationId/invites" element={<AdminInvitesRedirectRoute to={settingsInvitationsPath} />} />
-      <Route path="/admin/conversations/:conversationId/roles" element={<AdminRolesRedirectRoute to={settingsRolesPath} />} />
+      <Route path="/admin/conversations/:conversationId/invites" element={<AdminRedirectRoute to={settingsInvitationsPath} />} />
+      <Route path="/admin/conversations/:conversationId/roles" element={<AdminRedirectRoute to={settingsRolesPath} />} />
       <Route path="/app/parity/fork" element={<ForkPage />} />
       <Route path="/app/parity/help/statements" element={<StatementGuidancePage />} />
       <Route path="/app/parity/help/arguments" element={<ArgumentGuidancePage />} />
@@ -113,9 +112,8 @@ function DeferredRoutes() {
       <Route path="/app/admin/conversations/:conversationId/featured" element={<AdminFeaturedRoute />} />
       <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
       <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminModerationRoute />} />
-      <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminInvitesRedirectRoute to={settingsInvitationsPath} />} />
-      <Route path="/app/admin/conversations/:conversationId/invites" element={<AdminInvitesRedirectRoute to={settingsInvitationsPath} />} />
-      <Route path="/app/admin/conversations/:conversationId/roles" element={<AdminRolesRedirectRoute to={settingsRolesPath} />} />
+      <Route path="/app/admin/conversations/:conversationId/invitations" element={<AdminRedirectRoute to={settingsInvitationsPath} />} />
+      <Route path="/app/admin/conversations/:conversationId/roles" element={<AdminRedirectRoute to={settingsRolesPath} />} />
       <Route path="*" element={<UnmatchedRoute />} />
     </Routes>
   );

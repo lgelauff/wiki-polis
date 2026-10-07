@@ -1018,8 +1018,41 @@ test('the Vouchers tab is the strip and one line about what is not built yet', a
     + ' — not available yet (#368)',
   );
   expect(lines[0]).toHaveAttribute('lang', 'en');
+  expect(lines[0]).toHaveClass('admin-shell__coming');
   expect(lines[0]?.closest('a, button')).toBeNull();
   // No dead controls standing in for the missing feature.
   expect(screen.queryByRole('button', {name: /Generate|Import|Check|Withdraw/})).toBeNull();
   expect(screen.queryByRole('table')).toBeNull();
+});
+
+test.each([
+  ['voucher', 'invitations', 'Vouchers'],
+  ['invite_only', 'vouchers', 'Invitations'],
+] as const)('a %s consultation on the %s tab still marks one tab as current', async (
+  gatingType, page, label,
+) => {
+  // The third tab is named by this consultation's kind, while the URL may be the other
+  // kind's (an old link, a changed answer). The strip still says "you are here" once.
+  serve({...settings, conversation: {
+    ...settings.conversation, gated: true, gatingType, accessPolicy: 'invite_only',
+  }});
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[`/admin/conversations/7/settings/${page}`]}>
+        <Suspense fallback={null}>
+          <MessageProvider locale="en">
+            {page === 'invitations'
+              ? <AdminInvitationsPage conversationId={7} csrfToken="test-csrf-token" />
+              : <AdminSettingsVouchersPage conversationId={7} />}
+          </MessageProvider>
+        </Suspense>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  const current = within(tabs()).getAllByRole('link')
+    .filter((link) => link.getAttribute('aria-current') === 'page');
+  expect(current).toHaveLength(1);
+  expect(current[0]).toHaveTextContent(label);
 });
