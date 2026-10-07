@@ -464,9 +464,6 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           </>
         )}
 
-        {/* The Approval control (strict moderation) moved to Settings › Basics (#478): it is
-            a setting of the consultation, not of the statement list. */}
-
         {(['pending', 'approved', 'hidden'] as Status[]).map((status) => (
           <StatementTable
             key={status}

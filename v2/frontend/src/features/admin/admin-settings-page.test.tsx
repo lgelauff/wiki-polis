@@ -599,8 +599,9 @@ test('Basics names the three things that are not built yet', async () => {
     'Also coming: publishing the moderation log — not available yet (#473)',
   ]);
   for (const line of lines) {
-    // A control whose value nothing reads is not a control: muted, in English, and
-    // nothing to tab into.
+    // A control whose value nothing reads is not a control: muted like the frame's own
+    // lines, in English, and nothing to tab into.
+    expect(line).toHaveClass('admin-shell__coming');
     expect(line).toHaveAttribute('lang', 'en');
     // Not inside a control, and not itself focusable. `<main tabindex="-1">` is the frame's
     // skip target, not a control these lines live in.
@@ -610,47 +611,51 @@ test('Basics names the three things that are not built yet', async () => {
   }
 });
 
-test('the Approval control moved to Basics, with the body it always sent', async () => {
-  const sent: Record<string, unknown>[] = [];
-  // Its state comes from the statements workspace's `moderationPolicy.mode`, which is why
-  // this tab runs that query (decisions.md a).
-  server.use(http.get(
-    new URL('/api/v1/admin/conversations/7/statements', globalThis.location.origin).toString(),
-    () => HttpResponse.json({data: {
-      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
-      statements: {pending: [], approved: [], hidden: []},
-      moderationPolicy: {mode: 'auto_approve', newStatements: 'approved', available: true},
-      dataAvailability: {statements: true},
-      seeding: {allowed: true, lockReason: null, maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
-      capabilities: {moderate: true, seed: true},
-      links: {self: '/api/v1/admin/conversations/7/statements', lifecycle: '/admin/conversations/7'},
-    }}),
-  ));
-  server.use(http.put(
-    new URL('/api/v1/admin/conversations/7/statement-moderation-policy', globalThis.location.origin)
-      .toString(),
-    async ({request}) => {
-      const payload = await request.json() as Record<string, unknown>;
-      sent.push(payload);
-      return HttpResponse.json({data: {
-        mode: payload.mode, changed: true, reconciledStatements: 0,
-        workspace: {
-          conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
-          statements: {pending: [], approved: [], hidden: []},
-          moderationPolicy: {mode: payload.mode, newStatements: 'pending', available: true},
-          dataAvailability: {statements: true},
-          seeding: {allowed: true, lockReason: null, maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
-          capabilities: {moderate: true, seed: true},
-          links: {self: '/api/v1/admin/conversations/7/statements', lifecycle: '/admin/conversations/7'},
-        },
-      }});
+const STATEMENTS_URL = new URL(
+  '/api/v1/admin/conversations/7/statements', globalThis.location.origin,
+).toString();
+const POLICY_URL = new URL(
+  '/api/v1/admin/conversations/7/statement-moderation-policy', globalThis.location.origin,
+).toString();
+
+function workspace(mode: string) {
+  return {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+    statements: {pending: [], approved: [], hidden: []},
+    moderationPolicy: {
+      mode, newStatements: mode === 'moderate' ? 'pending' : 'approved', available: true,
     },
-  ));
+    dataAvailability: {statements: true},
+    seeding: {allowed: true, lockReason: null, maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
+    capabilities: {moderate: true, seed: true},
+    links: {self: '/api/v1/admin/conversations/7/statements', lifecycle: '/admin/conversations/7'},
+  };
+}
+
+/** Serves the statements workspace the Approval control reads its state from (decisions.md
+ *  a), and records every moderation-policy PUT. */
+function recordPolicyPuts() {
+  const sent: Record<string, unknown>[] = [];
+  server.use(http.get(STATEMENTS_URL, () => HttpResponse.json({data: workspace('auto_approve')})));
+  server.use(http.put(POLICY_URL, async ({request}) => {
+    const payload = await request.json() as Record<string, unknown>;
+    sent.push(payload);
+    return HttpResponse.json({data: {
+      mode: payload.mode, changed: true, reconciledStatements: 0,
+      workspace: workspace(String(payload.mode)),
+    }});
+  }));
+  return sent;
+}
+
+test('the Approval control moved to Basics, with the body it always sent', async () => {
+  const sent = recordPolicyPuts();
   serve(settings);
   renderPage('basics');
 
   const approval = await screen.findByRole('checkbox', {name: /Strict moderation/},
     {timeout: 10_000});
+  expect(screen.getByRole('heading', {name: 'Moderation settings', level: 3})).toBeVisible();
   expect(approval).not.toBeChecked();
   fireEvent.click(approval);
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
@@ -659,6 +664,27 @@ test('the Approval control moved to Basics, with the body it always sent', async
   // The moderation policy is not one of the fields the settings endpoint takes, so it
   // keeps its own endpoint and its own body.
   expect(sent[0]).toEqual({mode: 'moderate'});
+});
+
+test('saving Approval sends one policy PUT and no settings PUT', async () => {
+  const policy = recordPolicyPuts();
+  serve(settings);
+  const settingsPuts = recordPuts();
+  renderPage('basics');
+
+  const approval = await screen.findByRole('checkbox', {name: /Strict moderation/},
+    {timeout: 10_000});
+  fireEvent.click(approval);
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+
+  await waitFor(() => expect(policy).toHaveLength(1));
+  // Both requests would leave on the same click; wait for the receipt to land, then for a
+  // settings save to have had every chance to show up.
+  await waitFor(() => expect(screen.getByRole('button', {name: 'Save'})).toBeEnabled());
+  await new Promise((resolve) => { setTimeout(resolve, 100); });
+  expect(policy).toHaveLength(1);
+  expect(settingsPuts).toHaveLength(0);
+  expect(screen.queryByRole('status')).toBeNull();
 });
 
 test('the Access tab has no Approval control and no Practice switch', async () => {
@@ -671,37 +697,60 @@ test('the Access tab has no Approval control and no Practice switch', async () =
   expect(screen.queryByRole('textbox', {name: 'Title'})).toBeNull();
 });
 
-test.each([
-  ['basics', 'title'],
-  ['access', 'gated'],
-] as const)('saving %s sends the other tab’s fields back as they were loaded', async (
-  tab, edited,
-) => {
+test('a practice item keeps its eligibility fields on Access, without the admission group', async () => {
+  serve({...settings, conversation: {...settings.conversation, accessPolicy: 'demo'},
+    eligibility: {...settings.eligibility, configured: true, eventId: 'event-42'}});
+  renderPage('access');
+
+  const eventId = await screen.findByLabelText('Eligibility event ID', {}, {timeout: 10_000});
+  expect(eventId).toHaveValue('event-42');
+  expect(screen.getByLabelText('Eligibility label')).toBeVisible();
+  // The fixed answer is stated on Basics; here there is no question to offer.
+  expect(screen.queryByRole('group', {name: 'Who can take part'})).toBeNull();
+  expect(screen.queryByRole('radio')).toBeNull();
+  expect(within(screen.getByRole('main')).queryByText(/^Also coming:/)).toBeNull();
+});
+
+test('saving Basics sends the Access fields back as they were loaded', async () => {
   // The endpoint takes one of three complete key sets, so a save from either tab has to
   // carry the fields the other tab owns. Last write wins, so they go back untouched.
   serve({...settings, eligibility: {...settings.eligibility, configured: true, eventId: 'event-42', label: 'Active editors'}});
   const sent = recordPuts();
-  renderPage(tab);
+  renderPage('basics');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  if (tab === 'basics') {
-    fireEvent.change(screen.getByRole('textbox', {name: 'Title'}), {target: {value: 'A new title'}});
-  } else {
-    fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'event-99'}});
-  }
+  fireEvent.change(screen.getByRole('textbox', {name: 'Title'}), {target: {value: 'A new title'}});
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toMatchObject({
-    // Whatever this tab edits...
-    [edited]: tab === 'basics' ? 'A new title' : true,
-    // ...and everything the other tab owns, exactly as loaded.
-    eligibilityEventId: tab === 'basics' ? 'event-42' : 'event-99',
+    title: 'A new title',
+    eligibilityEventId: 'event-42',
     eligibilityLabel: 'Active editors',
     gated: false,
     gatingType: null,
-    recommendationTier: 'medium',
+    accessPolicy: 'public',
     announce: false, information: false, resultsShared: false, showUsernames: false,
     accessRequestText: null,
+  });
+});
+
+test('saving Access sends the Basics fields back as they were loaded', async () => {
+  serve({...settings, eligibility: {...settings.eligibility, configured: true, eventId: 'event-42', label: 'Active editors'}});
+  const sent = recordPuts();
+  renderPage('access');
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'event-99'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+
+  await waitFor(() => expect(sent).toHaveLength(1));
+  expect(sent[0]).toMatchObject({
+    eligibilityEventId: 'event-99',
+    title: 'Community strategy',
+    introHtml: '<p>Shape the future.</p>',
+    outroHtml: '',
+    accessPolicy: 'public',
+    recommendationTier: 'medium',
   });
 });

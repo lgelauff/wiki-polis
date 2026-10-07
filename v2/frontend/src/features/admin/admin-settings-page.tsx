@@ -162,10 +162,12 @@ function SettingsTabs({conversationId, gatingType, current}: {
  * fields the settings endpoint takes. It reads its state from the statements workspace
  * (`moderationPolicy.mode`), which is why this tab runs that query, and the receipt writes
  * the returned workspace back into it, so the checkbox and the statements list never
- * disagree. */
-function ApprovalControl({conversationId, csrfToken}: {
+ * disagree. Its form is rendered after the settings form, never inside it: a nested form's
+ * submit would also reach the settings form and send a settings PUT. */
+function ApprovalControl({conversationId, csrfToken, number}: {
   conversationId: number;
   csrfToken: string;
+  number: string;
 }) {
   const msg = useMessage();
   const queryClient = useQueryClient();
@@ -198,7 +200,7 @@ function ApprovalControl({conversationId, csrfToken}: {
   });
   return (
     <section aria-labelledby="settings-approval">
-      <header><span>03</span><div><h3 id="settings-approval">Approval</h3></div></header>
+      <header><span>{number}</span><div><h3 id="settings-approval">{msg('stmts-modsettings-heading')}</h3></div></header>
       <form onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
         <input type="hidden" name="csrf_token" value={csrfToken} />
         <label className="checkbox-label" style={{fontWeight: 'normal', color: 'var(--text)'}}>
@@ -346,6 +348,9 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
     return <p className="access-field-error" id={`${ids}-${field}-error`}>{messages.join(' ')}</p>;
   }
 
+  // The Practice switch is shown only to a site admin, and not while Explore locks access.
+  const canSwitchPractice = !gated && canSwitchDemo && !admissionLocked;
+  const practiceSection = practice || canSwitchPractice;
   const tabName = tab === 'basics'
     ? msg('admin-settings-tab-basics')
     : msg('admin-access-heading');
@@ -384,7 +389,7 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
               <p className="settings-hint" dangerouslySetInnerHTML={richHtml(msg('admin-settings-basics-licence', '<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">' + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
             </section>
             <section aria-labelledby="settings-guidance">
-              <header><span>02</span><div><h3 id="settings-guidance">Topic size</h3></div></header>
+              <header><span>02</span><div><h3 id="settings-guidance">Guidance scope</h3></div></header>
               <fieldset><legend>Complexity tier</legend>{data.recommendations.tiers.map((option) => (
                 <label className="settings-tier" key={option.key}>
                   <input type="radio" name="tier" value={option.key} checked={tier === option.key} onChange={() => setTier(option.key)} />
@@ -393,37 +398,29 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
                 </label>
               ))}</fieldset>
             </section>
-            <ApprovalControl conversationId={conversationId} csrfToken={csrfToken} />
             {/* The Practice Environment section: the fixed answer a practice item has, and the
                 switch that moves one in or out of it. Nothing at all when neither applies, so
                 there is no heading without content under it. Hidden while Explore locks access:
                 moving into or out of Practice rewrites the locked settings, which the server
                 refuses then. */}
-            {(practice || (!gated && canSwitchDemo && !admissionLocked)) && <section aria-labelledby="settings-practice">
-              <header><span>04</span><div><h3 id="settings-practice">{msg('admin-access-practice')}</h3></div></header>
+            {practiceSection && <section aria-labelledby="settings-practice">
+              <header><span>03</span><div><h3 id="settings-practice">{msg('admin-access-practice')}</h3></div></header>
               {practice && <div className="access-answer" role="group" aria-labelledby={`${ids}-practice-legend`}>
                 {/* One fixed answer, stored by the server whatever is sent, so it is stated
                     rather than offered: a gate here would only be refused. */}
                 <p className="access-answer-legend" id={`${ids}-practice-legend`}>{msg('admin-access-admission-legend')}</p>
                 <p className="access-answer-value">{msg('admin-access-admission-practice')}</p>
               </div>}
-              {!gated && canSwitchDemo && !admissionLocked && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
+              {canSwitchPractice && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
                 <option value="public">Not gated</option><option value="demo">Practice</option>
               </select></label>}
             </section>}
-            <section aria-labelledby="settings-coming">
-              <header><span>05</span><div><h3 id="settings-coming">Submission, transparency and language</h3></div></header>
-              <p className="settings-hint" lang="en">Also coming: the language the consultation is written in — not available yet (#473)</p>
-              <p className="settings-hint" lang="en">Also coming: keeping the submission form open while new statements are no longer shown — not available yet (#473)</p>
-              <p className="settings-hint" lang="en">Also coming: publishing the moderation log — not available yet (#473)</p>
-            </section>
-          </> : <>
-            {/* A practice item has no access choice to offer: the server stores one fixed
-                answer whatever is sent, and the Practice Environment section on Basics says
-                which. Rendering a gate here would offer a control the server refuses, so the
-                whole group is absent rather than empty. */}
-            {!practice && <section aria-labelledby="settings-access">
-              <header><span>01</span><div><h3 id="settings-access">Who can discover and join this consultation.</h3></div></header>
+          </> : <section aria-label={msg('admin-access-heading')}>
+            {/* A practice item has no admission choice: the server stores one fixed answer
+                whatever is sent, and the Practice Environment section on Basics states it.
+                Only the admission group is left out; the eligibility fields stay. The tab has
+                one section, so it carries no number. */}
+            {!practice && <>
               {admissionLocked ? <div className="access-answer">
                 <p className="access-answer-legend">{msg('admin-access-admission-legend')}</p>
                 <p className="access-answer-value">
@@ -445,23 +442,23 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
                 </label>
                 <p className="settings-hint">{COMING_ADMISSION}</p>
               </fieldset>}
-              {admissionMessages.length > 0 &&<p className="access-field-error" id={`${ids}-gated-error`}>{admissionMessages.join(' ')}</p>}
-              {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
               {gated && <>
                 <p className="settings-hint">{COMING_VISIBILITY}</p>
                 <p className="settings-hint">{COMING_REVEAL}</p>
               </>}
-              <label>{msg('admin-label-elig-event')}<input value={eligibilityEventId} maxLength={80} placeholder={msg('admin-elig-event-ph')} {...invalid('eligibilityEventId')} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
-              <FieldError field="eligibilityEventId" />
-              <label>{msg('admin-label-elig-label')}<input value={eligibilityLabel} maxLength={255} placeholder={msg('admin-elig-label-ph')} {...invalid('eligibilityLabel')} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
-              <FieldError field="eligibilityLabel" />
-              <div className="settings-eligibility" data-configured={data.eligibility.configured}>
-                <strong>Eligibility {data.eligibility.configured ? 'configured' : 'not configured'}</strong>
-                {data.eligibility.label && <span>{data.eligibility.label}</span>}
-                <p>{data.eligibility.note}</p>
-              </div>
-            </section>}
-          </>}
+            </>}
+            {admissionMessages.length > 0 &&<p className="access-field-error" id={`${ids}-gated-error`}>{admissionMessages.join(' ')}</p>}
+            {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
+            <label>{msg('admin-label-elig-event')}<input value={eligibilityEventId} maxLength={80} placeholder={msg('admin-elig-event-ph')} {...invalid('eligibilityEventId')} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
+            <FieldError field="eligibilityEventId" />
+            <label>{msg('admin-label-elig-label')}<input value={eligibilityLabel} maxLength={255} placeholder={msg('admin-elig-label-ph')} {...invalid('eligibilityLabel')} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
+            <FieldError field="eligibilityLabel" />
+            <div className="settings-eligibility" data-configured={data.eligibility.configured}>
+              <strong>Eligibility {data.eligibility.configured ? 'configured' : 'not configured'}</strong>
+              {data.eligibility.label && <span>{data.eligibility.label}</span>}
+              <p>{data.eligibility.note}</p>
+            </div>
+          </section>}
           {canEdit && <footer>
             {confirming ? <div className="access-confirm" role="group" aria-labelledby={`${ids}-confirm`} tabIndex={-1} ref={confirmRef}>
               <p id={`${ids}-confirm`}>{msg('admin-access-narrowing-confirm')}</p>
@@ -474,6 +471,13 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
             {generalError && <p role="alert">{generalError}</p>}
           </footer>}
         </form>
+        {tab === 'basics' && <>
+          {/* Outside the settings form: the Approval control has a form of its own. */}
+          <ApprovalControl conversationId={conversationId} csrfToken={csrfToken} number={practiceSection ? '04' : '03'} />
+          <p className="admin-shell__coming" lang="en">Also coming: the language the consultation is written in — not available yet (#473)</p>
+          <p className="admin-shell__coming" lang="en">Also coming: keeping the submission form open while new statements are no longer shown — not available yet (#473)</p>
+          <p className="admin-shell__coming" lang="en">Also coming: publishing the moderation log — not available yet (#473)</p>
+        </>}
       </div>
     </AdminShell>
   );

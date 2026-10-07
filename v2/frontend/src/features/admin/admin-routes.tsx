@@ -119,12 +119,9 @@ export const AdminSettingsAccessRoute = () => <AdminRoute kind="settings-access"
 
 /** `…/settings` is the URL the lifecycle page and the sidebar still link to; Settings has
  *  tabs, so the bare path lands on Basics. `<Navigate replace>` keeps the old path out of the
- *  history: Back returns to wherever the organizer came from, not to this hop. */
-export function AdminSettingsIndexRoute() {
-  const {conversationId} = useParams();
-  if (!conversationId) throw new Error('Missing route parameter: conversationId');
-  return <Navigate replace to={`/admin/conversations/${conversationId}/settings/basics`} />;
-}
+ *  history: Back returns to wherever the organizer came from, not to this hop. The target is
+ *  relative, so `/app/admin/…` stays in its own route group. */
+export const AdminSettingsIndexRoute = () => <Navigate replace to="basics" />;
 export const AdminTerminationRoute = () => <AdminRoute kind="termination" />;
 export const AdminStatementsRoute = () => <AdminRoute kind="statements" />;
 export const AdminFeaturedRoute = () => <AdminRoute kind="featured" />;
