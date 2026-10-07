@@ -1,16 +1,28 @@
 import {useEffect, useId, useRef, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
-import {Link} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
-import {adminSettingsQuery, putAdminSettings} from '../../api/queries';
+import {
+  adminLifecycleQuery,
+  adminSettingsQuery,
+  adminStatementWorkspaceQuery,
+  putAdminSettings,
+  putAdminStatementModerationPolicy,
+} from '../../api/queries';
+import {AdminShell} from './admin-shell';
+import {InternalLink} from '../../internal-link';
+import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useMessage, type Message} from '../../i18n/messages';
 
 type Settings = components['schemas']['AdminSettings'];
 type Policy = Settings['conversation']['accessPolicy'];
 type GatingType = Settings['conversation']['gatingType'];
 type Tier = Settings['recommendations']['tier'];
+type Workspace = components['schemas']['AdminStatementWorkspace'];
+
+/** Which Settings tab a page is. The route decides; the page never reads the URL. */
+export type SettingsTab = 'basics' | 'access';
 
 /** The answers to "who can take part" that this page offers, as one value.
  *
@@ -107,13 +119,116 @@ function LockGlyph({label}: {label: string}) {
   );
 }
 
-export function AdminSettingsPage({conversationId, csrfToken}: {
-  conversationId: number; csrfToken: string;
+/** The four Settings tabs, in the order the strip shows them.
+ *
+ * The third is named by the answer to "who gets in": a consultation gated on voucher codes
+ * has vouchers to manage, everything else has an invitation list. Both point at the page
+ * that exists today (#473 moves them under this strip in the next step). */
+function SettingsTabs({conversationId, gatingType, current}: {
+  conversationId: number;
+  gatingType: GatingType;
+  current: SettingsTab;
+}) {
+  const msg = useMessage();
+  const base = `/admin/conversations/${conversationId}`;
+  const tabs = [
+    {id: 'basics', label: msg('admin-settings-tab-basics'), href: `${base}/settings/basics`},
+    {id: 'access', label: msg('admin-access-heading'), href: `${base}/settings/access`},
+    {id: 'membership', label: gatingType === 'voucher'
+      ? msg('admin-settings-tab-vouchers')
+      : msg('admin-settings-tab-invitations'), href: `${base}/invites`},
+    {id: 'roles', label: msg('admin-settings-tab-roles'), href: `${base}/roles`},
+  ];
+  return (
+    <nav className="settings-tabs" aria-label={msg('admin-settings-tabs-aria')}>
+      {tabs.map((tab) => (
+        <InternalLink
+          key={tab.id}
+          href={tab.href}
+          className="settings-tabs__tab"
+          aria-current={tab.id === current ? 'page' : undefined}
+        >
+          {tab.label}
+        </InternalLink>
+      ))}
+    </nav>
+  );
+}
+
+/** The Approval control, moved here from the statements page (#478, decision a).
+ *
+ * It keeps its own endpoint and its own body -- `{mode}` on
+ * `PUT …/statement-moderation-policy` -- because the moderation policy is not one of the
+ * fields the settings endpoint takes. It reads its state from the statements workspace
+ * (`moderationPolicy.mode`), which is why this tab runs that query, and the receipt writes
+ * the returned workspace back into it, so the checkbox and the statements list never
+ * disagree. */
+function ApprovalControl({conversationId, csrfToken}: {
+  conversationId: number;
+  csrfToken: string;
+}) {
+  const msg = useMessage();
+  const queryClient = useQueryClient();
+  const options = adminStatementWorkspaceQuery(conversationId);
+  const {data} = useSuspenseQuery(options);
+  const [strictModeration, setStrictModeration] = useState(data.moderationPolicy.mode === 'moderate');
+  const [error, setError] = useState<string | null>(null);
+  const mutation = useMutation({
+    mutationFn: () => putAdminStatementModerationPolicy(
+      conversationId,
+      {mode: strictModeration ? 'moderate' : 'auto_approve'},
+      csrfToken,
+    ),
+    onSuccess: (receipt) => {
+      queryClient.setQueryData<Workspace>(options.queryKey, receipt.workspace);
+      setStrictModeration(receipt.mode === 'moderate');
+      setError(null);
+    },
+    onError: (failure: Error) => {
+      if (failure instanceof ApiContractError && failure.code === 'verification_unavailable') {
+        setError('Could not verify the current moderation state. Try again later.');
+      } else if (failure instanceof ApiContractError && failure.code === 'upstream_unavailable') {
+        setError('Could not update moderation settings. Check server logs for details.');
+      } else if (failure instanceof ApiContractError && failure.code === 'command_outcome_unknown') {
+        setError('The voting service may have been updated, but the local policy could not be saved. Do not retry until a site admin checks it.');
+      } else {
+        setError('Could not save the moderation policy. Try again later.');
+      }
+    },
+  });
+  return (
+    <section aria-labelledby="settings-approval">
+      <header><span>03</span><div><h3 id="settings-approval">Approval</h3></div></header>
+      <form onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
+        <input type="hidden" name="csrf_token" value={csrfToken} />
+        <label className="checkbox-label" style={{fontWeight: 'normal', color: 'var(--text)'}}>
+          <input
+            type="checkbox"
+            name="strict_moderation"
+            value="1"
+            checked={strictModeration}
+            onChange={(event) => setStrictModeration(event.target.checked)}
+          />
+          {msg('stmts-strict-label')}
+        </label>
+        <div style={{marginTop: '.75rem'}}>
+          <button type="submit" className="btn-small" disabled={mutation.isPending}>{msg('stmts-save')}</button>
+        </div>
+        {error && <p role="alert" className="command-error">{error}</p>}
+      </form>
+    </section>
+  );
+}
+
+export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
+  conversationId: number; csrfToken: string; tab?: SettingsTab | undefined;
 }) {
   const msg = useMessage();
   const queryClient = useQueryClient();
   const options = adminSettingsQuery(conversationId);
   const {data} = useSuspenseQuery(options);
+  // The console shell frames the page, and the frame is built from the lifecycle DTO.
+  const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
   const [title, setTitle] = useState(data.conversation.title);
   const [introHtml, setIntroHtml] = useState(data.conversation.introHtml);
   const [outroHtml, setOutroHtml] = useState(data.conversation.outroHtml);
@@ -143,7 +258,9 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
   // page no longer shows. They are kept out of component state for that reason. The
   // endpoint takes one of three complete key sets and refuses anything else
   // ("Provide the complete settings representation.", `api/admin_routes.py`), so dropping
-  // the keys from the body is not an option: the whole save would 400.
+  // the keys from the body is not an option: the whole save would 400. Every tab sends the
+  // whole representation, so a save on one tab writes the other tab's fields back as they
+  // were loaded; last write wins.
   const {
     announce, information, resultsShared, showUsernames, accessRequestText,
   } = data.conversation;
@@ -229,109 +346,135 @@ export function AdminSettingsPage({conversationId, csrfToken}: {
     return <p className="access-field-error" id={`${ids}-${field}-error`}>{messages.join(' ')}</p>;
   }
 
+  const tabName = tab === 'basics'
+    ? msg('admin-settings-tab-basics')
+    : msg('admin-access-heading');
+
   return (
-    <main className="settings-shell" id="main">
-      <nav className="record-breadcrumb" aria-label={msg('admin-crumb-aria')}>
-        <Link to="/admin">{msg('admin-nav-panel')}</Link><span>/</span>
-        <Link to={data.links.lifecycle}>{data.conversation.title}</Link><span>/</span>
-        <span>{msg('admin-access-heading')}</span>
-      </nav>
-      <header className="settings-heading">
-        <p className="eyebrow">Configuration &middot; {data.conversation.slug}</p>
-        <h1>{msg('admin-access-heading')}</h1>
-        <p>Describe the consultation, control access, and choose the scope used for tool guidance.</p>
-      </header>
-      {!canEdit && <p className="settings-readonly" role="note">
-        Your role can inspect but not change these settings.
-      </p>}
-      <form className="settings-form" onSubmit={submit}>
-        {fieldMessages.length > 0 && <div className="access-summary" role="alert" tabIndex={-1} ref={summaryRef}>
-          <ul>{Object.entries(fields).map(([field, messages]) => (
-            <li key={field}>{messages.join(' ')}</li>
-          ))}</ul>
-        </div>}
-        <section aria-labelledby="settings-description">
-          <header><span>01</span><div><h2 id="settings-description">Description</h2><p>Participant-facing title and rich-text context.</p></div></header>
-          <label>{msg('admin-label-title')}<input value={title} maxLength={255} required {...invalid('title')} onChange={(event) => setTitle(event.target.value)} /></label>
-          <FieldError field="title" />
-          <label>Introduction HTML<textarea value={introHtml} rows={7} onChange={(event) => setIntroHtml(event.target.value)} /></label>
-          <label>Closing HTML<textarea value={outroHtml} rows={5} onChange={(event) => setOutroHtml(event.target.value)} /></label>
-          <p className="settings-hint">Allowed HTML is sanitized by the server when saved.</p>
-        </section>
-        <section aria-label={msg('admin-access-heading')}>
-          <header><span>02</span><div><p>Who can discover and join this consultation.</p></div></header>
-          {/* Stated before the answer it explains, so it is read as a fact about the item,
-              not as a second part of the answer. */}
-          {!canSwitchDemo && practice && <p className="access-answer-value">{msg('admin-access-practice')}</p>}
-          {practice ? <div className="access-answer" role="group" aria-labelledby={`${ids}-practice-legend`}>
-            {/* Practice has one fixed answer, stored by the server whatever is sent, so it is
-                stated rather than offered: a gate here would only be refused. */}
-            <p className="access-answer-legend" id={`${ids}-practice-legend`}>{msg('admin-access-admission-legend')}</p>
-            <p className="access-answer-value">{msg('admin-access-admission-practice')}</p>
-          </div> : admissionLocked ? <div className="access-answer">
-            <p className="access-answer-legend">{msg('admin-access-admission-legend')}</p>
-            <p className="access-answer-value">
-              {admissionLabel(msg, stored)} <LockGlyph label={msg('admin-access-locked-note')} />
-            </p>
-          </div> : <fieldset className="access-choices">
-            <legend>{msg('admin-access-admission-legend')}</legend>
-            <label className="access-choice">
-              <input type="radio" name="admission" value="anyone" checked={admission === 'anyone'} {...admissionInvalid} onChange={() => setAdmission('anyone')} />
-              <span>{msg('admin-access-admission-anyone')}</span>
-            </label>
-            <label className="access-choice">
-              <input type="radio" name="admission" value="invite_only" checked={admission === 'invite_only'} {...admissionInvalid} onChange={() => setAdmission('invite_only')} />
-              <span>{msg('admin-access-admission-invited')}</span>
-            </label>
-            <label className="access-choice">
-              <input type="radio" name="admission" value="voucher" checked={admission === 'voucher'} {...admissionInvalid} onChange={() => setAdmission('voucher')} />
-              <span>{msg('admin-access-admission-voucher')}</span>
-            </label>
-            <p className="settings-hint">{COMING_ADMISSION}</p>
-          </fieldset>}
-          {admissionMessages.length > 0 &&<p className="access-field-error" id={`${ids}-gated-error`}>{admissionMessages.join(' ')}</p>}
-          {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
-          {/* Hidden while Explore locks access: moving into or out of Practice rewrites the
-              locked settings, which the server refuses then. */}
-          {!gated && canSwitchDemo && !admissionLocked && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
-            <option value="public">Not gated</option><option value="demo">Practice</option>
-          </select></label>}
-          {gated && <>
-            <p className="settings-hint">{COMING_VISIBILITY}</p>
-            <p className="settings-hint">{COMING_REVEAL}</p>
+    <AdminShell
+      title={msg('adminconv-doc-title', lifecycle.conversation.title)}
+      data={lifecycle}
+      gatingType={data.conversation.gatingType}
+      section="settings"
+      subPage={tabName}
+    >
+      <div className="settings-shell">
+        <h1>{msg('admin-settings-heading')}</h1>
+        <SettingsTabs conversationId={conversationId} gatingType={data.conversation.gatingType} current={tab} />
+        <h2>{tabName}</h2>
+        {!canEdit && <p className="settings-readonly" role="note">
+          Your role can inspect but not change these settings.
+        </p>}
+        <form className="settings-form" onSubmit={submit}>
+          {fieldMessages.length > 0 && <div className="access-summary" role="alert" tabIndex={-1} ref={summaryRef}>
+            <ul>{Object.entries(fields).map(([field, messages]) => (
+              <li key={field}>{messages.join(' ')}</li>
+            ))}</ul>
+          </div>}
+          {tab === 'basics' ? <>
+            <section aria-labelledby="settings-description">
+              <header><span>01</span><div><h3 id="settings-description">Description</h3></div></header>
+              <label>{msg('admin-label-title')}<input value={title} maxLength={255} required {...invalid('title')} onChange={(event) => setTitle(event.target.value)} /></label>
+              <FieldError field="title" />
+              <label>Introduction HTML<textarea value={introHtml} rows={7} onChange={(event) => setIntroHtml(event.target.value)} /></label>
+              <label>Closing HTML<textarea value={outroHtml} rows={5} onChange={(event) => setOutroHtml(event.target.value)} /></label>
+              <p className="settings-hint">Allowed HTML is sanitized by the server when saved.</p>
+              {/* Admin-written texts meant for publication are CC0, like participants'
+                  contributions; the deed link is built as on the join screen. */}
+              <p className="settings-hint" dangerouslySetInnerHTML={richHtml(msg('admin-settings-basics-licence', '<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">' + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
+            </section>
+            <section aria-labelledby="settings-guidance">
+              <header><span>02</span><div><h3 id="settings-guidance">Topic size</h3></div></header>
+              <fieldset><legend>Complexity tier</legend>{data.recommendations.tiers.map((option) => (
+                <label className="settings-tier" key={option.key}>
+                  <input type="radio" name="tier" value={option.key} checked={tier === option.key} onChange={() => setTier(option.key)} />
+                  <strong>{option.label}</strong>
+                  <span>{Object.values(option.quantities).join(' · ')}</span>
+                </label>
+              ))}</fieldset>
+            </section>
+            <ApprovalControl conversationId={conversationId} csrfToken={csrfToken} />
+            {/* The Practice Environment section: the fixed answer a practice item has, and the
+                switch that moves one in or out of it. Nothing at all when neither applies, so
+                there is no heading without content under it. Hidden while Explore locks access:
+                moving into or out of Practice rewrites the locked settings, which the server
+                refuses then. */}
+            {(practice || (!gated && canSwitchDemo && !admissionLocked)) && <section aria-labelledby="settings-practice">
+              <header><span>04</span><div><h3 id="settings-practice">{msg('admin-access-practice')}</h3></div></header>
+              {practice && <div className="access-answer" role="group" aria-labelledby={`${ids}-practice-legend`}>
+                {/* One fixed answer, stored by the server whatever is sent, so it is stated
+                    rather than offered: a gate here would only be refused. */}
+                <p className="access-answer-legend" id={`${ids}-practice-legend`}>{msg('admin-access-admission-legend')}</p>
+                <p className="access-answer-value">{msg('admin-access-admission-practice')}</p>
+              </div>}
+              {!gated && canSwitchDemo && !admissionLocked && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
+                <option value="public">Not gated</option><option value="demo">Practice</option>
+              </select></label>}
+            </section>}
+            <section aria-labelledby="settings-coming">
+              <header><span>05</span><div><h3 id="settings-coming">Submission, transparency and language</h3></div></header>
+              <p className="settings-hint" lang="en">Also coming: the language the consultation is written in — not available yet (#473)</p>
+              <p className="settings-hint" lang="en">Also coming: keeping the submission form open while new statements are no longer shown — not available yet (#473)</p>
+              <p className="settings-hint" lang="en">Also coming: publishing the moderation log — not available yet (#473)</p>
+            </section>
+          </> : <>
+            {/* A practice item has no access choice to offer: the server stores one fixed
+                answer whatever is sent, and the Practice Environment section on Basics says
+                which. Rendering a gate here would offer a control the server refuses, so the
+                whole group is absent rather than empty. */}
+            {!practice && <section aria-labelledby="settings-access">
+              <header><span>01</span><div><h3 id="settings-access">Who can discover and join this consultation.</h3></div></header>
+              {admissionLocked ? <div className="access-answer">
+                <p className="access-answer-legend">{msg('admin-access-admission-legend')}</p>
+                <p className="access-answer-value">
+                  {admissionLabel(msg, stored)} <LockGlyph label={msg('admin-access-locked-note')} />
+                </p>
+              </div> : <fieldset className="access-choices">
+                <legend>{msg('admin-access-admission-legend')}</legend>
+                <label className="access-choice">
+                  <input type="radio" name="admission" value="anyone" checked={admission === 'anyone'} {...admissionInvalid} onChange={() => setAdmission('anyone')} />
+                  <span>{msg('admin-access-admission-anyone')}</span>
+                </label>
+                <label className="access-choice">
+                  <input type="radio" name="admission" value="invite_only" checked={admission === 'invite_only'} {...admissionInvalid} onChange={() => setAdmission('invite_only')} />
+                  <span>{msg('admin-access-admission-invited')}</span>
+                </label>
+                <label className="access-choice">
+                  <input type="radio" name="admission" value="voucher" checked={admission === 'voucher'} {...admissionInvalid} onChange={() => setAdmission('voucher')} />
+                  <span>{msg('admin-access-admission-voucher')}</span>
+                </label>
+                <p className="settings-hint">{COMING_ADMISSION}</p>
+              </fieldset>}
+              {admissionMessages.length > 0 &&<p className="access-field-error" id={`${ids}-gated-error`}>{admissionMessages.join(' ')}</p>}
+              {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
+              {gated && <>
+                <p className="settings-hint">{COMING_VISIBILITY}</p>
+                <p className="settings-hint">{COMING_REVEAL}</p>
+              </>}
+              <label>{msg('admin-label-elig-event')}<input value={eligibilityEventId} maxLength={80} placeholder={msg('admin-elig-event-ph')} {...invalid('eligibilityEventId')} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
+              <FieldError field="eligibilityEventId" />
+              <label>{msg('admin-label-elig-label')}<input value={eligibilityLabel} maxLength={255} placeholder={msg('admin-elig-label-ph')} {...invalid('eligibilityLabel')} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
+              <FieldError field="eligibilityLabel" />
+              <div className="settings-eligibility" data-configured={data.eligibility.configured}>
+                <strong>Eligibility {data.eligibility.configured ? 'configured' : 'not configured'}</strong>
+                {data.eligibility.label && <span>{data.eligibility.label}</span>}
+                <p>{data.eligibility.note}</p>
+              </div>
+            </section>}
           </>}
-          <label>{msg('admin-label-elig-event')}<input value={eligibilityEventId} maxLength={80} placeholder={msg('admin-elig-event-ph')} {...invalid('eligibilityEventId')} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
-          <FieldError field="eligibilityEventId" />
-          <label>{msg('admin-label-elig-label')}<input value={eligibilityLabel} maxLength={255} placeholder={msg('admin-elig-label-ph')} {...invalid('eligibilityLabel')} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
-          <FieldError field="eligibilityLabel" />
-          <div className="settings-eligibility" data-configured={data.eligibility.configured}>
-            <strong>Eligibility {data.eligibility.configured ? 'configured' : 'not configured'}</strong>
-            {data.eligibility.label && <span>{data.eligibility.label}</span>}
-            <p>{data.eligibility.note}</p>
-          </div>
-        </section>
-        <section aria-labelledby="settings-guidance">
-          <header><span>03</span><div><h2 id="settings-guidance">Guidance scope</h2><p>The tool owns the recommended quantities for each tier.</p></div></header>
-          <fieldset><legend>Complexity tier</legend>{data.recommendations.tiers.map((option) => (
-            <label className="settings-tier" key={option.key}>
-              <input type="radio" name="tier" value={option.key} checked={tier === option.key} onChange={() => setTier(option.key)} />
-              <strong>{option.label}</strong>
-              <span>{Object.values(option.quantities).join(' · ')}</span>
-            </label>
-          ))}</fieldset>
-        </section>
-        {canEdit && <footer>
-          {confirming ? <div className="access-confirm" role="group" aria-labelledby={`${ids}-confirm`} tabIndex={-1} ref={confirmRef}>
-            <p id={`${ids}-confirm`}>{msg('admin-access-narrowing-confirm')}</p>
-            <button type="submit" disabled={mutation.isPending}>{msg('admin-access-narrowing-continue')}</button>
-            <button type="button" onClick={() => setConfirming(false)}>{msg('common-cancel')}</button>
-          </div> : <button type="submit" disabled={mutation.isPending} ref={saveRef}>
-            {mutation.isPending ? 'Saving…' : msg('adminconv-save-settings')}
-          </button>}
-          {mutation.data && <p role="status">{mutation.data.changed ? 'Settings saved.' : 'Settings already up to date.'}</p>}
-          {generalError && <p role="alert">{generalError}</p>}
-        </footer>}
-      </form>
-    </main>
+          {canEdit && <footer>
+            {confirming ? <div className="access-confirm" role="group" aria-labelledby={`${ids}-confirm`} tabIndex={-1} ref={confirmRef}>
+              <p id={`${ids}-confirm`}>{msg('admin-access-narrowing-confirm')}</p>
+              <button type="submit" disabled={mutation.isPending}>{msg('admin-access-narrowing-continue')}</button>
+              <button type="button" onClick={() => setConfirming(false)}>{msg('common-cancel')}</button>
+            </div> : <button type="submit" disabled={mutation.isPending} ref={saveRef}>
+              {mutation.isPending ? 'Saving…' : msg('adminconv-save-settings')}
+            </button>}
+            {mutation.data && <p role="status">{mutation.data.changed ? 'Settings saved.' : 'Settings already up to date.'}</p>}
+            {generalError && <p role="alert">{generalError}</p>}
+          </footer>}
+        </form>
+      </div>
+    </AdminShell>
   );
 }

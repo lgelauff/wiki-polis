@@ -26,7 +26,9 @@ const ResultsRoute = lazy(() => loadResultsPage().then((module) => ({default: mo
 
 const AdminCatalogRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminCatalogRoute})));
 const AdminLifecycleRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminLifecycleRoute})));
-const AdminSettingsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsRoute})));
+const AdminSettingsIndexRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsIndexRoute})));
+const AdminSettingsBasicsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsBasicsRoute})));
+const AdminSettingsAccessRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsAccessRoute})));
 const AdminTerminationRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminTerminationRoute})));
 const AdminStatementsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminStatementsRoute})));
 const AdminFeaturedRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminFeaturedRoute})));
@@ -61,7 +63,9 @@ function DeferredRoutes() {
       <Route path="/c/:slug/reveal" element={<IdentityRevealLegacyPage />} />
       <Route path="/admin" element={<AdminCatalogRoute />} />
       <Route path="/admin/conversations/:conversationId" element={<AdminLifecycleRoute />} />
-      <Route path="/admin/conversations/:conversationId/settings" element={<AdminSettingsRoute />} />
+      <Route path="/admin/conversations/:conversationId/settings" element={<AdminSettingsIndexRoute />} />
+      <Route path="/admin/conversations/:conversationId/settings/basics" element={<AdminSettingsBasicsRoute />} />
+      <Route path="/admin/conversations/:conversationId/settings/access" element={<AdminSettingsAccessRoute />} />
       <Route path="/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
       <Route path="/admin/conversations/:conversationId/statements" element={<AdminStatementsRoute />} />
       <Route path="/admin/conversations/:conversationId/featured" element={<AdminFeaturedRoute />} />
@@ -85,7 +89,9 @@ function DeferredRoutes() {
       <Route path="/app/conversations/:slug/identity-reveal" element={<IdentityRevealLegacyPage />} />
       <Route path="/app/admin" element={<AdminCatalogRoute />} />
       <Route path="/app/admin/conversations/:conversationId" element={<AdminLifecycleRoute />} />
-      <Route path="/app/admin/conversations/:conversationId/settings" element={<AdminSettingsRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/settings" element={<AdminSettingsIndexRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/settings/basics" element={<AdminSettingsBasicsRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/settings/access" element={<AdminSettingsAccessRoute />} />
       <Route path="/app/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
       <Route path="/app/admin/conversations/:conversationId/statements" element={<AdminStatementsRoute />} />
       <Route path="/app/admin/conversations/:conversationId/featured" element={<AdminFeaturedRoute />} />

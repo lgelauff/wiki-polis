@@ -238,11 +238,20 @@ test('pauses and resumes from the legacy lifecycle control', async () => {
 });
 
 test('edits settings and legacy eligibility through one typed command', async () => {
-  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings']}><App /></MemoryRouter></QueryClientProvider>);
-  expect(await screen.findByRole('heading', {name: 'Access', level: 1})).toBeVisible();
+  // #478: the bare .../settings path is the old URL and lands on Basics; the eligibility
+  // fields are on Access. Both tabs PUT the one complete settings representation.
+  const access = render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings/access']}><App /></MemoryRouter></QueryClientProvider>);
+  expect(await screen.findByRole('heading', {name: 'Access', level: 2})).toBeVisible();
   expect(screen.getByText('Extended-confirmed editors')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'experienced-editors'}});
   fireEvent.change(screen.getByLabelText('Eligibility label'), {target: {value: 'Experienced editors'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved');
+  access.unmount();
+
+  render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings']}><App /></MemoryRouter></QueryClientProvider>);
+  expect(await screen.findByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Basics', level: 2})).toBeVisible();
   fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Updated strategy'}});
   fireEvent.click(screen.getByRole('radio', {name: /Complex topic/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
@@ -275,10 +284,8 @@ test('moderates statements and imports approved seeds through typed commands', a
   expect(screen.getByText(
     'Adds a seed-marked statement that appears early in the voting sequence for participants.',
   )).toBeVisible();
-  expect(screen.getByRole('checkbox', {name: /Strict moderation/})).toBeChecked();
-  fireEvent.click(screen.getByRole('checkbox', {name: /Strict moderation/}));
-  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
-  await waitFor(() => expect(screen.getByRole('checkbox', {name: /Strict moderation/})).not.toBeChecked());
+  // #478: the Approval control moved to Settings > Basics, so this page no longer owns it.
+  expect(screen.queryByRole('checkbox', {name: /Strict moderation/})).toBeNull();
   expect(screen.getByRole('heading', {name: /Pending review/})).toHaveTextContent('1');
   fireEvent.click(screen.getByRole('button', {name: 'approve'}));
   await waitFor(() => expect(screen.getByRole('heading', {name: /Approved/})).toHaveTextContent('2'));

@@ -57,7 +57,7 @@ export function isCanonicalClientPath(pathname: string): boolean {
   if (['/', '/demo', '/consultations', '/help/statements', '/help/arguments', '/admin'].includes(pathname)) return true;
   if (/^\/accept\/[^/]+$/.test(pathname)) return true;
   if (/^\/c\/[^/]+(?:\/(?:about|moderation-log|report|reveal|outputs\/[^/]+))?$/.test(pathname)) return true;
-  return /^\/admin\/conversations\/\d+(?:\/(?:participants|flags|invites|statements|featured|settings|termination|roles))?$/.test(pathname);
+  return /^\/admin\/conversations\/\d+(?:\/(?:participants|flags|invites|statements|featured|settings(?:\/(?:basics|access))?|termination|roles))?$/.test(pathname);
 }
 
 export function canonicalClientPath(href: string): string | null {

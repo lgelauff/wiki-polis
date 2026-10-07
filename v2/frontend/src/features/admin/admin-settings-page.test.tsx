@@ -6,7 +6,7 @@ import {MemoryRouter} from 'react-router-dom';
 import {expect, test} from 'vitest';
 
 import type {components} from '../../api/schema';
-import {AdminSettingsPage} from './admin-settings-page';
+import {AdminSettingsPage, type SettingsTab} from './admin-settings-page';
 import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
@@ -78,13 +78,13 @@ function recordPuts(status = 200, body?: ErrorBody) {
   return sent;
 }
 
-function renderPage() {
+function renderPage(tab: SettingsTab = 'access') {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[`/admin/conversations/7/settings/${tab}`]}>
         <Suspense fallback={null}>
           <MessageProvider locale="en">
-            <AdminSettingsPage conversationId={7} csrfToken="test-csrf-token" />
+            <AdminSettingsPage conversationId={7} csrfToken="test-csrf-token" tab={tab} />
           </MessageProvider>
         </Suspense>
       </MemoryRouter>
@@ -92,11 +92,16 @@ function renderPage() {
   );
 }
 
+/** The tab strip, which every tab carries. */
+function tabs() {
+  return screen.getByRole('navigation', {name: 'Settings'});
+}
+
 test('shows who can take part as one plain-worded choice per row', async () => {
   serve(settings);
-  renderPage();
+  renderPage('access');
 
-  expect(await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000}))
+  expect(await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000}))
     .toBeVisible();
   const admission = screen.getByRole('group', {name: 'Who can take part'});
   expect(admission).toBeVisible();
@@ -125,11 +130,76 @@ test('shows who can take part as one plain-worded choice per row', async () => {
   expect(screen.queryByText(/choosing what people without access can see/)).toBeNull();
 });
 
+test('every tab is headed Settings, and the open one is named under it', async () => {
+  serve(settings);
+  renderPage('basics');
+
+  // The h1 says which section; the h2 says which page of it.
+  expect(await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000}))
+    .toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Basics', level: 2})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Access', level: 2})).toBeNull();
+});
+
+test('the tab strip lists the four tabs in order and marks exactly one', async () => {
+  serve(settings);
+  renderPage('basics');
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  expect(within(tabs()).getAllByRole('link').map((link) => link.textContent))
+    .toEqual(['Basics', 'Access', 'Invitations', 'Roles']);
+  // The third tab is named by who-gets-in; an ungated, ungated-type consultation has the
+  // invitation list, so that is the tab.
+  expect(within(tabs()).getAllByRole('link').map((link) => link.getAttribute('href')))
+    .toEqual([
+      '/admin/conversations/7/settings/basics',
+      '/admin/conversations/7/settings/access',
+      // The fourth and third tabs still point at today's pages; #473 moves them under
+      // the strip in the next step.
+      '/admin/conversations/7/invites',
+      '/admin/conversations/7/roles',
+    ]);
+  const current = within(tabs()).getAllByRole('link')
+    .filter((link) => link.getAttribute('aria-current') === 'page');
+  expect(current).toHaveLength(1);
+  expect(current[0]).toHaveTextContent('Basics');
+});
+
+test.each([
+  ['invite_only', 'Invitations'],
+  ['wiki_based', 'Invitations'],
+  [null, 'Invitations'],
+  ['voucher', 'Vouchers'],
+] as const)('who-gets-in %s names the third tab %s', async (gatingType, label) => {
+  serve({...settings, conversation: {
+    ...settings.conversation, gated: gatingType !== null, gatingType,
+    accessPolicy: gatingType === 'voucher' ? 'invite_only' : 'public',
+  }});
+  renderPage('basics');
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  expect(within(tabs()).getByRole('link', {name: label})).toBeVisible();
+  const other = label === 'Vouchers' ? 'Invitations' : 'Vouchers';
+  expect(within(tabs()).queryByRole('link', {name: other})).toBeNull();
+});
+
+test('the access tab marks itself in the strip', async () => {
+  serve(settings);
+  renderPage('access');
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  expect(screen.getByRole('heading', {name: 'Access', level: 2})).toBeVisible();
+  expect(within(tabs()).getByRole('link', {name: 'Access'}))
+    .toHaveAttribute('aria-current', 'page');
+  expect(within(tabs()).getByRole('link', {name: 'Basics'}))
+    .not.toHaveAttribute('aria-current');
+});
+
 test('renders a locked admission answer as text with the reason on its lock', async () => {
   serve(lockedSettings);
-  renderPage();
+  renderPage('access');
 
-  expect(await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000}))
+  expect(await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000}))
     .toBeVisible();
   expect(screen.getByText('Only people on the invitation list')).toBeVisible();
   expect(screen.queryByRole('radio', {name: /Only people on the invitation list/})).toBeNull();
@@ -159,9 +229,9 @@ test('renders a locked admission answer as text with the reason on its lock', as
 test('asks once before narrowing access and saves only after Continue', async () => {
   serve(settings);
   const sent = recordPuts();
-  renderPage();
+  renderPage('access');
 
-  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('radio', {name: /Only people on the invitation list/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
 
@@ -199,7 +269,7 @@ test('after a save the eligibility inputs show what the server stored', async ()
       },
     }});
   }));
-  renderPage();
+  renderPage('access');
 
   const eventId = await screen.findByLabelText('Eligibility event ID', {}, {timeout: 10_000});
   expect(eventId).toHaveValue('event-42');
@@ -215,7 +285,7 @@ test('names a stored wiki-activity policy in words, not by its stored value', as
   serve({...lockedSettings, conversation: {
     ...lockedSettings.conversation, gatingType: 'wiki_based',
   }});
-  renderPage();
+  renderPage('access');
 
   expect(await screen.findByText('A policy based on wiki activity', {exact: false},
     {timeout: 10_000})).toBeVisible();
@@ -231,9 +301,9 @@ test('widening saves at once, without the question', async () => {
     },
   });
   const sent = recordPuts();
-  renderPage();
+  renderPage('access');
 
-  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('radio', {name: 'Anyone with a Wikimedia account'}));
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
 
@@ -249,9 +319,9 @@ test('shows the server refusal beside the admission answer and keeps the input',
     message: 'Gated access settings cannot change after Explore starts.',
     details: {field: 'gated'},
   }});
-  renderPage();
+  renderPage('access');
 
-  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('radio', {name: /Anyone with a voucher code/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
   fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
@@ -270,9 +340,9 @@ test('maps a field refusal to its field and keeps what was typed', async () => {
     message: 'Check the highlighted settings.',
     details: {fields: {title: ['Write a title up to 255 characters.']}},
   }});
-  renderPage();
+  renderPage('basics');
 
-  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   const title = screen.getByRole('textbox', {name: 'Title'});
   fireEvent.change(title, {target: {value: 'A retitled consultation'}});
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
@@ -296,9 +366,9 @@ test('asks before swapping one gate for another, which also takes access away', 
     },
   });
   const sent = recordPuts();
-  renderPage();
+  renderPage('access');
 
-  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('radio', {name: /Anyone with a voucher code/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
 
@@ -314,14 +384,14 @@ test('asks before swapping one gate for another, which also takes access away', 
 test('drops the question when the answer stops narrowing', async () => {
   serve(settings);
   const sent = recordPuts();
-  renderPage();
+  renderPage('access');
 
-  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('radio', {name: /Only people on the invitation list/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
   expect(screen.getByText('Some people will lose access. Continue?')).toBeVisible();
 
-  // Putting the widest answer back leaves the question with nothing to ask about.
+  // Putting the widest answer back leaves the question with nothing left to ask about.
   fireEvent.click(screen.getByRole('radio', {name: 'Anyone with a Wikimedia account'}));
   expect(screen.queryByText('Some people will lose access. Continue?')).toBeNull();
   expect(screen.getByRole('button', {name: 'Save settings'})).toBeVisible();
@@ -334,9 +404,9 @@ test('what is not available yet is prose, not a control that does nothing', asyn
   // tab stop, nothing to click, and no effect on what a save sends.
   serve({...lockedSettings, conversation: {...lockedSettings.conversation, showUsernames: true}});
   const sent = recordPuts();
-  renderPage();
+  renderPage('access');
 
-  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   for (const note of [
     screen.getByText(
       'Also coming: choosing what people without access can see, and what to tell them'
@@ -365,9 +435,9 @@ test('what is not available yet is prose, not a control that does nothing', asyn
 
 test('an organizer is never offered the Practice Environment', async () => {
   serve(settings);
-  renderPage();
+  renderPage('basics');
 
-  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   expect(screen.queryByRole('combobox', {name: /Legacy access mode/})).toBeNull();
   expect(screen.queryByRole('option', {name: 'Practice'})).toBeNull();
   expect(screen.queryByText('Practice Environment')).toBeNull();
@@ -376,9 +446,9 @@ test('an organizer is never offered the Practice Environment', async () => {
 test('an organizer sees a practice item as a fact with its fixed answer', async () => {
   serve({...settings, conversation: {...settings.conversation, accessPolicy: 'demo'}});
   const sent = recordPuts();
-  renderPage();
+  renderPage('basics');
 
-  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   expect(screen.getByText('Practice Environment')).toBeVisible();
   expect(screen.getByText('Anyone, including people who are not logged in')).toBeVisible();
   // The fixed answer reads as the answer to its question, and the fact comes before it.
@@ -399,13 +469,13 @@ test('an organizer sees a practice item as a fact with its fixed answer', async 
 test('a site admin moves an item into the Practice Environment and sees its fixed answer', async () => {
   serve({...settings, capabilities: {edit: true, switchDemo: true}});
   const sent = recordPuts();
-  renderPage();
+  renderPage('basics');
 
   const mode = await screen.findByRole('combobox', {name: /Legacy access mode/}, {timeout: 10_000});
-  expect(screen.getByRole('radio', {name: /Only people on the invitation list/})).toBeVisible();
+  expect(screen.queryByRole('radio', {name: /Only people on the invitation list/})).toBeNull();
   fireEvent.change(mode, {target: {value: 'demo'}});
 
-  // While Practice is selected the admission row states its one answer instead of offering
+  // Once Practice is selected the admission row states its one answer instead of offering
   // gates the server would refuse.
   expect(screen.getByText('Anyone, including people who are not logged in')).toBeVisible();
   expect(screen.queryByRole('radio', {name: /Only people on the invitation list/})).toBeNull();
@@ -417,29 +487,29 @@ test('a site admin moves an item into the Practice Environment and sees its fixe
 test('a site admin sees the switch, not the fact, on a practice item', async () => {
   serve({...settings, capabilities: {edit: true, switchDemo: true},
     conversation: {...settings.conversation, accessPolicy: 'demo'}});
-  renderPage();
+  renderPage('basics');
 
   const mode = await screen.findByRole('combobox', {name: /Legacy access mode/}, {timeout: 10_000});
   expect(mode).toHaveValue('demo');
-  expect(screen.queryByText('Practice Environment')).toBeNull();
+  // The section heading is the item's own name; the fact is stated inside it, not beside it.
+  expect(screen.getByRole('heading', {name: 'Practice Environment'})).toBeVisible();
   fireEvent.change(mode, {target: {value: 'public'}});
-  expect(screen.getByRole('radio', {name: /Only people on the invitation list/})).toBeVisible();
 });
 
 test('no Practice switch while Explore locks access', async () => {
   serve({...settings, capabilities: {edit: true, switchDemo: true},
     locks: {gated: true, gatingType: true, showUsernames: true}});
-  renderPage();
+  renderPage('basics');
 
-  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   expect(screen.queryByRole('combobox', {name: /Legacy access mode/})).toBeNull();
 });
 
 test('a role that may not edit gets the reason and no way to save', async () => {
   serve({...settings, capabilities: {edit: false, switchDemo: false}});
-  renderPage();
+  renderPage('basics');
 
-  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   expect(screen.getByRole('note')).toHaveTextContent('inspect but not change');
   expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();
 });
@@ -451,9 +521,9 @@ test('shows a refusal of the admission answer once, under the group', async () =
     message: 'Check the highlighted settings.',
     details: {fields: {gatingType: ['Choose invite_only, voucher, or wiki_based.']}},
   }});
-  renderPage();
+  renderPage('access');
 
-  await screen.findByRole('heading', {name: 'Access', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
@@ -471,16 +541,167 @@ test('renders its labels from the catalogue, not from source literals', async ()
     new URL('/api/v1/i18n/:locale', globalThis.location.origin).toString(),
     () => HttpResponse.json({
       ...testMessages,
+      'admin-settings-heading': 'CATALOGUE SETTINGS',
       'admin-access-heading': 'CATALOGUE ACCESS',
       'admin-access-admission-legend': 'CATALOGUE WHO TAKES PART',
       'admin-access-admission-anyone': 'CATALOGUE ANYONE',
     }),
   ));
   serve(settings);
-  renderPage();
+  renderPage('access');
 
-  expect(await screen.findByRole('heading', {name: 'CATALOGUE ACCESS', level: 1}, {timeout: 10_000}))
-    .toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'CATALOGUE SETTINGS', level: 1},
+    {timeout: 10_000})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'CATALOGUE ACCESS', level: 2})).toBeVisible();
   expect(screen.getByRole('group', {name: 'CATALOGUE WHO TAKES PART'})).toBeVisible();
   expect(screen.getByRole('radio', {name: 'CATALOGUE ANYONE'})).toBeChecked();
+  expect(within(tabs()).getByRole('link', {name: 'CATALOGUE ACCESS'})).toBeVisible();
+});
+
+test('the eligibility fields live on Access, and Basics says nothing about them', async () => {
+  serve({...settings, eligibility: {...settings.eligibility, configured: true, eventId: 'event-42'}});
+  renderPage('basics');
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  expect(screen.queryByLabelText('Eligibility event ID')).toBeNull();
+});
+
+test('Basics carries the texts, the topic size and the CC0 line', async () => {
+  serve(settings);
+  renderPage('basics');
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  expect(screen.getByRole('textbox', {name: 'Title'})).toHaveValue('Community strategy');
+  expect(screen.getByRole('radio', {name: /Medium topic/})).toBeChecked();
+  expect(screen.getByRole('radio', {name: /Complex topic/})).toBeVisible();
+  // Admin-written texts meant for publication are CC0, built as on the join screen.
+  const licence = screen.getByText(/^Texts you write here are released into the public domain/);
+  expect(licence).toBeVisible();
+  const link = within(licence).getByRole('link', {name: /^CC0/});
+  expect(link).toHaveAttribute('href', 'https://creativecommons.org/publicdomain/zero/1.0/');
+  // The access half is on the other tab, not here.
+  expect(screen.queryByRole('group', {name: 'Who can take part'})).toBeNull();
+});
+
+test('Basics names the three things that are not built yet', async () => {
+  serve(settings);
+  renderPage('basics');
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  // Scoped to the page: the console frame carries two "Also coming" lines of its own
+  // (#477), both outside <main>.
+  const lines = within(screen.getByRole('main')).getAllByText(/^Also coming:/);
+  expect(lines).toHaveLength(3);
+  expect(lines.map((line) => line.textContent)).toEqual([
+    'Also coming: the language the consultation is written in — not available yet (#473)',
+    'Also coming: keeping the submission form open while new statements are no longer shown'
+    + ' — not available yet (#473)',
+    'Also coming: publishing the moderation log — not available yet (#473)',
+  ]);
+  for (const line of lines) {
+    // A control whose value nothing reads is not a control: muted, in English, and
+    // nothing to tab into.
+    expect(line).toHaveAttribute('lang', 'en');
+    // Not inside a control, and not itself focusable. `<main tabindex="-1">` is the frame's
+    // skip target, not a control these lines live in.
+    expect(line.closest('a, button')).toBeNull();
+    expect(line).not.toHaveAttribute('tabindex');
+    expect(line.parentElement?.closest('a, button, [tabindex]:not(main)')).toBeNull();
+  }
+});
+
+test('the Approval control moved to Basics, with the body it always sent', async () => {
+  const sent: Record<string, unknown>[] = [];
+  // Its state comes from the statements workspace's `moderationPolicy.mode`, which is why
+  // this tab runs that query (decisions.md a).
+  server.use(http.get(
+    new URL('/api/v1/admin/conversations/7/statements', globalThis.location.origin).toString(),
+    () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+      statements: {pending: [], approved: [], hidden: []},
+      moderationPolicy: {mode: 'auto_approve', newStatements: 'approved', available: true},
+      dataAvailability: {statements: true},
+      seeding: {allowed: true, lockReason: null, maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
+      capabilities: {moderate: true, seed: true},
+      links: {self: '/api/v1/admin/conversations/7/statements', lifecycle: '/admin/conversations/7'},
+    }}),
+  ));
+  server.use(http.put(
+    new URL('/api/v1/admin/conversations/7/statement-moderation-policy', globalThis.location.origin)
+      .toString(),
+    async ({request}) => {
+      const payload = await request.json() as Record<string, unknown>;
+      sent.push(payload);
+      return HttpResponse.json({data: {
+        mode: payload.mode, changed: true, reconciledStatements: 0,
+        workspace: {
+          conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+          statements: {pending: [], approved: [], hidden: []},
+          moderationPolicy: {mode: payload.mode, newStatements: 'pending', available: true},
+          dataAvailability: {statements: true},
+          seeding: {allowed: true, lockReason: null, maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
+          capabilities: {moderate: true, seed: true},
+          links: {self: '/api/v1/admin/conversations/7/statements', lifecycle: '/admin/conversations/7'},
+        },
+      }});
+    },
+  ));
+  serve(settings);
+  renderPage('basics');
+
+  const approval = await screen.findByRole('checkbox', {name: /Strict moderation/},
+    {timeout: 10_000});
+  expect(approval).not.toBeChecked();
+  fireEvent.click(approval);
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+
+  await waitFor(() => expect(sent).toHaveLength(1));
+  // The moderation policy is not one of the fields the settings endpoint takes, so it
+  // keeps its own endpoint and its own body.
+  expect(sent[0]).toEqual({mode: 'moderate'});
+});
+
+test('the Access tab has no Approval control and no Practice switch', async () => {
+  serve({...settings, capabilities: {edit: true, switchDemo: true}});
+  renderPage('access');
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  expect(screen.queryByRole('checkbox', {name: /Strict moderation/})).toBeNull();
+  expect(screen.queryByRole('combobox', {name: /Legacy access mode/})).toBeNull();
+  expect(screen.queryByRole('textbox', {name: 'Title'})).toBeNull();
+});
+
+test.each([
+  ['basics', 'title'],
+  ['access', 'gated'],
+] as const)('saving %s sends the other tab’s fields back as they were loaded', async (
+  tab, edited,
+) => {
+  // The endpoint takes one of three complete key sets, so a save from either tab has to
+  // carry the fields the other tab owns. Last write wins, so they go back untouched.
+  serve({...settings, eligibility: {...settings.eligibility, configured: true, eventId: 'event-42', label: 'Active editors'}});
+  const sent = recordPuts();
+  renderPage(tab);
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  if (tab === 'basics') {
+    fireEvent.change(screen.getByRole('textbox', {name: 'Title'}), {target: {value: 'A new title'}});
+  } else {
+    fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'event-99'}});
+  }
+  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+
+  await waitFor(() => expect(sent).toHaveLength(1));
+  expect(sent[0]).toMatchObject({
+    // Whatever this tab edits...
+    [edited]: tab === 'basics' ? 'A new title' : true,
+    // ...and everything the other tab owns, exactly as loaded.
+    eligibilityEventId: tab === 'basics' ? 'event-42' : 'event-99',
+    eligibilityLabel: 'Active editors',
+    gated: false,
+    gatingType: null,
+    recommendationTier: 'medium',
+    announce: false, information: false, resultsShared: false, showUsernames: false,
+    accessRequestText: null,
+  });
 });

@@ -266,6 +266,34 @@
   white-space: nowrap;
 }
 
+/* ── Sub-navigation strips (Settings, and later Moderation and Content) ───── */
+
+/* One row of links that names the pages of a section. It wraps rather than scrolls: at
+   320px four tabs are two rows, which is why the gap is on both axes and nothing is
+   given a fixed width. The current tab is text with a rule under it, not a box: the
+   section sidebar already marks where you are, and two marked places for one page is
+   noise. */
+.admin-shell .settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem 1.25rem;
+  margin-block: .75rem 1.25rem;
+  border-block-end: 1px solid var(--shell-line);
+}
+
+.admin-shell .settings-tabs__tab {
+  padding-block: .375rem;
+  color: var(--shell-body);
+  text-decoration: none;
+  border-block-end: 2px solid transparent;
+}
+
+.admin-shell .settings-tabs__tab[aria-current] {
+  color: var(--shell-ink);
+  font-weight: 600;
+  border-block-end-color: var(--accent);
+}
+
 /* ── Coming lines ─────────────────────────────────────────────────────────── */
 
 .admin-shell__coming {
