@@ -107,6 +107,23 @@ TAGS:
     - admin-label-slug
     - admin-label-title
     - admin-label-wm-username
+    - admin-moderation-approve-statement
+    - admin-moderation-flag-keep
+    - admin-moderation-flag-remove
+    - admin-moderation-flag-marked
+    - admin-moderation-flags
+    - admin-moderation-hide-statement
+    - admin-moderation-people
+    - admin-moderation-person-active
+    - admin-moderation-queue
+    - admin-moderation-queue-empty
+    - admin-moderation-sort-aria
+    - admin-moderation-sort-based-on
+    - admin-moderation-sort-oldest
+    - admin-moderation-state-approved
+    - admin-moderation-state-hidden
+    - admin-moderation-state-unmoderated
+    - admin-moderation-statement
     - admin-nav-panel
     - admin-new-conv-heading
     - admin-overview-card-settings

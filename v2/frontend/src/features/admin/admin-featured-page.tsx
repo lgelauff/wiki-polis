@@ -1,17 +1,21 @@
 import {useCallback, useState, type FormEvent, type ReactNode} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
-import {Link} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
 import {
   adminFeaturedWorkspaceQuery,
+  adminLifecycleQuery,
+  adminSettingsQuery,
   deleteAdminFeaturedArgument,
   deleteAdminFeaturedSelection,
   putAdminFeaturedArgument,
   putAdminFeaturedStatement,
 } from '../../api/queries';
-import {LegacyShell} from '../legacy/legacy-shell';
+import {useMessage} from '../../i18n/messages';
+import {AdminShell} from './admin-shell';
+import {AdminTabStrip} from './admin-tab-strip';
+import {moderationTabs} from './admin-moderation-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 
 type Workspace = components['schemas']['AdminFeaturedWorkspace'];
@@ -22,10 +26,6 @@ type Provenance = Selected['provenance'];
 const selectLiveMessage = 'Informed vote is already live. This statement will be seeded into that round immediately. Continue?';
 const removeLiveMessage = 'Informed vote is already live. Removing this statement hides it from that round immediately (existing votes are preserved). Continue?';
 const deleteArgumentMessage = 'Delete this argument and all its votes? This cannot be undone.';
-
-function legacyTruncate(value: string, length = 28, leeway = 5): string {
-  return value.length <= length + leeway ? value : `${value.slice(0, length - 1)}…`;
-}
 
 function errorMessage(error: Error, fallback: string): string {
   if (error instanceof ApiContractError
@@ -203,9 +203,12 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
   conversationId: number;
   csrfToken: string;
 }) {
+  const msg = useMessage();
   const queryClient = useQueryClient();
   const options = adminFeaturedWorkspaceQuery(conversationId);
   const {data} = useSuspenseQuery(options);
+  const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
+  const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
   const [manualId, setManualId] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
@@ -242,25 +245,19 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
     if (Number.isInteger(id) && id >= 0) select(id, 'manual');
   }
 
-  const title = data.conversation.title;
   return (
-    <LegacyShell
-      headerMode="admin"
-      title={`Featured statements — ${title} — Proto`}
-      headerCrumb={(
-        <nav className="header-crumb" aria-label="Admin breadcrumb">
-          <span className="header-crumb-sep">/</span>
-          <Link to="/admin">Admin panel</Link>
-          <span className="header-crumb-sep">/</span>
-          <Link to={data.links.lifecycle}>{legacyTruncate(title)}</Link>
-          <span className="header-crumb-sep">/</span>
-          <span>Featured</span>
-        </nav>
-      )}
+    <AdminShell
+      title={msg('adminconv-doc-title', lifecycle.conversation.title)}
+      data={lifecycle}
+      gatingType={settings.conversation.gatingType}
+      section="moderation"
+      subPage={msg('featured-crumb')}
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
     >
-      <div className="container">
-        <h2>Featured statements — {title}</h2>
+      <div className="admin-page">
+        <h1>{msg('featured-crumb')}</h1>
+        <AdminTabStrip label={msg('admin-shell-moderation')}
+          tabs={moderationTabs(conversationId, msg)} current="featured" />
 
         <p className="muted" style={{fontSize: 13, marginBottom: '1.5rem'}}>
           Featured statements appear in the argument mapping tab. Participants submit a pro and con
@@ -353,6 +350,6 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
           </form>
         </div>
       </div>
-    </LegacyShell>
+    </AdminShell>
   );
 }
