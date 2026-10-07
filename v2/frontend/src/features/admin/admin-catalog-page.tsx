@@ -97,10 +97,12 @@ function Group({label, count, children}: {label: string; count: number; children
   return (
     <details className="admin-group">
       <summary>{label} ({count})</summary>
-      <table className="admin-table">
-        <ColumnHeads />
-        <tbody>{children}</tbody>
-      </table>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <ColumnHeads />
+          <tbody>{children}</tbody>
+        </table>
+      </div>
     </details>
   );
 }
@@ -199,12 +201,16 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
         <p className="muted" lang="en">Also coming: Admin home, one table of the consultations you have a role in — not available yet (#473)</p>
 
         <h3 className="section-heading" id="admin-convs-heading">{msg('admin-convs-heading')}</h3>
-        <table className="admin-table" aria-labelledby="admin-convs-heading">
-          <ColumnHeads />
-          <tbody>{consultations.map((conversation) => (
-            <ConversationRow key={conversation.id} conversation={conversation} />
-          ))}</tbody>
-        </table>
+        {/* The table scrolls inside its own box when its columns cannot shrink to the
+            screen (320px), so the page itself never scrolls sideways. */}
+        <div className="admin-table-wrap">
+          <table className="admin-table" aria-labelledby="admin-convs-heading">
+            <ColumnHeads />
+            <tbody>{consultations.map((conversation) => (
+              <ConversationRow key={conversation.id} conversation={conversation} />
+            ))}</tbody>
+          </table>
+        </div>
 
         {practice.length > 0 && <Group label={msg('base-mode-demo')} count={practice.length}>
           {practice.map((conversation) => (

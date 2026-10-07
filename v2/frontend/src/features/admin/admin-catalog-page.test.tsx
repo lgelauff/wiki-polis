@@ -72,6 +72,8 @@ test('the page is the site admin dashboard, with the columns it decides on', asy
   // screen reader does not hear them twice.
   expect(screen.getByRole('table', {name: 'All consultations'})).toBe(conversationsTable());
   expect(screen.getAllByText('All consultations')).toHaveLength(1);
+  // At 320px the table is wider than the screen; it scrolls in its own box, not the page.
+  expect(conversationsTable().parentElement).toHaveClass('admin-table-wrap');
 
   const table = conversationsTable();
   // Title · Access · Status · links. The slug is not a column: it is in the link.
