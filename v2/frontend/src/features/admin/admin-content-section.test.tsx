@@ -26,12 +26,12 @@ function statement(id: number, overrides: Partial<Statement> = {}): Statement {
   };
 }
 
-function serveWorkspace(statements: Workspace['statements']) {
+function serveWorkspace(statements: Workspace['statements'], available = true) {
   const payload: Workspace = {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     statements,
     moderationPolicy: {mode: 'moderate', newStatements: 'pending', available: true},
-    dataAvailability: {statements: true},
+    dataAvailability: {statements: available},
     seeding: {allowed: true, lockReason: null, maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
     capabilities: {moderate: true, seed: true},
     links: {self: STATEMENTS_URL, lifecycle: '/admin/conversations/7'},
@@ -200,6 +200,23 @@ test('a consultation without statements says so once', async () => {
 
   await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
   expect(page().getByText('No statements yet.')).toBeVisible();
+});
+
+test('statements that could not be loaded are an error, not an empty consultation', async () => {
+  // The workspace answers 200 with empty lists when the voting service is unreachable.
+  serveWorkspace({pending: [], approved: [], hidden: []}, false);
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  // The inline error stays on the page, and the toast stays as the old page had it.
+  const errors = page().getAllByText('Could not load statements. Check server logs.');
+  expect(errors).toHaveLength(2);
+  expect(errors.filter((node) => node.closest('.admin-shell__notices'))).toHaveLength(1);
+  for (const text of ['No statements yet.', 'No approved statements.',
+    'No statement matches the search.']) {
+    expect(page().queryByText(text)).toBeNull();
+  }
 });
 
 test('the switch, sort and search sit directly above the list, seeding below it', async () => {

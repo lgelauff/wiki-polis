@@ -463,9 +463,10 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
               />
             ))}
           </ul>
-        ) : (
+        ) : data.dataAvailability.statements ? (
           <p className="admin-empty">{empty}</p>
-        )}
+        ) : null /* Lists left empty because the voting service could not be read are not
+          an empty consultation: the error below (and the toast) say what happened. */}
 
         <div className="landing-section" style={{marginBottom: '1.5rem'}}>
           <h3 style={{fontSize: 16, marginBottom: '.5rem'}}>How statement management works</h3>
