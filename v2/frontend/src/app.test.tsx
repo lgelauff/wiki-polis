@@ -247,7 +247,7 @@ test('edits settings and legacy eligibility through one typed command', async ()
   fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'experienced-editors'}});
   fireEvent.change(screen.getByLabelText('Eligibility label'), {target: {value: 'Experienced editors'}});
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved');
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Settings saved'));
   access.unmount();
 
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings']}><App /></MemoryRouter></QueryClientProvider>);
@@ -256,7 +256,7 @@ test('edits settings and legacy eligibility through one typed command', async ()
   fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Updated strategy'}});
   fireEvent.click(screen.getByRole('radio', {name: /Complex topic/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved');
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Settings saved'));
 });
 
 test('deletes a verified empty conversation through a deliberate receipt flow', async () => {

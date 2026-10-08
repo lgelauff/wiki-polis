@@ -548,7 +548,7 @@ test('on Basics a moderator sees the settings as text and saves only the strict-
 
   await waitFor(() => expect(policy).toHaveLength(1));
   expect(policy[0]).toEqual({mode: 'moderate'});
-  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved.');
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Settings saved.'));
   expect(settingsPuts).toHaveLength(0);
 });
 
@@ -773,7 +773,7 @@ test('changing only the checkbox sends only the policy request', async () => {
   // The moderation policy is not one of the fields the settings endpoint takes, so it
   // keeps its own endpoint and its own body.
   expect(policy[0]).toEqual({mode: 'moderate'});
-  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved.');
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Settings saved.'));
   expect(settingsPuts).toHaveLength(0);
   expect(screen.getByRole('checkbox', {name: /Strict moderation/})).toBeChecked();
 });
@@ -794,7 +794,7 @@ test('changing a setting and the checkbox sends both requests on the one Save', 
   expect(settingsPuts).toHaveLength(1);
   expect(settingsPuts[0]).toMatchObject({title: 'A new title'});
   expect(policy[0]).toEqual({mode: 'moderate'});
-  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved.');
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Settings saved.'));
 });
 
 test('changing only a setting sends only the settings request', async () => {
@@ -807,7 +807,7 @@ test('changing only a setting sends only the settings request', async () => {
   fireEvent.change(screen.getByRole('textbox', {name: 'Title'}), {target: {value: 'A new title'}});
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
-  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved.');
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Settings saved.'));
   expect(settingsPuts).toHaveLength(1);
   expect(policy).toHaveLength(0);
 });
@@ -854,7 +854,7 @@ test('a refused policy request is said on the status line', async () => {
     'Could not update moderation settings. Check server logs for details.',
   );
   expect(settingsPuts).toHaveLength(0);
-  expect(screen.queryByRole('status')).toBeNull();
+  expect(screen.getByRole('status')).toBeEmptyDOMElement();
 });
 
 test('a partial save says both: the settings saved, the policy not', async () => {

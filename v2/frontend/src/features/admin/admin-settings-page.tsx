@@ -1,5 +1,5 @@
-import {useEffect, useId, useRef, useState, type FormEvent} from 'react';
-import {useMutation, useQuery, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
+import {useCallback, useEffect, useId, useRef, useState, type FormEvent} from 'react';
+import {useMutation, useQuery, useQueryClient, useSuspenseQuery, type QueryClient} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
@@ -86,6 +86,69 @@ function admissionLabel(msg: Message, admission: Admission): string {
     case 'wiki_based': return msg('admin-access-admission-wiki');
     default: return '—';
   }
+}
+
+/** What the organizer has changed on Basics or Access and not saved yet: only the fields
+ *  that were touched, so everything else is always read from the server's latest answer.
+ *
+ *  Each tab is its own route, so switching tabs unmounts the page. The draft is therefore
+ *  kept above the routes, per query client and per consultation, and a tab picks it up
+ *  again when it mounts: an edit on Basics survives a look at Access and back. A Save takes
+ *  the saved tab's fields out of the draft; the other tab's unsaved edits stay. */
+type Draft = {
+  title?: string;
+  introHtml?: string;
+  outroHtml?: string;
+  accessPolicy?: Policy;
+  tier?: Tier;
+  strictModeration?: boolean;
+  admission?: Admission;
+  eligibilityEventId?: string;
+  eligibilityLabel?: string;
+};
+
+/** The fields each tab shows and saves. A Save sends the server's current value for every
+ *  other field, never this page's copy of it. */
+const TAB_FIELDS = {
+  basics: ['title', 'introHtml', 'outroHtml', 'accessPolicy', 'tier'],
+  access: ['admission', 'eligibilityEventId', 'eligibilityLabel'],
+} as const satisfies Record<'basics' | 'access', readonly (keyof Draft)[]>;
+
+const drafts = new WeakMap<QueryClient, Map<number, Draft>>();
+
+function useSettingsDraft(conversationId: number) {
+  const queryClient = useQueryClient();
+  const [draft, setDraftState] = useState<Draft>(
+    () => drafts.get(queryClient)?.get(conversationId) ?? {},
+  );
+  useEffect(() => {
+    let store = drafts.get(queryClient);
+    if (!store) drafts.set(queryClient, store = new Map());
+    store.set(conversationId, draft);
+  }, [queryClient, conversationId, draft]);
+  const setDraft = useCallback((update: (current: Draft) => Draft) => setDraftState(update), []);
+  return [draft, setDraft] as const;
+}
+
+/** The complete settings representation the endpoint takes, as the server last stored it. */
+function storedBody(settings: Settings) {
+  const {conversation} = settings;
+  return {
+    title: conversation.title,
+    introHtml: conversation.introHtml,
+    outroHtml: conversation.outroHtml,
+    accessPolicy: conversation.accessPolicy,
+    eligibilityEventId: settings.eligibility.eventId,
+    eligibilityLabel: settings.eligibility.label ?? '',
+    recommendationTier: settings.recommendations.tier,
+    gated: conversation.gated,
+    gatingType: conversation.gatingType,
+    announce: conversation.announce,
+    information: conversation.information,
+    resultsShared: conversation.resultsShared,
+    showUsernames: conversation.showUsernames,
+    accessRequestText: conversation.accessRequestText,
+  };
 }
 
 /** The per-field messages of a 400 `validation_failed`, keyed by the request field. */
@@ -246,17 +309,20 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   const {data} = useSuspenseQuery(options);
   // The console shell frames the page, and the frame is built from the lifecycle DTO.
   const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
-  const [title, setTitle] = useState(data.conversation.title);
-  const [introHtml, setIntroHtml] = useState(data.conversation.introHtml);
-  const [outroHtml, setOutroHtml] = useState(data.conversation.outroHtml);
-  const [accessPolicy, setAccessPolicy] = useState<Policy>(data.conversation.accessPolicy);
-  const [admission, setAdmission] = useState<Admission>(admissionOf(data.conversation));
-  const [eligibilityEventId, setEligibilityEventId] = useState(data.eligibility.eventId);
-  const [eligibilityLabel, setEligibilityLabel] = useState(data.eligibility.label ?? '');
-  const [tier, setTier] = useState<Tier>(data.recommendations.tier);
+  // Every field shows the unsaved edit when there is one and the server's value otherwise,
+  // so a field nobody touched follows whatever the server last said.
+  const [draft, setDraft] = useSettingsDraft(conversationId);
+  const title = draft.title ?? data.conversation.title;
+  const introHtml = draft.introHtml ?? data.conversation.introHtml;
+  const outroHtml = draft.outroHtml ?? data.conversation.outroHtml;
+  const accessPolicy = draft.accessPolicy ?? data.conversation.accessPolicy;
+  const admission = draft.admission ?? admissionOf(data.conversation);
+  const eligibilityEventId = draft.eligibilityEventId ?? data.eligibility.eventId;
+  const eligibilityLabel = draft.eligibilityLabel ?? (data.eligibility.label ?? '');
+  const tier = draft.tier ?? data.recommendations.tier;
   // The strict-moderation answer once the checkbox has been touched; null until then, and
   // again after a save, when the checkbox shows what is stored.
-  const [strictModeration, setStrictModeration] = useState<boolean | null>(null);
+  const strictModeration = draft.strictModeration ?? null;
   const workspaceOptions = adminStatementWorkspaceQuery(conversationId);
   // Basics only: whether the moderation policy can be set from here. Everyone who can open
   // Settings may moderate this consultation (the server requires it to read the page), so
@@ -282,32 +348,47 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   // which is what today's page does by disabling both of its access controls.
   const admissionLocked = Boolean(data.locks?.gated || data.locks?.gatingType);
   const stored = admissionOf(data.conversation);
-  // The five settings nothing reads are sent back exactly as they were read, so none of
-  // them can ever be the field a 409 names, and a save cannot quietly rewrite a value the
-  // page no longer shows. They are kept out of component state for that reason. The
-  // endpoint takes one of three complete key sets and refuses anything else
+  // The endpoint takes one of three complete key sets and refuses anything else
   // ("Provide the complete settings representation.", `api/admin_routes.py`), so dropping
-  // the keys from the body is not an option: the whole save would 400. Every tab sends the
-  // whole representation, so a save on one tab writes the other tab's fields back as they
-  // were loaded; last write wins.
-  const {
-    announce, information, resultsShared, showUsernames, accessRequestText,
-  } = data.conversation;
+  // keys from the body is not an option: the whole save would 400. A Save therefore sends
+  // the whole representation -- built from a fresh read of the server, not from this
+  // page's copy, with only this tab's own edits laid over it. A field the tab does not show
+  // (the admission answer, from Basics) can then never be written back from a stale copy;
+  // the five settings nothing reads travel back exactly as the server holds them.
   const gated = admission !== 'anyone';
+  const ownFields = tab === 'access' ? TAB_FIELDS.access : TAB_FIELDS.basics;
 
-  /** Whether any field the settings request carries differs from what the server last
-   *  stored. Only Basics asks: Access sends its request on every Save, as it always has. */
+  /** This tab's edits, as request fields. */
+  function ownEdits(): Partial<ReturnType<typeof storedBody>> {
+    const edits: Partial<ReturnType<typeof storedBody>> = {};
+    if (tab === 'access') {
+      if (draft.admission !== undefined) Object.assign(edits, admissionWire(draft.admission));
+      if (draft.eligibilityEventId !== undefined) edits.eligibilityEventId = draft.eligibilityEventId;
+      if (draft.eligibilityLabel !== undefined) edits.eligibilityLabel = draft.eligibilityLabel;
+    } else {
+      if (draft.title !== undefined) edits.title = draft.title;
+      if (draft.introHtml !== undefined) edits.introHtml = draft.introHtml;
+      if (draft.outroHtml !== undefined) edits.outroHtml = draft.outroHtml;
+      if (draft.accessPolicy !== undefined) edits.accessPolicy = draft.accessPolicy;
+      if (draft.tier !== undefined) edits.recommendationTier = draft.tier;
+    }
+    return edits;
+  }
+
+  /** Whether this tab's edits differ from what the server last stored. Only Basics asks:
+   *  Access sends its request on every Save, as it always has. */
   function settingsChanged(): boolean {
-    const wire = admissionWire(admission);
-    return title !== data.conversation.title
-      || introHtml !== data.conversation.introHtml
-      || outroHtml !== data.conversation.outroHtml
-      || accessPolicy !== data.conversation.accessPolicy
-      || wire.gated !== data.conversation.gated
-      || wire.gatingType !== data.conversation.gatingType
-      || eligibilityEventId !== data.eligibility.eventId
-      || eligibilityLabel !== (data.eligibility.label ?? '')
-      || tier !== data.recommendations.tier;
+    const stored = storedBody(data);
+    return Object.entries(ownEdits()).some(
+      ([key, value]) => stored[key as keyof typeof stored] !== value,
+    );
+  }
+
+  /** One field edited: kept in the draft, and a "Settings saved." line from the last Save
+   *  goes, because it no longer describes what is on screen. */
+  function edit(patch: Draft) {
+    setDraft((current) => ({...current, ...patch}));
+    if (mutation.isSuccess) mutation.reset();
   }
 
   // One Save per tab, and everything on the tab takes effect on it (#478). On Basics that
@@ -326,16 +407,26 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
       let changed = false;
       let settingsReceiptChanged: boolean | null = null;
       if (sendSettings) {
+        // What the server holds now, not what this page loaded: another tab, another
+        // organizer, or a copy older than the cache's staleTime may have changed it since.
+        const fresh = await queryClient.fetchQuery({...options, staleTime: 0});
+        const edits = ownEdits();
         const receipt = await putAdminSettings(conversationId, {
-          title, introHtml, outroHtml, accessPolicy, eligibilityEventId,
-          eligibilityLabel, recommendationTier: tier, ...admissionWire(admission),
-          announce, information, resultsShared, showUsernames, accessRequestText,
+          ...storedBody(fresh), ...edits,
         }, csrfToken);
         queryClient.setQueryData<Settings>(options.queryKey, receipt.settings);
-        // The server clears the eligibility pair when the invitation list is chosen; show
-        // what it stored, not what was typed, or the inputs keep an event ID that is gone.
-        setEligibilityEventId(receipt.settings.eligibility.eventId);
-        setEligibilityLabel(receipt.settings.eligibility.label ?? '');
+        // The saved fields leave the draft, so they show what the server stored (it clears
+        // the eligibility pair when the invitation list is chosen) -- unless they were
+        // edited again while the request was on its way.
+        const sent = {...draft};
+        setDraft((current) => {
+          const next = {...current};
+          for (const field of ownFields) if (next[field] === sent[field]) delete next[field];
+          return next;
+        });
+        // The title is in the frame's breadcrumb and document title, both built from the
+        // lifecycle DTO.
+        void queryClient.invalidateQueries({queryKey: adminLifecycleQuery(conversationId).queryKey});
         changed = receipt.changed;
         settingsReceiptChanged = receipt.changed;
       }
@@ -351,7 +442,11 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
         // The receipt carries the workspace, so the checkbox and the statements list never
         // disagree; the checkbox goes back to showing what is stored.
         queryClient.setQueryData<Workspace>(workspaceOptions.queryKey, receipt.workspace);
-        setStrictModeration(null);
+        setDraft((current) => {
+          const next = {...current};
+          delete next.strictModeration;
+          return next;
+        });
         changed = changed || receipt.changed;
       }
       return {changed};
@@ -365,7 +460,8 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   // Only a move *to* "anyone" widens. The admission answer is the only thing left that can
   // narrow: the visibility settings are no longer editable here, so a save cannot take
   // visibility away from anybody.
-  const narrowing = stored !== admission && admission !== 'anyone';
+  // Asked on Access only: Basics does not show the answer and never sends an edit of it.
+  const narrowing = tab === 'access' && stored !== admission && admission !== 'anyone';
 
   // A refused policy request is said on the status line; everything else below is about
   // the settings request.
@@ -477,10 +573,10 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
             <section aria-labelledby="settings-description">
               <h2 id="settings-description">Description</h2>
               {canEdit ? <>
-                <label>{msg('admin-label-title')}<input value={title} maxLength={255} required {...invalid('title')} onChange={(event) => setTitle(event.target.value)} /></label>
+                <label>{msg('admin-label-title')}<input value={title} maxLength={255} required {...invalid('title')} onChange={(event) => edit({title: event.target.value})} /></label>
                 <FieldError field="title" />
-                <label>Introduction HTML<textarea value={introHtml} rows={7} onChange={(event) => setIntroHtml(event.target.value)} /></label>
-                <label>Closing HTML<textarea value={outroHtml} rows={5} onChange={(event) => setOutroHtml(event.target.value)} /></label>
+                <label>Introduction HTML<textarea value={introHtml} rows={7} onChange={(event) => edit({introHtml: event.target.value})} /></label>
+                <label>Closing HTML<textarea value={outroHtml} rows={5} onChange={(event) => edit({outroHtml: event.target.value})} /></label>
                 <p className="settings-hint">Allowed HTML is sanitized by the server when saved.</p>
               </> : <>
                 <SettingValue label={msg('admin-label-title')} value={data.conversation.title} />
@@ -495,7 +591,7 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
               <h2 id="settings-guidance">Guidance scope</h2>
               {canEdit ? <fieldset><legend>Complexity tier</legend>{data.recommendations.tiers.map((option) => (
                 <label className="settings-tier" key={option.key}>
-                  <input type="radio" name="tier" value={option.key} checked={tier === option.key} onChange={() => setTier(option.key)} />
+                  <input type="radio" name="tier" value={option.key} checked={tier === option.key} onChange={() => edit({tier: option.key})} />
                   <strong>{option.label}</strong>
                   <span>{Object.values(option.quantities).join(' · ')}</span>
                 </label>
@@ -514,12 +610,12 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
                 <p className="access-answer-legend" id={`${ids}-practice-legend`}>{msg('admin-access-admission-legend')}</p>
                 <p className="access-answer-value">{msg('admin-access-admission-practice')}</p>
               </div>}
-              {canSwitchPractice && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => setAccessPolicy(event.target.value as Policy)}>
+              {canSwitchPractice && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => edit({accessPolicy: event.target.value as Policy})}>
                 <option value="public">Not gated</option><option value="demo">Practice</option>
               </select></label>}
             </section>}
             <ApprovalSection conversationId={conversationId}
-              strict={strictModeration} onChange={setStrictModeration} />
+              strict={strictModeration} onChange={(strict) => edit({strictModeration: strict})} />
           </> : <section aria-label={msg('admin-access-heading')}>
             {/* A practice item has no admission choice: the server stores one fixed answer
                 whatever is sent, and the Practice Environment section on Basics states it.
@@ -533,15 +629,15 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
             </div> : <fieldset className="access-choices">
               <legend>{msg('admin-access-admission-legend')}</legend>
               <label className="access-choice">
-                <input type="radio" name="admission" value="anyone" checked={admission === 'anyone'} {...admissionInvalid} onChange={() => setAdmission('anyone')} />
+                <input type="radio" name="admission" value="anyone" checked={admission === 'anyone'} {...admissionInvalid} onChange={() => edit({admission: 'anyone'})} />
                 <span>{msg('admin-access-admission-anyone')}</span>
               </label>
               <label className="access-choice">
-                <input type="radio" name="admission" value="invite_only" checked={admission === 'invite_only'} {...admissionInvalid} onChange={() => setAdmission('invite_only')} />
+                <input type="radio" name="admission" value="invite_only" checked={admission === 'invite_only'} {...admissionInvalid} onChange={() => edit({admission: 'invite_only'})} />
                 <span>{msg('admin-access-admission-invited')}</span>
               </label>
               <label className="access-choice">
-                <input type="radio" name="admission" value="voucher" checked={admission === 'voucher'} {...admissionInvalid} onChange={() => setAdmission('voucher')} />
+                <input type="radio" name="admission" value="voucher" checked={admission === 'voucher'} {...admissionInvalid} onChange={() => edit({admission: 'voucher'})} />
                 <span>{msg('admin-access-admission-voucher')}</span>
               </label>
             </fieldset>)}
@@ -549,9 +645,9 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
             {locked && <p className="access-field-error" role="alert">{serverMessage}</p>}
             {eligibilityShown && <>
               {canEdit ? <>
-                <label>{msg('admin-label-elig-event')}<input value={eligibilityEventId} maxLength={80} placeholder={msg('admin-elig-event-ph')} {...invalid('eligibilityEventId')} onChange={(event) => setEligibilityEventId(event.target.value)} /></label>
+                <label>{msg('admin-label-elig-event')}<input value={eligibilityEventId} maxLength={80} placeholder={msg('admin-elig-event-ph')} {...invalid('eligibilityEventId')} onChange={(event) => edit({eligibilityEventId: event.target.value})} /></label>
                 <FieldError field="eligibilityEventId" />
-                <label>{msg('admin-label-elig-label')}<input value={eligibilityLabel} maxLength={255} placeholder={msg('admin-elig-label-ph')} {...invalid('eligibilityLabel')} onChange={(event) => setEligibilityLabel(event.target.value)} /></label>
+                <label>{msg('admin-label-elig-label')}<input value={eligibilityLabel} maxLength={255} placeholder={msg('admin-elig-label-ph')} {...invalid('eligibilityLabel')} onChange={(event) => edit({eligibilityLabel: event.target.value})} /></label>
                 <FieldError field="eligibilityLabel" />
               </> : <>
                 <SettingValue label={msg('admin-label-elig-event')} value={data.eligibility.eventId} />
@@ -573,7 +669,11 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
             </div> : <button type="submit" disabled={mutation.isPending} ref={saveRef}>
               {mutation.isPending ? msg('admin-saving') : msg('admin-save')}
             </button>}
-            {saved !== null && <p role="status">{saved ? 'Settings saved.' : 'Settings already up to date.'}</p>}
+            {/* Always mounted, so the region exists before its first message; keyed on the
+                attempt, so a second identical "Settings saved." is a new line, read again. */}
+            <div className="settings-status" role="status">
+              {saved !== null && <p key={mutation.submittedAt}>{saved ? 'Settings saved.' : 'Settings already up to date.'}</p>}
+            </div>
             {generalError && <p role="alert">{generalError}</p>}
           </footer>}
         </form>
