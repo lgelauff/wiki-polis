@@ -84,7 +84,7 @@ test('the Content section is Statements and Participants, each marked in the str
     .toHaveAttribute('aria-current', 'page');
 });
 
-test('the statement list opens on the approved ones, most votes first', async () => {
+test('the statement list opens on the approved ones, most responses first', async () => {
   serveWorkspace({
     pending: [statement(20, {moderation: 'pending', votes: {agree: 99, pass: 0, disagree: 0}})],
     approved: [
@@ -104,7 +104,8 @@ test('the statement list opens on the approved ones, most votes first', async ()
   // Each position of the switch carries its count, in its accessible name too.
   expect(screen.getByRole('button', {name: 'Show unmoderated 1'})).toBeVisible();
   expect(screen.getByRole('button', {name: 'Show hidden'})).toBeVisible();
-  expect(screen.getByRole('combobox', {name: 'Sort'})).toHaveValue('most-votes');
+  expect(screen.getByRole('combobox', {name: 'Sort'})).toHaveValue('most-responses');
+  expect(screen.getByRole('option', {name: 'Most responses', selected: true})).toBeInTheDocument();
   const rows = list().getAllByRole('listitem')
     .map((row) => row.querySelector('.admin-row__text')?.textContent ?? '');
   expect(rows[0]).toContain('Statement number 12');

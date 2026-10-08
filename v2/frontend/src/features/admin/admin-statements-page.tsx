@@ -122,19 +122,19 @@ const LIST: Record<Position, 'approved' | 'pending' | 'hidden'> = {
   hidden: 'hidden',
 };
 
-/** "Most votes" is what a reader of the statements wants first; "Oldest first" is the order
+/** "Most responses" is what a reader of the statements wants first; "Oldest first" is the order
  *  they arrived; "Based on" groups a correction under the statement it corrects. All three
  *  sort what is already loaded. */
-type Sort = 'most-votes' | 'oldest' | 'based-on';
+type Sort = 'most-responses' | 'oldest' | 'based-on';
 
-function voteTotal(statement: Statement): number {
+function responseTotal(statement: Statement): number {
   return statement.votes.agree + statement.votes.pass + statement.votes.disagree;
 }
 
 function sortStatements(rows: Statement[], sort: Sort): Statement[] {
   const byId = [...rows].sort((left, right) => left.id - right.id);
-  if (sort === 'most-votes') {
-    return byId.sort((left, right) => voteTotal(right) - voteTotal(left) || left.id - right.id);
+  if (sort === 'most-responses') {
+    return byId.sort((left, right) => responseTotal(right) - responseTotal(left) || left.id - right.id);
   }
   if (sort === 'oldest') return byId;
   const placed = new Set<number>();
@@ -235,7 +235,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
   const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
   const [position, setPosition] = useState<Position>('approved');
-  const [sort, setSort] = useState<Sort>('most-votes');
+  const [sort, setSort] = useState<Sort>('most-responses');
   const [search, setSearch] = useState('');
   const [feedback, setFeedback] = useState<Feedback[]>([]);
   const [toast, setToast] = useState<LegacyToastMessage | null>(() => (
@@ -433,7 +433,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           <label className="admin-sort">
             {msg('admin-content-sort-aria')}
             <select value={sort} onChange={(event) => setSort(event.target.value as Sort)}>
-              <option value="most-votes">{msg('admin-content-sort-most-votes')}</option>
+              <option value="most-responses">{msg('admin-content-sort-most-responses')}</option>
               <option value="oldest">{msg('admin-moderation-sort-oldest')}</option>
               <option value="based-on">{msg('admin-moderation-sort-based-on')}</option>
             </select>

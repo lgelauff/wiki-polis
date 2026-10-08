@@ -586,7 +586,7 @@
     "admin-moderation-person-already-allowed": "Warning on the moderation People page after an unblock of someone who was not blocked; nothing changed. Counterpart of {{msg-proto|flash-already-banned}}. Admin-only.",
     "admin-content-tabs-aria": "Accessible name of the nav holding the pages of the Content section of a consultation's admin console. Admin-only.",
     "admin-content-sort-aria": "Label of the control that reorders the statement list on Content. Admin-only.",
-    "admin-content-sort-most-votes": "Default option of the statement list's sort: the statements with the most votes first. Admin-only.",
+    "admin-content-sort-most-responses": "Default option of the statement list's sort on the Content section: the statements with the most responses (agree, disagree and pass together) first. The other options are {{msg-proto|admin-moderation-sort-oldest}} and {{msg-proto|admin-moderation-sort-based-on}}. Admin-only.",
     "admin-content-search-aria": "Label of the box that filters the statement list by its text. Admin-only.",
     "admin-content-empty": "Shown on Content > Statements when the consultation has no statements at all, in any state. When only the current position of the state switch is empty, the list says so with {{msg-proto|stmts-approved-empty}}, {{msg-proto|stmts-pending-empty}} or {{msg-proto|stmts-hidden-empty}}; when the search matches nothing, with {{msg-proto|admin-content-no-match}}. Admin-only.",
     "admin-content-no-match": "Shown on Content > Statements when there are statements in the position the state switch is on, but none of them contains the text typed in the search box ({{msg-proto|admin-content-search-aria}}). Admin-only.",
