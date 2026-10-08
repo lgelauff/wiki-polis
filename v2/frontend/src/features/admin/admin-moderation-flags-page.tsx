@@ -90,7 +90,7 @@ function FlagRow({conversationId, flag, csrfToken, onResolved, onFeedback}: {
       );
       onFeedback(
         receipt.changed ? 'success' : 'warning',
-        receipt.changed ? msg('flash-flag-resolved') : msg('admin-moderation-flag-already-resolved'),
+        receipt.changed ? msg('admin-moderation-flag-marked-handled') : msg('admin-moderation-flag-already-handled'),
       );
     },
     onError: (error: Error) => onFeedback('error', errorMessage(error, msg)),
@@ -187,7 +187,7 @@ export function AdminModerationFlagsPage({conversationId, csrfToken}: {
 
         {resolved.length > 0 && (
           <>
-            <h2>{msg('flags-resolved-heading')}</h2>
+            <h2>{msg('admin-moderation-flags-handled-heading')}</h2>
             <ul className="admin-rows">
               {resolved.map((flag) => (
                 <li className="admin-row" key={flag.id}>

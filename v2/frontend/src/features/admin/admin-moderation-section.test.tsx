@@ -346,9 +346,9 @@ test('flags are one row each, with the reason as a suffix and one way to close o
   expect(sent[0]).toEqual({flagId: 41, body: {resolved: true, note: null}});
   await waitFor(() => expect(screen.getByText('No open flags.')).toHaveFocus());
   expect(screen.queryByRole('button', {name: 'Mark as handled'})).toBeNull();
-  expect(screen.getByRole('status')).toHaveTextContent('Flag marked resolved.');
+  expect(screen.getByRole('status')).toHaveTextContent('Flag marked as handled.');
   // The resolved flag moves to the list below, without the way to the content.
-  const resolved = screen.getByRole('heading', {name: 'Resolved', level: 2}).nextElementSibling!;
+  const resolved = screen.getByRole('heading', {name: 'Handled', level: 2}).nextElementSibling!;
   expect(resolved).toHaveTextContent('A statement with a real name in it.');
   expect(resolved).toHaveTextContent('Handled 13 Aug 2026');
   expect(within(resolved as HTMLElement).queryByRole('link')).toBeNull();
@@ -381,12 +381,12 @@ test('the note typed on a flag is sent with it and shown in the handled list', a
 
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toEqual({resolved: true, note: 'Hid the statement on the queue.'});
-  const resolved = (await screen.findByRole('heading', {name: 'Resolved', level: 2}))
+  const resolved = (await screen.findByRole('heading', {name: 'Handled', level: 2}))
     .nextElementSibling as HTMLElement;
   expect(within(resolved).getByText('Hid the statement on the queue.')).toBeVisible();
 });
 
-test('a flag someone else already resolved says so', async () => {
+test('a flag someone else already handled says so', async () => {
   server.use(http.put(
     new URL('/api/v1/admin/conversations/7/flags/:flagId/resolution', globalThis.location.origin)
       .toString(),
@@ -401,7 +401,7 @@ test('a flag someone else already resolved says so', async () => {
 
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getAllByRole('button', {name: 'Mark as handled'})[0]!);
-  expect(await screen.findByRole('alert')).toHaveTextContent('Flag was already resolved.');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Flag was already handled.');
 });
 
 test('the flags page switches between statements and arguments when the data has both', async () => {

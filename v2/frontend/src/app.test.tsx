@@ -373,7 +373,7 @@ test('resolves a privacy-safe moderation item through the typed contract', async
   fireEvent.click(screen.getByRole('button', {name: 'Mark as handled'}));
 
   expect(await screen.findByText('No open flags.')).toBeVisible();
-  expect(screen.getByRole('status')).toHaveTextContent('Flag marked resolved.');
+  expect(screen.getByRole('status')).toHaveTextContent('Flag marked as handled.');
 });
 
 /** Serves settings whose answer to who gets in is the invitation list: the Invitations tab

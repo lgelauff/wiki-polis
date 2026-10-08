@@ -108,11 +108,13 @@ TAGS:
     - admin-label-title
     - admin-label-wm-username
     - admin-moderation-approve-statement
-    - admin-moderation-flag-already-resolved
+    - admin-moderation-flag-already-handled
     - admin-moderation-flag-handle
     - admin-moderation-flag-handled
+    - admin-moderation-flag-marked-handled
     - admin-moderation-flag-note
     - admin-moderation-flags
+    - admin-moderation-flags-handled-heading
     - admin-moderation-hide-statement
     - admin-moderation-people
     - admin-moderation-person-active
@@ -360,7 +362,6 @@ TAGS:
     - flags-th-target
     - flash-already-banned
     - flash-banned
-    - flash-flag-resolved
     - flash-load-statements-failed
     - flash-move-sync-failed
     - flash-moved-to
