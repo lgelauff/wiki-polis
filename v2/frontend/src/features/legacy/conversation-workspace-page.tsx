@@ -1,4 +1,4 @@
-import {useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent} from 'react';
 import {useMutation, useQuery, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {useLocation, useParams} from 'react-router-dom';
 
@@ -156,12 +156,23 @@ export const VOTE_KEY_GUARD_MS = 1500;
 
 function VoteChoices({disabled, onVote}: {disabled: boolean; onVote: (choice: VoteChoice, keyboard: boolean) => void}) {
   const msg = useMessage();
-  // A click event with `detail === 0` was not made by a pointer: Enter or Space on the button.
+  // A keyboard activation is a click with `detail === 0` that follows an Enter or Space keydown
+  // on the same button. Assistive technology also clicks with `detail === 0`, but without a
+  // keydown: it gets the pointer window, not the longer key window (p527-03).
+  const keyed = useRef<EventTarget | null>(null);
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    keyed.current = event.key === 'Enter' || event.key === ' ' ? event.currentTarget : null;
+  };
+  const activate = (choice: VoteChoice) => (event: MouseEvent<HTMLButtonElement>) => {
+    const keyboard = event.detail === 0 && keyed.current === event.currentTarget;
+    keyed.current = null;
+    onVote(choice, keyboard);
+  };
   return (
     <div className="vote-choice-row" id="vote-choice-row">
-      <button type="button" className="vote-choice" data-type="agree" disabled={disabled} onClick={(event) => onVote('agree', event.detail === 0)} autoFocus><span className="vote-dot vote-dot--agree" />{msg('conv-vote-agree')}</button>
-      <button type="button" className="vote-choice" data-type="neutral" disabled={disabled} onClick={(event) => onVote('pass', event.detail === 0)}><span className="vote-dot vote-dot--pass" />{msg('conv-vote-pass')}</button>
-      <button type="button" className="vote-choice" data-type="disagree" disabled={disabled} onClick={(event) => onVote('disagree', event.detail === 0)}><span className="vote-dot vote-dot--disagree" />{msg('conv-vote-disagree')}</button>
+      <button type="button" className="vote-choice" data-type="agree" disabled={disabled} onKeyDown={onKeyDown} onClick={activate('agree')} autoFocus><span className="vote-dot vote-dot--agree" />{msg('conv-vote-agree')}</button>
+      <button type="button" className="vote-choice" data-type="neutral" disabled={disabled} onKeyDown={onKeyDown} onClick={activate('pass')}><span className="vote-dot vote-dot--pass" />{msg('conv-vote-pass')}</button>
+      <button type="button" className="vote-choice" data-type="disagree" disabled={disabled} onKeyDown={onKeyDown} onClick={activate('disagree')}><span className="vote-dot vote-dot--disagree" />{msg('conv-vote-disagree')}</button>
     </div>
   );
 }
@@ -281,20 +292,28 @@ function OptionTriad({active, allDone, thresholdUnlocked, quota, quotaRemaining,
 function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
   const msg = useMessage();
   const {data, refetch} = useSuspenseQuery(exploreStateQuery(slug));
-  const [receipt, setReceipt] = useState<components['schemas']['ExploreVoteReceipt'] | null>(null);
-  const [recordedCurrentVote, setRecordedCurrentVote] = useState(false);
+  const [storedReceipt, setReceipt] = useState<components['schemas']['ExploreVoteReceipt'] | null>(null);
+  const [recordedVoteFor, setRecordedVoteFor] = useState<number | null>(null);
   const [composer, setComposer] = useState<ComposerMode>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [loadingNext, setLoadingNext] = useState(false);
+  const [nextFailed, setNextFailed] = useState(false);
+  const nextPending = useRef(false);
   const statementId = data.currentStatement?.id ?? null;
+  // A receipt belongs to the card it was given for: the next card never shows it, even in the
+  // render before Move on has finished.
+  const receipt = storedReceipt && storedReceipt.statementId === statementId ? storedReceipt : null;
   // #505: a double click, or a held Enter, on Move on must not answer a card unread.
-  // - From the moment Move on is pressed until the next card is on screen, no vote counts:
-  //   the old card's buttons come back while the deck reloads, and must not take a second vote.
+  // - While the next card loads, the old card keeps its receipt (no vote buttons), and Move on
+  //   does nothing more. From the moment Move on is pressed until the next card is on screen,
+  //   no vote counts either: "change" on the old card must not take a second vote.
   // - A card that replaced another one then ignores a pointer click for VOTE_INPUT_GUARD_MS
   //   and a keyboard activation for VOTE_KEY_GUARD_MS.
   // Silently: the buttons keep their look and tab stop (a disabled flash on every card reads
   // as a broken control). The first card after page load is not guarded, nor are the buttons
   // that "change" brings back after a vote. Refs, set in a layout effect, so the guard is in
-  // place before the new card can receive any input; a clock, so no timer is left running.
+  // place before the new card can receive any input; a monotonic clock, so no timer is left
+  // running and a change of the system time cannot open or close the window.
   const seenStatement = useRef(statementId);
   const voteGuard = useRef<{shownAt: number | null; awaitingNext: boolean}>({shownAt: null, awaitingNext: false});
   const vote = useMutation({
@@ -305,39 +324,50 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
     onSuccess: (nextReceipt) => {
       voteGuard.current.shownAt = null;
       setReceipt(nextReceipt);
-      setRecordedCurrentVote(true);
+      setRecordedVoteFor(nextReceipt.statementId);
     },
   });
   useLayoutEffect(() => {
     if (seenStatement.current === statementId) return;
     seenStatement.current = statementId;
-    voteGuard.current = {shownAt: statementId === null ? null : Date.now(), awaitingNext: false};
+    voteGuard.current = {shownAt: statementId === null ? null : performance.now(), awaitingNext: false};
   }, [statementId]);
   function castVote(choice: VoteChoice, keyboard: boolean) {
     const guard = voteGuard.current;
     if (statementId === null || guard.awaitingNext) return;
     if (guard.shownAt !== null
-      && Date.now() - guard.shownAt < (keyboard ? VOTE_KEY_GUARD_MS : VOTE_INPUT_GUARD_MS)) return;
+      && performance.now() - guard.shownAt < (keyboard ? VOTE_KEY_GUARD_MS : VOTE_INPUT_GUARD_MS)) return;
     vote.mutate(choice);
   }
   async function next() {
+    if (nextPending.current) return;
+    nextPending.current = true;
     const shown = seenStatement.current;
     voteGuard.current.awaitingNext = true;
-    setReceipt(null);
-    setComposer(null);
-    setSubmitted(false);
+    setLoadingNext(true);
+    setNextFailed(false);
     const result = await refetch();
     // A new card lifts the block itself, when it is committed. The same card back (or a failed
     // reload) never will, so lift it here.
     if (result.isError || (result.data?.currentStatement?.id ?? null) === shown) {
       voteGuard.current.awaitingNext = false;
     }
-    setRecordedCurrentVote(false);
+    nextPending.current = false;
+    setLoadingNext(false);
+    if (result.isError) {
+      // The old card keeps its receipt, so Move on is right there to try again.
+      setNextFailed(true);
+      return;
+    }
+    setReceipt(null);
+    setComposer(null);
+    setSubmitted(false);
+    setRecordedVoteFor(null);
   }
   const allDone = data.progress.allDone && receipt === null;
   const completed = Math.min(
     data.progress.total,
-    data.progress.completed + (recordedCurrentVote ? 1 : 0),
+    data.progress.completed + (recordedVoteFor !== null && recordedVoteFor === statementId ? 1 : 0),
   );
   const progress = {
     ...data.progress,
@@ -356,7 +386,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
   }, [composer, receipt, submitted]);
   return (
     <div className="voting-col">
-      <div id="particiapi-client">
+      <div id="particiapi-client" aria-busy={loadingNext}>
         <Progress progress={progress} />
         <p className="sr-only" id="statement-live" role="status" aria-live="polite">{data.currentStatement?.text}</p>
         {!allDone && data.currentStatement && (
@@ -394,6 +424,7 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
           </div>
         )}
         {vote.error && <div id="conv-error" role="alert"><p className="muted">{msg('conv-err-submit-vote')}</p></div>}
+        {nextFailed && <div id="conv-next-error" role="alert"><p className="muted">{msg('conv-unavailable-body')}</p></div>}
       </div>
     </div>
   );
