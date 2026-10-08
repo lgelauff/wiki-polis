@@ -383,9 +383,10 @@ test('adds and removes invitations through convergent admin commands', async () 
   );
 
   // #478: .../invitations is an old path that redirects to the Invitations tab, which is
-  // headed by the section like every other Settings tab.
+  // headed by the section like every other Settings tab, and no heading repeats the tab.
   expect(await screen.findByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
-  expect(screen.getByRole('heading', {name: 'Invitations', level: 2})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Invitations'})).toBeNull();
+  expect(screen.getByRole('heading', {name: 'Add invites', level: 2})).toBeVisible();
   // The access policy reads in words; the stored value never reaches the page.
   expect(screen.getByText('Only people who have been given access')).toBeVisible();
   expect(screen.queryByText('invite_only', {exact: false})).not.toBeInTheDocument();
@@ -474,9 +475,10 @@ test('keeps the typed invitation list and shows a toast after a save error', asy
 test('replaces a conversation role set from the admin workspace', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/roles']}><App /></MemoryRouter></QueryClientProvider>);
   // #478: Roles is a Settings tab; its own "Conversation roles" heading went with the old
-  // layout, and the roster is a subsection under the tab's h2.
-  const assigned = await screen.findByRole('heading', {name: 'Assigned', level: 3});
-  expect(screen.getByRole('heading', {name: 'Roles', level: 2})).toBeVisible();
+  // layout, no heading repeats the tab name, and the roster is an h2 under the h1.
+  const assigned = await screen.findByRole('heading', {name: 'Assigned', level: 2});
+  expect(screen.getByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Roles'})).toBeNull();
   // The roster's own row, not the username in the console's top bar.
   const roster = assigned.closest('section')!;
   expect(within(roster).getByRole('listitem')).toHaveTextContent('Example editor');
@@ -529,7 +531,10 @@ test.each([
 
   expect(await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000}))
     .toBeVisible();
-  expect(screen.getByRole('heading', {name: heading, level: 2})).toBeVisible();
+  // The strip's current tab names the page; no heading repeats it.
+  expect(screen.queryByRole('heading', {name: heading})).toBeNull();
+  expect(screen.getByRole('navigation', {name: 'Settings'})
+    .querySelectorAll('[aria-current="page"]')).toHaveLength(1);
 });
 
 test('renders a conversation record from the generated API contract', async () => {

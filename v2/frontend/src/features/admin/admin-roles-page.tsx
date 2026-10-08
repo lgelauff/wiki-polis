@@ -69,7 +69,7 @@ export function AdminRolesPage({conversationId, csrfToken}: {
       <div className="roles-shell">
       <p>See who can moderate or organize {data.conversation.title}.</p>
       <section className="roles-roster" aria-labelledby="role-roster-heading">
-        <header><h3 id="role-roster-heading">Assigned</h3><span>{data.assignments.length}</span></header>
+        <header><h2 id="role-roster-heading">Assigned</h2><span>{data.assignments.length}</span></header>
         {data.assignments.length ? <ul>{data.assignments.map((row) => (
           <li key={row.participantId}>
             <strong>{row.username}</strong>
@@ -79,7 +79,7 @@ export function AdminRolesPage({conversationId, csrfToken}: {
       </section>
       {data.capabilities.manageRoles && (
         <section className="roles-editor" aria-labelledby="role-editor-heading">
-          <div><p className="eyebrow">Global admin</p><h3 id="role-editor-heading">Replace a role set</h3><p>An empty selection removes all scoped access.</p></div>
+          <div><p className="eyebrow">Global admin</p><h2 id="role-editor-heading">Replace a role set</h2><p>An empty selection removes all scoped access.</p></div>
           <form onSubmit={submit}>
             <label htmlFor="role-participant">Participant</label>
             <select id="role-participant" value={participantId ?? ''} onChange={(event) => selectParticipant(event.target.value)} required>

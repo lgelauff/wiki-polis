@@ -131,7 +131,7 @@ export function AdminInvitationsPage({
         )}
 
         <div className="edit-form">
-          <h3>Add invites</h3>
+          <h2>Add invites</h2>
           <form onSubmit={submit}>
             <label>
               Wikimedia usernames (one per line)

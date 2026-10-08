@@ -983,7 +983,7 @@ test('a voucher consultation can be sent to Invitations, which still says what i
   renderInvitationsPage();
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  expect(screen.getByRole('heading', {name: 'Invitations', level: 2})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Invitations'})).toBeNull();
   // The strip still names the tab this consultation uses.
   expect(within(tabs()).getByRole('link', {name: 'Vouchers'}))
     .toHaveAttribute('href', '/admin/conversations/7/settings/vouchers');
@@ -1006,7 +1006,7 @@ test('the Vouchers tab is the strip and one line about what is not built yet', a
   );
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  expect(screen.getByRole('heading', {name: 'Vouchers', level: 2})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Vouchers'})).toBeNull();
   expect(within(tabs()).getByRole('link', {name: 'Vouchers'}))
     .toHaveAttribute('aria-current', 'page');
   // Every voucher action is parked (#368): the page says so once instead of offering a
