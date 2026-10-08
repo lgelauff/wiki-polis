@@ -219,7 +219,9 @@ test('retiring a site admin puts granted:false', async () => {
   renderPage();
   await screen.findByRole('heading', {name: 'Site admin dashboard', level: 2});
 
-  fireEvent.click(screen.getByRole('button', {name: 'remove'}));
+  // The button carries whose role it removes after its visible word, so two rows' Removes
+  // are told apart by name.
+  fireEvent.click(screen.getByRole('button', {name: 'remove — adminuser'}));
   await waitFor(() => expect(sent).toEqual([{participantId: 1, body: {granted: false}}]));
 });
 
@@ -276,7 +278,7 @@ test('under a key-id catalogue the page is all keys and the three coming lines',
   const page = container.querySelector('.container')!;
   expect(untranslatedCopy([page], [
     // The fixture's own words: participant data is never keyed.
-    'Consultation 1', 'consultation-1', 'adminuser', 'Full consultation',
+    'Consultation 1', 'consultation-1', 'adminuser', '— adminuser', 'Full consultation',
     'Also coming: Admin home, one table of the consultations you have a role in'
     + ' — not available yet (#473)',
     'Also coming: phase, participation counts, organizers, last action, and following or hiding'

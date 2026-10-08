@@ -254,7 +254,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
           <thead><tr><th>{msg('admin-th-username')}</th><th /></tr></thead>
           <tbody>{data.globalAdmins.map((admin) => <tr key={admin.participantId}>
             <td>{admin.username}</td>
-            <td><button type="button" className="btn-small btn-danger" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}</button></td>
+            <td><button type="button" className="btn-small btn-danger" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}{' '}<span className="sr-only">{`— ${admin.username}`}</span></button></td>
           </tr>)}</tbody>
         </table> : <p className="muted" style={{fontSize: 14, marginBottom: '1rem'}}>{msg('admin-globals-empty')}</p>}
         <div className="edit-form">
