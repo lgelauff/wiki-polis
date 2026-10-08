@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Explore walkthrough</title>
+<style>
+@font-face { font-family: "Inter Tight"; src: url(../../../v2/static/fonts/inter-tight-latin.woff2) format("woff2"); font-weight: 100 900; }
+@font-face { font-family: "JetBrains Mono"; src: url(../../../v2/static/fonts/jetbrains-mono-latin.woff2) format("woff2"); font-weight: 100 800; }
+:root {
+  --ink: #0c0c0e; --body: #3f3f43; --muted: #5f5f68; --bg: #fafaf9; --surface: #fff;
+  --hairline: #e5e5e6; --hairline-soft: #efefef; --agree: #15734a; --pass: #3d6dba; --disagree: #b23a3a;
+  --spot: #b45309; --accent: #2d2d31;
+  --tip: #fbf1e1; --tip-edge: #ecd3a8; --tip-ink: #4a3410;
+  --sans: "Inter Tight", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--body); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--pass); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- sheet chrome (mockup only) ---------- */
+.sheet { max-width: 784px; margin: 0 auto; padding: 24px 16px 48px; }
+.sheet-title { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.sheet-sub { font-size: 13px; margin: 4px 0 8px; max-width: 60ch; }
+.cap { font-family: var(--mono); font-size: 11px; color: var(--muted); margin: 32px 0 10px; line-height: 1.5; }
+.cap b { color: var(--ink); }
+.note { font-family: var(--mono); font-size: 11px; color: var(--spot); margin-top: 10px; line-height: 1.5; }
+body.single .sheet-title, body.single .sheet-sub { display: none; }
+body.single .cap { margin-top: 0; }
+body.single .blk:not(.on) { display: none; }
+
+
+
+/* ---------- Explore ---------- */
+.explore { container: ex / inline-size; max-width: 720px; margin: 0 auto; }
+.prog { display: flex; align-items: center; gap: 12px; height: 24px; margin-bottom: 16px; }
+.prog-count { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.prog-count b { color: var(--ink); font-weight: 600; }
+.prog-bar { flex: 1; display: flex; gap: 3px; }
+.seg { flex: 1; height: 6px; border-radius: 2px; background: var(--hairline-soft); }
+.seg.done { background: var(--ink); } .seg.cur { background: var(--spot); }
+.help { position: relative; flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--muted);
+        font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--muted); display: grid; place-items: center; }
+.help::after { content: ""; position: absolute; inset: -10px -10px -10px -10px; } /* 44 px hit area */
+.help[aria-expanded="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.help[hidden] { display: grid; visibility: hidden; }
+
+.card { position: relative; background: var(--surface); border: 1px solid var(--hairline); border-radius: 14px; padding: 22px 28px 24px; }
+.card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding-right: 28px; }
+.meta { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.meta::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--spot); }
+.priv { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.flag { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; display: grid; place-items: center; color: var(--muted); }
+.stmt { font-size: 28px; font-weight: 500; line-height: 1.28; color: var(--ink); text-wrap: pretty; hyphens: manual; overflow-wrap: break-word; /* no mid-word breaks; only a word longer than the line may break */
+        min-height: calc(2 * 1.28em); /* 2-line minimum: Move on and the next card's votes stay apart */ }
+.band { display: grid; margin-top: 18px; }
+.band > * { grid-area: 1 / 1; }
+.votes { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+.vote { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px; border: 1px solid var(--hairline);
+        border-radius: 8px; background: var(--surface); font-weight: 600; font-size: 15px; color: var(--ink); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dot.a { background: var(--agree); } .dot.p { background: var(--pass); } .dot.d { background: var(--disagree); }
+.voted .votes { visibility: hidden; }
+.resp { align-self: center; display: none; align-items: center; gap: 8px; font-size: 15px; flex-wrap: wrap; }
+.voted .resp { display: flex; }
+.resp strong { color: var(--agree); }
+.chg { position: relative; display: inline-flex; align-items: center; gap: 4px; color: var(--pass); text-decoration: underline; text-underline-offset: 3px;
+       padding: 12px 6px; margin: -12px -6px; }
+
+/* ---------- next-step row ---------- */
+.row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr) minmax(0,1fr); gap: 8px; margin-top: 20px; align-items: stretch; }
+.btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; padding: 6px 12px; border: 1px solid var(--hairline);
+       border-radius: 10px; background: var(--surface); color: var(--ink); font-weight: 600; font-size: 14px; line-height: 1.2; text-align: left; }
+.btn svg { flex: none; }
+.btn.primary { background: var(--ink); border-color: var(--ink); color: #fff; font-size: 16px; }
+.btn.focus { outline: 2px solid var(--pass); outline-offset: 2px; }
+.long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } /* full title: screen readers only */
+.locked { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 6px 4px; font-size: 13px; line-height: 1.25; color: var(--muted); }
+/* the button a bubble talks about gets a halo in the bubble's colour */
+.lit { box-shadow: 0 0 0 4px var(--tip-edge); }
+.btn.primary.lit { box-shadow: 0 0 0 2px var(--surface), 0 0 0 6px var(--tip-edge); }
+
+/* ---------- walkthrough bubble ---------- */
+.tip { position: relative; margin-top: 14px; background: var(--tip); border: 1px solid var(--tip-edge); border-radius: 10px;
+       padding: 10px 44px 11px 14px; color: var(--tip-ink); font-size: 14px; line-height: 1.4; }
+.tip::before { content: ""; position: absolute; top: -7px; left: var(--cx, 50%); width: 12px; height: 12px; background: var(--tip);
+       border-left: 1px solid var(--tip-edge); border-top: 1px solid var(--tip-edge); transform: translateX(-50%) rotate(45deg); border-radius: 2px 0 0 0; }
+.tip-title { display: block; font-weight: 700; color: var(--tip-ink); }
+.tip kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--tip-edge); border-radius: 4px; padding: 0 4px; margin-left: 4px; background: #fff8ec; }
+.tip-x { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--tip-ink); }
+.tip-x::after { content: ""; position: absolute; inset: -6px; } /* 44 px hit area */
+.tip-ctl { display: flex; justify-content: flex-end; margin-top: 8px; }
+.tip-next { border: 1px solid var(--tip-edge); background: #fff8ec; border-radius: 8px; padding: 6px 12px; min-height: 36px; font-size: 13px; font-weight: 600; color: var(--tip-ink); position: relative; }
+.tip-next::after { content: ""; position: absolute; inset: -4px 0; }
+.tip-q { display: block; margin-top: 2px; font-family: var(--mono); font-size: 12px; }
+.tip.has-ctl { padding-right: 230px; }
+.tip-never { position: relative; font-size: 12.5px; color: var(--tip-ink); text-decoration: underline; text-underline-offset: 3px; padding: 12px 4px; margin: -12px -4px; }
+.tip.has-ctl .tip-ctl { position: absolute; top: 8px; right: 46px; margin: 0; min-height: 32px; align-items: center; }
+
+/* ---------- phones ---------- */
+@container ex (max-width: 30rem) {
+  .card { padding: 16px 16px 18px; }
+  .stmt { font-size: 22px; }
+  .vote { font-size: 14px; padding: 8px 4px; gap: 6px; }
+  .resp { font-size: 14px; }
+  .row { grid-template-columns: minmax(0,1fr) minmax(0,1.1fr) minmax(0,1fr); gap: 6px; margin-top: 16px; }
+  .btn { flex-direction: column; gap: 2px; min-height: 52px; padding: 6px 2px; font-size: 12px; text-align: center; }
+  .btn.primary { flex-direction: row; gap: 6px; font-size: 15px; }
+  .locked { flex-direction: column; justify-content: center; gap: 2px; text-align: center; font-size: 11.5px; line-height: 1.2; padding: 4px 0; }
+  .tip { font-size: 13.5px; padding: 9px 42px 10px 12px; }
+  .tip kbd { display: none; } /* real build: @media (hover:none) */
+  .tip.has-ctl { padding-right: 42px; }
+  .tip.has-ctl .tip-ctl { position: static; margin: 6px 0 0; justify-content: flex-start; }
+  .tip.replay .tip-ctl { justify-content: flex-end; }
+}
+</style>
+</head>
+<body>
+<div class="sheet">
+  <p class="sheet-title">wiki-polis · Explore redesign · round 4 · concept 4 — short labels + walkthrough</p>
+  <p class="sheet-sub">Reword | Move on (filled, middle) | Propose — short labels only; the bubbles explain. Help comes as a walkthrough: one bubble at a time, each shown the first time its option can be used. Propose is plain status text until it unlocks.</p>
+  <div id="frames"></div>
+</div>
+<pre id="m" hidden></pre>
+<script>
+const I = {
+  sug: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>',
+  arr: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 5l7 7-7 7"/></svg>',
+  plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
+  lock: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+  flag: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V4h11l-1.5 4L15 12H4"/></svg>',
+  pen: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
+  x: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+};
+const S1 = 'Admins should be reconfirmed every five years.';
+const S2 = 'Our movement should invest more in shared technical infrastructure.';
+const S3 = 'Small wikis should get a say in which features are built next, even when their communities are much smaller than the large ones.';
+const TIPS = {
+  moveon:  {t: 'Move on', d: 'Next statement, nothing to add', kbd: true},
+  suggest: {t: 'Suggest different wording', d: 'Same idea, clearer phrasing'},
+  propose: {t: 'Propose a new statement', d: 'Bring a different angle, in one claim and one sentence. It goes to moderation, then into the same pool as the other statements.', q: '3 of 3 remaining'},
+};
+const F = [
+  {id: 'before', cap: '1 · Before the first vote', sub: 'Only the vote buttons. No row, no ?, no bubble. One-line statement shown at the 2-line minimum height.',
+   done: 0, total: 12, stmt: S1},
+  {id: 'first', cap: '2 · First vote → bubble 1: Move on', sub: 'Reword and Move on unlock now. Only Move on gets a bubble. Propose is still status text. Focus moves to Move on (ring drawn in frame 4).',
+   done: 1, total: 12, stmt: S1, voted: true, propose: 'locked', more: 9, tip: 'moveon', help: 'on',
+   note: 'Goes away on: × · Esc · any button in the row (Enter = Move on). "change" keeps it. Seen once = never automatic again. "Don’t show tips again" turns off all automatic bubbles in this browser; ? still works.'},
+  {id: 'second', cap: '3 · Second vote → bubble 2: Reword', sub: 'Shown on the next vote after bubble 1 was seen — not on the same card. Skipped if the participant already used Reword.',
+   done: 2, total: 12, stmt: S2, voted: true, propose: 'locked', more: 8, tip: 'suggest', help: 'on'},
+  {id: 'later', cap: '4 · A later card, no bubble', sub: 'The everyday state. Propose says how far away it is, as text. Blue ring = keyboard focus after the vote.',
+   done: 6, total: 12, stmt: S2, voted: true, propose: 'locked', more: 4, help: 'off', focus: true},
+  {id: 'unlock', cap: '5 · The vote that unlocks Propose → bubble 3: Propose', sub: 'Response 10 of 12 (default new_stmt_unlock_at = 10). The status text turns into a button in the same slot, and its bubble appears.',
+   done: 10, total: 12, stmt: S3, voted: true, propose: 'open', tip: 'propose', help: 'on',
+   note: 'If unlock and bubble 2 are due on the same vote, bubble 3 wins; bubble 2 waits for the next vote.'},
+  {id: 'off', cap: '5b · Same unlock vote, tips turned off', sub: 'After "Don’t show tips again": Propose still turns into a button, but no bubble. ? still replays on request.',
+   done: 10, total: 12, stmt: S3, voted: true, propose: 'open', help: 'off'},
+  {id: 'replay', cap: '6 · ? pressed on a later card → replay, one at a time', sub: 'Replays only what is unlocked, in walkthrough order. "Next tip" steps on; the last one has no Next. ? is pressed while it runs.',
+   done: 11, total: 12, stmt: S2, voted: true, propose: 'open', tip: 'moveon', replay: true, help: 'pressed'},
+];
+function seg(done, total) {
+  let h = '';
+  for (let i = 0; i < total; i++) h += `<span class="seg ${i < done ? 'done' : i === done ? 'cur' : ''}"></span>`;
+  return h;
+}
+function frame(f) {
+  const voted = !!f.voted;
+  const help = f.help ? `<button class="help" aria-label="What do these buttons do?" title="What do these buttons do?" aria-expanded="${f.help === 'pressed'}">?</button>`
+                      : `<button class="help" hidden aria-label="What do these buttons do?">?</button>`;
+  const lit = (k) => f.tip === k ? ' lit' : '';
+  const descr = (k) => f.tip === k ? ` aria-describedby="tip-${f.id}"` : '';
+  let propose;
+  if (f.propose === 'locked') propose = `<p class="locked" data-k="propose">${I.lock}<span><span class="sr-only">Propose a new statement: </span>Unlocks after ${f.more} more responses</span></p>`;
+  else propose = `<button class="btn${lit('propose')}" data-k="propose"${descr('propose')}>${I.plus}<span>Propose</span><span class="long">Propose a new statement</span></button>`;
+  const row = !voted ? '' : `
+    <div class="row" role="group" aria-label="What now?">
+      <button class="btn${lit('suggest')}" data-k="suggest"${descr('suggest')}>${I.sug}<span>Reword</span><span class="long">Suggest different wording</span></button>
+      <button class="btn primary${f.focus ? ' focus' : ''}${lit('moveon')}" data-k="moveon"${descr('moveon')}><span>Move on</span>${I.arr}</button>
+      ${propose}
+    </div>`;
+  let tip = '';
+  if (f.tip) {
+    const t = TIPS[f.tip];
+    tip = `<div class="tip has-ctl${f.replay ? ' replay' : ''}" id="tip-${f.id}" data-for="${f.tip}" role="note">
+      <span class="tip-title">${t.t}</span><span class="tip-d">${t.d}</span>${t.kbd ? '<kbd>Enter</kbd>' : ''}${t.q ? `<span class="tip-q">${t.q}</span>` : ''}
+      <button class="tip-x" aria-label="Close">${I.x}</button>
+      <div class="tip-ctl">${f.replay ? '<button class="tip-next">Next tip →</button>' : '<button class="tip-never">Don’t show tips again</button>'}</div>
+    </div>`;
+  }
+  return `<div class="blk" id="b-${f.id}"><p class="cap"><b>${f.cap}</b> — ${f.sub}</p>
+  <section class="frame" id="f-${f.id}" data-id="${f.id}">
+   <div class="explore">
+    <div class="prog"><span class="prog-count"><b>${f.done}</b> / ${f.total} responses</span><span class="prog-bar" role="progressbar" aria-valuenow="${f.done}" aria-valuemax="${f.total}">${seg(f.done, f.total)}</span>${help}</div>
+    <div class="card${voted ? ' voted' : ''}">
+      <div class="card-head"><span class="meta">Statement</span><span class="priv">private response</span></div>
+      <button class="flag" aria-label="Flag this statement for moderator review">${I.flag}</button>
+      <p class="stmt">${f.stmt}</p>
+      <div class="band">
+        <div class="votes" role="group" aria-label="Your response"${voted ? ' aria-hidden="true"' : ''}>
+          <button class="vote"><span class="dot a"></span>Agree</button><button class="vote"><span class="dot p"></span>Pass</button><button class="vote"><span class="dot d"></span>Disagree</button>
+        </div>
+        <p class="resp" role="status" aria-live="polite"><span class="dot a"></span><span>Your response: <strong>Agree</strong> ·</span> <button class="chg" aria-label="change: Your response: Agree">${I.pen}<span>change</span></button></p>
+      </div>
+    </div>
+    ${row}
+    ${tip}
+    <p class="sr-only" role="status" aria-live="polite">${f.tip ? TIPS[f.tip].t + '. ' + TIPS[f.tip].d : ''}</p>
+   </div>
+  </section>
+  ${f.note ? `<p class="note">${f.note}</p>` : ''}</div>`;
+}
+document.getElementById('frames').innerHTML = F.map(frame).join('');
+
+const q = new URLSearchParams(location.search);
+if (q.get('f')) { document.body.classList.add('single'); document.getElementById('b-' + q.get('f')).classList.add('on'); }
+
+function place() {
+  document.querySelectorAll('.tip').forEach((tip) => {
+    const ex = tip.closest('.explore');
+    const b = ex.querySelector(`[data-k="${tip.dataset.for}"]`);
+    const tr = tip.getBoundingClientRect(), br = b.getBoundingClientRect();
+    tip.style.setProperty('--cx', (br.left + br.width / 2 - tr.left) + 'px');
+  });
+}
+function measure() {
+  const out = {w: innerWidth, docW: document.documentElement.scrollWidth, docH: document.documentElement.scrollHeight, frames: {}};
+  document.querySelectorAll('.frame').forEach((fr) => {
+    if (getComputedStyle(fr).display === 'none') return;
+    const ex = fr.querySelector('.explore'), r = (el) => el && el.getBoundingClientRect();
+    const exr = r(ex), card = r(ex.querySelector('.card')), votes = r(ex.querySelector('.votes'));
+    const mo = r(ex.querySelector('[data-k="moveon"]')), tip = ex.querySelector('.tip'), row = r(ex.querySelector('.row'));
+    const stmt = ex.querySelector('.stmt'), lh = parseFloat(getComputedStyle(stmt).lineHeight);
+    const m = {
+      explore_h: +exr.height.toFixed(1), card_h: +card.height.toFixed(1), stmt_line_px: +lh.toFixed(1),
+      stmt_lines: Math.round(stmt.getBoundingClientRect().height / lh),
+      row_h: row ? +row.height.toFixed(1) : null,
+      frame_png_h: Math.ceil(fr.getBoundingClientRect().bottom + 24 + window.scrollY),
+    };
+    if (mo) {
+      m.moveon_clear_below_votes = +(mo.top - votes.bottom).toFixed(1);
+      m.moveon_overlaps_votes = !(mo.top >= votes.bottom || mo.bottom <= votes.top);
+      m.extra_stmt_lines_tolerated = Math.floor((mo.top - votes.bottom) / lh);
+      m.moveon_w = +mo.width.toFixed(1); m.moveon_h = +mo.height.toFixed(1);
+      ['suggest', 'propose'].forEach((k) => { const e = r(ex.querySelector(`[data-k="${k}"]`)); if (e) m[k + '_w'] = +e.width.toFixed(1); });
+    }
+    if (tip) {
+      const t = r(tip), b = r(ex.querySelector(`[data-k="${tip.dataset.for}"]`));
+      const cx = parseFloat(tip.style.getPropertyValue('--cx'));
+      m.tip_h = +t.height.toFixed(1); m.tip_gap_to_row = +(t.top - row.bottom).toFixed(1);
+      m.caret_off_centre = +((t.left + cx) - (b.left + b.width / 2)).toFixed(2);
+      m.tip_overlaps_votes = !(t.top >= votes.bottom || t.bottom <= votes.top);
+    }
+    const probs = [];
+    ex.querySelectorAll('button, .locked, .tip-d, .tip-title, .tip-never').forEach((el) => {
+      if (el.offsetParent === null || getComputedStyle(el).visibility === 'hidden' || el.matches('.help, .tip-x')) return;
+      if (el.scrollWidth > el.clientWidth + 1) probs.push('overflow:' + el.className + ':' + el.textContent.trim().slice(0, 30));
+    });
+    if (document.documentElement.scrollWidth > innerWidth) probs.push('page h-scroll');
+    m.problems = probs;
+    out.frames[fr.dataset.id] = m;
+  });
+  const pre = document.getElementById('m'); pre.textContent = JSON.stringify(out);
+}
+document.fonts.ready.then(() => { place(); measure(); document.body.dataset.ready = '1'; });
+</script>
+</body>
+</html>
