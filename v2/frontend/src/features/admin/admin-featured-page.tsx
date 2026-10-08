@@ -1,4 +1,4 @@
-import {useCallback, useState, type FormEvent, type ReactNode} from 'react';
+import {useCallback, useId, useState, type FormEvent, type ReactNode} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -33,19 +33,6 @@ function errorMessage(error: Error, fallback: string): string {
     return 'Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first.';
   }
   return error instanceof ApiContractError ? error.message : fallback;
-}
-
-function feedbackStyle() {
-  return {
-    background: '#fef2f2',
-    borderColor: '#fca5a5',
-    color: '#991b1b',
-    border: '1px solid',
-    padding: '.75rem 1rem',
-    borderRadius: 6,
-    fontSize: 13,
-    marginBottom: '1.5rem',
-  };
 }
 
 function ProvenanceBadge({provenance}: {provenance: Provenance}) {
@@ -210,16 +197,15 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
   const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
   const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
   const [manualId, setManualId] = useState('');
-  const [feedback, setFeedback] = useState<string | null>(null);
+  // The add-by-TID form's refusal, said at its field; the row actions' refusals are toasts.
+  const [manualError, setManualError] = useState<string | null>(null);
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
+  const manualErrorId = useId();
   function refresh() {
-    setFeedback(null);
     void queryClient.invalidateQueries({queryKey: options.queryKey});
   }
   function showError(message: string) {
-    globalThis.scrollTo(0, 0);
-    setFeedback(message);
     setToast({id: Date.now(), category: 'error', message});
   }
   const selection = useMutation({
@@ -228,11 +214,14 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
     ),
     onSuccess: () => {
       setManualId('');
+      setManualError(null);
       refresh();
     },
-    onError: (error: Error) => showError(errorMessage(
-      error, 'The statement could not be selected.',
-    )),
+    onError: (error: Error, {source}) => {
+      const message = errorMessage(error, 'The statement could not be selected.');
+      if (source === 'manual') setManualError(message);
+      else showError(message);
+    },
   });
   function select(id: number, source: 'system' | 'manual') {
     if (!data.phase.informedVotingLive || globalThis.confirm(selectLiveMessage)) {
@@ -283,8 +272,6 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
             {' '}and unhide them after review.
           </p>
         </div>
-
-        {feedback && <div style={feedbackStyle()}>{feedback}</div>}
 
         <h2 className="section-heading">Confirmed ({data.selected.length})</h2>
         {data.selected.length ? (
@@ -341,12 +328,15 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
           </p>
           <form onSubmit={submitManual}>
             <input type="hidden" name="csrf_token" value={csrfToken} />
-            <div className="edit-row-fields">
-              <label>Statement TID
-                <input type="number" name="tid" min="0" required style={{width: 100}} value={manualId} onChange={(event) => setManualId(event.target.value)} />
-              </label>
+            <label className="admin-field admin-field--short">Statement TID
+              <input type="number" name="tid" min="0" required className="admin-mono" value={manualId}
+                {...(manualError ? {'aria-invalid': true, 'aria-describedby': manualErrorId} : {})}
+                onChange={(event) => setManualId(event.target.value)} />
+            </label>
+            {manualError && <p className="admin-error" id={manualErrorId} role="alert">{manualError}</p>}
+            <div className="admin-form__actions">
+              <button type="submit" disabled={selection.isPending}>Add</button>
             </div>
-            <button type="submit" disabled={selection.isPending}>Add</button>
           </form>
         </div>
       </div>

@@ -135,7 +135,8 @@ test('matches the legacy catalog error for an unknown global admin', async () =>
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'No account found for "MissingEditor". They must log in at least once first.',
   );
-  expect(username).toHaveValue('');
+  expect(username).toHaveValue('MissingEditor');
+  expect(username).toHaveAttribute('aria-invalid', 'true');
 });
 
 test('matches the legacy forbidden document for denied admin access', async () => {
@@ -293,7 +294,7 @@ test('moderates statements and imports approved seeds through typed commands', a
   fireEvent.click(screen.getByRole('button', {name: /^Show unmoderated/}));
   expect(await screen.findByText('A participant proposal awaiting review.')).toBeVisible();
   expect(screen.getByText(
-    'Adds a seed-marked statement that appears early in the voting sequence for participants.',
+    'Adds a seed-marked statement that participants see early on.',
   )).toBeVisible();
   // #478: the Approval control moved to Settings > Basics, so this page no longer owns it.
   expect(screen.queryByRole('checkbox', {name: /Strict moderation/})).toBeNull();
@@ -439,10 +440,7 @@ test('adds and removes invitations through convergent admin commands', async () 
   fireEvent.click(screen.getByRole('button', {name: 'Add'}));
 
   expect(await screen.findByText('New editor')).toBeVisible();
-  // The toast inside the console reads out through the shell's polite region.
-  expect(screen.getByText('Invitations: 1 added; 1 duplicate input.', {selector: '.toast__msg'})).toBeVisible();
-  await waitFor(() => expect(document.querySelector('[aria-live="polite"]'))
-    .toHaveTextContent('Invitations: 1 added; 1 duplicate input.'));
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Invitations: 1 added; 1 duplicate input.'));
   const newEditorRow = screen.getByText('New editor').closest('tr');
   expect(newEditorRow).not.toBeNull();
   expect(within(newEditorRow!).getByText('Never logged in')).toBeVisible();
@@ -480,7 +478,7 @@ test('greys out adding invites while access is not the invitation list, and says
   expect(screen.getByRole('button', {name: 'Remove invitation for Existing editor'})).toBeEnabled();
 });
 
-test('keeps the typed invitation list and shows a toast after a save error', async () => {
+test('keeps the typed invitation list and says the save failed at the form', async () => {
   serveInvitationListSettings();
   server.use(http.put(
     new URL(
@@ -503,12 +501,11 @@ test('keeps the typed invitation list and shows a toast after a save error', asy
   fireEvent.change(input, {target: {value: 'New editor'}});
   fireEvent.click(screen.getByRole('button', {name: 'Add'}));
 
-  expect(await screen.findByText("Couldn't save invitations — please review the list and retry.",
-    {selector: '.toast__msg'})).toBeVisible();
-  // Read out as an alert, through the console's assertive region.
-  await waitFor(() => expect(document.querySelector('[aria-live="assertive"]')).toHaveTextContent(
-    "Couldn't save invitations — please review the list and retry.",
-  ));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent("Couldn't save invitations — please review the list and retry.");
+  // At the form, under its button: a form's result is not a toast.
+  expect(alert.closest('form')).not.toBeNull();
+  expect(alert.closest('.admin-shell__notices')).toBeNull();
   expect(input).toHaveValue('New editor');
 });
 

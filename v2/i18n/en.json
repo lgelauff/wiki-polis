@@ -614,7 +614,6 @@
     "admin-globals-empty": "No site admins assigned.",
     "admin-grant-heading": "Grant site admin",
     "admin-label-wm-username": "Wikimedia username",
-    "admin-wm-username-ph": "Type a Wikimedia username…",
     "admin-btn-grant": "Grant",
     "invites-add-heading": "Add invitations",
     "invites-label-usernames": "Wikimedia usernames (one per line)",

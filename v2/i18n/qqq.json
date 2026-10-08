@@ -613,7 +613,6 @@
     "admin-globals-empty": "Shown when no site administrator is assigned. Admin-only.",
     "admin-grant-heading": "Heading of the form that grants site administrator rights to a Wikimedia account. Admin-only.",
     "admin-label-wm-username": "Form label for a Wikimedia username input.",
-    "admin-wm-username-ph": "Placeholder for the Wikimedia username autocomplete field.",
     "admin-btn-grant": "Submit button to grant global admin.",
     "invites-add-heading": "Heading of the form on Settings › Invitations that adds Wikimedia usernames to the invitation list. Admin-only.",
     "invites-label-usernames": "Label for the bulk-usernames textarea.",

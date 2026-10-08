@@ -37,7 +37,8 @@ function AccessControl({conversationId, participant, csrfToken, onFeedback}: {
   const queryClient = useQueryClient();
   const [summary, setSummary] = useState('');
   const desiredBanned = !participant.access.banned;
-  const placeholder = msg(participant.access.banned
+  // The field's own label, beside it: an example in the field would vanish as you type.
+  const label = msg(participant.access.banned
     ? 'participants-unban-note-ph'
     : 'participants-ban-reason-ph');
   const mutation = useMutation({
@@ -85,16 +86,18 @@ function AccessControl({conversationId, participant, csrfToken, onFeedback}: {
         mutation.mutate();
       }}
     >
-      <input
-        type="text"
-        name="summary"
-        value={summary}
-        onChange={(event) => setSummary(event.target.value)}
-        placeholder={placeholder}
-        // Every row has this field and this button: the person's name after the visible
-        // words tells one row's from the next one's.
-        aria-label={`${placeholder} — ${participant.pseudonym}`}
-      />
+      {/* Every row has this field and this button: the person's name after the visible
+          words tells one row's from the next one's. */}
+      <label className="admin-row__field">
+        <span>{label}</span>
+        {' '}<span className="sr-only">{`— ${participant.pseudonym}`}</span>
+        <input
+          type="text"
+          name="summary"
+          value={summary}
+          onChange={(event) => setSummary(event.target.value)}
+        />
+      </label>
       <button type="submit" className="admin-row__text-button" disabled={mutation.isPending}>
         {msg(participant.access.banned ? 'participants-btn-unban' : 'participants-btn-ban')}
         {' '}<span className="sr-only">{`— ${participant.pseudonym}`}</span>

@@ -1,4 +1,4 @@
-import {useCallback, useState, type FormEvent, type ReactNode} from 'react';
+import {useCallback, useId, useState, type FormEvent, type ReactNode} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {useNavigate} from 'react-router-dom';
 
@@ -119,8 +119,12 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
     phaseRoute: data.phaseRoutes[0]?.key ?? '',
   });
   const [username, setUsername] = useState('');
+  // Each form's refusal is said at the form; the toast is for the row action (remove).
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [grantError, setGrantError] = useState<string | null>(null);
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
+  const grantErrorId = useId();
 
   function replaceCatalog(catalog: Catalog) {
     queryClient.setQueryData<Catalog>(options.queryKey, catalog);
@@ -129,32 +133,22 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
   const creation = useMutation({
     mutationFn: () => postAdminConversation(draft, csrfToken),
     onSuccess: (result) => { navigate(result.links.manage); },
-    onError: (error: Error) => setToast({
-      id: Date.now(),
-      category: 'error',
-      message: errorMessage(error) ?? msg('adminconv-command-failed'),
-    }),
+    onError: (error: Error) => setCreateError(errorMessage(error) ?? msg('adminconv-command-failed')),
   });
   const grant = useMutation({
     mutationFn: () => postGlobalAdminGrant({username}, csrfToken),
     onSuccess: (result) => {
       replaceCatalog(result.catalog);
       setUsername('');
+      setGrantError(null);
     },
     onError: (error: Error) => {
-      const attempted = username;
-      setUsername('');
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-      setToast({
-        id: Date.now(),
-        category: 'error',
-        // The server's own refusal for a name nobody has signed in with; keyed now, worded
-        // exactly as it always has been (#479, default f).
-        message: error instanceof ApiContractError && error.code === 'participant_not_found'
-          ? msg('admin-site-grant-not-found', attempted)
-          : errorMessage(error) ?? msg('adminconv-command-failed'),
-      });
+      // Said at the field, which keeps what was typed so one letter can be corrected. The
+      // server's own refusal for a name nobody has signed in with is keyed, worded exactly
+      // as it always has been (#479, default f).
+      setGrantError(error instanceof ApiContractError && error.code === 'participant_not_found'
+        ? msg('admin-site-grant-not-found', username)
+        : errorMessage(error) ?? msg('adminconv-command-failed'));
     },
   });
   const membership = useMutation({
@@ -226,19 +220,19 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
         <div className="edit-form">
           <h2>{msg('admin-new-conv-heading')}</h2>
           <form onSubmit={submitConversation}>
-            <div className="edit-row-fields">
-              <label>{msg('admin-label-slug')}<input type="text" placeholder={msg('admin-slug-ph')} required pattern="[a-z0-9]+(-[a-z0-9]+)*" title={msg('admin-slug-title')} value={draft.slug} onChange={(event) => setDraft({...draft, slug: event.target.value})} /></label>
-              <label>{msg('admin-label-title')}<input type="text" required value={draft.title} onChange={(event) => setDraft({...draft, title: event.target.value})} /></label>
-              <label>{msg('admin-label-access')}<select value={draft.accessPolicy} onChange={(event) => setDraft({...draft, accessPolicy: event.target.value as CreateRequest['accessPolicy']})}><option value="public">{msg('admin-common-policy-open')}</option><option value="invite_only">{msg('admin-common-policy-invited')}</option><option value="demo">{msg('admin-common-policy-practice')}</option></select></label>
-              <label>{msg('admin-label-route')}<select value={draft.phaseRoute} onChange={(event) => setDraft({...draft, phaseRoute: event.target.value})}>{data.phaseRoutes.map((route) => <option key={route.key} value={route.key}>{route.label}</option>)}</select></label>
-              <label>{msg('admin-label-elig-event')}<input type="text" maxLength={80} placeholder={msg('admin-elig-event-ph')} value={draft.eligibilityEventId} onChange={(event) => setDraft({...draft, eligibilityEventId: event.target.value})} /></label>
-              <label>{msg('admin-label-elig-label')}<input type="text" maxLength={255} placeholder={msg('admin-elig-label-ph')} value={draft.eligibilityLabel} onChange={(event) => setDraft({...draft, eligibilityLabel: event.target.value})} /></label>
+            <label className="admin-field admin-field--medium">{msg('admin-label-slug')}<input type="text" className="admin-mono" placeholder={msg('admin-slug-ph')} required pattern="[a-z0-9]+(-[a-z0-9]+)*" title={msg('admin-slug-title')} value={draft.slug} onChange={(event) => setDraft({...draft, slug: event.target.value})} /></label>
+            <label className="admin-field">{msg('admin-label-title')}<input type="text" required value={draft.title} onChange={(event) => setDraft({...draft, title: event.target.value})} /></label>
+            <label className="admin-field admin-field--medium">{msg('admin-label-access')}<select value={draft.accessPolicy} onChange={(event) => setDraft({...draft, accessPolicy: event.target.value as CreateRequest['accessPolicy']})}><option value="public">{msg('admin-common-policy-open')}</option><option value="invite_only">{msg('admin-common-policy-invited')}</option><option value="demo">{msg('admin-common-policy-practice')}</option></select></label>
+            <label className="admin-field admin-field--medium">{msg('admin-label-route')}<select value={draft.phaseRoute} onChange={(event) => setDraft({...draft, phaseRoute: event.target.value})}>{data.phaseRoutes.map((route) => <option key={route.key} value={route.key}>{route.label}</option>)}</select></label>
+            {/* The eligibility pair stays as it was (#406 follow-up). */}
+            <label className="admin-field admin-field--medium">{msg('admin-label-elig-event')}<input type="text" maxLength={80} placeholder={msg('admin-elig-event-ph')} value={draft.eligibilityEventId} onChange={(event) => setDraft({...draft, eligibilityEventId: event.target.value})} /></label>
+            <label className="admin-field admin-field--medium">{msg('admin-label-elig-label')}<input type="text" maxLength={255} placeholder={msg('admin-elig-label-ph')} value={draft.eligibilityLabel} onChange={(event) => setDraft({...draft, eligibilityLabel: event.target.value})} /></label>
+            <label className="admin-field">{msg('admin-label-intro')}<textarea rows={4} value={draft.introHtml} onChange={(event) => setDraft({...draft, introHtml: event.target.value})} /></label>
+            <label className="admin-field">{msg('admin-label-outro')}<textarea rows={4} value={draft.outroHtml} onChange={(event) => setDraft({...draft, outroHtml: event.target.value})} /></label>
+            <div className="admin-form__actions">
+              <button type="submit" disabled={creation.isPending}>{msg('admin-btn-create-conv')}</button>
             </div>
-            <div className="edit-row-texts">
-              <label>{msg('admin-label-intro')}<textarea rows={4} value={draft.introHtml} onChange={(event) => setDraft({...draft, introHtml: event.target.value})} /></label>
-              <label>{msg('admin-label-outro')}<textarea rows={4} value={draft.outroHtml} onChange={(event) => setDraft({...draft, outroHtml: event.target.value})} /></label>
-            </div>
-            <button type="submit" disabled={creation.isPending}>{msg('admin-btn-create-conv')}</button>
+            {createError && <p className="admin-error" role="alert">{createError}</p>}
           </form>
         </div>
 
@@ -258,8 +252,13 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
         <div className="edit-form">
           <h2>{msg('admin-grant-heading')}</h2>
           <form onSubmit={submitGrant}>
-            <div className="edit-row-fields"><label>{msg('admin-label-wm-username')}<input type="text" required autoComplete="off" placeholder={msg('admin-wm-username-ph')} style={{width: 260}} value={username} onChange={(event) => setUsername(event.target.value)} /></label></div>
-            <button type="submit" disabled={grant.isPending}>{msg('admin-btn-grant')}</button>
+            <label className="admin-field admin-field--medium">{msg('admin-label-wm-username')}<input type="text" required autoComplete="off" value={username}
+              {...(grantError ? {'aria-invalid': true, 'aria-describedby': grantErrorId} : {})}
+              onChange={(event) => setUsername(event.target.value)} /></label>
+            {grantError && <p className="admin-error" id={grantErrorId} role="alert">{grantError}</p>}
+            <div className="admin-form__actions">
+              <button type="submit" disabled={grant.isPending}>{msg('admin-btn-grant')}</button>
+            </div>
           </form>
         </div>
 

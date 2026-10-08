@@ -24,25 +24,29 @@ import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 type Workspace = components['schemas']['AdminStatementWorkspace'];
 type Statement = components['schemas']['AdminStatement'];
 type Status = Statement['moderation'];
-type Feedback = LegacyToastMessage;
+/** One line of a form's result: said on the form's status line, under its button, as an
+ *  error (role=alert) or as the outcome (role=status). Never also a toast: a form's result
+ *  belongs to the form; toasts are for row actions. */
+type Feedback = {id: number; error: boolean; message: string};
 
 function legacyError(error: Error, fallback: string): string {
   return error instanceof ApiContractError ? error.message : fallback;
 }
 
-function feedbackStyle(category: Feedback['category']) {
-  const error = category === 'error' || category === 'import_row_error';
-  const warning = category === 'warning';
-  return {
-    background: error ? '#fef2f2' : warning ? '#fffbeb' : '#f0fdf4',
-    borderColor: error ? '#fca5a5' : warning ? '#fcd34d' : '#86efac',
-    color: error ? '#991b1b' : warning ? '#92400e' : '#166534',
-    border: '1px solid',
-    padding: '.75rem 1rem',
-    borderRadius: 6,
-    fontSize: 13,
-    marginBottom: '1.5rem',
-  };
+/** A form's result lines, at the form. */
+function FormFeedback({lines}: {lines: Feedback[]}) {
+  const errors = lines.filter((line) => line.error);
+  const outcomes = lines.filter((line) => !line.error);
+  return (
+    <>
+      {errors.length > 0 && <div role="alert">{errors.map((line) => (
+        <p key={line.id} className="admin-error">{line.message}</p>
+      ))}</div>}
+      {outcomes.length > 0 && <div role="status">{outcomes.map((line) => (
+        <p key={line.id} className="admin-status">{line.message}</p>
+      ))}</div>}
+    </>
+  );
 }
 
 const actions: Record<Status, {status: Status; label: string; className?: string}[]> = {
@@ -237,29 +241,24 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   const [position, setPosition] = useState<Position>('approved');
   const [sort, setSort] = useState<Sort>('most-responses');
   const [search, setSearch] = useState('');
-  const [feedback, setFeedback] = useState<Feedback[]>([]);
-  const [toast, setToast] = useState<LegacyToastMessage | null>(() => (
-    data.dataAvailability.statements ? null : {
-      id: 0,
-      category: 'error',
-      message: 'Could not load statements. Check server logs.',
-    }
-  ));
+  // Each form's result lines, said at that form.
+  const [seedFeedback, setSeedFeedback] = useState<Feedback[]>([]);
+  const [importFeedback, setImportFeedback] = useState<Feedback[]>([]);
+  // Toasts are for the row actions only.
+  const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const [seedText, setSeedText] = useState('');
   const [derivedFrom, setDerivedFrom] = useState('');
   const [importText, setImportText] = useState('');
   const dismissToast = useCallback(() => setToast(null), []);
   const announcer = useAnnouncer();
 
-  function showFeedback(messages: Omit<Feedback, 'id'>[]) {
+  function lines(messages: Omit<Feedback, 'id'>[]): Feedback[] {
     const timestamp = Date.now();
-    const next = messages.map((message, index) => ({...message, id: timestamp + index}));
-    setFeedback(next);
-    setToast(next.at(-1) ?? null);
+    return messages.map((message, index) => ({...message, id: timestamp + index}));
   }
 
-  function showError(message: string) {
-    showFeedback([{category: 'error', message}]);
+  function showRowError(message: string) {
+    setToast({id: Date.now(), category: 'error', message});
   }
 
   const seedMutation = useMutation({
@@ -269,25 +268,26 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       csrfToken,
     ),
     onSuccess: (receipt) => {
-      let category: Feedback['category'] = 'success';
+      let error = false;
       let message = 'Seed statement added.';
       if (receipt.provenanceRecorded === false) {
-        category = 'warning';
+        error = true;
         message = 'Seed statement added, but the correction link could not be recorded.';
       } else if (receipt.derivedFromId !== null) {
         message = `Seed statement added (recorded as a correction of #${receipt.derivedFromId}).`;
       }
       setSeedText('');
       setDerivedFrom('');
-      showFeedback([{category, message}]);
+      setSeedFeedback(lines([{error, message}]));
       void queryClient.invalidateQueries({queryKey: options.queryKey});
     },
     onError: (error: Error) => {
+      // The typed text stays in the form, so it can be corrected and sent again.
       if (error instanceof ApiContractError
           && error.code === 'derived_statement_not_found') {
-        showError(`Statement #${derivedFrom} was not found in this consultation — fix the "corrects" number and try again. Nothing was added.`);
+        setSeedFeedback(lines([{error: true, message: `Statement #${derivedFrom} was not found in this consultation — fix the "corrects" number and try again. Nothing was added.`}]));
       } else {
-        showError(legacyError(error, msg('adminconv-command-failed')));
+        setSeedFeedback(lines([{error: true, message: legacyError(error, msg('adminconv-command-failed'))}]));
       }
     },
   });
@@ -300,7 +300,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       const messages: Omit<Feedback, 'id'>[] = [];
       if (receipt.outcome.skippedExisting) {
         messages.push({
-          category: 'warning',
+          error: false,
           message: `${receipt.outcome.skippedExisting} statement${receipt.outcome.skippedExisting === 1 ? '' : 's'} already existed in this consultation and were skipped.`,
         });
       }
@@ -309,34 +309,34 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       const failed = receipt.outcome.failedUpstream;
       if (failed) {
         messages.push({
-          category: 'error',
+          error: true,
           message: `${failed} statement${failed === 1 ? '' : 's'} could not be added by the voting service. The text is still in the box: import it again to retry; lines already added are skipped.`,
         });
       }
       if (receipt.outcome.imported && !receipt.outcome.skippedExisting && !failed) {
         messages.push({
-          category: 'import_result',
+          error: false,
           message: `✓ ${receipt.outcome.imported} statement${receipt.outcome.imported === 1 ? '' : 's'} imported`,
         });
       } else if (receipt.outcome.imported || failed) {
         messages.push({
-          category: 'import_result',
+          error: false,
           message: `✓ ${receipt.outcome.imported} imported${receipt.outcome.skippedExisting ? ` — ⚠ ${receipt.outcome.skippedExisting} skipped` : ''}${failed ? ` — ✗ ${failed} not added` : ''}`,
         });
       } else if (receipt.outcome.skippedExisting) {
         messages.push({
-          category: 'import_result',
+          error: false,
           message: `⚠ 0 imported — ${receipt.outcome.skippedExisting} already existed in Polis`,
         });
       } else {
-        messages.push({category: 'warning', message: 'No statements were imported — there were no valid rows.'});
-        messages.push({category: 'import_result', message: '⚠ 0 imported — Polis returned no result'});
+        messages.push({error: true, message: 'No statements were imported — there were no valid rows.'});
+        messages.push({error: false, message: '⚠ 0 imported — Polis returned no result'});
       }
       if (!failed) setImportText('');
-      showFeedback(messages);
+      setImportFeedback(lines(messages));
       void queryClient.invalidateQueries({queryKey: options.queryKey});
     },
-    onError: (error: Error) => showError(legacyError(error, msg('adminconv-command-failed'))),
+    onError: (error: Error) => setImportFeedback(lines([{error: true, message: legacyError(error, msg('adminconv-command-failed'))}])),
   });
 
   function moveStatement(statement: Statement, status: Status) {
@@ -350,7 +350,6 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       statements[status] = [...statements[status], {...statement, moderation: status}];
       return {...workspace, statements};
     });
-    setFeedback([]);
     setToast(null);
     // The row leaves the list when the switch is on another position; focus goes to the next
     // row and the result is said, every time, through the shell's live region.
@@ -364,27 +363,27 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       .map((text, index) => ({row: index + 1, text: text.trim()}))
       .filter(({text}) => text);
     if (rows.length > data.seeding.maxStatementsPerImport) {
-      showFeedback([{
-        category: 'import_result',
+      setImportFeedback(lines([{
+        error: true,
         message: `✗ Import rejected — nothing was imported. Text import contains ${rows.length} lines, maximum is ${data.seeding.maxStatementsPerImport}. Reduce it and try again. (Parse errors may also be present — fix everything before retrying.)`,
-      }]);
+      }]));
       return;
     }
     const seen = new Set<string>();
     const errors: Omit<Feedback, 'id'>[] = [];
     rows.forEach(({row, text}) => {
       if (text.length > data.seeding.maxCharactersPerStatement) {
-        errors.push({category: 'import_row_error', message: `Row ${row}: text is too long (${text.length} characters; max ${data.seeding.maxCharactersPerStatement}).`});
+        errors.push({error: true, message: `Row ${row}: text is too long (${text.length} characters; max ${data.seeding.maxCharactersPerStatement}).`});
       } else if (seen.has(text)) {
-        errors.push({category: 'import_row_error', message: `Row ${row}: duplicate — already added from an earlier row.`});
+        errors.push({error: true, message: `Row ${row}: duplicate — already added from an earlier row.`});
       }
       seen.add(text);
     });
     if (errors.length) {
-      showFeedback([...errors, {
-        category: 'import_result',
+      setImportFeedback(lines([...errors, {
+        error: true,
         message: '✗ Import rejected — nothing was added. One invalid line rejects the whole import; fix the lines listed above and try again.',
-      }]);
+      }]));
       return;
     }
     importMutation.mutate(rows.map(({text}) => text));
@@ -474,14 +473,17 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                   && shown.has(statement.provenance.derivedFromId)}
                 csrfToken={csrfToken}
                 move={moveStatement}
-                onError={showError}
+                onError={showRowError}
               />
             ))}
           </ul>
         ) : data.dataAvailability.statements ? (
           <p className="admin-empty" ref={emptyRef} tabIndex={-1}>{empty}</p>
-        ) : null /* Lists left empty because the voting service could not be read are not
-          an empty consultation: the error below (and the toast) say what happened. */}
+        ) : (
+          // Lists left empty because the voting service could not be read are not an empty
+          // consultation. Said once, here, where the list would be (as on the Queue).
+          <p className="admin-empty" role="alert">{msg('flash-load-statements-failed')}</p>
+        )}
 
         <div className="landing-section" style={{marginBottom: '1.5rem'}}>
           <h2 style={{fontSize: 16, marginBottom: '.5rem'}}>How statement management works</h2>
@@ -502,13 +504,6 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           </p>
         </div>
 
-        {!data.dataAvailability.statements && (
-          <div style={feedbackStyle('error')}>Could not load statements. Check server logs.</div>
-        )}
-        {feedback.map((message) => (
-          <div key={message.id} style={feedbackStyle(message.category)}>{message.message}</div>
-        ))}
-
         {!data.seeding.allowed ? (
           <>
             <h2 className="section-heading">Seed statements locked</h2>
@@ -528,34 +523,34 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
               </p>
               <form onSubmit={(event) => { event.preventDefault(); seedMutation.mutate(); }}>
                 <input type="hidden" name="csrf_token" value={csrfToken} />
-                <label>Statement text (max 280 characters)
+                <label className="admin-field">Statement text (max 280 characters)
                   <textarea
                     name="txt"
                     rows={3}
                     maxLength={280}
                     id="seed-txt"
                     required
-                    placeholder="Enter a statement participants will respond to…"
+                    aria-describedby="seed-count"
                     value={seedText}
                     onChange={(event) => setSeedText(event.target.value)}
                   />
                 </label>
-                <label className="muted" style={{display: 'block', marginTop: '.5rem', fontSize: 13}}>
+                <label className="admin-field admin-field--short">
                   Corrects statement&nbsp;#&nbsp;(optional)
                   <input
                     type="number"
                     name="derived_from"
                     min={0}
-                    style={{width: '6rem'}}
-                    title="If this is a corrected/derived version of an existing statement, enter its #id so the link is recorded (#143)."
+                    className="admin-mono"
                     value={derivedFrom}
                     onChange={(event) => setDerivedFrom(event.target.value)}
                   />
                 </label>
-                <div style={{display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '.5rem'}}>
+                <div className="admin-form__actions">
                   <button type="submit" disabled={seedMutation.isPending}>Add seed statement</button>
-                  <span id="seed-count" className="muted" style={{fontSize: 12}}>{seedText.length} / 280</span>
+                  <span id="seed-count" className="admin-form__count">{seedText.length} / 280</span>
                 </div>
+                <FormFeedback lines={seedFeedback} />
               </form>
             </div>
 
@@ -572,19 +567,19 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
               </p>
               <form onSubmit={submitImport}>
                 <input type="hidden" name="csrf_token" value={csrfToken} />
-                <label>Statements
+                <label className="admin-field">Statements
                   <textarea
                     name="statement_texts"
                     rows={8}
                     maxLength={data.seeding.maxStatementsPerImport * (data.seeding.maxCharactersPerStatement + 1)}
-                    placeholder={'First statement\nSecond statement\nThird statement'}
                     value={importText}
                     onChange={(event) => setImportText(event.target.value)}
                   />
                 </label>
-                <div style={{marginTop: '.75rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap'}}>
+                <div className="admin-form__actions">
                   <button type="submit" disabled={importMutation.isPending}>Import statements</button>
                 </div>
+                <FormFeedback lines={importFeedback} />
               </form>
             </div>
           </>

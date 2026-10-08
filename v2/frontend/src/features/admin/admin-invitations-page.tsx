@@ -61,6 +61,8 @@ export function AdminInvitationsPage({
   const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
   const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
   const [input, setInput] = useState('');
+  // The add form's result is said on its own status line; a toast is for the row action.
+  const [result, setResult] = useState<{error: boolean; message: string} | null>(null);
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
   const announcer = useAnnouncer();
@@ -78,21 +80,13 @@ export function AdminInvitationsPage({
         adminInvitationRosterQuery(conversationId).queryKey,
         (roster) => roster ? {...roster, invitations: receipt.invitations} : roster,
       );
-      setToast({
-        id: Date.now(),
-        category: receipt.outcome.concurrentConflicts ? 'info' : 'success',
-        message: invitationOutcomeMessage(receipt.outcome),
-      });
+      setResult({error: false, message: invitationOutcomeMessage(receipt.outcome)});
       setInput('');
     },
     onError: () => {
       // The list stays in the textarea: the save failed, so whoever typed it
       // still needs it to retry or to correct one name.
-      setToast({
-        id: Date.now(),
-        category: 'error',
-        message: "Couldn't save invitations — please review the list and retry.",
-      });
+      setResult({error: true, message: "Couldn't save invitations — please review the list and retry."});
     },
   });
   const removeMutation = useMutation({
@@ -111,6 +105,7 @@ export function AdminInvitationsPage({
         (roster) => roster ? {...roster, invitations: receipt.invitations} : roster,
       );
     },
+    onError: () => setToast({id: Date.now(), category: 'error', message: msg('adminconv-command-failed')}),
   });
   useEffect(() => {
     if (!focusAfterRemove) return;
@@ -173,7 +168,7 @@ export function AdminInvitationsPage({
             {msg('admin-invitations-unavailable', admissionName(msg, settings.conversation))}
           </p>}
           <form onSubmit={submit}>
-            <label>
+            <label className="admin-field admin-field--medium">
               Wikimedia usernames (one per line)
               <textarea
                 name="mw_usernames"
@@ -182,11 +177,17 @@ export function AdminInvitationsPage({
                 disabled={!invitationList}
                 aria-describedby={invitationList ? undefined : unavailableId}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder={'Username1\nUsername2\nUsername3'}
               />
             </label>
-            <button type="submit" disabled={!invitationList || addMutation.isPending}
-              aria-describedby={invitationList ? undefined : unavailableId}>Add</button>
+            <div className="admin-form__actions">
+              <button type="submit" disabled={!invitationList || addMutation.isPending}
+                aria-describedby={invitationList ? undefined : unavailableId}>Add</button>
+            </div>
+            {/* The status line is always mounted, keyed per attempt, so a repeat is read again. */}
+            <div role="status">
+              {result && !result.error && <p className="admin-status" key={addMutation.submittedAt}>{result.message}</p>}
+            </div>
+            {result?.error && <p className="admin-error" role="alert">{result.message}</p>}
           </form>
         </div>
 

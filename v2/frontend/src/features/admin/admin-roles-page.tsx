@@ -9,6 +9,7 @@ import {
   putAdminRoles,
 } from '../../api/queries';
 import {AdminSettingsFrame} from './admin-settings-page';
+import {useMessage} from '../../i18n/messages';
 
 type Role = 'moderator' | 'organizer';
 type Roster = components['schemas']['AdminRoleRoster'];
@@ -16,6 +17,7 @@ type Roster = components['schemas']['AdminRoleRoster'];
 export function AdminRolesPage({conversationId, csrfToken}: {
   conversationId: number; csrfToken: string;
 }) {
+  const msg = useMessage();
   const queryClient = useQueryClient();
   const {data} = useSuspenseQuery(adminRoleRosterQuery(conversationId));
   // The console frame needs the lifecycle DTO and the settings query for the tab names.
@@ -104,7 +106,8 @@ export function AdminRolesPage({conversationId, csrfToken}: {
             <div role="status">
               {mutation.isSuccess && <p key={mutation.submittedAt}>Added: {mutation.data.added.join(', ') || 'none'} · Removed: {mutation.data.removed.join(', ') || 'none'}</p>}
             </div>
-            {mutation.isError && <p className="command-error" role="alert">{mutation.error.message}</p>}
+            {/* The server's message is for developers (plan_i18n.md rule 4); the page says its own. */}
+            {mutation.isError && <p className="admin-error" role="alert">{msg('adminconv-command-failed')}</p>}
           </form>
         </section>
       )}

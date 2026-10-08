@@ -213,12 +213,12 @@ test('statements that could not be loaded are an error, not an empty consultatio
     '/admin/conversations/7/content/statements');
 
   await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
-  // The inline error stays on the page, and the toast stays as the old page had it.
-  // (The shell's assertive region reads the toast out as well; it is not a third line.)
-  const errors = page().getAllByText('Could not load statements. Check server logs.')
-    .filter((node) => !node.closest('[aria-live]'));
-  expect(errors).toHaveLength(2);
-  expect(errors.filter((node) => node.closest('.admin-shell__notices'))).toHaveLength(1);
+  // Said once, where the list would be, as on the Queue: no toast repeating it (#473 C6).
+  const errors = page().getAllByText('Could not load statements. Check server logs.');
+  expect(errors).toHaveLength(1);
+  expect(errors[0]).toHaveAttribute('role', 'alert');
+  expect(errors[0]!.closest('.admin-shell__notices')).toBeNull();
+  expect(document.querySelector('.admin-shell__notices')).toBeEmptyDOMElement();
   for (const text of ['No statements yet.', 'No approved statements.',
     'No statement matches the search.']) {
     expect(page().queryByText(text)).toBeNull();
@@ -303,6 +303,33 @@ test('seeding and importing are still on this page', async () => {
   expect(screen.getByRole('button', {name: 'Import statements'})).toBeVisible();
   // The Approval control is a setting, and lives on Settings > Basics (#478).
   expect(screen.queryByRole('checkbox', {name: /Strict moderation/})).toBeNull();
+});
+
+test('a seed statement\'s result and refusal are said under its form, never as a toast', async () => {
+  serveWorkspace({pending: [], approved: [], hidden: []});
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  const text = await screen.findByLabelText('Statement text (max 280 characters)', {}, {timeout: 10_000});
+  fireEvent.change(text, {target: {value: 'A new seed.'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Add seed statement'}));
+  const status = await screen.findByRole('status');
+  expect(status).toHaveTextContent('Seed statement added.');
+  expect(status.closest('form')).toBe(text.closest('form'));
+  expect(document.querySelector('.admin-shell__notices')).toBeEmptyDOMElement();
+
+  // A refusal keeps what was typed and says why at the same place.
+  server.use(http.post(STATEMENTS_URL, () => HttpResponse.json({
+    error: {code: 'derived_statement_not_found', message: 'Not found.'},
+  }, {status: 404})));
+  fireEvent.change(text, {target: {value: 'A corrected seed.'}});
+  fireEvent.change(screen.getByLabelText(/Corrects statement/), {target: {value: '99'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Add seed statement'}));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Statement #99 was not found in this consultation');
+  expect(alert.closest('form')).toBe(text.closest('form'));
+  expect(text).toHaveValue('A corrected seed.');
+  expect(document.querySelector('.admin-shell__notices')).toBeEmptyDOMElement();
 });
 
 test('the statement page names the one thing it cannot show yet', async () => {

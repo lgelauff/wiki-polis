@@ -18,7 +18,12 @@
   --shell-line: #d5e0d8;
   --shell-sunken: #eef3ef;
   --shell-surface: #ffffff;
+  --shell-danger: #a3282b;
   --shell-gap: 1rem;
+  /* The three widths a field may have: a number or an id, a name, a sentence. */
+  --field-short: 8rem;
+  --field-medium: 22rem;
+  --field-wide: 40rem;
 
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -468,16 +473,6 @@
   font-size: 13px;
 }
 
-.admin-shell .admin-sort select {
-  min-block-size: 2rem;
-  padding: .125rem .5rem;
-  border: 1px solid var(--shell-line);
-  border-radius: 4px;
-  background: var(--shell-surface);
-  color: var(--shell-body);
-  font: inherit;
-  font-size: 13px;
-}
 
 /* One row per statement or flag: the text takes what is left, the actions keep their size.
    At 320px the row wraps, so the actions sit under the text rather than beside a
@@ -570,19 +565,11 @@
   max-inline-size: 100%;
 }
 
-/* 16px: a smaller input makes iOS Safari zoom the page when it takes focus. */
+/* The field's look is the console's one input rule (below); here only its size in a row. */
 .admin-shell .admin-row__block-form input {
   flex: 1 1 10rem;
   min-inline-size: 0;
-  min-block-size: 2rem;
   max-inline-size: 14rem;
-  padding: .125rem .5rem;
-  border: 1px solid var(--shell-line);
-  border-radius: 4px;
-  background: var(--shell-surface);
-  color: var(--shell-body);
-  font: inherit;
-  font-size: 16px;
 }
 
 /* A labelled field inside a row's form: the label is short muted text beside the input,
@@ -657,15 +644,119 @@
   color: var(--accent);
 }
 
-.admin-shell .admin-sort input[type="search"] {
+
+/* ── Fields, labels and errors ─────────────────────────────────────────────── */
+
+/* One input rule for every page of the console, whatever stylesheet the page's markup
+   came from: the console's line colour, 4px corners, the interface's own sans at 14px.
+   Monospace only where the value is an identifier (`.admin-mono`: slugs, ids, codes).
+   The selector is deliberately specific enough to win over the site stylesheet's form
+   rules, which are written for the participant pages. */
+.admin-shell .admin-page :is(input:not([type="checkbox"], [type="radio"], [type="hidden"]), select, textarea) {
+  box-sizing: border-box;
   min-block-size: 2rem;
-  padding: .125rem .5rem;
+  margin: 0;
+  padding: .375rem .5rem;
   border: 1px solid var(--shell-line);
   border-radius: 4px;
   background: var(--shell-surface);
-  color: var(--shell-body);
+  color: var(--shell-ink);
   font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.admin-shell .admin-page textarea {
+  resize: vertical;
+}
+
+/* 16px on a touch screen: below that iOS zooms the page when a field takes focus. */
+@media (pointer: coarse) {
+  .admin-shell .admin-page :is(input:not([type="checkbox"], [type="radio"], [type="hidden"]), select, textarea) {
+    font-size: 16px;
+  }
+}
+
+.admin-shell .admin-page .admin-mono {
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.admin-shell .admin-page [aria-invalid="true"] {
+  border-color: var(--shell-danger);
+}
+
+/* A field: its label above it, 13px semibold, "(optional)" part of the label. */
+.admin-shell .admin-page .admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  max-inline-size: var(--field-wide);
+  margin: 0 0 .75rem;
+  color: var(--shell-ink);
   font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-shell .admin-page .admin-field > :is(input, select, textarea) {
+  inline-size: 100%;
+  font-weight: 400;
+}
+
+.admin-shell .admin-page .admin-field--short {
+  max-inline-size: var(--field-short);
+}
+
+.admin-shell .admin-page .admin-field--medium {
+  max-inline-size: var(--field-medium);
+}
+
+/* A form's buttons, and the one line under them that says how it went. */
+.admin-shell .admin-page .admin-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1rem;
+  margin-block: .25rem 0;
+}
+
+.admin-shell .admin-page .admin-form__count {
+  color: var(--shell-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An error is a sentence at the field or under the form's button, never only a colour:
+   the words say what went wrong, the colour only helps find them. */
+.admin-shell .admin-page :is(.admin-error, .access-field-error) {
+  margin: .25rem 0 0;
+  color: var(--shell-danger);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.admin-shell .admin-page .admin-status {
+  margin: .25rem 0 0;
+  color: var(--shell-body);
+  font-size: 13px;
+}
+
+/* The Settings form's own summary of refused fields: the same words and colour, no box. */
+.admin-shell .settings-form .access-summary {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.admin-shell .settings-form .access-summary ul {
+  color: var(--shell-danger);
+}
+
+.admin-shell .settings-form > footer p {
+  color: var(--shell-body);
+}
+
+.admin-shell .settings-form > footer p[role="alert"] {
+  color: var(--shell-danger);
 }
 
 /* ── Coming lines ─────────────────────────────────────────────────────────── */

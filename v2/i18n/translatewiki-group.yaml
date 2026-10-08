@@ -174,7 +174,6 @@ TAGS:
     - admin-th-status
     - admin-th-title
     - admin-th-username
-    - admin-wm-username-ph
     - adminconv-add-role
     - adminconv-admin-can-adjust
     - adminconv-advanced-note
@@ -319,6 +318,7 @@ TAGS:
     - adminconv-view-as
     - adminconv-view-report
     - adminconv-you-are-in-phase
+    - base-admin-badge
     - featured-addtid-heading
     - featured-arg-delete
     - featured-arg-delete-confirm
