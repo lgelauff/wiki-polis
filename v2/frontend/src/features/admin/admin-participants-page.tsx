@@ -145,7 +145,7 @@ export function AdminParticipantsPage({
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
     >
       <div className="admin-page">
-        <h1>{msg('adminconv-card-participants')}</h1>
+        <h1>{msg('admin-shell-content')}</h1>
         <AdminTabStrip label={msg('admin-content-tabs-aria')}
           tabs={contentTabs(conversationId, msg)} current="participants" />
 

@@ -67,8 +67,11 @@ test('the Content section is Statements and Participants, each marked in the str
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/statements');
 
-  expect(await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000}))
+  // The h1 names the section; the strip's current tab names the page, so no heading
+  // repeats it.
+  expect(await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000}))
     .toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Statements'})).toBeNull();
   const strip = screen.getByRole('navigation', {name: 'Content'});
   expect(within(strip).getAllByRole('link').map((link) => link.textContent))
     .toEqual(['Statements', 'Participants']);
@@ -94,7 +97,7 @@ test('the statement list opens on the approved ones, most votes first', async ()
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/statements');
 
-  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   // The state switch defaults to approved here, not to what is waiting: that is the
   // Moderation queue's default.
   expect(screen.getByRole('button', {name: 'Show approved 3'})).toHaveAttribute('aria-pressed', 'true');
@@ -126,7 +129,7 @@ test('a statement row carries its votes, muted, and where it came from', async (
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/statements');
 
-  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   const row = list().getByRole('listitem');
   expect(row).toHaveTextContent('A corrected wording.');
   expect(row.querySelector('.admin-row__counts')).toHaveTextContent('A 12 · P 3 · D 5');
@@ -153,7 +156,7 @@ test('"↳ #N" jumps to the source row when the source is in the list', async ()
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/statements');
 
-  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   const link = list().getByRole('link', {name: 'derived from statement 11'});
   expect(link).toHaveAttribute('href', '#statement-11');
   expect(link).toHaveTextContent('↳ #11');
@@ -171,7 +174,7 @@ test('the search box filters the loaded text and says when nothing is left', asy
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/statements');
 
-  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   fireEvent.change(screen.getByLabelText('Search statements'), {target: {value: 'trees'}});
   expect(list().getByRole('listitem')).toHaveTextContent('More trees on the square.');
   expect(page().queryByText(/Bicycle parking/)).toBeNull();
@@ -186,7 +189,7 @@ test('the empty list says whether there are no statements at all or none in this
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/statements');
 
-  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   expect(page().getByText('No approved statements.')).toBeVisible();
   expect(page().queryByText('No statements yet.')).toBeNull();
   fireEvent.click(screen.getByRole('button', {name: 'Show hidden'}));
@@ -198,7 +201,7 @@ test('a consultation without statements says so once', async () => {
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/statements');
 
-  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   expect(page().getByText('No statements yet.')).toBeVisible();
 });
 
@@ -208,7 +211,7 @@ test('statements that could not be loaded are an error, not an empty consultatio
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/statements');
 
-  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   // The inline error stays on the page, and the toast stays as the old page had it.
   const errors = page().getAllByText('Could not load statements. Check server logs.');
   expect(errors).toHaveLength(2);
@@ -224,7 +227,7 @@ test('the switch, sort and search sit directly above the list, seeding below it'
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/statements');
 
-  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   const toolbar = document.querySelector('.admin-toolbar')!;
   const rows = document.querySelector('.admin-rows')!;
   expect(toolbar.nextElementSibling).toBe(rows);
@@ -246,7 +249,7 @@ test('sorting by lineage puts a correction under its source', async () => {
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/statements');
 
-  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   fireEvent.change(screen.getByRole('combobox', {name: 'Sort'}), {target: {value: 'based-on'}});
   const texts = list().getAllByRole('listitem')
     .map((row) => row.querySelector('.admin-row__text')?.textContent ?? '');
@@ -259,7 +262,7 @@ test('seeding and importing are still on this page', async () => {
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/statements');
 
-  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   expect(screen.getByLabelText('Statement text (max 280 characters)')).toBeVisible();
   expect(screen.getByRole('button', {name: 'Add seed statement'})).toBeVisible();
   expect(screen.getByRole('button', {name: 'Import statements'})).toBeVisible();
@@ -272,7 +275,7 @@ test('the statement page names the one thing it cannot show yet', async () => {
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/statements');
 
-  await screen.findByRole('heading', {name: 'Statements', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   const lines = page().getAllByText(/^Also coming:/);
   expect(lines).toHaveLength(1);
   expect(lines[0]).toHaveTextContent(
@@ -286,7 +289,7 @@ test('participants are one row each, with today’s figures and the access contr
   renderContent(<AdminParticipantsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/participants');
 
-  await screen.findByRole('heading', {name: 'Participants', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   expect(screen.getByRole('navigation', {name: 'Content'})
     .querySelector('[aria-current="page"]')).toHaveTextContent('Participants');
   const row = list().getByRole('listitem');
@@ -311,7 +314,7 @@ test('participants says once what the roster cannot answer yet', async () => {
   renderContent(<AdminParticipantsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/content/participants');
 
-  await screen.findByRole('heading', {name: 'Participants', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   const lines = page().getAllByText(/^Also coming:/);
   expect(lines).toHaveLength(1);
   expect(lines[0]).toHaveTextContent(

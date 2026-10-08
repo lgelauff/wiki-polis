@@ -282,7 +282,8 @@ test('moderates statements and imports approved seeds through typed commands', a
 
   // #473: the old .../statements path redirects to Content > Statements, which is headed
   // like every other page of the section.
-  expect(await screen.findByRole('heading', {name: 'Statements', level: 1})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Content', level: 1})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Statements'})).toBeNull();
   // #473: the list is one row per statement behind the state switch, which opens on the
   // approved ones; the waiting statement is one click away.
   expect(screen.getByRole('button', {name: /^Show unmoderated/})).toBeVisible();
@@ -343,7 +344,8 @@ test('manages participant access in the distinct admin workspace', async () => {
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {name: 'Participants', level: 1})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Content', level: 1})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Participants'})).toBeNull();
   // The roster is a list of rows now, not a table (#473).
   const roster = within(screen.getByRole('main')).getByRole('listitem').closest('ul')!;
   expect(within(roster).getByText('Example editor')).toBeVisible();
@@ -652,8 +654,9 @@ test.each([
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {name: heading, level: 1}, {timeout: 10_000}))
+  expect(await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000}))
     .toBeVisible();
+  expect(screen.queryByRole('heading', {name: heading})).toBeNull();
   expect(within(screen.getByRole('navigation', {name: 'Content'})).getByRole('link', {name: heading}))
     .toHaveAttribute('aria-current', 'page');
   // Routed, not redirected: the page renders at the path it was asked for.
