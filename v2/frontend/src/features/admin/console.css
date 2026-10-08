@@ -356,6 +356,11 @@
   padding: 0;
 }
 
+/* A value shown as text sits at the rhythm of the fields it replaces. */
+.admin-shell .settings-form .access-answer {
+  margin-block: 0 .75rem;
+}
+
 /* An organizer text shown rendered to a viewer who may not change it. */
 .admin-shell .settings-value-html {
   color: var(--shell-body);
@@ -466,7 +471,9 @@
    in a row with no facts. Below 720px the row stacks: text, then facts, then actions. */
 .admin-shell .admin-rows {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  /* The text keeps at least 12rem, so a long facts column cannot squeeze a name into a
+     one-word column. */
+  grid-template-columns: minmax(min(12rem, 100%), 1fr) auto auto;
   column-gap: 1rem;
   margin: 0;
   padding: 0;
@@ -665,6 +672,12 @@
 }
 
 
+/* Links on a console page take the console's green, not the participant site's blue. The
+   tab strip and the muted "↳ #N" links keep their own colours. */
+.admin-shell .admin-page a:not(.admin-tabs__tab, .admin-row__source) {
+  color: var(--accent);
+}
+
 /* ── Fields, labels and errors ─────────────────────────────────────────────── */
 
 /* One input rule for every page of the console, whatever stylesheet the page's markup
@@ -683,6 +696,8 @@
   color: var(--shell-ink);
   font: inherit;
   font-size: 14px;
+  /* Not the label's semibold, which `font: inherit` would otherwise carry into the field. */
+  font-weight: 400;
   line-height: 1.4;
 }
 
@@ -722,7 +737,12 @@
   font-weight: 400;
 }
 
+/* A short field: the input is short, its label keeps the room to stay on one line. */
 .admin-shell .admin-page .admin-field--short {
+  max-inline-size: var(--field-medium);
+}
+
+.admin-shell .admin-page .admin-field--short > input {
   max-inline-size: var(--field-short);
 }
 
@@ -971,6 +991,8 @@
 
 .admin-shell__main {
   display: block;
+  /* White down to the footer on a short page, not a white block over a grey one. */
+  align-self: stretch;
   min-inline-size: 0;
   padding: 1.25rem;
   background: var(--shell-surface);

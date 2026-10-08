@@ -121,8 +121,7 @@ function StatementRow({conversationId, statement, sourceShown, csrfToken, move, 
         {statement.text}
         <span className="admin-row__suffix">{` #${statement.id}`}</span>
         {statement.provenance && (
-          <StatementProvenance provenance={statement.provenance}
-            href={sourceShown ? `#statement-${statement.provenance.derivedFromId}` : undefined} />
+          <StatementProvenance provenance={statement.provenance} linked={sourceShown} />
         )}
       </div>
       <div className="admin-row__counts">

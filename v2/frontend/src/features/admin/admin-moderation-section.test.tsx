@@ -539,7 +539,7 @@ test('Featured is today’s page under the strip, arguments and all', async () =
     .toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('heading', {name: 'Confirmed 1'})).toBeVisible();
   // Argument moderation is served by this endpoint, so it stays here (#473).
-  expect(screen.getByRole('list', {name: /^Arguments on statement/})).toBeVisible();
+  expect(screen.getByRole('list', {name: 'Arguments'})).toBeVisible();
   expect(screen.getByRole('button', {name: 'Hide'})).toBeVisible();
 });
 

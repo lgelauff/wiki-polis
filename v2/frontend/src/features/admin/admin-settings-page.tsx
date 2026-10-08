@@ -643,7 +643,7 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
                   <strong>{option.label}</strong>
                   <span>{Object.values(option.quantities).join(' · ')}</span>
                 </label>
-              ))}</fieldset> : <SettingValue label={msg('adminconv-label-tier')} value={selectedTier?.label ?? tier} />}
+              ))}</fieldset> : <p className="access-answer-value settings-value">{selectedTier?.label ?? tier}</p>}
             </section>
             {/* The Practice Environment section: the fixed answer a practice item has, and the
                 switch that moves one in or out of it. Nothing at all when neither applies, so

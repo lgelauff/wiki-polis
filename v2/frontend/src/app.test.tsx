@@ -327,7 +327,8 @@ test('matches legacy featured-statement administration and commands', async () =
   expect(screen.getByRole('heading', {name: 'Confirmed 1'})).toBeVisible();
   expect(screen.getByText('An approved seed statement.')).toBeVisible();
   expect(screen.getByText('A candidate preserving another viewpoint.')).toBeVisible();
-  const candidates = screen.getAllByRole('table')[1]!;
+  // The suggestions are the page's one table; the confirmed statements are rows.
+  const candidates = screen.getByRole('table');
   expect(within(candidates).getByText('2')).toBeVisible();
   expect(within(candidates).getByText('6')).toBeVisible();
   expect(screen.queryByText(/divisiv/i)).not.toBeInTheDocument();
