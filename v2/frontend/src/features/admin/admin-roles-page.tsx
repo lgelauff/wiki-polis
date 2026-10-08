@@ -66,7 +66,7 @@ export function AdminRolesPage({conversationId, csrfToken}: {
       lifecycle={lifecycle}
       tab="roles"
     >
-      <div className="roles-shell">
+      <div>
       <p>See who can moderate or organize {data.conversation.title}.</p>
       <section className="roles-roster" aria-labelledby="role-roster-heading">
         <header><h2 id="role-roster-heading">Assigned</h2><span>{data.assignments.length}</span></header>

@@ -128,7 +128,7 @@ export function AdminInvitationsPage({
       tab="invitations"
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
     >
-      <div className="container">
+      <div>
         <p>
           <Link to={`/c/${data.conversation.slug}/about`}>{title}</Link>
         </p>

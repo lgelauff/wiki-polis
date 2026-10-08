@@ -352,8 +352,7 @@
 }
 
 /* Invitations and Roles are Settings tabs too: their sub-headings take the same style,
-   sentence case and never uppercase, and their old full-page wrappers lose the width and
-   centring they had as pages of their own. */
+   sentence case and never uppercase. */
 .admin-shell .settings-page h2 {
   margin-block: 1.5rem .5rem;
   color: var(--shell-ink);
@@ -361,12 +360,6 @@
   font-weight: 600;
   letter-spacing: normal;
   text-transform: none;
-}
-
-.admin-shell .settings-page .roles-shell {
-  width: auto;
-  margin: 0;
-  padding: 0;
 }
 
 .admin-shell .settings-page :is(.eyebrow, .roles-roster li span) {
