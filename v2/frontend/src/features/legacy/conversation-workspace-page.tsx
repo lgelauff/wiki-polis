@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent} from 'react';
 import {useMutation, useQuery, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {useLocation, useParams} from 'react-router-dom';
 
@@ -147,17 +147,21 @@ function SpaceWarning({space}: {space: 'real' | 'demo'}) {
   );
 }
 
-/** How long the vote buttons of a freshly appeared Explore card ignore clicks (#505).
- *  Exported so the guard's tests can wait exactly as long as the guard does. */
+/** How long the vote buttons of a freshly appeared Explore card ignore a pointer click or tap
+ *  (#505). Exported so the guard's tests can wait exactly as long as the guard does. */
 export const VOTE_INPUT_GUARD_MS = 500;
+/** How long they ignore a keyboard activation (Enter/Space): the new card's Agree button has
+ *  the focus, so a held or repeated Enter from the Move on button would land on it (#505). */
+export const VOTE_KEY_GUARD_MS = 1500;
 
-function VoteChoices({disabled, onVote}: {disabled: boolean; onVote: (choice: VoteChoice) => void}) {
+function VoteChoices({disabled, onVote}: {disabled: boolean; onVote: (choice: VoteChoice, keyboard: boolean) => void}) {
   const msg = useMessage();
+  // A click event with `detail === 0` was not made by a pointer: Enter or Space on the button.
   return (
     <div className="vote-choice-row" id="vote-choice-row">
-      <button type="button" className="vote-choice" data-type="agree" disabled={disabled} onClick={() => onVote('agree')} autoFocus><span className="vote-dot vote-dot--agree" />{msg('conv-vote-agree')}</button>
-      <button type="button" className="vote-choice" data-type="neutral" disabled={disabled} onClick={() => onVote('pass')}><span className="vote-dot vote-dot--pass" />{msg('conv-vote-pass')}</button>
-      <button type="button" className="vote-choice" data-type="disagree" disabled={disabled} onClick={() => onVote('disagree')}><span className="vote-dot vote-dot--disagree" />{msg('conv-vote-disagree')}</button>
+      <button type="button" className="vote-choice" data-type="agree" disabled={disabled} onClick={(event) => onVote('agree', event.detail === 0)} autoFocus><span className="vote-dot vote-dot--agree" />{msg('conv-vote-agree')}</button>
+      <button type="button" className="vote-choice" data-type="neutral" disabled={disabled} onClick={(event) => onVote('pass', event.detail === 0)}><span className="vote-dot vote-dot--pass" />{msg('conv-vote-pass')}</button>
+      <button type="button" className="vote-choice" data-type="disagree" disabled={disabled} onClick={(event) => onVote('disagree', event.detail === 0)}><span className="vote-dot vote-dot--disagree" />{msg('conv-vote-disagree')}</button>
     </div>
   );
 }
@@ -282,40 +286,52 @@ function ExplorePanel({slug, csrfToken}: {slug: string; csrfToken: string}) {
   const [composer, setComposer] = useState<ComposerMode>(null);
   const [submitted, setSubmitted] = useState(false);
   const statementId = data.currentStatement?.id ?? null;
-  // #505: the second click of a double click lands on the card that just replaced the one
-  // the first click was meant for. A card that replaces another one ignores vote clicks
-  // until it has been on screen for VOTE_INPUT_GUARD_MS. The buttons keep their normal look
-  // and their tab stop, because a disabled flash on every card reads as a broken control.
-  // Clock only: no timer to clean up, and nothing left running if the panel unmounts.
-  // `null` means this card has not replaced another one, so it is not guarded: nothing can
-  // have leaked onto it from a click meant for the previous card.
+  // #505: a double click, or a held Enter, on Move on must not answer a card unread.
+  // - From the moment Move on is pressed until the next card is on screen, no vote counts:
+  //   the old card's buttons come back while the deck reloads, and must not take a second vote.
+  // - A card that replaced another one then ignores a pointer click for VOTE_INPUT_GUARD_MS
+  //   and a keyboard activation for VOTE_KEY_GUARD_MS.
+  // Silently: the buttons keep their look and tab stop (a disabled flash on every card reads
+  // as a broken control). The first card after page load is not guarded, nor are the buttons
+  // that "change" brings back after a vote. Refs, set in a layout effect, so the guard is in
+  // place before the new card can receive any input; a clock, so no timer is left running.
   const seenStatement = useRef(statementId);
-  const [voteOpensAt, setVoteOpensAt] = useState<number | null>(null);
+  const voteGuard = useRef<{shownAt: number | null; awaitingNext: boolean}>({shownAt: null, awaitingNext: false});
   const vote = useMutation({
     mutationFn: (choice: VoteChoice) => {
       if (!data.currentStatement) throw new Error('There is no statement to vote on.');
       return putExploreVote(slug, data.currentStatement.id, {choice}, csrfToken);
     },
     onSuccess: (nextReceipt) => {
+      voteGuard.current.shownAt = null;
       setReceipt(nextReceipt);
       setRecordedCurrentVote(true);
     },
   });
-  useEffect(() => {
-    if (statementId === null || seenStatement.current === statementId) return;
+  useLayoutEffect(() => {
+    if (seenStatement.current === statementId) return;
     seenStatement.current = statementId;
-    setVoteOpensAt(Date.now() + VOTE_INPUT_GUARD_MS);
+    voteGuard.current = {shownAt: statementId === null ? null : Date.now(), awaitingNext: false};
   }, [statementId]);
-  function castVote(choice: VoteChoice) {
-    if (statementId === null) return;
-    if (voteOpensAt !== null && Date.now() < voteOpensAt) return;
+  function castVote(choice: VoteChoice, keyboard: boolean) {
+    const guard = voteGuard.current;
+    if (statementId === null || guard.awaitingNext) return;
+    if (guard.shownAt !== null
+      && Date.now() - guard.shownAt < (keyboard ? VOTE_KEY_GUARD_MS : VOTE_INPUT_GUARD_MS)) return;
     vote.mutate(choice);
   }
   async function next() {
+    const shown = seenStatement.current;
+    voteGuard.current.awaitingNext = true;
     setReceipt(null);
     setComposer(null);
     setSubmitted(false);
-    await refetch();
+    const result = await refetch();
+    // A new card lifts the block itself, when it is committed. The same card back (or a failed
+    // reload) never will, so lift it here.
+    if (result.isError || (result.data?.currentStatement?.id ?? null) === shown) {
+      voteGuard.current.awaitingNext = false;
+    }
     setRecordedCurrentVote(false);
   }
   const allDone = data.progress.allDone && receipt === null;
