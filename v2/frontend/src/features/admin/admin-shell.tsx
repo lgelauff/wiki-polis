@@ -152,26 +152,34 @@ function LanguageSwitcher({locales, active, msg}: {
  *  the frame is what marks it, and what builds the sidebar and the breadcrumb from it. */
 export type AdminSection = 'overview' | 'settings' | 'moderation' | 'content';
 
-/** The frame every admin page sits in: sidebar, top bar, one main, one announcement region
- *  and one notification slot. It renders only what the lifecycle DTO already carries, so a
- *  page inside it needs no new server field to get a complete frame.
+/** Where a page sits: inside one consultation, or at site level (the site admin dashboard).
  *
- *  `title` is the document title, assembled by the page because the wording is that page's.
- *  `section` is the section the page belongs to: the sidebar marks it and the breadcrumb
- *  names it. `subPage` is the page's own name within that section, added to the breadcrumb
- *  when the page has one.
+ *  A consultation page passes the lifecycle DTO the frame is built from. `section` is the
+ *  section the page belongs to: the sidebar marks it and the breadcrumb names it. `subPage`
+ *  is the page's own name within that section, added to the breadcrumb when it has one.
  *  `gatingType` comes from the settings query the page already runs, and only decides
- *  whether the participant view is a preview. */
-export function AdminShell({announcer, children, data, gatingType, section, subPage, title, toast}: {
+ *  whether the participant view is a preview.
+ *
+ *  A site-level page passes `site`, its own name, which is the whole breadcrumb. It has no
+ *  consultation, so the sidebar lists no sections: a link to a consultation's Settings from
+ *  a page that is not about one would be a link to nowhere. */
+type ShellScope =
+  | {data: Lifecycle; gatingType: GatingType; section: AdminSection; subPage?: string | undefined;
+    site?: undefined}
+  | {site: string; data?: undefined; gatingType?: undefined; section?: undefined;
+    subPage?: undefined};
+
+/** The frame every admin page sits in: sidebar, top bar, one main, one announcement region
+ *  and one notification slot. It renders only what the lifecycle DTO (or, at site level, the
+ *  session) already carries, so a page inside it needs no new server field to get a
+ *  complete frame. `title` is the document title, assembled by the page because the wording
+ *  is that page's. */
+export function AdminShell({announcer, children, data, gatingType, section, site, subPage, title, toast}: {
   announcer?: Announcer | undefined;
   children: ReactNode;
-  data: Lifecycle;
-  gatingType: GatingType;
-  section: AdminSection;
-  subPage?: string | undefined;
   title: string;
   toast?: ReactNode;
-}) {
+} & ShellScope) {
   const msg = useMessage();
   // A page that announces from its own code hands its announcer in; otherwise the frame
   // keeps one for whatever is rendered inside it.
@@ -190,26 +198,29 @@ export function AdminShell({announcer, children, data, gatingType, section, subP
   // sections and the participant view, not the page this frame is built around -- so the
   // client builds it from the conversation the lifecycle DTO names. It is an ordinary
   // client path, rendered through InternalLink like the other sidebar links.
-  const overviewHref = `/admin/conversations/${data.conversation.id}`;
-  const openFlags = data.counts.openFlags;
-  const sections: {id: AdminSection; label: string; href: string; badge?: string | null}[] = [
-    {id: 'overview', label: msg('admin-shell-overview'), href: overviewHref},
+  const sections: {id: AdminSection; label: string; href: string; badge?: string | null}[] = data ? [
+    {id: 'overview', label: msg('admin-shell-overview'), href: `/admin/conversations/${data.conversation.id}`},
     {id: 'settings', label: msg('admin-overview-card-settings'), href: data.links.settings},
     {id: 'moderation', label: msg('admin-shell-moderation'), href: data.links.moderation,
       // A zero is not worth a badge: an empty counter is noise, not information.
-      badge: openFlags > 0 ? msg('adminconv-open-count', openFlags) : null},
+      badge: data.counts.openFlags > 0 ? msg('adminconv-open-count', data.counts.openFlags) : null},
     {id: 'content', label: msg('admin-shell-content'), href: data.links.statements},
-  ];
+  ] : [];
   const current = sections.find((item) => item.id === section);
   // The breadcrumb is title / section / sub-page, and the last crumb is the page itself:
   // the trail a screen reader reads back is the one that ends where the reader is.
-  const crumbs = [data.conversation.title, current?.label ?? null, subPage ?? null]
+  const crumbs = (data ? [data.conversation.title, current?.label ?? null, subPage ?? null] : [site])
     .filter((crumb): crumb is string => Boolean(crumb));
+  // The operator's role: the consultation's word for it, or at site level the one role a
+  // page there can be opened with.
+  const role = data ? data.operator.roleLabel
+    : session.capabilities.administerSite ? 'Global admin' : null;
 
   return (
     <div className="admin-shell">
       <header className="admin-shell__topbar">
-        <p className="admin-shell__coming" lang="en">Also coming: Admin home — not available yet (#473)</p>
+        {/* At site level the dashboard says this itself, last on its page. */}
+        {data && <p className="admin-shell__coming" lang="en">Also coming: Admin home — not available yet (#473)</p>}
         <nav className="admin-shell__crumbs" aria-label={msg('admin-crumb-aria')}>
           <ol>
             {crumbs.map((crumb, index) => (
@@ -227,7 +238,8 @@ export function AdminShell({announcer, children, data, gatingType, section, subP
         <div className="admin-shell__tools">
           <LanguageSwitcher locales={session.locales} active={activeLocale} msg={msg} />
           <div className="admin-shell__switch" role="group" aria-label={msg('admin-shell-switch-aria')}>
-            <InternalLink href={data.links.participantView} className="admin-shell__switch-option">
+            {/* At site level the participant side is the list of consultations. */}
+            <InternalLink href={data ? data.links.participantView : '/consultations'} className="admin-shell__switch-option">
               {gatingType === 'voucher' ? msg('admin-shell-participant-preview') : msg('admin-shell-participant')}
             </InternalLink>
             {/* Text, not a link: the DTO carries no link to the console's own page, and a
@@ -237,7 +249,9 @@ export function AdminShell({announcer, children, data, gatingType, section, subP
           <div className="admin-shell__identity">
             {/* The name is cut off with an ellipsis when long, so the whole of it is the hover title. */}
             <span className="admin-shell__user" title={authenticated ? session.user?.username : undefined}>{authenticated ? session.user?.username : msg('base-voucher-account')}</span>
-            <span className="admin-shell__role"><RoleGlyph label={msg('adminconv-role-title')} /><span>{roleLabel(msg, data.operator.roleLabel)}</span></span>
+            {/* The glyph says "your role in this consultation"; a site-level page has no
+                consultation, so there the role word stands alone. */}
+            {role && <span className="admin-shell__role">{data && <RoleGlyph label={msg('adminconv-role-title')} />}<span>{roleLabel(msg, role)}</span></span>}
             {signedIn && (
               <form method="post" action={session.links.logout} className="admin-shell__logout">
                 <input type="hidden" name="csrf_token" value={session.csrfToken} />
@@ -252,8 +266,9 @@ export function AdminShell({announcer, children, data, gatingType, section, subP
         <nav className="admin-shell__side" aria-label={msg('admin-shell-nav-aria')}>
           <div className="admin-shell__brand">
             {/* Admin home only for a site administrator: today's crumb sends an organizer
-                to a 403, and a link to a page you may not open is information as an action. */}
-            {session.capabilities.administerSite ? (
+                to a 403, and a link to a page you may not open is information as an action.
+                Not on the dashboard itself either: a link to where you are goes nowhere. */}
+            {session.capabilities.administerSite && data ? (
               <InternalLink href="/admin" className="admin-shell__mark">
                 <ConsoleMark />
                 <span className="admin-shell__mark-word">{msg('base-admin-badge')}</span>
@@ -266,7 +281,7 @@ export function AdminShell({announcer, children, data, gatingType, section, subP
             )}
           </div>
           <p className="admin-shell__coming" lang="en">Also coming: switching between consultations — not available yet (#473)</p>
-          {narrow && (
+          {narrow && sections.length > 0 && (
             <button
               type="button"
               className="admin-shell__sections-toggle"
@@ -277,7 +292,7 @@ export function AdminShell({announcer, children, data, gatingType, section, subP
               {msg('admin-shell-sections')}
             </button>
           )}
-          <ul className="admin-shell__sections" id={SECTIONS_ID} hidden={narrow && !sectionsOpen}>
+          {sections.length > 0 && <ul className="admin-shell__sections" id={SECTIONS_ID} hidden={narrow && !sectionsOpen}>
             {sections.map((section) => (
               <li className="admin-shell__section" key={section.id}>
                 <InternalLink
@@ -290,7 +305,7 @@ export function AdminShell({announcer, children, data, gatingType, section, subP
                 </InternalLink>
               </li>
             ))}
-          </ul>
+          </ul>}
         </nav>
 
         <main id="main" tabIndex={-1} className="admin-shell__main">

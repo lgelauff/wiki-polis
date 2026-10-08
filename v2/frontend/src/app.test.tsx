@@ -107,7 +107,7 @@ test('runs site-wide administration without falling back to Jinja forms', async 
   expect(screen.getByRole('columnheader', {name: 'Access'})).toBeVisible();
   expect(screen.getByRole('cell', {name: 'Anyone with a Wikimedia account'})).toBeVisible();
   expect(screen.queryByText('invite_only')).not.toBeInTheDocument();
-  expect(screen.getByText('Admin')).toHaveClass('header-mode-badge');
+  expect(screen.getByRole('main')).toHaveClass('admin-shell__main');
   // #479: keyed with `admin-new-conv-heading`, whose English is "New consultation".
   expect(screen.getByRole('heading', {name: 'New consultation'})).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Example editor'}});

@@ -25,7 +25,10 @@
   /* One column that may shrink below its content's width: without it a long title in
      the breadcrumb widens the whole frame and the page scrolls sideways at 320px. */
   grid-template-columns: minmax(0, 1fr);
-  min-block-size: 100%;
+  /* The whole viewport at least, so the footer sits at the bottom of a short page rather
+     than under its last line, halfway up the screen. */
+  min-block-size: 100vh;
+  min-block-size: 100dvh;
   color: var(--shell-body);
   background: var(--shell-sunken);
   font-size: 14px;
@@ -303,6 +306,16 @@
 .admin-shell .settings-form > section {
   padding-block: 1.25rem;
   border-block-end: 1px solid var(--shell-line);
+}
+
+/* The tab strip already leaves room under itself: the first section starts right there,
+   and a section's first line takes no margin above the section's own padding. */
+.admin-shell .settings-form > section:first-of-type {
+  padding-block-start: 0;
+}
+
+.admin-shell .settings-form > section > :first-child {
+  margin-block-start: 0;
 }
 
 .admin-shell .settings-form h2 {
@@ -657,11 +670,9 @@
 
 /* ── Coming lines ─────────────────────────────────────────────────────────── */
 
-/* Also used outside the console frame (the site admin dashboard), where the shell's
-   tokens are not declared, hence the fallback colour. */
 .admin-shell__coming {
   margin: 0;
-  color: var(--shell-muted, #5a655e);
+  color: var(--shell-muted);
   font-size: 12px;
   font-style: italic;
 }

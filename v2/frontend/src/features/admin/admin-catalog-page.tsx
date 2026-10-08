@@ -11,7 +11,7 @@ import {
   putGlobalAdmin,
 } from '../../api/queries';
 import {AdminComing} from './admin-coming';
-import {LegacyShell} from '../legacy/legacy-shell';
+import {AdminShell} from './admin-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
@@ -190,17 +190,15 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
   );
 
   return (
-    <LegacyShell
-      headerMode="admin"
+    <AdminShell
+      site={msg('admin-site-dashboard')}
       title={`${msg('admin-site-dashboard')} — Proto`}
-      headerCrumb={<nav className="header-crumb" aria-label="Admin breadcrumb"><span className="header-crumb-sep">/</span><span>{msg('admin-site-dashboard')}</span></nav>}
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
     >
-      <div className="container">
-        <h2>{msg('admin-site-dashboard')}</h2>
+      <div className="admin-page">
+        <h1>{msg('admin-site-dashboard')}</h1>
 
-
-        <h3 className="section-heading" id="admin-convs-heading">{msg('admin-convs-heading')}</h3>
+        <h2 id="admin-convs-heading">{msg('admin-convs-heading')}</h2>
         {/* The table scrolls inside its own box when its columns cannot shrink to the
             screen (320px), so the page itself never scrolls sideways. */}
         <div className="admin-table-wrap">
@@ -226,7 +224,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
 
 
         <div className="edit-form">
-          <h3>{msg('admin-new-conv-heading')}</h3>
+          <h2>{msg('admin-new-conv-heading')}</h2>
           <form onSubmit={submitConversation}>
             <div className="edit-row-fields">
               <label>{msg('admin-label-slug')}<input type="text" placeholder={msg('admin-slug-ph')} required pattern="[a-z0-9]+(-[a-z0-9]+)*" title={msg('admin-slug-title')} value={draft.slug} onChange={(event) => setDraft({...draft, slug: event.target.value})} /></label>
@@ -244,7 +242,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
           </form>
         </div>
 
-        <h3 className="section-heading">{msg('admin-globals-heading')}</h3>
+        <h2>{msg('admin-globals-heading')}</h2>
         <p
           className="muted"
           style={{fontSize: 13, marginBottom: '.75rem'}}
@@ -258,7 +256,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
           </tr>)}</tbody>
         </table> : <p className="muted" style={{fontSize: 14, marginBottom: '1rem'}}>{msg('admin-globals-empty')}</p>}
         <div className="edit-form">
-          <h3>{msg('admin-grant-heading')}</h3>
+          <h2>{msg('admin-grant-heading')}</h2>
           <form onSubmit={submitGrant}>
             <div className="edit-row-fields"><label>{msg('admin-label-wm-username')}<input type="text" required autoComplete="off" placeholder={msg('admin-wm-username-ph')} style={{width: 260}} value={username} onChange={(event) => setUsername(event.target.value)} /></label></div>
             <button type="submit" disabled={grant.isPending}>{msg('admin-btn-grant')}</button>
@@ -270,6 +268,6 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
         <AdminComing what="phase, participation counts, organizers, last action, and following or hiding a consultation" issue={473} />
         <AdminComing what="voucher use, correct and wrong codes per consultation" issue={473} />
       </div>
-    </LegacyShell>
+    </AdminShell>
   );
 }
