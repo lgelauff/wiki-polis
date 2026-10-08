@@ -1,6 +1,7 @@
 import {useEffect} from 'react';
 
 import {useMessage} from '../../i18n/messages';
+import {useAnnounce} from '../admin/admin-announcer';
 
 export type LegacyToastMessage = {
   id: number;
@@ -25,16 +26,24 @@ export function LegacyToast({
   onDismiss: () => void;
 }) {
   const msg = useMessage();
+  // Inside the admin console the shell's always-mounted region reads the toast out, once per
+  // toast id -- so a second identical message is read again, which a role on an element
+  // created together with its text does not reliably do. Elsewhere the toast keeps its role.
+  const announce = useAnnounce();
   useEffect(() => {
     if (!toast) return undefined;
     const timer = window.setTimeout(onDismiss, durations[toast.category]);
     return () => window.clearTimeout(timer);
   }, [onDismiss, toast]);
+  const urgent = toast ? toast.category === 'error' || toast.category === 'warning' : false;
+  const toastId = toast?.id;
+  const toastText = toast?.message;
+  useEffect(() => {
+    if (announce && toastId !== undefined && toastText) announce(toastText, urgent ? 'assertive' : 'polite');
+  }, [announce, toastId, toastText, urgent]);
 
   if (!toast) return null;
-  const role = toast.category === 'error' || toast.category === 'warning'
-    ? 'alert'
-    : 'status';
+  const role = announce ? undefined : urgent ? 'alert' : 'status';
   return (
     <div className={`toast toast--${toast.category}`} role={role}>
       <span className="toast__msg">{toast.message}</span>

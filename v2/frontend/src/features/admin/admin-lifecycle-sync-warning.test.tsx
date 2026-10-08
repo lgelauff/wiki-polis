@@ -38,13 +38,17 @@ test('a failed Polis visibility sync reaches the operator as an alert, not a suc
 
   await advance();
 
-  const toast = await screen.findByRole('alert');
+  const toast = (await screen.findByText(/Phase moved, but updating results visibility/)).closest('.toast');
   expect(toast).toHaveTextContent(
     'Phase moved, but updating results visibility in Polis failed.',
   );
   expect(toast).toHaveTextContent('Moved to: Explore.');
   expect(toast).toHaveClass('toast--error');
   expect(toast).not.toHaveClass('toast--success');
+  // Read out as an alert, through the console's assertive region.
+  expect(document.querySelector('[aria-live="assertive"]')).toHaveTextContent(
+    'Phase moved, but updating results visibility in Polis failed.',
+  );
 });
 
 test('a healthy phase move confirms as a success toast, never an alert', async () => {
@@ -55,6 +59,8 @@ test('a healthy phase move confirms as a success toast, never an alert', async (
   const toast = await screen.findByText('Moved to: Explore.');
   expect(toast.closest('.toast')).toHaveClass('toast--success');
   expect(screen.queryByRole('alert')).toBeNull();
+  expect(document.querySelector('[aria-live="assertive"]')).toBeEmptyDOMElement();
+  expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent('Moved to: Explore.');
 });
 
 test('phaseTransitionToast keeps the worst severity and the server ordering', () => {

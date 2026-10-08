@@ -6,6 +6,8 @@ import {afterEach, expect, test} from 'vitest';
 
 import type {components} from '../../api/schema';
 import {AdminShell} from './admin-shell';
+import {useAnnounce} from './admin-announcer';
+import {LegacyToast} from '../legacy/legacy-toast';
 import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
@@ -57,6 +59,7 @@ function serveSession(overrides: Partial<Session> = {}) {
 }
 
 function renderShell(options: {
+  children?: React.ReactNode;
   data?: Lifecycle;
   gatingType?: 'invite_only' | 'voucher' | 'wiki_based' | null;
   section?: 'overview' | 'settings' | 'moderation' | 'content';
@@ -76,7 +79,7 @@ function renderShell(options: {
             section={options.section ?? 'overview'}
             subPage={options.subPage}
             toast={options.toast ?? null}
-            children={null}
+            children={options.children ?? null}
           />
         </MessageProvider>
       </MemoryRouter>
@@ -372,9 +375,12 @@ test('the frame has one main, one polite live region and no other landmark', asy
   expect(container.querySelectorAll('main')).toHaveLength(1);
   expect(container.querySelector('main')).toHaveAttribute('id', 'main');
   expect(container.querySelector('main')).toHaveAttribute('tabindex', '-1');
-  // One region announces results; the notice slot below it is not a second one.
+  // One polite and one assertive region announce results, both there (and empty) before
+  // the first announcement; the notice slot below them is not a third.
   expect(container.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
+  expect(container.querySelectorAll('[aria-live="assertive"]')).toHaveLength(1);
   expect(container.querySelector('[aria-live="polite"]')).toBeEmptyDOMElement();
+  expect(container.querySelector('[aria-live="assertive"]')).toBeEmptyDOMElement();
   // The notice slot is a non-fixed area at the top of <main>, not a floating overlay.
   const notices = container.querySelector('.admin-shell__notices')!;
   expect(notices).toBe(container.querySelector('main')!.firstElementChild);
@@ -393,4 +399,48 @@ test('under qqx the frame is all keys but the two "also coming" lines', async ()
     'Also coming: Admin home — not available yet (#473)',
     'Also coming: switching between consultations — not available yet (#473)',
   ])).toEqual([]);
+});
+
+/** A button inside the frame that announces through the shell, as a row action does. */
+function AnnounceButton({text, politeness}: {text: string; politeness?: 'polite' | 'assertive'}) {
+  const announce = useAnnounce();
+  return <button type="button" onClick={() => announce?.(text, politeness)}>Act</button>;
+}
+
+test('an announcement from inside the frame is read out, and the same words twice are read twice', async () => {
+  serveSession();
+  const {container} = renderShell({children: <AnnounceButton text="Statement 12 hidden." />});
+
+  const button = await screen.findByRole('button', {name: 'Act'});
+  const region = container.querySelector('[aria-live="polite"]')!;
+  fireEvent.click(button);
+  expect(region).toHaveTextContent('Statement 12 hidden.');
+  const first = region.firstElementChild;
+  fireEvent.click(button);
+  // Same text, new node: the region gets an addition, so a screen reader reads it again.
+  expect(region).toHaveTextContent('Statement 12 hidden.');
+  expect(region.firstElementChild).not.toBe(first);
+  expect(container.querySelector('[aria-live="assertive"]')).toBeEmptyDOMElement();
+});
+
+test('a failure is announced in the assertive region', async () => {
+  serveSession();
+  const {container} = renderShell({children: <AnnounceButton text="Could not save." politeness="assertive" />});
+
+  fireEvent.click(await screen.findByRole('button', {name: 'Act'}));
+  expect(container.querySelector('[aria-live="assertive"]')).toHaveTextContent('Could not save.');
+  expect(container.querySelector('[aria-live="polite"]')).toBeEmptyDOMElement();
+});
+
+test('a toast in the frame reads out through the shell region, not a role of its own', async () => {
+  serveSession();
+  const {container} = renderShell({
+    toast: <LegacyToast toast={{id: 1, category: 'error', message: 'Could not hide the statement.'}} onDismiss={() => {}} />,
+  });
+
+  await screen.findByRole('navigation', {name: 'Admin sections'});
+  const toast = container.querySelector('.toast')!;
+  expect(toast).toHaveTextContent('Could not hide the statement.');
+  expect(toast).not.toHaveAttribute('role');
+  expect(container.querySelector('[aria-live="assertive"]')).toHaveTextContent('Could not hide the statement.');
 });
