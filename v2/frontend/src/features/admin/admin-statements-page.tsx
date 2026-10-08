@@ -446,7 +446,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
             ))}
           </div>
           <label className="admin-sort">
-            {msg('admin-content-sort-aria')}
+            {msg('admin-moderation-sort-aria')}
             <select value={sort} onChange={(event) => setSort(event.target.value as Sort)}>
               <option value="most-responses">{msg('admin-content-sort-most-responses')}</option>
               <option value="oldest">{msg('admin-moderation-sort-oldest')}</option>

@@ -49,24 +49,19 @@ for the same thing: "samenvouwen"/"uitvouwen", "zichtbaar maken", "Niet toegesta
 | `common-cancel` | `Cancel` | MediaWiki core | [`cancel`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `voucher-switch-cancel` | `Cancel` | MediaWiki core | [`cancel`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `adminconv-edit` | `Edit` | MediaWiki core | [`edit`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
-| `stmts-save` | `Save` | MediaWiki core | [`saveprefs`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/preferences/en.json) | GPL-2.0-or-later | en |
 | `admin-save` | `Save` | MediaWiki core | [`saveprefs`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/preferences/en.json) | GPL-2.0-or-later | en |
 | `featured-arg-delete` | `delete` | MediaWiki core | [`delete`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
 | `featured-btn-confirm` | `confirm` | MediaWiki core | [`confirm`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
 | `conv-arg-hide` | `hide` | MediaWiki core | [`hide`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl |
 | `featured-arg-hide` | `hide` | MediaWiki core | [`hide`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
-| `stmts-hide` | `hide` | MediaWiki core | [`hide`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
 | `conv-arg-hidden` | `Hidden` | MediaWiki core | [`revdelete-radio-set`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `featured-arg-hidden` | `hidden` | MediaWiki core | [`revdelete-radio-set`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
-| `stmts-hidden-heading` | `Hidden` | MediaWiki core | [`revdelete-radio-set`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `conv-arg-unhide` | `unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
 | `featured-arg-unhide` | `unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
 | `base-log-in` | `log in` | MediaWiki core | [`loginreqlink`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `base-log-out` | `log out` | MediaWiki core | [`logout`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
 | `conv-crumb-about` | `About` | MediaWiki core | [`about`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `conv-flag-reason-label` | `Reason` | MediaWiki core | [`block-reason`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
-| `flags-th-reason` | `Reason` | MediaWiki core | [`blocklist-reason`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
-| `flags-th-target` | `Target` | MediaWiki core | [`blocklist-target`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `conv-flag-cat-other` | `Other` | MediaWiki core | [`htmlform-selectorother-other`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `conv-flag-details-label` | `Details` | MediaWiki core | [`upload-form-label-infoform-title`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `conv-flag-send` | `Send` | MediaWiki core | [`emailsend`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
