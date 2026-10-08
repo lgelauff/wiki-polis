@@ -15,6 +15,8 @@ import {testMessages} from '../../test/handlers';
 type Lifecycle = components['schemas']['AdminLifecycle'];
 
 const LIFECYCLE_URL = new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString();
+const TERMINATION_URL = new URL('/api/v1/admin/conversations/7/termination', globalThis.location.origin).toString();
+const ARCHIVE_URL = new URL('/api/v1/admin/conversations/7/archive', globalThis.location.origin).toString();
 
 /** An active consultation mid-route: one unmet readiness check, live statistics from an
  *  informed-voting round, and the advanced controls visible. Enough branches in one
@@ -99,6 +101,7 @@ test('renders the admin console from the catalogue English', async () => {
   expect(screen.getByRole('group', {name: 'Phase control mode'})).toBeVisible();
   expect(screen.getByText('1 readiness check still need resolving before Arguments')).toBeVisible();
   expect(screen.getByRole('button', {name: 'Move on to Arguments →'})).toBeDisabled();
+  expect(screen.queryByRole('button', {name: 'Archive consultation'})).not.toBeInTheDocument();
   expect(screen.getByText('1 invite')).toBeVisible();
   expect(screen.getAllByText('12 participants joined').length).toBe(1);
   expect(screen.getByText('Need time to coordinate inviting people back? You can pause first.')).toBeVisible();
@@ -162,6 +165,108 @@ test('renders the closed-consultation description from parameterised sentences',
     .toBe('Closed 1 Jul 2026. Participants can link their Wikimedia username until 1 Sept 2026.');
   expect(screen.getByText('Published')).toBeVisible();
   expect(screen.getByText('The final aggregate report is published and participant activity is closed.')).toBeVisible();
+});
+
+test('does not recommend archiving a published consultation with votes', async () => {
+  server.use(http.get(TERMINATION_URL, () => HttpResponse.json({data: {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+    deletion: {state: 'blocked_by_votes', validVoteCount: 3, reason: 'Conversations with votes are retained; archive it instead.'},
+    links: {self: TERMINATION_URL, lifecycle: '/admin/conversations/7'},
+  }})));
+  serve({...closedLifecycle, capabilities: {...closedLifecycle.capabilities, archive: false}});
+  renderConsole();
+
+  await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
+  expect(screen.getByText(/cannot be deleted or archived/i)).toBeVisible();
+  expect(screen.queryByText(/archive it instead/i)).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Archive consultation'})).toBeNull();
+});
+
+test('offers archive for a voted consultation and lets the admin reopen it', async () => {
+  const requestedStates: boolean[] = [];
+  let csrfHeader: string | null = null;
+  server.use(
+    http.get(TERMINATION_URL, () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+      deletion: {state: 'blocked_by_votes', validVoteCount: 3, reason: 'Conversations with votes are retained; archive it instead.'},
+      links: {self: TERMINATION_URL, lifecycle: '/admin/conversations/7'},
+    }})),
+    http.put(ARCHIVE_URL, async ({request}) => {
+      const body = await request.json() as {archived: boolean};
+      requestedStates.push(body.archived);
+      csrfHeader = request.headers.get('X-CSRFToken');
+      const updatedLifecycle = {
+        ...lifecycle,
+        conversation: {...lifecycle.conversation, status: body.archived ? 'archived' as const : 'active' as const},
+      };
+      return HttpResponse.json({data: {archived: body.archived, changed: true, lifecycle: updatedLifecycle}});
+    }),
+  );
+  serve(lifecycle);
+  const confirmation = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+
+  try {
+    renderConsole();
+    await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
+
+    expect(screen.getByText(/archive it instead/i)).toBeVisible();
+    screen.getByRole('button', {name: 'Archive consultation'}).click();
+    expect(confirmation).toHaveBeenCalledWith(expect.stringContaining('reopening restores only its active status'));
+
+    expect(await screen.findByRole('button', {name: 'Reopen consultation'})).toBeVisible();
+    expect(screen.getByText('Archived')).toBeVisible();
+    expect(screen.getByText(/archived consultation has 3 valid responses and cannot be deleted/i)).toBeVisible();
+    expect(requestedStates).toEqual([true]);
+    expect(csrfHeader).toBe('test-csrf-token');
+
+    screen.getByRole('button', {name: 'Reopen consultation'}).click();
+    expect(await screen.findByRole('button', {name: 'Archive consultation'})).toBeVisible();
+    expect(requestedStates).toEqual([true, false]);
+    expect(confirmation).toHaveBeenCalledTimes(2);
+  } finally {
+    confirmation.mockRestore();
+  }
+});
+
+test('does not send an archive request when the admin cancels confirmation', async () => {
+  const requestedStates: boolean[] = [];
+  server.use(
+    http.get(TERMINATION_URL, () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+      deletion: {state: 'blocked_by_votes', validVoteCount: 3, reason: 'Conversations with votes are retained; archive it instead.'},
+      links: {self: TERMINATION_URL, lifecycle: '/admin/conversations/7'},
+    }})),
+    http.put(ARCHIVE_URL, async ({request}) => {
+      const body = await request.json() as {archived: boolean};
+      requestedStates.push(body.archived);
+      return HttpResponse.json({data: {archived: body.archived, changed: true, lifecycle}});
+    }),
+  );
+  serve(lifecycle);
+  const confirmation = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+
+  try {
+    renderConsole();
+    await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
+    screen.getByRole('button', {name: 'Archive consultation'}).click();
+    expect(confirmation).toHaveBeenCalledTimes(1);
+    expect(requestedStates).toEqual([]);
+  } finally {
+    confirmation.mockRestore();
+  }
+});
+
+test('does not offer archive when the lifecycle capability is false', async () => {
+  server.use(http.get(TERMINATION_URL, () => HttpResponse.json({data: {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+    deletion: {state: 'blocked_by_votes', validVoteCount: 3, reason: 'Conversations with votes are retained; archive it instead.'},
+    links: {self: TERMINATION_URL, lifecycle: '/admin/conversations/7'},
+  }})));
+  serve({...lifecycle, capabilities: {...lifecycle.capabilities, archive: false}});
+  renderConsole();
+
+  await screen.findByRole('heading', {name: 'Community strategy'}, {timeout: 10_000});
+  expect(screen.queryByRole('button', {name: 'Archive consultation'})).not.toBeInTheDocument();
 });
 
 test('renders console text from the catalogue, not from source literals', async () => {
