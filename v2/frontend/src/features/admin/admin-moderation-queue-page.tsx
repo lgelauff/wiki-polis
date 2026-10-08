@@ -190,7 +190,7 @@ export function AdminModerationQueuePage({conversationId, csrfToken}: {
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
     >
       <div className="admin-page">
-        <h1>{msg('admin-moderation-queue')}</h1>
+        <h1>{msg('admin-shell-moderation')}</h1>
         <AdminTabStrip label={msg('admin-shell-moderation')} tabs={tabs} current="queue" />
 
         <div className="admin-toolbar">

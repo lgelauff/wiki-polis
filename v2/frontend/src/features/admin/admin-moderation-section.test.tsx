@@ -109,8 +109,11 @@ test('every page of the section carries the strip and marks itself', async () =>
   renderModeration(<AdminModerationQueuePage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/queue');
 
-  expect(await screen.findByRole('heading', {name: 'Queue', level: 1}, {timeout: 10_000}))
+  // The h1 names the section; the strip's current tab names the page, so no heading
+  // repeats it.
+  expect(await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000}))
     .toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Queue'})).toBeNull();
   expect(within(strip()).getAllByRole('link').map((link) => link.textContent))
     .toEqual(['Queue', 'Flags', 'Featured', 'People']);
   expect(within(strip()).getAllByRole('link').map((link) => link.getAttribute('href')))
@@ -132,7 +135,7 @@ test('the queue shows the statements waiting, oldest first, by default', async (
   renderModeration(<AdminModerationQueuePage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/queue');
 
-  await screen.findByRole('heading', {name: 'Queue', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const texts = page().getAllByRole('listitem')
     .map((row) => row.querySelector('.admin-row__text')?.textContent);
   expect(texts[0]).toContain('number 9');
@@ -146,7 +149,7 @@ test('a derived statement names its source, and "Based on" puts it under it', as
   renderModeration(<AdminModerationQueuePage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/queue');
 
-  await screen.findByRole('heading', {name: 'Queue', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const link = screen.getByRole('link', {name: '↳ #11'});
   expect(link).toHaveAttribute('href', '/admin/conversations/7/statements');
   expect(link.closest('.admin-row__text')).toHaveTextContent('A corrected version');
@@ -171,7 +174,7 @@ test('"Based on" puts a correction of a correction under its own source', async 
   renderModeration(<AdminModerationQueuePage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/queue');
 
-  await screen.findByRole('heading', {name: 'Queue', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   fireEvent.change(screen.getByRole('combobox', {name: 'Sort'}), {target: {value: 'based-on'}});
   const texts = page().getAllByRole('listitem')
     .map((row) => row.querySelector('.admin-row__text')?.firstChild?.textContent ?? '');
@@ -190,7 +193,7 @@ test('after a row leaves the queue, focus moves to the next row, then to the emp
   renderModeration(<AdminModerationQueuePage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/queue');
 
-  await screen.findByRole('heading', {name: 'Queue', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('button', {name: 'Approve statement 11'}));
   await waitFor(() => expect(screen.getByRole('button', {name: 'Approve statement 12'})).toHaveFocus());
   fireEvent.click(screen.getByRole('button', {name: 'Hide statement 12'}));
@@ -203,7 +206,7 @@ test('approve and hide are two glyphs that name the statement they act on', asyn
   renderModeration(<AdminModerationQueuePage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/queue');
 
-  await screen.findByRole('heading', {name: 'Queue', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const approve = screen.getByRole('button', {name: 'Approve statement 11'});
   const hide = screen.getByRole('button', {name: 'Hide statement 11'});
   // Icon-only: the glyph is hidden from the accessibility tree and the words are the name.
@@ -225,7 +228,7 @@ test('the three-position switch shows which statements are on screen', async () 
   renderModeration(<AdminModerationQueuePage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/queue');
 
-  await screen.findByRole('heading', {name: 'Queue', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const positions = ['Show unmoderated', 'Show approved', 'Show hidden'];
   for (const name of positions) {
     const button = screen.getByRole('button', {name});
@@ -275,7 +278,7 @@ test('the queue names the one thing it cannot show yet', async () => {
   renderModeration(<AdminModerationQueuePage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/queue');
 
-  await screen.findByRole('heading', {name: 'Queue', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const lines = page().getAllByText(/^Also coming:/);
   expect(lines).toHaveLength(1);
   expect(lines[0]).toHaveTextContent(
@@ -316,7 +319,7 @@ test('flags are one row each, with the reason as a suffix and two ways to close 
   renderModeration(<AdminModerationFlagsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/flags');
 
-  await screen.findByRole('heading', {name: 'Flags', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const row = page().getByRole('listitem');
   expect(row).toHaveTextContent('A statement with a real name in it.');
   // The way to the flagged content, as a muted glyph that names itself.
@@ -361,7 +364,7 @@ test('a flag someone else already resolved says so', async () => {
   renderModeration(<AdminModerationFlagsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/flags');
 
-  await screen.findByRole('heading', {name: 'Flags', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('button', {name: 'Remove'}));
   expect(await screen.findByRole('alert')).toHaveTextContent('Flag was already resolved.');
 });
@@ -391,7 +394,7 @@ test('the flags page switches between statements and arguments when the data has
   renderModeration(<AdminModerationFlagsPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/flags');
 
-  await screen.findByRole('heading', {name: 'Flags', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   expect(screen.getByText('A flagged statement.')).toBeVisible();
   expect(screen.queryByText('A flagged argument.')).toBeNull();
   // Each position carries its count, so argument flags are found from the statements side.
@@ -424,7 +427,7 @@ test('people are one row each, with their state and the control that changes it'
   renderModeration(<AdminModerationPeoplePage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/people');
 
-  await screen.findByRole('heading', {name: 'People', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const row = page().getByRole('listitem');
   expect(row).toHaveTextContent('quiet-otter');
   expect(row).toHaveTextContent('Active');
@@ -475,7 +478,7 @@ test('a person shows since when and why only while blocked, and an unchanged unb
   renderModeration(<AdminModerationPeoplePage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/people');
 
-  await screen.findByRole('heading', {name: 'People', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const [blocked, allowed] = page().getAllByRole('listitem');
   expect(blocked).toHaveTextContent('Banned since 2026-08-10 · Repeated spam.');
   expect(allowed).toHaveTextContent('Active');
@@ -490,7 +493,7 @@ test('Featured is today’s page under the strip, arguments and all', async () =
   renderModeration(<AdminFeaturedPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/featured');
 
-  await screen.findByRole('heading', {name: 'Featured', level: 1}, {timeout: 10_000});
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   expect(within(strip()).getByRole('link', {name: 'Featured'}))
     .toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('heading', {name: 'Confirmed (1)'})).toBeVisible();

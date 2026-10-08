@@ -310,7 +310,8 @@ test('matches legacy featured-statement administration and commands', async () =
 
   // #473: the old .../featured path redirects to Moderation > Featured, which is headed
   // like every other page of the section.
-  expect(await screen.findByRole('heading', {name: 'Featured', level: 1})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Moderation', level: 1})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Featured'})).toBeNull();
   expect(screen.getByRole('heading', {name: 'Confirmed (1)'})).toBeVisible();
   expect(screen.getByText('An approved seed statement.')).toBeVisible();
   expect(screen.getByText('A candidate preserving another viewpoint.')).toBeVisible();
@@ -364,7 +365,8 @@ test('resolves a privacy-safe moderation item through the typed contract', async
   // carries the resolution-note field (#478's Keep/Remove buttons replace it) or the
   // flagger-identity paragraph (quiet screens: no explanatory sentences), and the row is
   // the flagged text with the reason as its suffix, so no target label is printed.
-  expect(await screen.findByRole('heading', {name: 'Flags', level: 1})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Moderation', level: 1})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Flags'})).toBeNull();
   expect(screen.getByText('A statement containing private information.')).toBeVisible();
   // The reason is a muted suffix on the flagged text, not a field of its own.
   expect(screen.getByText(/Privacy violation/)).toHaveClass('admin-row__suffix');
@@ -597,8 +599,9 @@ test.each([
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {name: heading, level: 1}, {timeout: 10_000}))
+  expect(await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000}))
     .toBeVisible();
+  expect(screen.queryByRole('heading', {name: heading})).toBeNull();
   expect(within(screen.getByRole('navigation', {name: 'Moderation'})).getByRole('link', {name: heading}))
     .toHaveAttribute('aria-current', 'page');
 });

@@ -120,7 +120,7 @@ export function AdminModerationPeoplePage({conversationId, csrfToken}: {
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
     >
       <div className="admin-page">
-        <h1>{msg('admin-moderation-people')}</h1>
+        <h1>{msg('admin-shell-moderation')}</h1>
         <AdminTabStrip label={msg('admin-shell-moderation')}
           tabs={moderationTabs(conversationId, msg)} current="people" />
 
