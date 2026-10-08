@@ -1,6 +1,8 @@
 """Explore-phase read model and server-side Particiapi gateway."""
 
 import hashlib
+import heapq
+from collections import deque
 from dataclasses import dataclass
 
 import requests
@@ -263,62 +265,112 @@ def normalise_statements(payload: dict) -> list[dict]:
 FAMILY_MIN_DISTANCE = 1
 
 
-def _family_root(statement_id: int, families: dict | None) -> int:
-    """The family root of a statement. A statement the caller did not pass is its own root."""
-    return (families or {}).get(statement_id, statement_id)
-
-
 def space_by_family(statements: list[dict], families: dict | None,
                     min_distance: int = FAMILY_MIN_DISTANCE) -> list[dict]:
     """Reorder a deck so that no two statements of one family are closer than `min_distance`.
 
-    One deterministic pass over the whole deck (#504), which keeps each family's statements
-    in the order the deck had them:
+    One deterministic pass over the deck in its existing order (#504). At each step, with
+    `left` statements of a family still to place and `remaining` statements in all:
 
-    - take the first remaining statement that fits the last `min_distance` placed families;
-    - of those, serve first the family with most statements left, because that is the one
-      that runs out of room first (tie: the one earliest in the deck);
-    - when nothing fits (one family left, or `min_distance` 0), take the first remaining one,
-      so a deck of one family is still served whole and in order.
+    1. if a family is *critical* — it can no longer be kept apart unless one of its members
+       is placed now, i.e. ``left > ceil((remaining - 1) / (min_distance + 1))`` (for
+       distance 1: ``2 * left > remaining``) — take the first remaining member of that family,
+       if it fits the window of the last `min_distance` placed;
+    2. otherwise take the first remaining statement whose family differs from the last
+       `min_distance` placed;
+    3. if none fits, take the first remaining statement (one family left: served in order).
 
-    Taking the first *fitting* statement instead would waste the statements of other
-    families early: it leaves a family that is clustered late in the deck with no separator
-    left, and the rule then fails on decks where separation was possible. Ranking the
-    candidates by how many statements their family has left avoids that.
+    Each family keeps its own deck order, and a statement only moves where separation forces
+    it, so seeds keep their place at the front unless a family needs room. For distance 1
+    the pass separates every deck for which a separation exists (largest family at most
+    ``ceil(n / 2)``); for a larger distance it is best effort.
 
-    Deterministic (the same deck and families always give the same order) and a no-op when
-    every statement is its own root, so a caller that passes no families keeps the deck.
+    Considered and not used (owner, 2026-10-08): always serving the family with the most
+    statements left first. It separates as often, but front-loads every family to the start
+    of every participant's deck, ahead of the per-participant order and the seeds. It may
+    come back later as an opt-in, cf. #506.
+
+    Cost: roots are looked up once; without any family of two or more the deck is returned
+    unchanged. Otherwise O(n log n) for n statements (a heap of family heads and a lazy
+    max-heap of family sizes; each step touches at most `min_distance` + a few entries).
+    Deterministic: the same deck and families always give the same order.
     """
-    remaining = list(statements)
-    counts: dict[int, int] = {}
-    for statement in remaining:
-        root = _family_root(statement['id'], families)
-        counts[root] = counts.get(root, 0) + 1
-    placed: list[dict] = []
+    lookup = families or {}
+    roots = [lookup.get(statement['id'], statement['id']) for statement in statements]
+    queues: dict[int, deque] = {}
+    for position, root in enumerate(roots):
+        queues.setdefault(root, deque()).append(position)
+    if min_distance < 1 or all(len(queue) < 2 for queue in queues.values()):
+        return list(statements)
+
+    # Heads: (deck position of the family's first remaining member, root). One live entry
+    # per family; an entry is stale once that member has been placed.
+    heads = [(queue[0], root) for root, queue in queues.items()]
+    heapq.heapify(heads)
+    # Sizes: (-left, head position, root); an entry is stale once its `left` changed.
+    sizes = [(-len(queue), queue[0], root) for root, queue in queues.items()]
+    heapq.heapify(sizes)
+
+    def live_head(entry):
+        queue = queues[entry[1]]
+        return bool(queue) and queue[0] == entry[0]
+
+    def live_size(entry):
+        return len(queues[entry[2]]) == -entry[0]
+
+    placed_roots: list[int] = []
+    order: list[dict] = []
+    remaining = len(statements)
     while remaining:
-        window = [
-            _family_root(statement['id'], families)
-            for statement in placed[-min_distance:] if min_distance > 0
-        ]
-        fitting = [
-            position for position, statement in enumerate(remaining)
-            if _family_root(statement['id'], families) not in window
-        ]
-        if fitting:
-            need = max(
-                counts[_family_root(remaining[position]['id'], families)]
-                for position in fitting
-            )
-            take = next(
-                position for position in fitting
-                if counts[_family_root(remaining[position]['id'], families)] == need
-            )
-        else:
-            take = 0
-        statement = remaining.pop(take)
-        counts[_family_root(statement['id'], families)] -= 1
-        placed.append(statement)
-    return placed
+        window = set(placed_roots[-min_distance:])
+        threshold = -(-(remaining - 1) // (min_distance + 1))  # ceil((remaining-1)/(d+1))
+        take_root = None
+
+        # 1. A critical family that fits; if several, the one whose next member comes first.
+        popped = []
+        critical = []
+        while sizes:
+            entry = sizes[0]
+            if not live_size(entry):
+                heapq.heappop(sizes)
+                continue
+            if -entry[0] <= threshold:
+                break
+            popped.append(heapq.heappop(sizes))
+            if entry[2] not in window:
+                critical.append((queues[entry[2]][0], entry[2]))
+        for entry in popped:
+            heapq.heappush(sizes, entry)
+        if critical:
+            take_root = min(critical)[1]
+
+        # 2./3. The first remaining statement that fits, else the first remaining.
+        if take_root is None:
+            skipped = []
+            while heads:
+                entry = heads[0]
+                if not live_head(entry):
+                    heapq.heappop(heads)
+                    continue
+                if entry[1] in window:
+                    skipped.append(heapq.heappop(heads))
+                    continue
+                take_root = entry[1]
+                break
+            for entry in skipped:
+                heapq.heappush(heads, entry)
+            if take_root is None:
+                take_root = min(skipped)[1]
+
+        queue = queues[take_root]
+        position = queue.popleft()
+        if queue:
+            heapq.heappush(heads, (queue[0], take_root))
+            heapq.heappush(sizes, (-len(queue), queue[0], take_root))
+        order.append(statements[position])
+        placed_roots.append(take_root)
+        remaining -= 1
+    return order
 
 
 def build_explore_state(

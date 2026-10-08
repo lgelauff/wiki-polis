@@ -9,6 +9,10 @@ not part of any family and keep their place at the front of the deck.
 `FAMILY_MIN_DISTANCE = 1` today: at least one statement of another family in between.
 """
 import hashlib
+import math
+import random
+import signal
+from collections import Counter
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,7 +20,7 @@ from sqlalchemy import event
 
 from db import Participation, StatementProvenance, db
 from services.explore import (FAMILY_MIN_DISTANCE, build_explore_state,
-                              normalise_statements)
+                              normalise_statements, space_by_family)
 
 # One meta statement, a seed, five statements that are each their own family, the original
 # 50, its direct rewording 51 and the rewording of that rewording 52 — one family of three.
@@ -185,21 +189,27 @@ def test_the_family_keeps_its_own_order_inside_the_spaced_deck():
     assert family == in_deck_order
 
 
+def _deck(ids):
+    return [{'id': statement_id, 'text': f'Statement {statement_id}',
+             'isMeta': False, 'isSeed': False} for statement_id in ids]
+
+
+def _ids(statements):
+    return [statement['id'] for statement in statements]
+
+
 def test_a_larger_minimum_distance_is_honoured():
-    """#505 will cut the spaced deck into packs; the constant has to be able to grow."""
-    from services.explore import space_by_family
+    """#505 will cut the spaced deck into packs; the constant has to be able to grow.
 
-    statements = normalise_statements(DECK)
-    deck = [statements[index] for index in (7, 8, 9, 3, 6)]
-    spaced = [statement['id'] for statement in space_by_family(deck, FAMILIES, 2)]
+    Family 60 (60, 61) in front of two others: at distance 2 both others go in between."""
+    spaced = _ids(space_by_family(_deck([60, 61, 3, 4]), {61: 60}, 2))
 
-    for index in range(len(spaced) - 2):
-        assert FAMILIES[spaced[index]] != FAMILIES[spaced[index + 2]]
+    assert spaced == [60, 3, 4, 61]
 
 
 def _first_fitting_greedy(deck, families):
-    """The simpler rule `space_by_family` was written against: always take the first
-    remaining statement that fits the window. Kept here as the yardstick it beats."""
+    """The brief's plain rule: always take the first remaining statement that fits the
+    window, else the first remaining. The yardstick the critical-family override beats."""
     remaining = list(deck)
     placed = []
     while remaining:
@@ -211,21 +221,112 @@ def _first_fitting_greedy(deck, families):
     return placed
 
 
-def test_taking_the_first_statement_that_fits_would_break_the_rule():
-    """The yardstick leaves two family members back to back where separation is possible:
-    it spends the other families early, so a family clustered late in the deck runs out of
-    separators. Here it serves 50 and 51 next to each other."""
-    from services.explore import space_by_family
+def _adjacent_pairs(order, families):
+    return [(previous, current) for previous, current in zip(order, order[1:])
+            if families.get(previous, previous) == families.get(current, current)]
 
-    deck = [statement for statement in normalise_statements(DECK)
-            if not statement['isMeta']]
-    greedy = [statement['id'] for statement in _first_fitting_greedy(deck, FAMILIES)]
-    served = [statement['id'] for statement in space_by_family(deck, FAMILIES)]
 
-    assert [previous for previous, current in zip(greedy, greedy[1:])
-            if FAMILIES[previous] == FAMILIES[current]] == [50, 51]
-    assert all(FAMILIES[previous] != FAMILIES[current]
-               for previous, current in zip(served, served[1:]))
+def test_the_plain_rule_fails_where_the_critical_family_override_separates():
+    """The plain rule spends the other statements first, so a family that sits late in the
+    deck runs out of separators. The override takes a family member as soon as the family
+    could otherwise no longer be kept apart (2 * left > remaining), and nothing earlier."""
+    families = {71: 70, 72: 70}
+    deck = _deck([1, 2, 70, 71, 72])
+
+    plain = _ids(_first_fitting_greedy(deck, families))
+    spaced = _ids(space_by_family(deck, families))
+
+    assert _adjacent_pairs(plain, families) == [(70, 71), (71, 72)]
+    assert spaced == [70, 1, 71, 2, 72]
+
+    # The test deck: the plain rule puts 50 and 51 together; the override separates them
+    # while keeping the first four statements (the seed first) where they were.
+    deck = [statement for statement in normalise_statements(DECK) if not statement['isMeta']]
+    plain = _ids(_first_fitting_greedy(deck, FAMILIES))
+    spaced = _ids(space_by_family(deck, FAMILIES))
+
+    assert _adjacent_pairs(plain, FAMILIES)
+    assert _adjacent_pairs(spaced, FAMILIES) == []
+    assert spaced == [2, 3, 4, 8, 50, 9, 51, 10, 52]
+
+
+def _random_deck(rng):
+    """A deck of 1..24 statements with random ids, cut into 1..n families of random size."""
+    size = rng.randint(1, 24)
+    ids = rng.sample(range(100, 10_000), size)
+    family_count = rng.randint(1, size)
+    roots = ids[:family_count]
+    families = {statement_id: rng.choice(roots) for statement_id in ids}
+    return _deck(ids), families
+
+
+def test_property_spacing_over_many_seeded_random_decks():
+    """For distance 1: every statement exactly once, and no two family members back to back
+    whenever a separation exists (largest family at most ceil(n / 2))."""
+    separable_with_families = inseparable = 0
+    for seed in range(400):
+        rng = random.Random(seed)
+        deck, families = _random_deck(rng)
+        spaced = _ids(space_by_family(deck, families))
+
+        assert sorted(spaced) == sorted(_ids(deck)), seed
+        sizes = Counter(families.values())
+        if max(sizes.values()) <= math.ceil(len(deck) / 2):
+            assert _adjacent_pairs(spaced, families) == [], (seed, spaced, families)
+            separable_with_families += max(sizes.values()) > 1
+        else:
+            inseparable += 1
+    # The sample really exercises both cases.
+    assert separable_with_families > 100
+    assert inseparable > 20
+
+
+def test_property_without_families_the_order_is_unchanged():
+    for seed in range(200):
+        rng = random.Random(seed)
+        deck, _ = _random_deck(rng)
+        own_roots = {statement['id']: statement['id'] for statement in deck}
+
+        assert _ids(space_by_family(deck, None)) == _ids(deck), seed
+        assert _ids(space_by_family(deck, {})) == _ids(deck), seed
+        assert _ids(space_by_family(deck, own_roots)) == _ids(deck), seed
+
+
+def test_property_served_through_the_explore_state():
+    """The same property through `build_explore_state`, with meta statements and seeds:
+    meta first in their own order, then every other statement exactly once, spaced."""
+    for seed in range(60):
+        rng = random.Random(10_000 + seed)
+        deck, families = _random_deck(rng)
+        payload = {}
+        for statement in deck:
+            payload[str(statement['id'])] = {
+                'id': statement['id'], 'text': statement['text'],
+                'is_seed': rng.random() < 0.2,
+            }
+        meta_ids = rng.sample(range(10, 99), rng.randint(0, 2))
+        for meta_id in meta_ids:
+            payload[str(meta_id)] = {'id': meta_id, 'text': 'Meta', 'is_meta': True}
+        ordering_key = f'random-{seed}'
+
+        answered: list[int] = []
+        while True:
+            state = build_explore_state(
+                statements_payload=payload,
+                participant_payload={'votes': answered, 'statements': []},
+                ordering_key=ordering_key, new_statement_unlock_at=10,
+                new_statement_max=3, new_statements_used=0, families=families,
+            )
+            if state['currentStatement'] is None:
+                break
+            answered.append(state['currentStatement']['id'])
+
+        pin = _pin_order(payload, ordering_key)
+        assert answered[:len(meta_ids)] == pin[:len(meta_ids)], seed
+        rest = answered[len(meta_ids):]
+        assert sorted(rest) == sorted(_ids(deck)), seed
+        if max(Counter(families.values()).values()) <= math.ceil(len(deck) / 2):
+            assert _adjacent_pairs(rest, families) == [], seed
 
 
 # ── the app.py wiring: the route reads the families from the database ──────────
@@ -301,6 +402,13 @@ def test_family_roots_come_from_one_query_and_are_cycle_safe(app, conversation):
         conversation_id=conversation.id, polis_statement_id=32, derived_from_tid=31,
     ))
     db.session.commit()
+    # A real cycle: 30 → 32 closes 32 → 31 → 30 → 32. And 34 hangs under the cycle.
+    db.session.add(StatementProvenance(
+        conversation_id=conversation.id, polis_statement_id=30, derived_from_tid=32,
+    ))
+    db.session.add(StatementProvenance(
+        conversation_id=conversation.id, polis_statement_id=34, derived_from_tid=32,
+    ))
     # A row pointing at a statement that has no row at all: the walk stops there.
     db.session.add(StatementProvenance(
         conversation_id=conversation.id, polis_statement_id=33, derived_from_tid=99,
@@ -312,14 +420,25 @@ def test_family_roots_come_from_one_query_and_are_cycle_safe(app, conversation):
     def count(connection, cursor, statement, *args):
         queries.append(str(statement))
 
+    def endless(signum, frame):
+        raise AssertionError('the walk did not terminate on a provenance cycle')
+
+    # Termination: a walk that loops on the cycle is stopped after 5 s and fails the test.
+    previous_handler = signal.signal(signal.SIGALRM, endless)
+    signal.alarm(5)
     event.listen(db.engine, 'before_cursor_execute', count)
     try:
         roots = _statement_family_roots(conversation.id)
         lineage = _lineage_group(conversation.id, 32)
     finally:
         event.remove(db.engine, 'before_cursor_execute', count)
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
-    assert roots == {31: 30, 32: 30, 33: 99}
+    # Every member of the cycle, and what hangs under it, gets the same root (the cycle's
+    # smallest id), whichever member the walk starts from.
+    assert roots == {30: 30, 31: 30, 32: 30, 34: 30, 33: 99}
+    # `_lineage_group` keeps its behaviour: it stops where the cycle closes.
     assert lineage == [32, 31, 30]
     provenance_queries = [query for query in queries if 'statement_provenance' in query]
     assert len(provenance_queries) == 2, provenance_queries

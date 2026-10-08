@@ -5310,13 +5310,20 @@ def _parent_map(conv_id):
 
 
 def _family_root(by_tid, tid):
-    """Walk `derived_from_tid` up from `tid` and return the root. Cycle-safe."""
+    """Walk `derived_from_tid` up from `tid` and return the root. Cycle-safe.
+
+    The walk is the one :func:`_lineage_group` does. A cycle has no root, so its smallest
+    id stands in for one: every statement on or under the cycle then gets the same root,
+    whichever member the walk started from.
+    """
+    path = [tid]
     seen = {tid}
     cur = tid
     while cur in by_tid:
         parent = by_tid[cur]
         if parent in seen:          # defensive: stop on any cycle
-            break
+            return min(path[path.index(parent):])
+        path.append(parent)
         seen.add(parent)
         cur = parent
     return cur
