@@ -252,15 +252,17 @@ test('the three "Also coming" lines are muted English and nothing else', async (
     'Also coming: voucher use, correct and wrong codes per consultation — not available yet (#473)',
   ]);
   for (const line of lines) {
-    // Outside the console frame, so the legacy frame's muted text, not `admin-shell__coming`
-    // (whose colour token is declared on `.admin-shell` only).
-    expect(line).toHaveClass('muted');
+    // The one "Also coming" component and class of the whole console, outside its frame too.
+    expect(line).toHaveClass('admin-shell__coming');
     expect(line).toHaveAttribute('lang', 'en');
     // `<main tabindex="-1">` is the frame's skip target, not a control these lines live in.
     expect(line.closest('a, button')).toBeNull();
     expect(line).not.toHaveAttribute('tabindex');
     expect(line.parentElement?.closest('a, button, [tabindex]:not(main)')).toBeNull();
   }
+  // Last on the page, after everything that works.
+  const page = lines[0]!.parentElement!;
+  expect(Array.from(page.children).slice(-3)).toEqual(lines);
 });
 
 test('under a key-id catalogue the page is all keys and the three coming lines', async () => {

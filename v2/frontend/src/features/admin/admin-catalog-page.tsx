@@ -10,6 +10,7 @@ import {
   postGlobalAdminGrant,
   putGlobalAdmin,
 } from '../../api/queries';
+import {AdminComing} from './admin-coming';
 import {LegacyShell} from '../legacy/legacy-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
@@ -198,7 +199,6 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
       <div className="container">
         <h2>{msg('admin-site-dashboard')}</h2>
 
-        <p className="muted" lang="en">Also coming: Admin home, one table of the consultations you have a role in — not available yet (#473)</p>
 
         <h3 className="section-heading" id="admin-convs-heading">{msg('admin-convs-heading')}</h3>
         {/* The table scrolls inside its own box when its columns cannot shrink to the
@@ -224,7 +224,6 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
           ))}
         </Group>}
 
-        <p className="muted" lang="en">Also coming: phase, participation counts, organizers, last action, and following or hiding a consultation — not available yet (#473)</p>
 
         <div className="edit-form">
           <h3>{msg('admin-new-conv-heading')}</h3>
@@ -266,7 +265,10 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
           </form>
         </div>
 
-        <p className="muted" lang="en">Also coming: voucher use, correct and wrong codes per consultation — not available yet (#473)</p>
+        {/* What is not built yet, last on the page (see `AdminComing`). */}
+        <AdminComing what="Admin home, one table of the consultations you have a role in" issue={473} />
+        <AdminComing what="phase, participation counts, organizers, last action, and following or hiding a consultation" issue={473} />
+        <AdminComing what="voucher use, correct and wrong codes per consultation" issue={473} />
       </div>
     </LegacyShell>
   );
