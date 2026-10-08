@@ -265,7 +265,7 @@ export function AdminSettingsVouchersPage({conversationId}: {conversationId: num
       lifecycle={lifecycle}
       tab="vouchers"
     >
-      <p className="admin-shell__coming" lang="en">Also coming: generating, importing, checking and withdrawing voucher codes here — not available yet (#368)</p>
+      <AdminComing what="generating, importing, checking and withdrawing voucher codes here" issue={368} />
     </AdminSettingsFrame>
   );
 }

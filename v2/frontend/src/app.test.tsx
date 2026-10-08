@@ -373,7 +373,24 @@ test('resolves a privacy-safe moderation item through the typed contract', async
   expect(screen.getByText('Statement #12')).toBeVisible();
 });
 
+/** Serves settings whose answer to who gets in is the invitation list: the Invitations tab
+ *  offers its add form only then. */
+function serveInvitationListSettings() {
+  server.use(http.get(
+    new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(),
+    () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', introHtml: '<p>Shape the future.</p>', outroHtml: '', accessPolicy: 'invite_only', gated: true, gatingType: 'invite_only', announce: false, information: false, resultsShared: false, showUsernames: false, accessRequestText: null, phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},
+      recommendations: {tier: 'medium', tiers: [
+        {key: 'medium', label: 'Medium topic', quantities: {seed_statements: 8, featured_statements: 15}},
+      ]},
+      eligibility: {configured: false, eventId: '', label: null, configurationMode: 'editable', note: 'Leave the event ID blank when no external eligibility check applies.'},
+      capabilities: {edit: true, switchDemo: true}, locks: {gated: false, gatingType: false, showUsernames: false}, links: {self: '/api/v1/admin/conversations/7/settings', lifecycle: '/admin/conversations/7'},
+    }}),
+  ));
+}
+
 test('adds and removes invitations through convergent admin commands', async () => {
+  serveInvitationListSettings();
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/app/admin/conversations/7/invitations']}>
@@ -413,18 +430,10 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(screen.queryByText(/invited ·/)).not.toBeInTheDocument();
 });
 
-test('warns that invites are inert in words, not in stored values', async () => {
-  // The default roster fixture is invite_only, so the warning branch never renders there.
-  // This is the only prose this scope rewrites, and it names one access-policy label.
-  server.use(http.get(
-    new URL('/api/v1/admin/conversations/7/invitations', globalThis.location.origin).toString(),
-    () => HttpResponse.json({data: {
-      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'public'},
-      invitations: [],
-      capabilities: {manageInvitations: true},
-      links: {self: '/api/v1/admin/conversations/7/invitations', conversation: '/admin/conversations/7'},
-    }}),
-  ));
+test('offers no way to add invites while access is not the invitation list', async () => {
+  // A field must work or not be shown: with any other answer to who gets in, an added
+  // invite would admit nobody, so neither the form nor a note about it is on the page. The
+  // stored invitations stay listed, each with its remove button.
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/app/admin/conversations/7/invitations']}>
@@ -433,18 +442,16 @@ test('warns that invites are inert in words, not in stored values', async () => 
     </QueryClientProvider>,
   );
 
-  const note = await screen.findByText(/Invites only take effect/);
-  expect(note).toHaveTextContent(
-    'Access is set to Anyone with a Wikimedia account. '
-    + 'Invites only take effect when access is limited to an invitation list.',
-  );
-  // Neither stored value reaches the note, including the one hardcoded in the sentence.
-  // Scoped to the note: the page footer legitimately says "public domain".
-  expect(note.textContent).not.toContain('invite_only');
-  expect(note.textContent).not.toMatch(/\bpublic\b/);
+  expect(await screen.findByText('Existing editor')).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Add invites'})).toBeNull();
+  expect(screen.queryByLabelText('Wikimedia usernames (one per line)')).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Add'})).toBeNull();
+  expect(screen.queryByText(/Invites only take effect/)).toBeNull();
+  expect(screen.getByRole('button', {name: 'Remove invitation for Existing editor'})).toBeVisible();
 });
 
 test('keeps the typed invitation list and shows a toast after a save error', async () => {
+  serveInvitationListSettings();
   server.use(http.put(
     new URL(
       '/api/v1/admin/conversations/7/invitations',

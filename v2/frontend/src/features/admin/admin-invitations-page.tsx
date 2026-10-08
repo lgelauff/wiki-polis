@@ -100,6 +100,10 @@ export function AdminInvitationsPage({
   // account with this exact name has logged in to the site yet, so the
   // invitation is not bound to an account.
   const linked = data.invitations.filter((invitation) => invitation.signedIn).length;
+  // A field must work or not be shown (#478): invites only admit anyone while the
+  // invitation list is the answer to who gets in, so only then can more be added. The
+  // stored list stays visible either way, with its remove buttons.
+  const invitationList = settings.conversation.gatingType === 'invite_only';
   return (
     <AdminSettingsFrame
       conversationId={conversationId}
@@ -121,16 +125,7 @@ export function AdminInvitationsPage({
           </p>
         )}
 
-        {data.conversation.accessPolicy !== 'invite_only' && (
-          <div className="landing-section">
-            <p className="muted">
-              Access is set to <strong>{accessPolicyLabel(msg, data.conversation.accessPolicy)}</strong>.
-              {' '}Invites only take effect when access is limited to an invitation list.
-            </p>
-          </div>
-        )}
-
-        <div className="edit-form">
+        {invitationList && <div className="edit-form">
           <h2>Add invites</h2>
           <form onSubmit={submit}>
             <label>
@@ -145,7 +140,7 @@ export function AdminInvitationsPage({
             </label>
             <button type="submit">Add</button>
           </form>
-        </div>
+        </div>}
 
         <table className="admin-table">
           <thead>
