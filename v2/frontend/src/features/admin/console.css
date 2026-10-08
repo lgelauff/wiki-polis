@@ -385,14 +385,11 @@
   text-transform: none;
 }
 
-/* A control that cannot be used right now reads as such: greyed, and no pointer that
-   promises a click (the Invitations form while the invitation list is not in effect). */
-.admin-shell .settings-page .edit-form :is(textarea, button):disabled {
-  border-color: var(--shell-line);
+/* A field that cannot be used right now (the Invitations form while the invitation list
+   is not in effect) is greyed as well as faded; the fading is the console's one disabled
+   style, under Buttons. */
+.admin-shell .settings-page :is(textarea, input):disabled {
   background: var(--shell-sunken);
-  color: var(--shell-muted);
-  cursor: not-allowed;
-  opacity: .6;
 }
 
 /* No text on a Settings tab below 12px. */
@@ -538,12 +535,6 @@
   cursor: pointer;
 }
 
-.admin-shell .admin-row__glyph:disabled {
-  color: var(--shell-muted);
-  cursor: default;
-  opacity: .55;
-}
-
 .admin-shell .admin-row__text-button {
   min-block-size: 2rem;
   padding: .25rem .5rem;
@@ -554,6 +545,19 @@
   font-size: 13px;
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* Red only where the action cannot be undone (deleting an argument and its ratings). */
+.admin-shell .admin-row__text-button--danger {
+  color: var(--shell-danger);
+}
+
+/* A link in a row's actions reads like the row's text buttons: it is one of them. */
+.admin-shell .admin-row__link {
+  display: inline-block;
+  padding: .25rem .5rem;
+  color: var(--accent);
+  font-size: 13px;
 }
 
 .admin-shell .admin-row__block-form {
@@ -757,6 +761,41 @@
 
 .admin-shell .settings-form > footer p[role="alert"] {
   color: var(--shell-danger);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+
+/* Two button styles: a quiet one, and the primary one (the console's green) for the one
+   command a form exists for. Row actions are glyph buttons or text buttons (above).
+   Sentence case everywhere; red only for what cannot be undone. The selectors carry
+   `.admin-page` to win over the site stylesheet's button rules. */
+.admin-shell .admin-page .admin-button {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2rem;
+  padding: .25rem .875rem;
+  border: 1px solid var(--shell-line);
+  border-radius: 4px;
+  background: var(--shell-surface);
+  color: var(--shell-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.admin-shell .admin-page .admin-button--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* One disabled look for every control of the console: faded, and no pointer that
+   promises a click. */
+.admin-shell :is(button, input, select, textarea, .admin-button):disabled,
+.admin-shell .admin-page [aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: .5;
 }
 
 /* ── Coming lines ─────────────────────────────────────────────────────────── */

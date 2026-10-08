@@ -332,6 +332,27 @@ test('a seed statement\'s result and refusal are said under its form, never as a
   expect(document.querySelector('.admin-shell__notices')).toBeEmptyDOMElement();
 });
 
+test('a statement row moderates with the Queue\'s glyphs, and can go back to unmoderated', async () => {
+  serveWorkspace({pending: [], approved: [statement(5)], hidden: []});
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
+  const row = list().getByRole('listitem');
+  const approve = within(row).getByRole('button', {name: 'Approve statement 5'});
+  const hide = within(row).getByRole('button', {name: 'Hide statement 5'});
+  const back = within(row).getByRole('button', {name: 'Move statement 5 back to unmoderated'});
+  // The same icon-only buttons as Moderation › Queue, named by their words.
+  for (const button of [approve, hide, back]) {
+    expect(button).toHaveClass('admin-row__glyph');
+    expect(button).toHaveAttribute('title', button.getAttribute('aria-label'));
+  }
+  expect(approve.querySelector('[aria-hidden="true"]')).toHaveTextContent('✓');
+  expect(approve).toBeDisabled();
+  expect(hide).toBeEnabled();
+  expect(within(row).queryByRole('button', {name: /^(approve|hide|pending)$/})).toBeNull();
+});
+
 test('the statement page names the one thing it cannot show yet', async () => {
   serveWorkspace({pending: [], approved: [], hidden: []});
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
@@ -361,9 +382,14 @@ test('participants are one row each, with today’s figures and the access contr
   expect(row).toHaveTextContent('Statements remaining');
   expect(row).toHaveTextContent('Arguments submitted');
   expect(row).toHaveTextContent('2026-08-13');
-  // The access control is the same one the participants page has always had.
-  expect(within(row).getByPlaceholderText('Reason (optional)')).toBeVisible();
-  expect(within(row).getByRole('button', {name: 'Block — Example editor'})).toBeVisible();
+  // The access control is Moderation › People's: a labelled field and a text button in
+  // the row's block form, not a boxed red button under a bare input (#473 D2). Both carry
+  // the person's name after the visible words, to tell this row's from the next one's.
+  expect(within(row).getByRole('textbox', {name: 'Reason (optional) — Example editor'})).toBeVisible();
+  const block = within(row).getByRole('button', {name: 'Block — Example editor'});
+  expect(block).toHaveClass('admin-row__text-button');
+  expect(block.closest('form')).toHaveClass('admin-row__block-form');
+  expect(block).not.toHaveClass('btn-danger');
 
   // Once banned, the row says "Blocked since …" once, beside the name.
   fireEvent.click(within(row).getByRole('button', {name: 'Block — Example editor'}));

@@ -180,7 +180,7 @@ export function AdminInvitationsPage({
               />
             </label>
             <div className="admin-form__actions">
-              <button type="submit" disabled={!invitationList || addMutation.isPending}
+              <button type="submit" className="admin-button admin-button--primary" disabled={!invitationList || addMutation.isPending}
                 aria-describedby={invitationList ? undefined : unavailableId}>Add</button>
             </div>
             {/* The status line is always mounted, keyed per attempt, so a repeat is read again. */}
@@ -204,21 +204,16 @@ export function AdminInvitationsPage({
                   <td>{invitation.signedIn ? 'Linked' : 'Never logged in'}</td>
                   <td className="muted">{formatLegacyDate(invitation.createdAt)}</td>
                   <td>
-                    <form
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        removeMutation.mutate(invitation.id);
-                      }}
-                      style={{display: 'inline'}}
+                    {/* Not red: a removed invitation can be added again. */}
+                    <button
+                      type="button"
+                      className="admin-row__text-button"
+                      disabled={removeMutation.isPending}
+                      aria-label={`Remove invitation for ${invitation.username}`}
+                      onClick={() => removeMutation.mutate(invitation.id)}
                     >
-                      <button
-                        type="submit"
-                        className="btn-small btn-danger"
-                        aria-label={`Remove invitation for ${invitation.username}`}
-                      >
-                        remove
-                      </button>
-                    </form>
+                      {msg('admin-btn-remove')}
+                    </button>
                   </td>
                 </tr>
               ))}

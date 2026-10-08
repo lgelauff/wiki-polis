@@ -62,15 +62,15 @@ function ConversationRow({conversation}: {conversation: Row}) {
         <span className={statusClass(conversation.status)}>{statusLabel(msg, conversation.status)}</span>
       </td>
       <td>
-        <InternalLink href={conversation.links.manage} className="btn-small">
+        <InternalLink href={conversation.links.manage} className="admin-row__link">
           {msg('admin-btn-manage')}
         </InternalLink>
         {' '}
         {/* The settings page hangs off the manage path the server itself builds
             (`_admin_client_link` in app.py), so the link is derived from that link
             rather than from a second copy of the admin route table here. */}
-        <InternalLink href={`${conversation.links.manage}/settings`} className="btn-small">
-          {msg('admin-site-link-settings')}
+        <InternalLink href={`${conversation.links.manage}/settings`} className="admin-row__link">
+          {msg('admin-overview-card-settings')}
         </InternalLink>
       </td>
     </tr>
@@ -230,7 +230,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
             <label className="admin-field">{msg('admin-label-intro')}<textarea rows={4} value={draft.introHtml} onChange={(event) => setDraft({...draft, introHtml: event.target.value})} /></label>
             <label className="admin-field">{msg('admin-label-outro')}<textarea rows={4} value={draft.outroHtml} onChange={(event) => setDraft({...draft, outroHtml: event.target.value})} /></label>
             <div className="admin-form__actions">
-              <button type="submit" disabled={creation.isPending}>{msg('admin-btn-create-conv')}</button>
+              <button type="submit" className="admin-button admin-button--primary" disabled={creation.isPending}>{msg('admin-btn-create-conv')}</button>
             </div>
             {createError && <p className="admin-error" role="alert">{createError}</p>}
           </form>
@@ -246,7 +246,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
           <thead><tr><th>{msg('admin-th-username')}</th><th /></tr></thead>
           <tbody>{data.globalAdmins.map((admin) => <tr key={admin.participantId}>
             <td>{admin.username}</td>
-            <td><button type="button" className="btn-small btn-danger" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}{' '}<span className="sr-only">{`— ${admin.username}`}</span></button></td>
+            <td><button type="button" className="admin-row__text-button" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}{' '}<span className="sr-only">{`— ${admin.username}`}</span></button></td>
           </tr>)}</tbody>
         </table> : <p className="muted" style={{fontSize: 14, marginBottom: '1rem'}}>{msg('admin-globals-empty')}</p>}
         <div className="edit-form">
@@ -257,7 +257,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
               onChange={(event) => setUsername(event.target.value)} /></label>
             {grantError && <p className="admin-error" id={grantErrorId} role="alert">{grantError}</p>}
             <div className="admin-form__actions">
-              <button type="submit" disabled={grant.isPending}>{msg('admin-btn-grant')}</button>
+              <button type="submit" className="admin-button admin-button--primary" disabled={grant.isPending}>{msg('admin-btn-grant')}</button>
             </div>
           </form>
         </div>

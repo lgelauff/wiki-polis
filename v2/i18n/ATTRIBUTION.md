@@ -24,6 +24,7 @@ Chosen from MediaWiki's catalogue to replace wording of our own.
 |---|---|---|---|---|---|
 | `common-err-nologin` | `Please log in to be able to access this page or action.` | MediaWiki core | [`exception-nologin-text`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `errorpage-500-title` | `Something went wrong` | OOUI | [`ooui-dialog-process-error`](https://github.com/wikimedia/oojs-ui/blob/master/i18n/en.json) | MIT | en, nl |
+| `admin-btn-remove` | `Remove` | OOUI | [`ooui-item-remove`](https://github.com/wikimedia/oojs-ui/blob/master/i18n/en.json) | MIT | en |
 | `base-dismiss` | `Close` | MediaWiki core (Codex messages) | [`cdx-message-dismiss-button-label`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/codex/en.json) | GPL-2.0-or-later | en, nl |
 | `base-skip-to-content` | `Jump to content` | Vector skin | [`vector-jumptocontent`](https://github.com/wikimedia/mediawiki-skins-Vector/blob/master/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `common-loading` | `Loading…` | MobileFrontend | [`mobile-frontend-loading-message`](https://github.com/wikimedia/mediawiki-extensions-MobileFrontend/blob/master/i18n/en.json) | GPL-2.0-or-later | en, nl |
@@ -53,14 +54,14 @@ for the same thing: "samenvouwen"/"uitvouwen", "zichtbaar maken", "Niet toegesta
 | `voucher-switch-cancel` | `Cancel` | MediaWiki core | [`cancel`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `adminconv-edit` | `Edit` | MediaWiki core | [`edit`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `admin-save` | `Save` | MediaWiki core | [`saveprefs`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/preferences/en.json) | GPL-2.0-or-later | en |
-| `featured-arg-delete` | `delete` | MediaWiki core | [`delete`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
-| `featured-btn-confirm` | `confirm` | MediaWiki core | [`confirm`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
+| `featured-arg-delete` | `Delete` | MediaWiki core | [`delete`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
+| `featured-btn-confirm` | `Confirm` | MediaWiki core | [`confirm`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `conv-arg-hide` | `hide` | MediaWiki core | [`hide`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl |
-| `featured-arg-hide` | `hide` | MediaWiki core | [`hide`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
+| `featured-arg-hide` | `Hide` | MediaWiki core | [`hide`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en |
 | `conv-arg-hidden` | `Hidden` | MediaWiki core | [`revdelete-radio-set`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `featured-arg-hidden` | `hidden` | MediaWiki core | [`revdelete-radio-set`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
 | `conv-arg-unhide` | `unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
-| `featured-arg-unhide` | `unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en (lowercased) |
+| `featured-arg-unhide` | `Unhide` | Flow | [`flow-post-action-unhide-post`](https://github.com/wikimedia/mediawiki-extensions-Flow/blob/master/i18n/en.json) | GPL-2.0-or-later | en |
 | `base-log-in` | `log in` | MediaWiki core | [`loginreqlink`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `base-log-out` | `log out` | MediaWiki core | [`logout`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (lowercased), nl (lowercased) |
 | `conv-crumb-about` | `About` | MediaWiki core | [`about`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
@@ -104,7 +105,7 @@ the contributors to each project, as listed in its history and, for MediaWiki co
 
 ### OOUI (MIT)
 
-Applies to `errorpage-500-title`.
+Applies to `errorpage-500-title` and `admin-btn-remove`.
 
 ```
 Copyright 2011-2025 OOUI Team and other contributors.

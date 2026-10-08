@@ -101,7 +101,7 @@ export function AdminRolesPage({conversationId, csrfToken}: {
                 <input type="checkbox" checked={chosen.includes(role)} onChange={() => toggle(role)} /> {role}
               </label>)}
             </fieldset>
-            <button type="submit" disabled={participantId === null || mutation.isPending}>{mutation.isPending ? 'Saving…' : 'Save role set'}</button>
+            <button type="submit" className="admin-button admin-button--primary" disabled={participantId === null || mutation.isPending}>{mutation.isPending ? 'Saving…' : 'Save role set'}</button>
             {/* Always mounted, keyed per save: a repeat of the same result is read again. */}
             <div role="status">
               {mutation.isSuccess && <p key={mutation.submittedAt}>Added: {mutation.data.added.join(', ') || 'none'} · Removed: {mutation.data.removed.join(', ') || 'none'}</p>}

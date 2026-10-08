@@ -164,9 +164,9 @@ test('a title opens the participant view and "manage" the console, on one reques
 
   expect(screen.getByRole('link', {name: 'Community strategy'}))
     .toHaveAttribute('href', '/c/community-strategy');
-  expect(screen.getByRole('link', {name: 'manage'}))
+  expect(screen.getByRole('link', {name: 'Manage'}))
     .toHaveAttribute('href', '/admin/conversations/7');
-  expect(screen.getByRole('link', {name: 'settings'}))
+  expect(screen.getByRole('link', {name: 'Settings'}))
     .toHaveAttribute('href', '/admin/conversations/7/settings');
   expect(catalogRequests).toBe(1);
 });
@@ -221,7 +221,7 @@ test('retiring a site admin puts granted:false', async () => {
 
   // The button carries whose role it removes after its visible word, so two rows' Removes
   // are told apart by name.
-  fireEvent.click(screen.getByRole('button', {name: 'remove — adminuser'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Remove — adminuser'}));
   await waitFor(() => expect(sent).toEqual([{participantId: 1, body: {granted: false}}]));
 });
 

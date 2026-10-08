@@ -1,4 +1,4 @@
-import {useCallback, useId, useState, type FormEvent, type ReactNode} from 'react';
+import {useCallback, useId, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -49,25 +49,6 @@ function ProvenanceBadge({provenance}: {provenance: Provenance}) {
   );
 }
 
-function InlineForm({children, className, onSubmit}: {
-  children: ReactNode;
-  className?: string;
-  onSubmit: () => void;
-}) {
-  return (
-    <form
-      className={className}
-      style={{display: 'inline', flexShrink: 0}}
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit();
-      }}
-    >
-      {children}
-    </form>
-  );
-}
-
 function SelectedRow({
   selection,
   conversationId,
@@ -83,6 +64,7 @@ function SelectedRow({
   refresh: () => void;
   showError: (message: string) => void;
 }) {
+  const msg = useMessage();
   const remove = useMutation({
     mutationFn: () => deleteAdminFeaturedSelection(
       conversationId, selection.featuredId, csrfToken,
@@ -129,39 +111,41 @@ function SelectedRow({
               <span style={{flex: 1, minWidth: 120, color: 'var(--body)'}}>{argument.body}</span>
               <span style={{color: 'var(--muted)', whiteSpace: 'nowrap'}}>{argument.proposerPseudonym ?? '—'}</span>
               <span style={{color: 'var(--muted)', whiteSpace: 'nowrap'}}>{argument.createdAt?.slice(0, 10) ?? ''}</span>
-              <InlineForm onSubmit={() => visibility.mutate({id: argument.id, hidden: !argument.hidden})}>
-                <input type="hidden" name="csrf_token" value={csrfToken} />
-                <input type="hidden" name="hidden" value={argument.hidden ? '0' : '1'} />
-                <button type="submit" className="btn-small" disabled={visibility.isPending}>{argument.hidden ? 'unhide' : 'hide'}</button>
-              </InlineForm>
-              <InlineForm onSubmit={() => {
-                if (globalThis.confirm(deleteArgumentMessage)) deletion.mutate(argument.id);
-              }}>
-                <input type="hidden" name="csrf_token" value={csrfToken} />
-                <button type="submit" className="btn-small btn-danger" disabled={deletion.isPending}>delete</button>
-              </InlineForm>
+              <button type="button" className="admin-row__text-button" disabled={visibility.isPending}
+                onClick={() => visibility.mutate({id: argument.id, hidden: !argument.hidden})}>
+                {argument.hidden ? msg('featured-arg-unhide') : msg('featured-arg-hide')}
+              </button>
+              {/* Red and confirmed: deleting an argument and its ratings cannot be undone. */}
+              <button type="button" className="admin-row__text-button admin-row__text-button--danger"
+                disabled={deletion.isPending}
+                onClick={() => {
+                  if (globalThis.confirm(deleteArgumentMessage)) deletion.mutate(argument.id);
+                }}>
+                {msg('featured-arg-delete')}
+              </button>
             </div>
           )) : <p style={{fontSize: 12, color: 'var(--body)', margin: '4px 0 0'}}>no arguments yet</p>}
         </div>
       </td>
       <td style={{verticalAlign: 'top'}}>
-        <InlineForm onSubmit={() => {
-          if (!informedVotingLive || globalThis.confirm(removeLiveMessage)) remove.mutate();
-        }}>
-          <input type="hidden" name="csrf_token" value={csrfToken} />
-          <button type="submit" className="btn-small btn-danger" disabled={remove.isPending}>remove</button>
-        </InlineForm>
+        {/* Not red: a removed statement can be featured again. */}
+        <button type="button" className="admin-row__text-button" disabled={remove.isPending}
+          onClick={() => {
+            if (!informedVotingLive || globalThis.confirm(removeLiveMessage)) remove.mutate();
+          }}>
+          {msg('admin-btn-remove')}
+        </button>
       </td>
     </tr>
   );
 }
 
-function CandidateRow({candidate, csrfToken, pending, onConfirm}: {
+function CandidateRow({candidate, pending, onConfirm}: {
   candidate: Candidate;
-  csrfToken: string;
   pending: boolean;
   onConfirm: () => void;
 }) {
+  const msg = useMessage();
   return (
     <tr>
       <td>{candidate.statementId}</td>
@@ -175,12 +159,9 @@ function CandidateRow({candidate, csrfToken, pending, onConfirm}: {
       <td>{candidate.votes.pass}</td>
       <td>{candidate.votes.total}</td>
       <td>
-        <InlineForm onSubmit={onConfirm}>
-          <input type="hidden" name="csrf_token" value={csrfToken} />
-          <input type="hidden" name="tid" value={candidate.statementId} />
-          <input type="hidden" name="system_suggested" value="1" />
-          <button type="submit" className="btn-small" disabled={pending}>confirm</button>
-        </InlineForm>
+        <button type="button" className="admin-row__text-button" disabled={pending} onClick={onConfirm}>
+          {msg('featured-btn-confirm')}
+        </button>
       </td>
     </tr>
   );
@@ -312,7 +293,6 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
                 <CandidateRow
                   key={candidate.statementId}
                   candidate={candidate}
-                  csrfToken={csrfToken}
                   pending={selection.isPending}
                   onConfirm={() => select(candidate.statementId, 'system')}
                 />
@@ -335,7 +315,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
             </label>
             {manualError && <p className="admin-error" id={manualErrorId} role="alert">{manualError}</p>}
             <div className="admin-form__actions">
-              <button type="submit" disabled={selection.isPending}>Add</button>
+              <button type="submit" className="admin-button admin-button--primary" disabled={selection.isPending}>Add</button>
             </div>
           </form>
         </div>

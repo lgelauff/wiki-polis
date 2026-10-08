@@ -100,9 +100,9 @@ test('runs site-wide administration without falling back to Jinja forms', async 
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin']}><App /></MemoryRouter></QueryClientProvider>);
 
   expect(await screen.findByRole('heading', {name: 'Site admin dashboard'})).toBeVisible();
-  expect(screen.getByRole('link', {name: 'manage'})).toHaveAttribute('href', '/admin/conversations/7');
+  expect(screen.getByRole('link', {name: 'Manage'})).toHaveAttribute('href', '/admin/conversations/7');
   // The settings page used to be reachable only by typing its URL.
-  expect(screen.getByRole('link', {name: 'settings'})).toHaveAttribute('href', '/admin/conversations/7/settings');
+  expect(screen.getByRole('link', {name: 'Settings'})).toHaveAttribute('href', '/admin/conversations/7/settings');
   // The Access column names the stored value in words instead of printing "public".
   expect(screen.getByRole('columnheader', {name: 'Access'})).toBeVisible();
   expect(screen.getByRole('cell', {name: 'Anyone with a Wikimedia account'})).toBeVisible();
@@ -298,7 +298,7 @@ test('moderates statements and imports approved seeds through typed commands', a
   )).toBeVisible();
   // #478: the Approval control moved to Settings > Basics, so this page no longer owns it.
   expect(screen.queryByRole('checkbox', {name: /Strict moderation/})).toBeNull();
-  fireEvent.click(screen.getByRole('button', {name: 'approve'}));
+  fireEvent.click(screen.getByRole('button', {name: /^Approve statement/}));
   // Approving takes the row out of the waiting list and into the approved one.
   await waitFor(() => expect(screen.queryByText('A participant proposal awaiting review.')).toBeNull());
   fireEvent.click(screen.getByRole('button', {name: /^Show approved/}));
@@ -332,10 +332,10 @@ test('matches legacy featured-statement administration and commands', async () =
   expect(within(candidates).getByText('2')).toBeVisible();
   expect(within(candidates).getByText('6')).toBeVisible();
   expect(screen.queryByText(/divisiv/i)).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', {name: 'confirm'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
   await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-  fireEvent.click(screen.getByRole('button', {name: 'hide'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Hide'}));
   await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 });
 
@@ -354,7 +354,7 @@ test('manages participant access in the distinct admin workspace', async () => {
   const roster = within(screen.getByRole('main')).getByRole('listitem').closest('ul')!;
   expect(within(roster).getByText('Example editor')).toBeVisible();
   expect(screen.getByText('8 / 12')).toBeVisible();
-  fireEvent.change(screen.getByPlaceholderText('Reason (optional)'), {
+  fireEvent.change(screen.getByLabelText(/^Reason \(optional\)/), {
     target: {value: 'Repeated disruption'},
   });
   fireEvent.click(screen.getByRole('button', {name: /^Block/}));
@@ -362,7 +362,8 @@ test('manages participant access in the distinct admin workspace', async () => {
   expect(await screen.findByRole('button', {
     name: /^Unblock/,
   })).toBeVisible();
-  expect(screen.getByText('Repeated disruption')).toBeVisible();
+  expect(roster).toHaveTextContent('Example editor · Blocked since');
+  expect(roster).toHaveTextContent('· Repeated disruption');
   await waitFor(() => expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent(
     'Participant blocked in this consultation.',
   ));

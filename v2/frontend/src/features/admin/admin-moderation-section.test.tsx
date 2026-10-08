@@ -539,5 +539,21 @@ test('Featured is today’s page under the strip, arguments and all', async () =
   expect(screen.getByRole('heading', {name: 'Confirmed (1)'})).toBeVisible();
   // Argument moderation is served by this endpoint, so it stays here (#473).
   expect(screen.getByText('Arguments')).toBeVisible();
-  expect(screen.getByRole('button', {name: 'hide'})).toBeVisible();
+  expect(screen.getByRole('button', {name: 'Hide'})).toBeVisible();
+});
+
+test('Featured\'s actions are sentence-case text buttons, red only where nothing can undo them', async () => {
+  renderModeration(<AdminFeaturedPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/moderation/featured');
+
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
+  // Deleting an argument and its ratings is the one irreversible action here.
+  expect(screen.getByRole('button', {name: 'Delete'})).toHaveClass('admin-row__text-button--danger');
+  for (const name of ['Hide', 'Remove', 'Confirm']) {
+    const button = screen.getByRole('button', {name});
+    expect(button).toHaveClass('admin-row__text-button');
+    expect(button).not.toHaveClass('admin-row__text-button--danger');
+  }
+  expect(screen.queryByRole('button', {name: /^(hide|unhide|remove|confirm|delete)$/})).toBeNull();
+  expect(document.querySelector('.btn-small, .btn-danger')).toBeNull();
 });

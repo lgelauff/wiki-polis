@@ -1,4 +1,4 @@
-import {Fragment, useCallback, useState, type FormEvent} from 'react';
+import {useCallback, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -9,14 +9,14 @@ import {
   adminStatementWorkspaceQuery,
   postAdminSeedStatement,
   postAdminStatementImport,
-  putAdminStatementModeration,
 } from '../../api/queries';
-import {useMessage} from '../../i18n/messages';
+import {useMessage, type Message} from '../../i18n/messages';
 import {sortByBasedOn} from './admin-based-on';
 import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
 import {useAnnouncer} from './admin-announcer';
 import {useRowFocus} from './admin-row-focus';
+import {StatementActions} from './admin-statement-actions';
 import {AdminTabStrip} from './admin-tab-strip';
 import {contentTabs} from './admin-content-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
@@ -49,68 +49,10 @@ function FormFeedback({lines}: {lines: Feedback[]}) {
   );
 }
 
-const actions: Record<Status, {status: Status; label: string; className?: string}[]> = {
-  pending: [
-    {status: 'approved', label: 'approve', className: 'btn-approve'},
-    {status: 'hidden', label: 'hide', className: 'btn-danger'},
-  ],
-  approved: [
-    {status: 'hidden', label: 'hide', className: 'btn-danger'},
-    {status: 'pending', label: 'pending'},
-  ],
-  hidden: [
-    {status: 'approved', label: 'approve', className: 'btn-approve'},
-    {status: 'pending', label: 'pending'},
-  ],
-};
-
-function StatementActions({
-  statement, conversationId, csrfToken, onMove, onError,
-}: {
-  statement: Statement;
-  conversationId: number;
-  csrfToken: string;
-  onMove: (statement: Statement, status: Status) => void;
-  onError: (message: string) => void;
-}) {
-  const mutation = useMutation({
-    mutationFn: (status: Status) => putAdminStatementModeration(
-      conversationId, statement.id, {status}, csrfToken,
-    ),
-    onSuccess: (receipt) => onMove(statement, receipt.status),
-    onError: (error: Error) => {
-      if (error instanceof ApiContractError
-          && error.code === 'last_featured_statement_protected') {
-        onError('Cannot hide or move the last featured statement to pending while argument mapping is active. Disable the argument mapping phase first.');
-      } else {
-        onError('Moderation action failed. Check server logs for details.');
-      }
-    },
-  });
-  return (
-    <div className="admin-row__actions">
-      {actions[statement.moderation].map((action, index) => (
-        <Fragment key={action.status}>
-          {index > 0 && ' '}
-          <form
-            style={{display: 'inline'}}
-            onSubmit={(event) => {
-              event.preventDefault();
-              mutation.mutate(action.status);
-            }}
-          >
-            <input type="hidden" name="csrf_token" value={csrfToken} />
-            <input type="hidden" name="mod" value={{approved: 1, pending: 0, hidden: -1}[action.status]} />
-            <button
-              type="submit"
-              className={`btn-small${action.className ? ` ${action.className}` : ''}`}
-              disabled={mutation.isPending}
-            >{action.label}</button>
-          </form>
-        </Fragment>
-      ))}
-    </div>
-  );
+/** A moderation refusal in the page's words: the server's message is for developers. */
+function moderationError(msg: Message, error: Error): string {
+  return error instanceof ApiContractError && error.code === 'last_featured_statement_protected'
+    ? msg('flash-last-featured-hide') : msg('flash-moderation-failed');
 }
 
 /** Which statements the page shows, chosen by the state switch. Approved is the default
@@ -221,8 +163,9 @@ function StatementRow({conversationId, statement, sourceShown, csrfToken, move, 
         statement={statement}
         conversationId={conversationId}
         csrfToken={csrfToken}
-        onMove={move}
-        onError={onError}
+        withUnmoderate
+        onMoved={move}
+        onError={(error) => onError(moderationError(msg, error))}
       />
     </li>
   );
@@ -547,7 +490,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                   />
                 </label>
                 <div className="admin-form__actions">
-                  <button type="submit" disabled={seedMutation.isPending}>Add seed statement</button>
+                  <button type="submit" className="admin-button admin-button--primary" disabled={seedMutation.isPending}>Add seed statement</button>
                   <span id="seed-count" className="admin-form__count">{seedText.length} / 280</span>
                 </div>
                 <FormFeedback lines={seedFeedback} />
@@ -577,7 +520,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                   />
                 </label>
                 <div className="admin-form__actions">
-                  <button type="submit" disabled={importMutation.isPending}>Import statements</button>
+                  <button type="submit" className="admin-button admin-button--primary" disabled={importMutation.isPending}>Import statements</button>
                 </div>
                 <FormFeedback lines={importFeedback} />
               </form>

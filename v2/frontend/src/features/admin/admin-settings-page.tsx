@@ -715,9 +715,9 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
           {canSave && <footer>
             {confirming ? <div className="access-confirm" role="group" aria-labelledby={`${ids}-confirm`} tabIndex={-1} ref={confirmRef}>
               <p id={`${ids}-confirm`}>{msg('admin-access-narrowing-confirm')}</p>
-              <button type="submit" disabled={mutation.isPending}>{msg('admin-access-narrowing-continue')}</button>
-              <button type="button" onClick={() => setConfirming(false)}>{msg('common-cancel')}</button>
-            </div> : <button type="submit" disabled={mutation.isPending} ref={saveRef}>
+              <button type="submit" className="admin-button admin-button--primary" disabled={mutation.isPending}>{msg('admin-access-narrowing-continue')}</button>
+              <button type="button" className="admin-button" onClick={() => setConfirming(false)}>{msg('common-cancel')}</button>
+            </div> : <button type="submit" className="admin-button admin-button--primary" disabled={mutation.isPending} ref={saveRef}>
               {mutation.isPending ? msg('admin-saving') : msg('admin-save')}
             </button>}
             {/* Always mounted, so the region exists before its first message; keyed on the

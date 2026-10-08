@@ -135,6 +135,7 @@ TAGS:
     - admin-moderation-statement-approved
     - admin-moderation-statement-hidden
     - admin-moderation-statement-unmoderated
+    - admin-moderation-unmoderate-statement
     - admin-new-conv-heading
     - admin-overview-card-settings
     - admin-overview-card-settings-desc
@@ -162,7 +163,6 @@ TAGS:
     - admin-site-dashboard
     - admin-site-grant-not-found
     - admin-site-group-other
-    - admin-site-link-settings
     - admin-slug-ph
     - admin-slug-title
     - admin-status-active
@@ -346,7 +346,9 @@ TAGS:
     - flags-review-statements
     - flash-already-banned
     - flash-banned
+    - flash-last-featured-hide
     - flash-load-statements-failed
+    - flash-moderation-failed
     - flash-move-sync-failed
     - flash-moved-to
     - flash-phases-saved-sync-failed

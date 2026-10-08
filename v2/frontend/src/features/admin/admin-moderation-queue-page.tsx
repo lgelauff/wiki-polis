@@ -1,5 +1,5 @@
 import {useCallback, useState} from 'react';
-import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
+import {useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
@@ -7,7 +7,6 @@ import {
   adminLifecycleQuery,
   adminSettingsQuery,
   adminStatementWorkspaceQuery,
-  putAdminStatementModeration,
 } from '../../api/queries';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
@@ -15,6 +14,7 @@ import {sortByBasedOn} from './admin-based-on';
 import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
 import {useAnnouncer} from './admin-announcer';
+import {StatementActions} from './admin-statement-actions';
 import {AdminTabStrip, type SectionTab} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
 import {useRowFocus} from './admin-row-focus';
@@ -80,13 +80,6 @@ function QueueRow({conversationId, statement, csrfToken, move, onError}: {
   onError: (message: string) => void;
 }) {
   const msg = useMessage();
-  const mutation = useMutation({
-    mutationFn: (status: Status) => putAdminStatementModeration(
-      conversationId, statement.id, {status}, csrfToken,
-    ),
-    onSuccess: (receipt) => move(statement, receipt.status),
-    onError: (error: Error) => onError(errorMessage(error, msg)),
-  });
   const source = statement.provenance;
   return (
     <li className="admin-row" data-row-id={statement.id}>
@@ -98,28 +91,9 @@ function QueueRow({conversationId, statement, csrfToken, move, onError}: {
             className="admin-row__source">{`↳ #${source.derivedFromId}`}</InternalLink>
         )}
       </div>
-      <div className="admin-row__actions">
-        <button
-          type="button"
-          className="admin-row__glyph"
-          title={msg('admin-moderation-approve-statement', statement.id)}
-          aria-label={msg('admin-moderation-approve-statement', statement.id)}
-          disabled={mutation.isPending || statement.moderation === 'approved'}
-          onClick={() => mutation.mutate('approved')}
-        >
-          <span aria-hidden="true">✓</span>
-        </button>
-        <button
-          type="button"
-          className="admin-row__glyph"
-          title={msg('admin-moderation-hide-statement', statement.id)}
-          aria-label={msg('admin-moderation-hide-statement', statement.id)}
-          disabled={mutation.isPending || statement.moderation === 'hidden'}
-          onClick={() => mutation.mutate('hidden')}
-        >
-          <span aria-hidden="true">✕</span>
-        </button>
-      </div>
+      <StatementActions conversationId={conversationId} statement={statement}
+        csrfToken={csrfToken} onMoved={move}
+        onError={(error) => onError(errorMessage(error, msg))} />
     </li>
   );
 }

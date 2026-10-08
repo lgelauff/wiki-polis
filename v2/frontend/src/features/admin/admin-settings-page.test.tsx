@@ -144,6 +144,8 @@ test('shows who can take part as one plain-worded choice per row', async () => {
   expect(coming.closest('form')).toBeNull();
   expect(screen.getByRole('button', {name: 'Save'}).compareDocumentPosition(coming)
     & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // The tab's one command is the console's primary button.
+  expect(screen.getByRole('button', {name: 'Save'})).toHaveClass('admin-button', 'admin-button--primary');
   // The visibility answers are gone from the page altogether, and their placeholder is a
   // gated-only line, so an ungated consultation shows neither.
   expect(screen.queryByRole('group', {name: 'What people without access can see'})).toBeNull();
