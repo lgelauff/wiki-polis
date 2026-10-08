@@ -687,7 +687,7 @@
     "stmts-import-label": "Label for the bulk-import textarea.\n{{Identical|Statements}}",
     "stmts-import-submit": "Submit button for the bulk-text import.",
     "stmts-modsettings-heading": "Heading of the strict-moderation (approval) control on Settings > Basics in the admin console. Admin-only.",
-    "stmts-strict-label": "Checkbox label for strict moderation, now on Settings > Basics: new participant statements wait for a moderator's approval before others can vote on them. Says what is approved, not what the setting is called internally. Admin-only.",
+    "stmts-strict-label": "Checkbox label for strict moderation, now on Settings > Basics: new participant statements wait for a moderator's approval before others can respond to them (agree, disagree or pass). Says what is approved, not what the setting is called internally. Admin-only.",
     "stmts-save": "Save button for moderation settings. Text copied from MediaWiki core's {{msg-mw|saveprefs}} (GPL-2.0-or-later; see i18n/ATTRIBUTION.md); use that message's translation, lowercased where the English is.\n{{Identical|Save}}",
     "stmts-pending-heading": "Section heading for statements awaiting review.",
     "stmts-pending-empty": "Empty state for the pending list.",
