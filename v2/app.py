@@ -3511,6 +3511,8 @@ def _admin_participant_roster_api_payload(conv_id: int) -> dict:
             conversation_id=conv.id,
         ),
         conversation_link=_admin_client_link(conv.id),
+        # A moderator who does not also organize sees pseudonyms only.
+        include_usernames=_can_organize(conv),
     )
 
 

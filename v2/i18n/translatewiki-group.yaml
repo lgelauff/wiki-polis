@@ -135,6 +135,7 @@ TAGS:
     - admin-moderation-state-unmoderated
     - admin-moderation-statement-approved
     - admin-moderation-statement-hidden
+    - admin-moderation-statement-unmoderated
     - admin-nav-panel
     - admin-new-conv-heading
     - admin-overview-card-settings

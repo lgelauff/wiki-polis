@@ -27,6 +27,13 @@ function formatLegacyDateTime(value: string | null): string | null {
   return new Date(value).toISOString().slice(0, 16).replace('T', ' ');
 }
 
+/** The person as this page names them: the Wikimedia username for an organizer or a site
+ *  admin, the pseudonym for a moderator-only viewer, to whom the roster sends no username
+ *  (owner decision, 2026-10-08). */
+function personName(participant: Participant): string {
+  return participant.username ?? participant.pseudonym;
+}
+
 function ParticipantAccessControl({
   conversationId,
   participant,
@@ -41,6 +48,9 @@ function ParticipantAccessControl({
   const queryClient = useQueryClient();
   const [summary, setSummary] = useState('');
   const desiredBanned = !participant.access.banned;
+  // Every row has this field and this button: the person's name after the visible words
+  // tells one row's from the next one's.
+  const who = personName(participant);
   const mutation = useMutation({
     mutationFn: () => putAdminParticipantAccess(
       conversationId,
@@ -99,9 +109,10 @@ function ParticipantAccessControl({
             value={summary}
             onChange={(event) => setSummary(event.target.value)}
             placeholder="Unban note (optional)"
+            aria-label={`Unban note (optional) — ${who}`}
             style={{width: '100%', marginBottom: '.35rem'}}
           />
-          <button type="submit" className="btn-small btn-approve">unban</button>
+          <button type="submit" className="btn-small btn-approve">unban{' '}<span className="sr-only">{`— ${who}`}</span></button>
         </form>
       </>
     );
@@ -115,9 +126,10 @@ function ParticipantAccessControl({
         value={summary}
         onChange={(event) => setSummary(event.target.value)}
         placeholder="Reason (optional)"
+        aria-label={`Reason (optional) — ${who}`}
         style={{width: '100%', marginBottom: '.35rem'}}
       />
-      <button type="submit" className="btn-small btn-danger">ban</button>
+      <button type="submit" className="btn-small btn-danger">ban{' '}<span className="sr-only">{`— ${who}`}</span></button>
     </form>
   );
 }
@@ -164,7 +176,7 @@ export function AdminParticipantsPage({
               return (
                 <li className="admin-row" key={participant.participantId}>
                   <div className="admin-row__text">
-                    {participant.username}
+                    {personName(participant)}
                     {participant.access.banned && (
                       <span className="admin-row__suffix">
                         {' · '}{msg('participants-banned')}

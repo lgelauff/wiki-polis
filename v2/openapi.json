@@ -1531,7 +1531,7 @@
         "additionalProperties": false,
         "properties": {
           "participantId": {"type": "integer", "minimum": 1},
-          "username": {"type": "string"},
+          "username": {"type": ["string", "null"], "description": "The Wikimedia username; null when the viewer moderates but does not organize the consultation, who sees the pseudonym only."},
           "pseudonym": {"type": "string"},
           "statementProgress": {
             "oneOf": [

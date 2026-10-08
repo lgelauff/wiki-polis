@@ -15,6 +15,8 @@ import {useMessage} from '../../i18n/messages';
 import {sortByBasedOn} from './admin-based-on';
 import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
+import {useAnnouncer} from './admin-announcer';
+import {useRowFocus} from './admin-row-focus';
 import {AdminTabStrip} from './admin-tab-strip';
 import {contentTabs} from './admin-content-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
@@ -124,6 +126,13 @@ const LIST: Record<Position, 'approved' | 'pending' | 'hidden'> = {
   hidden: 'hidden',
 };
 
+/** What is said when a statement has moved to a list. */
+const MOVED: Record<Status, string> = {
+  approved: 'admin-moderation-statement-approved',
+  hidden: 'admin-moderation-statement-hidden',
+  pending: 'admin-moderation-statement-unmoderated',
+};
+
 /** "Most responses" is what a reader of the statements wants first; "Oldest first" is the order
  *  they arrived; "Based on" groups a correction under the statement it corrects, with the
  *  same function as the Moderation queue (`sortByBasedOn`). All three sort what is already
@@ -169,9 +178,10 @@ function StatementSource({provenance, sourceShown}: {
   );
 }
 
-/** One statement as one row: a star when it is featured, the text, where it came from, its
- *  votes and what can be done to it. The row's id is the target of "↳ #N" on the rows
- *  derived from it. */
+/** One statement as one row: a star when it is featured, the text, its number as a muted
+ *  suffix (what "↳ #N", Featured's add by number and "Corrects statement #" refer to),
+ *  where it came from, its votes and what can be done to it. The row's id is the target of
+ *  "↳ #N" on the rows derived from it. */
 function StatementRow({conversationId, statement, sourceShown, csrfToken, move, onError}: {
   conversationId: number;
   statement: Statement;
@@ -182,7 +192,7 @@ function StatementRow({conversationId, statement, sourceShown, csrfToken, move, 
 }) {
   const msg = useMessage();
   return (
-    <li className="admin-row" id={`statement-${statement.id}`}>
+    <li className="admin-row" id={`statement-${statement.id}`} data-row-id={statement.id}>
       <div className="admin-row__text">
         {statement.featured && (
           <span className="admin-row__star" title={msg('conv-arg-featured-label')}>
@@ -191,6 +201,7 @@ function StatementRow({conversationId, statement, sourceShown, csrfToken, move, 
           </span>
         )}
         {statement.text}
+        <span className="admin-row__suffix">{` #${statement.id}`}</span>
         {statement.provenance && (
           <StatementSource provenance={statement.provenance} sourceShown={sourceShown} />
         )}
@@ -238,6 +249,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   const [derivedFrom, setDerivedFrom] = useState('');
   const [importText, setImportText] = useState('');
   const dismissToast = useCallback(() => setToast(null), []);
+  const announcer = useAnnouncer();
 
   function showFeedback(messages: Omit<Feedback, 'id'>[]) {
     const timestamp = Date.now();
@@ -292,16 +304,24 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           message: `${receipt.outcome.skippedExisting} statement${receipt.outcome.skippedExisting === 1 ? '' : 's'} already existed in this conversation and were skipped.`,
         });
       }
-      if (receipt.outcome.imported && !receipt.outcome.skippedExisting
-          && !receipt.outcome.failedUpstream) {
+      // A statement the voting service refused is not "skipped": it was not added, and
+      // trying again may add it. It is counted on its own, and the text stays in the box.
+      const failed = receipt.outcome.failedUpstream;
+      if (failed) {
+        messages.push({
+          category: 'error',
+          message: `${failed} statement${failed === 1 ? '' : 's'} could not be added by the voting service. The text is still in the box: import it again to retry; lines already added are skipped.`,
+        });
+      }
+      if (receipt.outcome.imported && !receipt.outcome.skippedExisting && !failed) {
         messages.push({
           category: 'import_result',
           message: `✓ ${receipt.outcome.imported} statement${receipt.outcome.imported === 1 ? '' : 's'} imported`,
         });
-      } else if (receipt.outcome.imported) {
+      } else if (receipt.outcome.imported || failed) {
         messages.push({
           category: 'import_result',
-          message: `✓ ${receipt.outcome.imported} imported — ⚠ ${receipt.outcome.skippedExisting + receipt.outcome.failedUpstream} skipped`,
+          message: `✓ ${receipt.outcome.imported} imported${receipt.outcome.skippedExisting ? ` — ⚠ ${receipt.outcome.skippedExisting} skipped` : ''}${failed ? ` — ✗ ${failed} not added` : ''}`,
         });
       } else if (receipt.outcome.skippedExisting) {
         messages.push({
@@ -312,7 +332,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
         messages.push({category: 'warning', message: 'No statements were imported — there were no valid rows.'});
         messages.push({category: 'import_result', message: '⚠ 0 imported — Polis returned no result'});
       }
-      setImportText('');
+      if (!failed) setImportText('');
       showFeedback(messages);
       void queryClient.invalidateQueries({queryKey: options.queryKey});
     },
@@ -332,6 +352,10 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
     });
     setFeedback([]);
     setToast(null);
+    // The row leaves the list when the switch is on another position; focus goes to the next
+    // row and the result is said, every time, through the shell's live region.
+    if (status !== LIST[position]) rowRemoved(statement.id);
+    announcer.announce(msg(MOVED[status], statement.id));
   }
 
   function submitImport(event: FormEvent<HTMLFormElement>) {
@@ -387,6 +411,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   );
 
   const shown = new Set(rows.map((row) => row.id));
+  const {listRef, emptyRef, rowRemoved} = useRowFocus(rows.map((row) => row.id));
 
   return (
     <AdminShell
@@ -396,6 +421,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       section="content"
       subPage={msg('adminconv-card-statements')}
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
+      announcer={announcer}
     >
       <div className="admin-page">
         <h1>{msg('admin-shell-content')}</h1>
@@ -438,7 +464,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
         </div>
 
         {rows.length ? (
-          <ul className="admin-rows">
+          <ul className="admin-rows" ref={listRef}>
             {rows.map((statement) => (
               <StatementRow
                 key={statement.id}
@@ -453,7 +479,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
             ))}
           </ul>
         ) : data.dataAvailability.statements ? (
-          <p className="admin-empty">{empty}</p>
+          <p className="admin-empty" ref={emptyRef} tabIndex={-1}>{empty}</p>
         ) : null /* Lists left empty because the voting service could not be read are not
           an empty consultation: the error below (and the toast) say what happened. */}
 

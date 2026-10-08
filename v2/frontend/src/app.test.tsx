@@ -353,15 +353,15 @@ test('manages participant access in the distinct admin workspace', async () => {
   fireEvent.change(screen.getByPlaceholderText('Reason (optional)'), {
     target: {value: 'Repeated disruption'},
   });
-  fireEvent.click(screen.getByRole('button', {name: 'ban'}));
+  fireEvent.click(screen.getByRole('button', {name: /^ban/}));
 
   expect(await screen.findByRole('button', {
-    name: 'unban',
+    name: /^unban/,
   })).toBeVisible();
   expect(screen.getByText('Repeated disruption')).toBeVisible();
-  expect(screen.getByRole('status')).toHaveTextContent(
+  await waitFor(() => expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent(
     'Participant banned from this conversation.',
-  );
+  ));
 });
 
 test('resolves a privacy-safe moderation item through the typed contract', async () => {

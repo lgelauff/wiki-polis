@@ -214,7 +214,9 @@ test('statements that could not be loaded are an error, not an empty consultatio
 
   await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
   // The inline error stays on the page, and the toast stays as the old page had it.
-  const errors = page().getAllByText('Could not load statements. Check server logs.');
+  // (The shell's assertive region reads the toast out as well; it is not a third line.)
+  const errors = page().getAllByText('Could not load statements. Check server logs.')
+    .filter((node) => !node.closest('[aria-live]'));
   expect(errors).toHaveLength(2);
   expect(errors.filter((node) => node.closest('.admin-shell__notices'))).toHaveLength(1);
   for (const text of ['No statements yet.', 'No approved statements.',
@@ -334,11 +336,11 @@ test('participants are one row each, with today’s figures and the access contr
   expect(row).toHaveTextContent('2026-08-13');
   // The access control is the same one the participants page has always had.
   expect(within(row).getByPlaceholderText('Reason (optional)')).toBeVisible();
-  expect(within(row).getByRole('button', {name: 'ban'})).toBeVisible();
+  expect(within(row).getByRole('button', {name: 'ban — Example editor'})).toBeVisible();
 
   // Once banned, the row says "Banned since …" once, beside the name.
-  fireEvent.click(within(row).getByRole('button', {name: 'ban'}));
-  await within(row).findByRole('button', {name: 'unban'});
+  fireEvent.click(within(row).getByRole('button', {name: 'ban — Example editor'}));
+  await within(row).findByRole('button', {name: 'unban — Example editor'});
   expect(row).toHaveTextContent('Example editor · Banned since 2026-08-13');
   expect(row.textContent?.match(/since/g)).toHaveLength(1);
 });
