@@ -241,7 +241,8 @@ test('edits settings and legacy eligibility through one typed command', async ()
   // #478: the bare .../settings path is the old URL and lands on Basics; the eligibility
   // fields are on Access. Both tabs PUT the one complete settings representation.
   const access = render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings/access']}><App /></MemoryRouter></QueryClientProvider>);
-  expect(await screen.findByRole('heading', {name: 'Access', level: 2})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Access'})).toBeNull();
   expect(screen.getByText('Extended-confirmed editors')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'experienced-editors'}});
   fireEvent.change(screen.getByLabelText('Eligibility label'), {target: {value: 'Experienced editors'}});
@@ -251,7 +252,7 @@ test('edits settings and legacy eligibility through one typed command', async ()
 
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/settings']}><App /></MemoryRouter></QueryClientProvider>);
   expect(await screen.findByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
-  expect(screen.getByRole('heading', {name: 'Basics', level: 2})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Basics'})).toBeNull();
   fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Updated strategy'}});
   fireEvent.click(screen.getByRole('radio', {name: /Complex topic/}));
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));

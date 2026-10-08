@@ -177,7 +177,7 @@ function ApprovalSection({conversationId, number, strict, onChange}: {
   const {data} = useSuspenseQuery(adminStatementWorkspaceQuery(conversationId));
   return (
     <section aria-labelledby="settings-approval">
-      <header><span>{number}</span><div><h3 id="settings-approval">{msg('stmts-modsettings-heading')}</h3></div></header>
+      <header><span>{number}</span><div><h2 id="settings-approval">{msg('stmts-modsettings-heading')}</h2></div></header>
       <label className="checkbox-label" style={{fontWeight: 'normal', color: 'var(--text)'}}>
         <input
           type="checkbox"
@@ -413,7 +413,6 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
       <div className="settings-shell">
         <h1>{msg('admin-settings-heading')}</h1>
         <SettingsTabs conversationId={conversationId} gatingType={data.conversation.gatingType} current={tab} />
-        <h2>{tabName}</h2>
         {!canEdit && <p className="settings-readonly" role="note">
           Your role can inspect but not change these settings.
         </p>}
@@ -425,7 +424,7 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
           </div>}
           {tab === 'basics' ? <>
             <section aria-labelledby="settings-description">
-              <header><span>01</span><div><h3 id="settings-description">Description</h3></div></header>
+              <header><span>01</span><div><h2 id="settings-description">Description</h2></div></header>
               <label>{msg('admin-label-title')}<input value={title} maxLength={255} required disabled={!canEdit} {...invalid('title')} onChange={(event) => setTitle(event.target.value)} /></label>
               <FieldError field="title" />
               <label>Introduction HTML<textarea value={introHtml} rows={7} disabled={!canEdit} onChange={(event) => setIntroHtml(event.target.value)} /></label>
@@ -436,7 +435,7 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
               <p className="settings-hint" dangerouslySetInnerHTML={richHtml(msg('admin-settings-basics-licence', '<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">' + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
             </section>
             <section aria-labelledby="settings-guidance">
-              <header><span>02</span><div><h3 id="settings-guidance">Guidance scope</h3></div></header>
+              <header><span>02</span><div><h2 id="settings-guidance">Guidance scope</h2></div></header>
               <fieldset><legend>Complexity tier</legend>{data.recommendations.tiers.map((option) => (
                 <label className="settings-tier" key={option.key}>
                   <input type="radio" name="tier" value={option.key} checked={tier === option.key} disabled={!canEdit} onChange={() => setTier(option.key)} />
@@ -451,7 +450,7 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
                 moving into or out of Practice rewrites the locked settings, which the server
                 refuses then. */}
             {practiceSection && <section aria-labelledby="settings-practice">
-              <header><span>03</span><div><h3 id="settings-practice">{msg('admin-access-practice')}</h3></div></header>
+              <header><span>03</span><div><h2 id="settings-practice">{msg('admin-access-practice')}</h2></div></header>
               {practice && <div className="access-answer" role="group" aria-labelledby={`${ids}-practice-legend`}>
                 {/* One fixed answer, stored by the server whatever is sent, so it is stated
                     rather than offered: a gate here would only be refused. */}

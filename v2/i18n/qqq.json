@@ -551,7 +551,7 @@
     "admin-elig-event-ph": "Placeholder for the eligibility event ID field.",
     "admin-label-elig-label": "Form label for the eligibility label.",
     "admin-elig-label-ph": "Placeholder for the eligibility label field.",
-    "admin-settings-heading": "Heading of every Settings tab in the admin console. The sidebar and the breadcrumb already name the section with {{msg-proto|admin-overview-card-settings}}; this is the page heading, and each tab's own heading sits under it. Admin-only.",
+    "admin-settings-heading": "Heading of every Settings tab in the admin console. The sidebar and the breadcrumb already name the section with {{msg-proto|admin-overview-card-settings}}; this is the page heading, the same on every tab, with the tab strip under it; no heading repeats the tab's name. Admin-only.",
     "admin-settings-tabs-aria": "Accessible name of the nav element holding the four Settings tabs. Names the navigation, not the strip's appearance. Admin-only.",
     "admin-settings-tab-basics": "Name of the Settings tab holding the things set once: title, introduction, closing text, topic size, the approval control and the Practice Environment switch. Admin-only.",
     "admin-settings-tab-invitations": "Name of the Settings tab holding the invitation list, shown when who-gets-in is not answered with voucher codes. Admin-only.",

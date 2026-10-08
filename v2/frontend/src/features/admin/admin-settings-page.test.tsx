@@ -130,15 +130,19 @@ test('shows who can take part as one plain-worded choice per row', async () => {
   expect(screen.queryByText(/choosing what people without access can see/)).toBeNull();
 });
 
-test('every tab is headed Settings, and the open one is named under it', async () => {
+test('every tab is headed Settings, and no heading repeats the tab name', async () => {
   serve(settings);
   renderPage('basics');
 
-  // The h1 says which section; the h2 says which page of it.
+  // The h1 says which section; the strip's current tab says which page of it, so no
+  // heading under the strip names the tab again.
   expect(await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000}))
     .toBeVisible();
-  expect(screen.getByRole('heading', {name: 'Basics', level: 2})).toBeVisible();
-  expect(screen.queryByRole('heading', {name: 'Access', level: 2})).toBeNull();
+  expect(screen.queryByRole('heading', {name: 'Basics'})).toBeNull();
+  expect(within(tabs()).getByRole('link', {name: 'Basics'}))
+    .toHaveAttribute('aria-current', 'page');
+  // The numbered sections are the h2s, straight under the h1.
+  expect(screen.getByRole('heading', {name: 'Description', level: 2})).toBeVisible();
 });
 
 test('the tab strip lists the four tabs in order and marks exactly one', async () => {
@@ -188,7 +192,7 @@ test('the access tab marks itself in the strip', async () => {
   renderPage('access');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  expect(screen.getByRole('heading', {name: 'Access', level: 2})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Access'})).toBeNull();
   expect(within(tabs()).getByRole('link', {name: 'Access'}))
     .toHaveAttribute('aria-current', 'page');
   expect(within(tabs()).getByRole('link', {name: 'Basics'}))
@@ -574,7 +578,6 @@ test('renders its labels from the catalogue, not from source literals', async ()
 
   expect(await screen.findByRole('heading', {name: 'CATALOGUE SETTINGS', level: 1},
     {timeout: 10_000})).toBeVisible();
-  expect(screen.getByRole('heading', {name: 'CATALOGUE ACCESS', level: 2})).toBeVisible();
   expect(screen.getByRole('group', {name: 'CATALOGUE WHO TAKES PART'})).toBeVisible();
   expect(screen.getByRole('radio', {name: 'CATALOGUE ANYONE'})).toBeChecked();
   expect(within(tabs()).getByRole('link', {name: 'CATALOGUE ACCESS'})).toBeVisible();
@@ -698,7 +701,7 @@ test('the Approval section has the numbered-section header, with the number outs
   serve(settings);
   renderPage('basics');
 
-  const heading = await screen.findByRole('heading', {name: 'Moderation settings', level: 3},
+  const heading = await screen.findByRole('heading', {name: 'Moderation settings', level: 2},
     {timeout: 10_000});
   // Exactly the key's text: the section number is a sibling, not part of the heading.
   expect(heading.textContent).toBe('Moderation settings');
@@ -707,7 +710,7 @@ test('the Approval section has the numbered-section header, with the number outs
   expect(section.parentElement).toHaveClass('settings-form');
   const header = section.querySelector(':scope > header');
   expect(header?.querySelector(':scope > span')?.textContent).toBe('03');
-  expect(header?.querySelector(':scope > div > h3')).toBe(heading);
+  expect(header?.querySelector(':scope > div > h2')).toBe(heading);
 });
 
 test('changing only the checkbox sends only the policy request', async () => {
