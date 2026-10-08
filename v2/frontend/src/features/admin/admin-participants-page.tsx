@@ -10,6 +10,7 @@ import {
 } from '../../api/queries';
 import {useMessage} from '../../i18n/messages';
 import {AdminShell} from './admin-shell';
+import {AdminComing} from './admin-coming';
 import {AdminTabStrip} from './admin-tab-strip';
 import {contentTabs} from './admin-content-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
@@ -214,7 +215,7 @@ export function AdminParticipantsPage({
 
         {/* The spec splits this page into a moderator's columns and an organizer's and adds
             the batch label and the joined day. The roster carries none of those fields yet. */}
-        <p className="admin-shell__coming" lang="en">Also coming: the moderator and organizer roles per person, their batch, and the day they joined — not available yet (#473)</p>
+        <AdminComing what="the moderator and organizer roles per person, their batch, and the day they joined" issue={473} />
       </div>
     </AdminShell>
   );

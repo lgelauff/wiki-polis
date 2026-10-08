@@ -258,6 +258,38 @@ test('sorting by lineage puts a correction under its source', async () => {
   expect(texts[1]).toContain('The corrected wording.');
 });
 
+test('"Based on" follows a line of corrections all the way down, as the queue does', async () => {
+  // One shared sort for the Moderation queue and this list: a correction of a correction
+  // sits under its own source, not after the next unrelated statement.
+  serveWorkspace({
+    pending: [],
+    approved: [
+      statement(11, {text: 'The original wording.'}),
+      statement(12, {text: 'An unrelated statement.'}),
+      statement(14, {text: 'The corrected wording.', provenance: {
+        derivedFromId: 11, scores: [{model: 'sim', value: 1}],
+      }}),
+      statement(16, {text: 'The corrected correction.', provenance: {
+        derivedFromId: 14, scores: [{model: 'sim', value: 1}],
+      }}),
+    ],
+    hidden: [],
+  });
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
+  fireEvent.change(screen.getByRole('combobox', {name: 'Sort'}), {target: {value: 'based-on'}});
+  const texts = list().getAllByRole('listitem')
+    .map((row) => row.querySelector('.admin-row__text')?.textContent ?? '');
+  expect(texts.map((text) => text.split('↳')[0]?.trim().replace(/\s+/g, ' '))).toEqual([
+    expect.stringContaining('The original wording.'),
+    expect.stringContaining('The corrected wording.'),
+    expect.stringContaining('The corrected correction.'),
+    expect.stringContaining('An unrelated statement.'),
+  ]);
+});
+
 test('seeding and importing are still on this page', async () => {
   serveWorkspace({pending: [], approved: [], hidden: []});
   renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,

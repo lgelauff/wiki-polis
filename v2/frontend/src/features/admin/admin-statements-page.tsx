@@ -12,6 +12,8 @@ import {
   putAdminStatementModeration,
 } from '../../api/queries';
 import {useMessage} from '../../i18n/messages';
+import {sortByBasedOn} from './admin-based-on';
+import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
 import {AdminTabStrip} from './admin-tab-strip';
 import {contentTabs} from './admin-content-tabs';
@@ -123,8 +125,9 @@ const LIST: Record<Position, 'approved' | 'pending' | 'hidden'> = {
 };
 
 /** "Most responses" is what a reader of the statements wants first; "Oldest first" is the order
- *  they arrived; "Based on" groups a correction under the statement it corrects. All three
- *  sort what is already loaded. */
+ *  they arrived; "Based on" groups a correction under the statement it corrects, with the
+ *  same function as the Moderation queue (`sortByBasedOn`). All three sort what is already
+ *  loaded. */
 type Sort = 'most-responses' | 'oldest' | 'based-on';
 
 function responseTotal(statement: Statement): number {
@@ -132,26 +135,12 @@ function responseTotal(statement: Statement): number {
 }
 
 function sortStatements(rows: Statement[], sort: Sort): Statement[] {
+  if (sort === 'based-on') return sortByBasedOn(rows);
   const byId = [...rows].sort((left, right) => left.id - right.id);
   if (sort === 'most-responses') {
     return byId.sort((left, right) => responseTotal(right) - responseTotal(left) || left.id - right.id);
   }
-  if (sort === 'oldest') return byId;
-  const placed = new Set<number>();
-  const out: Statement[] = [];
-  for (const row of byId) {
-    if (placed.has(row.id)) continue;
-    placed.add(row.id);
-    out.push(row);
-    for (const child of byId) {
-      if (placed.has(child.id)) continue;
-      if (child.provenance?.derivedFromId === row.id) {
-        placed.add(child.id);
-        out.push(child);
-      }
-    }
-  }
-  return out;
+  return byId;
 }
 
 /** Where a derived statement came from, in the words and format the old statement table
@@ -469,7 +458,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           an empty consultation: the error below (and the toast) say what happened. */}
 
         <div className="landing-section" style={{marginBottom: '1.5rem'}}>
-          <h3 style={{fontSize: 16, marginBottom: '.5rem'}}>How statement management works</h3>
+          <h2 style={{fontSize: 16, marginBottom: '.5rem'}}>How statement management works</h2>
           <p className="muted" style={{fontSize: 13, marginBottom: '.6rem'}}>
             Pending statements are held for moderator review. Approve makes a statement visible
             {' '}for participant voting, hide removes it from participant voting, and pending returns
@@ -496,7 +485,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
 
         {!data.seeding.allowed ? (
           <>
-            <h3 className="section-heading">Seed statements locked</h3>
+            <h2 className="section-heading">Seed statements locked</h2>
             <div className="edit-form">
               <p className="muted" style={{marginBottom: 0, fontSize: 13}}>
                 {data.seeding.lockReason} Seed statements can only be added during preparation
@@ -506,7 +495,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           </>
         ) : (
           <>
-            <h3 className="section-heading">Add seed statement</h3>
+            <h2 className="section-heading">Add seed statement</h2>
             <div className="edit-form">
               <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
                 Adds a seed-marked statement that appears early in the voting sequence for participants.
@@ -544,7 +533,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
               </form>
             </div>
 
-            <h3 className="section-heading">Import seed statements from text</h3>
+            <h2 className="section-heading">Import seed statements from text</h2>
             <div className="edit-form">
               <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
                 Paste one statement per line. Blank lines are ignored. Maximum {data.seeding.maxStatementsPerImport}
@@ -577,7 +566,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
 
         {/* Arguments are a page in the spec and not one here: there is no admin list endpoint
             for them yet (#473). */}
-        <p className="admin-shell__coming" lang="en">Also coming: the arguments of this consultation as a list of their own — not available yet (#473)</p>
+        <AdminComing what="the arguments of this consultation as a list of their own" issue={473} />
 
         {/* The Approval control (strict moderation) lives on Settings › Basics (#478): it is a
             setting of the consultation, not of the statement list. */}

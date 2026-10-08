@@ -11,6 +11,7 @@ import {
 } from '../../api/queries';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
+import {sortByBasedOn} from './admin-based-on';
 import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
 import {useAnnouncer} from './admin-announcer';
@@ -48,43 +49,14 @@ const EMPTY: Record<Position, string> = {
   hidden: 'stmts-hidden-empty',
 };
 
-/** "Oldest first" works the queue in the order statements arrived. "Based on" is lineage:
- *  a derived statement sits directly under the statement it corrects, and a correction of
- *  that correction under it in turn, so a whole line of corrections is read together. Both
- *  sort what is already loaded; nothing is refetched.
- *
- *  A derived statement whose source is not in the same list is treated as a root: the
- *  grouping has nothing to attach it to, and hiding it would take a statement off the
- *  queue. */
+/** "Oldest first" works the queue in the order statements arrived; "Based on" groups a
+ *  correction under the statement it corrects (`sortByBasedOn`). Both sort what is already
+ *  loaded; nothing is refetched. */
 type Sort = 'oldest' | 'based-on';
 
 function sortStatements(rows: Statement[], sort: Sort): Statement[] {
-  const byId = [...rows].sort((left, right) => left.id - right.id);
-  if (sort === 'oldest') return byId;
-  const shown = new Set(byId.map((row) => row.id));
-  const children = new Map<number, Statement[]>();
-  const roots: Statement[] = [];
-  for (const row of byId) {
-    const source = row.provenance?.derivedFromId;
-    if (source !== undefined && source !== row.id && shown.has(source)) {
-      children.set(source, [...(children.get(source) ?? []), row]);
-    } else {
-      roots.push(row);
-    }
-  }
-  const placed = new Set<number>();
-  const out: Statement[] = [];
-  const place = (row: Statement) => {
-    if (placed.has(row.id)) return;
-    placed.add(row.id);
-    out.push(row);
-    for (const child of children.get(row.id) ?? []) place(child);
-  };
-  roots.forEach(place);
-  // Statements that derive from each other in a circle have no root to hang from; they
-  // still belong on the queue.
-  byId.forEach(place);
-  return out;
+  if (sort === 'based-on') return sortByBasedOn(rows);
+  return [...rows].sort((left, right) => left.id - right.id);
 }
 
 function errorMessage(error: Error, msg: Message): string {
