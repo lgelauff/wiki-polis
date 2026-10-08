@@ -91,10 +91,13 @@ function AccessControl({conversationId, participant, csrfToken, onFeedback}: {
         value={summary}
         onChange={(event) => setSummary(event.target.value)}
         placeholder={placeholder}
-        aria-label={placeholder}
+        // Every row has this field and this button: the person's name after the visible
+        // words tells one row's from the next one's.
+        aria-label={`${placeholder} — ${participant.pseudonym}`}
       />
       <button type="submit" className="admin-row__text-button" disabled={mutation.isPending}>
         {msg(participant.access.banned ? 'participants-btn-unban' : 'participants-btn-ban')}
+        {' '}<span className="sr-only">{`— ${participant.pseudonym}`}</span>
       </button>
     </form>
   );
@@ -130,6 +133,9 @@ export function AdminModerationPeoplePage({conversationId, csrfToken}: {
             {data.participants.map((participant) => (
               <li className="admin-row" key={participant.participantId}>
                 <div className="admin-row__text">
+                  {/* The pseudonym, never the username: moderators see people only by the
+                      name they take part under (owner decision, 2026-10-08), and the roster
+                      does not carry a username to a moderator-only viewer at all. */}
                   {participant.pseudonym}
                   <span className="admin-row__suffix">
                     {' · '}

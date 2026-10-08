@@ -13,6 +13,7 @@ import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
 import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
+import {useAnnouncer} from './admin-announcer';
 import {AdminTabStrip, type SectionTab} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
 import {useRowFocus} from './admin-row-focus';
@@ -39,6 +40,12 @@ const LIST: Record<Position, 'approved' | 'pending' | 'hidden'> = {
   approved: 'approved',
   unmoderated: 'pending',
   hidden: 'hidden',
+};
+
+const EMPTY: Record<Position, string> = {
+  approved: 'stmts-approved-empty',
+  unmoderated: 'admin-moderation-queue-empty',
+  hidden: 'stmts-hidden-empty',
 };
 
 /** "Oldest first" works the queue in the order statements arrived. "Based on" is lineage:
@@ -84,10 +91,12 @@ function errorMessage(error: Error, msg: Message): string {
   return error instanceof ApiContractError ? error.message : msg('adminconv-command-failed');
 }
 
-/** One statement as one row: the text, where it came from, and what can be done to it.
+/** One statement as one row: the text, its number, where it came from, and what can be
+ *  done to it.
  *
- *  The id is neither printed nor a column of its own: it is the row's accessible name,
- *  which is what a moderator says out loud when they confirm an action. Approve and Hide
+ *  The number is a muted suffix, not a column of its own: it is how a moderator refers to a
+ *  statement ("↳ #12", Featured's add by number), and it is in the accessible name of each
+ *  action, so the visible "#12" is also what a voice-control user says. Approve and Hide
  *  are icon-only (a check and a cross) because they are the two ends of one decision and
  *  the same two words on every row are noise; the words live in the accessible name and in
  *  the tooltip. */
@@ -111,6 +120,7 @@ function QueueRow({conversationId, statement, csrfToken, move, onError}: {
     <li className="admin-row" data-row-id={statement.id}>
       <div className="admin-row__text">
         {statement.text}
+        <span className="admin-row__suffix">{` #${statement.id}`}</span>
         {source && (
           <InternalLink href={`/admin/conversations/${conversationId}/statements`}
             className="admin-row__source">{`↳ #${source.derivedFromId}`}</InternalLink>
@@ -156,6 +166,7 @@ export function AdminModerationQueuePage({conversationId, csrfToken}: {
   const [sort, setSort] = useState<Sort>('oldest');
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
+  const announcer = useAnnouncer();
   const tabs: SectionTab[] = moderationTabs(conversationId, msg);
   const rows = sortStatements(data.statements[LIST[position]], sort);
   const {listRef, emptyRef, rowRemoved} = useRowFocus(rows.map((row) => row.id));
@@ -166,6 +177,10 @@ export function AdminModerationQueuePage({conversationId, csrfToken}: {
 
   function move(statement: Statement, status: Status) {
     if (status !== LIST[position]) rowRemoved(statement.id);
+    // The row leaves the list (or its glyph greys out); this says what happened, and is
+    // said again when the next statement gets the same answer.
+    if (status === 'approved') announcer.announce(msg('admin-moderation-statement-approved', statement.id));
+    if (status === 'hidden') announcer.announce(msg('admin-moderation-statement-hidden', statement.id));
     // The receipt names the new state, so the row moves between the lists rather than
     // refetching: the queue keeps its scroll position and its sort while a moderator works.
     queryClient.setQueryData<Workspace>(options.queryKey, (workspace) => {
@@ -189,6 +204,7 @@ export function AdminModerationQueuePage({conversationId, csrfToken}: {
       section="moderation"
       subPage={msg('admin-moderation-queue')}
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
+      announcer={announcer}
     >
       <div className="admin-page">
         <h1>{msg('admin-shell-moderation')}</h1>
@@ -239,7 +255,9 @@ export function AdminModerationQueuePage({conversationId, csrfToken}: {
             ))}
           </ul>
         ) : (
-          <p className="admin-empty" ref={emptyRef} tabIndex={-1}>{msg('admin-moderation-queue-empty')}</p>
+          // Each position says what it is empty of: nothing waiting is not the same news as
+          // nothing approved.
+          <p className="admin-empty" ref={emptyRef} tabIndex={-1}>{msg(EMPTY[position])}</p>
         )}
 
         {/* The waiting time on each row would need a timestamp the statements endpoint does

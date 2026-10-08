@@ -127,6 +127,8 @@ TAGS:
     - admin-moderation-state-approved
     - admin-moderation-state-hidden
     - admin-moderation-state-unmoderated
+    - admin-moderation-statement-approved
+    - admin-moderation-statement-hidden
     - admin-nav-panel
     - admin-new-conv-heading
     - admin-overview-card-settings

@@ -370,10 +370,11 @@ test('resolves a privacy-safe moderation item through the typed contract', async
   expect(screen.getByText('A statement containing private information.')).toBeVisible();
   // The reason is a muted suffix on the flagged text, not a field of its own.
   expect(screen.getByText(/Privacy violation/)).toHaveClass('admin-row__suffix');
-  fireEvent.click(screen.getByRole('button', {name: 'Mark as handled'}));
+  fireEvent.click(screen.getByRole('button', {name: /^Mark as handled/}));
 
   expect(await screen.findByText('No open flags.')).toBeVisible();
-  expect(screen.getByRole('status')).toHaveTextContent('Flag marked as handled.');
+  await waitFor(() => expect(document.querySelector('[aria-live="polite"]'))
+    .toHaveTextContent('Flag marked as handled.'));
 });
 
 /** Serves settings whose answer to who gets in is the invitation list: the Invitations tab

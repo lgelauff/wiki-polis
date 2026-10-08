@@ -99,6 +99,11 @@ function strip() {
   return screen.getByRole('navigation', {name: 'Moderation'});
 }
 
+/** One of the shell's two always-mounted live regions, which every result is read through. */
+function announced(politeness: 'polite' | 'assertive') {
+  return document.querySelector(`[aria-live="${politeness}"]`);
+}
+
 /** The page's own content, without the console frame's sidebar and section list. */
 function page() {
   return within(screen.getByRole('main'));
@@ -335,18 +340,18 @@ test('flags are one row each, with the reason as a suffix and one way to close o
   // One text action, not a check (a check beside a flag reads as confirming it), and an
   // optional note with a label of its own.
   expect(within(row).getAllByRole('button').map((button) => button.textContent))
-    .toEqual(['Mark as handled']);
-  expect(within(row).getByRole('textbox', {name: 'Resolution note (optional)'})).toHaveValue('');
+    .toEqual(['Mark as handled — A statement with a real name in it.']);
+  expect(within(row).getByRole('textbox', {name: /^Resolution note \(optional\)/})).toHaveValue('');
 
   // One request per row: a second click while the first runs sends nothing. An empty
   // note is sent as null.
-  fireEvent.click(within(row).getByRole('button', {name: 'Mark as handled'}));
-  fireEvent.click(within(row).getByRole('button', {name: 'Mark as handled'}));
+  fireEvent.click(within(row).getByRole('button', {name: /^Mark as handled/}));
+  fireEvent.click(within(row).getByRole('button', {name: /^Mark as handled/}));
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toEqual({flagId: 41, body: {resolved: true, note: null}});
   await waitFor(() => expect(screen.getByText('No open flags.')).toHaveFocus());
-  expect(screen.queryByRole('button', {name: 'Mark as handled'})).toBeNull();
-  expect(screen.getByRole('status')).toHaveTextContent('Flag marked as handled.');
+  expect(screen.queryByRole('button', {name: /^Mark as handled/})).toBeNull();
+  expect(announced('polite')).toHaveTextContent('Flag marked as handled.');
   // The resolved flag moves to the list below, without the way to the content.
   const resolved = screen.getByRole('heading', {name: 'Handled', level: 2}).nextElementSibling!;
   expect(resolved).toHaveTextContent('A statement with a real name in it.');
@@ -375,9 +380,9 @@ test('the note typed on a flag is sent with it and shown in the handled list', a
 
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const row = page().getAllByRole('listitem')[0]!;
-  fireEvent.change(within(row).getByRole('textbox', {name: 'Resolution note (optional)'}),
+  fireEvent.change(within(row).getByRole('textbox', {name: /^Resolution note \(optional\)/}),
     {target: {value: 'Hid the statement on the queue.'}});
-  fireEvent.click(within(row).getByRole('button', {name: 'Mark as handled'}));
+  fireEvent.click(within(row).getByRole('button', {name: /^Mark as handled/}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toEqual({resolved: true, note: 'Hid the statement on the queue.'});
@@ -400,8 +405,8 @@ test('a flag someone else already handled says so', async () => {
     '/admin/conversations/7/moderation/flags');
 
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
-  fireEvent.click(screen.getAllByRole('button', {name: 'Mark as handled'})[0]!);
-  expect(await screen.findByRole('alert')).toHaveTextContent('Flag was already handled.');
+  fireEvent.click(screen.getAllByRole('button', {name: /^Mark as handled/})[0]!);
+  await waitFor(() => expect(announced('assertive')).toHaveTextContent('Flag was already handled.'));
 });
 
 test('the flags page switches between statements and arguments when the data has both', async () => {
@@ -468,15 +473,15 @@ test('people are one row each, with their state and the control that changes it'
   expect(row).toHaveTextContent('Active');
   expect(row).toHaveTextContent('2026-08-13');
   expect(row).not.toHaveTextContent('since');
-  expect(within(row).getByRole('textbox', {name: 'Reason (optional)'})).toBeVisible();
+  expect(within(row).getByRole('textbox', {name: 'Reason (optional) — quiet-otter'})).toBeVisible();
 
-  fireEvent.click(within(row).getByRole('button', {name: 'ban'}));
+  fireEvent.click(within(row).getByRole('button', {name: 'ban — quiet-otter'}));
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toEqual({participantId: 23, body: {banned: true, summary: null}});
   // The row says the new state in place, and the toast says it to a screen reader.
   await waitFor(() => expect(page().getByRole('listitem')).toHaveTextContent('Banned since 2026-08-14'));
-  expect(screen.getByRole('button', {name: 'unban'})).toBeVisible();
-  expect(screen.getByRole('status')).toHaveTextContent('Participant banned from this conversation.');
+  expect(screen.getByRole('button', {name: 'unban — quiet-otter'})).toBeVisible();
+  expect(announced('polite')).toHaveTextContent('Participant banned from this conversation.');
 });
 
 test('a person shows since when and why only while blocked, and an unchanged unblock says so', async () => {
@@ -519,9 +524,9 @@ test('a person shows since when and why only while blocked, and an unchanged unb
   expect(allowed).toHaveTextContent('Active');
   expect(allowed).not.toHaveTextContent('since');
 
-  fireEvent.click(within(blocked!).getByRole('button', {name: 'unban'}));
-  expect(await screen.findByRole('alert'))
-    .toHaveTextContent('Participant is already allowed in this consultation.');
+  fireEvent.click(within(blocked!).getByRole('button', {name: /^unban/}));
+  await waitFor(() => expect(announced('assertive'))
+    .toHaveTextContent('Participant is already allowed in this consultation.'));
 });
 
 test('Featured is today’s page under the strip, arguments and all', async () => {

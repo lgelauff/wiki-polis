@@ -26,6 +26,14 @@ type Target = Flag['target']['type'];
  *  lists are the same data read two ways rather than two requests. */
 type Position = Target;
 
+/** The start of a flagged text, to tell one row's controls from the next one's: every row
+ *  has the same "Note" and "Mark as handled", so their accessible names carry this after
+ *  the visible words (which stay first, as the name a voice-control user says). */
+function rowExcerpt(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > 60 ? `${flat.slice(0, 59)}…` : flat;
+}
+
 function errorMessage(error: Error, msg: Message): string {
   return error instanceof ApiContractError ? error.message : msg('adminconv-command-failed');
 }
@@ -76,6 +84,8 @@ function FlagRow({conversationId, flag, csrfToken, onResolved, onFeedback}: {
     ),
     onSuccess: (receipt) => {
       onResolved(flag.id);
+      // The open-flag count is the Moderation badge in the frame's sidebar.
+      void queryClient.invalidateQueries({queryKey: adminLifecycleQuery(conversationId).queryKey});
       queryClient.setQueryData<Queue>(
         adminFlagQueueQuery(conversationId).queryKey,
         (queue) => {
@@ -112,11 +122,13 @@ function FlagRow({conversationId, flag, csrfToken, onResolved, onFeedback}: {
         <form className="admin-row__block-form" onSubmit={resolve}>
           <label className="admin-row__field">
             <span>{msg('admin-moderation-flag-note')}</span>
+            {' '}<span className="sr-only">{`— ${rowExcerpt(flag.target.text)}`}</span>
             <input type="text" name="resolution_note" value={note}
               onChange={(event) => setNote(event.target.value)} />
           </label>
           <button type="submit" className="admin-row__text-button" disabled={mutation.isPending}>
             {msg('admin-moderation-flag-handle')}
+            {' '}<span className="sr-only">{`— ${rowExcerpt(flag.target.text)}`}</span>
           </button>
         </form>
       </div>

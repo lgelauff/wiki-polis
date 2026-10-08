@@ -575,6 +575,8 @@
     "admin-moderation-queue-empty": "Nothing to moderate.",
     "admin-moderation-approve-statement": "Approve statement $1",
     "admin-moderation-hide-statement": "Hide statement $1",
+    "admin-moderation-statement-approved": "Statement $1 approved.",
+    "admin-moderation-statement-hidden": "Statement $1 hidden.",
     "admin-moderation-flag-handle": "Mark as handled",
     "admin-moderation-flag-note": "Resolution note (optional)",
     "admin-moderation-flag-handled": "Handled $1",
