@@ -325,7 +325,7 @@ test('matches legacy featured-statement administration and commands', async () =
   // like every other page of the section.
   expect(await screen.findByRole('heading', {name: 'Moderation', level: 1})).toBeVisible();
   expect(screen.queryByRole('heading', {name: 'Featured'})).toBeNull();
-  expect(screen.getByRole('heading', {name: 'Confirmed (1)'})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Confirmed 1'})).toBeVisible();
   expect(screen.getByText('An approved seed statement.')).toBeVisible();
   expect(screen.getByText('A candidate preserving another viewpoint.')).toBeVisible();
   const candidates = screen.getAllByRole('table')[1]!;
@@ -432,9 +432,10 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(screen.getByText('Only people who have been given access')).toBeVisible();
   expect(screen.queryByText('invite_only', {exact: false})).not.toBeInTheDocument();
   expect(screen.getByText('Existing editor')).toBeVisible();
-  expect(screen.getByText('1 invited · 1 linked · 0 never logged in')).toBeVisible();
-  const existingRow = screen.getByText('Existing editor').closest('tr');
-  expect(within(existingRow!).getByText('Linked')).toBeVisible();
+  // No count line repeating the list: each row says its own state, in words.
+  expect(screen.queryByText(/invited ·/)).not.toBeInTheDocument();
+  const existingRow = screen.getByText('Existing editor').closest('li');
+  expect(existingRow).toHaveTextContent('Existing editor · Signed in');
   fireEvent.change(screen.getByLabelText('Wikimedia usernames (one per line)'), {
     target: {value: 'New editor\nNew editor'},
   });
@@ -442,16 +443,14 @@ test('adds and removes invitations through convergent admin commands', async () 
 
   expect(await screen.findByText('New editor')).toBeVisible();
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Invitations: 1 added; 1 duplicate input.'));
-  const newEditorRow = screen.getByText('New editor').closest('tr');
+  const newEditorRow = screen.getByText('New editor').closest('li');
   expect(newEditorRow).not.toBeNull();
-  expect(within(newEditorRow!).getByText('Never logged in')).toBeVisible();
-  expect(screen.getByText('2 invited · 1 linked · 1 never logged in')).toBeVisible();
+  expect(newEditorRow).toHaveTextContent('New editor · Not signed in yet');
   fireEvent.click(within(newEditorRow!).getByRole('button', {
     name: 'Remove invitation for New editor',
   }));
   expect(await screen.findByText('No invitations yet.')).toBeVisible();
-  expect(screen.getByText('No invitations yet.').closest('td')).toHaveAttribute('colspan', '4');
-  expect(screen.queryByText(/invited ·/)).not.toBeInTheDocument();
+  expect(screen.getByText('No invitations yet.')).toHaveClass('admin-empty');
 });
 
 test('greys out adding invites while access is not the invitation list, and says why', async () => {
@@ -521,10 +520,10 @@ test('replaces a conversation role set from the admin workspace', async () => {
   const roster = assigned.closest('section')!;
   expect(within(roster).getByRole('listitem')).toHaveTextContent('Example editor');
   fireEvent.change(screen.getByLabelText('Participant'), {target: {value: '23'}});
-  fireEvent.click(screen.getByRole('checkbox', {name: 'organizer'}));
+  fireEvent.click(screen.getByRole('checkbox', {name: 'Organizer'}));
   fireEvent.click(screen.getByRole('button', {name: 'Save role set'}));
   expect(await screen.findByRole('status')).toHaveTextContent('Added: organizer');
-  expect(screen.getByText('moderator + organizer')).toBeVisible();
+  expect(within(roster).getByRole('listitem')).toHaveTextContent('Example editor · Moderator, Organizer');
 });
 
 function LocationProbe() {

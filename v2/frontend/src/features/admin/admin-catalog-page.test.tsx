@@ -78,7 +78,7 @@ test('the page is the site admin dashboard, with the columns it decides on', asy
   const table = conversationsTable();
   // Title · Access · Status · links. The slug is not a column: it is in the link.
   expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent))
-    .toEqual(['Title', 'Access', 'Status', '']);
+    .toEqual(['Title', 'Access', 'Status', 'Actions']);
   expect(within(table).queryByRole('columnheader', {name: 'Slug'})).toBeNull();
 
   // Three main rows: the archived one is not among them, and neither is the practice one.
@@ -93,18 +93,23 @@ test('each status says the server’s word, archived included', async () => {
 
   await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
   const table = conversationsTable();
-  expect(within(screen.getByText('Practice Environment (1)').closest('details')!)
-    .getByRole('row', {name: /Consultation 5/})).toHaveTextContent('active');
-  expect(within(screen.getByText('Other (1)').closest('details')!)
-    .getByRole('row', {name: /Consultation 4/})).toHaveTextContent('archived');
+  expect(within(screen.getByText('Practice Environment', {selector: 'summary'}).closest('details')!)
+    .getByRole('row', {name: /Consultation 5/})).toHaveTextContent('Active');
+  expect(within(screen.getByText('Other', {selector: 'summary'}).closest('details')!)
+    .getByRole('row', {name: /Consultation 4/})).toHaveTextContent('Archived');
   // The closed consultation is closed, and not called archived.
   const closed = within(table).getByRole('row', {name: /Consultation 3/});
-  expect(closed).toHaveTextContent('closed');
-  expect(closed).not.toHaveTextContent('archived');
-  // Badge classes stay as they were: active green, paused, everything else quiet.
-  expect(within(table).getByText('active')).toHaveClass('badge-active-inline');
-  expect(within(table).getByText('paused')).toHaveClass('badge-paused-inline');
-  expect(within(table).getByText('closed')).toHaveClass('badge-inactive');
+  expect(closed).toHaveTextContent('Closed');
+  expect(closed).not.toHaveTextContent('Archived');
+  // Statuses are plain words in their cell: no badge, no box, no colour of their own.
+  for (const word of ['Active', 'Paused', 'Closed']) {
+    const cell = within(table).getByRole('cell', {name: word});
+    expect(cell.children).toHaveLength(0);
+    expect(cell.className).toBe('');
+  }
+  // A group's count is a bare number beside its name, not in brackets.
+  expect(screen.getByText('Practice Environment', {selector: 'summary'}).querySelector('.admin-count'))
+    .toHaveTextContent(/^1$/);
 });
 
 test('the practice item and the archived one sit in collapsed groups, not in the table', async () => {
@@ -112,8 +117,8 @@ test('the practice item and the archived one sit in collapsed groups, not in the
   renderPage();
 
   await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
-  const practice = screen.getByText('Practice Environment (1)').closest('details')!;
-  const other = screen.getByText('Other (1)').closest('details')!;
+  const practice = screen.getByText('Practice Environment', {selector: 'summary'}).closest('details')!;
+  const other = screen.getByText('Other', {selector: 'summary'}).closest('details')!;
   expect(practice).not.toHaveAttribute('open');
   expect(other).not.toHaveAttribute('open');
   // A practice item is never listed as a consultation.
@@ -123,13 +128,13 @@ test('the practice item and the archived one sit in collapsed groups, not in the
   expect(within(practice).getByText('Consultation 5')).toBeInTheDocument();
   expect(within(other).getByText('Consultation 4')).toBeInTheDocument();
   expect(within(practice).getByText('Consultation 5')).not.toBeVisible();
-  fireEvent.click(within(practice).getByText('Practice Environment (1)'));
+  fireEvent.click(within(practice).getByText('Practice Environment', {selector: 'summary'}));
   expect(within(practice).getByText('Consultation 5')).toBeVisible();
   // Each group's table names its columns the way the main table does, so a cell in it has
   // a column name too.
   for (const group of [practice, other]) {
     expect(within(group).getAllByRole('columnheader').map((cell) => cell.textContent))
-      .toEqual(['Title', 'Access', 'Status', '']);
+      .toEqual(['Title', 'Access', 'Status', 'Actions']);
   }
 });
 
@@ -139,8 +144,8 @@ test('a practice item that is also archived goes under the Practice Environment'
   renderPage();
 
   await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
-  expect(screen.getByText('Practice Environment (1)')).toBeVisible();
-  expect(screen.queryByText(/^Other \(/)).toBeNull();
+  expect(screen.getByText('Practice Environment', {selector: 'summary'})).toBeVisible();
+  expect(screen.queryByText('Other', {selector: 'summary'})).toBeNull();
 });
 
 test('with neither a practice item nor an archived one there is no group at all', async () => {

@@ -449,8 +449,8 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
 
         {!data.seeding.allowed ? (
           <>
-            <h2 className="section-heading">Seed statements locked</h2>
-            <div className="edit-form">
+            <h2>Seed statements locked</h2>
+            <div className="admin-form">
               <p className="muted" style={{marginBottom: 0, fontSize: 13}}>
                 {data.seeding.lockReason} Seed statements can only be added during preparation
                 {' '}or while statement submission is open.
@@ -459,8 +459,8 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           </>
         ) : (
           <>
-            <h2 className="section-heading">Add seed statement</h2>
-            <div className="edit-form">
+            <h2>Add seed statement</h2>
+            <div className="admin-form">
               <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
                 Adds a seed-marked statement that participants see early on.
               </p>
@@ -497,8 +497,8 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
               </form>
             </div>
 
-            <h2 className="section-heading">Import seed statements from text</h2>
-            <div className="edit-form">
+            <h2>Import seed statements from text</h2>
+            <div className="admin-form">
               <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
                 Paste one statement per line. Blank lines are ignored. Maximum {data.seeding.maxStatementsPerImport}
                 {' '}statements per import and {data.seeding.maxCharactersPerStatement} characters per statement.

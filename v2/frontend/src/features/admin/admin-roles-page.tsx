@@ -9,9 +9,16 @@ import {
   putAdminRoles,
 } from '../../api/queries';
 import {AdminSettingsFrame} from './admin-settings-page';
-import {useMessage} from '../../i18n/messages';
+import {useMessage, type Message} from '../../i18n/messages';
 
 type Role = 'moderator' | 'organizer';
+
+/** A role in the console's words, the ones the top bar uses for the operator's own role. */
+function roleName(msg: Message, role: string): string {
+  if (role === 'moderator') return msg('admin-shell-role-moderator');
+  if (role === 'organizer') return msg('admin-shell-role-organizer');
+  return role;
+}
 type Roster = components['schemas']['AdminRoleRoster'];
 
 export function AdminRolesPage({conversationId, csrfToken}: {
@@ -77,31 +84,37 @@ export function AdminRolesPage({conversationId, csrfToken}: {
     >
       <div>
       <p>See who can moderate or organize {data.conversation.title}.</p>
-      <section className="roles-roster" aria-labelledby="role-roster-heading">
-        <header><h2 id="role-roster-heading">Assigned</h2><span>{data.assignments.length}</span></header>
-        {data.assignments.length ? <ul>{data.assignments.map((row) => (
-          <li key={row.participantId}>
-            <strong>{row.username}</strong>
-            <span>{row.roles.join(' + ')}</span>
+      <section aria-labelledby="role-roster-heading">
+        <h2 id="role-roster-heading">Assigned<span className="admin-count">{data.assignments.length}</span></h2>
+        {/* One row per person, their roles as plain words after the name. */}
+        {data.assignments.length ? <ul className="admin-rows">{data.assignments.map((row) => (
+          <li className="admin-row" key={row.participantId}>
+            <div className="admin-row__text">
+              {row.username}
+              <span className="admin-row__suffix">{' · '}{row.roles.map((role) => roleName(msg, role)).join(', ')}</span>
+            </div>
           </li>
-        ))}</ul> : <p className="moderation-empty">No roles assigned yet.</p>}
+        ))}</ul> : <p className="admin-empty">No roles assigned yet.</p>}
       </section>
       {data.capabilities.manageRoles && (
-        <section className="roles-editor" aria-labelledby="role-editor-heading">
+        <section aria-labelledby="role-editor-heading">
           <div><p className="eyebrow">Site admin</p><h2 id="role-editor-heading">Replace a role set</h2><p>An empty selection removes all scoped access.</p></div>
           <form onSubmit={submit}>
-            <label htmlFor="role-participant">Participant</label>
-            <select id="role-participant" value={participantId ?? ''} onChange={(event) => selectParticipant(event.target.value)} required>
-              <option value="">Select an account</option>
-              {data.candidates.map((row) => <option key={row.participantId} value={row.participantId}>{row.username}</option>)}
-            </select>
-            <fieldset disabled={participantId === null || mutation.isPending}>
+            <label className="admin-field admin-field--medium">Participant
+              <select value={participantId ?? ''} onChange={(event) => selectParticipant(event.target.value)} required>
+                <option value="">Select an account</option>
+                {data.candidates.map((row) => <option key={row.participantId} value={row.participantId}>{row.username}</option>)}
+              </select>
+            </label>
+            <fieldset className="admin-choices" disabled={participantId === null || mutation.isPending}>
               <legend>Roles</legend>
               {data.availableRoles.map((role) => <label key={role}>
-                <input type="checkbox" checked={chosen.includes(role)} onChange={() => toggle(role)} /> {role}
+                <input type="checkbox" checked={chosen.includes(role)} onChange={() => toggle(role)} /> {roleName(msg, role)}
               </label>)}
             </fieldset>
-            <button type="submit" className="admin-button admin-button--primary" disabled={participantId === null || mutation.isPending}>{mutation.isPending ? 'Saving…' : 'Save role set'}</button>
+            <div className="admin-form__actions">
+              <button type="submit" className="admin-button admin-button--primary" disabled={participantId === null || mutation.isPending}>{mutation.isPending ? 'Saving…' : 'Save role set'}</button>
+            </div>
             {/* Always mounted, keyed per save: a repeat of the same result is read again. */}
             <div role="status">
               {mutation.isSuccess && <p key={mutation.submittedAt}>Added: {mutation.data.added.join(', ') || 'none'} · Removed: {mutation.data.removed.join(', ') || 'none'}</p>}

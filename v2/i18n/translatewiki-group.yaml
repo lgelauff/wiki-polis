@@ -101,7 +101,9 @@ TAGS:
     - admin-globals-heading
     - admin-globals-intro
     - admin-grant-heading
+    - admin-invitations-not-signed-in
     - admin-invitations-removed
+    - admin-invitations-signed-in
     - admin-invitations-unavailable
     - admin-label-access
     - admin-label-elig-event
@@ -169,6 +171,7 @@ TAGS:
     - admin-status-archived
     - admin-status-closed
     - admin-status-paused
+    - admin-th-actions
     - admin-th-participant
     - admin-th-policy
     - admin-th-status

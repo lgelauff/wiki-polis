@@ -181,7 +181,7 @@ test('the search box filters the loaded text and says when nothing is left', asy
   expect(page().queryByText(/Bicycle parking/)).toBeNull();
 
   fireEvent.change(screen.getByLabelText('Search statements'), {target: {value: 'nothing here'}});
-  expect(page().getByText('No statement matches the search.')).toBeVisible();
+  expect(page().getByText('No statements match the search.')).toBeVisible();
   expect(page().queryByText('No statements yet.')).toBeNull();
 });
 
@@ -191,10 +191,10 @@ test('the empty list says whether there are no statements at all or none in this
     '/admin/conversations/7/content/statements');
 
   await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
-  expect(page().getByText('No approved statements.')).toBeVisible();
+  expect(page().getByText('No approved statements yet.')).toBeVisible();
   expect(page().queryByText('No statements yet.')).toBeNull();
   fireEvent.click(screen.getByRole('button', {name: 'Show hidden'}));
-  expect(page().getByText('No hidden statements.')).toBeVisible();
+  expect(page().getByText('No hidden statements yet.')).toBeVisible();
 });
 
 test('a consultation without statements says so once', async () => {
@@ -219,8 +219,8 @@ test('statements that could not be loaded are an error, not an empty consultatio
   expect(errors[0]).toHaveAttribute('role', 'alert');
   expect(errors[0]!.closest('.admin-shell__notices')).toBeNull();
   expect(document.querySelector('.admin-shell__notices')).toBeEmptyDOMElement();
-  for (const text of ['No statements yet.', 'No approved statements.',
-    'No statement matches the search.']) {
+  for (const text of ['No statements yet.', 'No approved statements yet.',
+    'No statements match the search.']) {
     expect(page().queryByText(text)).toBeNull();
   }
 });
@@ -381,7 +381,9 @@ test('participants are one row each, with today’s figures and the access contr
   expect(row).toHaveTextContent('8 / 12');
   expect(row).toHaveTextContent('Statements remaining');
   expect(row).toHaveTextContent('Arguments submitted');
-  expect(row).toHaveTextContent('2026-08-13');
+  // One date rendering for the console: a <time> in the reader's language.
+  expect(row).toHaveTextContent('13 Aug 2026');
+  expect(row.querySelector('time')).toHaveAttribute('title', expect.stringMatching(/ UTC$/));
   // The access control is Moderation › People's: a labelled field and a text button in
   // the row's block form, not a boxed red button under a bare input (#473 D2). Both carry
   // the person's name after the visible words, to tell this row's from the next one's.
@@ -394,7 +396,7 @@ test('participants are one row each, with today’s figures and the access contr
   // Once banned, the row says "Blocked since …" once, beside the name.
   fireEvent.click(within(row).getByRole('button', {name: 'Block — Example editor'}));
   await within(row).findByRole('button', {name: 'Unblock — Example editor'});
-  expect(row).toHaveTextContent('Example editor · Blocked since 2026-08-13');
+  expect(row).toHaveTextContent('Example editor · Blocked since 13 Aug 2026');
   expect(row.textContent?.match(/since/g)).toHaveLength(1);
 });
 

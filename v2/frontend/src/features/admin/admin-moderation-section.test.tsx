@@ -471,7 +471,7 @@ test('people are one row each, with their state and the control that changes it'
   const row = page().getByRole('listitem');
   expect(row).toHaveTextContent('quiet-otter');
   expect(row).toHaveTextContent('Active');
-  expect(row).toHaveTextContent('2026-08-13');
+  expect(row).toHaveTextContent('13 Aug 2026');
   expect(row).not.toHaveTextContent('since');
   expect(within(row).getByRole('textbox', {name: 'Reason (optional) — quiet-otter'})).toBeVisible();
 
@@ -479,7 +479,7 @@ test('people are one row each, with their state and the control that changes it'
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toEqual({participantId: 23, body: {banned: true, summary: null}});
   // The row says the new state in place, and the toast says it to a screen reader.
-  await waitFor(() => expect(page().getByRole('listitem')).toHaveTextContent('Blocked since 2026-08-14'));
+  await waitFor(() => expect(page().getByRole('listitem')).toHaveTextContent('Blocked since 14 Aug 2026'));
   expect(screen.getByRole('button', {name: 'Unblock — quiet-otter'})).toBeVisible();
   expect(announced('polite')).toHaveTextContent('Participant blocked in this consultation.');
 });
@@ -520,7 +520,7 @@ test('a person shows since when and why only while blocked, and an unchanged unb
 
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const [blocked, allowed] = page().getAllByRole('listitem');
-  expect(blocked).toHaveTextContent('Blocked since 2026-08-10 · Repeated spam.');
+  expect(blocked).toHaveTextContent('Blocked since 10 Aug 2026 · Repeated spam.');
   expect(allowed).toHaveTextContent('Active');
   expect(allowed).not.toHaveTextContent('since');
 
@@ -536,9 +536,9 @@ test('Featured is today’s page under the strip, arguments and all', async () =
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   expect(within(strip()).getByRole('link', {name: 'Featured'}))
     .toHaveAttribute('aria-current', 'page');
-  expect(screen.getByRole('heading', {name: 'Confirmed (1)'})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Confirmed 1'})).toBeVisible();
   // Argument moderation is served by this endpoint, so it stays here (#473).
-  expect(screen.getByText('Arguments')).toBeVisible();
+  expect(screen.getByRole('list', {name: /^Arguments on statement/})).toBeVisible();
   expect(screen.getByRole('button', {name: 'Hide'})).toBeVisible();
 });
 

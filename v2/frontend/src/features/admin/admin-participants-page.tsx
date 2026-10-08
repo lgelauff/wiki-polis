@@ -9,6 +9,7 @@ import {
 } from '../../api/queries';
 import {useMessage} from '../../i18n/messages';
 import {AdminShell} from './admin-shell';
+import {AdminTime} from './admin-time';
 import {PersonAccessControl} from './admin-person-access';
 import {AdminComing} from './admin-coming';
 import {AdminTabStrip} from './admin-tab-strip';
@@ -16,15 +17,6 @@ import {contentTabs} from './admin-content-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 
 type Participant = components['schemas']['AdminParticipant'];
-
-function formatLegacyDate(value: string): string {
-  return new Date(value).toISOString().slice(0, 10);
-}
-
-function formatLegacyDateTime(value: string | null): string | null {
-  if (!value) return null;
-  return new Date(value).toISOString().slice(0, 16).replace('T', ' ');
-}
 
 /** The person as this page names them: the Wikimedia username for an organizer or a site
  *  admin, the pseudonym for a moderator-only viewer, to whom the roster sends no username
@@ -71,7 +63,6 @@ export function AdminParticipantsPage({
           <ul className="admin-rows">
             {data.participants.map((participant) => {
               const progress = participant.statementProgress;
-              const lastEngagement = formatLegacyDateTime(participant.lastEngagementAt);
               return (
                 <li className="admin-row" key={participant.participantId}>
                   <div className="admin-row__text">
@@ -79,8 +70,10 @@ export function AdminParticipantsPage({
                     {participant.access.banned && (
                       <span className="admin-row__suffix">
                         {' · '}{msg('participants-banned')}
-                        {participant.access.changedAt
-                          && ` ${msg('participants-banned-since')} ${formatLegacyDate(participant.access.changedAt)}`}
+                        {participant.access.changedAt && <>
+                          {` ${msg('participants-banned-since')} `}
+                          <AdminTime value={participant.access.changedAt} />
+                        </>}
                         {/* The reason, once, beside the name: as on Moderation › People. */}
                         {participant.access.summary && ` · ${participant.access.summary}`}
                       </span>
@@ -107,7 +100,9 @@ export function AdminParticipantsPage({
                     </div>
                     <div>
                       <dt>{msg('participants-th-last-engagement')}</dt>
-                      <dd>{lastEngagement ?? msg('participants-no-actions')}</dd>
+                      <dd>{participant.lastEngagementAt
+                        ? <AdminTime value={participant.lastEngagementAt} moment />
+                        : msg('participants-no-actions')}</dd>
                     </div>
                   </dl>
                   <div className="admin-row__actions">

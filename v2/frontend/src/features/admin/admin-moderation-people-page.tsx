@@ -9,14 +9,11 @@ import {
 import {useMessage} from '../../i18n/messages';
 import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
+import {AdminTime} from './admin-time';
 import {PersonAccessControl} from './admin-person-access';
 import {AdminTabStrip} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
-
-function formatDate(value: string): string {
-  return value.slice(0, 10);
-}
 
 export function AdminModerationPeoplePage({conversationId, csrfToken}: {
   conversationId: number;
@@ -57,15 +54,17 @@ export function AdminModerationPeoplePage({conversationId, csrfToken}: {
                     {participant.access.banned
                       ? msg('participants-banned')
                       : msg('admin-moderation-person-active')}
-                    {participant.access.banned && participant.access.changedAt
-                      ? ` ${msg('participants-banned-since')} ${formatDate(participant.access.changedAt)}`
-                      : ''}
+                    {participant.access.banned && participant.access.changedAt && <>
+                      {` ${msg('participants-banned-since')} `}
+                      <AdminTime value={participant.access.changedAt} />
+                    </>}
                     {participant.access.banned && participant.access.summary
                       ? ` · ${participant.access.summary}`
                       : ''}
+                    {' · '}
                     {participant.lastEngagementAt
-                      ? ` · ${formatDate(participant.lastEngagementAt)}`
-                      : ` · ${msg('participants-no-actions')}`}
+                      ? <AdminTime value={participant.lastEngagementAt} moment />
+                      : msg('participants-no-actions')}
                   </span>
                 </div>
                 <div className="admin-row__actions">

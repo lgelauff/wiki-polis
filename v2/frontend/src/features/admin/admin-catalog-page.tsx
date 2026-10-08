@@ -38,14 +38,6 @@ function statusLabel(msg: Message, status: Row['status']): string {
   }
 }
 
-/** The badge class each status has always had: the class is the styling, the word is the
- *  information. */
-function statusClass(status: Row['status']): string {
-  if (status === 'active') return 'badge-active-inline';
-  if (status === 'paused') return 'badge-paused-inline';
-  return 'badge-inactive';
-}
-
 function errorMessage(error: Error | null) {
   if (!error) return null;
   return error instanceof ApiContractError ? error.message : null;
@@ -58,9 +50,8 @@ function ConversationRow({conversation}: {conversation: Row}) {
     <tr>
       <td><InternalLink href={conversation.links.participant}>{conversation.title}</InternalLink></td>
       <td>{accessPolicyLabel(msg, conversation.accessPolicy)}</td>
-      <td>
-        <span className={statusClass(conversation.status)}>{statusLabel(msg, conversation.status)}</span>
-      </td>
+      {/* The status is a word, not a badge: plain text in the spec's words. */}
+      <td>{statusLabel(msg, conversation.status)}</td>
       <td>
         <InternalLink href={conversation.links.manage} className="admin-row__link">
           {msg('admin-btn-manage')}
@@ -82,7 +73,7 @@ function ConversationRow({conversation}: {conversation: Row}) {
 function ColumnHeads() {
   const msg = useMessage();
   return (
-    <thead><tr><th>{msg('admin-th-title')}</th><th>{msg('admin-th-policy')}</th><th>{msg('admin-th-status')}</th><th /></tr></thead>
+    <thead><tr><th>{msg('admin-th-title')}</th><th>{msg('admin-th-policy')}</th><th>{msg('admin-th-status')}</th><th>{msg('admin-th-actions')}</th></tr></thead>
   );
 }
 
@@ -97,7 +88,7 @@ function ColumnHeads() {
 function Group({label, count, children}: {label: string; count: number; children: ReactNode}) {
   return (
     <details className="admin-group">
-      <summary>{label} ({count})</summary>
+      <summary>{label}<span className="admin-count">{count}</span></summary>
       <div className="admin-table-wrap">
         <table className="admin-table">
           <ColumnHeads />
@@ -217,7 +208,7 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
         </Group>}
 
 
-        <div className="edit-form">
+        <div className="admin-form">
           <h2>{msg('admin-new-conv-heading')}</h2>
           <form onSubmit={submitConversation}>
             <label className="admin-field admin-field--medium">{msg('admin-label-slug')}<input type="text" className="admin-mono" placeholder={msg('admin-slug-ph')} required pattern="[a-z0-9]+(-[a-z0-9]+)*" title={msg('admin-slug-title')} value={draft.slug} onChange={(event) => setDraft({...draft, slug: event.target.value})} /></label>
@@ -242,14 +233,16 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
           style={{fontSize: 13, marginBottom: '.75rem'}}
           dangerouslySetInnerHTML={richHtml(msg('admin-globals-intro'))}
         />
-        {data.globalAdmins.length ? <table className="admin-table">
-          <thead><tr><th>{msg('admin-th-username')}</th><th /></tr></thead>
-          <tbody>{data.globalAdmins.map((admin) => <tr key={admin.participantId}>
-            <td>{admin.username}</td>
-            <td><button type="button" className="admin-row__text-button" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}{' '}<span className="sr-only">{`— ${admin.username}`}</span></button></td>
-          </tr>)}</tbody>
-        </table> : <p className="muted" style={{fontSize: 14, marginBottom: '1rem'}}>{msg('admin-globals-empty')}</p>}
-        <div className="edit-form">
+        {/* One row per site admin: a list, not a table, since there is one column. */}
+        {data.globalAdmins.length ? <ul className="admin-rows">
+          {data.globalAdmins.map((admin) => <li className="admin-row" key={admin.participantId}>
+            <div className="admin-row__text">{admin.username}</div>
+            <div className="admin-row__actions">
+              <button type="button" className="admin-row__text-button" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}{' '}<span className="sr-only">{`— ${admin.username}`}</span></button>
+            </div>
+          </li>)}
+        </ul> : <p className="admin-empty">{msg('admin-globals-empty')}</p>}
+        <div className="admin-form">
           <h2>{msg('admin-grant-heading')}</h2>
           <form onSubmit={submitGrant}>
             <label className="admin-field admin-field--medium">{msg('admin-label-wm-username')}<input type="text" required autoComplete="off" value={username}

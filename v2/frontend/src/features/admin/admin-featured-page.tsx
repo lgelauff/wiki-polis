@@ -14,6 +14,7 @@ import {
 } from '../../api/queries';
 import {useMessage} from '../../i18n/messages';
 import {AdminShell} from './admin-shell';
+import {AdminTime} from './admin-time';
 import {AdminTabStrip} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
@@ -35,13 +36,16 @@ function errorMessage(error: Error, fallback: string): string {
   return error instanceof ApiContractError ? error.message : fallback;
 }
 
-function ProvenanceBadge({provenance}: {provenance: Provenance}) {
+/** Where a featured statement came from, as Content › Statements says it: "↳ #N" and each
+ *  similarity score, muted plain text with the explanation on hover. */
+function Provenance({provenance}: {provenance: Provenance}) {
   if (!provenance) return null;
   const title = `Derived from statement #${provenance.derivedFromId}. Similarity 1.00 = identical.${provenance.scores.map((score) => ` ${score.model} ${score.value.toFixed(2)}.`).join('')}`;
   return (
-    <span className="prov-badge" title={title}>
-      <span className="sr-only">derived from statement {provenance.derivedFromId}, </span>
-      ↳ #{provenance.derivedFromId}
+    <span className="admin-row__source" title={title}>
+      {' '}
+      <span className="sr-only">derived from statement {provenance.derivedFromId}</span>
+      <span aria-hidden="true">{`↳ #${provenance.derivedFromId}`}</span>
       {provenance.scores.map((score) => (
         <span key={score.model}> · {score.model}&nbsp;{score.value.toFixed(2)}</span>
       ))}
@@ -93,41 +97,13 @@ function SelectedRow({
     )),
   });
   return (
-    <tr>
-      <td style={{whiteSpace: 'nowrap', verticalAlign: 'top'}}>{selection.statementId}</td>
-      <td style={{fontSize: 13, verticalAlign: 'top'}}>
-        <div style={{marginBottom: '.5rem'}}>{selection.text ?? '—'}</div>
-        {selection.provenance && (
-          <div style={{marginBottom: '.5rem'}}>
-            <ProvenanceBadge provenance={selection.provenance} />
-          </div>
-        )}
-        <div style={{borderTop: '1px solid var(--hairline)', paddingTop: '.4rem', marginTop: '.1rem'}}>
-          <span style={{fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em'}}>Arguments</span>
-          {selection.arguments.length ? selection.arguments.map((argument) => (
-            <div key={argument.id} style={{display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6, marginTop: 4, fontSize: 12}}>
-              <span style={{color: 'var(--muted)', minWidth: '2rem', flexShrink: 0}}>{argument.side}</span>
-              {argument.hidden && <span style={{background: '#fef3c7', color: '#92400e', border: '1px solid #f59e0b', borderRadius: 999, padding: '1px 6px', fontSize: 11}}>hidden</span>}
-              <span style={{flex: 1, minWidth: 120, color: 'var(--body)'}}>{argument.body}</span>
-              <span style={{color: 'var(--muted)', whiteSpace: 'nowrap'}}>{argument.proposerPseudonym ?? '—'}</span>
-              <span style={{color: 'var(--muted)', whiteSpace: 'nowrap'}}>{argument.createdAt?.slice(0, 10) ?? ''}</span>
-              <button type="button" className="admin-row__text-button" disabled={visibility.isPending}
-                onClick={() => visibility.mutate({id: argument.id, hidden: !argument.hidden})}>
-                {argument.hidden ? msg('featured-arg-unhide') : msg('featured-arg-hide')}
-              </button>
-              {/* Red and confirmed: deleting an argument and its ratings cannot be undone. */}
-              <button type="button" className="admin-row__text-button admin-row__text-button--danger"
-                disabled={deletion.isPending}
-                onClick={() => {
-                  if (globalThis.confirm(deleteArgumentMessage)) deletion.mutate(argument.id);
-                }}>
-                {msg('featured-arg-delete')}
-              </button>
-            </div>
-          )) : <p style={{fontSize: 12, color: 'var(--body)', margin: '4px 0 0'}}>no arguments yet</p>}
-        </div>
-      </td>
-      <td style={{verticalAlign: 'top'}}>
+    <li className="admin-row">
+      <div className="admin-row__text">
+        <span className="admin-row__id">#{selection.statementId}</span>{' '}
+        {selection.text ?? '—'}
+        <Provenance provenance={selection.provenance} />
+      </div>
+      <div className="admin-row__actions">
         {/* Not red: a removed statement can be featured again. */}
         <button type="button" className="admin-row__text-button" disabled={remove.isPending}
           onClick={() => {
@@ -135,8 +111,39 @@ function SelectedRow({
           }}>
           {msg('admin-btn-remove')}
         </button>
-      </td>
-    </tr>
+      </div>
+      {/* Its arguments, one small row each: side, text, who and when, its state in words,
+          and what can be done to it. */}
+      {selection.arguments.length ? (
+        <ul className="admin-row__sub" aria-label={`Arguments on statement ${selection.statementId}`}>
+          {selection.arguments.map((argument) => (
+            <li key={argument.id}>
+              <span className="admin-row__suffix">{argument.side}</span>
+              <span>{argument.body}</span>
+              <span className="admin-row__suffix">
+                {argument.proposerPseudonym ?? '—'}
+                {argument.createdAt && <>{' · '}<AdminTime value={argument.createdAt} /></>}
+                {argument.hidden && <>{' · '}{msg('featured-arg-hidden')}</>}
+              </span>
+              <span className="admin-row__actions">
+                <button type="button" className="admin-row__text-button" disabled={visibility.isPending}
+                  onClick={() => visibility.mutate({id: argument.id, hidden: !argument.hidden})}>
+                  {argument.hidden ? msg('featured-arg-unhide') : msg('featured-arg-hide')}
+                </button>
+                {/* Red and confirmed: deleting an argument and its ratings cannot be undone. */}
+                <button type="button" className="admin-row__text-button admin-row__text-button--danger"
+                  disabled={deletion.isPending}
+                  onClick={() => {
+                    if (globalThis.confirm(deleteArgumentMessage)) deletion.mutate(argument.id);
+                  }}>
+                  {msg('featured-arg-delete')}
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="admin-row__note admin-row__suffix">{msg('featured-no-args')}</p>}
+    </li>
   );
 }
 
@@ -148,16 +155,17 @@ function CandidateRow({candidate, pending, onConfirm}: {
   const msg = useMessage();
   return (
     <tr>
-      <td>{candidate.statementId}</td>
-      <td style={{fontSize: 13}}>
+      <td className="admin-num">{candidate.statementId}</td>
+      <td>
         {candidate.text}
-        {candidate.provenance && <div style={{marginTop: '.35rem'}}><ProvenanceBadge provenance={candidate.provenance} /></div>}
+        <Provenance provenance={candidate.provenance} />
       </td>
-      <td>{candidate.seed ? '✓' : ''}</td>
-      <td>{candidate.votes.agree}</td>
-      <td>{candidate.votes.disagree}</td>
-      <td>{candidate.votes.pass}</td>
-      <td>{candidate.votes.total}</td>
+      {/* A seed statement is marked with a check that names itself. */}
+      <td>{candidate.seed && <span title="Seed" aria-label="Seed" role="img">✓</span>}</td>
+      <td className="admin-num">{candidate.votes.agree}</td>
+      <td className="admin-num">{candidate.votes.disagree}</td>
+      <td className="admin-num">{candidate.votes.pass}</td>
+      <td className="admin-num">{candidate.votes.total}</td>
       <td>
         <button type="button" className="admin-row__text-button" disabled={pending} onClick={onConfirm}>
           {msg('featured-btn-confirm')}
@@ -254,11 +262,9 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
           </p>
         </div>
 
-        <h2 className="section-heading">Confirmed ({data.selected.length})</h2>
+        <h2>Confirmed<span className="admin-count">{data.selected.length}</span></h2>
         {data.selected.length ? (
-          <table className="admin-table" style={{marginBottom: '1.5rem'}}>
-            <thead><tr><th>TID</th><th>Statement</th><th /></tr></thead>
-            <tbody>
+          <ul className="admin-rows">
               {data.selected.map((row) => (
                 <SelectedRow
                   key={row.featuredId}
@@ -270,24 +276,22 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
                   showError={showError}
                 />
               ))}
-            </tbody>
-          </table>
-        ) : <p className="muted" style={{fontSize: 14, marginBottom: '1.5rem'}}>No featured statements yet.</p>}
+          </ul>
+        ) : <p className="admin-empty">{msg('featured-empty')}</p>}
 
-        <h2 className="section-heading">System suggestions</h2>
+        <h2>System suggestions</h2>
         {!data.dataAvailability.candidates ? (
           <p className="muted" style={{fontSize: 13, marginBottom: '1.5rem'}}>
             Not available — <code>POLIS_DATABASE_URL</code> is not configured.
             {' '}Use the manual form below to add statements by TID.
           </p>
         ) : data.candidates.length === 0 ? (
-          <p className="muted" style={{fontSize: 13, marginBottom: '1.5rem'}}>
-            No unconfirmed candidates. All available statements are already featured,
-            {' '}or there are no statements yet.
-          </p>
+          <p className="admin-empty">{msg('featured-suggestions-empty')}</p>
         ) : (
-          <table className="admin-table" style={{marginBottom: '1.5rem'}}>
-            <thead><tr><th>TID</th><th>Text</th><th>Seed</th><th>Agree</th><th>Disagree</th><th>Pass</th><th>Responses</th><th /></tr></thead>
+          // A table: the response counts are compared down the columns.
+          <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead><tr><th>TID</th><th>Text</th><th>Seed</th><th className="admin-num">Agree</th><th className="admin-num">Disagree</th><th className="admin-num">Pass</th><th className="admin-num">Responses</th><th>{msg('admin-th-actions')}</th></tr></thead>
             <tbody>
               {data.candidates.map((candidate) => (
                 <CandidateRow
@@ -299,10 +303,11 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
-        <h2 className="section-heading">Add by TID</h2>
-        <div className="edit-form">
+        <h2>Add by TID</h2>
+        <div className="admin-form">
           <p className="muted" style={{fontSize: 13, marginBottom: '.75rem'}}>
             Enter the Polis statement ID (TID) to feature it directly.
           </p>
