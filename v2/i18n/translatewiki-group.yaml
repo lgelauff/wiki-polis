@@ -334,7 +334,7 @@ TAGS:
     - adminconv-view-report
     - adminconv-you-are-in-phase
     - base-admin-badge
-    - featured-addtid-heading
+    - featured-addnumber-heading
     - featured-arg-delete
     - featured-arg-delete-confirm
     - featured-arg-hidden
@@ -345,7 +345,7 @@ TAGS:
     - featured-confirmed-heading
     - featured-crumb
     - featured-empty
-    - featured-label-tid
+    - featured-label-number
     - featured-no-args
     - featured-remove-live-confirm
     - featured-select-live-confirm
@@ -353,10 +353,10 @@ TAGS:
     - featured-suggestions-heading
     - featured-th-agree
     - featured-th-disagree
+    - featured-th-number
     - featured-th-seed
     - featured-th-statement
     - featured-th-text
-    - featured-th-tid
     - featured-th-votes
     - flags-open-empty
     - flags-review-arguments

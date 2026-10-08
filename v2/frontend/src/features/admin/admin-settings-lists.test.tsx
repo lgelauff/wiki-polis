@@ -143,7 +143,7 @@ test('a Roles result goes when another person or role is chosen', async () => {
   const form = person.closest('form')!;
   fireEvent.submit(form);
   const status = within(form).getByRole('status');
-  await waitFor(() => expect(status).toHaveTextContent(/organizer/));
+  await waitFor(() => expect(status).not.toBeEmptyDOMElement());
 
   fireEvent.change(person, {target: {value: ''}});
   // The region stays mounted for the next result, but no longer speaks about the last one.

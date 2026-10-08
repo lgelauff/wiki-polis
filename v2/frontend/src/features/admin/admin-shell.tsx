@@ -16,6 +16,10 @@ type GatingType = components['schemas']['AdminSettings']['conversation']['gating
 
 const SECTIONS_ID = 'admin-shell-sections';
 
+/** The server's identifier for the site admin role (`_conversation_role_label`, app.py),
+ *  which `roleLabel` maps to the console's own word for it. */
+const SITE_ADMIN_ROLE = 'Global admin';
+
 /** The product mark: one outline glyph for the whole console, drawn with currentColor so
  *  it takes the colour of whatever it sits on. */
 function ConsoleMark() {
@@ -212,9 +216,10 @@ export function AdminShell({announcer, children, data, gatingType, section, site
   const crumbs = (data ? [data.conversation.title, current?.label ?? null, subPage ?? null] : [site])
     .filter((crumb): crumb is string => Boolean(crumb));
   // The operator's role: the consultation's word for it, or at site level the one role a
-  // page there can be opened with.
+  // page there can be opened with. Either way an identifier, not copy: `roleLabel` shows
+  // the server's "Global admin" as "Site admin" (the interface never says Global admin).
   const role = data ? data.operator.roleLabel
-    : session.capabilities.administerSite ? 'Global admin' : null;
+    : session.capabilities.administerSite ? SITE_ADMIN_ROLE : null;
 
   return (
     <div className="admin-shell">

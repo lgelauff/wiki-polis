@@ -1,4 +1,5 @@
-import {useCallback, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useState, type FormEvent} from 'react';
+import {useLocation} from 'react-router-dom';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -40,9 +41,11 @@ function FormFeedback({lines}: {lines: Feedback[]}) {
       {errors.length > 0 && <div role="alert">{errors.map((line) => (
         <p key={line.id} className="admin-error">{line.message}</p>
       ))}</div>}
-      {outcomes.length > 0 && <div role="status">{outcomes.map((line) => (
+      {/* Always mounted, so the region exists before its first message; each line is keyed
+          by its own id, so the same outcome twice is a new line and is read again. */}
+      <div role="status">{outcomes.map((line) => (
         <p key={line.id} className="admin-status">{line.message}</p>
-      ))}</div>}
+      ))}</div>
     </>
   );
 }
@@ -153,7 +156,19 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   const {data} = useSuspenseQuery(options);
   const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
   const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
-  const [position, setPosition] = useState<Position>('approved');
+  // A link to one statement (the Queue's "↳ #N") opens the page on the list that holds it.
+  const {hash} = useLocation();
+  const target = /^#statement-(\d+)$/.exec(hash)?.[1];
+  const [position, setPosition] = useState<Position>(() => {
+    const id = Number(target);
+    if (data.statements.pending.some((row) => row.id === id)) return 'unmoderated';
+    if (data.statements.hidden.some((row) => row.id === id)) return 'hidden';
+    return 'approved';
+  });
+  // ...and scrolled to it: a client-side navigation does not do what a page load would.
+  useEffect(() => {
+    if (target) document.getElementById(`statement-${target}`)?.scrollIntoView?.({block: 'center'});
+  }, [target]);
   const [sort, setSort] = useState<Sort>('most-responses');
   const [search, setSearch] = useState('');
   // Each form's result lines, said at that form.

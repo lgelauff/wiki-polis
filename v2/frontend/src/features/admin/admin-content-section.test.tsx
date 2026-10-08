@@ -315,9 +315,9 @@ test('a seed statement\'s result and refusal are said under its form, never as a
   const text = await screen.findByLabelText('Statement text (max 280 characters)', {}, {timeout: 10_000});
   fireEvent.change(text, {target: {value: 'A new seed.'}});
   fireEvent.click(screen.getByRole('button', {name: 'Add seed statement'}));
-  const status = await screen.findByRole('status');
-  expect(status).toHaveTextContent('Seed statement added.');
-  expect(status.closest('form')).toBe(text.closest('form'));
+  // Each form has its own always-mounted status region; the seed form's says it.
+  const status = within(text.closest('form')!).getByRole('status');
+  await waitFor(() => expect(status).toHaveTextContent('Seed statement added.'));
   expect(document.querySelector('.admin-shell__notices')).toBeEmptyDOMElement();
 
   // A refusal keeps what was typed and says why at the same place.

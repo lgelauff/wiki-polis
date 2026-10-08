@@ -332,10 +332,10 @@ test('matches legacy featured-statement administration and commands', async () =
   expect(within(candidates).getByText('2')).toBeVisible();
   expect(within(candidates).getByText('6')).toBeVisible();
   expect(screen.queryByText(/divisiv/i)).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
+  fireEvent.click(screen.getByRole('button', {name: /^Confirm/}));
   await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
-  fireEvent.click(screen.getByRole('button', {name: 'Hide'}));
+  fireEvent.click(screen.getByRole('button', {name: /^Hide/}));
   await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 });
 

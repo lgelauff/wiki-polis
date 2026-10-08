@@ -138,3 +138,24 @@ test('Participants names a person by pseudonym when the roster sends no username
   const button = await screen.findByRole('button', {name: /— blue-heron$/}, {timeout: 10_000});
   expect(button.closest('li')).toHaveTextContent(/^blue-heron/);
 });
+
+test('a link to one statement opens Statements on the list that holds it', async () => {
+  serveWorkspace({pending: [statement(14, 'pending')], approved: [statement(12, 'approved')]});
+  renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />,
+    '/admin/conversations/7/content/statements#statement-14');
+
+  // Statement 14 waits for moderation, so the page opens on Unmoderated, not on Approved.
+  expect(await screen.findByText('Statement text 14.', {}, {timeout: 10_000})).toBeVisible();
+  expect(screen.getByRole('button', {name: new RegExp(m('admin-moderation-state-unmoderated'))}))
+    .toHaveAttribute('aria-pressed', 'true');
+  expect(screen.queryByText('Statement text 12.')).toBeNull();
+});
+
+test('moving a statement back to unmoderated is said too', async () => {
+  serveWorkspace({approved: [statement(21, 'approved')]});
+  renderPage(<AdminStatementsPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/content/statements');
+
+  await screen.findByText('Statement text 21.', {}, {timeout: 10_000});
+  fireEvent.click(within(rowOf(21)).getByRole('button', {name: /unmoderated|pending/i}));
+  await waitFor(() => expect(polite()).toHaveTextContent(m('admin-moderation-statement-unmoderated', 21)));
+});

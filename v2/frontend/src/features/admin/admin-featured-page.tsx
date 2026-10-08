@@ -31,6 +31,19 @@ function errorMessage(msg: Message, error: Error): string {
     ? msg('flash-last-featured-remove') : msg('adminconv-command-failed');
 }
 
+/** The start of a text, to tell one row's buttons from the next one's: every row has the
+ *  same Remove, Hide and Delete, so their accessible names carry this after the visible
+ *  word (which stays first, as the name a voice-control user says). */
+function excerpt(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > 60 ? `${flat.slice(0, 59)}…` : flat;
+}
+
+/** What follows a row control's visible word in its accessible name. */
+function RowName({children}: {children: string}) {
+  return <>{' '}<span className="sr-only">{`— ${children}`}</span></>;
+}
+
 function SelectedRow({
   selection,
   conversationId,
@@ -81,7 +94,7 @@ function SelectedRow({
           onClick={() => {
             if (!informedVotingLive || globalThis.confirm(msg('featured-remove-live-confirm'))) remove.mutate();
           }}>
-          {msg('admin-btn-remove')}
+          {msg('admin-btn-remove')}<RowName>{`#${selection.statementId}`}</RowName>
         </button>
       </div>
       {/* Its arguments, one small row each: side, text, who and when, its state in words,
@@ -103,6 +116,7 @@ function SelectedRow({
                 <button type="button" className="admin-row__text-button" disabled={visibility.isPending}
                   onClick={() => visibility.mutate({id: argument.id, hidden: !argument.hidden})}>
                   {argument.hidden ? msg('featured-arg-unhide') : msg('featured-arg-hide')}
+                  <RowName>{excerpt(argument.body)}</RowName>
                 </button>
                 {/* Red and confirmed: deleting an argument and its ratings cannot be undone. */}
                 <button type="button" className="admin-row__text-button admin-row__text-button--danger"
@@ -110,7 +124,7 @@ function SelectedRow({
                   onClick={() => {
                     if (globalThis.confirm(msg('featured-arg-delete-confirm'))) deletion.mutate(argument.id);
                   }}>
-                  {msg('featured-arg-delete')}
+                  {msg('featured-arg-delete')}<RowName>{excerpt(argument.body)}</RowName>
                 </button>
               </span>
             </li>
@@ -142,7 +156,7 @@ function CandidateRow({candidate, pending, onConfirm}: {
       <td className="admin-num">{candidate.votes.total}</td>
       <td>
         <button type="button" className="admin-row__text-button" disabled={pending} onClick={onConfirm}>
-          {msg('featured-btn-confirm')}
+          {msg('featured-btn-confirm')}<RowName>{`#${candidate.statementId}`}</RowName>
         </button>
       </td>
     </tr>
@@ -160,7 +174,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
   const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
   const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
   const [manualId, setManualId] = useState('');
-  // The add-by-TID form's refusal, said at its field; the row actions' refusals are toasts.
+  // The add-by-number form's refusal, said at its field; the row actions' refusals are toasts.
   const [manualError, setManualError] = useState<string | null>(null);
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
@@ -229,7 +243,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
         ) : <p className="admin-empty">{msg('featured-empty')}</p>}
 
         {/* Without the statistics database there are no suggestions: the section is left
-            out rather than shown with a note about configuration. Add by TID still works. */}
+            out rather than shown with a note about configuration. Adding by number still works. */}
         {data.dataAvailability.candidates && <h2>{msg('featured-suggestions-heading')}</h2>}
         {!data.dataAvailability.candidates ? null : data.candidates.length === 0 ? (
           <p className="admin-empty">{msg('featured-suggestions-empty')}</p>
@@ -238,7 +252,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
           <div className="admin-table-wrap">
           <table className="admin-table">
             <thead><tr>
-              <th>{msg('featured-th-tid')}</th><th>{msg('featured-th-text')}</th><th>{msg('featured-th-seed')}</th>
+              <th>{msg('featured-th-number')}</th><th>{msg('featured-th-text')}</th><th>{msg('featured-th-seed')}</th>
               <th className="admin-num">{msg('featured-th-agree')}</th><th className="admin-num">{msg('featured-th-disagree')}</th>
               <th className="admin-num">{msg('conv-vote-pass')}</th><th className="admin-num">{msg('featured-th-votes')}</th>
               <th>{msg('admin-th-actions')}</th>
@@ -257,18 +271,18 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
           </div>
         )}
 
-        <h2>{msg('featured-addtid-heading')}</h2>
+        <h2>{msg('featured-addnumber-heading')}</h2>
         <div className="admin-form">
           <form onSubmit={submitManual}>
             <input type="hidden" name="csrf_token" value={csrfToken} />
-            <label className="admin-field admin-field--short">{msg('featured-label-tid')}
+            <label className="admin-field admin-field--short">{msg('featured-label-number')}
               <input type="number" name="tid" min="0" required className="admin-mono" value={manualId}
                 {...(manualError ? {'aria-invalid': true, 'aria-describedby': manualErrorId} : {})}
                 onChange={(event) => setManualId(event.target.value)} />
             </label>
             {manualError && <p className="admin-error" id={manualErrorId} role="alert">{manualError}</p>}
             <div className="admin-form__actions">
-              <button type="submit" className="admin-button admin-button--primary" disabled={selection.isPending}>{msg('featured-addtid-heading')}</button>
+              <button type="submit" className="admin-button admin-button--primary" disabled={selection.isPending}>{msg('featured-addnumber-heading')}</button>
             </div>
           </form>
         </div>

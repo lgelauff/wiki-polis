@@ -156,8 +156,11 @@ test('a derived statement names its source, and "Based on" puts it under it', as
     '/admin/conversations/7/moderation/queue');
 
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
-  const link = screen.getByRole('link', {name: '↳ #11'});
-  expect(link).toHaveAttribute('href', '/admin/conversations/7/content/statements');
+  // The shared provenance marker: "↳ #11" on screen, named in words, and a link to that
+  // statement's own row on Content › Statements.
+  const link = screen.getByRole('link', {name: 'derived from statement 11'});
+  expect(link).toHaveTextContent('↳ #11');
+  expect(link).toHaveAttribute('href', '/admin/conversations/7/content/statements#statement-11');
   expect(link.closest('.admin-row__text')).toHaveTextContent('A corrected version');
 
   fireEvent.change(screen.getByRole('combobox', {name: 'Sort'}), {target: {value: 'based-on'}});
@@ -540,7 +543,7 @@ test('Featured is today’s page under the strip, arguments and all', async () =
   expect(screen.getByRole('heading', {name: 'Confirmed 1'})).toBeVisible();
   // Argument moderation is served by this endpoint, so it stays here (#473).
   expect(screen.getByRole('list', {name: 'Arguments'})).toBeVisible();
-  expect(screen.getByRole('button', {name: 'Hide'})).toBeVisible();
+  expect(screen.getByRole('button', {name: /^Hide/})).toBeVisible();
 });
 
 test('Featured without the statistics database leaves out its suggestions, and explains nothing', async () => {
@@ -560,9 +563,11 @@ test('Featured without the statistics database leaves out its suggestions, and e
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   expect(screen.queryByRole('heading', {name: 'System suggestions'})).toBeNull();
   expect(screen.queryByText(/POLIS_DATABASE_URL|Not available/)).toBeNull();
-  // What works stays: the confirmed list (empty) and adding by TID.
+  // What works stays: the confirmed list (empty) and adding by statement number.
   expect(screen.getByText('No featured statements yet.')).toBeVisible();
-  expect(screen.getByRole('heading', {name: 'Add by TID'})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Add by statement number'})).toBeVisible();
+  expect(screen.getByRole('spinbutton', {name: 'Statement number'})).toBeVisible();
+  expect(screen.queryByText(/\bTID\b/)).toBeNull();
   // No help card or intro about featured statements.
   expect(screen.queryByText(/How to choose featured statements|Featured statements appear/)).toBeNull();
 });
@@ -573,8 +578,8 @@ test('Featured\'s actions are sentence-case text buttons, red only where nothing
 
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   // Deleting an argument and its ratings is the one irreversible action here.
-  expect(screen.getByRole('button', {name: 'Delete'})).toHaveClass('admin-row__text-button--danger');
-  for (const name of ['Hide', 'Remove', 'Confirm']) {
+  expect(screen.getByRole('button', {name: /^Delete/})).toHaveClass('admin-row__text-button--danger');
+  for (const name of [/^Hide/, /^Remove/, /^Confirm/]) {
     const button = screen.getByRole('button', {name});
     expect(button).toHaveClass('admin-row__text-button');
     expect(button).not.toHaveClass('admin-row__text-button--danger');

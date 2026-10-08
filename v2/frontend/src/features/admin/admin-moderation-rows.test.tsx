@@ -9,6 +9,7 @@ import type {components} from '../../api/schema';
 import {AdminModerationFlagsPage} from './admin-moderation-flags-page';
 import {AdminModerationPeoplePage} from './admin-moderation-people-page';
 import {AdminModerationQueuePage} from './admin-moderation-queue-page';
+import {AdminFeaturedPage} from './admin-featured-page';
 import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
 import {testMessages} from '../../test/handlers';
@@ -197,4 +198,36 @@ test('People shows each person by pseudonym, never by username, and names each r
   expect(screen.getByRole('main')).not.toHaveTextContent('Second editor');
   expect(main().getByRole('button', {name: `${block} — blue-heron`})).toBeVisible();
   expect(main().getByRole('button', {name: `${block} — grey-badger`})).toBeVisible();
+});
+
+test('Featured\'s row buttons are named for their row', async () => {
+  const argument = (id: number, body: string) => ({
+    id, side: 'pro' as const, body, proposerPseudonym: 'quiet-otter', hidden: false, createdAt: null,
+  });
+  server.use(http.get(url('/api/v1/admin/conversations/7/featured-statements'), () => HttpResponse.json({data: {
+    conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+    selected: [
+      {featuredId: 61, statementId: 12, text: 'First featured.', systemSuggested: true, provenance: null,
+        arguments: [argument(71, 'First argument.'), argument(72, 'Second argument.')]},
+      {featuredId: 62, statementId: 13, text: 'Second featured.', systemSuggested: true, provenance: null, arguments: []},
+    ],
+    candidates: [
+      {statementId: 14, text: 'First candidate.', seed: false, votes: {agree: 1, pass: 0, disagree: 0, total: 1, agreementPercent: 100}, provenance: null},
+      {statementId: 15, text: 'Second candidate.', seed: false, votes: {agree: 1, pass: 0, disagree: 0, total: 1, agreementPercent: 100}, provenance: null},
+    ],
+    dataAvailability: {candidates: true}, phase: {argumentMappingActive: false, informedVotingLive: false},
+    guidance: {recommendedCount: 15, note: ''}, capabilities: {manage: true},
+    links: {self: url('/api/v1/admin/conversations/7/featured-statements'), lifecycle: '/admin/conversations/7'},
+  }})));
+  renderPage(<AdminFeaturedPage conversationId={7} csrfToken="t" />, '/admin/conversations/7/moderation/featured');
+
+  await screen.findByText('First featured.', {exact: false}, {timeout: 10_000});
+  const names = (word: string) => main().getAllByRole('button', {name: new RegExp(`^${word}`)})
+    .map((button) => button.textContent);
+  expect(names(m('admin-btn-remove'))).toEqual([`${m('admin-btn-remove')} — #12`, `${m('admin-btn-remove')} — #13`]);
+  expect(names(m('featured-btn-confirm'))).toEqual([`${m('featured-btn-confirm')} — #14`, `${m('featured-btn-confirm')} — #15`]);
+  expect(names(m('featured-arg-hide'))).toEqual([
+    `${m('featured-arg-hide')} — First argument.`, `${m('featured-arg-hide')} — Second argument.`,
+  ]);
+  expect(new Set(names(m('featured-arg-delete'))).size).toBe(2);
 });
