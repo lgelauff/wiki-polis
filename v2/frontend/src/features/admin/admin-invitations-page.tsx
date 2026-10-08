@@ -33,16 +33,15 @@ function admissionName(msg: Message, conversation: Settings['conversation']): st
   }
 }
 
+/** What an add did, in two sentences at most: how many were added, and how many were not
+ *  (already on the list, typed twice, or added by someone else at the same moment). */
 function invitationOutcomeMessage(
+  msg: Message,
   outcome: components['schemas']['AdminInvitationBatchReceipt']['outcome'],
 ): string {
-  const summary = [`${outcome.added} added`];
-  if (outcome.alreadyPresent) summary.push(`${outcome.alreadyPresent} already present`);
-  if (outcome.duplicateInputs) summary.push(`${outcome.duplicateInputs} duplicate input`);
-  if (outcome.concurrentConflicts) {
-    summary.push(`${outcome.concurrentConflicts} added concurrently by another moderator`);
-  }
-  return `Invitations: ${summary.join('; ')}.`;
+  const skipped = outcome.alreadyPresent + outcome.duplicateInputs + outcome.concurrentConflicts;
+  const added = msg('admin-invitations-added', outcome.added);
+  return skipped ? `${added} ${msg('admin-invitations-skipped', skipped)}` : added;
 }
 
 export function AdminInvitationsPage({
@@ -75,13 +74,13 @@ export function AdminInvitationsPage({
         adminInvitationRosterQuery(conversationId).queryKey,
         (roster) => roster ? {...roster, invitations: receipt.invitations} : roster,
       );
-      setResult({error: false, message: invitationOutcomeMessage(receipt.outcome)});
+      setResult({error: false, message: invitationOutcomeMessage(msg, receipt.outcome)});
       setInput('');
     },
     onError: () => {
       // The list stays in the textarea: the save failed, so whoever typed it
       // still needs it to retry or to correct one name.
-      setResult({error: true, message: "Couldn't save invitations — please review the list and retry."});
+      setResult({error: true, message: msg('adminconv-command-failed')});
     },
   });
   const removeMutation = useMutation({
@@ -137,7 +136,7 @@ export function AdminInvitationsPage({
           </p>}
           <form onSubmit={submit}>
             <label className="admin-field admin-field--medium">
-              Wikimedia usernames (one per line)
+              {msg('invites-label-usernames')}
               <textarea
                 name="mw_usernames"
                 rows={6}
@@ -149,7 +148,7 @@ export function AdminInvitationsPage({
             </label>
             <div className="admin-form__actions">
               <button type="submit" className="admin-button admin-button--primary" disabled={!invitationList || addMutation.isPending}
-                aria-describedby={invitationList ? undefined : unavailableId}>Add</button>
+                aria-describedby={invitationList ? undefined : unavailableId}>{msg('invites-add-heading')}</button>
             </div>
             {/* The status line is always mounted, keyed per attempt, so a repeat is read again. */}
             <div role="status">
@@ -182,7 +181,7 @@ export function AdminInvitationsPage({
                     className="admin-row__text-button"
                     // Only the row on its way out: the others stay operable, and keep focus.
                     disabled={removeMutation.isPending && removeMutation.variables === invitation.id}
-                    aria-label={`Remove invitation for ${invitation.username}`}
+                    aria-label={msg('admin-invitations-remove-aria', invitation.username)}
                     onClick={() => removeMutation.mutate(invitation.id)}
                   >
                     {msg('admin-btn-remove')}

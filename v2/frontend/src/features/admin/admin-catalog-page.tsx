@@ -87,7 +87,7 @@ function ColumnHeads() {
 function Group({label, count, children}: {label: string; count: number; children: ReactNode}) {
   return (
     <details className="admin-group">
-      <summary>{label}<span className="admin-count">{count}</span></summary>
+      <summary>{label}{' '}<span className="admin-count">{count}</span></summary>
       <div className="admin-table-wrap">
         <table className="admin-table">
           <ColumnHeads />

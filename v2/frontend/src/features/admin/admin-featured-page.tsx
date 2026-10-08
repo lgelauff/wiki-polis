@@ -12,9 +12,10 @@ import {
   putAdminFeaturedArgument,
   putAdminFeaturedStatement,
 } from '../../api/queries';
-import {useMessage} from '../../i18n/messages';
+import {useMessage, type Message} from '../../i18n/messages';
 import {AdminShell} from './admin-shell';
 import {AdminTime} from './admin-time';
+import {StatementProvenance} from './admin-provenance';
 import {AdminTabStrip} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
@@ -22,35 +23,12 @@ import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 type Workspace = components['schemas']['AdminFeaturedWorkspace'];
 type Selected = components['schemas']['AdminFeaturedSelection'];
 type Candidate = components['schemas']['AdminFeaturedCandidate'];
-type Provenance = Selected['provenance'];
 
-const selectLiveMessage = 'The informed opinion round is already open. This statement is added to it at once. Continue?';
-const removeLiveMessage = 'The informed opinion round is already open. Removing this statement takes it out of that round at once; the responses it has are kept. Continue?';
-const deleteArgumentMessage = 'Delete this argument and all its ratings? This cannot be undone.';
-
-function errorMessage(error: Error, fallback: string): string {
-  if (error instanceof ApiContractError
-      && error.code === 'last_featured_statement_protected') {
-    return 'Cannot remove the last featured statement while argument mapping is active. Disable the argument mapping phase first.';
-  }
-  return error instanceof ApiContractError ? error.message : fallback;
-}
-
-/** Where a featured statement came from, as Content › Statements says it: "↳ #N" and each
- *  similarity score, muted plain text with the explanation on hover. */
-function Provenance({provenance}: {provenance: Provenance}) {
-  if (!provenance) return null;
-  const title = `Derived from statement #${provenance.derivedFromId}. Similarity 1.00 = identical.${provenance.scores.map((score) => ` ${score.model} ${score.value.toFixed(2)}.`).join('')}`;
-  return (
-    <span className="admin-row__source" title={title}>
-      {' '}
-      <span className="sr-only">derived from statement {provenance.derivedFromId}</span>
-      <span aria-hidden="true">{`↳ #${provenance.derivedFromId}`}</span>
-      {provenance.scores.map((score) => (
-        <span key={score.model}> · {score.model}&nbsp;{score.value.toFixed(2)}</span>
-      ))}
-    </span>
-  );
+/** A refusal in the page's words: the server's message is for developers (plan_i18n.md
+ *  rule 4). Removing the last featured statement while argument mapping runs has its own. */
+function errorMessage(msg: Message, error: Error): string {
+  return error instanceof ApiContractError && error.code === 'last_featured_statement_protected'
+    ? msg('flash-last-featured-remove') : msg('adminconv-command-failed');
 }
 
 function SelectedRow({
@@ -74,40 +52,34 @@ function SelectedRow({
       conversationId, selection.featuredId, csrfToken,
     ),
     onSuccess: refresh,
-    onError: (error: Error) => showError(errorMessage(
-      error, 'The featured statement could not be removed.',
-    )),
+    onError: (error: Error) => showError(errorMessage(msg, error)),
   });
   const visibility = useMutation({
     mutationFn: ({id, hidden}: {id: number; hidden: boolean}) => (
       putAdminFeaturedArgument(conversationId, id, {hidden}, csrfToken)
     ),
     onSuccess: refresh,
-    onError: (error: Error) => showError(errorMessage(
-      error, 'The argument moderation state could not be updated.',
-    )),
+    onError: (error: Error) => showError(errorMessage(msg, error)),
   });
   const deletion = useMutation({
     mutationFn: (id: number) => deleteAdminFeaturedArgument(
       conversationId, id, csrfToken,
     ),
     onSuccess: refresh,
-    onError: (error: Error) => showError(errorMessage(
-      error, 'The argument could not be deleted.',
-    )),
+    onError: (error: Error) => showError(errorMessage(msg, error)),
   });
   return (
     <li className="admin-row">
       <div className="admin-row__text">
         <span className="admin-row__id">#{selection.statementId}</span>{' '}
         {selection.text ?? '—'}
-        <Provenance provenance={selection.provenance} />
+        {selection.provenance && <StatementProvenance provenance={selection.provenance} />}
       </div>
       <div className="admin-row__actions">
         {/* Not red: a removed statement can be featured again. */}
         <button type="button" className="admin-row__text-button" disabled={remove.isPending}
           onClick={() => {
-            if (!informedVotingLive || globalThis.confirm(removeLiveMessage)) remove.mutate();
+            if (!informedVotingLive || globalThis.confirm(msg('featured-remove-live-confirm'))) remove.mutate();
           }}>
           {msg('admin-btn-remove')}
         </button>
@@ -115,10 +87,12 @@ function SelectedRow({
       {/* Its arguments, one small row each: side, text, who and when, its state in words,
           and what can be done to it. */}
       {selection.arguments.length ? (
-        <ul className="admin-row__sub" aria-label={`Arguments on statement ${selection.statementId}`}>
+        <ul className="admin-row__sub" aria-label={msg('featured-arguments-label')}>
           {selection.arguments.map((argument) => (
             <li key={argument.id}>
-              <span className="admin-row__suffix">{argument.side}</span>
+              <span className="admin-row__suffix">
+                {argument.side === 'pro' ? msg('conv-arg-col-for') : msg('conv-arg-col-against')}
+              </span>
               <span>{argument.body}</span>
               <span className="admin-row__suffix">
                 {argument.proposerPseudonym ?? '—'}
@@ -134,7 +108,7 @@ function SelectedRow({
                 <button type="button" className="admin-row__text-button admin-row__text-button--danger"
                   disabled={deletion.isPending}
                   onClick={() => {
-                    if (globalThis.confirm(deleteArgumentMessage)) deletion.mutate(argument.id);
+                    if (globalThis.confirm(msg('featured-arg-delete-confirm'))) deletion.mutate(argument.id);
                   }}>
                   {msg('featured-arg-delete')}
                 </button>
@@ -158,10 +132,10 @@ function CandidateRow({candidate, pending, onConfirm}: {
       <td className="admin-num">{candidate.statementId}</td>
       <td>
         {candidate.text}
-        <Provenance provenance={candidate.provenance} />
+        {candidate.provenance && <StatementProvenance provenance={candidate.provenance} />}
       </td>
       {/* A seed statement is marked with a check that names itself. */}
-      <td>{candidate.seed && <span title="Seed" aria-label="Seed" role="img">✓</span>}</td>
+      <td>{candidate.seed && <span title={msg('featured-th-seed')} aria-label={msg('featured-th-seed')} role="img">✓</span>}</td>
       <td className="admin-num">{candidate.votes.agree}</td>
       <td className="admin-num">{candidate.votes.disagree}</td>
       <td className="admin-num">{candidate.votes.pass}</td>
@@ -207,13 +181,13 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
       refresh();
     },
     onError: (error: Error, {source}) => {
-      const message = errorMessage(error, 'The statement could not be selected.');
+      const message = errorMessage(msg, error);
       if (source === 'manual') setManualError(message);
       else showError(message);
     },
   });
   function select(id: number, source: 'system' | 'manual') {
-    if (!data.phase.informedVotingLive || globalThis.confirm(selectLiveMessage)) {
+    if (!data.phase.informedVotingLive || globalThis.confirm(msg('featured-select-live-confirm'))) {
       selection.mutate({id, source});
     }
   }
@@ -237,7 +211,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
         <AdminTabStrip label={msg('admin-shell-moderation')}
           tabs={moderationTabs(conversationId, msg)} current="featured" />
 
-        <h2>Confirmed<span className="admin-count">{data.selected.length}</span></h2>
+        <h2>{msg('featured-confirmed-heading')}{' '}<span className="admin-count">{data.selected.length}</span></h2>
         {data.selected.length ? (
           <ul className="admin-rows">
               {data.selected.map((row) => (
@@ -256,14 +230,19 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
 
         {/* Without the statistics database there are no suggestions: the section is left
             out rather than shown with a note about configuration. Add by TID still works. */}
-        {data.dataAvailability.candidates && <h2>System suggestions</h2>}
+        {data.dataAvailability.candidates && <h2>{msg('featured-suggestions-heading')}</h2>}
         {!data.dataAvailability.candidates ? null : data.candidates.length === 0 ? (
           <p className="admin-empty">{msg('featured-suggestions-empty')}</p>
         ) : (
           // A table: the response counts are compared down the columns.
           <div className="admin-table-wrap">
           <table className="admin-table">
-            <thead><tr><th>TID</th><th>Text</th><th>Seed</th><th className="admin-num">Agree</th><th className="admin-num">Disagree</th><th className="admin-num">Pass</th><th className="admin-num">Responses</th><th>{msg('admin-th-actions')}</th></tr></thead>
+            <thead><tr>
+              <th>{msg('featured-th-tid')}</th><th>{msg('featured-th-text')}</th><th>{msg('featured-th-seed')}</th>
+              <th className="admin-num">{msg('featured-th-agree')}</th><th className="admin-num">{msg('featured-th-disagree')}</th>
+              <th className="admin-num">{msg('conv-vote-pass')}</th><th className="admin-num">{msg('featured-th-votes')}</th>
+              <th>{msg('admin-th-actions')}</th>
+            </tr></thead>
             <tbody>
               {data.candidates.map((candidate) => (
                 <CandidateRow
@@ -278,18 +257,18 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
           </div>
         )}
 
-        <h2>Add by TID</h2>
+        <h2>{msg('featured-addtid-heading')}</h2>
         <div className="admin-form">
           <form onSubmit={submitManual}>
             <input type="hidden" name="csrf_token" value={csrfToken} />
-            <label className="admin-field admin-field--short">Statement TID
+            <label className="admin-field admin-field--short">{msg('featured-label-tid')}
               <input type="number" name="tid" min="0" required className="admin-mono" value={manualId}
                 {...(manualError ? {'aria-invalid': true, 'aria-describedby': manualErrorId} : {})}
                 onChange={(event) => setManualId(event.target.value)} />
             </label>
             {manualError && <p className="admin-error" id={manualErrorId} role="alert">{manualError}</p>}
             <div className="admin-form__actions">
-              <button type="submit" className="admin-button admin-button--primary" disabled={selection.isPending}>Add</button>
+              <button type="submit" className="admin-button admin-button--primary" disabled={selection.isPending}>{msg('featured-addtid-heading')}</button>
             </div>
           </form>
         </div>

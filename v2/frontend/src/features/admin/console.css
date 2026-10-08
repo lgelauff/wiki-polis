@@ -870,7 +870,6 @@
 
 /* A count is a bare number beside what it counts: muted, tabular, never in brackets. */
 .admin-shell .admin-count {
-  margin-inline-start: .375rem;
   color: var(--shell-muted);
   font-weight: 400;
   font-variant-numeric: tabular-nums;

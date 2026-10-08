@@ -13,6 +13,7 @@ import {AdminFeaturedPage} from './admin-featured-page';
 import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
+import {renderAsQqx, untranslatedCopy} from '../../test/i18n';
 
 type Workspace = components['schemas']['AdminStatementWorkspace'];
 type Statement = components['schemas']['AdminStatement'];
@@ -580,4 +581,23 @@ test('Featured\'s actions are sentence-case text buttons, red only where nothing
   }
   expect(screen.queryByRole('button', {name: /^(hide|unhide|remove|confirm|delete)$/})).toBeNull();
   expect(document.querySelector('.btn-small, .btn-danger')).toBeNull();
+});
+test('under a key-id catalogue Featured is all keys, but for its data', async () => {
+  renderAsQqx();
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/admin/conversations/7/moderation/featured']}>
+        <Suspense fallback={null}>
+          <MessageProvider><AdminFeaturedPage conversationId={7} csrfToken={csrf} /></MessageProvider>
+        </Suspense>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await screen.findByRole('heading', {name: '(admin-shell-moderation)', level: 1}, {timeout: 10_000});
+  expect(untranslatedCopy([document.querySelector('.admin-page')], [
+    // The fixture's own words and the formatted date: data, never keyed.
+    'An approved seed statement.', 'A useful supporting argument.', 'quiet-otter',
+    'A candidate preserving another viewpoint.', '13 Aug 2026', 'UTC',
+  ])).toEqual([]);
 });

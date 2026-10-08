@@ -100,9 +100,12 @@ TAGS:
     - admin-globals-empty
     - admin-globals-heading
     - admin-grant-heading
+    - admin-invitations-added
     - admin-invitations-not-signed-in
+    - admin-invitations-remove-aria
     - admin-invitations-removed
     - admin-invitations-signed-in
+    - admin-invitations-skipped
     - admin-invitations-unavailable
     - admin-label-access
     - admin-label-elig-event
@@ -140,15 +143,25 @@ TAGS:
     - admin-new-conv-heading
     - admin-overview-card-settings
     - admin-overview-card-settings-desc
+    - admin-provenance-aria
+    - admin-provenance-title
+    - admin-roles-assigned
+    - admin-roles-change
+    - admin-roles-empty
     - admin-save
     - admin-saving
     - admin-settings-basics-licence
+    - admin-settings-description
     - admin-settings-heading
+    - admin-settings-policy-failed
+    - admin-settings-policy-unknown
+    - admin-settings-saved
     - admin-settings-tab-basics
     - admin-settings-tab-invitations
     - admin-settings-tab-roles
     - admin-settings-tab-vouchers
     - admin-settings-tabs-aria
+    - admin-settings-unchanged
     - admin-shell-content
     - admin-shell-licence
     - admin-shell-moderation
@@ -334,6 +347,8 @@ TAGS:
     - featured-empty
     - featured-label-tid
     - featured-no-args
+    - featured-remove-live-confirm
+    - featured-select-live-confirm
     - featured-suggestions-empty
     - featured-suggestions-heading
     - featured-th-agree
@@ -348,12 +363,22 @@ TAGS:
     - flags-review-statements
     - flash-already-banned
     - flash-banned
+    - flash-import-no-result
+    - flash-import-no-valid-rows
+    - flash-import-rejected-invalid
+    - flash-import-rejected-rows
+    - flash-import-row-error
     - flash-last-featured-hide
+    - flash-last-featured-remove
     - flash-load-statements-failed
     - flash-moderation-failed
+    - flash-modsettings-failed
     - flash-move-sync-failed
     - flash-moved-to
     - flash-phases-saved-sync-failed
+    - flash-seed-added
+    - flash-seed-added-corrected
+    - flash-seed-added-no-link
     - flash-unbanned
     - guidance-argument-check-claim
     - guidance-argument-check-direction
@@ -440,12 +465,18 @@ TAGS:
     - rec-tier-simple
     - stmts-approved-empty
     - stmts-hidden-empty
+    - stmts-import-duplicate
+    - stmts-import-failed
     - stmts-import-heading
+    - stmts-import-imported
     - stmts-import-label
+    - stmts-import-skipped
     - stmts-import-submit
+    - stmts-import-too-long
     - stmts-modsettings-heading
     - stmts-pending-empty
     - stmts-seed-corrects-label
+    - stmts-seed-corrects-not-found
     - stmts-seed-heading
     - stmts-seed-label
     - stmts-seed-submit

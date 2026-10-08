@@ -303,11 +303,11 @@ test('moderates statements and imports approved seeds through typed commands', a
   fireEvent.click(screen.getByRole('button', {name: /^Show approved/}));
   await waitFor(() => expect(screen.getByText('A participant proposal awaiting review.')).toBeVisible());
 
-  fireEvent.change(screen.getByLabelText('Statements'), {
+  fireEvent.change(screen.getByLabelText('Statements (one per line)'), {
     target: {value: 'First seed\nSecond seed'},
   });
   fireEvent.click(screen.getByRole('button', {name: 'Import statements'}));
-  expect((await screen.findAllByText('✓ 2 statements imported'))[0]).toBeVisible();
+  expect(await screen.findByText('2 statements imported.')).toBeVisible();
 
   fireEvent.change(screen.getByLabelText('Statement text (max 280 characters)'), {
     target: {value: 'A corrected seed'},
@@ -439,10 +439,12 @@ test('adds and removes invitations through convergent admin commands', async () 
   fireEvent.change(screen.getByLabelText('Wikimedia usernames (one per line)'), {
     target: {value: 'New editor\nNew editor'},
   });
-  fireEvent.click(screen.getByRole('button', {name: 'Add'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Add invitations'}));
 
   expect(await screen.findByText('New editor')).toBeVisible();
-  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Invitations: 1 added; 1 duplicate input.'));
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(
+    '1 invitation added. 1 name was not added: already on the list, or typed twice.',
+  ));
   const newEditorRow = screen.getByText('New editor').closest('li');
   expect(newEditorRow).not.toBeNull();
   expect(newEditorRow).toHaveTextContent('New editor · Not signed in yet');
@@ -469,7 +471,7 @@ test('greys out adding invites while access is not the invitation list, and says
   expect(screen.getByRole('heading', {name: 'Add invitations', level: 2})).toBeVisible();
   const reason = screen.getByText('Not available: access is set to “Anyone with a Wikimedia account”.');
   const textarea = screen.getByLabelText('Wikimedia usernames (one per line)');
-  const add = screen.getByRole('button', {name: 'Add'});
+  const add = screen.getByRole('button', {name: 'Add invitations'});
   expect(textarea).toBeDisabled();
   expect(add).toBeDisabled();
   expect(textarea).toHaveAttribute('aria-describedby', reason.id);
@@ -499,10 +501,10 @@ test('keeps the typed invitation list and says the save failed at the form', asy
 
   const input = await screen.findByLabelText('Wikimedia usernames (one per line)');
   fireEvent.change(input, {target: {value: 'New editor'}});
-  fireEvent.click(screen.getByRole('button', {name: 'Add'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Add invitations'}));
 
   const alert = await screen.findByRole('alert');
-  expect(alert).toHaveTextContent("Couldn't save invitations — please review the list and retry.");
+  expect(alert).toHaveTextContent('The command could not be completed.');
   // At the form, under its button: a form's result is not a toast.
   expect(alert.closest('form')).not.toBeNull();
   expect(alert.closest('.admin-shell__notices')).toBeNull();
@@ -513,7 +515,7 @@ test('replaces a conversation role set from the admin workspace', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/roles']}><App /></MemoryRouter></QueryClientProvider>);
   // #478: Roles is a Settings tab; its own "Conversation roles" heading went with the old
   // layout, no heading repeats the tab name, and the roster is an h2 under the h1.
-  const assigned = await screen.findByRole('heading', {name: 'Assigned', level: 2});
+  const assigned = await screen.findByRole('heading', {name: 'Assigned 1', level: 2});
   expect(screen.getByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
   expect(screen.queryByRole('heading', {name: 'Roles'})).toBeNull();
   // The roster's own row, not the username in the console's top bar.
@@ -521,8 +523,8 @@ test('replaces a conversation role set from the admin workspace', async () => {
   expect(within(roster).getByRole('listitem')).toHaveTextContent('Example editor');
   fireEvent.change(screen.getByLabelText('Participant'), {target: {value: '23'}});
   fireEvent.click(screen.getByRole('checkbox', {name: 'Organizer'}));
-  fireEvent.click(screen.getByRole('button', {name: 'Save role set'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('Added: organizer');
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved.');
   expect(within(roster).getByRole('listitem')).toHaveTextContent('Example editor · Moderator, Organizer');
 });
 

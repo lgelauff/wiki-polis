@@ -11,6 +11,7 @@ import {AdminStatementsPage} from './admin-statements-page';
 import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
+import {renderAsQqx, untranslatedCopy} from '../../test/i18n';
 
 type Statement = components['schemas']['AdminStatement'];
 type Workspace = components['schemas']['AdminStatementWorkspace'];
@@ -428,4 +429,23 @@ test('participants says once what the roster cannot answer yet', async () => {
     + ' and the day they joined — not available yet (#473)',
   );
   expect(lines[0]).toHaveAttribute('lang', 'en');
+});
+test('under a key-id catalogue Statements is all keys, but for its data and coming line', async () => {
+  renderAsQqx();
+  serveWorkspace({pending: [], approved: [statement(5)], hidden: []});
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/admin/conversations/7/content/statements']}>
+        <Suspense fallback={null}>
+          <MessageProvider><AdminStatementsPage conversationId={7} csrfToken={csrf} /></MessageProvider>
+        </Suspense>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await screen.findByRole('heading', {name: '(admin-shell-content)', level: 1}, {timeout: 10_000});
+  expect(untranslatedCopy([document.querySelector('.admin-page')], [
+    'Statement number 5.',
+    'Also coming: the arguments of this consultation as a list of their own — not available yet (#473)',
+  ])).toEqual([]);
 });

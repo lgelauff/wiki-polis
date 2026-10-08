@@ -17,6 +17,7 @@ import {AdminShell} from './admin-shell';
 import {useAnnouncer} from './admin-announcer';
 import {useRowFocus} from './admin-row-focus';
 import {StatementActions} from './admin-statement-actions';
+import {StatementProvenance} from './admin-provenance';
 import {AdminTabStrip} from './admin-tab-strip';
 import {contentTabs} from './admin-content-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
@@ -29,9 +30,6 @@ type Status = Statement['moderation'];
  *  belongs to the form; toasts are for row actions. */
 type Feedback = {id: number; error: boolean; message: string};
 
-function legacyError(error: Error, fallback: string): string {
-  return error instanceof ApiContractError ? error.message : fallback;
-}
 
 /** A form's result lines, at the form. */
 function FormFeedback({lines}: {lines: Feedback[]}) {
@@ -98,32 +96,6 @@ function sortStatements(rows: Statement[], sort: Sort): Statement[] {
   return byId;
 }
 
-/** Where a derived statement came from, in the words and format the old statement table
- *  used: "↳ #N", then each similarity score, muted. "↳ #N" jumps to the source's row when
- *  that row is in the list on screen; otherwise there is nothing to jump to and it is text. */
-function StatementSource({provenance, sourceShown}: {
-  provenance: NonNullable<Statement['provenance']>;
-  sourceShown: boolean;
-}) {
-  const id = provenance.derivedFromId;
-  const title = `Derived from statement #${id}. Similarity 1.00 = identical.${provenance.scores.map((score) => ` ${score.model} ${score.value.toFixed(2)}.`).join('')}`;
-  const marker = (
-    <>
-      <span className="sr-only">derived from statement {id}</span>
-      <span aria-hidden="true">{`↳ #${id}`}</span>
-    </>
-  );
-  return (
-    <span className="admin-row__source" title={title}>
-      {' '}
-      {sourceShown ? <a href={`#statement-${id}`}>{marker}</a> : marker}
-      {provenance.scores.map((score) => (
-        <span key={score.model}> · {score.model}&nbsp;{score.value.toFixed(2)}</span>
-      ))}
-    </span>
-  );
-}
-
 /** One statement as one row: a star when it is featured, the text, its number as a muted
  *  suffix (what "↳ #N", Featured's add by number and "Corrects statement #" refer to),
  *  where it came from, its votes and what can be done to it. The row's id is the target of
@@ -149,7 +121,8 @@ function StatementRow({conversationId, statement, sourceShown, csrfToken, move, 
         {statement.text}
         <span className="admin-row__suffix">{` #${statement.id}`}</span>
         {statement.provenance && (
-          <StatementSource provenance={statement.provenance} sourceShown={sourceShown} />
+          <StatementProvenance provenance={statement.provenance}
+            href={sourceShown ? `#statement-${statement.provenance.derivedFromId}` : undefined} />
         )}
       </div>
       <div className="admin-row__counts">
@@ -212,12 +185,12 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
     ),
     onSuccess: (receipt) => {
       let error = false;
-      let message = 'Seed statement added.';
+      let message = msg('flash-seed-added');
       if (receipt.provenanceRecorded === false) {
         error = true;
-        message = 'Seed statement added, but the correction link could not be recorded.';
+        message = msg('flash-seed-added-no-link');
       } else if (receipt.derivedFromId !== null) {
-        message = `Seed statement added (recorded as a correction of #${receipt.derivedFromId}).`;
+        message = msg('flash-seed-added-corrected', receipt.derivedFromId);
       }
       setSeedText('');
       setDerivedFrom('');
@@ -228,9 +201,9 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       // The typed text stays in the form, so it can be corrected and sent again.
       if (error instanceof ApiContractError
           && error.code === 'derived_statement_not_found') {
-        setSeedFeedback(lines([{error: true, message: `Statement #${derivedFrom} was not found in this consultation — fix the "corrects" number and try again. Nothing was added.`}]));
+        setSeedFeedback(lines([{error: true, message: msg('stmts-seed-corrects-not-found', derivedFrom)}]));
       } else {
-        setSeedFeedback(lines([{error: true, message: legacyError(error, msg('adminconv-command-failed'))}]));
+        setSeedFeedback(lines([{error: true, message: msg('adminconv-command-failed')}]));
       }
     },
   });
@@ -241,45 +214,28 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
     ),
     onSuccess: (receipt) => {
       const messages: Omit<Feedback, 'id'>[] = [];
-      if (receipt.outcome.skippedExisting) {
-        messages.push({
-          error: false,
-          message: `${receipt.outcome.skippedExisting} statement${receipt.outcome.skippedExisting === 1 ? '' : 's'} already existed in this consultation and were skipped.`,
-        });
+      const skipped = receipt.outcome.skippedExisting;
+      const failed = receipt.outcome.failedUpstream;
+      if (receipt.outcome.imported) {
+        messages.push({error: false, message: msg('stmts-import-imported', receipt.outcome.imported)});
+      }
+      if (skipped) {
+        messages.push({error: false, message: msg('stmts-import-skipped', skipped)});
       }
       // A statement the voting service refused is not "skipped": it was not added, and
       // trying again may add it. It is counted on its own, and the text stays in the box.
-      const failed = receipt.outcome.failedUpstream;
       if (failed) {
-        messages.push({
-          error: true,
-          message: `${failed} statement${failed === 1 ? '' : 's'} could not be added by the voting service. The text is still in the box: import it again to retry; lines already added are skipped.`,
-        });
+        messages.push({error: true, message: msg('stmts-import-failed', failed)});
       }
-      if (receipt.outcome.imported && !receipt.outcome.skippedExisting && !failed) {
-        messages.push({
-          error: false,
-          message: `✓ ${receipt.outcome.imported} statement${receipt.outcome.imported === 1 ? '' : 's'} imported`,
-        });
-      } else if (receipt.outcome.imported || failed) {
-        messages.push({
-          error: false,
-          message: `✓ ${receipt.outcome.imported} imported${receipt.outcome.skippedExisting ? ` — ⚠ ${receipt.outcome.skippedExisting} skipped` : ''}${failed ? ` — ✗ ${failed} not added` : ''}`,
-        });
-      } else if (receipt.outcome.skippedExisting) {
-        messages.push({
-          error: false,
-          message: `⚠ 0 imported — ${receipt.outcome.skippedExisting} already existed in Polis`,
-        });
-      } else {
-        messages.push({error: true, message: 'No statements were imported — there were no valid rows.'});
-        messages.push({error: false, message: '⚠ 0 imported — Polis returned no result'});
+      if (!receipt.outcome.imported && !skipped && !failed) {
+        messages.push({error: true, message: msg('flash-import-no-valid-rows')});
+        messages.push({error: false, message: msg('flash-import-no-result')});
       }
       if (!failed) setImportText('');
       setImportFeedback(lines(messages));
       void queryClient.invalidateQueries({queryKey: options.queryKey});
     },
-    onError: (error: Error) => setImportFeedback(lines([{error: true, message: legacyError(error, msg('adminconv-command-failed'))}])),
+    onError: () => setImportFeedback(lines([{error: true, message: msg('adminconv-command-failed')}])),
   });
 
   function moveStatement(statement: Statement, status: Status) {
@@ -308,7 +264,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
     if (rows.length > data.seeding.maxStatementsPerImport) {
       setImportFeedback(lines([{
         error: true,
-        message: `✗ Import rejected — nothing was imported. Text import contains ${rows.length} lines, maximum is ${data.seeding.maxStatementsPerImport}. Reduce it and try again. (Parse errors may also be present — fix everything before retrying.)`,
+        message: msg('flash-import-rejected-rows', rows.length, data.seeding.maxStatementsPerImport),
       }]));
       return;
     }
@@ -316,16 +272,17 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
     const errors: Omit<Feedback, 'id'>[] = [];
     rows.forEach(({row, text}) => {
       if (text.length > data.seeding.maxCharactersPerStatement) {
-        errors.push({error: true, message: `Row ${row}: text is too long (${text.length} characters; max ${data.seeding.maxCharactersPerStatement}).`});
+        errors.push({error: true, message: msg('flash-import-row-error', row,
+          msg('stmts-import-too-long', text.length, data.seeding.maxCharactersPerStatement))});
       } else if (seen.has(text)) {
-        errors.push({error: true, message: `Row ${row}: duplicate — already added from an earlier row.`});
+        errors.push({error: true, message: msg('flash-import-row-error', row, msg('stmts-import-duplicate'))});
       }
       seen.add(text);
     });
     if (errors.length) {
       setImportFeedback(lines([...errors, {
         error: true,
-        message: '✗ Import rejected — nothing was added. One invalid line rejects the whole import; fix the lines listed above and try again.',
+        message: msg('flash-import-rejected-invalid'),
       }]));
       return;
     }
@@ -432,11 +389,11 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
             outside that, its two forms are not shown rather than shown locked. */}
         {data.seeding.allowed && (
           <>
-            <h2>Add seed statement</h2>
+            <h2>{msg('stmts-seed-heading')}</h2>
             <div className="admin-form">
               <form onSubmit={(event) => { event.preventDefault(); seedMutation.mutate(); }}>
                 <input type="hidden" name="csrf_token" value={csrfToken} />
-                <label className="admin-field">Statement text (max 280 characters)
+                <label className="admin-field">{msg('stmts-seed-label')}
                   <textarea
                     name="txt"
                     rows={3}
@@ -449,7 +406,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                   />
                 </label>
                 <label className="admin-field admin-field--short">
-                  Corrects statement&nbsp;#&nbsp;(optional)
+                  {msg('stmts-seed-corrects-label')}
                   <input
                     type="number"
                     name="derived_from"
@@ -460,18 +417,18 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                   />
                 </label>
                 <div className="admin-form__actions">
-                  <button type="submit" className="admin-button admin-button--primary" disabled={seedMutation.isPending}>Add seed statement</button>
+                  <button type="submit" className="admin-button admin-button--primary" disabled={seedMutation.isPending}>{msg('stmts-seed-submit')}</button>
                   <span id="seed-count" className="admin-form__count">{seedText.length} / 280</span>
                 </div>
                 <FormFeedback lines={seedFeedback} />
               </form>
             </div>
 
-            <h2>Import seed statements from text</h2>
+            <h2>{msg('stmts-import-heading')}</h2>
             <div className="admin-form">
               <form onSubmit={submitImport}>
                 <input type="hidden" name="csrf_token" value={csrfToken} />
-                <label className="admin-field">Statements
+                <label className="admin-field">{msg('stmts-import-label')}
                   <textarea
                     name="statement_texts"
                     rows={8}
@@ -481,7 +438,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                   />
                 </label>
                 <div className="admin-form__actions">
-                  <button type="submit" className="admin-button admin-button--primary" disabled={importMutation.isPending}>Import statements</button>
+                  <button type="submit" className="admin-button admin-button--primary" disabled={importMutation.isPending}>{msg('stmts-import-submit')}</button>
                 </div>
                 <FormFeedback lines={importFeedback} />
               </form>

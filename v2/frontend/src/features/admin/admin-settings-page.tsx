@@ -345,17 +345,15 @@ class PolicySaveError extends Error {
 }
 
 /** The status-line text for a refused moderation-policy request. */
-function policyErrorMessage(failure: unknown): string {
-  if (failure instanceof ApiContractError && failure.code === 'verification_unavailable') {
-    return 'Could not verify the current moderation state. Try again later.';
-  }
+function policyErrorMessage(msg: Message, failure: unknown): string {
   if (failure instanceof ApiContractError && failure.code === 'upstream_unavailable') {
-    return 'Could not update moderation settings. Check server logs for details.';
+    return msg('flash-modsettings-failed');
   }
+  // The one refusal a retry could make worse: Polis may already hold the new mode.
   if (failure instanceof ApiContractError && failure.code === 'command_outcome_unknown') {
-    return 'Polis may have been updated, but the local policy could not be saved. Do not retry until a site admin checks it.';
+    return msg('admin-settings-policy-unknown');
   }
-  return 'Could not save the moderation policy. Try again later.';
+  return msg('admin-settings-policy-failed');
 }
 
 export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
@@ -536,10 +534,10 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   const locked = lockedField(settingsError);
   const serverMessage = settingsError instanceof ApiContractError
     ? settingsError.message : null;
-  const generalError = policyFailure ? policyErrorMessage(policyFailure.failure)
+  const generalError = policyFailure ? policyErrorMessage(msg, policyFailure.failure)
     : settingsError instanceof ApiContractError
       ? (fieldMessages.length || locked ? null : serverMessage)
-      : settingsError ? 'Settings could not be saved.' : null;
+      : settingsError ? msg('adminconv-command-failed') : null;
 
   // The question takes focus when it opens; when it closes, by Cancel or by Continue, the
   // buttons that held focus are gone, so focus goes back to the Save button.
@@ -622,7 +620,7 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
           </div>}
           {tab === 'basics' ? <>
             <section aria-labelledby="settings-description">
-              <h2 id="settings-description">Description</h2>
+              <h2 id="settings-description">{msg('admin-settings-description')}</h2>
               {canEdit ? <>
                 <label>{msg('admin-label-title')}<input value={title} maxLength={255} required {...invalid('title')} onChange={(event) => edit({title: event.target.value})} /></label>
                 <FieldError field="title" />
@@ -722,7 +720,7 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
             {/* Always mounted, so the region exists before its first message; keyed on the
                 attempt, so a second identical "Settings saved." is a new line, read again. */}
             <div className="settings-status" role="status">
-              {saved !== null && <p key={mutation.submittedAt}>{saved ? 'Settings saved.' : 'Settings already up to date.'}</p>}
+              {saved !== null && <p key={mutation.submittedAt}>{saved ? msg('admin-settings-saved') : msg('admin-settings-unchanged')}</p>}
             </div>
             {generalError && <p role="alert">{generalError}</p>}
           </footer>}
