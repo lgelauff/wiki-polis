@@ -294,6 +294,60 @@
   border-block-end-color: var(--accent);
 }
 
+/* ── Settings pages ───────────────────────────────────────────────────────── */
+
+/* The settings form's rules come from the site stylesheet, written for a full-page
+   layout. Inside the console the page is an `.admin-page` like every other section, and
+   the form takes the console's rule colour, spacing and sub-heading style: sentence case,
+   no section numbers, nothing uppercase, and no text smaller than 12px. */
+.admin-shell .settings-form > section {
+  padding-block: 1.25rem;
+  border-block-end: 1px solid var(--shell-line);
+}
+
+.admin-shell .settings-form h2 {
+  margin: 0 0 .5rem;
+  color: var(--shell-ink);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.admin-shell .settings-form :is(label, legend, .access-answer-legend, .access-answer-value,
+  .access-choice, .settings-hint, .settings-eligibility, .settings-eligibility p,
+  .settings-tier span, .access-summary ul, .access-field-error, .access-confirm p),
+.admin-shell .settings-form > footer p {
+  font-size: 13px;
+}
+
+/* The site stylesheet makes every input of the form a full-width block; a checkbox sits
+   beside its label instead. */
+.admin-shell .settings-form .checkbox-label {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  color: var(--shell-body);
+  font-weight: 400;
+}
+
+.admin-shell .settings-form input[type="checkbox"] {
+  display: inline-block;
+  inline-size: auto;
+  margin: 0;
+  padding: 0;
+}
+
+/* A value shown to a viewer who may not change it keeps its line breaks. */
+.admin-shell .settings-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.admin-shell .settings-page > .admin-shell__coming {
+  margin-block-start: .5rem;
+}
+
 /* ── Coming lines ─────────────────────────────────────────────────────────── */
 
 .admin-shell__coming {

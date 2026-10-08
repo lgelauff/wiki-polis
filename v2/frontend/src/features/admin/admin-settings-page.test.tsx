@@ -111,19 +111,19 @@ test('shows who can take part as one plain-worded choice per row', async () => {
   // No internal value reaches the screen, and the combination the server refuses --
   // gated with no type -- cannot be expressed by a radio group.
   expect(screen.queryByText(/invite_only|gating type/i)).toBeNull();
-  // Functionality that does not exist yet is named in prose at the foot of the group, not
-  // mimed with a control: the group offers three answers and every one of them works.
+  // Functionality that does not exist yet is named in prose, not mimed with a control: the
+  // group offers three answers and every one of them works.
   expect(within(admission).getAllByRole('radio')).toHaveLength(3);
   expect(screen.queryByRole('radio', {name: /Wiki policy/})).toBeNull();
-  const coming = within(admission).getByText(
+  const coming = screen.getByText(
     'Also coming: a policy based on wiki activity — not available yet (#406)',
   );
   expect(coming).toBeVisible();
   expect(coming.tagName).toBe('P');
-  // Inside the fieldset and last in it, so it closes the question it is about instead of
-  // sitting flush against the next question's legend.
-  expect(coming.parentElement).toBe(admission);
-  expect(admission.lastElementChild).toBe(coming);
+  // Last on the page, after everything that works: outside the form, after the Save.
+  expect(coming.closest('form')).toBeNull();
+  expect(screen.getByRole('button', {name: 'Save'}).compareDocumentPosition(coming)
+    & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   // The visibility answers are gone from the page altogether, and their placeholder is a
   // gated-only line, so an ungated consultation shows neither.
   expect(screen.queryByRole('group', {name: 'What people without access can see'})).toBeNull();
@@ -257,32 +257,32 @@ test('asks once before narrowing access and saves only after Continue', async ()
   expect(sent[0]).toMatchObject({gated: true, gatingType: 'invite_only'});
 });
 
-test('after a save the eligibility inputs show what the server stored', async () => {
-  // Choosing the invitation list makes the server clear the eligibility pair; the inputs
-  // must not keep showing an event ID that is no longer stored.
+test('the eligibility fields are not shown while the invitation list is the answer', async () => {
+  // The server clears the eligibility pair whenever the invitation list is chosen
+  // (services/admin_settings.py), so a field that save would empty is not offered.
   serve({...settings, eligibility: {
     ...settings.eligibility, configured: true, eventId: 'event-42', label: 'Active editors',
   }});
-  server.use(http.put(SETTINGS_URL, async ({request}) => {
-    const payload = await request.json() as Record<string, unknown>;
-    return HttpResponse.json({data: {
-      changed: true, changedFields: ['gated', 'gatingType', 'eligibilityEventId'],
-      settings: {
-        ...settings, conversation: {...settings.conversation, ...payload},
-        eligibility: {...settings.eligibility, configured: false, eventId: '', label: null},
-      },
-    }});
-  }));
   renderPage('access');
 
   const eventId = await screen.findByLabelText('Eligibility event ID', {}, {timeout: 10_000});
   expect(eventId).toHaveValue('event-42');
   fireEvent.click(screen.getByRole('radio', {name: /Only people on the invitation list/}));
-  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
-  fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
+  expect(screen.queryByLabelText('Eligibility event ID')).toBeNull();
+  expect(screen.queryByLabelText('Eligibility label')).toBeNull();
+  expect(screen.queryByText(/^Eligibility (not )?configured$/)).toBeNull();
+  // Back to an answer that keeps them, and they are there again, as they were.
+  fireEvent.click(screen.getByRole('radio', {name: 'Anyone with a Wikimedia account'}));
+  expect(screen.getByLabelText('Eligibility event ID')).toHaveValue('event-42');
+});
 
-  await waitFor(() => expect(screen.getByLabelText('Eligibility event ID')).toHaveValue(''));
-  expect(screen.getByLabelText('Eligibility label')).toHaveValue('');
+test('a stored invitation list shows no eligibility fields', async () => {
+  serve(lockedSettings);
+  renderPage('access');
+
+  await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
+  expect(screen.queryByLabelText('Eligibility event ID')).toBeNull();
+  expect(screen.queryByLabelText('Eligibility label')).toBeNull();
 });
 
 test('names a stored wiki-activity policy in words, not by its stored value', async () => {
@@ -509,18 +509,25 @@ test('no Practice switch while Explore locks access', async () => {
   expect(screen.queryByRole('combobox', {name: /Legacy access mode/})).toBeNull();
 });
 
-test('a role that may not edit gets the reason and no way to save', async () => {
-  serve({...settings, capabilities: {edit: false, switchDemo: false}});
+test('on Access a role that may not edit sees the values as text and no Save', async () => {
+  serve({...settings, capabilities: {edit: false, switchDemo: false},
+    eligibility: {...settings.eligibility, configured: true, eventId: 'event-42', label: 'Active editors'}});
   renderPage('access');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  expect(screen.getByRole('note')).toHaveTextContent('inspect but not change');
+  // No disabled controls and no note about the role: the values, as text.
+  expect(screen.queryByRole('note')).toBeNull();
+  expect(screen.queryByText(/inspect but not change/)).toBeNull();
+  expect(screen.queryByRole('radio')).toBeNull();
+  expect(screen.queryByRole('textbox')).toBeNull();
+  expect(screen.getByText('Anyone with a Wikimedia account')).toBeVisible();
+  expect(screen.getByText('event-42')).toBeVisible();
   expect(screen.queryByRole('button', {name: 'Save'})).toBeNull();
 });
 
-test('on Basics a role that may not edit saves only the strict-moderation answer', async () => {
-  // Moderators may set the moderation policy but not the settings: the settings inputs are
-  // disabled, so the one Save cannot take a typed title and quietly drop it.
+test('on Basics a moderator sees the settings as text and saves only the strict-moderation answer', async () => {
+  // Moderators may set the moderation policy but not the settings: the settings are text,
+  // so the one Save cannot take a typed title and quietly drop it.
   const policy = recordPolicyPuts();
   serve({...settings, capabilities: {edit: false, switchDemo: false}});
   const settingsPuts = recordPuts();
@@ -528,9 +535,11 @@ test('on Basics a role that may not edit saves only the strict-moderation answer
 
   const approval = await screen.findByRole('checkbox', {name: /Strict moderation/},
     {timeout: 10_000});
-  expect(screen.getByRole('note')).toHaveTextContent('inspect but not change');
-  expect(screen.getByRole('textbox', {name: 'Title'})).toBeDisabled();
-  expect(screen.getByRole('radio', {name: /Complex topic/})).toBeDisabled();
+  expect(screen.queryByRole('note')).toBeNull();
+  expect(screen.queryByRole('textbox')).toBeNull();
+  expect(screen.queryByRole('radio')).toBeNull();
+  expect(screen.getByText('Community strategy', {selector: '.settings-value'})).toBeVisible();
+  expect(screen.getByText('Medium topic')).toBeVisible();
   fireEvent.click(approval);
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
@@ -538,6 +547,18 @@ test('on Basics a role that may not edit saves only the strict-moderation answer
   expect(policy[0]).toEqual({mode: 'moderate'});
   expect(await screen.findByRole('status')).toHaveTextContent('Settings saved.');
   expect(settingsPuts).toHaveLength(0);
+});
+
+test('on Basics a viewer who may set neither gets no Save', async () => {
+  server.use(http.get(STATEMENTS_URL, () => HttpResponse.json({data: {
+    ...workspace('moderate'), capabilities: {moderate: false, seed: false},
+  }})));
+  serve({...settings, capabilities: {edit: false, switchDemo: false}});
+  renderPage('basics');
+
+  await screen.findByRole('heading', {name: 'Moderation settings', level: 2}, {timeout: 10_000});
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Save'})).toBeNull();
 });
 
 test('shows a refusal of the admission answer once, under the group', async () => {
@@ -696,21 +717,22 @@ test('Basics has one Save button, at the bottom, and the Approval section has no
   expect(within(section).queryByRole('button')).toBeNull();
 });
 
-test('the Approval section has the numbered-section header, with the number outside the heading', async () => {
+test('the sections of Basics are headed in sentence case, with no number', async () => {
   recordPolicyPuts();
   serve(settings);
   renderPage('basics');
 
   const heading = await screen.findByRole('heading', {name: 'Moderation settings', level: 2},
     {timeout: 10_000});
-  // Exactly the key's text: the section number is a sibling, not part of the heading.
   expect(heading.textContent).toBe('Moderation settings');
   const section = screen.getByRole('region', {name: 'Moderation settings'});
-  // A numbered section of the settings form, like the others.
+  // A section of the settings form, like the others, headed by its h2 alone.
   expect(section.parentElement).toHaveClass('settings-form');
-  const header = section.querySelector(':scope > header');
-  expect(header?.querySelector(':scope > span')?.textContent).toBe('03');
-  expect(header?.querySelector(':scope > div > h2')).toBe(heading);
+  expect(section.firstElementChild).toBe(heading);
+  for (const name of ['Description', 'Guidance scope', 'Moderation settings']) {
+    expect(screen.getByRole('heading', {name, level: 2})).toBeVisible();
+  }
+  expect(within(screen.getByRole('main')).queryByText(/^0\d$/)).toBeNull();
 });
 
 test('changing only the checkbox sends only the policy request', async () => {
@@ -810,6 +832,30 @@ test('a refused policy request is said on the status line', async () => {
     'Could not update moderation settings. Check server logs for details.',
   );
   expect(settingsPuts).toHaveLength(0);
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
+test('a partial save says both: the settings saved, the policy not', async () => {
+  recordPolicyPuts();
+  server.use(http.put(POLICY_URL, () => HttpResponse.json(
+    {error: {code: 'upstream_unavailable', message: 'The moderation baseline could not be reconciled safely.'}},
+    {status: 502},
+  )));
+  serve(settings);
+  const settingsPuts = recordPuts();
+  renderPage('basics');
+
+  const approval = await screen.findByRole('checkbox', {name: /Strict moderation/},
+    {timeout: 10_000});
+  fireEvent.change(screen.getByRole('textbox', {name: 'Title'}), {target: {value: 'A new title'}});
+  fireEvent.click(approval);
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Could not update moderation settings. Check server logs for details.',
+  );
+  expect(settingsPuts).toHaveLength(1);
+  expect(screen.getByRole('status')).toHaveTextContent('Settings saved.');
 });
 
 test('the Access tab has no Approval control and no Practice switch', async () => {

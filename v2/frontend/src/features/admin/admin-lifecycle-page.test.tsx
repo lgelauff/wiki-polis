@@ -132,7 +132,7 @@ test('links to the settings page instead of editing the same settings itself', a
     expect(screen.queryByLabelText(name)).toBeNull();
   }
   expect(screen.queryByRole('combobox', {name: 'Complexity tier'})).toBeNull();
-  expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();
+  expect(screen.queryByRole('button', {name: /^Save( settings)?$/})).toBeNull();
   expect(screen.queryByRole('button', {name: 'Save recommendations'})).toBeNull();
 
   // What stays is what the settings page does not show, plus the tier as a fact.

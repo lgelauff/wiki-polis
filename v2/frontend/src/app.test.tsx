@@ -195,7 +195,7 @@ test('the lifecycle console writes no setting of its own, and points at the page
   expect(screen.getByRole('link', {name: 'Settings Title, introduction and access'})).toHaveAttribute(
     'href', '/admin/conversations/7/settings',
   );
-  expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();
+  expect(screen.queryByRole('button', {name: /^Save( settings)?$/})).toBeNull();
   expect(screen.queryByRole('button', {name: 'Save recommendations'})).toBeNull();
   expect(screen.queryByLabelText('Complexity tier')).toBeNull();
   // The tier is still reported, as the fact the readiness checks are measured against.
