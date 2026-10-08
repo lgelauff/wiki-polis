@@ -336,12 +336,12 @@ test('participants are one row each, with today’s figures and the access contr
   expect(row).toHaveTextContent('2026-08-13');
   // The access control is the same one the participants page has always had.
   expect(within(row).getByPlaceholderText('Reason (optional)')).toBeVisible();
-  expect(within(row).getByRole('button', {name: 'ban — Example editor'})).toBeVisible();
+  expect(within(row).getByRole('button', {name: 'Block — Example editor'})).toBeVisible();
 
-  // Once banned, the row says "Banned since …" once, beside the name.
-  fireEvent.click(within(row).getByRole('button', {name: 'ban — Example editor'}));
-  await within(row).findByRole('button', {name: 'unban — Example editor'});
-  expect(row).toHaveTextContent('Example editor · Banned since 2026-08-13');
+  // Once banned, the row says "Blocked since …" once, beside the name.
+  fireEvent.click(within(row).getByRole('button', {name: 'Block — Example editor'}));
+  await within(row).findByRole('button', {name: 'Unblock — Example editor'});
+  expect(row).toHaveTextContent('Example editor · Blocked since 2026-08-13');
   expect(row.textContent?.match(/since/g)).toHaveLength(1);
 });
 

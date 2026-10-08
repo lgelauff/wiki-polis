@@ -467,7 +467,7 @@ test('an organizer is never offered the Practice Environment', async () => {
   renderPage('basics');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  expect(screen.queryByRole('combobox', {name: /Legacy access mode/})).toBeNull();
+  expect(screen.queryByRole('combobox', {name: /^Access$/})).toBeNull();
   expect(screen.queryByRole('option', {name: 'Practice'})).toBeNull();
   expect(screen.queryByText('Practice Environment')).toBeNull();
 });
@@ -488,7 +488,7 @@ test('an organizer sees a practice item as a fact with its fixed answer', async 
   ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   // One fixed answer: nothing to choose, so no radio and no select.
   expect(screen.queryAllByRole('radio', {name: /invitation list|voucher code/})).toHaveLength(0);
-  expect(screen.queryByRole('combobox', {name: /Legacy access mode/})).toBeNull();
+  expect(screen.queryByRole('combobox', {name: /^Access$/})).toBeNull();
 
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
   await waitFor(() => expect(sent).toHaveLength(1));
@@ -500,7 +500,7 @@ test('a site admin moves an item into the Practice Environment and sees its fixe
   const sent = recordPuts();
   renderPage('basics');
 
-  const mode = await screen.findByRole('combobox', {name: /Legacy access mode/}, {timeout: 10_000});
+  const mode = await screen.findByRole('combobox', {name: /^Access$/}, {timeout: 10_000});
   expect(screen.queryByRole('radio', {name: /Only people on the invitation list/})).toBeNull();
   fireEvent.change(mode, {target: {value: 'demo'}});
 
@@ -518,7 +518,7 @@ test('a site admin sees the switch, not the fact, on a practice item', async () 
     conversation: {...settings.conversation, accessPolicy: 'demo'}});
   renderPage('basics');
 
-  const mode = await screen.findByRole('combobox', {name: /Legacy access mode/}, {timeout: 10_000});
+  const mode = await screen.findByRole('combobox', {name: /^Access$/}, {timeout: 10_000});
   expect(mode).toHaveValue('demo');
   // The section heading is the item's own name; the fact is stated inside it, not beside it.
   expect(screen.getByRole('heading', {name: 'Practice Environment'})).toBeVisible();
@@ -531,7 +531,7 @@ test('no Practice switch while Explore locks access', async () => {
   renderPage('basics');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  expect(screen.queryByRole('combobox', {name: /Legacy access mode/})).toBeNull();
+  expect(screen.queryByRole('combobox', {name: /^Access$/})).toBeNull();
 });
 
 test('on Access a role that may not edit sees the values as text and no Save', async () => {
@@ -776,7 +776,7 @@ test('the sections of Basics are headed in sentence case, with no number', async
   // A section of the settings form, like the others, headed by its h2 alone.
   expect(section.parentElement).toHaveClass('settings-form');
   expect(section.firstElementChild).toBe(heading);
-  for (const name of ['Description', 'Guidance scope', 'Moderation settings']) {
+  for (const name of ['Description', 'Complexity tier', 'Moderation settings']) {
     expect(screen.getByRole('heading', {name, level: 2})).toBeVisible();
   }
   expect(within(screen.getByRole('main')).queryByText(/^0\d$/)).toBeNull();
@@ -911,7 +911,7 @@ test('the Access tab has no Approval control and no Practice switch', async () =
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   expect(screen.queryByRole('checkbox', {name: /Strict moderation/})).toBeNull();
-  expect(screen.queryByRole('combobox', {name: /Legacy access mode/})).toBeNull();
+  expect(screen.queryByRole('combobox', {name: /^Access$/})).toBeNull();
   expect(screen.queryByRole('textbox', {name: 'Title'})).toBeNull();
 });
 

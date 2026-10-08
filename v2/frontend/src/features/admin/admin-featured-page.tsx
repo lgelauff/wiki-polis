@@ -23,9 +23,9 @@ type Selected = components['schemas']['AdminFeaturedSelection'];
 type Candidate = components['schemas']['AdminFeaturedCandidate'];
 type Provenance = Selected['provenance'];
 
-const selectLiveMessage = 'Informed vote is already live. This statement will be seeded into that round immediately. Continue?';
-const removeLiveMessage = 'Informed vote is already live. Removing this statement hides it from that round immediately (existing votes are preserved). Continue?';
-const deleteArgumentMessage = 'Delete this argument and all its votes? This cannot be undone.';
+const selectLiveMessage = 'The informed opinion round is already open. This statement is added to it at once. Continue?';
+const removeLiveMessage = 'The informed opinion round is already open. Removing this statement takes it out of that round at once; the responses it has are kept. Continue?';
+const deleteArgumentMessage = 'Delete this argument and all its ratings? This cannot be undone.';
 
 function errorMessage(error: Error, fallback: string): string {
   if (error instanceof ApiContractError
@@ -319,7 +319,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
           </p>
         ) : (
           <table className="admin-table" style={{marginBottom: '1.5rem'}}>
-            <thead><tr><th>TID</th><th>Text</th><th>Seed</th><th>Agree</th><th>Disagree</th><th>Pass</th><th>Votes</th><th /></tr></thead>
+            <thead><tr><th>TID</th><th>Text</th><th>Seed</th><th>Agree</th><th>Disagree</th><th>Pass</th><th>Responses</th><th /></tr></thead>
             <tbody>
               {data.candidates.map((candidate) => (
                 <CandidateRow

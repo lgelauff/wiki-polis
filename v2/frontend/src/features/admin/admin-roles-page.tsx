@@ -82,11 +82,11 @@ export function AdminRolesPage({conversationId, csrfToken}: {
             <strong>{row.username}</strong>
             <span>{row.roles.join(' + ')}</span>
           </li>
-        ))}</ul> : <p className="moderation-empty">No conversation roles assigned.</p>}
+        ))}</ul> : <p className="moderation-empty">No roles assigned yet.</p>}
       </section>
       {data.capabilities.manageRoles && (
         <section className="roles-editor" aria-labelledby="role-editor-heading">
-          <div><p className="eyebrow">Global admin</p><h2 id="role-editor-heading">Replace a role set</h2><p>An empty selection removes all scoped access.</p></div>
+          <div><p className="eyebrow">Site admin</p><h2 id="role-editor-heading">Replace a role set</h2><p>An empty selection removes all scoped access.</p></div>
           <form onSubmit={submit}>
             <label htmlFor="role-participant">Participant</label>
             <select id="role-participant" value={participantId ?? ''} onChange={(event) => selectParticipant(event.target.value)} required>
@@ -108,7 +108,7 @@ export function AdminRolesPage({conversationId, csrfToken}: {
           </form>
         </section>
       )}
-      {!data.capabilities.manageRoles && <p className="roles-readonly">Only a global admin can change role assignments.</p>}
+      {!data.capabilities.manageRoles && <p className="roles-readonly">Only a site admin can change role assignments.</p>}
       </div>
     </AdminSettingsFrame>
   );

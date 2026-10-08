@@ -356,14 +356,14 @@ test('manages participant access in the distinct admin workspace', async () => {
   fireEvent.change(screen.getByPlaceholderText('Reason (optional)'), {
     target: {value: 'Repeated disruption'},
   });
-  fireEvent.click(screen.getByRole('button', {name: /^ban/}));
+  fireEvent.click(screen.getByRole('button', {name: /^Block/}));
 
   expect(await screen.findByRole('button', {
-    name: /^unban/,
+    name: /^Unblock/,
   })).toBeVisible();
   expect(screen.getByText('Repeated disruption')).toBeVisible();
   await waitFor(() => expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent(
-    'Participant banned from this conversation.',
+    'Participant blocked in this consultation.',
   ));
 });
 
@@ -422,7 +422,7 @@ test('adds and removes invitations through convergent admin commands', async () 
   // headed by the section like every other Settings tab, and no heading repeats the tab.
   expect(await screen.findByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
   expect(screen.queryByRole('heading', {name: 'Invitations'})).toBeNull();
-  expect(screen.getByRole('heading', {name: 'Add invites', level: 2})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Add invitations', level: 2})).toBeVisible();
   // With the invitation list in effect the form works, and there is no reason line.
   expect(screen.getByLabelText('Wikimedia usernames (one per line)')).toBeEnabled();
   expect(screen.queryByText(/^Not available:/)).toBeNull();
@@ -440,9 +440,9 @@ test('adds and removes invitations through convergent admin commands', async () 
 
   expect(await screen.findByText('New editor')).toBeVisible();
   // The toast inside the console reads out through the shell's polite region.
-  expect(screen.getByText('Invites: 1 added; 1 duplicate input.', {selector: '.toast__msg'})).toBeVisible();
+  expect(screen.getByText('Invitations: 1 added; 1 duplicate input.', {selector: '.toast__msg'})).toBeVisible();
   await waitFor(() => expect(document.querySelector('[aria-live="polite"]'))
-    .toHaveTextContent('Invites: 1 added; 1 duplicate input.'));
+    .toHaveTextContent('Invitations: 1 added; 1 duplicate input.'));
   const newEditorRow = screen.getByText('New editor').closest('tr');
   expect(newEditorRow).not.toBeNull();
   expect(within(newEditorRow!).getByText('Never logged in')).toBeVisible();
@@ -450,8 +450,8 @@ test('adds and removes invitations through convergent admin commands', async () 
   fireEvent.click(within(newEditorRow!).getByRole('button', {
     name: 'Remove invitation for New editor',
   }));
-  expect(await screen.findByText('No invites yet.')).toBeVisible();
-  expect(screen.getByText('No invites yet.').closest('td')).toHaveAttribute('colspan', '4');
+  expect(await screen.findByText('No invitations yet.')).toBeVisible();
+  expect(screen.getByText('No invitations yet.').closest('td')).toHaveAttribute('colspan', '4');
   expect(screen.queryByText(/invited ·/)).not.toBeInTheDocument();
 });
 
@@ -468,7 +468,7 @@ test('greys out adding invites while access is not the invitation list, and says
   );
 
   expect(await screen.findByText('Existing editor')).toBeVisible();
-  expect(screen.getByRole('heading', {name: 'Add invites', level: 2})).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Add invitations', level: 2})).toBeVisible();
   const reason = screen.getByText('Not available: access is set to “Anyone with a Wikimedia account”.');
   const textarea = screen.getByLabelText('Wikimedia usernames (one per line)');
   const add = screen.getByRole('button', {name: 'Add'});
@@ -503,11 +503,11 @@ test('keeps the typed invitation list and shows a toast after a save error', asy
   fireEvent.change(input, {target: {value: 'New editor'}});
   fireEvent.click(screen.getByRole('button', {name: 'Add'}));
 
-  expect(await screen.findByText("Couldn't save invites — please review the list and retry.",
+  expect(await screen.findByText("Couldn't save invitations — please review the list and retry.",
     {selector: '.toast__msg'})).toBeVisible();
   // Read out as an alert, through the console's assertive region.
   await waitFor(() => expect(document.querySelector('[aria-live="assertive"]')).toHaveTextContent(
-    "Couldn't save invites — please review the list and retry.",
+    "Couldn't save invitations — please review the list and retry.",
   ));
   expect(input).toHaveValue('New editor');
 });

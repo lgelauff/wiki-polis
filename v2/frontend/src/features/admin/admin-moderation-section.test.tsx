@@ -475,13 +475,13 @@ test('people are one row each, with their state and the control that changes it'
   expect(row).not.toHaveTextContent('since');
   expect(within(row).getByRole('textbox', {name: 'Reason (optional) — quiet-otter'})).toBeVisible();
 
-  fireEvent.click(within(row).getByRole('button', {name: 'ban — quiet-otter'}));
+  fireEvent.click(within(row).getByRole('button', {name: 'Block — quiet-otter'}));
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toEqual({participantId: 23, body: {banned: true, summary: null}});
   // The row says the new state in place, and the toast says it to a screen reader.
-  await waitFor(() => expect(page().getByRole('listitem')).toHaveTextContent('Banned since 2026-08-14'));
-  expect(screen.getByRole('button', {name: 'unban — quiet-otter'})).toBeVisible();
-  expect(announced('polite')).toHaveTextContent('Participant banned from this conversation.');
+  await waitFor(() => expect(page().getByRole('listitem')).toHaveTextContent('Blocked since 2026-08-14'));
+  expect(screen.getByRole('button', {name: 'Unblock — quiet-otter'})).toBeVisible();
+  expect(announced('polite')).toHaveTextContent('Participant blocked in this consultation.');
 });
 
 test('a person shows since when and why only while blocked, and an unchanged unblock says so', async () => {
@@ -520,11 +520,11 @@ test('a person shows since when and why only while blocked, and an unchanged unb
 
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
   const [blocked, allowed] = page().getAllByRole('listitem');
-  expect(blocked).toHaveTextContent('Banned since 2026-08-10 · Repeated spam.');
+  expect(blocked).toHaveTextContent('Blocked since 2026-08-10 · Repeated spam.');
   expect(allowed).toHaveTextContent('Active');
   expect(allowed).not.toHaveTextContent('since');
 
-  fireEvent.click(within(blocked!).getByRole('button', {name: /^unban/}));
+  fireEvent.click(within(blocked!).getByRole('button', {name: /^Unblock/}));
   await waitFor(() => expect(announced('assertive'))
     .toHaveTextContent('Participant is already allowed in this consultation.'));
 });

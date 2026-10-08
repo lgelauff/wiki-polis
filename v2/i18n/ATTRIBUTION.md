@@ -13,7 +13,8 @@ GPL-3.0 work as long as its copyright and permission notice is kept, which is do
 
 **Copied** says which languages' text is copied: `en` from the source's `en.json`, and `nl`
 where `nl.json` holds the source's Dutch. "(lowercased)" means our text is the source's
-with its first letter lowercased, because the element is a small inline control.
+with its first letter lowercased, because the element is a small inline control; "(capitalised)"
+means the reverse, for a source written in lower case where our control is in sentence case.
 
 ## Copied on purpose
 
@@ -32,6 +33,8 @@ Chosen from MediaWiki's catalogue to replace wording of our own.
 | `adminconv-countdown-minutes` | `$1 min` | MediaWiki core | [`minutes-abbrev`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/datetime/en.json) | GPL-2.0-or-later | en |
 | `conv-nav-prev` | `Previous` | MediaWiki core | [`watchlistlabels-onboarding-prev`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
 | `conv-nav-next` | `Next` | MediaWiki core | [`watchlistlabels-onboarding-next`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en, nl |
+| `participants-btn-ban` | `Block` | MediaWiki core | [`blocklink`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (capitalised) |
+| `participants-btn-unban` | `Unblock` | MediaWiki core | [`unblocklink`](https://github.com/wikimedia/mediawiki/blob/master/languages/i18n/en.json) | GPL-2.0-or-later | en (capitalised) |
 
 `adminconv-countdown-*` has no Dutch: the admin console is not translated into Dutch yet, and
 MediaWiki core has Dutch only for `hours-abbrev` ("$1 u"). `days-abbrev` and

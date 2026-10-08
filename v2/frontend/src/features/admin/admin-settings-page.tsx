@@ -353,7 +353,7 @@ function policyErrorMessage(failure: unknown): string {
     return 'Could not update moderation settings. Check server logs for details.';
   }
   if (failure instanceof ApiContractError && failure.code === 'command_outcome_unknown') {
-    return 'The voting service may have been updated, but the local policy could not be saved. Do not retry until a site admin checks it.';
+    return 'Polis may have been updated, but the local policy could not be saved. Do not retry until a site admin checks it.';
   }
   return 'Could not save the moderation policy. Try again later.';
 }
@@ -626,27 +626,27 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
               {canEdit ? <>
                 <label>{msg('admin-label-title')}<input value={title} maxLength={255} required {...invalid('title')} onChange={(event) => edit({title: event.target.value})} /></label>
                 <FieldError field="title" />
-                <label>Introduction HTML<textarea value={introHtml} rows={7} onChange={(event) => edit({introHtml: event.target.value})} /></label>
-                <label>Closing HTML<textarea value={outroHtml} rows={5} onChange={(event) => edit({outroHtml: event.target.value})} /></label>
+                <label>{msg('admin-label-intro')}<textarea value={introHtml} rows={7} onChange={(event) => edit({introHtml: event.target.value})} /></label>
+                <label>{msg('admin-label-outro')}<textarea value={outroHtml} rows={5} onChange={(event) => edit({outroHtml: event.target.value})} /></label>
                 <p className="settings-hint">Allowed HTML is sanitized by the server when saved.</p>
               </> : <>
                 <SettingValue label={msg('admin-label-title')} value={data.conversation.title} />
-                <SettingHtml label="Introduction HTML" html={data.conversation.introHtml} className="intro-text" />
-                <SettingHtml label="Closing HTML" html={data.conversation.outroHtml} className="outro-text" />
+                <SettingHtml label={msg('admin-label-intro')} html={data.conversation.introHtml} className="intro-text" />
+                <SettingHtml label={msg('admin-label-outro')} html={data.conversation.outroHtml} className="outro-text" />
               </>}
               {/* Admin-written texts meant for publication are CC0, like participants'
                   contributions; the deed link is built as on the join screen. */}
               <p className="settings-hint" dangerouslySetInnerHTML={richHtml(msg('admin-settings-basics-licence', '<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">' + `${escapeHtml(msg('accept-licence-link'))}<span class="sr-only"> ${escapeHtml(msg('common-opens-in-new-tab'))}</span></a>`))} />
             </section>
             <section aria-labelledby="settings-guidance">
-              <h2 id="settings-guidance">Guidance scope</h2>
-              {canEdit ? <fieldset><legend>Complexity tier</legend>{data.recommendations.tiers.map((option) => (
+              <h2 id="settings-guidance">{msg('adminconv-label-tier')}</h2>
+              {canEdit ? <fieldset aria-labelledby="settings-guidance">{data.recommendations.tiers.map((option) => (
                 <label className="settings-tier" key={option.key}>
                   <input type="radio" name="tier" value={option.key} checked={tier === option.key} onChange={() => edit({tier: option.key})} />
                   <strong>{option.label}</strong>
                   <span>{Object.values(option.quantities).join(' · ')}</span>
                 </label>
-              ))}</fieldset> : <SettingValue label="Complexity tier" value={selectedTier?.label ?? tier} />}
+              ))}</fieldset> : <SettingValue label={msg('adminconv-label-tier')} value={selectedTier?.label ?? tier} />}
             </section>
             {/* The Practice Environment section: the fixed answer a practice item has, and the
                 switch that moves one in or out of it. Nothing at all when neither applies, so
@@ -661,8 +661,8 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
                 <p className="access-answer-legend" id={`${ids}-practice-legend`}>{msg('admin-access-admission-legend')}</p>
                 <p className="access-answer-value">{msg('admin-access-admission-practice')}</p>
               </div>}
-              {canSwitchPractice && <label>Legacy access mode<select value={accessPolicy} onChange={(event) => edit({accessPolicy: event.target.value as Policy})}>
-                <option value="public">Not gated</option><option value="demo">Practice</option>
+              {canSwitchPractice && <label>{msg('admin-label-access')}<select value={accessPolicy} onChange={(event) => edit({accessPolicy: event.target.value as Policy})}>
+                <option value="public">{msg('admin-common-policy-open')}</option><option value="demo">{msg('admin-common-policy-practice')}</option>
               </select></label>}
             </section>}
             <ApprovalSection conversationId={conversationId}

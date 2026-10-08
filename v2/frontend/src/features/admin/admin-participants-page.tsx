@@ -45,6 +45,7 @@ function ParticipantAccessControl({
   csrfToken: string;
   setToast: (toast: LegacyToastMessage) => void;
 }) {
+  const msg = useMessage();
   const queryClient = useQueryClient();
   const [summary, setSummary] = useState('');
   const desiredBanned = !participant.access.banned;
@@ -76,12 +77,10 @@ function ParticipantAccessControl({
         } : current,
       );
       setSummary('');
-      const changedMessage = receipt.banned
-        ? 'Participant banned from this conversation.'
-        : 'Participant unbanned from this conversation.';
+      const changedMessage = receipt.banned ? msg('flash-banned') : msg('flash-unbanned');
       const unchangedMessage = receipt.banned
-        ? 'Participant is already banned from this conversation.'
-        : 'Participant is already allowed in this conversation.';
+        ? msg('flash-already-banned')
+        : msg('admin-moderation-person-already-allowed');
       setToast({
         id: Date.now(),
         category: receipt.changed ? 'success' : 'warning',
@@ -108,11 +107,11 @@ function ParticipantAccessControl({
             name="summary"
             value={summary}
             onChange={(event) => setSummary(event.target.value)}
-            placeholder="Unban note (optional)"
-            aria-label={`Unban note (optional) — ${who}`}
+            placeholder={msg('participants-unban-note-ph')}
+            aria-label={`${msg('participants-unban-note-ph')} — ${who}`}
             style={{width: '100%', marginBottom: '.35rem'}}
           />
-          <button type="submit" className="btn-small btn-approve">unban{' '}<span className="sr-only">{`— ${who}`}</span></button>
+          <button type="submit" className="btn-small btn-approve">{msg('participants-btn-unban')}{' '}<span className="sr-only">{`— ${who}`}</span></button>
         </form>
       </>
     );
@@ -125,11 +124,11 @@ function ParticipantAccessControl({
         name="summary"
         value={summary}
         onChange={(event) => setSummary(event.target.value)}
-        placeholder="Reason (optional)"
-        aria-label={`Reason (optional) — ${who}`}
+        placeholder={msg('participants-ban-reason-ph')}
+        aria-label={`${msg('participants-ban-reason-ph')} — ${who}`}
         style={{width: '100%', marginBottom: '.35rem'}}
       />
-      <button type="submit" className="btn-small btn-danger">ban{' '}<span className="sr-only">{`— ${who}`}</span></button>
+      <button type="submit" className="btn-small btn-danger">{msg('participants-btn-ban')}{' '}<span className="sr-only">{`— ${who}`}</span></button>
     </form>
   );
 }

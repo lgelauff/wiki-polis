@@ -285,9 +285,9 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
     onError: (error: Error) => {
       if (error instanceof ApiContractError
           && error.code === 'derived_statement_not_found') {
-        showError(`Statement #${derivedFrom} was not found in this conversation — fix the "corrects" number and try again. Nothing was added.`);
+        showError(`Statement #${derivedFrom} was not found in this consultation — fix the "corrects" number and try again. Nothing was added.`);
       } else {
-        showError(legacyError(error, 'The voting service is unavailable.'));
+        showError(legacyError(error, msg('adminconv-command-failed')));
       }
     },
   });
@@ -301,7 +301,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       if (receipt.outcome.skippedExisting) {
         messages.push({
           category: 'warning',
-          message: `${receipt.outcome.skippedExisting} statement${receipt.outcome.skippedExisting === 1 ? '' : 's'} already existed in this conversation and were skipped.`,
+          message: `${receipt.outcome.skippedExisting} statement${receipt.outcome.skippedExisting === 1 ? '' : 's'} already existed in this consultation and were skipped.`,
         });
       }
       // A statement the voting service refused is not "skipped": it was not added, and
@@ -336,7 +336,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       showFeedback(messages);
       void queryClient.invalidateQueries({queryKey: options.queryKey});
     },
-    onError: (error: Error) => showError(legacyError(error, 'The voting service is unavailable.')),
+    onError: (error: Error) => showError(legacyError(error, msg('adminconv-command-failed'))),
   });
 
   function moveStatement(statement: Statement, status: Status) {
@@ -524,7 +524,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
             <h2 className="section-heading">Add seed statement</h2>
             <div className="edit-form">
               <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
-                Adds a seed-marked statement that appears early in the voting sequence for participants.
+                Adds a seed-marked statement that participants see early on.
               </p>
               <form onSubmit={(event) => { event.preventDefault(); seedMutation.mutate(); }}>
                 <input type="hidden" name="csrf_token" value={csrfToken} />
@@ -535,7 +535,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
                     maxLength={280}
                     id="seed-txt"
                     required
-                    placeholder="Enter a statement participants will vote on…"
+                    placeholder="Enter a statement participants will respond to…"
                     value={seedText}
                     onChange={(event) => setSeedText(event.target.value)}
                   />

@@ -45,7 +45,7 @@ function invitationOutcomeMessage(
   if (outcome.concurrentConflicts) {
     summary.push(`${outcome.concurrentConflicts} added concurrently by another moderator`);
   }
-  return `Invites: ${summary.join('; ')}.`;
+  return `Invitations: ${summary.join('; ')}.`;
 }
 
 export function AdminInvitationsPage({
@@ -91,7 +91,7 @@ export function AdminInvitationsPage({
       setToast({
         id: Date.now(),
         category: 'error',
-        message: "Couldn't save invites — please review the list and retry.",
+        message: "Couldn't save invitations — please review the list and retry.",
       });
     },
   });
@@ -168,7 +168,7 @@ export function AdminInvitationsPage({
         )}
 
         <div className="edit-form">
-          <h2>Add invites</h2>
+          <h2>{msg('invites-add-heading')}</h2>
           {!invitationList && <p className="muted" id={unavailableId}>
             {msg('admin-invitations-unavailable', admissionName(msg, settings.conversation))}
           </p>}
@@ -222,7 +222,7 @@ export function AdminInvitationsPage({
                 </tr>
               ))}
               {!data.invitations.length && (
-                <tr><td colSpan={4} className="muted" ref={emptyRef} tabIndex={-1}>No invites yet.</td></tr>
+                <tr><td colSpan={4} className="muted" ref={emptyRef} tabIndex={-1}>{msg('invites-empty')}</td></tr>
               )}
             </tbody>
           </table>
