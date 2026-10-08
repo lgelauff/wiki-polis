@@ -233,7 +233,7 @@ test('asks once before narrowing access and saves only after Continue', async ()
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('radio', {name: /Only people on the invitation list/}));
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
   expect(screen.getByText('Some people will lose access. Continue?')).toBeVisible();
   expect(sent).toHaveLength(0);
@@ -244,9 +244,9 @@ test('asks once before narrowing access and saves only after Continue', async ()
   expect(screen.queryByText('Some people will lose access. Continue?')).toBeNull();
   expect(screen.getByRole('radio', {name: /Only people on the invitation list/})).toBeChecked();
   // The button that held focus is gone; focus goes back to Save, not to the page.
-  expect(screen.getByRole('button', {name: 'Save settings'})).toHaveFocus();
+  expect(screen.getByRole('button', {name: 'Save'})).toHaveFocus();
 
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
   fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
@@ -274,7 +274,7 @@ test('after a save the eligibility inputs show what the server stored', async ()
   const eventId = await screen.findByLabelText('Eligibility event ID', {}, {timeout: 10_000});
   expect(eventId).toHaveValue('event-42');
   fireEvent.click(screen.getByRole('radio', {name: /Only people on the invitation list/}));
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
   fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
 
   await waitFor(() => expect(screen.getByLabelText('Eligibility event ID')).toHaveValue(''));
@@ -305,7 +305,7 @@ test('widening saves at once, without the question', async () => {
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('radio', {name: 'Anyone with a Wikimedia account'}));
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toMatchObject({gated: false, gatingType: null});
@@ -323,7 +323,7 @@ test('shows the server refusal beside the admission answer and keeps the input',
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('radio', {name: /Anyone with a voucher code/}));
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
   fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
@@ -345,7 +345,7 @@ test('maps a field refusal to its field and keeps what was typed', async () => {
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   const title = screen.getByRole('textbox', {name: 'Title'});
   fireEvent.change(title, {target: {value: 'A retitled consultation'}});
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
   // Once in the summary that takes focus, once beside the field it is about.
@@ -370,7 +370,7 @@ test('asks before swapping one gate for another, which also takes access away', 
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('radio', {name: /Anyone with a voucher code/}));
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
   // Everybody on the invitation list loses access when the gate becomes a voucher.
   expect(screen.getByText('Some people will lose access. Continue?')).toBeVisible();
@@ -388,13 +388,13 @@ test('drops the question when the answer stops narrowing', async () => {
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.click(screen.getByRole('radio', {name: /Only people on the invitation list/}));
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
   expect(screen.getByText('Some people will lose access. Continue?')).toBeVisible();
 
   // Putting the widest answer back leaves the question with nothing left to ask about.
   fireEvent.click(screen.getByRole('radio', {name: 'Anyone with a Wikimedia account'}));
   expect(screen.queryByText('Some people will lose access. Continue?')).toBeNull();
-  expect(screen.getByRole('button', {name: 'Save settings'})).toBeVisible();
+  expect(screen.getByRole('button', {name: 'Save'})).toBeVisible();
   expect(sent).toHaveLength(0);
 });
 
@@ -420,7 +420,7 @@ test('what is not available yet is prose, not a control that does nothing', asyn
     expect(note).not.toHaveAttribute('role');
     expect(note.querySelector('input, button, a, [role]')).toBeNull();
   }
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
   // Every stored value behind those lines goes back exactly as it was read: the endpoint
@@ -461,7 +461,7 @@ test('an organizer sees a practice item as a fact with its fixed answer', async 
   expect(screen.queryAllByRole('radio', {name: /invitation list|voucher code/})).toHaveLength(0);
   expect(screen.queryByRole('combobox', {name: /Legacy access mode/})).toBeNull();
 
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toMatchObject({accessPolicy: 'demo', gated: false, gatingType: null});
 });
@@ -479,7 +479,7 @@ test('a site admin moves an item into the Practice Environment and sees its fixe
   // gates the server would refuse.
   expect(screen.getByText('Anyone, including people who are not logged in')).toBeVisible();
   expect(screen.queryByRole('radio', {name: /Only people on the invitation list/})).toBeNull();
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toMatchObject({accessPolicy: 'demo', gated: false, gatingType: null});
 });
@@ -507,11 +507,33 @@ test('no Practice switch while Explore locks access', async () => {
 
 test('a role that may not edit gets the reason and no way to save', async () => {
   serve({...settings, capabilities: {edit: false, switchDemo: false}});
-  renderPage('basics');
+  renderPage('access');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   expect(screen.getByRole('note')).toHaveTextContent('inspect but not change');
-  expect(screen.queryByRole('button', {name: 'Save settings'})).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Save'})).toBeNull();
+});
+
+test('on Basics a role that may not edit saves only the strict-moderation answer', async () => {
+  // Moderators may set the moderation policy but not the settings: the settings inputs are
+  // disabled, so the one Save cannot take a typed title and quietly drop it.
+  const policy = recordPolicyPuts();
+  serve({...settings, capabilities: {edit: false, switchDemo: false}});
+  const settingsPuts = recordPuts();
+  renderPage('basics');
+
+  const approval = await screen.findByRole('checkbox', {name: /Strict moderation/},
+    {timeout: 10_000});
+  expect(screen.getByRole('note')).toHaveTextContent('inspect but not change');
+  expect(screen.getByRole('textbox', {name: 'Title'})).toBeDisabled();
+  expect(screen.getByRole('radio', {name: /Complex topic/})).toBeDisabled();
+  fireEvent.click(approval);
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+
+  await waitFor(() => expect(policy).toHaveLength(1));
+  expect(policy[0]).toEqual({mode: 'moderate'});
+  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved.');
+  expect(settingsPuts).toHaveLength(0);
 });
 
 test('shows a refusal of the admission answer once, under the group', async () => {
@@ -524,7 +546,7 @@ test('shows a refusal of the admission answer once, under the group', async () =
   renderPage('access');
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
   // Once in the summary, once under the group -- and the description the choices point at
@@ -648,22 +670,27 @@ function recordPolicyPuts() {
   return sent;
 }
 
-test('the Approval control moved to Basics, with the body it always sent', async () => {
-  const sent = recordPolicyPuts();
+test('Basics has one Save button, at the bottom, and the Approval section has none', async () => {
+  recordPolicyPuts();
   serve(settings);
   renderPage('basics');
 
-  const approval = await screen.findByRole('checkbox', {name: /Strict moderation/},
-    {timeout: 10_000});
-  expect(screen.getByRole('heading', {name: 'Moderation settings', level: 3})).toBeVisible();
-  expect(approval).not.toBeChecked();
-  fireEvent.click(approval);
-  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
-
-  await waitFor(() => expect(sent).toHaveLength(1));
-  // The moderation policy is not one of the fields the settings endpoint takes, so it
-  // keeps its own endpoint and its own body.
-  expect(sent[0]).toEqual({mode: 'moderate'});
+  await screen.findByRole('checkbox', {name: /Strict moderation/}, {timeout: 10_000});
+  const buttons = within(screen.getByRole('main')).getAllByRole('button');
+  expect(buttons.map((button) => button.textContent)).toEqual(['Save']);
+  const save = buttons[0]!;
+  // Every control on the tab is in the one form the Save submits, and none comes after it.
+  const form = save.closest('form');
+  expect(form).not.toBeNull();
+  expect(form?.querySelectorAll('form')).toHaveLength(0);
+  const main = within(screen.getByRole('main'));
+  for (const control of [...main.getAllByRole('textbox'), ...main.getAllByRole('radio'),
+    ...main.getAllByRole('checkbox')]) {
+    expect(control.closest('form')).toBe(form);
+    expect(control.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+  const section = screen.getByRole('region', {name: 'Moderation settings'});
+  expect(within(section).queryByRole('button')).toBeNull();
 });
 
 test('the Approval section has the numbered-section header, with the number outside the heading', async () => {
@@ -676,16 +703,97 @@ test('the Approval section has the numbered-section header, with the number outs
   // Exactly the key's text: the section number is a sibling, not part of the heading.
   expect(heading.textContent).toBe('Moderation settings');
   const section = screen.getByRole('region', {name: 'Moderation settings'});
-  // Outside the settings form, so it carries the class that gives it the same header grid.
-  expect(section).toHaveClass('settings-approval');
-  expect(section.closest('form')).toBeNull();
+  // A numbered section of the settings form, like the others.
+  expect(section.parentElement).toHaveClass('settings-form');
   const header = section.querySelector(':scope > header');
   expect(header?.querySelector(':scope > span')?.textContent).toBe('03');
   expect(header?.querySelector(':scope > div > h3')).toBe(heading);
 });
 
-test('saving Approval sends one policy PUT and no settings PUT', async () => {
+test('changing only the checkbox sends only the policy request', async () => {
   const policy = recordPolicyPuts();
+  serve(settings);
+  const settingsPuts = recordPuts();
+  renderPage('basics');
+
+  const approval = await screen.findByRole('checkbox', {name: /Strict moderation/},
+    {timeout: 10_000});
+  expect(approval).not.toBeChecked();
+  fireEvent.click(approval);
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+
+  await waitFor(() => expect(policy).toHaveLength(1));
+  // The moderation policy is not one of the fields the settings endpoint takes, so it
+  // keeps its own endpoint and its own body.
+  expect(policy[0]).toEqual({mode: 'moderate'});
+  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved.');
+  expect(settingsPuts).toHaveLength(0);
+  expect(screen.getByRole('checkbox', {name: /Strict moderation/})).toBeChecked();
+});
+
+test('changing a setting and the checkbox sends both requests on the one Save', async () => {
+  const policy = recordPolicyPuts();
+  serve(settings);
+  const settingsPuts = recordPuts();
+  renderPage('basics');
+
+  const approval = await screen.findByRole('checkbox', {name: /Strict moderation/},
+    {timeout: 10_000});
+  fireEvent.change(screen.getByRole('textbox', {name: 'Title'}), {target: {value: 'A new title'}});
+  fireEvent.click(approval);
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+
+  await waitFor(() => expect(policy).toHaveLength(1));
+  expect(settingsPuts).toHaveLength(1);
+  expect(settingsPuts[0]).toMatchObject({title: 'A new title'});
+  expect(policy[0]).toEqual({mode: 'moderate'});
+  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved.');
+});
+
+test('changing only a setting sends only the settings request', async () => {
+  const policy = recordPolicyPuts();
+  serve(settings);
+  const settingsPuts = recordPuts();
+  renderPage('basics');
+
+  await screen.findByRole('checkbox', {name: /Strict moderation/}, {timeout: 10_000});
+  fireEvent.change(screen.getByRole('textbox', {name: 'Title'}), {target: {value: 'A new title'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+
+  expect(await screen.findByRole('status')).toHaveTextContent('Settings saved.');
+  expect(settingsPuts).toHaveLength(1);
+  expect(policy).toHaveLength(0);
+});
+
+test('a refused settings request stops the Save before the policy request', async () => {
+  const policy = recordPolicyPuts();
+  serve(settings);
+  const settingsPuts = recordPuts(400, {error: {
+    code: 'validation_failed',
+    message: 'Check the highlighted settings.',
+    details: {fields: {title: ['Give the consultation a title.']}},
+  }});
+  renderPage('basics');
+
+  const approval = await screen.findByRole('checkbox', {name: /Strict moderation/},
+    {timeout: 10_000});
+  fireEvent.change(screen.getByRole('textbox', {name: 'Title'}), {target: {value: 'x'}});
+  fireEvent.click(approval);
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+
+  await waitFor(() => expect(settingsPuts).toHaveLength(1));
+  expect((await screen.findAllByText('Give the consultation a title.')).length).toBeGreaterThan(0);
+  expect(policy).toHaveLength(0);
+  // The unsaved answer is kept for the next attempt.
+  expect(screen.getByRole('checkbox', {name: /Strict moderation/})).toBeChecked();
+});
+
+test('a refused policy request is said on the status line', async () => {
+  recordPolicyPuts();
+  server.use(http.put(POLICY_URL, () => HttpResponse.json(
+    {error: {code: 'upstream_unavailable', message: 'The moderation baseline could not be reconciled safely.'}},
+    {status: 502},
+  )));
   serve(settings);
   const settingsPuts = recordPuts();
   renderPage('basics');
@@ -695,14 +803,10 @@ test('saving Approval sends one policy PUT and no settings PUT', async () => {
   fireEvent.click(approval);
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
-  await waitFor(() => expect(policy).toHaveLength(1));
-  // Both requests would leave on the same click; wait for the receipt to land, then for a
-  // settings save to have had every chance to show up.
-  await waitFor(() => expect(screen.getByRole('button', {name: 'Save'})).toBeEnabled());
-  await new Promise((resolve) => { setTimeout(resolve, 100); });
-  expect(policy).toHaveLength(1);
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Could not update moderation settings. Check server logs for details.',
+  );
   expect(settingsPuts).toHaveLength(0);
-  expect(screen.queryByRole('status')).toBeNull();
 });
 
 test('the Access tab has no Approval control and no Practice switch', async () => {
@@ -738,7 +842,7 @@ test('saving Basics sends the Access fields back as they were loaded', async () 
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.change(screen.getByRole('textbox', {name: 'Title'}), {target: {value: 'A new title'}});
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toMatchObject({
@@ -760,7 +864,7 @@ test('saving Access sends the Basics fields back as they were loaded', async () 
 
   await screen.findByRole('heading', {name: 'Settings', level: 1}, {timeout: 10_000});
   fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'event-99'}});
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
 
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toMatchObject({

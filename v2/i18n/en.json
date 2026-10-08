@@ -559,6 +559,8 @@
     "admin-settings-tab-vouchers": "Vouchers",
     "admin-settings-tab-roles": "Roles",
     "admin-settings-basics-licence": "Texts you write here are released into the public domain ($1).",
+    "admin-save": "Save",
+    "admin-saving": "Saving…",
     "admin-access-heading": "Access",
     "admin-access-admission-legend": "Who can take part",
     "admin-access-admission-practice": "Anyone, including people who are not logged in",

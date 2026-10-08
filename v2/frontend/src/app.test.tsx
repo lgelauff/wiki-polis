@@ -245,7 +245,7 @@ test('edits settings and legacy eligibility through one typed command', async ()
   expect(screen.getByText('Extended-confirmed editors')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Eligibility event ID'), {target: {value: 'experienced-editors'}});
   fireEvent.change(screen.getByLabelText('Eligibility label'), {target: {value: 'Experienced editors'}});
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
   expect(await screen.findByRole('status')).toHaveTextContent('Settings saved');
   access.unmount();
 
@@ -254,7 +254,7 @@ test('edits settings and legacy eligibility through one typed command', async ()
   expect(screen.getByRole('heading', {name: 'Basics', level: 2})).toBeVisible();
   fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Updated strategy'}});
   fireEvent.click(screen.getByRole('radio', {name: /Complex topic/}));
-  fireEvent.click(screen.getByRole('button', {name: 'Save settings'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
   expect(await screen.findByRole('status')).toHaveTextContent('Settings saved');
 });
 

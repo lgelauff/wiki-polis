@@ -155,73 +155,63 @@ function SettingsTabs({conversationId, gatingType, current}: {
   );
 }
 
-/** The Approval control, moved here from the statements page (#478, decision a).
+/** The Approval section, moved here from the statements page (#478, decision a).
  *
- * It keeps its own endpoint and its own body -- `{mode}` on
- * `PUT …/statement-moderation-policy` -- because the moderation policy is not one of the
- * fields the settings endpoint takes. It reads its state from the statements workspace
- * (`moderationPolicy.mode`), which is why this tab runs that query, and the receipt writes
- * the returned workspace back into it, so the checkbox and the statements list never
- * disagree. Its form is rendered after the settings form, never inside it: a nested form's
- * submit would also reach the settings form and send a settings PUT. */
-function ApprovalControl({conversationId, csrfToken, number}: {
+ * The moderation policy is not one of the fields the settings endpoint takes, so it is
+ * written by its own request -- `{mode}` on `PUT …/statement-moderation-policy` -- but
+ * not by its own button: Basics has one Save, which sends this request when, and only when,
+ * the checkbox differs from what is stored (see `AdminSettingsPage`). The section is part
+ * of the settings form and has no form of its own; a nested form is invalid HTML, and its
+ * submit would also reach the settings form.
+ *
+ * It reads the stored mode from the statements workspace (`moderationPolicy.mode`), which
+ * is why this tab runs that query. `strict` is the page's unsaved answer, or null while it
+ * is the stored one. */
+function ApprovalSection({conversationId, number, strict, onChange}: {
   conversationId: number;
-  csrfToken: string;
   number: string;
+  strict: boolean | null;
+  onChange: (strict: boolean) => void;
 }) {
   const msg = useMessage();
-  const queryClient = useQueryClient();
-  const options = adminStatementWorkspaceQuery(conversationId);
-  const {data} = useSuspenseQuery(options);
-  const [strictModeration, setStrictModeration] = useState(data.moderationPolicy.mode === 'moderate');
-  const [error, setError] = useState<string | null>(null);
-  const mutation = useMutation({
-    mutationFn: () => putAdminStatementModerationPolicy(
-      conversationId,
-      {mode: strictModeration ? 'moderate' : 'auto_approve'},
-      csrfToken,
-    ),
-    onSuccess: (receipt) => {
-      queryClient.setQueryData<Workspace>(options.queryKey, receipt.workspace);
-      setStrictModeration(receipt.mode === 'moderate');
-      setError(null);
-    },
-    onError: (failure: Error) => {
-      if (failure instanceof ApiContractError && failure.code === 'verification_unavailable') {
-        setError('Could not verify the current moderation state. Try again later.');
-      } else if (failure instanceof ApiContractError && failure.code === 'upstream_unavailable') {
-        setError('Could not update moderation settings. Check server logs for details.');
-      } else if (failure instanceof ApiContractError && failure.code === 'command_outcome_unknown') {
-        setError('The voting service may have been updated, but the local policy could not be saved. Do not retry until a site admin checks it.');
-      } else {
-        setError('Could not save the moderation policy. Try again later.');
-      }
-    },
-  });
+  const {data} = useSuspenseQuery(adminStatementWorkspaceQuery(conversationId));
   return (
-    // `settings-approval` gives this section, outside `.settings-form`, the same header
-    // grid and spacing as the numbered sections inside it (styles.css).
-    <section className="settings-approval" aria-labelledby="settings-approval">
+    <section aria-labelledby="settings-approval">
       <header><span>{number}</span><div><h3 id="settings-approval">{msg('stmts-modsettings-heading')}</h3></div></header>
-      <form onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
-        <input type="hidden" name="csrf_token" value={csrfToken} />
-        <label className="checkbox-label" style={{fontWeight: 'normal', color: 'var(--text)'}}>
-          <input
-            type="checkbox"
-            name="strict_moderation"
-            value="1"
-            checked={strictModeration}
-            onChange={(event) => setStrictModeration(event.target.checked)}
-          />
-          {msg('stmts-strict-label')}
-        </label>
-        <div style={{marginTop: '.75rem'}}>
-          <button type="submit" className="btn-small" disabled={mutation.isPending}>{msg('stmts-save')}</button>
-        </div>
-        {error && <p role="alert" className="command-error">{error}</p>}
-      </form>
+      <label className="checkbox-label" style={{fontWeight: 'normal', color: 'var(--text)'}}>
+        <input
+          type="checkbox"
+          name="strict_moderation"
+          value="1"
+          checked={strict ?? data.moderationPolicy.mode === 'moderate'}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        {msg('stmts-strict-label')}
+      </label>
     </section>
   );
+}
+
+/** A refusal of the moderation-policy request, told apart from a refusal of the settings
+ *  request so each is shown where it belongs. */
+class PolicySaveError extends Error {
+  constructor(readonly failure: unknown) {
+    super('The moderation policy could not be saved.');
+  }
+}
+
+/** The status-line text for a refused moderation-policy request. */
+function policyErrorMessage(failure: unknown): string {
+  if (failure instanceof ApiContractError && failure.code === 'verification_unavailable') {
+    return 'Could not verify the current moderation state. Try again later.';
+  }
+  if (failure instanceof ApiContractError && failure.code === 'upstream_unavailable') {
+    return 'Could not update moderation settings. Check server logs for details.';
+  }
+  if (failure instanceof ApiContractError && failure.code === 'command_outcome_unknown') {
+    return 'The voting service may have been updated, but the local policy could not be saved. Do not retry until a site admin checks it.';
+  }
+  return 'Could not save the moderation policy. Try again later.';
 }
 
 export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
@@ -241,6 +231,10 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   const [eligibilityEventId, setEligibilityEventId] = useState(data.eligibility.eventId);
   const [eligibilityLabel, setEligibilityLabel] = useState(data.eligibility.label ?? '');
   const [tier, setTier] = useState<Tier>(data.recommendations.tier);
+  // The strict-moderation answer once the checkbox has been touched; null until then, and
+  // again after a save, when the checkbox shows what is stored.
+  const [strictModeration, setStrictModeration] = useState<boolean | null>(null);
+  const workspaceOptions = adminStatementWorkspaceQuery(conversationId);
   const [confirming, setConfirming] = useState(false);
   const confirmRef = useRef<HTMLDivElement>(null);
   const saveRef = useRef<HTMLButtonElement>(null);
@@ -270,18 +264,64 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   } = data.conversation;
   const gated = admission !== 'anyone';
 
+  /** Whether any field the settings request carries differs from what the server last
+   *  stored. Only Basics asks: Access sends its request on every Save, as it always has. */
+  function settingsChanged(): boolean {
+    const wire = admissionWire(admission);
+    return title !== data.conversation.title
+      || introHtml !== data.conversation.introHtml
+      || outroHtml !== data.conversation.outroHtml
+      || accessPolicy !== data.conversation.accessPolicy
+      || wire.gated !== data.conversation.gated
+      || wire.gatingType !== data.conversation.gatingType
+      || eligibilityEventId !== data.eligibility.eventId
+      || eligibilityLabel !== (data.eligibility.label ?? '')
+      || tier !== data.recommendations.tier;
+  }
+
+  // One Save per tab, and everything on the tab takes effect on it (#478). On Basics that
+  // can be two requests, because the moderation policy has its own endpoint: the settings
+  // request when a settings field changed (or when nothing did, so the Save still answers
+  // "already up to date"), then the policy request when the checkbox differs from what is
+  // stored. A refused settings request stops the Save before the policy request is sent.
+  // A role that may not edit the settings sends only the policy request.
   const mutation = useMutation({
-    mutationFn: () => putAdminSettings(conversationId, {
-      title, introHtml, outroHtml, accessPolicy, eligibilityEventId,
-      eligibilityLabel, recommendationTier: tier, ...admissionWire(admission),
-      announce, information, resultsShared, showUsernames, accessRequestText,
-    }, csrfToken),
-    onSuccess: (receipt) => {
-      queryClient.setQueryData<Settings>(options.queryKey, receipt.settings);
-      // The server clears the eligibility pair when the invitation list is chosen; show
-      // what it stored, not what was typed, or the inputs keep an event ID that is gone.
-      setEligibilityEventId(receipt.settings.eligibility.eventId);
-      setEligibilityLabel(receipt.settings.eligibility.label ?? '');
+    mutationFn: async (): Promise<{changed: boolean}> => {
+      const workspace = queryClient.getQueryData<Workspace>(workspaceOptions.queryKey);
+      const storedStrict = workspace ? workspace.moderationPolicy.mode === 'moderate' : null;
+      const policyChanged = tab === 'basics' && strictModeration !== null
+        && storedStrict !== null && strictModeration !== storedStrict;
+      const sendSettings = canEdit && (tab !== 'basics' || settingsChanged() || !policyChanged);
+      let changed = false;
+      if (sendSettings) {
+        const receipt = await putAdminSettings(conversationId, {
+          title, introHtml, outroHtml, accessPolicy, eligibilityEventId,
+          eligibilityLabel, recommendationTier: tier, ...admissionWire(admission),
+          announce, information, resultsShared, showUsernames, accessRequestText,
+        }, csrfToken);
+        queryClient.setQueryData<Settings>(options.queryKey, receipt.settings);
+        // The server clears the eligibility pair when the invitation list is chosen; show
+        // what it stored, not what was typed, or the inputs keep an event ID that is gone.
+        setEligibilityEventId(receipt.settings.eligibility.eventId);
+        setEligibilityLabel(receipt.settings.eligibility.label ?? '');
+        changed = receipt.changed;
+      }
+      if (policyChanged) {
+        let receipt;
+        try {
+          receipt = await putAdminStatementModerationPolicy(
+            conversationId, {mode: strictModeration ? 'moderate' : 'auto_approve'}, csrfToken,
+          );
+        } catch (failure) {
+          throw new PolicySaveError(failure);
+        }
+        // The receipt carries the workspace, so the checkbox and the statements list never
+        // disagree; the checkbox goes back to showing what is stored.
+        queryClient.setQueryData<Workspace>(workspaceOptions.queryKey, receipt.workspace);
+        setStrictModeration(null);
+        changed = changed || receipt.changed;
+      }
+      return {changed};
     },
   });
 
@@ -294,7 +334,11 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   // visibility away from anybody.
   const narrowing = stored !== admission && admission !== 'anyone';
 
-  const fields = fieldErrors(mutation.error);
+  // A refused policy request is said on the status line; everything else below is about
+  // the settings request.
+  const policyFailure = mutation.error instanceof PolicySaveError ? mutation.error : null;
+  const settingsError = policyFailure ? null : mutation.error;
+  const fields = fieldErrors(settingsError);
   const fieldMessages = Object.values(fields).flat();
   // The admission radio group answers both wire fields, so a refusal of either is shown
   // once, under the group, and linked from every live choice in it.
@@ -302,12 +346,13 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   const admissionInvalid = admissionMessages.length
     ? {'aria-invalid': true, 'aria-describedby': `${ids}-gated-error`}
     : {};
-  const locked = lockedField(mutation.error);
-  const serverMessage = mutation.error instanceof ApiContractError
-    ? mutation.error.message : null;
-  const generalError = mutation.error instanceof ApiContractError
-    ? (fieldMessages.length || locked ? null : serverMessage)
-    : mutation.error ? 'Settings could not be saved.' : null;
+  const locked = lockedField(settingsError);
+  const serverMessage = settingsError instanceof ApiContractError
+    ? settingsError.message : null;
+  const generalError = policyFailure ? policyErrorMessage(policyFailure.failure)
+    : settingsError instanceof ApiContractError
+      ? (fieldMessages.length || locked ? null : serverMessage)
+      : settingsError ? 'Settings could not be saved.' : null;
 
   // The question takes focus when it opens; when it closes, by Cancel or by Continue, the
   // buttons that held focus are gone, so focus goes back to the Save button.
@@ -381,10 +426,10 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
           {tab === 'basics' ? <>
             <section aria-labelledby="settings-description">
               <header><span>01</span><div><h3 id="settings-description">Description</h3></div></header>
-              <label>{msg('admin-label-title')}<input value={title} maxLength={255} required {...invalid('title')} onChange={(event) => setTitle(event.target.value)} /></label>
+              <label>{msg('admin-label-title')}<input value={title} maxLength={255} required disabled={!canEdit} {...invalid('title')} onChange={(event) => setTitle(event.target.value)} /></label>
               <FieldError field="title" />
-              <label>Introduction HTML<textarea value={introHtml} rows={7} onChange={(event) => setIntroHtml(event.target.value)} /></label>
-              <label>Closing HTML<textarea value={outroHtml} rows={5} onChange={(event) => setOutroHtml(event.target.value)} /></label>
+              <label>Introduction HTML<textarea value={introHtml} rows={7} disabled={!canEdit} onChange={(event) => setIntroHtml(event.target.value)} /></label>
+              <label>Closing HTML<textarea value={outroHtml} rows={5} disabled={!canEdit} onChange={(event) => setOutroHtml(event.target.value)} /></label>
               <p className="settings-hint">Allowed HTML is sanitized by the server when saved.</p>
               {/* Admin-written texts meant for publication are CC0, like participants'
                   contributions; the deed link is built as on the join screen. */}
@@ -394,7 +439,7 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
               <header><span>02</span><div><h3 id="settings-guidance">Guidance scope</h3></div></header>
               <fieldset><legend>Complexity tier</legend>{data.recommendations.tiers.map((option) => (
                 <label className="settings-tier" key={option.key}>
-                  <input type="radio" name="tier" value={option.key} checked={tier === option.key} onChange={() => setTier(option.key)} />
+                  <input type="radio" name="tier" value={option.key} checked={tier === option.key} disabled={!canEdit} onChange={() => setTier(option.key)} />
                   <strong>{option.label}</strong>
                   <span>{Object.values(option.quantities).join(' · ')}</span>
                 </label>
@@ -417,6 +462,11 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
                 <option value="public">Not gated</option><option value="demo">Practice</option>
               </select></label>}
             </section>}
+            <ApprovalSection conversationId={conversationId} number={practiceSection ? '04' : '03'}
+              strict={strictModeration} onChange={setStrictModeration} />
+            <p className="admin-shell__coming" lang="en">Also coming: the language the consultation is written in — not available yet (#473)</p>
+            <p className="admin-shell__coming" lang="en">Also coming: keeping the submission form open while new statements are no longer shown — not available yet (#473)</p>
+            <p className="admin-shell__coming" lang="en">Also coming: publishing the moderation log — not available yet (#473)</p>
           </> : <section aria-label={msg('admin-access-heading')}>
             {/* A practice item has no admission choice: the server stores one fixed answer
                 whatever is sent, and the Practice Environment section on Basics states it.
@@ -461,25 +511,21 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
               <p>{data.eligibility.note}</p>
             </div>
           </section>}
-          {canEdit && <footer>
+          {/* One Save, at the bottom of the tab, with one status line beside it. A role
+              that may not edit the settings still saves the strict-moderation answer on
+              Basics, which moderators may change; the settings inputs are disabled for it. */}
+          {(canEdit || tab === 'basics') && <footer>
             {confirming ? <div className="access-confirm" role="group" aria-labelledby={`${ids}-confirm`} tabIndex={-1} ref={confirmRef}>
               <p id={`${ids}-confirm`}>{msg('admin-access-narrowing-confirm')}</p>
               <button type="submit" disabled={mutation.isPending}>{msg('admin-access-narrowing-continue')}</button>
               <button type="button" onClick={() => setConfirming(false)}>{msg('common-cancel')}</button>
             </div> : <button type="submit" disabled={mutation.isPending} ref={saveRef}>
-              {mutation.isPending ? 'Saving…' : msg('adminconv-save-settings')}
+              {mutation.isPending ? msg('admin-saving') : msg('admin-save')}
             </button>}
             {mutation.data && <p role="status">{mutation.data.changed ? 'Settings saved.' : 'Settings already up to date.'}</p>}
             {generalError && <p role="alert">{generalError}</p>}
           </footer>}
         </form>
-        {tab === 'basics' && <>
-          {/* Outside the settings form: the Approval control has a form of its own. */}
-          <ApprovalControl conversationId={conversationId} csrfToken={csrfToken} number={practiceSection ? '04' : '03'} />
-          <p className="admin-shell__coming" lang="en">Also coming: the language the consultation is written in — not available yet (#473)</p>
-          <p className="admin-shell__coming" lang="en">Also coming: keeping the submission form open while new statements are no longer shown — not available yet (#473)</p>
-          <p className="admin-shell__coming" lang="en">Also coming: publishing the moderation log — not available yet (#473)</p>
-        </>}
       </div>
     </AdminShell>
   );
