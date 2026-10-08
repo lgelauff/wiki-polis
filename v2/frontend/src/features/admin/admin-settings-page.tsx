@@ -64,8 +64,8 @@ type Admission = 'anyone' | 'invite_only' | 'voucher' | 'wiki_based' | 'unset';
  * key and no qqq entry, so translators are not asked to carry a string that leaves again
  * when the functionality lands (`.claude/admin-review/message-key-convention.md`). */
 const COMING_ADMISSION = {what: 'a policy based on wiki activity', issue: 406};
-const COMING_VISIBILITY = {what: 'choosing what people without access can see, and what to tell them'};
-const COMING_REVEAL = {what: 'participants choosing to show their username'};
+const COMING_VISIBILITY = {what: 'choosing what people without access can see, and what to tell them', issue: 405};
+const COMING_REVEAL = {what: 'participants choosing to show their username', issue: 405};
 
 function admissionOf(conversation: Settings['conversation']): Admission {
   if (!conversation.gated) return 'anyone';
@@ -191,6 +191,19 @@ function ApprovalSection({conversationId, strict, onChange}: {
 
 /** A setting shown as its value, for a viewer who may not change it: text, not a disabled
  *  control, so nothing on the page looks as if it could be operated when it cannot. */
+/** An organizer text shown to a viewer who may not change it: rendered exactly as
+ *  participants see it. The HTML is the server-sanitised text the settings endpoint
+ *  returns, which the participant pages render the same way, with the same class. */
+function SettingHtml({label, html, className}: {label: string; html: string; className: string}) {
+  return (
+    <div className="access-answer">
+      <p className="access-answer-legend">{label}</p>
+      {html === '' ? <p className="access-answer-value">—</p>
+        : <div className={`settings-value-html ${className}`} dangerouslySetInnerHTML={{__html: html}} />}
+    </div>
+  );
+}
+
 function SettingValue({label, value}: {label: string; value: string}) {
   return (
     <div className="access-answer">
@@ -467,8 +480,8 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
                 <p className="settings-hint">Allowed HTML is sanitized by the server when saved.</p>
               </> : <>
                 <SettingValue label={msg('admin-label-title')} value={data.conversation.title} />
-                <SettingValue label="Introduction HTML" value={data.conversation.introHtml} />
-                <SettingValue label="Closing HTML" value={data.conversation.outroHtml} />
+                <SettingHtml label="Introduction HTML" html={data.conversation.introHtml} className="intro-text" />
+                <SettingHtml label="Closing HTML" html={data.conversation.outroHtml} className="outro-text" />
               </>}
               {/* Admin-written texts meant for publication are CC0, like participants'
                   contributions; the deed link is built as on the join screen. */}

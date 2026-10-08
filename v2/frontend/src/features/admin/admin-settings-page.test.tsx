@@ -221,12 +221,12 @@ test('renders a locked admission answer as text with the reason on its lock', as
   // What they promised is one muted line instead, beside the username-reveal one.
   const coming = screen.getByText(
     'Also coming: choosing what people without access can see, and what to tell them'
-    + ' — not available yet',
+    + ' — not available yet (#405)',
   );
   expect(coming).toBeVisible();
   expect(coming.tagName).toBe('P');
   expect(screen.getByText(
-    'Also coming: participants choosing to show their username — not available yet',
+    'Also coming: participants choosing to show their username — not available yet (#405)',
   )).toBeVisible();
 });
 
@@ -414,10 +414,10 @@ test('what is not available yet is prose, not a control that does nothing', asyn
   for (const note of [
     screen.getByText(
       'Also coming: choosing what people without access can see, and what to tell them'
-      + ' — not available yet',
+      + ' — not available yet (#405)',
     ),
     screen.getByText(
-      'Also coming: participants choosing to show their username — not available yet',
+      'Also coming: participants choosing to show their username — not available yet (#405)',
     ),
   ]) {
     expect(note).not.toHaveAttribute('tabindex');
@@ -539,6 +539,9 @@ test('on Basics a moderator sees the settings as text and saves only the strict-
   expect(screen.queryByRole('textbox')).toBeNull();
   expect(screen.queryByRole('radio')).toBeNull();
   expect(screen.getByText('Community strategy', {selector: '.settings-value'})).toBeVisible();
+  // The introduction as participants see it: rendered, not its HTML source.
+  expect(screen.getByText('Shape the future.', {selector: '.intro-text p'})).toBeVisible();
+  expect(screen.queryByText('<p>Shape the future.</p>')).toBeNull();
   expect(screen.getByText('Medium topic')).toBeVisible();
   fireEvent.click(approval);
   fireEvent.click(screen.getByRole('button', {name: 'Save'}));

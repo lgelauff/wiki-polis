@@ -338,6 +338,13 @@
   padding: 0;
 }
 
+/* An organizer text shown rendered to a viewer who may not change it. */
+.admin-shell .settings-value-html {
+  color: var(--shell-body);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
 /* A value shown to a viewer who may not change it keeps its line breaks. */
 .admin-shell .settings-value {
   white-space: pre-wrap;
