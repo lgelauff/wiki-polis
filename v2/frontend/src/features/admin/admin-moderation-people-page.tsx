@@ -9,6 +9,7 @@ import {
   putAdminParticipantAccess,
 } from '../../api/queries';
 import {useMessage} from '../../i18n/messages';
+import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
 import {AdminTabStrip} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
@@ -159,7 +160,7 @@ export function AdminModerationPeoplePage({conversationId, csrfToken}: {
 
         {/* The moderator/organizer split, progress, batch label and joined day need fields
             the roster does not return yet (#473). */}
-        <p className="admin-shell__coming" lang="en">Also coming: the moderator and organizer roles per person, and when they joined — not available yet (#473)</p>
+        <AdminComing what="the moderator and organizer roles per person, and when they joined" issue={473} />
       </div>
     </AdminShell>
   );

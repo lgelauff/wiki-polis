@@ -265,7 +265,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
         </p>
 
         <div className="landing-section" style={{marginBottom: '1.5rem'}}>
-          <h3 style={{fontSize: 16, marginBottom: '.5rem'}}>How to choose featured statements</h3>
+          <h2 style={{fontSize: 16, marginBottom: '.5rem'}}>How to choose featured statements</h2>
           <p className="muted" style={{fontSize: 13, marginBottom: '.6rem'}}>
             Featured statements are the representative set that carries the rest of the consultation:
             {' '}they become the prompts for argument mapping and are seeded into informed voting.
@@ -286,7 +286,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
 
         {feedback && <div style={feedbackStyle()}>{feedback}</div>}
 
-        <h3 className="section-heading">Confirmed ({data.selected.length})</h3>
+        <h2 className="section-heading">Confirmed ({data.selected.length})</h2>
         {data.selected.length ? (
           <table className="admin-table" style={{marginBottom: '1.5rem'}}>
             <thead><tr><th>TID</th><th>Statement</th><th /></tr></thead>
@@ -306,7 +306,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
           </table>
         ) : <p className="muted" style={{fontSize: 14, marginBottom: '1.5rem'}}>No featured statements yet.</p>}
 
-        <h3 className="section-heading">System suggestions</h3>
+        <h2 className="section-heading">System suggestions</h2>
         {!data.dataAvailability.candidates ? (
           <p className="muted" style={{fontSize: 13, marginBottom: '1.5rem'}}>
             Not available — <code>POLIS_DATABASE_URL</code> is not configured.
@@ -334,7 +334,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
           </table>
         )}
 
-        <h3 className="section-heading">Add by TID</h3>
+        <h2 className="section-heading">Add by TID</h2>
         <div className="edit-form">
           <p className="muted" style={{fontSize: 13, marginBottom: '.75rem'}}>
             Enter the Polis statement ID (TID) to feature it directly.

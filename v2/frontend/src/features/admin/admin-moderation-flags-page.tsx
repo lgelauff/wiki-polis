@@ -1,4 +1,4 @@
-import {useCallback, useRef, useState} from 'react';
+import {useCallback, useRef, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 
 import type {components} from '../../api/schema';
@@ -52,11 +52,10 @@ function FlagText({flag, open}: {flag: Flag; open: boolean}) {
   );
 }
 
-/** One open flag. "Keep" says the content is fine as it stands, "Remove" says the content
- *  should go, which the moderator then does where the "↳" leads; both resolve the flag, so
- *  they share one request and neither can be pressed while it runs. There is no check glyph
- *  here — a check beside a flag would read as "confirm the flag", which is the opposite of
- *  what it does. */
+/** One open flag, with one action: "Mark as handled" closes the flag, with an optional note
+ *  saying what was done. What happens to the content itself is done where the "↳" leads.
+ *  There is no check glyph here — a check beside a flag would read as "confirm the flag",
+ *  which is the opposite of what it does. */
 function FlagRow({conversationId, flag, csrfToken, onResolved, onFeedback}: {
   conversationId: number;
   flag: Flag;
@@ -70,9 +69,10 @@ function FlagRow({conversationId, flag, csrfToken, onResolved, onFeedback}: {
   // Set on the click itself: `isPending` reaches the buttons a render later, and a second
   // click in between would send a second request.
   const busy = useRef(false);
+  const [note, setNote] = useState('');
   const mutation = useMutation({
     mutationFn: () => putAdminFlagResolution(
-      conversationId, flag.id, {resolved: true, note: null}, csrfToken,
+      conversationId, flag.id, {resolved: true, note: note.trim() || null}, csrfToken,
     ),
     onSuccess: (receipt) => {
       onResolved(flag.id);
@@ -98,7 +98,8 @@ function FlagRow({conversationId, flag, csrfToken, onResolved, onFeedback}: {
       busy.current = false;
     },
   });
-  function resolve() {
+  function resolve(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     if (busy.current) return;
     busy.current = true;
     mutation.mutate();
@@ -108,10 +109,16 @@ function FlagRow({conversationId, flag, csrfToken, onResolved, onFeedback}: {
       <FlagText flag={flag} open />
       <div className="admin-row__actions">
         {flag.flaggedAt && <span className="admin-row__time">{date(flag.flaggedAt)}</span>}
-        <button type="button" className="admin-row__text-button" disabled={mutation.isPending}
-          onClick={resolve}>{msg('admin-moderation-flag-keep')}</button>
-        <button type="button" className="admin-row__text-button" disabled={mutation.isPending}
-          onClick={resolve}>{msg('admin-moderation-flag-remove')}</button>
+        <form className="admin-row__block-form" onSubmit={resolve}>
+          <label className="admin-row__field">
+            <span>{msg('admin-moderation-flag-note')}</span>
+            <input type="text" name="resolution_note" value={note}
+              onChange={(event) => setNote(event.target.value)} />
+          </label>
+          <button type="submit" className="admin-row__text-button" disabled={mutation.isPending}>
+            {msg('admin-moderation-flag-handle')}
+          </button>
+        </form>
       </div>
     </li>
   );
@@ -155,14 +162,16 @@ export function AdminModerationFlagsPage({conversationId, csrfToken}: {
 
         {/* Each position says how many open flags it holds, so flags on the other one are
             found without switching. */}
-        <div className="admin-switch admin-switch--words">
-          {([['statement', 'adminconv-card-statements'], ['argument', 'featured-arguments-label']] as const)
-            .map(([type, key]) => (
-              <button key={type} type="button" aria-pressed={position === type}
-                onClick={() => setPosition(type)}>
-                {msg(key)}{count(type) ? ` ${count(type)}` : ''}
-              </button>
-            ))}
+        <div className="admin-toolbar">
+          <div className="admin-switch">
+            {([['statement', 'adminconv-card-statements'], ['argument', 'featured-arguments-label']] as const)
+              .map(([type, key]) => (
+                <button key={type} type="button" className="admin-switch__position"
+                  aria-pressed={position === type} onClick={() => setPosition(type)}>
+                  {msg(key)}{count(type) ? ` ${count(type)}` : ''}
+                </button>
+              ))}
+          </div>
         </div>
 
         {rows.length ? (
@@ -183,8 +192,15 @@ export function AdminModerationFlagsPage({conversationId, csrfToken}: {
               {resolved.map((flag) => (
                 <li className="admin-row" key={flag.id}>
                   <FlagText flag={flag} open={false} />
+                  {/* When it was handled, and the note the moderator left, if any: the
+                      note is theirs, so it is shown as written. */}
                   {flag.resolution?.resolvedAt && (
-                    <span className="admin-row__time">{date(flag.resolution.resolvedAt)}</span>
+                    <span className="admin-row__time">
+                      {msg('admin-moderation-flag-handled', date(flag.resolution.resolvedAt))}
+                    </span>
+                  )}
+                  {flag.resolution?.note && (
+                    <p className="admin-row__note">{flag.resolution.note}</p>
                   )}
                 </li>
               ))}

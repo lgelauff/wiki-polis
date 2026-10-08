@@ -11,6 +11,7 @@ import {
 } from '../../api/queries';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
+import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
 import {AdminTabStrip, type SectionTab} from './admin-tab-strip';
 import {moderationTabs} from './admin-moderation-tabs';
@@ -243,7 +244,7 @@ export function AdminModerationQueuePage({conversationId, csrfToken}: {
 
         {/* The waiting time on each row would need a timestamp the statements endpoint does
             not return today; the moderation log would carry it, once it exists (#473). */}
-        <p className="admin-shell__coming" lang="en">Also coming: how long each statement has been waiting — not available yet (#473)</p>
+        <AdminComing what="how long each statement has been waiting" issue={473} />
       </div>
     </AdminShell>
   );

@@ -288,7 +288,7 @@ test('the queue names the one thing it cannot show yet', async () => {
   expect(lines[0]?.closest('a, button')).toBeNull();
 });
 
-test('flags are one row each, with the reason as a suffix and two ways to close one', async () => {
+test('flags are one row each, with the reason as a suffix and one way to close one', async () => {
   server.use(http.get(FLAGS_URL, () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     open: [{
@@ -332,23 +332,58 @@ test('flags are one row each, with the reason as a suffix and two ways to close 
   const suffix = row.querySelector('.admin-row__suffix')!;
   expect(suffix).toHaveTextContent('Privacy violation · Includes a real name.');
   expect(suffix).toHaveClass('admin-row__suffix');
-  // Text buttons, not a check: a check beside a flag reads as confirming it.
-  expect(within(row).getByRole('button', {name: 'Keep'})).toBeVisible();
-  expect(within(row).getByRole('button', {name: 'Remove'})).toBeVisible();
+  // One text action, not a check (a check beside a flag reads as confirming it), and an
+  // optional note with a label of its own.
+  expect(within(row).getAllByRole('button').map((button) => button.textContent))
+    .toEqual(['Mark as handled']);
+  expect(within(row).getByRole('textbox', {name: 'Resolution note (optional)'})).toHaveValue('');
 
-  // One request per row: a second click while the first runs sends nothing.
-  fireEvent.click(within(row).getByRole('button', {name: 'Keep'}));
-  fireEvent.click(within(row).getByRole('button', {name: 'Remove'}));
+  // One request per row: a second click while the first runs sends nothing. An empty
+  // note is sent as null.
+  fireEvent.click(within(row).getByRole('button', {name: 'Mark as handled'}));
+  fireEvent.click(within(row).getByRole('button', {name: 'Mark as handled'}));
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0]).toEqual({flagId: 41, body: {resolved: true, note: null}});
   await waitFor(() => expect(screen.getByText('No open flags.')).toHaveFocus());
-  expect(screen.queryByRole('button', {name: 'Keep'})).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Mark as handled'})).toBeNull();
   expect(screen.getByRole('status')).toHaveTextContent('Flag marked resolved.');
   // The resolved flag moves to the list below, without the way to the content.
   const resolved = screen.getByRole('heading', {name: 'Resolved', level: 2}).nextElementSibling!;
   expect(resolved).toHaveTextContent('A statement with a real name in it.');
+  expect(resolved).toHaveTextContent('Handled 13 Aug 2026');
   expect(within(resolved as HTMLElement).queryByRole('link')).toBeNull();
   expect(sent).toHaveLength(1);
+});
+
+test('the note typed on a flag is sent with it and shown in the handled list', async () => {
+  const sent: unknown[] = [];
+  server.use(http.put(
+    new URL('/api/v1/admin/conversations/7/flags/:flagId/resolution', globalThis.location.origin)
+      .toString(),
+    async ({params, request}) => {
+      const body = await request.json() as {note: string | null};
+      sent.push(body);
+      return HttpResponse.json({data: {
+        flagId: Number(params.flagId), status: 'resolved', changed: true,
+        resolution: {resolvedAt: '2026-08-13T10:00:00Z', note: body.note},
+        links: {flags: FLAGS_URL},
+      }});
+    },
+  ));
+  renderModeration(<AdminModerationFlagsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/moderation/flags');
+
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
+  const row = page().getAllByRole('listitem')[0]!;
+  fireEvent.change(within(row).getByRole('textbox', {name: 'Resolution note (optional)'}),
+    {target: {value: 'Hid the statement on the queue.'}});
+  fireEvent.click(within(row).getByRole('button', {name: 'Mark as handled'}));
+
+  await waitFor(() => expect(sent).toHaveLength(1));
+  expect(sent[0]).toEqual({resolved: true, note: 'Hid the statement on the queue.'});
+  const resolved = (await screen.findByRole('heading', {name: 'Resolved', level: 2}))
+    .nextElementSibling as HTMLElement;
+  expect(within(resolved).getByText('Hid the statement on the queue.')).toBeVisible();
 });
 
 test('a flag someone else already resolved says so', async () => {
@@ -365,7 +400,7 @@ test('a flag someone else already resolved says so', async () => {
     '/admin/conversations/7/moderation/flags');
 
   await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
-  fireEvent.click(screen.getByRole('button', {name: 'Remove'}));
+  fireEvent.click(screen.getAllByRole('button', {name: 'Mark as handled'})[0]!);
   expect(await screen.findByRole('alert')).toHaveTextContent('Flag was already resolved.');
 });
 
@@ -486,7 +521,7 @@ test('a person shows since when and why only while blocked, and an unchanged unb
 
   fireEvent.click(within(blocked!).getByRole('button', {name: 'unban'}));
   expect(await screen.findByRole('alert'))
-    .toHaveTextContent('Participant is already allowed in this conversation.');
+    .toHaveTextContent('Participant is already allowed in this consultation.');
 });
 
 test('Featured is today’s page under the strip, arguments and all', async () => {

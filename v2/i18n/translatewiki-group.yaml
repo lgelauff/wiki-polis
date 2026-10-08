@@ -109,8 +109,9 @@ TAGS:
     - admin-label-wm-username
     - admin-moderation-approve-statement
     - admin-moderation-flag-already-resolved
-    - admin-moderation-flag-keep
-    - admin-moderation-flag-remove
+    - admin-moderation-flag-handle
+    - admin-moderation-flag-handled
+    - admin-moderation-flag-note
     - admin-moderation-flags
     - admin-moderation-hide-statement
     - admin-moderation-people

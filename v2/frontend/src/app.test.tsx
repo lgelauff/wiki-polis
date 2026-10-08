@@ -362,15 +362,15 @@ test('resolves a privacy-safe moderation item through the typed contract', async
   );
 
   // #473: the old /moderation path redirects to Moderation > Flags. The page no longer
-  // carries the resolution-note field (#478's Keep/Remove buttons replace it) or the
-  // flagger-identity paragraph (quiet screens: no explanatory sentences), and the row is
-  // the flagged text with the reason as its suffix, so no target label is printed.
+  // carries the flagger-identity paragraph (quiet screens: no explanatory sentences), and
+  // the row is the flagged text with the reason as its suffix, so no target label is
+  // printed; one "Mark as handled" closes it, with an optional note.
   expect(await screen.findByRole('heading', {name: 'Moderation', level: 1})).toBeVisible();
   expect(screen.queryByRole('heading', {name: 'Flags'})).toBeNull();
   expect(screen.getByText('A statement containing private information.')).toBeVisible();
   // The reason is a muted suffix on the flagged text, not a field of its own.
   expect(screen.getByText(/Privacy violation/)).toHaveClass('admin-row__suffix');
-  fireEvent.click(screen.getByRole('button', {name: 'Keep'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Mark as handled'}));
 
   expect(await screen.findByText('No open flags.')).toBeVisible();
   expect(screen.getByRole('status')).toHaveTextContent('Flag marked resolved.');
