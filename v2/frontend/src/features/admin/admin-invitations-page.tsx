@@ -1,4 +1,4 @@
-import {useCallback, useId, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useId, useRef, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 
@@ -11,6 +11,7 @@ import {
   putAdminInvitations,
 } from '../../api/queries';
 import {AdminSettingsFrame} from './admin-settings-page';
+import {useAnnouncer} from './admin-announcer';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {useMessage, type Message} from '../../i18n/messages';
 import {accessPolicyLabel} from '../../i18n/server-labels';
@@ -62,6 +63,12 @@ export function AdminInvitationsPage({
   const [input, setInput] = useState('');
   const [toast, setToast] = useState<LegacyToastMessage | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
+  const announcer = useAnnouncer();
+  // Where focus goes once a removed invitation's row has left the table: the next row's
+  // Remove (the previous row's when the last went), or the empty-list line.
+  const rowsRef = useRef<HTMLTableSectionElement>(null);
+  const emptyRef = useRef<HTMLTableCellElement>(null);
+  const [focusAfterRemove, setFocusAfterRemove] = useState<{removed: number; next: number | null} | null>(null);
   const addMutation = useMutation({
     mutationFn: (usernames: string[]) => putAdminInvitations(
       conversationId, {usernames}, csrfToken,
@@ -92,16 +99,34 @@ export function AdminInvitationsPage({
     mutationFn: (invitationId: number) => deleteAdminInvitation(
       conversationId, invitationId, csrfToken,
     ),
-    onSuccess: (receipt) => {
+    onSuccess: (receipt, invitationId) => {
+      const shown = data.invitations.map((invitation) => invitation.id);
+      const index = shown.indexOf(invitationId);
+      const rest = shown.filter((id) => id !== invitationId);
+      setFocusAfterRemove({removed: invitationId, next: rest[index] ?? rest[index - 1] ?? null});
+      const removed = data.invitations.find((invitation) => invitation.id === invitationId);
+      if (removed) announcer.announce(msg('admin-invitations-removed', removed.username));
       queryClient.setQueryData<Roster>(
         adminInvitationRosterQuery(conversationId).queryKey,
         (roster) => roster ? {...roster, invitations: receipt.invitations} : roster,
       );
     },
   });
+  useEffect(() => {
+    if (!focusAfterRemove) return;
+    if (data.invitations.some((invitation) => invitation.id === focusAfterRemove.removed)) return;
+    setFocusAfterRemove(null);
+    const next = focusAfterRemove.next === null ? null : rowsRef.current?.querySelector<HTMLElement>(
+      `[data-row-id="${focusAfterRemove.next}"] button`,
+    );
+    (next ?? emptyRef.current)?.focus();
+  }, [data.invitations, focusAfterRemove]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // One batch at a time: a second Enter or click while the first is on its way would
+    // send the same names again.
+    if (addMutation.isPending) return;
     const usernames = input.split('\n').map((value) => value.trim()).filter(Boolean);
     if (usernames.length) addMutation.mutate(usernames);
   }
@@ -127,6 +152,7 @@ export function AdminInvitationsPage({
       lifecycle={lifecycle}
       tab="invitations"
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
+      announcer={announcer}
     >
       <div>
         <p>
@@ -159,7 +185,7 @@ export function AdminInvitationsPage({
                 placeholder={'Username1\nUsername2\nUsername3'}
               />
             </label>
-            <button type="submit" disabled={!invitationList}
+            <button type="submit" disabled={!invitationList || addMutation.isPending}
               aria-describedby={invitationList ? undefined : unavailableId}>Add</button>
           </form>
         </div>
@@ -170,9 +196,9 @@ export function AdminInvitationsPage({
             <thead>
               <tr><th>Username</th><th>Status</th><th>Added</th><th /></tr>
             </thead>
-            <tbody>
+            <tbody ref={rowsRef}>
               {data.invitations.map((invitation) => (
-                <tr key={invitation.id}>
+                <tr key={invitation.id} data-row-id={invitation.id}>
                   <td>{invitation.username}</td>
                   <td>{invitation.signedIn ? 'Linked' : 'Never logged in'}</td>
                   <td className="muted">{formatLegacyDate(invitation.createdAt)}</td>
@@ -196,7 +222,7 @@ export function AdminInvitationsPage({
                 </tr>
               ))}
               {!data.invitations.length && (
-                <tr><td colSpan={4} className="muted">No invites yet.</td></tr>
+                <tr><td colSpan={4} className="muted" ref={emptyRef} tabIndex={-1}>No invites yet.</td></tr>
               )}
             </tbody>
           </table>

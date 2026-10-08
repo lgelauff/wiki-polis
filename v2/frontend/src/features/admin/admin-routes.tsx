@@ -128,8 +128,10 @@ export const AdminSettingsRolesRoute = () => <AdminRoute kind="settings-roles" /
  *  in `v2/app.py`. */
 export function AdminRedirectRoute({to}: {to: (conversationId: string) => string}) {
   const {conversationId} = useParams();
+  const {search, hash} = useLocation();
   if (!conversationId) throw new Error('Missing route parameter: conversationId');
-  return <Navigate replace to={to(conversationId)} />;
+  // The query string and fragment go along, as with the settings index below.
+  return <Navigate replace to={{pathname: to(conversationId), search, hash}} />;
 }
 
 /** `…/settings` is the URL the lifecycle page and the sidebar still link to; Settings has

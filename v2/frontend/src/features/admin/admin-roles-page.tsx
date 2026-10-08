@@ -27,6 +27,10 @@ export function AdminRolesPage({conversationId, csrfToken}: {
   const mutation = useMutation({
     mutationFn: () => putAdminRoles(conversationId, participantId!, {roles: chosen}, csrfToken),
     onSuccess: (receipt) => {
+      // The operator's own role is in the frame (from the lifecycle DTO), and what Settings
+      // lets them edit follows from it: both are read again.
+      void queryClient.invalidateQueries({queryKey: adminLifecycleQuery(conversationId).queryKey});
+      void queryClient.invalidateQueries({queryKey: adminSettingsQuery(conversationId).queryKey});
       queryClient.setQueryData<Roster>(adminRoleRosterQuery(conversationId).queryKey, (roster) => {
         if (!roster) return roster;
         const rest = roster.assignments.filter((row) => row.participantId !== receipt.participantId);
@@ -43,13 +47,16 @@ export function AdminRolesPage({conversationId, csrfToken}: {
     },
   });
 
+  // A result describes the person and roles it was saved for: another choice clears it.
   function selectParticipant(value: string) {
+    mutation.reset();
     const id = value ? Number(value) : null;
     setParticipantId(id);
     const current = data.assignments.find((row) => row.participantId === id);
     setChosen((current?.roles ?? []) as Role[]);
   }
   function toggle(role: Role) {
+    mutation.reset();
     setChosen((roles) => roles.includes(role)
       ? roles.filter((value) => value !== role)
       : [...roles, role]);
@@ -93,7 +100,10 @@ export function AdminRolesPage({conversationId, csrfToken}: {
               </label>)}
             </fieldset>
             <button type="submit" disabled={participantId === null || mutation.isPending}>{mutation.isPending ? 'Saving…' : 'Save role set'}</button>
-            {mutation.isSuccess && <p role="status">Added: {mutation.data.added.join(', ') || 'none'} · Removed: {mutation.data.removed.join(', ') || 'none'}</p>}
+            {/* Always mounted, keyed per save: a repeat of the same result is read again. */}
+            <div role="status">
+              {mutation.isSuccess && <p key={mutation.submittedAt}>Added: {mutation.data.added.join(', ') || 'none'} · Removed: {mutation.data.removed.join(', ') || 'none'}</p>}
+            </div>
             {mutation.isError && <p className="command-error" role="alert">{mutation.error.message}</p>}
           </form>
         </section>

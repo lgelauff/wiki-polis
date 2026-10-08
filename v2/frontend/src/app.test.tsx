@@ -420,7 +420,10 @@ test('adds and removes invitations through convergent admin commands', async () 
   fireEvent.click(screen.getByRole('button', {name: 'Add'}));
 
   expect(await screen.findByText('New editor')).toBeVisible();
-  expect(screen.getByRole('status')).toHaveTextContent('Invites: 1 added; 1 duplicate input.');
+  // The toast inside the console reads out through the shell's polite region.
+  expect(screen.getByText('Invites: 1 added; 1 duplicate input.', {selector: '.toast__msg'})).toBeVisible();
+  await waitFor(() => expect(document.querySelector('[aria-live="polite"]'))
+    .toHaveTextContent('Invites: 1 added; 1 duplicate input.'));
   const newEditorRow = screen.getByText('New editor').closest('tr');
   expect(newEditorRow).not.toBeNull();
   expect(within(newEditorRow!).getByText('Never logged in')).toBeVisible();
@@ -481,9 +484,12 @@ test('keeps the typed invitation list and shows a toast after a save error', asy
   fireEvent.change(input, {target: {value: 'New editor'}});
   fireEvent.click(screen.getByRole('button', {name: 'Add'}));
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
+  expect(await screen.findByText("Couldn't save invites — please review the list and retry.",
+    {selector: '.toast__msg'})).toBeVisible();
+  // Read out as an alert, through the console's assertive region.
+  await waitFor(() => expect(document.querySelector('[aria-live="assertive"]')).toHaveTextContent(
     "Couldn't save invites — please review the list and retry.",
-  );
+  ));
   expect(input).toHaveValue('New editor');
 });
 

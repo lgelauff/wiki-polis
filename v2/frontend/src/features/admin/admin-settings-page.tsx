@@ -12,6 +12,7 @@ import {
 } from '../../api/queries';
 import {AdminComing} from './admin-coming';
 import {AdminShell} from './admin-shell';
+import type {Announcer} from './admin-announcer';
 import {AdminTabStrip, type SectionTab} from './admin-tab-strip';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {useMessage, type Message} from '../../i18n/messages';
@@ -218,7 +219,8 @@ function settingsTabKey(tab: SettingsTab): string {
  *  tab strip, with the page's own content under it. On every tab an h1 "Settings" and the
  *  strip; no heading repeats the tab's name, which the strip's current tab and the
  *  breadcrumb already say. */
-export function AdminSettingsFrame({children, conversationId, gatingType, lifecycle, tab, toast}: {
+export function AdminSettingsFrame({announcer, children, conversationId, gatingType, lifecycle, tab, toast}: {
+  announcer?: Announcer | undefined;
   children: ReactNode;
   conversationId: number;
   gatingType: GatingType;
@@ -235,6 +237,7 @@ export function AdminSettingsFrame({children, conversationId, gatingType, lifecy
       section="settings"
       subPage={msg(settingsTabKey(tab))}
       toast={toast}
+      announcer={announcer}
     >
       <div className="admin-page settings-page">
         <h1>{msg('admin-settings-heading')}</h1>
