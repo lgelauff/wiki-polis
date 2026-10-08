@@ -1,4 +1,4 @@
-import {useCallback, useState, type FormEvent} from 'react';
+import {useCallback, useId, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 
@@ -12,10 +12,24 @@ import {
 } from '../../api/queries';
 import {AdminSettingsFrame} from './admin-settings-page';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
-import {useMessage} from '../../i18n/messages';
+import {useMessage, type Message} from '../../i18n/messages';
 import {accessPolicyLabel} from '../../i18n/server-labels';
 
 type Roster = components['schemas']['AdminInvitationRoster'];
+
+type Settings = components['schemas']['AdminSettings'];
+
+/** The answer to who gets in, in the words the Access tab uses for it. */
+function admissionName(msg: Message, conversation: Settings['conversation']): string {
+  if (conversation.accessPolicy === 'demo') return msg('admin-access-admission-practice');
+  if (!conversation.gated) return msg('admin-access-admission-anyone');
+  switch (conversation.gatingType) {
+    case 'invite_only': return msg('admin-access-admission-invited');
+    case 'voucher': return msg('admin-access-admission-voucher');
+    case 'wiki_based': return msg('admin-access-admission-wiki');
+    default: return accessPolicyLabel(msg, conversation.accessPolicy);
+  }
+}
 
 function formatLegacyDate(value: string): string {
   return new Date(value).toISOString().slice(0, 10);
@@ -100,10 +114,12 @@ export function AdminInvitationsPage({
   // account with this exact name has logged in to the site yet, so the
   // invitation is not bound to an account.
   const linked = data.invitations.filter((invitation) => invitation.signedIn).length;
-  // A field must work or not be shown (#478): invites only admit anyone while the
-  // invitation list is the answer to who gets in, so only then can more be added. The
-  // stored list stays visible either way, with its remove buttons.
+  // Invites only admit anyone while the invitation list is the answer to who gets in, so
+  // only then can more be added. Otherwise the form is shown greyed out, with one line
+  // naming the access policy in effect as the reason (#478). The stored list stays either
+  // way, with its remove buttons.
   const invitationList = settings.conversation.gatingType === 'invite_only';
+  const unavailableId = useId();
   return (
     <AdminSettingsFrame
       conversationId={conversationId}
@@ -125,8 +141,11 @@ export function AdminInvitationsPage({
           </p>
         )}
 
-        {invitationList && <div className="edit-form">
+        <div className="edit-form">
           <h2>Add invites</h2>
+          {!invitationList && <p className="muted" id={unavailableId}>
+            {msg('admin-invitations-unavailable', admissionName(msg, settings.conversation))}
+          </p>}
           <form onSubmit={submit}>
             <label>
               Wikimedia usernames (one per line)
@@ -134,13 +153,16 @@ export function AdminInvitationsPage({
                 name="mw_usernames"
                 rows={6}
                 value={input}
+                disabled={!invitationList}
+                aria-describedby={invitationList ? undefined : unavailableId}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder={'Username1\nUsername2\nUsername3'}
               />
             </label>
-            <button type="submit">Add</button>
+            <button type="submit" disabled={!invitationList}
+              aria-describedby={invitationList ? undefined : unavailableId}>Add</button>
           </form>
-        </div>}
+        </div>
 
         <table className="admin-table">
           <thead>

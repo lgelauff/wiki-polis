@@ -404,6 +404,9 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(await screen.findByRole('heading', {name: 'Settings', level: 1})).toBeVisible();
   expect(screen.queryByRole('heading', {name: 'Invitations'})).toBeNull();
   expect(screen.getByRole('heading', {name: 'Add invites', level: 2})).toBeVisible();
+  // With the invitation list in effect the form works, and there is no reason line.
+  expect(screen.getByLabelText('Wikimedia usernames (one per line)')).toBeEnabled();
+  expect(screen.queryByText(/^Not available:/)).toBeNull();
   // The access policy reads in words; the stored value never reaches the page.
   expect(screen.getByText('Only people who have been given access')).toBeVisible();
   expect(screen.queryByText('invite_only', {exact: false})).not.toBeInTheDocument();
@@ -430,10 +433,10 @@ test('adds and removes invitations through convergent admin commands', async () 
   expect(screen.queryByText(/invited ·/)).not.toBeInTheDocument();
 });
 
-test('offers no way to add invites while access is not the invitation list', async () => {
-  // A field must work or not be shown: with any other answer to who gets in, an added
-  // invite would admit nobody, so neither the form nor a note about it is on the page. The
-  // stored invitations stay listed, each with its remove button.
+test('greys out adding invites while access is not the invitation list, and says why', async () => {
+  // With any other answer to who gets in, an added invite would admit nobody: the form is
+  // shown disabled, with one line naming the access policy in effect, linked from both of
+  // its controls. The stored invitations stay listed, each with its remove button.
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/app/admin/conversations/7/invitations']}>
@@ -443,11 +446,16 @@ test('offers no way to add invites while access is not the invitation list', asy
   );
 
   expect(await screen.findByText('Existing editor')).toBeVisible();
-  expect(screen.queryByRole('heading', {name: 'Add invites'})).toBeNull();
-  expect(screen.queryByLabelText('Wikimedia usernames (one per line)')).toBeNull();
-  expect(screen.queryByRole('button', {name: 'Add'})).toBeNull();
+  expect(screen.getByRole('heading', {name: 'Add invites', level: 2})).toBeVisible();
+  const reason = screen.getByText('Not available: access is set to “Anyone with a Wikimedia account”.');
+  const textarea = screen.getByLabelText('Wikimedia usernames (one per line)');
+  const add = screen.getByRole('button', {name: 'Add'});
+  expect(textarea).toBeDisabled();
+  expect(add).toBeDisabled();
+  expect(textarea).toHaveAttribute('aria-describedby', reason.id);
+  expect(add).toHaveAttribute('aria-describedby', reason.id);
   expect(screen.queryByText(/Invites only take effect/)).toBeNull();
-  expect(screen.getByRole('button', {name: 'Remove invitation for Existing editor'})).toBeVisible();
+  expect(screen.getByRole('button', {name: 'Remove invitation for Existing editor'})).toBeEnabled();
 });
 
 test('keeps the typed invitation list and shows a toast after a save error', async () => {

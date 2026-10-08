@@ -558,6 +558,7 @@
     "admin-settings-tab-invitations": "Invitations",
     "admin-settings-tab-vouchers": "Vouchers",
     "admin-settings-tab-roles": "Roles",
+    "admin-invitations-unavailable": "Not available: access is set to “$1”.",
     "admin-settings-basics-licence": "Texts you write here are released into the public domain ($1).",
     "admin-save": "Save",
     "admin-saving": "Saving…",
