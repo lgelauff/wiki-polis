@@ -15,7 +15,6 @@ import {AdminShell} from './admin-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 import {InternalLink} from '../../internal-link';
 import {useMessage, type Message} from '../../i18n/messages';
-import {richHtml} from '../../i18n/rich-html';
 import {accessPolicyLabel} from '../../i18n/server-labels';
 
 type Catalog = components['schemas']['AdminCatalog'];
@@ -228,11 +227,6 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
         </div>
 
         <h2>{msg('admin-globals-heading')}</h2>
-        <p
-          className="muted"
-          style={{fontSize: 13, marginBottom: '.75rem'}}
-          dangerouslySetInnerHTML={richHtml(msg('admin-globals-intro'))}
-        />
         {/* One row per site admin: a list, not a table, since there is one column. */}
         {data.globalAdmins.length ? <ul className="admin-rows">
           {data.globalAdmins.map((admin) => <li className="admin-row" key={admin.participantId}>

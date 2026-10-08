@@ -53,8 +53,6 @@ export function AdminParticipantsPage({
         <AdminTabStrip label={msg('admin-content-tabs-aria')}
           tabs={contentTabs(conversationId, msg)} current="participants" />
 
-        <p className="admin-note">{msg('participants-intro')}</p>
-
         {!data.dataAvailability.statementProgress && (
           <p className="admin-note">{msg('participants-progress-unavailable')}</p>
         )}

@@ -542,6 +542,30 @@ test('Featured is today’s page under the strip, arguments and all', async () =
   expect(screen.getByRole('button', {name: 'Hide'})).toBeVisible();
 });
 
+test('Featured without the statistics database leaves out its suggestions, and explains nothing', async () => {
+  server.use(http.get(
+    new URL('/api/v1/admin/conversations/7/featured-statements', globalThis.location.origin).toString(),
+    () => HttpResponse.json({data: {
+      conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
+      selected: [], candidates: [],
+      dataAvailability: {candidates: false}, phase: {argumentMappingActive: false, informedVotingLive: false},
+      guidance: {recommendedCount: 15, note: ''}, capabilities: {manage: true},
+      links: {self: '/api/v1/admin/conversations/7/featured-statements', lifecycle: '/admin/conversations/7'},
+    }}),
+  ));
+  renderModeration(<AdminFeaturedPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/moderation/featured');
+
+  await screen.findByRole('heading', {name: 'Moderation', level: 1}, {timeout: 10_000});
+  expect(screen.queryByRole('heading', {name: 'System suggestions'})).toBeNull();
+  expect(screen.queryByText(/POLIS_DATABASE_URL|Not available/)).toBeNull();
+  // What works stays: the confirmed list (empty) and adding by TID.
+  expect(screen.getByText('No featured statements yet.')).toBeVisible();
+  expect(screen.getByRole('heading', {name: 'Add by TID'})).toBeVisible();
+  // No help card or intro about featured statements.
+  expect(screen.queryByText(/How to choose featured statements|Featured statements appear/)).toBeNull();
+});
+
 test('Featured\'s actions are sentence-case text buttons, red only where nothing can undo them', async () => {
   renderModeration(<AdminFeaturedPage conversationId={7} csrfToken={csrf} />,
     '/admin/conversations/7/moderation/featured');

@@ -1,6 +1,5 @@
 import {useCallback, useId, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
-import {Link} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {
@@ -110,7 +109,6 @@ export function AdminInvitationsPage({
     if (usernames.length) addMutation.mutate(usernames);
   }
 
-  const title = data.conversation.title;
   // "Signed in" = the invitation is bound to a Wikimedia account by user id, which
   // happens when that account logs in to the site. It says nothing about whether that
   // person has joined *this* consultation. "Not signed in yet" = no account with this
@@ -132,12 +130,6 @@ export function AdminInvitationsPage({
       announcer={announcer}
     >
       <div>
-        <p>
-          <Link to={`/c/${data.conversation.slug}/about`}>{title}</Link>
-        </p>
-        <p className="muted" style={{marginBottom: '1.25rem'}}>
-          Access policy: <strong>{accessPolicyLabel(msg, data.conversation.accessPolicy)}</strong>
-        </p>
         <section className="admin-form" aria-labelledby={headingId}>
           <h2 id={headingId}>{msg('invites-add-heading')}</h2>
           {!invitationList && <p className="admin-note" id={unavailableId}>

@@ -83,7 +83,6 @@ export function AdminRolesPage({conversationId, csrfToken}: {
       tab="roles"
     >
       <div>
-      <p>See who can moderate or organize {data.conversation.title}.</p>
       <section aria-labelledby="role-roster-heading">
         <h2 id="role-roster-heading">Assigned<span className="admin-count">{data.assignments.length}</span></h2>
         {/* One row per person, their roles as plain words after the name. */}
@@ -98,7 +97,7 @@ export function AdminRolesPage({conversationId, csrfToken}: {
       </section>
       {data.capabilities.manageRoles && (
         <section aria-labelledby="role-editor-heading">
-          <div><p className="eyebrow">Site admin</p><h2 id="role-editor-heading">Replace a role set</h2><p>An empty selection removes all scoped access.</p></div>
+          <h2 id="role-editor-heading">Replace a role set</h2>
           <form onSubmit={submit}>
             <label className="admin-field admin-field--medium">Participant
               <select value={participantId ?? ''} onChange={(event) => selectParticipant(event.target.value)} required>
@@ -124,7 +123,6 @@ export function AdminRolesPage({conversationId, csrfToken}: {
           </form>
         </section>
       )}
-      {!data.capabilities.manageRoles && <p className="roles-readonly">Only a site admin can change role assignments.</p>}
       </div>
     </AdminSettingsFrame>
   );

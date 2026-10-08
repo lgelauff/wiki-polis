@@ -428,42 +428,12 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           <p className="admin-empty" role="alert">{msg('flash-load-statements-failed')}</p>
         )}
 
-        <div className="landing-section" style={{marginBottom: '1.5rem'}}>
-          <h2 style={{fontSize: 16, marginBottom: '.5rem'}}>How statement management works</h2>
-          <p className="muted" style={{fontSize: 13, marginBottom: '.6rem'}}>
-            Pending statements are held for moderator review. Approve makes a statement visible
-            {' '}for participant voting, hide removes it from participant voting, and pending returns
-            {' '}an approved or hidden statement to the review queue.
-          </p>
-          <ul style={{fontSize: 13, paddingLeft: '1.25rem', marginBottom: '.6rem'}}>
-            <li>Vote counts show <strong>A</strong>gree · <strong>P</strong>ass · <strong>D</strong>isagree totals from Polis when the statistics database is available.</li>
-            <li>Seed statements come from moderator entry or imports; participant-submitted statements appear in the same moderation lists.</li>
-            <li>A star marks statements already selected as featured. A correction marker links derived statements back to the original TID.</li>
-            <li>Seed entry and imports are available only during preparation or open statement submission.</li>
-          </ul>
-          <p className="muted" style={{fontSize: 13, marginBottom: 0}}>
-            The text import strips spreadsheet formula prefixes, removes HTML, rejects invalid
-            {' '}rows as a batch, and skips statements already present in the conversation.
-          </p>
-        </div>
-
-        {!data.seeding.allowed ? (
-          <>
-            <h2>Seed statements locked</h2>
-            <div className="admin-form">
-              <p className="muted" style={{marginBottom: 0, fontSize: 13}}>
-                {data.seeding.lockReason} Seed statements can only be added during preparation
-                {' '}or while statement submission is open.
-              </p>
-            </div>
-          </>
-        ) : (
+        {/* Seeding works only during preparation or while statement submission is open;
+            outside that, its two forms are not shown rather than shown locked. */}
+        {data.seeding.allowed && (
           <>
             <h2>Add seed statement</h2>
             <div className="admin-form">
-              <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
-                Adds a seed-marked statement that participants see early on.
-              </p>
               <form onSubmit={(event) => { event.preventDefault(); seedMutation.mutate(); }}>
                 <input type="hidden" name="csrf_token" value={csrfToken} />
                 <label className="admin-field">Statement text (max 280 characters)
@@ -499,15 +469,6 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
 
             <h2>Import seed statements from text</h2>
             <div className="admin-form">
-              <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
-                Paste one statement per line. Blank lines are ignored. Maximum {data.seeding.maxStatementsPerImport}
-                {' '}statements per import and {data.seeding.maxCharactersPerStatement} characters per statement.
-              </p>
-              <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
-                All-or-nothing: if any line is invalid (too long, duplicated within your paste, or
-                {' '}over the limit) nothing is imported and the offending lines are listed. Lines
-                {' '}identical to an existing statement are skipped automatically — the rest still import.
-              </p>
               <form onSubmit={submitImport}>
                 <input type="hidden" name="csrf_token" value={csrfToken} />
                 <label className="admin-field">Statements

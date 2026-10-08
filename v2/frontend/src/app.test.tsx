@@ -293,9 +293,8 @@ test('moderates statements and imports approved seeds through typed commands', a
   expect(screen.getByRole('button', {name: /^Show unmoderated/})).toBeVisible();
   fireEvent.click(screen.getByRole('button', {name: /^Show unmoderated/}));
   expect(await screen.findByText('A participant proposal awaiting review.')).toBeVisible();
-  expect(screen.getByText(
-    'Adds a seed-marked statement that participants see early on.',
-  )).toBeVisible();
+  // No help card or explanation on the page: labels, values and controls (#473 B5).
+  expect(screen.queryByText(/How statement management works|seed-marked/)).toBeNull();
   // #478: the Approval control moved to Settings > Basics, so this page no longer owns it.
   expect(screen.queryByRole('checkbox', {name: /Strict moderation/})).toBeNull();
   fireEvent.click(screen.getByRole('button', {name: /^Approve statement/}));
@@ -428,8 +427,9 @@ test('adds and removes invitations through convergent admin commands', async () 
   // With the invitation list in effect the form works, and there is no reason line.
   expect(screen.getByLabelText('Wikimedia usernames (one per line)')).toBeEnabled();
   expect(screen.queryByText(/^Not available:/)).toBeNull();
-  // The access policy reads in words; the stored value never reaches the page.
-  expect(screen.getByText('Only people who have been given access')).toBeVisible();
+  // The access policy is the Access tab's to say: no "Access policy:" line here, and the
+  // stored value never reaches the page.
+  expect(screen.queryByText(/Access policy:/)).toBeNull();
   expect(screen.queryByText('invite_only', {exact: false})).not.toBeInTheDocument();
   expect(screen.getByText('Existing editor')).toBeVisible();
   // No count line repeating the list: each row says its own state, in words.

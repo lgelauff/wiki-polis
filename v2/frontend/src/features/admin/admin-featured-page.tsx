@@ -237,31 +237,6 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
         <AdminTabStrip label={msg('admin-shell-moderation')}
           tabs={moderationTabs(conversationId, msg)} current="featured" />
 
-        <p className="muted" style={{fontSize: 13, marginBottom: '1.5rem'}}>
-          Featured statements appear in the argument mapping tab. Participants submit a pro and con
-          {' '}argument for each, then vote on the most important arguments submitted by others.
-        </p>
-
-        <div className="landing-section" style={{marginBottom: '1.5rem'}}>
-          <h2 style={{fontSize: 16, marginBottom: '.5rem'}}>How to choose featured statements</h2>
-          <p className="muted" style={{fontSize: 13, marginBottom: '.6rem'}}>
-            Featured statements are the representative set that carries the rest of the consultation:
-            {' '}they become the prompts for argument mapping and are seeded into informed voting.
-            {' '}Aim for a balanced set across the main viewpoints, not only the most popular statements.
-          </p>
-          <ul style={{fontSize: 13, paddingLeft: '1.25rem', marginBottom: '.6rem'}}>
-            <li>Use roughly 15 statements as a working target, then adjust for topic complexity.</li>
-            <li>Prefer statements with enough votes to indicate signal, while preserving minority viewpoints.</li>
-            <li>Once argument mapping begins, treat the selected set as locked; changing it later can confuse participants and downstream Phase 6 seeding.</li>
-          </ul>
-          <p className="muted" style={{fontSize: 13, marginBottom: 0}}>
-            System suggestions are ranked candidates from the Polis data. Manual TID adds are for
-            {' '}known statements that should be included even if they are not surfaced by the suggestion query.
-            {' '}Arguments are visible by default; hide individual arguments here when they need moderation,
-            {' '}and unhide them after review.
-          </p>
-        </div>
-
         <h2>Confirmed<span className="admin-count">{data.selected.length}</span></h2>
         {data.selected.length ? (
           <ul className="admin-rows">
@@ -279,13 +254,10 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
           </ul>
         ) : <p className="admin-empty">{msg('featured-empty')}</p>}
 
-        <h2>System suggestions</h2>
-        {!data.dataAvailability.candidates ? (
-          <p className="muted" style={{fontSize: 13, marginBottom: '1.5rem'}}>
-            Not available — <code>POLIS_DATABASE_URL</code> is not configured.
-            {' '}Use the manual form below to add statements by TID.
-          </p>
-        ) : data.candidates.length === 0 ? (
+        {/* Without the statistics database there are no suggestions: the section is left
+            out rather than shown with a note about configuration. Add by TID still works. */}
+        {data.dataAvailability.candidates && <h2>System suggestions</h2>}
+        {!data.dataAvailability.candidates ? null : data.candidates.length === 0 ? (
           <p className="admin-empty">{msg('featured-suggestions-empty')}</p>
         ) : (
           // A table: the response counts are compared down the columns.
@@ -308,9 +280,6 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
 
         <h2>Add by TID</h2>
         <div className="admin-form">
-          <p className="muted" style={{fontSize: 13, marginBottom: '.75rem'}}>
-            Enter the Polis statement ID (TID) to feature it directly.
-          </p>
           <form onSubmit={submitManual}>
             <input type="hidden" name="csrf_token" value={csrfToken} />
             <label className="admin-field admin-field--short">Statement TID

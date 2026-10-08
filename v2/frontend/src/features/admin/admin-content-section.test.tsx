@@ -26,13 +26,14 @@ function statement(id: number, overrides: Partial<Statement> = {}): Statement {
   };
 }
 
-function serveWorkspace(statements: Workspace['statements'], available = true) {
+function serveWorkspace(statements: Workspace['statements'], available = true, seedingAllowed = true) {
   const payload: Workspace = {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'},
     statements,
     moderationPolicy: {mode: 'moderate', newStatements: 'pending', available: true},
     dataAvailability: {statements: available},
-    seeding: {allowed: true, lockReason: null, maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
+    seeding: {allowed: seedingAllowed, lockReason: seedingAllowed ? null : 'Statement submission is closed.',
+      maxStatementsPerImport: 20, maxCharactersPerStatement: 280},
     capabilities: {moderate: true, seed: true},
     links: {self: STATEMENTS_URL, lifecycle: '/admin/conversations/7'},
   };
@@ -351,6 +352,21 @@ test('a statement row moderates with the Queue\'s glyphs, and can go back to unm
   expect(approve).toBeDisabled();
   expect(hide).toBeEnabled();
   expect(within(row).queryByRole('button', {name: /^(approve|hide|pending)$/})).toBeNull();
+});
+
+test('while seeding is closed its forms are not shown, and nothing explains why', async () => {
+  serveWorkspace({pending: [], approved: [statement(5)], hidden: []}, true, false);
+  renderContent(<AdminStatementsPage conversationId={7} csrfToken={csrf} />,
+    '/admin/conversations/7/content/statements');
+
+  await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000});
+  // A control works now or is not there: no locked form, no "Seed statements locked".
+  expect(screen.queryByRole('button', {name: 'Add seed statement'})).toBeNull();
+  expect(screen.queryByRole('button', {name: 'Import statements'})).toBeNull();
+  expect(screen.queryByText(/locked|Statement submission is closed/)).toBeNull();
+  // Nor a help card about how the page works.
+  expect(screen.queryByText(/How statement management works/)).toBeNull();
+  expect(list().getByRole('listitem')).toHaveTextContent('Statement number 5.');
 });
 
 test('the statement page names the one thing it cannot show yet', async () => {

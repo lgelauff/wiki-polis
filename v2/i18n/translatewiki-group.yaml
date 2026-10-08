@@ -99,7 +99,6 @@ TAGS:
     - admin-elig-label-ph
     - admin-globals-empty
     - admin-globals-heading
-    - admin-globals-intro
     - admin-grant-heading
     - admin-invitations-not-signed-in
     - admin-invitations-removed
@@ -395,7 +394,6 @@ TAGS:
     - participants-btn-ban
     - participants-btn-unban
     - participants-empty
-    - participants-intro
     - participants-no-actions
     - participants-progress-unavailable
     - participants-th-args-submitted

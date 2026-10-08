@@ -628,7 +628,6 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
                 <FieldError field="title" />
                 <label>{msg('admin-label-intro')}<textarea value={introHtml} rows={7} onChange={(event) => edit({introHtml: event.target.value})} /></label>
                 <label>{msg('admin-label-outro')}<textarea value={outroHtml} rows={5} onChange={(event) => edit({outroHtml: event.target.value})} /></label>
-                <p className="settings-hint">Allowed HTML is sanitized by the server when saved.</p>
               </> : <>
                 <SettingValue label={msg('admin-label-title')} value={data.conversation.title} />
                 <SettingHtml label={msg('admin-label-intro')} html={data.conversation.introHtml} className="intro-text" />
