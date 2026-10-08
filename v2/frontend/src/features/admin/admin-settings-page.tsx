@@ -175,7 +175,7 @@ function ApprovalSection({conversationId, strict, onChange}: {
   return (
     <section aria-labelledby="settings-approval">
       <h2 id="settings-approval">{msg('stmts-modsettings-heading')}</h2>
-      {data.capabilities.moderate ? <label className="checkbox-label">
+      {data.moderationPolicy.available ? <label className="checkbox-label">
         <input
           type="checkbox"
           name="strict_moderation"
@@ -184,7 +184,7 @@ function ApprovalSection({conversationId, strict, onChange}: {
           onChange={(event) => onChange(event.target.checked)}
         />
         {msg('stmts-strict-label')}
-      </label> : <SettingValue label={msg('stmts-strict-label')} value={stored ? 'On' : 'Off'} />}
+      </label> : <SettingValue label={msg('stmts-strict-label')} value="" />}
     </section>
   );
 }
@@ -258,10 +258,14 @@ export function AdminSettingsPage({conversationId, csrfToken, tab = 'basics'}: {
   // again after a save, when the checkbox shows what is stored.
   const [strictModeration, setStrictModeration] = useState<boolean | null>(null);
   const workspaceOptions = adminStatementWorkspaceQuery(conversationId);
-  // Basics only: whether this viewer may set the moderation policy. The Approval section
+  // Basics only: whether the moderation policy can be set from here. Everyone who can open
+  // Settings may moderate this consultation (the server requires it to read the page), so
+  // the question is only whether the stored mode is known: when it is not, a checkbox would
+  // guess. (`capabilities.moderate` in the workspace says whether the statements could be
+  // read from the voting service, which is a different thing.) The Approval section
   // suspends until the workspace is loaded, so by the time the footer renders it is here.
   const {data: workspace} = useQuery({...workspaceOptions, enabled: tab === 'basics'});
-  const canModerate = tab === 'basics' && Boolean(workspace?.capabilities.moderate);
+  const canModerate = tab === 'basics' && Boolean(workspace?.moderationPolicy.available);
   const [confirming, setConfirming] = useState(false);
   const confirmRef = useRef<HTMLDivElement>(null);
   const saveRef = useRef<HTMLButtonElement>(null);

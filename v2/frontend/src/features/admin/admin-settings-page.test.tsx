@@ -552,9 +552,28 @@ test('on Basics a moderator sees the settings as text and saves only the strict-
   expect(settingsPuts).toHaveLength(0);
 });
 
-test('on Basics a viewer who may set neither gets no Save', async () => {
+test('the strict-moderation checkbox works while the statements cannot be read', async () => {
+  // `capabilities.moderate` says whether the statements could be read from the voting
+  // service; it does not decide whether the policy can be set. The stored mode does.
+  const policy = recordPolicyPuts();
   server.use(http.get(STATEMENTS_URL, () => HttpResponse.json({data: {
-    ...workspace('moderate'), capabilities: {moderate: false, seed: false},
+    ...workspace('auto_approve'), capabilities: {moderate: false, seed: true},
+    dataAvailability: {statements: false},
+  }})));
+  serve(settings);
+  renderPage('basics');
+
+  const approval = await screen.findByRole('checkbox', {name: /Strict moderation/},
+    {timeout: 10_000});
+  fireEvent.click(approval);
+  fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+  await waitFor(() => expect(policy).toHaveLength(1));
+});
+
+test('on Basics a viewer who may not edit gets no Save while the policy is unknown', async () => {
+  server.use(http.get(STATEMENTS_URL, () => HttpResponse.json({data: {
+    ...workspace('moderate'),
+    moderationPolicy: {mode: null, newStatements: null, available: false},
   }})));
   serve({...settings, capabilities: {edit: false, switchDemo: false}});
   renderPage('basics');
