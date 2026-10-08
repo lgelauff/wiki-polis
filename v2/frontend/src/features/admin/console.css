@@ -367,6 +367,16 @@
   text-transform: none;
 }
 
+/* A control that cannot be used right now reads as such: greyed, and no pointer that
+   promises a click (the Invitations form while the invitation list is not in effect). */
+.admin-shell .settings-page .edit-form :is(textarea, button):disabled {
+  border-color: var(--shell-line);
+  background: var(--shell-sunken);
+  color: var(--shell-muted);
+  cursor: not-allowed;
+  opacity: .6;
+}
+
 /* No text on a Settings tab below 12px. */
 .admin-shell .settings-page :is(.eyebrow, .roles-roster header span, .roles-roster li span,
   .roles-editor form > p, .roles-readonly) {
