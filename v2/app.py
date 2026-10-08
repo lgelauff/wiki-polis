@@ -78,7 +78,8 @@ from services.participations import (join_conversation)
 from services.participation_entry import build_participation_entry
 from services.explore import (ExploreGateway, ParticiapiSessionState,
                               ExploreUpstreamError, StatementAlreadyExists,
-                              build_explore_state, normalise_statements)
+                              FAMILY_MIN_DISTANCE, build_explore_state,
+                              normalise_statements)
 from services.explore_votes import update_pass_signal
 from services.argument_mapping import build_argument_mapping_state
 from services.argument_commands import (
@@ -2822,6 +2823,26 @@ def _save_explore_gateway_state(
     session['particiapi_api_sessions'] = states
 
 
+_EXPLORE_RECENT_ANSWERS_KEY = 'explore_recent_answers'
+
+
+def _explore_recent_answers(conv: Conversation) -> list[int]:
+    """The statements answered last in this browser session, oldest first (p526-1)."""
+    recent = (session.get(_EXPLORE_RECENT_ANSWERS_KEY) or {}).get(str(conv.id)) or []
+    return [int(value) for value in recent if isinstance(value, int)]
+
+
+def _remember_explore_answer(conv: Conversation, statement_id: int) -> None:
+    """Record an answered statement, so family spacing starts from it on the next read.
+
+    Only the last `FAMILY_MIN_DISTANCE` are kept: that is all the spacing window needs.
+    """
+    stored = dict(session.get(_EXPLORE_RECENT_ANSWERS_KEY) or {})
+    recent = [value for value in _explore_recent_answers(conv) if value != statement_id]
+    stored[str(conv.id)] = [*recent, statement_id][-FAMILY_MIN_DISTANCE:]
+    session[_EXPLORE_RECENT_ANSWERS_KEY] = stored
+
+
 def _explore_state_payload(conv: Conversation, participant: Participant,
                            participation: Participation, gateway: ExploreGateway) -> dict:
     statements, upstream_participant = gateway.read(conv.polis_id)
@@ -2834,6 +2855,7 @@ def _explore_state_payload(conv: Conversation, participant: Participant,
         new_statement_max=int(config.get('new_stmt_max', 3)),
         new_statements_used=len(participation.new_stmt_ids or []),
         families=_statement_family_roots(conv.id),
+        recent_answers=_explore_recent_answers(conv),
     )
     links = {
         'self': url_for('api_v1.get_explore_state', slug=conv.slug),
@@ -2888,6 +2910,7 @@ def _explore_vote_api_payload(
         )
         _touch_last_engagement(participation)
         db.session.commit()
+        _remember_explore_answer(conv, statement_id)
         return {
             'statementId': statement_id,
             'choice': choice,
@@ -5304,29 +5327,46 @@ def _provenance_map(conv_id, tids):
 
 
 def _parent_map(conv_id):
-    """{tid: derived_from_tid} for the whole conversation, in one query."""
-    return {r.polis_statement_id: r.derived_from_tid
-            for r in StatementProvenance.query.filter_by(conversation_id=conv_id).all()}
+    """{tid: derived_from_tid} for the whole conversation, in one two-column query."""
+    rows = (db.session.query(StatementProvenance.polis_statement_id,
+                             StatementProvenance.derived_from_tid)
+            .filter(StatementProvenance.conversation_id == conv_id)
+            .all())
+    return {tid: parent for tid, parent in rows}
 
 
-def _family_root(by_tid, tid):
-    """Walk `derived_from_tid` up from `tid` and return the root. Cycle-safe.
+def _family_roots(by_tid):
+    """{tid: root} for every tid in `by_tid`: walk `derived_from_tid` up. Cycle-safe.
 
     The walk is the one :func:`_lineage_group` does. A cycle has no root, so its smallest
     id stands in for one: every statement on or under the cycle then gets the same root,
-    whichever member the walk started from.
+    whichever member the walk started from. Memoised: a walk stops at the first statement
+    whose root is already known, so the whole map costs O(n).
     """
-    path = [tid]
-    seen = {tid}
-    cur = tid
-    while cur in by_tid:
-        parent = by_tid[cur]
-        if parent in seen:          # defensive: stop on any cycle
-            return min(path[path.index(parent):])
-        path.append(parent)
-        seen.add(parent)
-        cur = parent
-    return cur
+    roots: dict = {}
+    for start in by_tid:
+        if start in roots:
+            continue
+        path, index = [start], {start: 0}
+        cur = start
+        while True:
+            if cur in roots:
+                root = roots[cur]
+                break
+            if cur not in by_tid:
+                root = cur
+                break
+            parent = by_tid[cur]
+            if parent in index:     # defensive: stop on any cycle
+                root = min(path[index[parent]:])
+                break
+            index[parent] = len(path)
+            path.append(parent)
+            cur = parent
+        for tid in path:
+            if tid in by_tid:
+                roots[tid] = root
+    return roots
 
 
 def _lineage_group(conv_id, tid):
@@ -5354,8 +5394,7 @@ def _statement_family_roots(conv_id):
     :func:`_lineage_group`, over the map it reads for the conversation. Statements with no
     row are their own root and simply stay out of the map.
     """
-    by_tid = _parent_map(conv_id)
-    return {tid: _family_root(by_tid, tid) for tid in by_tid}
+    return _family_roots(_parent_map(conv_id))
 
 
 def _register_branded_error_pages(app) -> None:

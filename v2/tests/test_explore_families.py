@@ -166,12 +166,15 @@ def test_without_families_the_served_order_is_the_pin_order():
 
 def test_a_statement_the_caller_did_not_pass_is_its_own_root():
     """No provenance row at all for the unrelated statements: they are their own roots."""
-    served, _ = _served(families={2: 50, 50: 50, 51: 50, 52: 50})
+    families = {2: 50, 50: 50, 51: 50, 52: 50}
+    served, _ = _served(families=families)
 
     deck = served[1:]
+    assert sorted(deck) == [2, 3, 4, 8, 9, 10, 50, 51, 52]
     for previous, current in zip(deck, deck[1:]):
-        assert {3: 3, 4: 4, 8: 8, 9: 9, 10: 10}.get(previous, previous) != \
-            {3: 3, 4: 4, 8: 8, 9: 9, 10: 10}.get(current, current)
+        assert families.get(previous, previous) != families.get(current, current), (
+            f'{previous} and {current} share a family and were served back to back'
+        )
 
 
 def test_the_family_keeps_its_own_order_inside_the_spaced_deck():
@@ -442,3 +445,185 @@ def test_family_roots_come_from_one_query_and_are_cycle_safe(app, conversation):
     assert lineage == [32, 31, 30]
     provenance_queries = [query for query in queries if 'statement_provenance' in query]
     assert len(provenance_queries) == 2, provenance_queries
+
+# ── p526-1: a deck that changes mid-session ─────────────────────────────────────
+#
+# The pin of a deck that changes (a rewording added, a statement moderated out) re-spaces
+# every statement, answered ones included. The first unanswered statement of that new
+# order can then be a family member of the statement the participant has just answered.
+
+def _deck_payload(ids):
+    return {str(statement_id): {'id': statement_id, 'text': f'Statement {statement_id}'}
+            for statement_id in ids}
+
+
+def _read_then_vote_then_read(auth_client, participant, conversation, *, before, votes_before,
+                              answer, after, provenance_after=()):
+    """Read the deck, vote on the card served, change the deck, read again.
+
+    Returns (served on the first read, served on the second read)."""
+    db.session.add(Participation(
+        participant_id=participant.id, conversation_id=conversation.id,
+        pseudonym='family-heron',
+    ))
+    conversation.phase_submission = True
+    db.session.commit()
+    session_response = _response(
+        {'csrf_token': 'upstream-csrf'}, cookies={'session': 'upstream-cookie'},
+    )
+    upstream_participant = {'votes': list(votes_before), 'statements': []}
+    with (
+        patch('app.polis_http.post', return_value=session_response),
+        patch('app.polis_http.get', side_effect=[
+            _response(_deck_payload(before)), _response(upstream_participant),
+            _response(_deck_payload(before)), _response(upstream_participant),
+        ]),
+        patch('app.polis_http.put', return_value=_response({})),
+    ):
+        first = auth_client.get('/api/v1/conversations/test-conv/explore')
+        vote = auth_client.put(
+            f'/api/v1/conversations/test-conv/statements/{answer}/vote',
+            json={'choice': 'agree'},
+        )
+    assert first.status_code == 200
+    assert vote.status_code == 200
+
+    for child, parent in provenance_after:
+        db.session.add(StatementProvenance(
+            conversation_id=conversation.id, polis_statement_id=child,
+            derived_from_tid=parent,
+        ))
+    db.session.commit()
+    with (
+        patch('app.polis_http.post', return_value=session_response),
+        patch('app.polis_http.get', side_effect=[
+            _response(_deck_payload(after)),
+            _response({'votes': [*votes_before, answer], 'statements': []}),
+        ]),
+    ):
+        second = auth_client.get('/api/v1/conversations/test-conv/explore')
+    assert second.status_code == 200
+    return (first.get_json()['data']['currentStatement']['id'],
+            second.get_json()['data']['currentStatement']['id'])
+
+
+def test_a_rewording_added_mid_session_is_not_served_after_its_sibling(
+    auth_client, participant, conversation,
+):
+    """Pin [X, A1, A2, Y]; X answered, A1 served and answered; then A3, a rewording of A1,
+    arrives with a pin between A2 and Y. The next card must not be from family A."""
+    ordering_key = f'{participant.xid}:{conversation.id}'
+    x, a1, a2, a3, y = 236, 202, 239, 208, 217
+    assert _pin_order(_deck_payload([x, a1, a2, a3, y]), ordering_key) == [x, a1, a2, a3, y]
+    db.session.add(StatementProvenance(
+        conversation_id=conversation.id, polis_statement_id=a2, derived_from_tid=a1,
+    ))
+    db.session.commit()
+
+    first, second = _read_then_vote_then_read(
+        auth_client, participant, conversation,
+        before=[x, a1, a2, y], votes_before=[x], answer=a1,
+        after=[x, a1, a2, a3, y], provenance_after=[(a3, a1)],
+    )
+
+    assert first == a1
+    assert second not in {a1, a2, a3}, (
+        f'{second} is a family member of {a1}, the statement just answered'
+    )
+    assert second == y
+
+
+def test_a_statement_moderated_out_mid_session_does_not_pull_a_sibling_forward(
+    auth_client, participant, conversation,
+):
+    """Pin [X, Y, A1, A2, A3, Z, B]; X and Y answered, A1 served and answered; then B is
+    moderated out. One statement fewer makes family A critical one step earlier, so the
+    re-spaced deck puts A1 before Y and serves A2 right after the A1 just answered.
+
+    (The plain [A1, B, A2] case cannot be separated once B is gone: A2 is all that is left.)"""
+    ordering_key = f'{participant.xid}:{conversation.id}'
+    x, y, a1, a2, a3, z, b = 232, 222, 238, 231, 207, 228, 215
+    assert _pin_order(_deck_payload([x, y, a1, a2, a3, z, b]), ordering_key) == \
+        [x, y, a1, a2, a3, z, b]
+    for child in (a2, a3):
+        db.session.add(StatementProvenance(
+            conversation_id=conversation.id, polis_statement_id=child, derived_from_tid=a1,
+        ))
+    db.session.commit()
+
+    first, second = _read_then_vote_then_read(
+        auth_client, participant, conversation,
+        before=[x, y, a1, a2, a3, z, b], votes_before=[x, y], answer=a1,
+        after=[x, y, a1, a2, a3, z],
+    )
+
+    assert first == a1
+    assert second not in {a1, a2, a3}, (
+        f'{second} is a family member of {a1}, the statement just answered'
+    )
+    assert second == z
+
+
+def test_the_window_is_seeded_with_the_roots_served_just_before():
+    """`last_roots`: the first statement of the deck keeps its distance from the last one
+    served, even when no family has two members left in the deck."""
+    deck = _deck([61, 3])
+
+    assert _ids(space_by_family(deck, {61: 60})) == [61, 3]
+    assert _ids(space_by_family(deck, {61: 60}, last_roots=[60])) == [3, 61]
+    assert _ids(space_by_family(deck, {61: 60}, last_roots=[3])) == [61, 3]
+    # One statement left: the rule cannot hold, and it is still served.
+    assert _ids(space_by_family(_deck([61]), {61: 60}, last_roots=[60])) == [61]
+
+
+def test_property_recorded_answers_serve_the_same_sequence_on_a_static_deck():
+    """Spacing only the unanswered statements, seeded from the last answer, gives the rest
+    of the full deck's order: with or without a record of the answers, nothing changes."""
+    for seed in range(120):
+        rng = random.Random(20_000 + seed)
+        deck, families = _random_deck(rng)
+        payload = {str(statement['id']): {'id': statement['id'], 'text': statement['text']}
+                   for statement in deck}
+        ordering_key = f'static-{seed}'
+
+        def read(answered, recent):
+            return build_explore_state(
+                statements_payload=payload,
+                participant_payload={'votes': answered, 'statements': []},
+                ordering_key=ordering_key, new_statement_unlock_at=10,
+                new_statement_max=3, new_statements_used=0, families=families,
+                recent_answers=recent,
+            )['currentStatement']
+
+        answered: list[int] = []
+        while (current := read(answered, None)) is not None:
+            assert read(answered, answered[-1:]) == current, (seed, answered)
+            answered.append(current['id'])
+        assert sorted(answered) == sorted(_ids(deck)), seed
+
+
+def test_the_recorded_last_answer_steers_the_next_statement():
+    """The pure-function form of p526-1: the deck changed, so the full deck's order says the
+    last answer was X, but the participant answered A1 last. The record wins."""
+    families = {201: 201, 202: 201, 203: 201}
+    payload = {str(statement_id): {'id': statement_id, 'text': f'Statement {statement_id}'}
+               for statement_id in (100, 201, 202, 203, 300)}
+    ordering_key = next(
+        f'key-{index}' for index in range(10_000)
+        if _pin_order(payload, f'key-{index}') == [100, 201, 202, 203, 300]
+    )
+
+    def read(recent):
+        return build_explore_state(
+            statements_payload=payload,
+            participant_payload={'votes': [100, 201], 'statements': []},
+            ordering_key=ordering_key, new_statement_unlock_at=10,
+            new_statement_max=3, new_statements_used=0, families=families,
+            recent_answers=recent,
+        )['currentStatement']['id']
+
+    # Without a record, the full deck [201, 100, 202, 300, 203] says 100 came last.
+    assert read(None) == 202
+    assert read([100, 201]) == 300
+    # A recorded answer that is not among the answered statements is ignored.
+    assert read([999]) == 202

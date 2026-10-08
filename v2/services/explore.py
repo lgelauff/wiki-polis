@@ -266,8 +266,14 @@ FAMILY_MIN_DISTANCE = 1
 
 
 def space_by_family(statements: list[dict], families: dict | None,
-                    min_distance: int = FAMILY_MIN_DISTANCE) -> list[dict]:
+                    min_distance: int = FAMILY_MIN_DISTANCE,
+                    last_roots: list | None = None) -> list[dict]:
     """Reorder a deck so that no two statements of one family are closer than `min_distance`.
+
+    `last_roots` are the family roots of the statements served just before this deck, oldest
+    first (p526-1). They seed the window, so the first statements of the deck also keep their
+    distance from what was already served. Spacing the unanswered rest of a deck with the
+    roots of its last answered statements gives exactly the rest of the full deck's order.
 
     One deterministic pass over the deck in its existing order (#504). At each step, with
     `left` statements of a family still to place and `remaining` statements in all:
@@ -300,7 +306,9 @@ def space_by_family(statements: list[dict], families: dict | None,
     queues: dict[int, deque] = {}
     for position, root in enumerate(roots):
         queues.setdefault(root, deque()).append(position)
-    if min_distance < 1 or all(len(queue) < 2 for queue in queues.values()):
+    placed_roots: list = list(last_roots or [])[-min_distance:] if min_distance >= 1 else []
+    if min_distance < 1 or (all(len(queue) < 2 for queue in queues.values())
+                            and not set(placed_roots) & queues.keys()):
         return list(statements)
 
     # Heads: (deck position of the family's first remaining member, root). One live entry
@@ -318,7 +326,6 @@ def space_by_family(statements: list[dict], families: dict | None,
     def live_size(entry):
         return len(queues[entry[2]]) == -entry[0]
 
-    placed_roots: list[int] = []
     order: list[dict] = []
     remaining = len(statements)
     while remaining:
@@ -382,11 +389,27 @@ def build_explore_state(
     new_statement_max: int,
     new_statements_used: int,
     families: dict | None = None,
+    recent_answers: list[int] | None = None,
 ) -> dict:
     """Build a privacy-safe, stable participant queue projection.
 
     `families` maps statement id to family root (#504). Without it every statement is its
     own family and the order is exactly the pin's.
+
+    `recent_answers` are the statements this participant answered last, oldest first, as the
+    app recorded them (p526-1). Only the unanswered statements are spaced, and the window
+    starts from the roots of the last answered ones, so a deck that changes mid-session (a
+    rewording added, a statement moderated out) never serves a family member right after the
+    statement just answered. Without a record (another browser, an expired session) the last
+    answered statements are taken from the spaced order of the whole deck, which is exact for
+    a deck that did not change. For a deck that did not change, the served sequence is the
+    same either way.
+
+    Research note (p526-2): the served order is no longer a function of the sha256 pin
+    alone. It is the pin, then family spacing over the provenance (`derived_from_tid`) as it
+    stood at each read, then the participant's own last answers. Rebuilding the exposure
+    order of a participant therefore needs the provenance table as of each read, not only
+    as of the export; nothing extra is logged for that.
     """
     statements = normalise_statements(statements_payload)
     voted = {int(value) for value in participant_payload.get('votes', [])}
@@ -399,17 +422,26 @@ def build_explore_state(
         return (not statement['isMeta'], not statement['isSeed'], digest)
 
     statements.sort(key=order_key)
+    completed_ids = voted | authored
     # Meta statements keep their place at the front of the deck and are never spaced: they
     # are not part of a family.
     meta = [statement for statement in statements if statement['isMeta']]
-    deck = space_by_family(
-        [statement for statement in statements if not statement['isMeta']], families,
+    deck = [statement for statement in statements if not statement['isMeta']]
+    lookup = families or {}
+    recent = [statement_id for statement_id in (recent_answers or [])
+              if statement_id in completed_ids]
+    if not recent:
+        recent = [statement['id'] for statement in space_by_family(deck, families)
+                  if statement['id'] in completed_ids]
+    last_roots = [lookup.get(statement_id, statement_id)
+                  for statement_id in recent[-FAMILY_MIN_DISTANCE:]]
+    unanswered = space_by_family(
+        [statement for statement in deck if statement['id'] not in completed_ids],
+        families, last_roots=last_roots,
     )
-    statements = meta + deck
-    completed_ids = voted | authored
     current = next(
-        (statement for statement in statements if statement['id'] not in completed_ids),
-        None,
+        (statement for statement in meta if statement['id'] not in completed_ids),
+        unanswered[0] if unanswered else None,
     )
     total = len(statements)
     completed = sum(statement['id'] in completed_ids for statement in statements)
