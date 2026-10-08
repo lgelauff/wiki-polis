@@ -164,40 +164,43 @@ export function AdminInvitationsPage({
           </form>
         </div>
 
-        <table className="admin-table">
-          <thead>
-            <tr><th>Username</th><th>Status</th><th>Added</th><th /></tr>
-          </thead>
-          <tbody>
-            {data.invitations.map((invitation) => (
-              <tr key={invitation.id}>
-                <td>{invitation.username}</td>
-                <td>{invitation.signedIn ? 'Linked' : 'Never logged in'}</td>
-                <td className="muted">{formatLegacyDate(invitation.createdAt)}</td>
-                <td>
-                  <form
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      removeMutation.mutate(invitation.id);
-                    }}
-                    style={{display: 'inline'}}
-                  >
-                    <button
-                      type="submit"
-                      className="btn-small btn-danger"
-                      aria-label={`Remove invitation for ${invitation.username}`}
+        {/* The table scrolls inside its own box at 320px, so the page never scrolls sideways. */}
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr><th>Username</th><th>Status</th><th>Added</th><th /></tr>
+            </thead>
+            <tbody>
+              {data.invitations.map((invitation) => (
+                <tr key={invitation.id}>
+                  <td>{invitation.username}</td>
+                  <td>{invitation.signedIn ? 'Linked' : 'Never logged in'}</td>
+                  <td className="muted">{formatLegacyDate(invitation.createdAt)}</td>
+                  <td>
+                    <form
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        removeMutation.mutate(invitation.id);
+                      }}
+                      style={{display: 'inline'}}
                     >
-                      remove
-                    </button>
-                  </form>
-                </td>
-              </tr>
-            ))}
-            {!data.invitations.length && (
-              <tr><td colSpan={4} className="muted">No invites yet.</td></tr>
-            )}
-          </tbody>
-        </table>
+                      <button
+                        type="submit"
+                        className="btn-small btn-danger"
+                        aria-label={`Remove invitation for ${invitation.username}`}
+                      >
+                        remove
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+              {!data.invitations.length && (
+                <tr><td colSpan={4} className="muted">No invites yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </AdminSettingsFrame>
   );
