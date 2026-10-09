@@ -74,6 +74,11 @@ if [ -n "$EXPECTED_REV" ] && [[ ! "$EXPECTED_REV" =~ ^[0-9a-f]{7,40}$ ]]; then
   exit 2
 fi
 
+# Check the Toolforge context before fetching, checking out, installing, or restarting.
+DEPLOY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$DEPLOY_SCRIPT_DIR/v2/ops/toolforge-account-guard.sh"
+wiki_polis_require_tool_account 'deploy.sh' || exit 1
+
 echo "==> Resolving deployment revision..."
 cd ~/wiki-polis
 if [ -n "$PULL_REQUEST" ]; then

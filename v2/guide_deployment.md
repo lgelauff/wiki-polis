@@ -528,7 +528,9 @@ guessed.
 > protects the start of the run, not the middle.
 
 ```bash
-# On Toolforge bastion as wiki-polis user:
+# On Toolforge bastion, guard the account before any manual deployment commands:
+source ~/wiki-polis/v2/ops/toolforge-account-guard.sh || exit 1
+wiki_polis_require_tool_account 'manual wiki-polis deployment' || exit 1
 cd ~/wiki-polis && git pull
 pip install -r ~/wiki-polis/v2/requirements-deploy.txt
 pip install --no-deps -e ~/wiki-polis/v2
@@ -537,6 +539,9 @@ pip install --no-deps -e ~/wiki-polis/v2
 If the deploy includes database migrations, run them **before** restarting (see [Database migrations](#database-migrations) below).
 
 ```bash
+# Keep this in the same guarded shell, or source/check again if starting a new one.
+source ~/wiki-polis/v2/ops/toolforge-account-guard.sh || exit 1
+wiki_polis_require_tool_account 'manual webservice restart' || exit 1
 cd ~   # webservice commands must run from home directory
 toolforge webservice restart
 ```
@@ -546,6 +551,19 @@ Or use the deploy script (which handles all steps):
 ```bash
 bash ~/wiki-polis/deploy.sh
 ```
+
+Before fetching or changing the checkout, `deploy.sh` checks `whoami` and allows only
+`tools.wiki-polis` and `tools.wiki-polis-dev`. Any other account aborts with its name and
+a warning about the active `become` context. For a deliberately new Toolforge account,
+set the one-command override `ALLOW_UNKNOWN_TOOL=1`; it prints a prominent warning and
+leaves the revision-pinning checks intact. Do not export this override globally.
+
+```bash
+ALLOW_UNKNOWN_TOOL=1 bash ~/wiki-polis/deploy.sh <branch> --expect <sha>
+```
+
+The same account guard is sourceable for manual operations; use it immediately before
+the first command that changes Toolforge state (examples above).
 
 Deploy a named branch only while it remains a live `origin` ref, and pin the
 reviewed commit when staging a moving development branch:
