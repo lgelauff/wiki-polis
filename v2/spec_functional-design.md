@@ -16,11 +16,11 @@ A deliberation tool for the Wikimedia community. Participants vote on atomic sta
 
 **Participant** — logged in via Wikimedia account. Can join conversations, vote, submit statements, and read and vote on arguments.
 
-**Moderator** — a participant with elevated trust for a *specific* conversation. Can approve or hide statements and arguments and resolve community flags. Phase controls are read-only.
+**Moderator** — a participant with elevated trust for one *specific* consultation. Can approve or hide statements and arguments, feature statements, resolve (mark as handled) community flags, block and unblock participants, and add seed statements before the first phase and during Explore. Sees the admin Overview, including the phase control and statistics, read-only: cannot change phases, pause, schedule, initialise Phase 6 or publish. Sees Settings read-only (Basics including strict moderation, Access, the Roles list with usernames, the Invitations list with usernames), and the Moderation and Content sections. People and Participants show moderator-only viewers pseudonyms only, no usernames *(the owner may revisit Participants)*. Cannot change any setting (strict moderation is organizer-only), access or participation, roles, or phases. The way in is the **You moderate** list on the participant home, whose Admin link opens the consultation's admin pages; a console Admin home is planned ([#473](https://github.com/lgelauff/wiki-polis/issues/473)).
 
-**Organizer** — a conversation-scoped role above moderator. In addition to moderation, an organizer can advance the conversation through its phases via the guided "Move on" flow.
+**Organizer** — a consultation-scoped role above moderator. In addition to moderation, an organizer can change the consultation's settings (strict moderation included), advance the consultation through its phases via the guided "Move on" flow, and initialise Phase 6.
 
-**Admin (global)** — site-wide control. Can create and manage any conversation, assign roles, curate featured statements, schedule phase transitions, and use the advanced (non-linear) phase toggles. The three conversation-facing tiers surface in the UI as *Global admin*, *Organizer*, and *Moderator*.
+**Site admin** (global) — site-wide control. Can create and manage any consultation, assign roles, curate featured statements, schedule phase transitions, and use the advanced (non-linear) phase toggles. The three consultation-facing tiers surface in the UI as *Site admin*, *Organizer*, and *Moderator*.
 
 ---
 
@@ -290,11 +290,11 @@ Admins can:
 - Enable or disable the argument layer on a featured statement
 
 **Statements:**
-- Add seed statements individually, or **bulk-import** them by pasting text (one statement per line; max 20 lines / 100 KB, ≤280 chars each; the whole paste is rejected if over limit; duplicates are ignored by Polis).
+- Add seed statements individually, or **bulk-import** them by pasting text (one statement per line; max 20 lines / 100 KB, ≤280 chars each; the whole paste is rejected if over limit; duplicates are ignored by Polis). Moderators can add seed statements too. Seeding is open before the first phase and during Explore only, for every role.
 
 **Phases:** see *Phase control* below.
 
-Statement and argument moderation happens in the wiki-polis admin UI, not the Polis interface: moderators approve or hide items from the moderation queue, participants can **flag** a statement or argument (categories: personal attack, privacy, off-topic, other) into a per-conversation review queue that moderators resolve, and a conversation's moderators can **ban** a participant from it (recorded in a public ban log).
+Statement and argument moderation happens in the wiki-polis admin UI, not the Polis interface: moderators approve or hide items from the moderation queue, participants can **flag** a statement or argument (categories: personal attack, privacy, off-topic, other) into a per-consultation review queue that moderators resolve (mark as handled), and a consultation's moderators can **block** a participant from it and unblock them (recorded in a public ban log). Whether new statements wait for approval (**strict moderation**, on Settings › Basics) is a setting: only an organizer or site admin can change it; moderators see it read-only.
 
 ---
 
@@ -328,7 +328,7 @@ Two control surfaces:
 - **Simple / guided ("Move on").** Advances one step forward through the sequence. Renders a consequence summary plus a **readiness checklist** (per-phase preconditions); the submit button is gated client-side until every item is confirmed, and the server re-validates on POST. Machine-checked preconditions (currently only "≥1 confirmed featured statement" before argument mapping) show a met / not-met badge.
 - **Advanced toggles (global admin only).** Each phase flag as an independent on/off control, including backward moves and non-linear states. Opens automatically when the conversation is already in a non-linear state.
 
-Conversation moderators (non-admins) see phase controls read-only. Pause/Resume and Close are separate conversation-status actions (see above), not phases.
+Consultation moderators (non-organizers) see the phase control and statistics read-only, as text with no controls: they cannot move on, pause, schedule, initialise Phase 6 or publish. Pause/Resume and Close are separate conversation-status actions (see above), not phases.
 
 ### Phase-control and transition guards
 
@@ -355,7 +355,7 @@ Transitions and phase-critical mutations are protected by **hard guards** (block
 **Soft guards** (confirm dialog, disabled control + tooltip, warning banner, inline hint):
 
 - Guided checklist: submit disabled until all boxes ticked and no unmet machine checks.
-- Moderators: phase controls disabled — "Only a site admin can change phases."
+- Moderators: no phase controls, only the line "Only an organizer or site admin can change phases."
 - Consequence banners in the Move-on box (e.g. public results "permanently closes the consultation and starts the identity-reveal window"; informed voting "you can pause first").
 - `confirm()` dialogs on Close permanently and on argument delete.
 
@@ -370,7 +370,7 @@ The **real lane** (`/consultations`) shows:
 - **Your conversations — active** — conversations the participant has joined where there is still something to do: open submission, unread arguments, or results to explore
 - **Your conversations — archived** — conversations the participant joined that are now inactive; results remain accessible but no further participation is possible
 - **Available conversations** — conversations the participant is eligible to join but has not yet accepted
-- **Conversations you moderate** — shown only to participants who are moderator or admin on one or more conversations. Lists those conversations regardless of their active or archived status. Hidden entirely if the participant has no such role.
+- **You moderate** — shown only to participants who are moderator, organizer or admin on one or more consultations. Lists those consultations regardless of their active or archived status, each with an **Admin** link to its admin pages (a moderator's way in; a console Admin home is planned, [#473](https://github.com/lgelauff/wiki-polis/issues/473)). Hidden entirely if the participant has no such role.
 
 The real lane never lists demo conversations. Visitors who are not logged in see a brief explanation of the platform and a login prompt.
 
