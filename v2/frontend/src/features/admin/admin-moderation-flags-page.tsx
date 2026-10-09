@@ -69,8 +69,10 @@ function FlagText({flag, open}: {flag: Flag; open: boolean}) {
 
 /** One open flag, with one action: "Mark as handled" closes the flag, with an optional note
  *  saying what was done. What happens to the content itself is done where the "↳" leads.
- *  There is no check glyph here — a check beside a flag would read as "confirm the flag",
- *  which is the opposite of what it does. */
+ *  The action itself carries no check glyph — a check beside an open flag would read as
+ *  "confirm the flag", which is the opposite of what it does. Once the flag is handled, the
+ *  row's controls give way to "Handled ✓" for FLAG_SETTLE_MS (owner, 2026-10-09): there the
+ *  check says the flag is closed, and it is decorative (aria-hidden), the word says it. */
 function FlagRow({conversationId, flag, csrfToken, settled, onHandled, onFeedback}: {
   conversationId: number;
   flag: Flag;
@@ -130,7 +132,7 @@ function FlagRow({conversationId, flag, csrfToken, settled, onHandled, onFeedbac
       {settled ? (
         <div className="admin-row__actions">
           <p className="admin-row__time" ref={settledRef} tabIndex={-1}>
-            {msg('admin-moderation-flags-handled-heading')} <span aria-hidden="true">✓</span>
+            {msg('admin-moderation-flag-row-handled')} <span aria-hidden="true">✓</span>
           </p>
         </div>
       ) : <div className="admin-row__actions">
@@ -179,6 +181,9 @@ export function AdminModerationFlagsPage({conversationId, csrfToken}: {
   // list; the move runs when its timer fires, or at once when the page goes away.
   const [settled, setSettled] = useState<ReadonlySet<number>>(new Set());
   const moves = useRef(new Map<number, {timer: ReturnType<typeof setTimeout>; move: () => void}>());
+  // TanStack runs a mutation's onSuccess even after the row's page has gone, so a request
+  // that lands after unmount must not start a timer the cleanup below will never see.
+  const mounted = useRef(false);
   const move = useRef<(flag: Flag, resolution: Resolution, refocus: boolean) => void>(() => {});
   move.current = (flag, resolution, refocus) => {
     moves.current.delete(flag.id);
@@ -203,13 +208,21 @@ export function AdminModerationFlagsPage({conversationId, csrfToken}: {
     });
   };
   function handled(flag: Flag, resolution: Resolution) {
+    if (!mounted.current) {
+      // The page has gone: nobody sees the row settle, so the flag moves to the Handled list
+      // in the cache at once, and a return within the settle time finds it there.
+      move.current(flag, resolution, false);
+      return;
+    }
     setSettled((current) => new Set(current).add(flag.id));
     const timer = setTimeout(() => move.current(flag, resolution, true), FLAG_SETTLE_MS);
     moves.current.set(flag.id, {timer, move: () => move.current(flag, resolution, false)});
   }
   useEffect(() => {
     const pending = moves.current;
+    mounted.current = true;
     return () => {
+      mounted.current = false;
       for (const {timer, move: run} of pending.values()) {
         clearTimeout(timer);
         run();

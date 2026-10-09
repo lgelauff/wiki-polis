@@ -190,7 +190,7 @@ test('a handled flag stays in place as "Handled ✓" before it moves, so the nex
     first.focus();
     fireEvent.click(first);
     const settledRow = document.querySelector('[data-row-id="41"]') as HTMLElement;
-    await waitFor(() => expect(within(settledRow).getByText(m('admin-moderation-flags-handled-heading'), {exact: false})).toBeVisible());
+    await waitFor(() => expect(within(settledRow).getByText(m('admin-moderation-flag-row-handled'), {exact: false})).toBeVisible());
     await waitFor(() => expect(polite()).toHaveTextContent(m('admin-moderation-flag-marked-handled')));
     // Right after the click: the clicked row is where it was, without controls, and the next
     // row's button is still in its own row, not in the clicked row's place.
@@ -200,7 +200,7 @@ test('a handled flag stays in place as "Handled ✓" before it moves, so the nex
     expect(second.closest('[data-row-id]')).toHaveAttribute('data-row-id', '42');
     expect(screen.queryByRole('heading', {name: m('admin-moderation-flags-handled-heading'), level: 2})).toBeNull();
     // Focus is not dropped: it is on the line that replaced the controls.
-    expect(document.activeElement).toBe(within(settledRow).getByText(m('admin-moderation-flags-handled-heading'), {exact: false}));
+    expect(document.activeElement).toBe(within(settledRow).getByText(m('admin-moderation-flag-row-handled'), {exact: false}));
 
     act(() => { vi.advanceTimersByTime(FLAG_SETTLE_MS); });
 
@@ -213,6 +213,37 @@ test('a handled flag stays in place as "Handled ✓" before it moves, so the nex
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('a flag handled after its page has gone moves to the Handled list at once, not after the settle time', async () => {
+  // pr-check #540 frontend-js-1: TanStack runs onSuccess after unmount, and a timer started
+  // then was never cleared nor run, so a return within the settle time found the flag open.
+  serveFlags([flag(41, 'The first flagged text.')]);
+  let respond: () => void = () => {};
+  const answered = new Promise<void>((resolve) => { respond = resolve; });
+  server.use(http.put(url('/api/v1/admin/conversations/7/flags/:flagId/resolution'), async ({params}) => {
+    await answered;
+    return HttpResponse.json({data: {
+      flagId: Number(params.flagId), status: 'resolved', changed: true,
+      resolution: {resolvedAt: '2026-08-13T10:00:00Z', note: null}, links: {flags: FLAGS_URL},
+    }});
+  }));
+  const client = createQueryClient();
+  const view = renderPage(<AdminModerationFlagsPage conversationId={7} csrfToken="t" />,
+    '/admin/conversations/7/moderation/flags', client);
+  fireEvent.click(await screen.findByRole('button',
+    {name: new RegExp(`^${m('admin-moderation-flag-handle')}`)}, {timeout: 10_000}));
+
+  view.unmount();
+  respond();
+
+  type Queue = components['schemas']['AdminFlagQueue'];
+  const queue = () => client.getQueryData<Queue>(['admin-flag-queue', 7]);
+  // Well inside FLAG_SETTLE_MS: a timer would still be waiting.
+  await waitFor(() => {
+    expect(queue()?.open.map((item) => item.id)).toEqual([]);
+    expect(queue()?.resolved.map((item) => item.id)).toEqual([41]);
+  }, {timeout: FLAG_SETTLE_MS / 2});
 });
 
 test('People shows each person by pseudonym, never by username, and names each row\'s controls', async () => {

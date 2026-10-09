@@ -122,6 +122,7 @@ TAGS:
     - admin-moderation-flag-handled
     - admin-moderation-flag-marked-handled
     - admin-moderation-flag-note
+    - admin-moderation-flag-row-handled
     - admin-moderation-flags
     - admin-moderation-flags-handled-heading
     - admin-moderation-hide-statement

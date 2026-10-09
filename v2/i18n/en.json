@@ -597,6 +597,7 @@
     "admin-moderation-flag-already-handled": "Flag was already handled.",
     "admin-moderation-flag-marked-handled": "Flag marked as handled.",
     "admin-moderation-flags-handled-heading": "Handled",
+    "admin-moderation-flag-row-handled": "Handled",
     "admin-moderation-person-active": "Active",
     "admin-moderation-person-already-allowed": "Participant is already allowed in this consultation.",
     "admin-content-tabs-aria": "Content",
