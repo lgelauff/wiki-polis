@@ -166,6 +166,60 @@ def test_signed_out_is_unauthorized(client, conversation):
     assert response.get_json()['error']['code'] == 'unauthorized'
 
 
+# Every read a console page makes. Signed out, each answers 401, so the console's access
+# boundary sends the visitor to the login and back instead of showing "Not allowed".
+_CONSOLE_READS = (
+    '/api/v1/admin',
+    '/api/v1/admin/conversations/{id}',
+    '/api/v1/admin/conversations/{id}/settings',
+    '/api/v1/admin/conversations/{id}/invitations',
+    '/api/v1/admin/conversations/{id}/roles',
+    '/api/v1/admin/conversations/{id}/statements',
+    '/api/v1/admin/conversations/{id}/flags',
+    '/api/v1/admin/conversations/{id}/featured-statements',
+    '/api/v1/admin/conversations/{id}/participants',
+    '/api/v1/admin/conversations/{id}/termination',
+)
+
+
+@pytest.mark.parametrize('path', _CONSOLE_READS)
+def test_signed_out_on_a_console_page_is_unauthorized(client, conversation, path):
+    response = client.get(path.format(id=conversation.id))
+
+    assert response.status_code == 401
+    assert response.get_json()['error']['code'] == 'unauthorized'
+
+
+@pytest.mark.parametrize('path', _CONSOLE_READS)
+def test_signed_in_without_the_role_on_a_console_page_is_forbidden(auth_client, conversation, path):
+    response = auth_client.get(path.format(id=conversation.id))
+
+    assert response.status_code == 403
+    assert response.get_json()['error']['code'] == 'forbidden'
+
+
+@pytest.mark.parametrize('path', [
+    '/api/v1/admin', '/api/v1/admin/conversations/{id}', '/api/v1/admin/conversations/{id}/settings',
+])
+def test_a_practice_session_on_a_console_page_stays_forbidden(client, path):
+    """Unchanged by the 401 for signed-out visitors: a practice session resolves to its demo
+    participant, which is a signed-in identity to these checks. Only Admin home treats it as
+    signed out (`test_a_practice_session_is_unauthorized`)."""
+    guest = Participant(mw_user_id=-1_000_000_003, mw_username='Demo-guest-console', xid='f' * 64,
+                        is_demo=True)
+    db.session.add(guest)
+    db.session.commit()
+    conv = _conversation('practice-console', access_policy='demo')
+    with client.session_transaction() as sess:
+        sess['xid'] = guest.xid
+        sess['demo_conversation_id'] = conv.id
+
+    response = client.get(path.format(id=conv.id))
+
+    assert response.status_code == 403
+    assert response.get_json()['error']['code'] == 'forbidden'
+
+
 def test_admin_home_and_site_admin_pages_are_spa_routes(client, spa_build):
     for path in ('/admin', '/site-admin'):
         response = client.get(path)

@@ -312,9 +312,10 @@ def test_protected_api_denies_unauthenticated_and_leaks_nothing(client, conversa
     it is now asserted.
     """
     expected = {
-        # /admin — site administration surface
-        '/api/v1/admin': 403,
-        f'/api/v1/admin/conversations/{conversation.id}': 403,
+        # /admin — site administration surface: 401, so the console sends the visitor
+        # to the login (a signed-in user without the role gets 403)
+        '/api/v1/admin': 401,
+        f'/api/v1/admin/conversations/{conversation.id}': 401,
         # /accept/<slug> — the invitation/join surface
         '/api/v1/conversations/test-conv/participation-entry': 401,
         # /c/<slug> — the conversation surface

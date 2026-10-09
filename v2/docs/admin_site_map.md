@@ -5,6 +5,8 @@
 > and the API checks they rely on, and by opening each page as an organizer, a moderator
 > and a site admin without a role in a local build of that commit, on a consultation with
 > access by access code and one with an invitation list.
+> The signed-out sentence under **Roles** was updated afterwards, for the 401 on every admin
+> API call (2026-10-09); that is checked by the test suite, not yet in a browser.
 
 Where every admin page lives, who may open it, and where the old addresses lead. The
 routes are defined in `v2/frontend/src/app.tsx`; the server serves them as app pages
@@ -21,9 +23,10 @@ when a route is added, moved or removed.
 - **Organizer**: one consultation.
 - **Moderator**: one consultation. An organizer passes every check a moderator passes.
 
-**Everyone else**, including people signed in with no role, gets the access page ("Not
-allowed"). Signed out, Admin home (`/admin`) sends them to the login and back; the other
-admin pages show the access page.
+**Everyone else** signed in, with no role, gets the access page ("Not allowed"). Signed
+out, every admin page, `/site-admin` included, sends them to the login and back (the API
+answers 401). A practice session is treated as signed out only on Admin home (`/admin`);
+on the other admin pages it gets the access page.
 
 ## Site level
 

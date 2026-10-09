@@ -194,6 +194,8 @@ test('statements awaiting moderation are a plain count after the flags, left out
 
 test.each([
   ['/admin', HOME_URL, '/login?next=%2Fadmin'],
+  // The site admin dashboard's data answers 401 signed out too, so it asks for the login.
+  ['/site-admin', CATALOG_URL, '/login?next=%2Fsite-admin'],
   // The query string rides along; a voucher code (`v`) never does.
   ['/admin/conversations/7?x=1&v=SECRET', LIFECYCLE_URL, '/login?next=%2Fadmin%2Fconversations%2F7%3Fx%3D1'],
 ])('signed out on %s: one navigation to the login, with the way back', async (path, api, login) => {
