@@ -162,6 +162,8 @@ TAGS:
     - admin-settings-tab-vouchers
     - admin-settings-tabs-aria
     - admin-settings-unchanged
+    - admin-settings-value-no
+    - admin-settings-value-yes
     - admin-shell-content
     - admin-shell-licence
     - admin-shell-moderation
