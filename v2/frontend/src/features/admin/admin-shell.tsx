@@ -314,16 +314,19 @@ export function AdminShell({announcer, children, data, gatingType, section, site
         </nav>
 
         <main id="main" tabIndex={-1} className="admin-shell__main">
-          {/* The notification slot floats over the bottom corner (console.css), out of the
-              flow, so a toast never moves the rows under the pointer. First in <main> so it
-              comes first in reading order; the page keeps its height clear while it shows,
-              so it does not cover the focused control (WCAG 2.4.11). */}
-          <div className="admin-shell__notices"><AnnounceProvider value={announce}>{toast}</AnnounceProvider></div>
           {/* The one place that announces a result: a toast, a save, a row action. Always
               mounted, and the only live regions in the frame -- the toast inside the shell
               reads out through it rather than carrying a role of its own. */}
           <AnnouncerRegions announcement={announcement} />
           <AnnounceProvider value={announce}>{children}</AnnounceProvider>
+          {/* The notification slot floats over the bottom corner (console.css), out of the
+              flow, so a toast never moves the rows under the pointer. Last in <main>, after
+              the page, so its dismiss button comes in tab order where it is drawn rather than
+              before the page's first control; it is read out by the announcer above, not from
+              here. While a toast shows, its height is capped and <main> gets that much extra
+              bottom padding and scroll padding, so focus can be scrolled clear of it
+              (WCAG 2.4.11). */}
+          <div className="admin-shell__notices"><AnnounceProvider value={announce}>{toast}</AnnounceProvider></div>
         </main>
       </div>
 

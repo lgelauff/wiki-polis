@@ -381,10 +381,11 @@ test('the frame has one main, one polite live region and no other landmark', asy
   expect(container.querySelectorAll('[aria-live="assertive"]')).toHaveLength(1);
   expect(container.querySelector('[aria-live="polite"]')).toBeEmptyDOMElement();
   expect(container.querySelector('[aria-live="assertive"]')).toBeEmptyDOMElement();
-  // The notice slot is first in <main> (reading order); console.css floats it out of the
-  // flow, which test_admin_console_css.py guards.
+  // The notice slot is last in <main>, after the page, so a toast's dismiss button comes
+  // in tab order where it is drawn (the bottom corner), not before the page's first
+  // control. console.css floats it out of the flow, which test_admin_console_css.py guards.
   const notices = container.querySelector('.admin-shell__notices')!;
-  expect(notices).toBe(container.querySelector('main')!.firstElementChild);
+  expect(notices).toBe(container.querySelector('main')!.lastElementChild);
 });
 
 test('under qqx the frame is all keys but the two "also coming" lines', async () => {
