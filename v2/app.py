@@ -3971,7 +3971,8 @@ def _ensure_statement_moderation_policy(conv: Conversation) -> str:
 
 
 def _set_admin_statement_policy_api_payload(conv_id: int, body: dict) -> dict:
-    conv = _require_mod_for_conv(conv_id)
+    # Strict moderation is a consultation setting: organizers (and site admins) only.
+    conv = _require_organizer_for_conv(conv_id)
     outcome = _set_statement_moderation_policy_command(conv, body['mode'])
     return {
         'mode': outcome.policy,
@@ -4410,7 +4411,8 @@ def _initialize_admin_phase6_command(conv: Conversation):
 
 
 def _initialize_admin_phase6_api_payload(conv_id: int) -> dict:
-    conv = _require_mod_for_conv(conv_id)
+    # A phase control, like Move on: organizers (and site admins) only.
+    conv = _require_organizer_for_conv(conv_id)
     _initialize_admin_phase6_command(conv)
     return {
         'initialized': True,
