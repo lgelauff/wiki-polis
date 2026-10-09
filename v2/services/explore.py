@@ -1,6 +1,8 @@
 """Explore-phase read model and server-side Particiapi gateway."""
 
 import hashlib
+import heapq
+from collections import deque
 from dataclasses import dataclass
 
 import requests
@@ -258,6 +260,126 @@ def normalise_statements(payload: dict) -> list[dict]:
     return statements
 
 
+# #504: how many statements of another family sit between two statements of one family.
+# 1 means never back to back; it fits the packs of 10 of #505 and can be raised later.
+FAMILY_MIN_DISTANCE = 1
+
+
+def space_by_family(statements: list[dict], families: dict | None,
+                    min_distance: int = FAMILY_MIN_DISTANCE,
+                    last_roots: list | None = None) -> list[dict]:
+    """Reorder a deck so that no two statements of one family are closer than `min_distance`.
+
+    `last_roots` are the family roots of the statements served just before this deck, oldest
+    first (p526-1). They seed the window, so the first statements of the deck also keep their
+    distance from what was already served. Spacing the unanswered rest of a deck with the
+    roots of its last answered statements gives exactly the rest of the full deck's order.
+
+    One deterministic pass over the deck in its existing order (#504). At each step, with
+    `left` statements of a family still to place and `remaining` statements in all:
+
+    1. if a family is *critical* — it can no longer be kept apart unless one of its members
+       is placed now, i.e. ``left > ceil((remaining - 1) / (min_distance + 1))`` (for
+       distance 1: ``2 * left > remaining``) — take the first remaining member of that family,
+       if it fits the window of the last `min_distance` placed;
+    2. otherwise take the first remaining statement whose family differs from the last
+       `min_distance` placed;
+    3. if none fits, take the first remaining statement (one family left: served in order).
+
+    Each family keeps its own deck order, and a statement only moves where separation forces
+    it, so seeds keep their place at the front unless a family needs room. For distance 1
+    the pass separates every deck for which a separation exists (largest family at most
+    ``ceil(n / 2)``); for a larger distance it is best effort.
+
+    Considered and not used (owner, 2026-10-08): always serving the family with the most
+    statements left first. It separates as often, but front-loads every family to the start
+    of every participant's deck, ahead of the per-participant order and the seeds. It may
+    come back later as an opt-in, cf. #506.
+
+    Cost: roots are looked up once; without any family of two or more the deck is returned
+    unchanged. Otherwise O(n log n) for n statements (a heap of family heads and a lazy
+    max-heap of family sizes; each step touches at most `min_distance` + a few entries).
+    Deterministic: the same deck and families always give the same order.
+    """
+    lookup = families or {}
+    roots = [lookup.get(statement['id'], statement['id']) for statement in statements]
+    queues: dict[int, deque] = {}
+    for position, root in enumerate(roots):
+        queues.setdefault(root, deque()).append(position)
+    placed_roots: list = list(last_roots or [])[-min_distance:] if min_distance >= 1 else []
+    if min_distance < 1 or (all(len(queue) < 2 for queue in queues.values())
+                            and not set(placed_roots) & queues.keys()):
+        return list(statements)
+
+    # Heads: (deck position of the family's first remaining member, root). One live entry
+    # per family; an entry is stale once that member has been placed.
+    heads = [(queue[0], root) for root, queue in queues.items()]
+    heapq.heapify(heads)
+    # Sizes: (-left, head position, root); an entry is stale once its `left` changed.
+    sizes = [(-len(queue), queue[0], root) for root, queue in queues.items()]
+    heapq.heapify(sizes)
+
+    def live_head(entry):
+        queue = queues[entry[1]]
+        return bool(queue) and queue[0] == entry[0]
+
+    def live_size(entry):
+        return len(queues[entry[2]]) == -entry[0]
+
+    order: list[dict] = []
+    remaining = len(statements)
+    while remaining:
+        window = set(placed_roots[-min_distance:])
+        threshold = -(-(remaining - 1) // (min_distance + 1))  # ceil((remaining-1)/(d+1))
+        take_root = None
+
+        # 1. A critical family that fits; if several, the one whose next member comes first.
+        popped = []
+        critical = []
+        while sizes:
+            entry = sizes[0]
+            if not live_size(entry):
+                heapq.heappop(sizes)
+                continue
+            if -entry[0] <= threshold:
+                break
+            popped.append(heapq.heappop(sizes))
+            if entry[2] not in window:
+                critical.append((queues[entry[2]][0], entry[2]))
+        for entry in popped:
+            heapq.heappush(sizes, entry)
+        if critical:
+            take_root = min(critical)[1]
+
+        # 2./3. The first remaining statement that fits, else the first remaining.
+        if take_root is None:
+            skipped = []
+            while heads:
+                entry = heads[0]
+                if not live_head(entry):
+                    heapq.heappop(heads)
+                    continue
+                if entry[1] in window:
+                    skipped.append(heapq.heappop(heads))
+                    continue
+                take_root = entry[1]
+                break
+            for entry in skipped:
+                heapq.heappush(heads, entry)
+            if take_root is None:
+                take_root = min(skipped)[1]
+
+        queue = queues[take_root]
+        position = queue.popleft()
+        if queue:
+            heapq.heappush(heads, (queue[0], take_root))
+            heapq.heappush(sizes, (-len(queue), queue[0], take_root))
+        order.append(statements[position])
+        placed_roots.append(take_root)
+        remaining -= 1
+    return order
+
+
 def build_explore_state(
     *,
     statements_payload: dict,
@@ -266,8 +388,29 @@ def build_explore_state(
     new_statement_unlock_at: int,
     new_statement_max: int,
     new_statements_used: int,
+    families: dict | None = None,
+    recent_answers: list[int] | None = None,
 ) -> dict:
-    """Build a privacy-safe, stable participant queue projection."""
+    """Build a privacy-safe, stable participant queue projection.
+
+    `families` maps statement id to family root (#504). Without it every statement is its
+    own family and the order is exactly the pin's.
+
+    `recent_answers` are the statements this participant answered last, oldest first, as the
+    app recorded them (p526-1). Only the unanswered statements are spaced, and the window
+    starts from the roots of the last answered ones, so a deck that changes mid-session (a
+    rewording added, a statement moderated out) never serves a family member right after the
+    statement just answered. Without a record (another browser, an expired session) the last
+    answered statements are taken from the spaced order of the whole deck, which is exact for
+    a deck that did not change. For a deck that did not change, the served sequence is the
+    same either way.
+
+    Research note (p526-2): the served order is no longer a function of the sha256 pin
+    alone. It is the pin, then family spacing over the provenance (`derived_from_tid`) as it
+    stood at each read, then the participant's own last answers. Rebuilding the exposure
+    order of a participant therefore needs the provenance table as of each read, not only
+    as of the export; nothing extra is logged for that.
+    """
     statements = normalise_statements(statements_payload)
     voted = {int(value) for value in participant_payload.get('votes', [])}
     authored = {int(value) for value in participant_payload.get('statements', [])}
@@ -280,9 +423,25 @@ def build_explore_state(
 
     statements.sort(key=order_key)
     completed_ids = voted | authored
+    # Meta statements keep their place at the front of the deck and are never spaced: they
+    # are not part of a family.
+    meta = [statement for statement in statements if statement['isMeta']]
+    deck = [statement for statement in statements if not statement['isMeta']]
+    lookup = families or {}
+    recent = [statement_id for statement_id in (recent_answers or [])
+              if statement_id in completed_ids]
+    if not recent:
+        recent = [statement['id'] for statement in space_by_family(deck, families)
+                  if statement['id'] in completed_ids]
+    last_roots = [lookup.get(statement_id, statement_id)
+                  for statement_id in recent[-FAMILY_MIN_DISTANCE:]]
+    unanswered = space_by_family(
+        [statement for statement in deck if statement['id'] not in completed_ids],
+        families, last_roots=last_roots,
+    )
     current = next(
-        (statement for statement in statements if statement['id'] not in completed_ids),
-        None,
+        (statement for statement in meta if statement['id'] not in completed_ids),
+        unanswered[0] if unanswered else None,
     )
     total = len(statements)
     completed = sum(statement['id'] in completed_ids for statement in statements)
