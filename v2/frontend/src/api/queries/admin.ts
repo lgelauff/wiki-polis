@@ -113,6 +113,13 @@ export async function putAdminRoles(
   }))).data;
 }
 
+/** Admin home (#538): the consultations the viewer holds a role in. */
+export const adminHomeQuery = () => queryOptions({
+  queryKey: ['admin-home'],
+  queryFn: async () => (await requireApiData(api.GET('/admin/home'))).data,
+  staleTime: 5_000,
+});
+
 export const adminCatalogQuery = () => queryOptions({
   queryKey: ['admin-catalog'],
   queryFn: async () => (await requireApiData(api.GET('/admin'))).data,

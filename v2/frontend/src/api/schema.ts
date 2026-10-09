@@ -58,6 +58,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the consultations the caller holds a role in, for the Admin home */
+        get: operations["getAdminHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/conversations": {
         parameters: {
             query?: never;
@@ -1087,6 +1104,27 @@ export interface components {
             };
             links: {
                 self: string;
+            };
+        };
+        AdminHomeResponse: {
+            data: components["schemas"]["AdminHome"];
+        };
+        AdminHome: {
+            conversations: {
+                id: number;
+                title: string;
+                /** @enum {string} */
+                role: "Organizer" | "Moderator";
+                /** @enum {string} */
+                status: "active" | "paused" | "archived" | "closed";
+                openFlags: number;
+                links: {
+                    overview: string;
+                };
+            }[];
+            links: {
+                self: string;
+                siteAdminDashboard: string | null;
             };
         };
         AdminConversationCreateRequest: {
@@ -2823,6 +2861,44 @@ export interface operations {
                 };
             };
             /** @description Global admin permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminHome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admin home */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHomeResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No role in any consultation and not a site admin */
             403: {
                 headers: {
                     [name: string]: unknown;

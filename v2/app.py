@@ -126,8 +126,8 @@ from services.admin_featured import (
     set_featured_argument_visibility,
 )
 from services.admin_catalog import (
-    build_admin_catalog, create_conversation as create_admin_conversation,
-    set_global_admin,
+    build_admin_catalog, build_admin_home,
+    create_conversation as create_admin_conversation, set_global_admin,
 )
 from services.admin_lifecycle import (
     ScheduleInPast,
@@ -2360,8 +2360,8 @@ def _path_accept(slug) -> str:
     return f'/accept/{_url_segment(slug)}'
 
 
-def _path_admin() -> str:
-    return '/admin'
+def _path_site_admin() -> str:
+    return '/site-admin'
 
 
 def _path_admin_conversation(conv_id, *, page: str | None = None) -> str:
@@ -2414,6 +2414,7 @@ _SPA_ROUTE_PATTERNS: tuple[str, ...] = (
     r'/c/[^/]+/report',
     r'/c/[^/]+/reveal',
     r'/admin',
+    r'/site-admin',
     r'/admin/conversations/\d+',
     r'/admin/conversations/\d+/settings',
     r'/admin/conversations/\d+/settings/basics',
@@ -3594,6 +3595,40 @@ def _admin_catalog_api_payload() -> dict:
     )
 
 
+def _admin_home_api_payload() -> dict:
+    """Admin home (#538): the caller's own consultations, their role, status and open flags.
+
+    Signed in, or 401 (a practice session is not a sign-in). Signed in without a role in
+    any consultation and not a site admin: 403, so the page shows the access page rather
+    than an empty list of things the caller cannot open. A site admin may hold no role, and
+    then gets the empty list with the link to the dashboard.
+    """
+    participant = _current_participant()
+    if participant is not None and participant.is_demo:
+        participant = None
+    site_admin = _is_global_admin(participant)
+    if participant is None and not site_admin:
+        abort(401)
+    roles = (AdminRole.query.options(joinedload(AdminRole.conversation))
+             .filter_by(participant_id=participant.id).all()) if participant else []
+    if not roles and not site_admin:
+        abort(403)
+    conversation_ids = {role.conversation_id for role in roles}
+    open_flags = dict(
+        db.session.query(ContentFlag.conversation_id, db.func.count(ContentFlag.id))
+        .filter(ContentFlag.conversation_id.in_(conversation_ids), ContentFlag.status == 'open')
+        .group_by(ContentFlag.conversation_id).all()
+    ) if conversation_ids else {}
+    return build_admin_home(
+        roles=roles,
+        open_flags=open_flags,
+        site_admin=site_admin,
+        self_link=url_for('api_v1.get_admin_home'),
+        conversation_link=_admin_client_link,
+        site_admin_link=_path_site_admin(),
+    )
+
+
 def _create_admin_conversation_api_payload(body: dict) -> dict:
     if not _is_global_admin():
         abort(403)
@@ -4314,7 +4349,8 @@ def _delete_admin_conversation_api_payload(conv_id: int) -> dict:
     return {
         'conversationId': result.conversation_id,
         'deleted': True,
-        'links': {'admin': _path_admin()},
+        # Only a site admin can delete, from the dashboard, so that is where they go back to.
+        'links': {'admin': _path_site_admin()},
     }
 
 
@@ -5865,6 +5901,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         resolve_intermediate_results=_intermediate_results_api_payload,
         resolve_results_report=_results_report_api_payload,
         resolve_admin_catalog=_admin_catalog_api_payload,
+        resolve_admin_home=_admin_home_api_payload,
         create_admin_conversation=_create_admin_conversation_api_payload,
         grant_global_admin=_grant_global_admin_api_payload,
         set_global_admin=_set_global_admin_api_payload,

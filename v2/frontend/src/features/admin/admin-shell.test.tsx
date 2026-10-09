@@ -308,15 +308,61 @@ test('the mark links to Admin home for a site administrator', async () => {
   expect(await screen.findByRole('link', {name: 'Admin'})).toHaveAttribute('href', '/admin');
 });
 
-test('an organizer sees the mark as plain text, not as a link to a 403', async () => {
-  // Today's crumb sends an organizer to a 403, so the frame only offers the link to
-  // someone who can open the page behind it.
+test('an organizer\'s mark links to Admin home too, which lists their consultations', async () => {
   serveSession({capabilities: {administerSite: false}});
   renderShell();
 
   const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
+  expect(within(nav).getByRole('link', {name: 'Admin'})).toHaveAttribute('href', '/admin');
+});
+
+/** The frame at site level: Admin home (`home`) or the dashboard. */
+function renderSiteShell({home}: {home: boolean}) {
+  return render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[home ? '/admin' : '/site-admin']}>
+        <MessageProvider>
+          <AdminShell title="Page" site="Page" home={home} children={null} />
+        </MessageProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+test('on Admin home itself the mark is plain text: a link to where you are goes nowhere', async () => {
+  serveSession({capabilities: {administerSite: true}});
+  renderSiteShell({home: true});
+
+  const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
   expect(within(nav).queryByRole('link', {name: 'Admin'})).toBeNull();
   expect(within(nav).getByText('Admin')).toBeVisible();
+});
+
+test('a site admin has the dashboard in the sidebar on every console page', async () => {
+  serveSession({capabilities: {administerSite: true}});
+  renderShell();
+
+  const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
+  const link = within(nav).getByRole('link', {name: 'Site admin dashboard'});
+  expect(link).toHaveAttribute('href', '/site-admin');
+  expect(link).not.toHaveAttribute('aria-current');
+});
+
+test('on the dashboard its sidebar link is the current page, and the mark goes home', async () => {
+  serveSession({capabilities: {administerSite: true}});
+  renderSiteShell({home: false});
+
+  const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
+  expect(within(nav).getByRole('link', {name: 'Site admin dashboard'})).toHaveAttribute('aria-current', 'page');
+  expect(within(nav).getByRole('link', {name: 'Admin'})).toHaveAttribute('href', '/admin');
+});
+
+test('someone who is not a site admin has no link to the dashboard', async () => {
+  serveSession({capabilities: {administerSite: false}});
+  renderShell();
+
+  const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
+  expect(within(nav).queryByRole('link', {name: 'Site admin dashboard'})).toBeNull();
 });
 
 test('below 1024px the sections collapse behind a disclosure', async () => {
@@ -344,25 +390,25 @@ test('at desktop width there is no disclosure and every section is reachable', a
   expect(screen.queryByRole('button', {name: 'Sections'})).toBeNull();
 });
 
-test('the two "also coming" lines are muted text, not controls', async () => {
+test('the one "also coming" line is muted text, not a control', async () => {
   serveSession();
   const {container} = renderShell();
 
   // A control whose value nothing reads is not a control: the line says so, in English,
   // and takes no focus, so nobody tabs into a dead end.
   const lines = await screen.findAllByText(/^Also coming:/);
-  expect(lines).toHaveLength(2);
+  // Admin home was the other one; it is built now (#538).
+  expect(lines).toHaveLength(1);
   for (const line of lines) {
     expect(line.closest('a, button, [tabindex]')).toBeNull();
     expect(line).toHaveClass('admin-shell__coming');
     // Untranslated on purpose, so it says which language it is in (WCAG 3.1.2).
     expect(line).toHaveAttribute('lang', 'en');
   }
-  expect(lines[0]).toHaveTextContent('Also coming: Admin home — not available yet (#473)');
-  expect(lines[1]).toHaveTextContent('Also coming: switching between consultations — not available yet (#473)');
-  // The first sits far left of the top bar, before the breadcrumb; the second under the mark.
+  expect(lines[0]).toHaveTextContent('Also coming: switching between consultations — not available yet (#473)');
+  // Under the mark; the top bar has none any more.
   const topbar = container.querySelector('.admin-shell__topbar')!;
-  expect(topbar.firstElementChild).toBe(lines[0]);
+  expect(topbar.textContent).not.toContain('Also coming');
   const sidebar = container.querySelector('.admin-shell__side')!;
   expect(sidebar.textContent).toContain('switching between consultations');
 });
@@ -388,17 +434,16 @@ test('the frame has one main, one polite live region and no other landmark', asy
   expect(notices).toBe(container.querySelector('main')!.lastElementChild);
 });
 
-test('under qqx the frame is all keys but the two "also coming" lines', async () => {
+test('under qqx the frame is all keys but the "also coming" line', async () => {
   renderAsQqx();
   serveSession();
   const {container} = renderShell();
 
   await screen.findByRole('navigation', {name: '(admin-shell-nav-aria)'});
-  // The two "also coming" lines are the exception the issue allows, and the locale
+  // The "also coming" line is the exception the issue allows, and the locale
   // autonyms in the switcher are never translated, so both count as content here.
   expect(untranslatedCopy([container.querySelector('.admin-shell')], [
     'Community strategy', 'Example editor', 'English', 'Nederlands',
-    'Also coming: Admin home — not available yet (#473)',
     'Also coming: switching between consultations — not available yet (#473)',
   ])).toEqual([]);
 });

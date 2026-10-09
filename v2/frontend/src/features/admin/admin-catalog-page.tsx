@@ -250,7 +250,6 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
         </div>
 
         {/* What is not built yet, last on the page (see `AdminComing`). */}
-        <AdminComing what="Admin home, one table of the consultations you have a role in" issue={473} />
         <AdminComing what="phase, participation counts, organizers, last action, and following or hiding a consultation" issue={473} />
         <AdminComing what="voucher use, correct and wrong codes per consultation" issue={473} />
       </div>

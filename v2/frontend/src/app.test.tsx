@@ -40,7 +40,7 @@ test('keeps the current route painted while the next route loads', async () => {
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/consultations']}>
-        <Link to="/admin">Open admin</Link>
+        <Link to="/site-admin">Open admin</Link>
         <App />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -53,7 +53,7 @@ test('keeps the current route painted while the next route loads', async () => {
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
 
   releaseAdmin();
-  // #479: the page is the site admin dashboard now.
+  // #479: the page is the site admin dashboard, at /site-admin since #538.
   expect(await screen.findByRole('heading', {name: 'Site admin dashboard'})).toBeVisible();
 });
 
@@ -139,7 +139,7 @@ test('matches the legacy catalog error for an unknown global admin', async () =>
   expect(username).toHaveAttribute('aria-invalid', 'true');
 });
 
-test('matches the legacy forbidden document for denied admin access', async () => {
+test('denied admin access shows the app\'s own access page, not a bare Forbidden', async () => {
   server.use(http.get(
     new URL('/api/v1/admin', globalThis.location.origin).toString(),
     () => HttpResponse.json({
@@ -148,9 +148,11 @@ test('matches the legacy forbidden document for denied admin access', async () =
   ));
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin']}><App /></MemoryRouter></QueryClientProvider>);
 
-  expect(await screen.findByRole('heading', {name: 'Forbidden'})).toBeVisible();
-  expect(screen.getByText(/read-protected or not readable by the server/)).toBeVisible();
-  expect(document.title).toBe('403 Forbidden');
+  expect(await screen.findByRole('heading', {name: 'Not allowed', level: 1})).toBeVisible();
+  expect(screen.getByText('You do not have access to this page.')).toBeVisible();
+  expect(screen.queryByText(/read-protected or not readable by the server/)).toBeNull();
+  expect(screen.getByRole('link', {name: '← back to home'})).toHaveAttribute('href', '/');
+  expect(document.title).toBe('403 Not allowed — Proto');
 });
 
 test('advances a conversation from the server-described lifecycle console', async () => {
@@ -278,7 +280,7 @@ test('deletes a verified empty conversation through a deliberate receipt flow', 
   fireEvent.click(deletion);
 
   expect(await screen.findByRole('heading', {name: 'Conversation deleted'})).toBeVisible();
-  expect(screen.getByRole('link', {name: 'Return to admin panel'})).toHaveAttribute('href', '/admin');
+  expect(screen.getByRole('link', {name: 'Return to admin panel'})).toHaveAttribute('href', '/site-admin');
 });
 
 test('moderates statements and imports approved seeds through typed commands', async () => {

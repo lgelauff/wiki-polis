@@ -5,18 +5,22 @@ from dataclasses import dataclass
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 
+def conversation_status(conversation) -> str:
+    """One word for where a consultation stands, shared by the dashboard and Admin home."""
+    if conversation.closed_at:
+        return 'closed'
+    if not conversation.active:
+        return 'archived'
+    if conversation.paused:
+        return 'paused'
+    return 'active'
+
+
 def build_admin_catalog(
     *, conversations, global_admins, phase_routes: dict,
     managed_creation: bool, self_link: str, conversation_link,
 ) -> dict:
-    def status(conversation) -> str:
-        if conversation.closed_at:
-            return 'closed'
-        if not conversation.active:
-            return 'archived'
-        if conversation.paused:
-            return 'paused'
-        return 'active'
+    status = conversation_status
 
     return {
         'conversations': [{
@@ -45,6 +49,51 @@ def build_admin_catalog(
             'defaultModerationPolicy': 'moderate',
         },
         'links': {'self': self_link},
+    }
+
+
+# The server's role identifiers, as `_conversation_role_label` (app.py) sends them, so the
+# console's `roleLabel` maps them to its own words. Organizer outranks Moderator: someone
+# who holds both rows for one consultation is shown as its organizer.
+_HOME_ROLE_LABELS = {'organizer': 'Organizer', 'moderator': 'Moderator'}
+
+
+def build_admin_home(
+    *, roles, open_flags: dict, site_admin: bool, self_link: str,
+    conversation_link, site_admin_link: str,
+) -> dict:
+    """The Admin home (#538): the consultations the caller holds a role in, and nothing else.
+
+    ``roles`` are the caller's own ``AdminRole`` rows; a site admin's are listed like
+    anyone's (site-wide access is not a role in a consultation, so it adds no rows).
+    ``open_flags`` maps a conversation id to its open flag count. No participant data:
+    titles, the caller's own role, a status word and a count.
+    """
+    by_conversation: dict[int, tuple] = {}
+    for role in roles:
+        conversation = role.conversation
+        held = by_conversation.get(conversation.id)
+        if held is None or role.role == 'organizer':
+            by_conversation[conversation.id] = (conversation, role.role)
+    rows = sorted(
+        by_conversation.values(),
+        # Newest first, as the dashboard lists them; a row without a date goes last.
+        key=lambda item: (item[0].created_at is not None, item[0].created_at or 0, item[0].id),
+        reverse=True,
+    )
+    return {
+        'conversations': [{
+            'id': conversation.id,
+            'title': conversation.title,
+            'role': _HOME_ROLE_LABELS[role],
+            'status': conversation_status(conversation),
+            'openFlags': int(open_flags.get(conversation.id, 0)),
+            'links': {'overview': conversation_link(conversation.id)},
+        } for conversation, role in rows],
+        'links': {
+            'self': self_link,
+            'siteAdminDashboard': site_admin_link if site_admin else None,
+        },
     }
 
 

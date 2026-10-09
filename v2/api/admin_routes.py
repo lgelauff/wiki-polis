@@ -54,6 +54,7 @@ def register_admin_routes(
     error_response: Callable,
     limiter,
     resolve_admin_catalog: Callable[[], dict],
+    resolve_admin_home: Callable[[], dict],
     create_admin_conversation: Callable[[dict], dict],
     grant_global_admin: Callable[[dict], dict],
     set_global_admin: Callable[[int, dict], dict],
@@ -95,6 +96,10 @@ def register_admin_routes(
     @bp.get('/admin')
     def get_admin_catalog():
         return _no_store(jsonify({'data': resolve_admin_catalog()}))
+
+    @bp.get('/admin/home')
+    def get_admin_home():
+        return _no_store(jsonify({'data': resolve_admin_home()}))
 
     @bp.post('/admin/conversations')
     def post_admin_conversation():

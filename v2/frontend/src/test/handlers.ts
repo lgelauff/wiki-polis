@@ -94,6 +94,10 @@ export const testMessages: Record<string, string> = Object.fromEntries(
 
 export const handlers = [
   http.get(new URL('/api/v1/admin', globalThis.location.origin).toString(), () => HttpResponse.json({data: adminCatalogFixture()})),
+  http.get(new URL('/api/v1/admin/home', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
+    conversations: [{id: 7, title: 'Community strategy', role: 'Organizer', status: 'active', openFlags: 1, links: {overview: '/admin/conversations/7'}}],
+    links: {self: '/api/v1/admin/home', siteAdminDashboard: null},
+  }})),
   http.post(new URL('/api/v1/admin/conversations', globalThis.location.origin).toString(), () => HttpResponse.json({data: {conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'}, links: {manage: '/admin/conversations/7', catalog: '/api/v1/admin'}}}, {status: 201})),
   http.post(new URL('/api/v1/admin/global-admin-grants', globalThis.location.origin).toString(), async ({request}) => {
     const body = await request.json() as {username: string};
@@ -140,7 +144,7 @@ export const handlers = [
     links: {self: '/api/v1/admin/conversations/7/termination', lifecycle: '/admin/conversations/7'},
   }})),
   http.delete(new URL('/api/v1/admin/conversations/7', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
-    conversationId: 7, deleted: true, links: {admin: '/admin'},
+    conversationId: 7, deleted: true, links: {admin: '/site-admin'},
   }})),
   http.get(new URL('/api/v1/admin/conversations/7/settings', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', introHtml: '<p>Shape the future.</p>', outroHtml: '', accessPolicy: 'public', gated: false, gatingType: null, announce: false, information: false, resultsShared: false, showUsernames: false, accessRequestText: null, phaseRoute: 'default_7', phaseRouteLabel: 'Full consultation', polisId: 'polis-community-strategy'},

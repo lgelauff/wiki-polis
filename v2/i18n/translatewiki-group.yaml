@@ -100,6 +100,8 @@ TAGS:
     - admin-globals-empty
     - admin-globals-heading
     - admin-grant-heading
+    - admin-home-empty
+    - admin-home-heading
     - admin-invitations-added
     - admin-invitations-list-heading
     - admin-invitations-not-signed-in

@@ -240,21 +240,19 @@ test('a 403 on the catalogue shows the boundary, not the page', async () => {
       <MemoryRouter initialEntries={['/app/admin']}><App /></MemoryRouter>
     </QueryClientProvider>,
   );
-  expect(await screen.findByRole('heading', {name: 'Forbidden'})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Not allowed', level: 1})).toBeVisible();
   expect(screen.queryByRole('heading', {name: 'Site admin dashboard'})).toBeNull();
 });
 
-test('the three "Also coming" lines are muted English and nothing else', async () => {
+test('the two "Also coming" lines are muted English and nothing else', async () => {
   serve([row(1)]);
   renderPage();
   await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
 
   // The page's own lines; the console frame carries one of its own in the sidebar.
   const lines = within(document.querySelector<HTMLElement>('.admin-page')!).getAllByText(/^Also coming:/);
-  expect(lines).toHaveLength(3);
+  expect(lines).toHaveLength(2);
   expect(lines.map((line) => line.textContent)).toEqual([
-    'Also coming: Admin home, one table of the consultations you have a role in'
-    + ' — not available yet (#473)',
     'Also coming: phase, participation counts, organizers, last action, and following or hiding'
     + ' a consultation — not available yet (#473)',
     'Also coming: voucher use, correct and wrong codes per consultation — not available yet (#473)',
@@ -270,10 +268,10 @@ test('the three "Also coming" lines are muted English and nothing else', async (
   }
   // Last on the page, after everything that works.
   const page = lines[0]!.parentElement!;
-  expect(Array.from(page.children).slice(-3)).toEqual(lines);
+  expect(Array.from(page.children).slice(-2)).toEqual(lines);
 });
 
-test('under a key-id catalogue the page is all keys and the three coming lines', async () => {
+test('under a key-id catalogue the page is all keys and the two coming lines', async () => {
   renderAsQqx();
   serve([row(1)]);
   const {container} = renderPage('provider');
@@ -285,8 +283,6 @@ test('under a key-id catalogue the page is all keys and the three coming lines',
   expect(untranslatedCopy([page], [
     // The fixture's own words: participant data is never keyed.
     'Consultation 1', 'consultation-1', 'adminuser', '— adminuser', 'Full consultation',
-    'Also coming: Admin home, one table of the consultations you have a role in'
-    + ' — not available yet (#473)',
     'Also coming: phase, participation counts, organizers, last action, and following or hiding'
     + ' a consultation — not available yet (#473)',
     'Also coming: voucher use, correct and wrong codes per consultation — not available yet (#473)',

@@ -607,6 +607,8 @@
     "admin-content-empty": "No statements yet.",
     "admin-content-no-match": "No statements match the search.",
     "admin-site-dashboard": "Site admin dashboard",
+    "admin-home-heading": "Admin home",
+    "admin-home-empty": "You have no role in any consultation yet.",
     "admin-status-archived": "Archived",
     "admin-site-group-other": "Other",
     "admin-slug-ph": "e.g. rfc-2024-adminship",
