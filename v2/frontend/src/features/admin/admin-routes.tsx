@@ -1,5 +1,5 @@
 import {useSuspenseQuery} from '@tanstack/react-query';
-import {useParams} from 'react-router-dom';
+import {Navigate, useLocation, useParams} from 'react-router-dom';
 import type {ReactNode} from 'react';
 
 import {sessionQuery} from '../../api/queries';
@@ -73,7 +73,8 @@ type AdminRouteKind =
   | 'moderation'
   | 'participants'
   | 'roles'
-  | 'settings'
+  | 'settings-access'
+  | 'settings-basics'
   | 'statements'
   | 'termination';
 
@@ -86,8 +87,10 @@ function AdminRouteContent({kind}: {kind: AdminRouteKind}) {
   switch (kind) {
     case 'lifecycle':
       return <AdminLifecyclePage conversationId={conversationId} csrfToken={session.csrfToken} />;
-    case 'settings':
-      return <><AdminHeader /><AdminSettingsPage conversationId={conversationId} csrfToken={session.csrfToken} /></>;
+    case 'settings-basics':
+      return <AdminSettingsPage conversationId={conversationId} csrfToken={session.csrfToken} tab="basics" />;
+    case 'settings-access':
+      return <AdminSettingsPage conversationId={conversationId} csrfToken={session.csrfToken} tab="access" />;
     case 'termination':
       return <><AdminHeader /><AdminTerminationPage conversationId={conversationId} csrfToken={session.csrfToken} /></>;
     case 'statements':
@@ -111,7 +114,18 @@ function AdminRoute({kind}: {kind: AdminRouteKind}) {
 
 export const AdminCatalogRoute = () => <AdminRoute kind="catalog" />;
 export const AdminLifecycleRoute = () => <AdminRoute kind="lifecycle" />;
-export const AdminSettingsRoute = () => <AdminRoute kind="settings" />;
+export const AdminSettingsBasicsRoute = () => <AdminRoute kind="settings-basics" />;
+export const AdminSettingsAccessRoute = () => <AdminRoute kind="settings-access" />;
+
+/** `…/settings` is the URL the lifecycle page and the sidebar still link to; Settings has
+ *  tabs, so the bare path lands on Basics. `<Navigate replace>` keeps the old path out of the
+ *  history: Back returns to wherever the organizer came from, not to this hop. The target is
+ *  relative, so `/app/admin/…` stays in its own route group; the query string (a
+ *  `?uselang=`) and the fragment go along, as they would through a server redirect. */
+export function AdminSettingsIndexRoute() {
+  const {search, hash} = useLocation();
+  return <Navigate replace to={{pathname: 'basics', search, hash}} />;
+}
 export const AdminTerminationRoute = () => <AdminRoute kind="termination" />;
 export const AdminStatementsRoute = () => <AdminRoute kind="statements" />;
 export const AdminFeaturedRoute = () => <AdminRoute kind="featured" />;

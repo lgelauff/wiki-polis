@@ -9,7 +9,6 @@ import {
   postAdminSeedStatement,
   postAdminStatementImport,
   putAdminStatementModeration,
-  putAdminStatementModerationPolicy,
 } from '../../api/queries';
 import {LegacyShell} from '../legacy/legacy-shell';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
@@ -209,9 +208,6 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   const [seedText, setSeedText] = useState('');
   const [derivedFrom, setDerivedFrom] = useState('');
   const [importText, setImportText] = useState('');
-  const [strictModeration, setStrictModeration] = useState(
-    data.moderationPolicy.mode === 'moderate',
-  );
   const dismissToast = useCallback(() => setToast(null), []);
 
   function showFeedback(messages: Omit<Feedback, 'id'>[]) {
@@ -292,31 +288,6 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
       void queryClient.invalidateQueries({queryKey: options.queryKey});
     },
     onError: (error: Error) => showError(legacyError(error, 'The voting service is unavailable.')),
-  });
-
-  const policyMutation = useMutation({
-    mutationFn: () => putAdminStatementModerationPolicy(
-      conversationId,
-      {mode: strictModeration ? 'moderate' : 'auto_approve'},
-      csrfToken,
-    ),
-    onSuccess: (receipt) => {
-      queryClient.setQueryData<Workspace>(options.queryKey, receipt.workspace);
-      setStrictModeration(receipt.mode === 'moderate');
-      setFeedback([]);
-      setToast(null);
-    },
-    onError: (error: Error) => {
-      if (error instanceof ApiContractError && error.code === 'verification_unavailable') {
-        showError('Could not verify the current moderation state. Try again later.');
-      } else if (error instanceof ApiContractError && error.code === 'upstream_unavailable') {
-        showError('Could not update moderation settings. Check server logs for details.');
-      } else if (error instanceof ApiContractError && error.code === 'command_outcome_unknown') {
-        showError('The voting service may have been updated, but the local policy could not be saved. Do not retry until a site admin checks it.');
-      } else {
-        showError('Could not save the moderation policy. Try again later.');
-      }
-    },
   });
 
   function moveStatement(statement: Statement, status: Status) {
@@ -492,26 +463,6 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
             </div>
           </>
         )}
-
-        <h3 className="section-heading">Moderation settings</h3>
-        <div className="edit-form" style={{marginBottom: '2rem'}}>
-          <form onSubmit={(event) => { event.preventDefault(); policyMutation.mutate(); }}>
-            <input type="hidden" name="csrf_token" value={csrfToken} />
-            <label className="checkbox-label" style={{fontWeight: 'normal', color: 'var(--text)'}}>
-              <input
-                type="checkbox"
-                name="strict_moderation"
-                value="1"
-                checked={strictModeration}
-                onChange={(event) => setStrictModeration(event.target.checked)}
-              />
-              Strict moderation — new participant statements must be approved before others can vote on them
-            </label>
-            <div style={{marginTop: '.75rem'}}>
-              <button type="submit" className="btn-small" disabled={policyMutation.isPending}>Save</button>
-            </div>
-          </form>
-        </div>
 
         {(['pending', 'approved', 'hidden'] as Status[]).map((status) => (
           <StatementTable
