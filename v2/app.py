@@ -3725,8 +3725,10 @@ def _set_global_admin_api_payload(participant_id: int, body: dict) -> dict:
     if not _is_global_admin():
         abort(403)
     participant = db.session.get(Participant, participant_id)
+    actor = _current_participant()
     changed = set_global_admin(
         participant=participant, granted=body['granted'], session=db.session,
+        actor_id=actor.id if actor is not None else None,
         audit=lambda target_id, granted: record_audit(
             'global_admin.grant' if granted else 'global_admin.revoke',
             target_type='participant', target_id=target_id,

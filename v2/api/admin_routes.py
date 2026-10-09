@@ -41,6 +41,7 @@ from services.admin_featured import (
 from services.admin_catalog import (
     ConversationCreationSaveFailed, ConversationCreationUpstreamFailed,
     ConversationSlugConflict, GlobalAdminParticipantNotFound,
+    GlobalAdminSelfRevoke,
 )
 from services.admin_settings import (
     AccessSettingsLocked, DemoSwitchForbidden, InvalidAccessSettings,
@@ -175,6 +176,11 @@ def register_admin_routes(
         except GlobalAdminParticipantNotFound:
             return error_response(
                 'participant_not_found', 'That participant does not exist.', 404,
+            )
+        except GlobalAdminSelfRevoke:
+            return error_response(
+                'own_site_admin_protected',
+                'You cannot remove your own site admin access.', 409,
             )
         return _no_store(jsonify({'data': data}))
 

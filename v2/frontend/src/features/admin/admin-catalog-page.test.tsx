@@ -42,12 +42,12 @@ function serve(conversations: Row[]) {
 }
 
 /** `locale` is left to the provider by default so that `renderAsQqx()` can take effect. */
-function renderPage(locale: 'en' | 'provider' = 'en') {
+function renderPage(locale: 'en' | 'provider' = 'en', ownUsername: string | null = null) {
   return render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/admin']}>
         <Suspense fallback={null}>
-          <MessageProvider {...(locale === 'provider' ? {} : {locale})}><AdminCatalogPage csrfToken="test-csrf-token" /></MessageProvider>
+          <MessageProvider {...(locale === 'provider' ? {} : {locale})}><AdminCatalogPage csrfToken="test-csrf-token" ownUsername={ownUsername} /></MessageProvider>
         </Suspense>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -402,4 +402,21 @@ test('with no site admin of either kind the section says so, and still offers Gr
   const fold = openSiteAdmins();
   expect(within(fold).getByText('No site admins yet.')).toBeVisible();
   expect(within(fold).getByRole('button', {name: 'Grant'})).toBeVisible();
+});
+
+test('your own row offers no Remove; the row of another site admin does', async () => {
+  // Owner, 2026-10-09: a site admin cannot remove their own site admin access.
+  const fixture = adminCatalogFixture(true);
+  server.use(http.get(CATALOG_URL, () => HttpResponse.json({data: {...fixture, configuredAdmins: []}})));
+  renderPage('en', 'adminuser');
+
+  await screen.findByRole('heading', {name: 'Site admin dashboard', level: 1});
+  const fold = openSiteAdmins();
+  const rows = within(within(fold).getByRole('list')).getAllByRole('listitem');
+  expect(rows.map((item) => item.textContent)).toEqual([
+    'adminuser',
+    'Example editorRemove — Example editor',
+  ]);
+  expect(within(rows[0]!).queryByRole('button')).toBeNull();
+  expect(within(rows[1]!).getByRole('button', {name: 'Remove — Example editor'})).toBeVisible();
 });

@@ -73,7 +73,8 @@
         "200": {"description": "Membership receipt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/GlobalAdminGrantResponse"}}}},
         "400": {"description": "Invalid desired state", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
         "403": {"description": "Global admin permission required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
-        "404": {"description": "Participant not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
+        "404": {"description": "Participant not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}},
+        "409": {"description": "A site admin cannot remove their own site admin access (own_site_admin_protected)", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}
       }}
     },
     "/admin/conversations/{conversationId}/termination": {

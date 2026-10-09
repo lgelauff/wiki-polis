@@ -98,7 +98,10 @@ function Group({label, count, children}: {label: string; count: number; children
   );
 }
 
-export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
+/** `ownUsername` is the signed-in site admin's own name: their own row offers no Remove,
+ *  since a site admin cannot remove their own site admin access (owner, 2026-10-09; the
+ *  server refuses it too, `own_site_admin_protected`). */
+export function AdminCatalogPage({csrfToken, ownUsername = null}: {csrfToken: string; ownUsername?: string | null}) {
   const msg = useMessage();
   const navigate = useNavigate();
   const options = adminCatalogQuery();
@@ -240,16 +243,17 @@ export function AdminCatalogPage({csrfToken}: {csrfToken: string}) {
           <summary><h2>{msg('admin-globals-heading')}</h2>{' '}<span className="admin-count">({adminCount})</span></summary>
           {/* One row per site admin: a list, not a table, since there is one column. Those
               set in the server configuration cannot be removed here, so they say where they
-              come from instead of offering Remove. */}
+              come from instead of offering Remove. Your own row is a plain row too: you cannot
+              remove your own site admin access. */}
           {adminCount ? <ul className="admin-rows">
             {data.configuredAdmins.map((name) => <li className="admin-row" key={`configured-${name}`}>
               <div className="admin-row__text">{name}<span className="admin-row__suffix">{' · '}{msg('admin-site-admin-configured')}</span></div>
             </li>)}
             {data.globalAdmins.map((admin) => <li className="admin-row" key={admin.participantId}>
               <div className="admin-row__text">{admin.username}</div>
-              <div className="admin-row__actions">
+              {admin.username !== ownUsername && <div className="admin-row__actions">
                 <button type="button" className="admin-row__text-button" disabled={membership.isPending} onClick={() => membership.mutate({participantId: admin.participantId, granted: false})}>{msg('admin-btn-remove')}{' '}<span className="sr-only">{`— ${admin.username}`}</span></button>
-              </div>
+              </div>}
             </li>)}
           </ul> : <p className="admin-empty">{msg('admin-globals-empty')}</p>}
           <form onSubmit={submitGrant}>

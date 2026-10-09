@@ -88,7 +88,7 @@ type AdminRouteKind =
 function AdminRouteContent({kind}: {kind: AdminRouteKind}) {
   const {conversationId: rawConversationId} = useParams();
   const {data: session} = useSuspenseQuery(sessionQuery());
-  if (kind === 'catalog') return <AdminCatalogPage csrfToken={session.csrfToken} />;
+  if (kind === 'catalog') return <AdminCatalogPage csrfToken={session.csrfToken} ownUsername={session.user?.username ?? null} />;
   if (kind === 'home') return <AdminHomePage />;
 
   const conversationId = requiredConversationId(rawConversationId);

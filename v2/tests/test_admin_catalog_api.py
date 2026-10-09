@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from db import AuditEvent, Conversation, db
+from db import AuditEvent, Conversation, Participant, db
 from services.admin_catalog import ConversationCreationSaveFailed
 
 
@@ -128,6 +128,57 @@ def test_global_admin_grants_are_desired_state_commands(
     assert AuditEvent.query.filter(
         AuditEvent.operation.in_(['global_admin.grant', 'global_admin.revoke']),
     ).count() == 2
+
+
+def test_site_admin_cannot_remove_own_site_admin_access(
+    admin_client, admin_participant,
+):
+    """Owner, 2026-10-09: refused with nothing changed and no audit row."""
+    response = admin_client.put(
+        f'/api/v1/admin/global-admins/{admin_participant.id}',
+        json={'granted': False},
+    )
+
+    assert response.status_code == 409
+    assert response.get_json()['error']['code'] == 'own_site_admin_protected'
+    db.session.expire_all()
+    assert db.session.get(Participant, admin_participant.id).is_global_admin is True
+    assert AuditEvent.query.filter(
+        AuditEvent.operation.in_(['global_admin.grant', 'global_admin.revoke']),
+    ).count() == 0
+    # Still a site admin afterwards.
+    assert admin_client.get('/api/v1/admin').status_code == 200
+
+
+def test_site_admin_can_remove_another_site_admin(
+    admin_client, participant,
+):
+    participant.is_global_admin = True
+    db.session.commit()
+
+    response = admin_client.put(
+        f'/api/v1/admin/global-admins/{participant.id}',
+        json={'granted': False},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['changed'] is True
+    db.session.expire_all()
+    assert db.session.get(Participant, participant.id).is_global_admin is False
+    assert AuditEvent.query.filter_by(operation='global_admin.revoke').count() == 1
+
+
+def test_setting_own_site_admin_access_to_granted_is_not_refused(
+    admin_client, admin_participant,
+):
+    """Granting is unaffected: asking to keep one's own access is a no-op, not a refusal."""
+    response = admin_client.put(
+        f'/api/v1/admin/global-admins/{admin_participant.id}',
+        json={'granted': True},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['changed'] is False
 
 
 def test_admin_catalog_requires_global_admin(auth_client):

@@ -138,6 +138,10 @@ class GlobalAdminParticipantNotFound(RuntimeError):
     pass
 
 
+class GlobalAdminSelfRevoke(RuntimeError):
+    """A site admin may not remove their own site admin access (owner, 2026-10-09)."""
+
+
 @dataclass(frozen=True)
 class ConversationCreationResult:
     conversation: object
@@ -178,9 +182,14 @@ def create_conversation(
     return ConversationCreationResult(conversation=conversation)
 
 
-def set_global_admin(*, participant, granted: bool, session, audit) -> bool:
+def set_global_admin(
+    *, participant, granted: bool, session, audit, actor_id: int | None = None,
+) -> bool:
     if participant is None:
         raise GlobalAdminParticipantNotFound()
+    # Refused before anything is written: no change, no audit row.
+    if not granted and actor_id is not None and participant.id == actor_id:
+        raise GlobalAdminSelfRevoke()
     changed = bool(participant.is_global_admin) != granted
     if changed:
         participant.is_global_admin = granted
