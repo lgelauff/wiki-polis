@@ -36,3 +36,31 @@ test('an old admin path keeps its query string and fragment on the way to its Se
     '/admin/conversations/7/settings/invitations?uselang=en#top',
   );
 });
+
+test('the bare Moderation path lands on Queue, the first tab of its strip', async () => {
+  renderAt('/admin/conversations/7/moderation?uselang=en#top');
+
+  expect(await screen.findByRole('heading', {name: 'Moderation', level: 1})).toBeVisible();
+  expect(screen.getByRole('link', {name: 'Queue', current: 'page'})).toBeVisible();
+  expect(screen.getByTestId('where')).toHaveTextContent(
+    '/admin/conversations/7/moderation/queue?uselang=en#top',
+  );
+});
+
+test('the bare Content path lands on Statements, the first tab of its strip', async () => {
+  renderAt('/admin/conversations/7/content?uselang=en#top');
+
+  expect(await screen.findByRole('heading', {name: 'Content', level: 1})).toBeVisible();
+  expect(screen.getByRole('link', {name: 'Statements', current: 'page'})).toBeVisible();
+  expect(screen.getByTestId('where')).toHaveTextContent(
+    '/admin/conversations/7/content/statements?uselang=en#top',
+  );
+});
+
+test('the bare Content path under /app stays in the /app group', async () => {
+  renderAt('/app/admin/conversations/7/content');
+
+  expect(await screen.findByRole('heading', {name: 'Content', level: 1})).toBeVisible();
+  expect(screen.getByRole('link', {name: 'Statements', current: 'page'})).toBeVisible();
+  expect(screen.getByTestId('where')).toHaveTextContent('/app/admin/conversations/7/content/statements');
+});

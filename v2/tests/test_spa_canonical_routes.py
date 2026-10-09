@@ -106,6 +106,16 @@ def test_admin_route_with_no_view_function_still_serves_the_shell(client, conver
     assert b'<div id="root"></div>' in response.data
 
 
+@pytest.mark.parametrize('section', ['moderation', 'content'])
+def test_a_bare_admin_section_path_serves_the_shell(client, conversation, section):
+    """`…/moderation` and `…/content` have tabs; a hard load of the bare path gets the
+    shell, and the React router sends it on to the first tab (as with `…/settings`)."""
+    response = client.get(f'/admin/conversations/{conversation.id}/{section}')
+
+    assert response.status_code == 200
+    assert b'<div id="root"></div>' in response.data
+
+
 def test_the_react_route_parse_is_not_silently_empty():
     """The guard below is parametrized over a source parse, and an empty parametrize
     list *skips* rather than fails. Assert the floor here so a rename, a reflow or a
