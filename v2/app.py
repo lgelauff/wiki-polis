@@ -3880,7 +3880,6 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
         },
         counts={
             'participants': Participation.query.filter_by(conversation_id=conv.id).count(),
-            'invitations': ConversationInvite.query.filter_by(conversation_id=conv.id).count(),
             'openFlags': ContentFlag.query.filter_by(conversation_id=conv.id, status='open').count(),
             'featuredStatements': confirmed_featured_count,
         },
@@ -3889,12 +3888,8 @@ def _admin_lifecycle_api_payload(conv_id: int) -> dict:
         links={
             'self': url_for('api_v1.get_admin_conversation_lifecycle', conversation_id=conv.id),
             'participantView': _path_conversation(conv.slug),
-            'participants': _admin_client_link(conv.id, 'participants'),
             'moderation': _admin_client_link(conv.id, 'flags'),
-            'invitations': _admin_client_link(conv.id, 'invites'),
-            'roles': _admin_client_link(conv.id, 'roles'),
             'statements': _admin_client_link(conv.id, 'statements'),
-            'featuredStatements': _admin_client_link(conv.id, 'featured'),
             'settings': _admin_client_link(conv.id, 'settings'),
             'termination': _admin_client_link(conv.id, 'termination'),
         },

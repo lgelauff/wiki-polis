@@ -118,6 +118,7 @@ The one doc to trust for each concept (others should link here, not restate):
 | Stable design rules | `spec_design-principles.md` |
 | Database schema & data ownership | [`ref_data-model.md`](../ref_data-model.md) (derived from `db.py`) |
 | Which route requires which authorization | [`route_authorization_matrix.md`](route_authorization_matrix.md) |
+| Which admin page lives where, and what each role sees on it | [`admin_site_map.md`](admin_site_map.md) |
 | Browser/API contract | [`../openapi.json`](../openapi.json); the SPA's types are generated from it |
 | Accessibility conventions | `spec_accessibility.md` |
 | What changed and when | `log_changelog.md` (append-only) |

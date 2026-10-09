@@ -1274,14 +1274,14 @@
               "excludedStatementCount": {"type": "integer", "minimum": 0}, "excludedParticipantCount": {"type": "integer", "minimum": 0}
             }}]}
           }},
-          "counts": {"type": "object", "required": ["participants", "invitations", "openFlags", "featuredStatements"], "additionalProperties": false, "properties": {
-            "participants": {"type": "integer", "minimum": 0}, "invitations": {"type": "integer", "minimum": 0}, "openFlags": {"type": "integer", "minimum": 0}, "featuredStatements": {"type": "integer", "minimum": 0}
+          "counts": {"type": "object", "required": ["participants", "openFlags", "featuredStatements"], "additionalProperties": false, "properties": {
+            "participants": {"type": "integer", "minimum": 0}, "openFlags": {"type": "integer", "minimum": 0}, "featuredStatements": {"type": "integer", "minimum": 0}
           }},
           "capabilities": {"type": "object", "required": ["advancePhase", "pause", "publish", "editSettings", "useAdvancedPhases", "initializePhase6", "archive"], "additionalProperties": false, "properties": {
             "advancePhase": {"type": "boolean"}, "pause": {"type": "boolean"}, "publish": {"type": "boolean"}, "editSettings": {"type": "boolean"}, "useAdvancedPhases": {"type": "boolean"}, "initializePhase6": {"type": "boolean"}, "archive": {"type": "boolean"}
           }},
-          "links": {"type": "object", "required": ["self", "participantView", "participants", "moderation", "invitations", "roles", "statements", "featuredStatements", "settings", "termination"], "additionalProperties": false, "properties": {
-            "self": {"type": "string"}, "participantView": {"type": "string"}, "participants": {"type": "string"}, "moderation": {"type": "string"}, "invitations": {"type": "string"}, "roles": {"type": "string"}, "statements": {"type": "string"}, "featuredStatements": {"type": "string"}, "settings": {"type": "string"}, "termination": {"type": "string"}
+          "links": {"type": "object", "required": ["self", "participantView", "moderation", "statements", "settings", "termination"], "additionalProperties": false, "properties": {
+            "self": {"type": "string"}, "participantView": {"type": "string"}, "moderation": {"type": "string"}, "statements": {"type": "string"}, "settings": {"type": "string"}, "termination": {"type": "string"}
           }}
         }
       },

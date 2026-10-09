@@ -1673,7 +1673,6 @@ export interface components {
             };
             counts: {
                 participants: number;
-                invitations: number;
                 openFlags: number;
                 featuredStatements: number;
             };
@@ -1689,12 +1688,8 @@ export interface components {
             links: {
                 self: string;
                 participantView: string;
-                participants: string;
                 moderation: string;
-                invitations: string;
-                roles: string;
                 statements: string;
-                featuredStatements: string;
                 settings: string;
                 termination: string;
             };

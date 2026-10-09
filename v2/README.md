@@ -40,6 +40,7 @@ Following the classes and naming rules in
 | `ref_polis-routing.md` | tracks-code (external) | How a Polis conversation id is derived and routed |
 | `ref_cross-device-identity.md` | tracks-code | The `PARTICIAPI_SUB_SECRET` ↔ `TRUSTED_SUB_SECRET` trusted-subject mechanism |
 | `docs/route_authorization_matrix.md` | tracks-code | Which route requires which authorization. Verified against a named commit; see its banner for how to keep it true |
+| `docs/admin_site_map.md` | tracks-code | Every admin console page: its address, who can open it, what each role sees, and where the old addresses lead |
 | `docs/documentation-standards.md` | operational | Doc lifespans, naming rules, and the canonical-source map |
 | `openapi.json` | contract | The browser/API contract. The SPA's TypeScript types are generated from it |
 | `log_changelog.md` | append-only | What was built, and when. Never edited retroactively |

@@ -22,8 +22,8 @@ function lifecycleFixture(schedule = {canSchedule: true, scheduledAt: null as st
     schedule,
     publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
     statistics: {upstreamUnavailable: false, groups: [{key: 'preparation', label: 'Preparation', tiles: []}], informedVoting: null},
-    counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
-    links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/admin/conversations/7/participants', moderation: '/admin/conversations/7/flags', invitations: '/admin/conversations/7/invites', roles: '/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
+    counts: {participants: 12, openFlags: 1, featuredStatements: 4}, capabilities: {advancePhase: true, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
+    links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', moderation: '/admin/conversations/7/flags', statements: '/admin/conversations/7/statements', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
   };
 }
 
@@ -77,9 +77,9 @@ export function phaseAdvanceFixture(
         schedule: {canSchedule: true, scheduledAt: null, targetKey: null, targetLabel: null, frozen: false},
         publicationReadiness: {windowOpen: false, preconditions: [{id: 'phase6_initialized', label: 'Informed voting round initialized', met: false, note: 'Initialize informed voting before publishing.'}]},
         statistics: {upstreamUnavailable: false, groups: [{key: 'submission', label: 'Explore', tiles: []}], informedVoting: null},
-        counts: {participants: 12, invitations: 3, openFlags: 1, featuredStatements: 4},
+        counts: {participants: 12, openFlags: 1, featuredStatements: 4},
         capabilities: {advancePhase: false, pause: true, publish: false, editSettings: true, useAdvancedPhases: true, initializePhase6: false, archive: true},
-        links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', participants: '/admin/conversations/7/participants', moderation: '/admin/conversations/7/flags', invitations: '/admin/conversations/7/invites', roles: '/admin/conversations/7/roles', statements: '/admin/conversations/7/statements', featuredStatements: '/admin/conversations/7/featured', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
+        links: {self: '/api/v1/admin/conversations/7', participantView: '/c/community-strategy', moderation: '/admin/conversations/7/flags', statements: '/admin/conversations/7/statements', settings: '/admin/conversations/7/settings', termination: '/admin/conversations/7/termination'},
       },
   } as components['schemas']['AdminPhaseAdvanceReceipt'];
   return {...receipt, transition: {...receipt.transition, ...transition}};

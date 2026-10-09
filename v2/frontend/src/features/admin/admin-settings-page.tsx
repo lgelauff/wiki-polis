@@ -181,24 +181,30 @@ function LockGlyph({label}: {label: string}) {
 }
 
 /**
- * The four Settings tabs, in the order the strip shows them.
+ * The Settings tabs, in the order the strip shows them: Basics · Access · Invitations ·
+ * Access codes · Roles.
  *
- * The third is named by the answer to "who gets in": a consultation gated on voucher codes
- * has vouchers to manage, everything else has an invitation list. Both paths stay routable
- * whichever the answer is, so a link to one of them never lands on a page that says the
- * other thing is what this consultation uses. */
-function settingsTabs(conversationId: number, gatingType: GatingType, msg: Message): SectionTab[] {
+ * Invitations is always there: whatever the answer to "who gets in", a consultation can
+ * hold stored invitations, and that page is where they are read and removed. When the
+ * invitation list is not the answer, the tab looks like every other tab and its page greys
+ * its content instead (`AdminInvitationsPage`). Access codes is there only on a consultation
+ * gated on access codes, which is the one kind that has codes to manage -- and on its own
+ * page, reached by an old link after the answer changed, so the strip still marks the page
+ * the reader is on. Each tab has its own id, so each page marks exactly one tab as current.
+ *
+ * The Access codes page keeps the address `…/settings/vouchers`: "voucher" was the earlier
+ * word for an access code, and the address is not shown to anyone. */
+function settingsTabs(
+  conversationId: number, gatingType: GatingType, tab: SettingsTab, msg: Message,
+): SectionTab[] {
   const base = `/admin/conversations/${conversationId}/settings`;
   return [
     {id: 'basics', label: msg('admin-settings-tab-basics'), href: `${base}/basics`},
     {id: 'access', label: msg('admin-access-heading'), href: `${base}/access`},
-    // One id for both kinds, so a voucher consultation sent to Invitations (or the
-    // reverse) still marks this tab as the current one.
-    {id: 'membership',
-      label: gatingType === 'voucher'
-        ? msg('admin-settings-tab-vouchers')
-        : msg('admin-settings-tab-invitations'),
-      href: gatingType === 'voucher' ? `${base}/vouchers` : `${base}/invitations`},
+    {id: 'invitations', label: msg('admin-settings-tab-invitations'), href: `${base}/invitations`},
+    ...(gatingType === 'voucher' || tab === 'vouchers'
+      ? [{id: 'vouchers', label: msg('admin-settings-tab-vouchers'), href: `${base}/vouchers`}]
+      : []),
     {id: 'roles', label: msg('admin-settings-tab-roles'), href: `${base}/roles`},
   ];
 }
@@ -242,8 +248,8 @@ export function AdminSettingsFrame({announcer, children, conversationId, gatingT
       <div className="admin-page settings-page">
         <h1>{msg('admin-settings-heading')}</h1>
         <AdminTabStrip label={msg('admin-settings-tabs-aria')}
-          tabs={settingsTabs(conversationId, gatingType, msg)}
-          current={tab === 'invitations' || tab === 'vouchers' ? 'membership' : tab} />
+          tabs={settingsTabs(conversationId, gatingType, tab, msg)}
+          current={tab} />
         {children}
       </div>
     </AdminShell>
@@ -251,7 +257,8 @@ export function AdminSettingsFrame({announcer, children, conversationId, gatingT
 }
 
 /**
- * The Vouchers tab (#478 item 4): the strip and one line.
+ * The Access codes tab (#478 item 4; the address is still `…/settings/vouchers`): the strip
+ * and one line.
  *
  * Everything an organizer would do here — generate a batch, import codes, check one,
  * withdraw it — needs an endpoint the admin API does not have today; codes are managed by
@@ -268,7 +275,7 @@ export function AdminSettingsVouchersPage({conversationId}: {conversationId: num
       lifecycle={lifecycle}
       tab="vouchers"
     >
-      <AdminComing what="generating, importing, checking and withdrawing voucher codes here" issue={368} />
+      <AdminComing what="generating, importing, checking and withdrawing access codes here" issue={368} />
     </AdminSettingsFrame>
   );
 }

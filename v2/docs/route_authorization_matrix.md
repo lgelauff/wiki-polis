@@ -10,7 +10,8 @@
 > trustworthy.
 
 This is the security reference for reviewing route additions and authorization
-changes. It is a *reference to the code*, not a design document — for why the system
+changes. Which admin page lives at which address, and what each role sees
+there, is in [`admin_site_map.md`](admin_site_map.md). It is a *reference to the code*, not a design document — for why the system
 is shaped this way see [`../spec_architecture.md`](../spec_architecture.md) and
 [`../adr/0004-versioned-browser-api-and-spa.md`](../adr/0004-versioned-browser-api-and-spa.md).
 

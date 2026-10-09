@@ -172,12 +172,12 @@ test('advances a conversation from the server-described lifecycle console', asyn
 
   expect(await screen.findByText('You are in phase 2 of 3')).toBeVisible();
   expect(screen.getByText('Report phase reached — not yet published.')).toBeVisible();
-  expect(screen.getByRole('link', {name: /Participants/})).toHaveAttribute(
-    'href', '/admin/conversations/7/participants',
-  );
+  // The sections stay one click away after the move, from the console's sidebar.
+  expect(within(screen.getByRole('navigation', {name: 'Admin sections'}))
+    .getByRole('link', {name: 'Content'})).toHaveAttribute('href', '/admin/conversations/7/statements');
 });
 
-test('the lifecycle console writes no setting of its own, and points at the page that does', async () => {
+test('the lifecycle console writes no setting of its own; the sidebar points at the page that does', async () => {
   // This test used to drive the console's own settings and recommendation-tier forms. Both
   // edited fields the settings page edits too, so they were removed; what is pinned now is
   // the absence. Both endpoints are wired to fail, so any surviving writer would be loud.
@@ -196,11 +196,10 @@ test('the lifecycle console writes no setting of its own, and points at the page
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7']}><App /></MemoryRouter></QueryClientProvider>);
 
   await screen.findByRole('heading', {name: 'Community strategy'});
-  // #477: the console shell's sidebar carries a Settings link of its own, so the card is
-  // named whole (title and description) to tell the two apart.
-  expect(screen.getByRole('link', {name: 'Settings Title, introduction and access'})).toHaveAttribute(
-    'href', '/admin/conversations/7/settings',
-  );
+  // The settings page is reached from the console sidebar (the Overview's own card for it
+  // went with the "Content & access" block).
+  expect(within(screen.getByRole('navigation', {name: 'Admin sections'}))
+    .getByRole('link', {name: 'Settings'})).toHaveAttribute('href', '/admin/conversations/7/settings');
   expect(screen.queryByRole('button', {name: /^Save( settings)?$/})).toBeNull();
   expect(screen.queryByRole('button', {name: 'Save recommendations'})).toBeNull();
   expect(screen.queryByLabelText('Complexity tier')).toBeNull();
@@ -565,7 +564,7 @@ test.each([
 
 test.each([
   ['invitations', 'Invitations'],
-  ['vouchers', 'Vouchers'],
+  ['vouchers', 'Access codes'],
   ['roles', 'Roles'],
 ])('the Settings tab …/settings/%s is routed to its page', async (tab, heading) => {
   // Guards the routes themselves: a later change that drops one would fall through to the
