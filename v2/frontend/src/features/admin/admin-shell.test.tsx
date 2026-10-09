@@ -6,6 +6,8 @@ import {afterEach, expect, test} from 'vitest';
 
 import type {components} from '../../api/schema';
 import {AdminShell} from './admin-shell';
+import {useAnnounce} from './admin-announcer';
+import {LegacyToast} from '../legacy/legacy-toast';
 import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
 import {server} from '../../test/server';
@@ -56,17 +58,28 @@ function serveSession(overrides: Partial<Session> = {}) {
   server.use(http.get(SESSION_URL, () => HttpResponse.json({data})));
 }
 
-function renderShell(options: {data?: Lifecycle; gatingType?: 'invite_only' | 'voucher' | 'wiki_based' | null; toast?: React.ReactNode} = {}) {
+function renderShell(options: {
+  children?: React.ReactNode;
+  data?: Lifecycle;
+  gatingType?: 'invite_only' | 'voucher' | 'wiki_based' | null;
+  section?: 'overview' | 'settings' | 'moderation' | 'content';
+  subPage?: string;
+  path?: string;
+  toast?: React.ReactNode;
+} = {}) {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter initialEntries={['/admin/conversations/7']}>
+      {/* Any admin URL: the frame must not read where it is from the address bar. */}
+      <MemoryRouter initialEntries={[options.path ?? '/admin/conversations/7/settings/basics']}>
         <MessageProvider>
           <AdminShell
             title="Community strategy"
             data={options.data ?? lifecycle}
             gatingType={options.gatingType ?? null}
+            section={options.section ?? 'overview'}
+            subPage={options.subPage}
             toast={options.toast ?? null}
-            children={null}
+            children={options.children ?? null}
           />
         </MessageProvider>
       </MemoryRouter>
@@ -100,8 +113,9 @@ test('the sidebar names the four sections and points each at the fixture href', 
   expect(within(nav).getByRole('link', {name: 'Settings'})).toHaveAttribute('href', '/admin/conversations/7/settings');
   expect(within(nav).getByRole('link', {name: /^Moderation/})).toHaveAttribute('href', '/admin/conversations/7/flags');
   expect(within(nav).getByRole('link', {name: 'Content'})).toHaveAttribute('href', '/admin/conversations/7/statements');
-  // Overview is the page the frame is on, so it is marked as the current one and points
-  // at the current path: the DTO's links.* cover the other sections, not this one.
+  // The DTO's links.* cover the other sections, not Overview, so the client builds that
+  // one from the conversation id -- the frame is on some other URL and Overview still
+  // points at the consultation's own page.
   expect(within(nav).getByRole('link', {name: 'Overview'})).toHaveAttribute('href', '/admin/conversations/7');
   expect(within(nav).getByRole('link', {name: 'Overview'})).toHaveAttribute('aria-current', 'page');
   // No sub-page links: a leaf is reached from the page it belongs to, not from the frame.
@@ -145,14 +159,69 @@ test('the top bar repeats no section link: the sidebar is the one way in', async
 
 test('the breadcrumb ends at the current section', async () => {
   serveSession();
-  renderShell();
+  renderShell({section: 'settings'});
 
   const crumbs = await screen.findByRole('navigation', {name: 'Admin breadcrumb'});
   const items = within(crumbs).getAllByRole('listitem');
   expect(items).toHaveLength(2);
   expect(items[0]).toHaveTextContent('Community strategy');
-  expect(items[1]).toHaveTextContent('Overview');
+  expect(items[1]).toHaveTextContent('Settings');
   expect(items[1]).toHaveAttribute('aria-current', 'page');
+  // Only the last crumb is the current page: the section is where the page sits, not
+  // the page itself, once the page has a name of its own.
+  expect(items[0]).not.toHaveAttribute('aria-current');
+});
+
+test('on Overview the breadcrumb is the title and Overview, and Overview is current', async () => {
+  serveSession();
+  renderShell({section: 'overview'});
+
+  const crumbs = await screen.findByRole('navigation', {name: 'Admin breadcrumb'});
+  const items = within(crumbs).getAllByRole('listitem');
+  expect(items.map((item) => item.textContent)).toEqual(['Community strategy', 'Overview']);
+  expect(items[1]).toHaveAttribute('aria-current', 'page');
+});
+
+test('a page with a name of its own adds it as the last crumb', async () => {
+  serveSession();
+  renderShell({section: 'content', subPage: 'Statements'});
+
+  const crumbs = await screen.findByRole('navigation', {name: 'Admin breadcrumb'});
+  const items = within(crumbs).getAllByRole('listitem');
+  expect(items.map((item) => item.textContent)).toEqual([
+    'Community strategy', 'Content', 'Statements',
+  ]);
+  expect(items[2]).toHaveAttribute('aria-current', 'page');
+  expect(items[1]).not.toHaveAttribute('aria-current');
+});
+
+test('each section marks itself in the sidebar and no other', async () => {
+  serveSession();
+  for (const [section, name] of [
+    ['overview', 'Overview'], ['settings', 'Settings'],
+    ['moderation', 'Moderation'], ['content', 'Content'],
+  ] as const) {
+    const {unmount} = renderShell({section});
+    const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
+    expect(within(nav).getByRole('link', {name: new RegExp(`^${name}`)}))
+      .toHaveAttribute('aria-current', 'page');
+    // Exactly one section is current, so the sidebar never says "you are here" twice.
+    expect(within(nav).getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'page'))
+      .toHaveLength(1);
+    unmount();
+  }
+});
+
+test('the sidebar marks the section the frame is on, whatever the URL says', async () => {
+  // The address bar can be anything: the prop is what says which section this is.
+  serveSession();
+  renderShell({section: 'moderation', path: '/admin/conversations/7/content/statements'});
+
+  const nav = await screen.findByRole('navigation', {name: 'Admin sections'});
+  expect(within(nav).getByRole('link', {name: /Moderation/})).toHaveAttribute('aria-current', 'page');
+  expect(within(nav).getByRole('link', {name: 'Content'})).not.toHaveAttribute('aria-current');
+  // Overview still points at the consultation's own page, not at the URL being rendered.
+  expect(within(nav).getByRole('link', {name: 'Overview'})).toHaveAttribute('href', '/admin/conversations/7');
 });
 
 test('the session is ended by a form posting the CSRF token to the server link', async () => {
@@ -306,9 +375,12 @@ test('the frame has one main, one polite live region and no other landmark', asy
   expect(container.querySelectorAll('main')).toHaveLength(1);
   expect(container.querySelector('main')).toHaveAttribute('id', 'main');
   expect(container.querySelector('main')).toHaveAttribute('tabindex', '-1');
-  // One region announces results; the notice slot below it is not a second one.
+  // One polite and one assertive region announce results, both there (and empty) before
+  // the first announcement; the notice slot below them is not a third.
   expect(container.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
+  expect(container.querySelectorAll('[aria-live="assertive"]')).toHaveLength(1);
   expect(container.querySelector('[aria-live="polite"]')).toBeEmptyDOMElement();
+  expect(container.querySelector('[aria-live="assertive"]')).toBeEmptyDOMElement();
   // The notice slot is a non-fixed area at the top of <main>, not a floating overlay.
   const notices = container.querySelector('.admin-shell__notices')!;
   expect(notices).toBe(container.querySelector('main')!.firstElementChild);
@@ -327,4 +399,48 @@ test('under qqx the frame is all keys but the two "also coming" lines', async ()
     'Also coming: Admin home — not available yet (#473)',
     'Also coming: switching between consultations — not available yet (#473)',
   ])).toEqual([]);
+});
+
+/** A button inside the frame that announces through the shell, as a row action does. */
+function AnnounceButton({text, politeness}: {text: string; politeness?: 'polite' | 'assertive'}) {
+  const announce = useAnnounce();
+  return <button type="button" onClick={() => announce?.(text, politeness)}>Act</button>;
+}
+
+test('an announcement from inside the frame is read out, and the same words twice are read twice', async () => {
+  serveSession();
+  const {container} = renderShell({children: <AnnounceButton text="Statement 12 hidden." />});
+
+  const button = await screen.findByRole('button', {name: 'Act'});
+  const region = container.querySelector('[aria-live="polite"]')!;
+  fireEvent.click(button);
+  expect(region).toHaveTextContent('Statement 12 hidden.');
+  const first = region.firstElementChild;
+  fireEvent.click(button);
+  // Same text, new node: the region gets an addition, so a screen reader reads it again.
+  expect(region).toHaveTextContent('Statement 12 hidden.');
+  expect(region.firstElementChild).not.toBe(first);
+  expect(container.querySelector('[aria-live="assertive"]')).toBeEmptyDOMElement();
+});
+
+test('a failure is announced in the assertive region', async () => {
+  serveSession();
+  const {container} = renderShell({children: <AnnounceButton text="Could not save." politeness="assertive" />});
+
+  fireEvent.click(await screen.findByRole('button', {name: 'Act'}));
+  expect(container.querySelector('[aria-live="assertive"]')).toHaveTextContent('Could not save.');
+  expect(container.querySelector('[aria-live="polite"]')).toBeEmptyDOMElement();
+});
+
+test('a toast in the frame reads out through the shell region, not a role of its own', async () => {
+  serveSession();
+  const {container} = renderShell({
+    toast: <LegacyToast toast={{id: 1, category: 'error', message: 'Could not hide the statement.'}} onDismiss={() => {}} />,
+  });
+
+  await screen.findByRole('navigation', {name: 'Admin sections'});
+  const toast = container.querySelector('.toast')!;
+  expect(toast).toHaveTextContent('Could not hide the statement.');
+  expect(toast).not.toHaveAttribute('role');
+  expect(container.querySelector('[aria-live="assertive"]')).toHaveTextContent('Could not hide the statement.');
 });

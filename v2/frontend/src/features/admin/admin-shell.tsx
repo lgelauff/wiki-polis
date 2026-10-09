@@ -8,6 +8,7 @@ import {InternalLink} from '../../internal-link';
 import {useLocale, useMessage, type Message} from '../../i18n/messages';
 import {escapeHtml, richHtml} from '../../i18n/rich-html';
 import {roleLabel} from '../../i18n/server-labels';
+import {AnnounceProvider, AnnouncerRegions, useAnnouncer, type Announcer} from './admin-announcer';
 import './console.css';
 
 type Lifecycle = components['schemas']['AdminLifecycle'];
@@ -147,23 +148,36 @@ function LanguageSwitcher({locales, active, msg}: {
   );
 }
 
+/** The four sections of the console. The page inside the frame names the one it is on;
+ *  the frame is what marks it, and what builds the sidebar and the breadcrumb from it. */
+export type AdminSection = 'overview' | 'settings' | 'moderation' | 'content';
+
 /** The frame every admin page sits in: sidebar, top bar, one main, one announcement region
  *  and one notification slot. It renders only what the lifecycle DTO already carries, so a
  *  page inside it needs no new server field to get a complete frame.
  *
  *  `title` is the document title, assembled by the page because the wording is that page's.
+ *  `section` is the section the page belongs to: the sidebar marks it and the breadcrumb
+ *  names it. `subPage` is the page's own name within that section, added to the breadcrumb
+ *  when the page has one.
  *  `gatingType` comes from the settings query the page already runs, and only decides
  *  whether the participant view is a preview. */
-export function AdminShell({children, data, gatingType, title, toast}: {
+export function AdminShell({announcer, children, data, gatingType, section, subPage, title, toast}: {
+  announcer?: Announcer | undefined;
   children: ReactNode;
   data: Lifecycle;
   gatingType: GatingType;
+  section: AdminSection;
+  subPage?: string | undefined;
   title: string;
   toast?: ReactNode;
 }) {
   const msg = useMessage();
+  // A page that announces from its own code hands its announcer in; otherwise the frame
+  // keeps one for whatever is rendered inside it.
+  const ownAnnouncer = useAnnouncer();
+  const {announcement, announce} = announcer ?? ownAnnouncer;
   const activeLocale = useLocale();
-  const location = useLocation();
   const {data: session} = useSuspenseQuery(sessionQuery());
   const narrow = useNarrowViewport();
   const [sectionsOpen, setSectionsOpen] = useState(false);
@@ -172,20 +186,25 @@ export function AdminShell({children, data, gatingType, title, toast}: {
   const authenticated = session.state === 'authenticated';
   // A voucher account is signed in but has no username to show (#368).
   const signedIn = authenticated || session.state === 'voucher';
-  // Overview is the page the shell is on. The DTO has no link to it — `links.*` covers the
-  // other sections and the participant view — so it is the current path, which is right for
-  // as long as this shell carries the Overview. When the other pages move in, this wants a
-  // `links.overview` from the server rather than a URL the client builds for itself.
-  const overviewHref = location.pathname;
+  // Overview is the one section `links.*` does not cover -- the DTO links the other
+  // sections and the participant view, not the page this frame is built around -- so the
+  // client builds it from the conversation the lifecycle DTO names. It is an ordinary
+  // client path, rendered through InternalLink like the other sidebar links.
+  const overviewHref = `/admin/conversations/${data.conversation.id}`;
   const openFlags = data.counts.openFlags;
-  const sections = [
-    {id: 'overview', label: msg('admin-shell-overview'), href: overviewHref, current: true},
+  const sections: {id: AdminSection; label: string; href: string; badge?: string | null}[] = [
+    {id: 'overview', label: msg('admin-shell-overview'), href: overviewHref},
     {id: 'settings', label: msg('admin-overview-card-settings'), href: data.links.settings},
     {id: 'moderation', label: msg('admin-shell-moderation'), href: data.links.moderation,
       // A zero is not worth a badge: an empty counter is noise, not information.
       badge: openFlags > 0 ? msg('adminconv-open-count', openFlags) : null},
     {id: 'content', label: msg('admin-shell-content'), href: data.links.statements},
   ];
+  const current = sections.find((item) => item.id === section);
+  // The breadcrumb is title / section / sub-page, and the last crumb is the page itself:
+  // the trail a screen reader reads back is the one that ends where the reader is.
+  const crumbs = [data.conversation.title, current?.label ?? null, subPage ?? null]
+    .filter((crumb): crumb is string => Boolean(crumb));
 
   return (
     <div className="admin-shell">
@@ -193,8 +212,16 @@ export function AdminShell({children, data, gatingType, title, toast}: {
         <p className="admin-shell__coming" lang="en">Also coming: Admin home — not available yet (#473)</p>
         <nav className="admin-shell__crumbs" aria-label={msg('admin-crumb-aria')}>
           <ol>
-            <li className="admin-shell__crumb">{data.conversation.title}</li>
-            <li className="admin-shell__crumb" aria-current="page">{msg('admin-shell-overview')}</li>
+            {crumbs.map((crumb, index) => (
+              <li
+                className="admin-shell__crumb"
+                // By position: a consultation may be titled like a section ("Settings").
+                key={index}
+                aria-current={index === crumbs.length - 1 ? 'page' : undefined}
+              >
+                {crumb}
+              </li>
+            ))}
           </ol>
         </nav>
         <div className="admin-shell__tools">
@@ -256,7 +283,7 @@ export function AdminShell({children, data, gatingType, title, toast}: {
                 <InternalLink
                   href={section.href}
                   className="admin-shell__section-link"
-                  aria-current={section.current ? 'page' : undefined}
+                  aria-current={section.id === current?.id ? 'page' : undefined}
                 >
                   <span>{section.label}</span>
                   {section.badge && <span className="admin-shell__badge">{section.badge}</span>}
@@ -269,11 +296,12 @@ export function AdminShell({children, data, gatingType, title, toast}: {
         <main id="main" tabIndex={-1} className="admin-shell__main">
           {/* The notification slot is an area at the top of the content, not an overlay:
               a fixed toast covers what it sits on (WCAG 2.4.11). */}
-          <div className="admin-shell__notices">{toast}</div>
-          {/* The one region that announces a result. Empty by design: the toast carries
-              role=status or role=alert, so this must not become a second live region. */}
-          <div className="admin-shell__announcer" aria-live="polite" />
-          {children}
+          <div className="admin-shell__notices"><AnnounceProvider value={announce}>{toast}</AnnounceProvider></div>
+          {/* The one place that announces a result: a toast, a save, a row action. Always
+              mounted, and the only live regions in the frame -- the toast inside the shell
+              reads out through it rather than carrying a role of its own. */}
+          <AnnouncerRegions announcement={announcement} />
+          <AnnounceProvider value={announce}>{children}</AnnounceProvider>
         </main>
       </div>
 
