@@ -107,9 +107,9 @@ test('each status says the server’s word, archived included', async () => {
     expect(cell.children).toHaveLength(0);
     expect(cell.className).toBe('');
   }
-  // A group's count is a bare number beside its name, not in brackets.
+  // A group's count stands in brackets beside its name, so it does not read as part of it (owner, 2026-10-09).
   expect(screen.getByText('Practice Environment', {selector: 'summary'}).querySelector('.admin-count'))
-    .toHaveTextContent(/^1$/);
+    .toHaveTextContent(/^\(1\)$/);
 });
 
 test('the practice item and the archived one sit in collapsed groups, not in the table', async () => {

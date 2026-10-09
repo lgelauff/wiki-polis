@@ -888,7 +888,7 @@
   text-align: end;
 }
 
-/* A count is a bare number beside what it counts: muted, tabular, never in brackets. */
+/* A count stands in brackets beside what it counts, so it does not read as part of the name: muted, tabular. */
 .admin-shell .admin-count {
   color: var(--shell-muted);
   font-weight: 400;

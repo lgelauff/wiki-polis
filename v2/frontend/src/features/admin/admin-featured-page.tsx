@@ -225,7 +225,7 @@ export function AdminFeaturedPage({conversationId, csrfToken}: {
         <AdminTabStrip label={msg('admin-shell-moderation')}
           tabs={moderationTabs(conversationId, msg)} current="featured" />
 
-        <h2>{msg('featured-confirmed-heading')}{' '}<span className="admin-count">{data.selected.length}</span></h2>
+        <h2>{msg('featured-confirmed-heading')}{' '}<span className="admin-count">({data.selected.length})</span></h2>
         {data.selected.length ? (
           <ul className="admin-rows">
               {data.selected.map((row) => (
