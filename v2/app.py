@@ -2425,6 +2425,8 @@ _SPA_ROUTE_PATTERNS: tuple[str, ...] = (
     r'/admin/conversations/\d+/statements',
     r'/admin/conversations/\d+/featured',
     r'/admin/conversations/\d+/participants',
+    r'/admin/conversations/\d+/content/statements',
+    r'/admin/conversations/\d+/content/participants',
     r'/admin/conversations/\d+/flags',
     r'/admin/conversations/\d+/moderation/queue',
     r'/admin/conversations/\d+/moderation/flags',
@@ -3509,6 +3511,8 @@ def _admin_participant_roster_api_payload(conv_id: int) -> dict:
             conversation_id=conv.id,
         ),
         conversation_link=_admin_client_link(conv.id),
+        # A moderator who does not also organize sees pseudonyms only.
+        include_usernames=_can_organize(conv),
     )
 
 

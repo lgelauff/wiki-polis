@@ -1,26 +1,30 @@
 import {Fragment, useCallback, useState, type FormEvent} from 'react';
 import {useMutation, useQueryClient, useSuspenseQuery} from '@tanstack/react-query';
-import {Link} from 'react-router-dom';
 
 import type {components} from '../../api/schema';
 import {ApiContractError} from '../../api/client';
 import {
+  adminLifecycleQuery,
+  adminSettingsQuery,
   adminStatementWorkspaceQuery,
   postAdminSeedStatement,
   postAdminStatementImport,
   putAdminStatementModeration,
 } from '../../api/queries';
-import {LegacyShell} from '../legacy/legacy-shell';
+import {useMessage} from '../../i18n/messages';
+import {sortByBasedOn} from './admin-based-on';
+import {AdminComing} from './admin-coming';
+import {AdminShell} from './admin-shell';
+import {useAnnouncer} from './admin-announcer';
+import {useRowFocus} from './admin-row-focus';
+import {AdminTabStrip} from './admin-tab-strip';
+import {contentTabs} from './admin-content-tabs';
 import {LegacyToast, type LegacyToastMessage} from '../legacy/legacy-toast';
 
 type Workspace = components['schemas']['AdminStatementWorkspace'];
 type Statement = components['schemas']['AdminStatement'];
 type Status = Statement['moderation'];
 type Feedback = LegacyToastMessage;
-
-function legacyTruncate(value: string, length = 28, leeway = 5): string {
-  return value.length <= length + leeway ? value : `${value.slice(0, length - 1)}…`;
-}
 
 function legacyError(error: Error, fallback: string): string {
   return error instanceof ApiContractError ? error.message : fallback;
@@ -39,38 +43,6 @@ function feedbackStyle(category: Feedback['category']) {
     fontSize: 13,
     marginBottom: '1.5rem',
   };
-}
-
-function StatementIdentity({statement}: {statement: Statement}) {
-  const provenance = statement.provenance;
-  const scores = provenance?.scores ?? [];
-  const title = provenance
-    ? `Derived from statement #${provenance.derivedFromId}. Similarity 1.00 = identical.${scores.map((score) => ` ${score.model} ${score.value.toFixed(2)}.`).join('')}`
-    : undefined;
-  return (
-    <td className="muted">
-      {statement.id}{statement.featured && ' ★'}
-      {provenance && (
-        <><br /><span className="prov-badge" title={title}>
-          <span className="sr-only">derived from statement {provenance.derivedFromId}, </span>
-          ↳ #{provenance.derivedFromId}
-          {scores.map((score) => (
-            <span key={score.model}> · {score.model}&nbsp;{score.value.toFixed(2)}</span>
-          ))}
-        </span></>
-      )}
-    </td>
-  );
-}
-
-function VoteCounts({statement}: {statement: Statement}) {
-  return (
-    <td className="stmt-votes">
-      <span className="vcount vcount--agree" title="Agree votes"><span className="vlabel">A</span> {statement.votes.agree}</span>{' '}
-      <span className="vcount vcount--pass" title="Pass votes"><span className="vlabel">P</span> {statement.votes.pass}</span>{' '}
-      <span className="vcount vcount--disagree" title="Disagree votes"><span className="vlabel">D</span> {statement.votes.disagree}</span>
-    </td>
-  );
 }
 
 const actions: Record<Status, {status: Status; label: string; className?: string}[]> = {
@@ -112,7 +84,7 @@ function StatementActions({
     },
   });
   return (
-    <td className="stmt-actions">
+    <div className="admin-row__actions">
       {actions[statement.moderation].map((action, index) => (
         <Fragment key={action.status}>
           {index > 0 && ' '}
@@ -133,60 +105,122 @@ function StatementActions({
           </form>
         </Fragment>
       ))}
-    </td>
+    </div>
   );
 }
 
-function StatementTable({
-  status, statements, conversationId, csrfToken, onMove, onError,
-}: {
-  status: Status;
-  statements: Statement[];
+/** Which statements the page shows, chosen by the state switch. Approved is the default
+ *  here: on the Content side the question is what the consultation says, not what is
+ *  waiting, and what is waiting is Moderation's page. */
+type Position = 'approved' | 'unmoderated' | 'hidden';
+
+const POSITIONS: {id: Position; glyph: string; key: string}[] = [
+  {id: 'approved', glyph: '✓', key: 'admin-moderation-state-approved'},
+  {id: 'unmoderated', glyph: '○', key: 'admin-moderation-state-unmoderated'},
+  {id: 'hidden', glyph: '✕', key: 'admin-moderation-state-hidden'},
+];
+
+const LIST: Record<Position, 'approved' | 'pending' | 'hidden'> = {
+  approved: 'approved',
+  unmoderated: 'pending',
+  hidden: 'hidden',
+};
+
+/** What is said when a statement has moved to a list. */
+const MOVED: Record<Status, string> = {
+  approved: 'admin-moderation-statement-approved',
+  hidden: 'admin-moderation-statement-hidden',
+  pending: 'admin-moderation-statement-unmoderated',
+};
+
+/** "Most responses" is what a reader of the statements wants first; "Oldest first" is the order
+ *  they arrived; "Based on" groups a correction under the statement it corrects, with the
+ *  same function as the Moderation queue (`sortByBasedOn`). All three sort what is already
+ *  loaded. */
+type Sort = 'most-responses' | 'oldest' | 'based-on';
+
+function responseTotal(statement: Statement): number {
+  return statement.votes.agree + statement.votes.pass + statement.votes.disagree;
+}
+
+function sortStatements(rows: Statement[], sort: Sort): Statement[] {
+  if (sort === 'based-on') return sortByBasedOn(rows);
+  const byId = [...rows].sort((left, right) => left.id - right.id);
+  if (sort === 'most-responses') {
+    return byId.sort((left, right) => responseTotal(right) - responseTotal(left) || left.id - right.id);
+  }
+  return byId;
+}
+
+/** Where a derived statement came from, in the words and format the old statement table
+ *  used: "↳ #N", then each similarity score, muted. "↳ #N" jumps to the source's row when
+ *  that row is in the list on screen; otherwise there is nothing to jump to and it is text. */
+function StatementSource({provenance, sourceShown}: {
+  provenance: NonNullable<Statement['provenance']>;
+  sourceShown: boolean;
+}) {
+  const id = provenance.derivedFromId;
+  const title = `Derived from statement #${id}. Similarity 1.00 = identical.${provenance.scores.map((score) => ` ${score.model} ${score.value.toFixed(2)}.`).join('')}`;
+  const marker = (
+    <>
+      <span className="sr-only">derived from statement {id}</span>
+      <span aria-hidden="true">{`↳ #${id}`}</span>
+    </>
+  );
+  return (
+    <span className="admin-row__source" title={title}>
+      {' '}
+      {sourceShown ? <a href={`#statement-${id}`}>{marker}</a> : marker}
+      {provenance.scores.map((score) => (
+        <span key={score.model}> · {score.model}&nbsp;{score.value.toFixed(2)}</span>
+      ))}
+    </span>
+  );
+}
+
+/** One statement as one row: a star when it is featured, the text, its number as a muted
+ *  suffix (what "↳ #N", Featured's add by number and "Corrects statement #" refer to),
+ *  where it came from, its votes and what can be done to it. The row's id is the target of
+ *  "↳ #N" on the rows derived from it. */
+function StatementRow({conversationId, statement, sourceShown, csrfToken, move, onError}: {
   conversationId: number;
+  statement: Statement;
+  sourceShown: boolean;
   csrfToken: string;
-  onMove: (statement: Statement, status: Status) => void;
+  move: (statement: Statement, status: Status) => void;
   onError: (message: string) => void;
 }) {
-  const labels: Record<Status, string> = {
-    pending: 'Pending review', approved: 'Approved', hidden: 'Hidden',
-  };
-  const empty: Record<Status, string> = {
-    pending: 'No statements awaiting review.',
-    approved: 'No approved statements.',
-    hidden: 'No hidden statements.',
-  };
+  const msg = useMessage();
   return (
-    <>
-      <h3 className="section-heading">
-        {labels[status]}
-        {!!statements.length && <>{' '}<span className="stmt-count">{statements.length}</span></>}
-      </h3>
-      {!statements.length ? (
-        <p className="muted" style={{marginBottom: '1.5rem'}}>{empty[status]}</p>
-      ) : (
-        <table className="admin-table stmt-table">
-          <thead><tr><th>#</th><th>Text</th><th>Votes</th><th /></tr></thead>
-          <tbody>
-            {statements.map((statement) => (
-              <tr key={statement.id}>
-                {status === 'hidden'
-                  ? <td className="muted">{statement.id}</td>
-                  : <StatementIdentity statement={statement} />}
-                <td className="stmt-text">{statement.text}</td>
-                <VoteCounts statement={statement} />
-                <StatementActions
-                  statement={statement}
-                  conversationId={conversationId}
-                  csrfToken={csrfToken}
-                  onMove={onMove}
-                  onError={onError}
-                />
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </>
+    <li className="admin-row" id={`statement-${statement.id}`} data-row-id={statement.id}>
+      <div className="admin-row__text">
+        {statement.featured && (
+          <span className="admin-row__star" title={msg('conv-arg-featured-label')}>
+            <span aria-hidden="true">★ </span>
+            <span className="sr-only">{msg('conv-arg-featured-label')}: </span>
+          </span>
+        )}
+        {statement.text}
+        <span className="admin-row__suffix">{` #${statement.id}`}</span>
+        {statement.provenance && (
+          <StatementSource provenance={statement.provenance} sourceShown={sourceShown} />
+        )}
+      </div>
+      <div className="admin-row__counts">
+        <span title={msg('stmts-vote-agree-title')}>{msg('stmts-vlabel-a')} {statement.votes.agree}</span>
+        {' · '}
+        <span title={msg('stmts-vote-pass-title')}>{msg('stmts-vlabel-p')} {statement.votes.pass}</span>
+        {' · '}
+        <span title={msg('stmts-vote-disagree-title')}>{msg('stmts-vlabel-d')} {statement.votes.disagree}</span>
+      </div>
+      <StatementActions
+        statement={statement}
+        conversationId={conversationId}
+        csrfToken={csrfToken}
+        onMove={move}
+        onError={onError}
+      />
+    </li>
   );
 }
 
@@ -194,9 +228,15 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   conversationId: number;
   csrfToken: string;
 }) {
+  const msg = useMessage();
   const queryClient = useQueryClient();
   const options = adminStatementWorkspaceQuery(conversationId);
   const {data} = useSuspenseQuery(options);
+  const {data: settings} = useSuspenseQuery(adminSettingsQuery(conversationId));
+  const {data: lifecycle} = useSuspenseQuery(adminLifecycleQuery(conversationId));
+  const [position, setPosition] = useState<Position>('approved');
+  const [sort, setSort] = useState<Sort>('most-responses');
+  const [search, setSearch] = useState('');
   const [feedback, setFeedback] = useState<Feedback[]>([]);
   const [toast, setToast] = useState<LegacyToastMessage | null>(() => (
     data.dataAvailability.statements ? null : {
@@ -209,6 +249,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
   const [derivedFrom, setDerivedFrom] = useState('');
   const [importText, setImportText] = useState('');
   const dismissToast = useCallback(() => setToast(null), []);
+  const announcer = useAnnouncer();
 
   function showFeedback(messages: Omit<Feedback, 'id'>[]) {
     const timestamp = Date.now();
@@ -263,16 +304,24 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           message: `${receipt.outcome.skippedExisting} statement${receipt.outcome.skippedExisting === 1 ? '' : 's'} already existed in this conversation and were skipped.`,
         });
       }
-      if (receipt.outcome.imported && !receipt.outcome.skippedExisting
-          && !receipt.outcome.failedUpstream) {
+      // A statement the voting service refused is not "skipped": it was not added, and
+      // trying again may add it. It is counted on its own, and the text stays in the box.
+      const failed = receipt.outcome.failedUpstream;
+      if (failed) {
+        messages.push({
+          category: 'error',
+          message: `${failed} statement${failed === 1 ? '' : 's'} could not be added by the voting service. The text is still in the box: import it again to retry; lines already added are skipped.`,
+        });
+      }
+      if (receipt.outcome.imported && !receipt.outcome.skippedExisting && !failed) {
         messages.push({
           category: 'import_result',
           message: `✓ ${receipt.outcome.imported} statement${receipt.outcome.imported === 1 ? '' : 's'} imported`,
         });
-      } else if (receipt.outcome.imported) {
+      } else if (receipt.outcome.imported || failed) {
         messages.push({
           category: 'import_result',
-          message: `✓ ${receipt.outcome.imported} imported — ⚠ ${receipt.outcome.skippedExisting + receipt.outcome.failedUpstream} skipped`,
+          message: `✓ ${receipt.outcome.imported} imported${receipt.outcome.skippedExisting ? ` — ⚠ ${receipt.outcome.skippedExisting} skipped` : ''}${failed ? ` — ✗ ${failed} not added` : ''}`,
         });
       } else if (receipt.outcome.skippedExisting) {
         messages.push({
@@ -283,7 +332,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
         messages.push({category: 'warning', message: 'No statements were imported — there were no valid rows.'});
         messages.push({category: 'import_result', message: '⚠ 0 imported — Polis returned no result'});
       }
-      setImportText('');
+      if (!failed) setImportText('');
       showFeedback(messages);
       void queryClient.invalidateQueries({queryKey: options.queryKey});
     },
@@ -303,6 +352,10 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
     });
     setFeedback([]);
     setToast(null);
+    // The row leaves the list when the switch is on another position; focus goes to the next
+    // row and the result is said, every time, through the shell's live region.
+    if (status !== LIST[position]) rowRemoved(statement.id);
+    announcer.announce(msg(MOVED[status], statement.id));
   }
 
   function submitImport(event: FormEvent<HTMLFormElement>) {
@@ -337,28 +390,101 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
     importMutation.mutate(rows.map(({text}) => text));
   }
 
-  const title = data.conversation.title;
+  const needle = search.trim().toLowerCase();
+  const total = data.statements.approved.length + data.statements.pending.length
+    + data.statements.hidden.length;
+  const inView = data.statements[LIST[position]];
+  // What the list says when it is empty: that there are no statements at all, that this
+  // position of the switch holds none, or that the search matched none of them.
+  const emptyPosition: Record<Position, string> = {
+    approved: msg('stmts-approved-empty'),
+    unmoderated: msg('stmts-pending-empty'),
+    hidden: msg('stmts-hidden-empty'),
+  };
+  let empty = msg('admin-content-no-match');
+  if (total === 0) empty = msg('admin-content-empty');
+  else if (inView.length === 0) empty = emptyPosition[position];
+  const rows = sortStatements(
+    inView.filter((statement) => needle === ''
+      || statement.text.toLowerCase().includes(needle)),
+    sort,
+  );
+
+  const shown = new Set(rows.map((row) => row.id));
+  const {listRef, emptyRef, rowRemoved} = useRowFocus(rows.map((row) => row.id));
+
   return (
-    <LegacyShell
-      headerMode="admin"
-      title={`Statements — ${title} — Proto`}
-      headerCrumb={(
-        <nav className="header-crumb" aria-label="Admin breadcrumb">
-          <span className="header-crumb-sep">/</span>
-          <Link to="/admin">Admin panel</Link>
-          <span className="header-crumb-sep">/</span>
-          <Link to={data.links.lifecycle}>{legacyTruncate(title)}</Link>
-          <span className="header-crumb-sep">/</span>
-          <span>Statements</span>
-        </nav>
-      )}
+    <AdminShell
+      title={msg('adminconv-doc-title', lifecycle.conversation.title)}
+      data={lifecycle}
+      gatingType={settings.conversation.gatingType}
+      section="content"
+      subPage={msg('adminconv-card-statements')}
       toast={<LegacyToast toast={toast} onDismiss={dismissToast} />}
+      announcer={announcer}
     >
-      <div className="container">
-        <h2>Statements — {title}</h2>
+      <div className="admin-page">
+        <h1>{msg('admin-shell-content')}</h1>
+        <AdminTabStrip label={msg('admin-content-tabs-aria')}
+          tabs={contentTabs(conversationId, msg)} current="statements" />
+
+        <div className="admin-toolbar">
+          <div className="admin-switch">
+            {POSITIONS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={position === item.id}
+                title={msg(item.key)}
+                onClick={() => setPosition(item.id)}
+              >
+                <span aria-hidden="true">{item.glyph}</span>
+                <span className="sr-only">{msg(item.key)}</span>
+                {data.statements[LIST[item.id]].length
+                  ? ` ${data.statements[LIST[item.id]].length}` : ''}
+              </button>
+            ))}
+          </div>
+          <label className="admin-sort">
+            {msg('admin-content-sort-aria')}
+            <select value={sort} onChange={(event) => setSort(event.target.value as Sort)}>
+              <option value="most-responses">{msg('admin-content-sort-most-responses')}</option>
+              <option value="oldest">{msg('admin-moderation-sort-oldest')}</option>
+              <option value="based-on">{msg('admin-moderation-sort-based-on')}</option>
+            </select>
+          </label>
+          <label className="admin-sort">
+            {msg('admin-content-search-aria')}
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+        </div>
+
+        {rows.length ? (
+          <ul className="admin-rows" ref={listRef}>
+            {rows.map((statement) => (
+              <StatementRow
+                key={statement.id}
+                conversationId={conversationId}
+                statement={statement}
+                sourceShown={!!statement.provenance
+                  && shown.has(statement.provenance.derivedFromId)}
+                csrfToken={csrfToken}
+                move={moveStatement}
+                onError={showError}
+              />
+            ))}
+          </ul>
+        ) : data.dataAvailability.statements ? (
+          <p className="admin-empty" ref={emptyRef} tabIndex={-1}>{empty}</p>
+        ) : null /* Lists left empty because the voting service could not be read are not
+          an empty consultation: the error below (and the toast) say what happened. */}
 
         <div className="landing-section" style={{marginBottom: '1.5rem'}}>
-          <h3 style={{fontSize: 16, marginBottom: '.5rem'}}>How statement management works</h3>
+          <h2 style={{fontSize: 16, marginBottom: '.5rem'}}>How statement management works</h2>
           <p className="muted" style={{fontSize: 13, marginBottom: '.6rem'}}>
             Pending statements are held for moderator review. Approve makes a statement visible
             {' '}for participant voting, hide removes it from participant voting, and pending returns
@@ -385,7 +511,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
 
         {!data.seeding.allowed ? (
           <>
-            <h3 className="section-heading">Seed statements locked</h3>
+            <h2 className="section-heading">Seed statements locked</h2>
             <div className="edit-form">
               <p className="muted" style={{marginBottom: 0, fontSize: 13}}>
                 {data.seeding.lockReason} Seed statements can only be added during preparation
@@ -395,7 +521,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           </>
         ) : (
           <>
-            <h3 className="section-heading">Add seed statement</h3>
+            <h2 className="section-heading">Add seed statement</h2>
             <div className="edit-form">
               <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
                 Adds a seed-marked statement that appears early in the voting sequence for participants.
@@ -433,7 +559,7 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
               </form>
             </div>
 
-            <h3 className="section-heading">Import seed statements from text</h3>
+            <h2 className="section-heading">Import seed statements from text</h2>
             <div className="edit-form">
               <p className="muted" style={{marginBottom: '.75rem', fontSize: 13}}>
                 Paste one statement per line. Blank lines are ignored. Maximum {data.seeding.maxStatementsPerImport}
@@ -464,18 +590,13 @@ export function AdminStatementsPage({conversationId, csrfToken}: {
           </>
         )}
 
-        {(['pending', 'approved', 'hidden'] as Status[]).map((status) => (
-          <StatementTable
-            key={status}
-            status={status}
-            statements={data.statements[status]}
-            conversationId={conversationId}
-            csrfToken={csrfToken}
-            onMove={moveStatement}
-            onError={showError}
-          />
-        ))}
+        {/* Arguments are a page in the spec and not one here: there is no admin list endpoint
+            for them yet (#473). */}
+        <AdminComing what="the arguments of this consultation as a list of their own" issue={473} />
+
+        {/* The Approval control (strict moderation) lives on Settings › Basics (#478): it is a
+            setting of the consultation, not of the statement list. */}
       </div>
-    </LegacyShell>
+    </AdminShell>
   );
 }

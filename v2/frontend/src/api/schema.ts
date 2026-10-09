@@ -1899,7 +1899,8 @@ export interface components {
         };
         AdminParticipant: {
             participantId: number;
-            username: string;
+            /** @description The Wikimedia username; null when the viewer moderates but does not organize the consultation, who sees the pseudonym only. */
+            username: string | null;
             pseudonym: string;
             statementProgress: components["schemas"]["AdminStatementProgress"] | null;
             arguments: {

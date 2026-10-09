@@ -89,6 +89,12 @@ TAGS:
     - admin-common-policy-invited
     - admin-common-policy-open
     - admin-common-policy-practice
+    - admin-content-empty
+    - admin-content-no-match
+    - admin-content-search-aria
+    - admin-content-sort-aria
+    - admin-content-sort-most-responses
+    - admin-content-tabs-aria
     - admin-convs-heading
     - admin-crumb-aria
     - admin-elig-event-ph
@@ -129,6 +135,7 @@ TAGS:
     - admin-moderation-state-unmoderated
     - admin-moderation-statement-approved
     - admin-moderation-statement-hidden
+    - admin-moderation-statement-unmoderated
     - admin-nav-panel
     - admin-new-conv-heading
     - admin-overview-card-settings

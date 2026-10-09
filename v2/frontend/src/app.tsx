@@ -54,6 +54,13 @@ const moderationFlagsPath = (conversationId: string) =>
 const moderationFeaturedPath = (conversationId: string) =>
   `/admin/conversations/${conversationId}/moderation/featured`;
 
+/** Where the old statements and participants paths went (#473): both are pages of the
+ *  Content section now. One place, so the two route groups cannot drift apart. */
+const contentStatementsPath = (conversationId: string) =>
+  `/admin/conversations/${conversationId}/content/statements`;
+const contentParticipantsPath = (conversationId: string) =>
+  `/admin/conversations/${conversationId}/content/participants`;
+
 function UnmatchedRoute() {
   // The server 404s any path outside its SPA route table, so this only fires for
   // a client-side path the router does not know (e.g. under /app/*).
@@ -87,9 +94,11 @@ function DeferredRoutes() {
       <Route path="/admin/conversations/:conversationId/settings/vouchers" element={<AdminSettingsVouchersRoute />} />
       <Route path="/admin/conversations/:conversationId/settings/roles" element={<AdminSettingsRolesRoute />} />
       <Route path="/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
-      <Route path="/admin/conversations/:conversationId/statements" element={<AdminStatementsRoute />} />
+      <Route path="/admin/conversations/:conversationId/content/statements" element={<AdminStatementsRoute />} />
+      <Route path="/admin/conversations/:conversationId/content/participants" element={<AdminParticipantsRoute />} />
+      <Route path="/admin/conversations/:conversationId/statements" element={<AdminRedirectRoute to={contentStatementsPath} />} />
       <Route path="/admin/conversations/:conversationId/featured" element={<AdminRedirectRoute to={moderationFeaturedPath} />} />
-      <Route path="/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
+      <Route path="/admin/conversations/:conversationId/participants" element={<AdminRedirectRoute to={contentParticipantsPath} />} />
       <Route path="/admin/conversations/:conversationId/flags" element={<AdminRedirectRoute to={moderationFlagsPath} />} />
       <Route path="/admin/conversations/:conversationId/moderation/queue" element={<AdminModerationQueueRoute />} />
       <Route path="/admin/conversations/:conversationId/moderation/flags" element={<AdminModerationFlagsRoute />} />
@@ -120,9 +129,11 @@ function DeferredRoutes() {
       <Route path="/app/admin/conversations/:conversationId/settings/vouchers" element={<AdminSettingsVouchersRoute />} />
       <Route path="/app/admin/conversations/:conversationId/settings/roles" element={<AdminSettingsRolesRoute />} />
       <Route path="/app/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
-      <Route path="/app/admin/conversations/:conversationId/statements" element={<AdminStatementsRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/content/statements" element={<AdminStatementsRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/content/participants" element={<AdminParticipantsRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/statements" element={<AdminRedirectRoute to={contentStatementsPath} />} />
       <Route path="/app/admin/conversations/:conversationId/featured" element={<AdminRedirectRoute to={moderationFeaturedPath} />} />
-      <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminParticipantsRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/participants" element={<AdminRedirectRoute to={contentParticipantsPath} />} />
       <Route path="/app/admin/conversations/:conversationId/moderation" element={<AdminRedirectRoute to={moderationFlagsPath} />} />
       <Route path="/app/admin/conversations/:conversationId/moderation/queue" element={<AdminModerationQueueRoute />} />
       <Route path="/app/admin/conversations/:conversationId/moderation/flags" element={<AdminModerationFlagsRoute />} />

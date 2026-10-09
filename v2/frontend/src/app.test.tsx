@@ -280,16 +280,25 @@ test('deletes a verified empty conversation through a deliberate receipt flow', 
 test('moderates statements and imports approved seeds through typed commands', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin/conversations/7/statements']}><App /></MemoryRouter></QueryClientProvider>);
 
-  expect(await screen.findByRole('heading', {name: 'Statements — Community strategy'})).toBeVisible();
-  expect(screen.getByText('A participant proposal awaiting review.')).toBeVisible();
+  // #473: the old .../statements path redirects to Content > Statements, which is headed
+  // like every other page of the section.
+  expect(await screen.findByRole('heading', {name: 'Content', level: 1})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Statements'})).toBeNull();
+  // #473: the list is one row per statement behind the state switch, which opens on the
+  // approved ones; the waiting statement is one click away.
+  expect(screen.getByRole('button', {name: /^Show unmoderated/})).toBeVisible();
+  fireEvent.click(screen.getByRole('button', {name: /^Show unmoderated/}));
+  expect(await screen.findByText('A participant proposal awaiting review.')).toBeVisible();
   expect(screen.getByText(
     'Adds a seed-marked statement that appears early in the voting sequence for participants.',
   )).toBeVisible();
   // #478: the Approval control moved to Settings > Basics, so this page no longer owns it.
   expect(screen.queryByRole('checkbox', {name: /Strict moderation/})).toBeNull();
-  expect(screen.getByRole('heading', {name: /Pending review/})).toHaveTextContent('1');
   fireEvent.click(screen.getByRole('button', {name: 'approve'}));
-  await waitFor(() => expect(screen.getByRole('heading', {name: /Approved/})).toHaveTextContent('2'));
+  // Approving takes the row out of the waiting list and into the approved one.
+  await waitFor(() => expect(screen.queryByText('A participant proposal awaiting review.')).toBeNull());
+  fireEvent.click(screen.getByRole('button', {name: /^Show approved/}));
+  await waitFor(() => expect(screen.getByText('A participant proposal awaiting review.')).toBeVisible());
 
   fireEvent.change(screen.getByLabelText('Statements'), {
     target: {value: 'First seed\nSecond seed'},
@@ -335,21 +344,24 @@ test('manages participant access in the distinct admin workspace', async () => {
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole('heading', {name: 'Participants — Community strategy'})).toBeVisible();
-  expect(within(screen.getByRole('table')).getByText('Example editor')).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Content', level: 1})).toBeVisible();
+  expect(screen.queryByRole('heading', {name: 'Participants'})).toBeNull();
+  // The roster is a list of rows now, not a table (#473).
+  const roster = within(screen.getByRole('main')).getByRole('listitem').closest('ul')!;
+  expect(within(roster).getByText('Example editor')).toBeVisible();
   expect(screen.getByText('8 / 12')).toBeVisible();
   fireEvent.change(screen.getByPlaceholderText('Reason (optional)'), {
     target: {value: 'Repeated disruption'},
   });
-  fireEvent.click(screen.getByRole('button', {name: 'ban'}));
+  fireEvent.click(screen.getByRole('button', {name: /^ban/}));
 
   expect(await screen.findByRole('button', {
-    name: 'unban',
+    name: /^unban/,
   })).toBeVisible();
   expect(screen.getByText('Repeated disruption')).toBeVisible();
-  expect(screen.getByRole('status')).toHaveTextContent(
+  await waitFor(() => expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent(
     'Participant banned from this conversation.',
-  );
+  ));
 });
 
 test('resolves a privacy-safe moderation item through the typed contract', async () => {
@@ -605,6 +617,51 @@ test.each([
   expect(screen.queryByRole('heading', {name: heading})).toBeNull();
   expect(within(screen.getByRole('navigation', {name: 'Moderation'})).getByRole('link', {name: heading}))
     .toHaveAttribute('aria-current', 'page');
+});
+
+test.each([
+  ['/admin/conversations/7/statements', '/admin/conversations/7/content/statements'],
+  ['/admin/conversations/7/participants', '/admin/conversations/7/content/participants'],
+  // The /app/admin group redirects into the canonical /admin group.
+  ['/app/admin/conversations/7/statements', '/admin/conversations/7/content/statements'],
+  ['/app/admin/conversations/7/participants', '/admin/conversations/7/content/participants'],
+])('the old path %s redirects to the Content page %s', async (source, target) => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[source]}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  await waitFor(() => expect(screen.getByLabelText('client location')).toHaveTextContent(target));
+  expect(screen.getByLabelText('client location').textContent).toBe(target);
+});
+
+test.each([
+  ['/admin', 'statements', 'Statements'],
+  ['/admin', 'participants', 'Participants'],
+  ['/app/admin', 'statements', 'Statements'],
+  ['/app/admin', 'participants', 'Participants'],
+])('%s/conversations/7/content/%s is routed to its page', async (group, page, heading) => {
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[`${group}/conversations/7/content/${page}`]}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByRole('heading', {name: 'Content', level: 1}, {timeout: 10_000}))
+    .toBeVisible();
+  expect(screen.queryByRole('heading', {name: heading})).toBeNull();
+  expect(within(screen.getByRole('navigation', {name: 'Content'})).getByRole('link', {name: heading}))
+    .toHaveAttribute('aria-current', 'page');
+  // Routed, not redirected: the page renders at the path it was asked for.
+  expect(screen.getByLabelText('client location').textContent)
+    .toBe(`${group}/conversations/7/content/${page}`);
 });
 
 test('renders a conversation record from the generated API contract', async () => {
