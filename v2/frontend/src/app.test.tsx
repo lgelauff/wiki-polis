@@ -470,7 +470,7 @@ test('greys out adding invites while access is not the invitation list, and says
 
   expect(await screen.findByText('Existing editor')).toBeVisible();
   expect(screen.getByRole('heading', {name: 'Add invitations', level: 2})).toBeVisible();
-  const reason = screen.getByText('Not available: access is set to “Anyone with a Wikimedia account”.');
+  const reason = screen.getByText('The invitation list is not in effect: access is set to “Anyone with a Wikimedia account”.');
   const textarea = screen.getByLabelText('Wikimedia usernames (one per line)');
   const add = screen.getByRole('button', {name: 'Add invitations'});
   expect(textarea).toBeDisabled();

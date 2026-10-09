@@ -113,15 +113,18 @@ export function AdminInvitationsPage({
   // person has joined *this* consultation. "Not signed in yet" = no account with this
   // exact name has logged in to the site yet, so the invitation is not bound to one.
   // Invites only admit anyone while the invitation list is the answer to who gets in, so
-  // only then can more be added. Otherwise the form is shown greyed out, with one line
-  // naming the access policy in effect as the reason (#478). The stored list stays either
-  // way, with its remove buttons.
+  // only then can more be added. Otherwise one line, shown to every viewer above the form
+  // and the list, says the list is not in effect and names the access policy that is (#478);
+  // for an organizer the add form is greyed out, with that line as its reason. The stored
+  // list stays shown either way: with its Remove buttons for an organizer, without them for
+  // a moderator.
   const invitationList = settings.conversation.gatingType === 'invite_only';
   // Organizers (and site admins) manage the list; a moderator reads it: no add form and no
   // Remove at all, not greyed out (owner, 2026-10-09).
   const canManage = data.capabilities.manageInvitations;
   const unavailableId = useId();
   const headingId = useId();
+  const listHeadingId = useId();
   return (
     <AdminSettingsFrame
       conversationId={conversationId}
@@ -132,11 +135,11 @@ export function AdminInvitationsPage({
       announcer={announcer}
     >
       <div>
+        {!invitationList && <p className="admin-note" id={unavailableId}>
+          {msg('admin-invitations-unavailable', admissionName(msg, settings.conversation))}
+        </p>}
         {canManage && <section className="admin-form" aria-labelledby={headingId}>
           <h2 id={headingId}>{msg('invites-add-heading')}</h2>
-          {!invitationList && <p className="admin-note" id={unavailableId}>
-            {msg('admin-invitations-unavailable', admissionName(msg, settings.conversation))}
-          </p>}
           <form onSubmit={submit}>
             <label className="admin-field admin-field--medium">
               {msg('invites-label-usernames')}
@@ -162,38 +165,44 @@ export function AdminInvitationsPage({
         </section>}
 
         {/* One row per invitation: the name and whether that account has signed in to the
-            site, the day it was added, and Remove. Not a table: no column is compared. */}
-        {data.invitations.length ? (
-          <ul className="admin-rows" ref={listRef}>
-            {data.invitations.map((invitation) => (
-              <li className="admin-row" key={invitation.id} data-row-id={invitation.id}>
-                <div className="admin-row__text">
-                  {invitation.username}
-                  <span className="admin-row__suffix">
-                    {' · '}
-                    {invitation.signedIn
-                      ? msg('admin-invitations-signed-in')
-                      : msg('admin-invitations-not-signed-in')}
-                  </span>
-                </div>
-                <div className="admin-row__counts"><AdminTime value={invitation.createdAt} /></div>
-                {canManage && <div className="admin-row__actions">
-                  {/* Not red: a removed invitation can be added again. */}
-                  <button
-                    type="button"
-                    className="admin-row__text-button"
-                    // Only the row on its way out: the others stay operable, and keep focus.
-                    disabled={removeMutation.isPending && removeMutation.variables === invitation.id}
-                    aria-label={msg('admin-invitations-remove-aria', invitation.username)}
-                    onClick={() => removeMutation.mutate(invitation.id)}
-                  >
-                    {msg('admin-btn-remove')}
-                  </button>
-                </div>}
-              </li>
-            ))}
-          </ul>
-        ) : <p className="admin-empty" ref={emptyRef} tabIndex={-1}>{msg('invites-empty')}</p>}
+            site, the day it was added, and (for an organizer) Remove. Not a table: no column
+            is compared. Its own heading, for every viewer: a moderator has no add form, and
+            the list would otherwise be a bare list under the tab strip. Not the tab's name,
+            which the frame does not repeat as a heading. */}
+        <section aria-labelledby={listHeadingId}>
+          <h2 id={listHeadingId}>{msg('admin-invitations-list-heading')}</h2>
+          {data.invitations.length ? (
+            <ul className="admin-rows" ref={listRef}>
+              {data.invitations.map((invitation) => (
+                <li className="admin-row" key={invitation.id} data-row-id={invitation.id}>
+                  <div className="admin-row__text">
+                    {invitation.username}
+                    <span className="admin-row__suffix">
+                      {' · '}
+                      {invitation.signedIn
+                        ? msg('admin-invitations-signed-in')
+                        : msg('admin-invitations-not-signed-in')}
+                    </span>
+                  </div>
+                  <div className="admin-row__counts"><AdminTime value={invitation.createdAt} /></div>
+                  {canManage && <div className="admin-row__actions">
+                    {/* Not red: a removed invitation can be added again. */}
+                    <button
+                      type="button"
+                      className="admin-row__text-button"
+                      // Only the row on its way out: the others stay operable, and keep focus.
+                      disabled={removeMutation.isPending && removeMutation.variables === invitation.id}
+                      aria-label={msg('admin-invitations-remove-aria', invitation.username)}
+                      onClick={() => removeMutation.mutate(invitation.id)}
+                    >
+                      {msg('admin-btn-remove')}
+                    </button>
+                  </div>}
+                </li>
+              ))}
+            </ul>
+          ) : <p className="admin-empty" ref={emptyRef} tabIndex={-1}>{msg('invites-empty')}</p>}
+        </section>
       </div>
     </AdminSettingsFrame>
   );
