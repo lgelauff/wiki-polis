@@ -253,13 +253,13 @@ def _spa_shell_response():
 # Copy for the voucher entry page, each with the English it falls back to (same
 # discipline as _spa_bootstrap_text: a missing catalogue must not put ⧼key⧽ on the page).
 _VOUCHER_MESSAGES = {
-    'doc-title': ('voucher-page-doc-title', 'Voucher code — $1'),
-    'intro': ('voucher-page-intro', 'You need a voucher code to take part in this consultation.'),
-    'label': ('voucher-page-label', 'Voucher code'),
+    'doc-title': ('voucher-page-doc-title', 'Access code — $1'),
+    'intro': ('voucher-page-intro', 'You need an access code to take part in this consultation.'),
+    'label': ('voucher-page-label', 'Access code'),
     'hint': ('voucher-page-hint', 'Capitals, spaces and hyphens do not matter.'),
     'submit': ('voucher-page-submit', 'Continue'),
-    'empty': ('voucher-error-empty', 'Enter a voucher code.'),
-    'too-short': ('voucher-error-too-short', 'Voucher codes are at least $1 characters long.'),
+    'empty': ('voucher-error-empty', 'Enter an access code.'),
+    'too-short': ('voucher-error-too-short', 'Access codes are at least $1 characters long.'),
     'invalid': ('voucher-invalid', 'That code is not valid for this consultation.'),
     'throttled': ('voucher-throttled',
                   'That was too many wrong codes. Wait $1 seconds and try again.'),
@@ -267,7 +267,7 @@ _VOUCHER_MESSAGES = {
                          'That code is not valid for this consultation. If it contains '
                          'I, L, O or U, check whether those should be the numbers 1 and 0.'),
     'joined': ('voucher-already-joined',
-               'You already take part in this consultation with a voucher in this browser. '
+               'You already take part in this consultation with an access code in this browser. '
                'Log out first to use a different code.'),
     'switch-heading': ('voucher-switch-heading', 'Continue with this code?'),
     'switch-body': ('voucher-switch-body',

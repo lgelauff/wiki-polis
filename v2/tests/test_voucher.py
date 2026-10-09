@@ -290,7 +290,7 @@ def test_voucher_page_renders_form_with_csrf_field(app, client, voucher_conv):
     resp = client.get(f'/c/{voucher_conv.slug}/v')
     assert resp.status_code == 200
     html = resp.data.decode()
-    assert 'Voucher code' in html
+    assert 'Access code' in html
     assert voucher_conv.title in html
     assert 'name="csrf_token"' in html
     assert resp.headers['Cache-Control'] == 'no-store'
@@ -302,7 +302,7 @@ def test_voucher_page_renders_from_the_message_catalogue(app, client, voucher_co
     assert '(voucher-page-label)' in html
     assert '(voucher-page-intro)' in html
     assert f'(voucher-page-doc-title: {voucher_conv.title})' in html
-    assert 'Voucher code' not in html
+    assert 'Access code' not in html
 
 
 def test_there_is_no_top_level_voucher_url(app, client, voucher_conv):
@@ -518,7 +518,7 @@ def test_unusable_codes_get_the_same_answer_as_a_wrong_code(
 
 def test_empty_code_shows_a_field_error(app, client, voucher_conv):
     empty = _redeem(client, voucher_conv, code='').data.decode()
-    assert 'Enter a voucher code' in empty
+    assert 'Enter an access code' in empty
     assert 'aria-invalid="true"' in empty
     assert 'aria-describedby="code-hint code-error"' in empty
 
