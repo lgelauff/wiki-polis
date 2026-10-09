@@ -685,6 +685,10 @@ If there are new files since the last deploy, run the migration steps below befo
 ### Run migrations
 
 ```bash
+# On the Toolforge bastion, verify the active account before opening the migration shell.
+source ~/wiki-polis/v2/ops/toolforge-account-guard.sh || exit 1
+wiki_polis_require_tool_account 'manual database migration' || exit 1
+
 # Step 1 — enter the webservice shell (envvars are available here)
 toolforge webservice python3.13 shell
 
@@ -714,6 +718,8 @@ No output after "Will assume non-transactional DDL." means the database is alrea
 Run this from the **bastion** (not inside the webservice shell):
 
 ```bash
+source ~/wiki-polis/v2/ops/toolforge-account-guard.sh || exit 1
+wiki_polis_require_tool_account 'manual post-migration restart' || exit 1
 cd ~
 toolforge webservice restart
 ```
@@ -731,6 +737,10 @@ tail -50 /data/project/wiki-polis/uwsgi.log | grep -v lseek
 To undo the last migration:
 
 ```bash
+# On the Toolforge bastion, verify the active account before opening the rollback shell.
+source ~/wiki-polis/v2/ops/toolforge-account-guard.sh || exit 1
+wiki_polis_require_tool_account 'manual database rollback' || exit 1
+
 toolforge webservice python3.13 shell
 source /data/project/wiki-polis/www/python/venv/bin/activate
 cd ~/wiki-polis/v2
@@ -738,7 +748,7 @@ flask --app app db downgrade   # rolls back one step
 exit
 ```
 
-Then revert the code change and restart.
+Then revert the code change and follow the guarded restart steps above.
 
 ### Toolforge gotchas specific to migrations
 
