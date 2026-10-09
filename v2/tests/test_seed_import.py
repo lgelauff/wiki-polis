@@ -28,9 +28,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from db import Conversation, db
+from db import AdminRole, Conversation, db
 from polis_admin import POLIS_NOT_CONFIGURED_MESSAGE, PolisServerError
 from seed_csv import MAX_ROWS, MAX_TEXT_CHARS
+from tests.conftest import login
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -225,6 +226,33 @@ def test_seed_import_locked_in_argument_phase(admin_client, conv):
         resp = _import(admin_client, conv.id, ['Too late'])
     assert 'statement submission has ended' in _error(resp, 400)['message'].lower()
     assert _sent(mock) is None
+
+
+@pytest.mark.parametrize('phase_flag, allowed', [
+    (None, True),                        # before the first phase
+    ('phase_submission', True),          # Explore
+    ('phase_personal_results', False),   # after Explore
+    ('phase_argument_mapping', False),
+])
+def test_moderator_seeds_before_the_first_phase_and_during_explore_only(
+    client, conv, participant, phase_flag, allowed,
+):
+    """Owner, 2026-10-09: a moderator (not only an organizer) may add seed statements
+    before the first phase and during Explore, and not after."""
+    if phase_flag:
+        setattr(conv, phase_flag, True)
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='moderator'))
+    db.session.commit()
+    login(client, 'testuser')
+    with _mock_polis() as mock:
+        resp = _import(client, conv.id, ['Moderator seed'])
+    if allowed:
+        assert _outcome(resp)['imported'] == 1
+        mock.return_value.bulk_add_seeds.assert_called_once()
+    else:
+        assert 'statement submission has ended' in _error(resp, 400)['message'].lower()
+        assert _sent(mock) is None
 
 
 def test_single_seed_locked_when_conversation_closed(admin_client, conv):

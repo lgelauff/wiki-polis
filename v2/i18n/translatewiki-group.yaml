@@ -101,6 +101,7 @@ TAGS:
     - admin-globals-heading
     - admin-grant-heading
     - admin-invitations-added
+    - admin-invitations-list-heading
     - admin-invitations-not-signed-in
     - admin-invitations-remove-aria
     - admin-invitations-removed
@@ -122,6 +123,7 @@ TAGS:
     - admin-moderation-flag-handled
     - admin-moderation-flag-marked-handled
     - admin-moderation-flag-note
+    - admin-moderation-flag-row-handled
     - admin-moderation-flags
     - admin-moderation-flags-handled-heading
     - admin-moderation-hide-statement
@@ -162,6 +164,8 @@ TAGS:
     - admin-settings-tab-vouchers
     - admin-settings-tabs-aria
     - admin-settings-unchanged
+    - admin-settings-value-no
+    - admin-settings-value-yes
     - admin-shell-content
     - admin-shell-licence
     - admin-shell-moderation

@@ -27,6 +27,7 @@ const ResultsRoute = lazy(() => loadResultsPage().then((module) => ({default: mo
 const AdminCatalogRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminCatalogRoute})));
 const AdminLifecycleRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminLifecycleRoute})));
 const AdminSettingsIndexRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsIndexRoute})));
+const AdminSectionIndexRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSectionIndexRoute})));
 const AdminSettingsBasicsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsBasicsRoute})));
 const AdminSettingsAccessRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsAccessRoute})));
 const AdminSettingsInvitationsRoute = lazy(() => loadAdminRoutes().then((module) => ({default: module.AdminSettingsInvitationsRoute})));
@@ -94,12 +95,14 @@ function DeferredRoutes() {
       <Route path="/admin/conversations/:conversationId/settings/vouchers" element={<AdminSettingsVouchersRoute />} />
       <Route path="/admin/conversations/:conversationId/settings/roles" element={<AdminSettingsRolesRoute />} />
       <Route path="/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
+      <Route path="/admin/conversations/:conversationId/content" element={<AdminSectionIndexRoute firstTab="statements" />} />
       <Route path="/admin/conversations/:conversationId/content/statements" element={<AdminStatementsRoute />} />
       <Route path="/admin/conversations/:conversationId/content/participants" element={<AdminParticipantsRoute />} />
       <Route path="/admin/conversations/:conversationId/statements" element={<AdminRedirectRoute to={contentStatementsPath} />} />
       <Route path="/admin/conversations/:conversationId/featured" element={<AdminRedirectRoute to={moderationFeaturedPath} />} />
       <Route path="/admin/conversations/:conversationId/participants" element={<AdminRedirectRoute to={contentParticipantsPath} />} />
       <Route path="/admin/conversations/:conversationId/flags" element={<AdminRedirectRoute to={moderationFlagsPath} />} />
+      <Route path="/admin/conversations/:conversationId/moderation" element={<AdminSectionIndexRoute firstTab="queue" />} />
       <Route path="/admin/conversations/:conversationId/moderation/queue" element={<AdminModerationQueueRoute />} />
       <Route path="/admin/conversations/:conversationId/moderation/flags" element={<AdminModerationFlagsRoute />} />
       <Route path="/admin/conversations/:conversationId/moderation/featured" element={<AdminModerationFeaturedRoute />} />
@@ -129,6 +132,7 @@ function DeferredRoutes() {
       <Route path="/app/admin/conversations/:conversationId/settings/vouchers" element={<AdminSettingsVouchersRoute />} />
       <Route path="/app/admin/conversations/:conversationId/settings/roles" element={<AdminSettingsRolesRoute />} />
       <Route path="/app/admin/conversations/:conversationId/termination" element={<AdminTerminationRoute />} />
+      <Route path="/app/admin/conversations/:conversationId/content" element={<AdminSectionIndexRoute firstTab="statements" />} />
       <Route path="/app/admin/conversations/:conversationId/content/statements" element={<AdminStatementsRoute />} />
       <Route path="/app/admin/conversations/:conversationId/content/participants" element={<AdminParticipantsRoute />} />
       <Route path="/app/admin/conversations/:conversationId/statements" element={<AdminRedirectRoute to={contentStatementsPath} />} />

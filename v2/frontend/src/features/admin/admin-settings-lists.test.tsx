@@ -10,6 +10,7 @@ import {AdminInvitationsPage} from './admin-invitations-page';
 import {AdminRolesPage} from './admin-roles-page';
 import {MessageProvider} from '../../i18n/messages';
 import {createQueryClient} from '../../query-client';
+import {testMessages} from '../../test/handlers';
 import {server} from '../../test/server';
 
 /** Settings › Invitations and Roles: a request on its way cannot be sent twice, a removed
@@ -44,12 +45,17 @@ const invitation = (id: number, username: string) => (
   {id, username, createdAt: '2026-08-01T10:00:00Z', signedIn: false}
 );
 
-function serveInvitations(invitations: ReturnType<typeof invitation>[]) {
-  server.use(http.get(SETTINGS_URL, () => HttpResponse.json({data: settings})));
+function serveInvitations(
+  invitations: ReturnType<typeof invitation>[], manageInvitations = true,
+  conversation: Partial<Settings['conversation']> = {},
+) {
+  const served = {...settings, conversation: {...settings.conversation, ...conversation}};
+  server.use(http.get(SETTINGS_URL, () => HttpResponse.json({data: manageInvitations ? served
+    : {...served, capabilities: {edit: false, switchDemo: false}}})));
   server.use(http.get(INVITATIONS_URL, () => HttpResponse.json({data: {
     conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy', accessPolicy: 'invite_only'},
     invitations,
-    capabilities: {manageInvitations: true},
+    capabilities: {manageInvitations},
     links: {self: INVITATIONS_URL, conversation: '/admin/conversations/7'},
   }})));
 }
@@ -130,6 +136,64 @@ test('removing the last invitation leaves focus on the empty-list line', async (
   fireEvent.click(await screen.findByRole('button', {name: /First editor/}, {timeout: 10_000}));
   await waitFor(() => expect(document.activeElement?.textContent).toMatch(/^No invit/));
   expect(politeRegion()).toHaveTextContent('Invitation for First editor removed.');
+});
+
+test('a moderator sees the invitation list with usernames, read-only: no add form, no Remove', async () => {
+  // Owner, 2026-10-09: organizers stay in charge of invitations (the server refuses a
+  // moderator's add and remove). Read-only means absent, not greyed out.
+  serveInvitations([invitation(51, 'First editor'), invitation(52, 'Second editor')], false);
+  renderPage(<AdminInvitationsPage conversationId={7} csrfToken="t" />,
+    '/admin/conversations/7/settings/invitations');
+
+  expect(await screen.findByText('First editor', {}, {timeout: 10_000})).toBeVisible();
+  expect(screen.getByText('Second editor')).toBeVisible();
+  expect(screen.queryByRole('textbox')).toBeNull();
+  // (The frame's own log-out form is not the page's; the add form is the .admin-form section.)
+  expect(document.querySelector('textarea, .admin-form')).toBeNull();
+  expect(screen.queryByRole('button', {name: /First editor|Second editor/})).toBeNull();
+  expect(document.querySelector('.admin-rows button')).toBeNull();
+});
+
+test('a moderator\'s invitation list has a heading of its own', async () => {
+  // pr-check #540: the only h2 was the add form's, so a moderator got a bare list.
+  serveInvitations([invitation(51, 'First editor')], false);
+  renderPage(<AdminInvitationsPage conversationId={7} csrfToken="t" />,
+    '/admin/conversations/7/settings/invitations');
+
+  const heading = await screen.findByRole('heading',
+    {name: testMessages['admin-invitations-list-heading']!, level: 2}, {timeout: 10_000});
+  expect(heading).toBeVisible();
+  const list = screen.getByRole('region', {name: testMessages['admin-invitations-list-heading']!});
+  expect(within(list).getByText('First editor')).toBeVisible();
+  // The add form's heading is the organizer's only.
+  expect(screen.queryByRole('heading', {name: testMessages['invites-add-heading']!})).toBeNull();
+});
+
+test('a moderator is told when the invitation list is not in effect, above the list', async () => {
+  // pr-check #540 usability-1: the note sat inside the organizer-only form, so a moderator
+  // read a list that admits nobody with no sign of it.
+  serveInvitations([invitation(51, 'First editor')], false,
+    {gated: false, gatingType: null, accessPolicy: 'public'});
+  renderPage(<AdminInvitationsPage conversationId={7} csrfToken="t" />,
+    '/admin/conversations/7/settings/invitations');
+
+  const heading = await screen.findByRole('heading',
+    {name: testMessages['admin-invitations-list-heading']!, level: 2}, {timeout: 10_000});
+  const note = screen.getByText(testMessages['admin-invitations-unavailable']!
+    .replace('$1', testMessages['admin-access-admission-anyone']!));
+  expect(note).toBeVisible();
+  const order = [...document.querySelectorAll('.admin-note, h2')];
+  expect(order.indexOf(note)).toBeLessThan(order.indexOf(heading));
+  expect(order.indexOf(note)).toBeGreaterThanOrEqual(0);
+});
+
+test('an invite-only list shows no "not in effect" note to a moderator', async () => {
+  serveInvitations([invitation(51, 'First editor')], false);
+  renderPage(<AdminInvitationsPage conversationId={7} csrfToken="t" />,
+    '/admin/conversations/7/settings/invitations');
+
+  await screen.findByText('First editor', {}, {timeout: 10_000});
+  expect(document.querySelector('.admin-note')).toBeNull();
 });
 
 test('a Roles result goes when another person or role is chosen', async () => {

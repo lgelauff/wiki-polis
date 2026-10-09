@@ -2,8 +2,9 @@
 
 from unittest.mock import patch
 
-from db import AuditEvent, Conversation, ConversationInvite, Participant, db
+from db import AdminRole, AuditEvent, Conversation, ConversationInvite, Participant, db
 from services.invites import InviteBatchSaveError, claim_username_invites
+from tests.conftest import login
 
 
 def test_admin_invitation_roster_reports_policy_and_sorted_usernames(
@@ -107,6 +108,61 @@ def test_delete_invitation_is_scoped_and_returns_refreshed_roster(
     assert removed.get_json()['data']['invitations'] == []
     assert db.session.get(ConversationInvite, foreign.id) is not None
     assert [event.operation for event in AuditEvent.query.all()] == ['invite.remove']
+
+
+def _with_role(client, conversation, participant, role):
+    db.session.add(AdminRole(
+        participant_id=participant.id, conversation_id=conversation.id, role=role,
+    ))
+    db.session.commit()
+    login(client, 'testuser')
+
+
+def test_moderator_reads_invitations_with_usernames_but_cannot_change_them(
+    client, conversation, participant,
+):
+    """Owner, 2026-10-09: invitations are access, so organizers stay in charge of them. A
+    moderator sees the list (usernames included) read-only; adding and removing are
+    refused and change nothing."""
+    keep = ConversationInvite(conversation_id=conversation.id, mw_username='Keep')
+    db.session.add(keep)
+    db.session.commit()
+    _with_role(client, conversation, participant, 'moderator')
+    endpoint = f'/api/v1/admin/conversations/{conversation.id}/invitations'
+
+    roster = client.get(endpoint)
+    added = client.put(endpoint, json={'usernames': ['Bob']})
+    removed = client.delete(f'{endpoint}/{keep.id}')
+
+    assert roster.status_code == 200
+    assert [row['username'] for row in roster.get_json()['data']['invitations']] == ['Keep']
+    assert roster.get_json()['data']['capabilities'] == {'manageInvitations': False}
+    assert added.status_code == 403
+    assert removed.status_code == 403
+    assert [row.mw_username for row in ConversationInvite.query.all()] == ['Keep']
+    assert AuditEvent.query.count() == 0
+
+
+def test_organizer_manages_invitations(client, conversation, participant):
+    _with_role(client, conversation, participant, 'organizer')
+    endpoint = f'/api/v1/admin/conversations/{conversation.id}/invitations'
+
+    roster = client.get(endpoint)
+    added = client.put(endpoint, json={'usernames': ['Bob']})
+    invite_id = added.get_json()['data']['invitations'][0]['id']
+    removed = client.delete(f'{endpoint}/{invite_id}')
+
+    assert roster.get_json()['data']['capabilities'] == {'manageInvitations': True}
+    assert added.status_code == 200
+    assert removed.status_code == 200
+    assert ConversationInvite.query.count() == 0
+
+
+def test_site_admin_still_manages_invitations(admin_client, conversation):
+    roster = admin_client.get(
+        f'/api/v1/admin/conversations/{conversation.id}/invitations',
+    )
+    assert roster.get_json()['data']['capabilities'] == {'manageInvitations': True}
 
 
 def test_admin_invitation_roster_reports_whether_the_account_has_signed_in(

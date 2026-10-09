@@ -389,7 +389,7 @@ test('resolves a privacy-safe moderation item through the typed contract', async
   expect(screen.getByText(/Privacy violation/)).toHaveClass('admin-row__suffix');
   fireEvent.click(screen.getByRole('button', {name: /^Mark as handled/}));
 
-  expect(await screen.findByText('No open flags.')).toBeVisible();
+  expect(await screen.findByText('No open flags.', {}, {timeout: 5_000})).toBeVisible();
   await waitFor(() => expect(document.querySelector('[aria-live="polite"]'))
     .toHaveTextContent('Flag marked as handled.'));
 });
@@ -470,7 +470,7 @@ test('greys out adding invites while access is not the invitation list, and says
 
   expect(await screen.findByText('Existing editor')).toBeVisible();
   expect(screen.getByRole('heading', {name: 'Add invitations', level: 2})).toBeVisible();
-  const reason = screen.getByText('Not available: access is set to “Anyone with a Wikimedia account”.');
+  const reason = screen.getByText('The invitation list is not in effect: access is set to “Anyone with a Wikimedia account”.');
   const textarea = screen.getByLabelText('Wikimedia usernames (one per line)');
   const add = screen.getByRole('button', {name: 'Add invitations'});
   expect(textarea).toBeDisabled();

@@ -41,6 +41,13 @@ test.each([
   expect(canonicalClientPath(path)).toBe(path);
 });
 
+test.each([
+  '/admin/conversations/7/moderation',
+  '/admin/conversations/7/content',
+])('the bare section path %s is a client route, so it reaches the redirect to its first tab', (path) => {
+  expect(canonicalClientPath(path)).toBe(path);
+});
+
 test('prevents a document navigation and updates React Router location', () => {
   render(
     <MemoryRouter initialEntries={['/']}>

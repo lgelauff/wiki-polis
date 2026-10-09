@@ -3,10 +3,12 @@ import {useEffect, useRef} from 'react';
 /** Where focus goes when an action takes a row off a list.
  *
  *  The button that was pressed leaves the page with its row, and focus would fall back to the
- *  document. It goes to the next row's first action instead (the previous row's when the last
- *  row went), or to the list's empty-state line when nothing is left, so a keyboard or screen
- *  reader user carries on where they were. `ids` is the list as shown; the page calls
- *  `rowRemoved` when an action succeeds, and focus moves once the row is off the screen. */
+ *  document. It goes to the next row's first enabled action instead (the previous row's when
+ *  the last row went), or, when that row has none but has a line that takes focus
+ *  (tabindex -1, such as a handled flag's "Handled ✓"), to that line; and to the list's
+ *  empty-state line when nothing is left. So a keyboard or screen reader user carries on
+ *  where they were. `ids` is the list as shown; the page calls `rowRemoved` when an action
+ *  succeeds, and focus moves once the row is off the screen. */
 export function useRowFocus(ids: number[]) {
   const listRef = useRef<HTMLUListElement>(null);
   const emptyRef = useRef<HTMLParagraphElement>(null);
@@ -19,7 +21,7 @@ export function useRowFocus(ids: number[]) {
     if (!target || ids.includes(target.removed)) return;
     pending.current = null;
     const next = target.next === null ? null : listRef.current?.querySelector<HTMLElement>(
-      `[data-row-id="${target.next}"] button:not(:disabled)`,
+      `[data-row-id="${target.next}"] :is(button:not(:disabled), [tabindex="-1"])`,
     );
     (next ?? emptyRef.current)?.focus();
   });

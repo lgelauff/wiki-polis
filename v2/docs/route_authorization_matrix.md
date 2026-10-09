@@ -131,8 +131,9 @@ The public bootstrap routes — `/api/v1/session`, `/api/v1/i18n/<locale>`,
 ## Admin API — `/api/v1/admin/*`
 
 36 routes. Note the tiering: this is **not** a flat "admin" surface. Site-wide acts are
-global-admin-only, conversation-scoped acts are moderator-or-better, and three settings
-routes are organizer-or-better. Publishing the final report, pausing, archiving,
+global-admin-only, conversation-scoped acts are moderator-or-better, and seven routes (phase, recommendation
+tier, settings, statement-moderation policy, Phase 6 initialization, and adding or
+removing invitations) are organizer-or-better. Publishing the final report, pausing, archiving,
 scheduling a transition and setting the phase set are deliberately *not* available to a
 conversation organizer — a conversation-scoped organizer cannot end a consultation.
 
@@ -163,13 +164,13 @@ global-admin-only even though role *listing* is moderator-gated
 | `/api/v1/admin/conversations/<id>/roles/<int:participant_id>` | PUT | moderator **and** global admin | `_replace_admin_roles_api_payload` (app.py:4425) |
 | `/api/v1/admin/conversations/<id>/participants` | GET | moderator or global admin | `_admin_participant_roster_api_payload` (app.py:3420) |
 | `/api/v1/admin/conversations/<id>/participants/<int:participant_id>/access` | PUT | moderator or global admin | `_set_admin_participant_access_api_payload` (app.py:3432) |
-| `/api/v1/admin/conversations/<id>/invitations` | GET | moderator or global admin | `_admin_invitation_roster_api_payload` (app.py:3476) |
-| `/api/v1/admin/conversations/<id>/invitations` | PUT | moderator or global admin | `_add_admin_invitations_api_payload` (app.py:4456) |
-| `/api/v1/admin/conversations/<id>/invitations/<int:invite_id>` | DELETE | moderator or global admin | `_remove_admin_invitation_api_payload` (app.py:4479) |
+| `/api/v1/admin/conversations/<id>/invitations` | GET | moderator or global admin; a moderator reads the roster with `capabilities.manageInvitations=false` (adding and removing invitations is organizer-only) | `_admin_invitation_roster_api_payload` (app.py:3476) |
+| `/api/v1/admin/conversations/<id>/invitations` | PUT | conversation **organizer** or global admin | `_add_admin_invitations_api_payload` (app.py:4456) |
+| `/api/v1/admin/conversations/<id>/invitations/<int:invite_id>` | DELETE | conversation **organizer** or global admin | `_remove_admin_invitation_api_payload` (app.py:4479) |
 | `/api/v1/admin/conversations/<id>/statements` | GET | moderator or global admin | `_admin_statements_api_payload` (app.py:3812) |
 | `/api/v1/admin/conversations/<id>/statements` | POST | moderator or global admin | `_add_admin_seed_statement_api_payload` (app.py:3975) |
 | `/api/v1/admin/conversations/<id>/statements/<int:statement_id>/moderation` | PUT | moderator or global admin | `_moderate_admin_statement_api_payload` (app.py:3895) |
-| `/api/v1/admin/conversations/<id>/statement-moderation-policy` | PUT | moderator or global admin | `_set_admin_statement_policy_api_payload` (app.py:3884) |
+| `/api/v1/admin/conversations/<id>/statement-moderation-policy` | PUT | conversation **organizer** or global admin | `_set_admin_statement_policy_api_payload` (app.py:3884) |
 | `/api/v1/admin/conversations/<id>/statement-imports` | POST | moderator or global admin | `_import_admin_seed_statements_api_payload` (app.py:3939) |
 | `/api/v1/admin/conversations/<id>/featured-statements` | GET | moderator or global admin | `_admin_featured_api_payload` (app.py:4011) |
 | `/api/v1/admin/conversations/<id>/featured-statements/<int:statement_id>` | PUT | moderator or global admin | `_select_admin_featured_api_payload` (app.py:4062) |
@@ -178,9 +179,9 @@ global-admin-only even though role *listing* is moderator-gated
 | `/api/v1/admin/conversations/<id>/featured-arguments/<int:argument_id>` | DELETE | moderator or global admin | `_delete_admin_featured_argument_api_payload` (app.py:4179) |
 | `/api/v1/admin/conversations/<id>/flags` | GET | moderator or global admin | `_admin_flag_queue_api_payload` (app.py:4811) |
 | `/api/v1/admin/conversations/<id>/flags/<int:flag_id>/resolution` | PUT | moderator or global admin | `_resolve_admin_flag_api_payload` (app.py:4824) |
-| `/api/v1/admin/conversations/<id>/phase6-initialization` | POST | moderator or global admin | `_initialize_admin_phase6_api_payload` (app.py:4323) |
+| `/api/v1/admin/conversations/<id>/phase6-initialization` | POST | conversation **organizer** or global admin | `_initialize_admin_phase6_api_payload` (app.py:4323) |
 
-`/phase6-initialization` is the highest-consequence moderator route: it creates a second
+`/phase6-initialization` is the highest-consequence organizer route: it creates a second
 Polis conversation and seeds the confirmed featured statements into it. It has dedicated
 integration coverage in `tests/test_admin_lifecycle_api.py` (three tests, including the
 unknown-outcome path); a change here should keep it.

@@ -148,8 +148,16 @@ export function AdminRedirectRoute({to}: {to: (conversationId: string) => string
  *  relative, so `/app/admin/…` stays in its own route group; the query string (a
  *  `?uselang=`) and the fragment go along, as they would through a server redirect. */
 export function AdminSettingsIndexRoute() {
+  return <AdminSectionIndexRoute firstTab="basics" />;
+}
+
+/** The bare path of a tabbed section lands on the first tab of its strip, the way
+ *  `…/settings` lands on Basics: `…/moderation` on Queue (`moderationTabs`) and `…/content`
+ *  on Statements (`contentTabs`). Relative, so `/app/admin/…` stays in its own group, and
+ *  the query string and fragment go along. */
+export function AdminSectionIndexRoute({firstTab}: {firstTab: string}) {
   const {search, hash} = useLocation();
-  return <Navigate replace to={{pathname: 'basics', search, hash}} />;
+  return <Navigate replace to={{pathname: firstTab, search, hash}} />;
 }
 export const AdminTerminationRoute = () => <AdminRoute kind="termination" />;
 export const AdminStatementsRoute = () => <AdminRoute kind="statements" />;

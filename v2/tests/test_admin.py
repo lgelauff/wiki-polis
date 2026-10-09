@@ -1179,21 +1179,38 @@ def test_phase6_init_no_confirmed_featured(admin_client, conv):
     assert conv.phase6_polis_conversation_id is None
 
 
-def test_phase6_init_accessible_to_moderator(client, conv, participant):
-    """Unlike the guided advance, the standalone init allows conversation moderators."""
+def test_phase6_init_refused_to_moderator(client, conv, participant):
+    """Initialising Phase 6 is a phase control: like Move on, organizers only (owner,
+    2026-10-09). A moderator is refused before the voting service is touched."""
     conv.phase_informed_voting = True
     db.session.add(AdminRole(participant_id=participant.id,
                              conversation_id=conv.id, role='moderator'))
     db.session.commit()
     _add_featured(conv)
     login(client, 'testuser')
-    with patch('app.PolisServerClient.create_conversation', return_value='p6modok'), \
+    with patch('app.PolisServerClient.create_conversation') as cc:
+        resp = client.post(
+            f'/api/v1/admin/conversations/{conv.id}/phase6-initialization')
+    assert resp.status_code == 403
+    cc.assert_not_called()
+    db.session.refresh(conv)
+    assert conv.phase6_polis_conversation_id is None
+
+
+def test_phase6_init_accessible_to_organizer(client, conv, participant):
+    conv.phase_informed_voting = True
+    db.session.add(AdminRole(participant_id=participant.id,
+                             conversation_id=conv.id, role='organizer'))
+    db.session.commit()
+    _add_featured(conv)
+    login(client, 'testuser')
+    with patch('app.PolisServerClient.create_conversation', return_value='p6orgok'), \
          patch('app.PolisServerClient.add_seed_return_id', return_value=9):
         resp = client.post(
             f'/api/v1/admin/conversations/{conv.id}/phase6-initialization')
     assert resp.status_code == 201
     db.session.refresh(conv)
-    assert conv.phase6_polis_conversation_id == 'p6modok'
+    assert conv.phase6_polis_conversation_id == 'p6orgok'
 
 
 def test_phase6_init_integrityerror_reports_conflict(admin_client, conv):
