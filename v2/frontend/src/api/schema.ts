@@ -1118,6 +1118,8 @@ export interface components {
                 /** @enum {string} */
                 status: "active" | "paused" | "archived" | "closed";
                 openFlags: number;
+                /** @description Statements awaiting moderation; null when the voting service's database is unavailable or the consultation is closed or archived (not asked). */
+                pendingStatements: number | null;
                 links: {
                     overview: string;
                 };

@@ -95,7 +95,7 @@ export const testMessages: Record<string, string> = Object.fromEntries(
 export const handlers = [
   http.get(new URL('/api/v1/admin', globalThis.location.origin).toString(), () => HttpResponse.json({data: adminCatalogFixture()})),
   http.get(new URL('/api/v1/admin/home', globalThis.location.origin).toString(), () => HttpResponse.json({data: {
-    conversations: [{id: 7, title: 'Community strategy', role: 'Organizer', status: 'active', openFlags: 1, links: {overview: '/admin/conversations/7'}}],
+    conversations: [{id: 7, title: 'Community strategy', role: 'Organizer', status: 'active', openFlags: 1, pendingStatements: 2, links: {overview: '/admin/conversations/7'}}],
     links: {self: '/api/v1/admin/home', siteAdminDashboard: null},
   }})),
   http.post(new URL('/api/v1/admin/conversations', globalThis.location.origin).toString(), () => HttpResponse.json({data: {conversation: {id: 7, slug: 'community-strategy', title: 'Community strategy'}, links: {manage: '/admin/conversations/7', catalog: '/api/v1/admin'}}}, {status: 201})),

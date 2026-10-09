@@ -58,15 +58,29 @@ def build_admin_catalog(
 _HOME_ROLE_LABELS = {'organizer': 'Organizer', 'moderator': 'Moderator'}
 
 
+def home_conversations_to_count(roles) -> list:
+    """The consultations whose pending statements are worth asking Polis about: the live
+    ones (active or paused). A closed or archived one has nothing left to moderate, so it
+    is not queried and shows no count."""
+    seen = {}
+    for role in roles:
+        conversation = role.conversation
+        if conversation_status(conversation) in ('active', 'paused'):
+            seen[conversation.id] = conversation
+    return list(seen.values())
+
+
 def build_admin_home(
-    *, roles, open_flags: dict, site_admin: bool, self_link: str,
+    *, roles, open_flags: dict, pending_statements: dict, site_admin: bool, self_link: str,
     conversation_link, site_admin_link: str,
 ) -> dict:
     """The Admin home (#538): the consultations the caller holds a role in, and nothing else.
 
     ``roles`` are the caller's own ``AdminRole`` rows; a site admin's are listed like
     anyone's (site-wide access is not a role in a consultation, so it adds no rows).
-    ``open_flags`` maps a conversation id to its open flag count. No participant data:
+    ``open_flags`` maps a conversation id to its open flag count, ``pending_statements``
+    to its count of statements awaiting moderation, absent when unknown (Polis not
+    reachable, or a closed or archived consultation that was not asked). No participant data:
     titles, the caller's own role, a status word and a count.
     """
     by_conversation: dict[int, tuple] = {}
@@ -88,6 +102,7 @@ def build_admin_home(
             'role': _HOME_ROLE_LABELS[role],
             'status': conversation_status(conversation),
             'openFlags': int(open_flags.get(conversation.id, 0)),
+            'pendingStatements': pending_statements.get(conversation.id),
             'links': {'overview': conversation_link(conversation.id)},
         } for conversation, role in rows],
         'links': {

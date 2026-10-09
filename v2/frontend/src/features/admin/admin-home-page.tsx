@@ -23,9 +23,10 @@ function statusLabel(msg: Message, status: Row['status']): string {
  * Admin home (#538): the consultations the viewer is an organizer or moderator of.
  *
  * One list, one row per consultation: the title goes to its Overview, and the viewer's
- * role, the status and the open flags are plain text beside it. A zero is left out, as in
- * the sidebar badge: an empty counter is noise, not information. Pending statements live
- * in the voting service, not here, so they are not counted on this page.
+ * role, the status, the open flags and the statements awaiting moderation are plain text
+ * beside it. A zero is left out, as in the sidebar badge: an empty counter is noise, not
+ * information. So is a pending count the server could not get (null): the voting service's
+ * database was not reachable, or the consultation is closed and was not asked.
  *
  * A site admin reaches the dashboard from the sidebar (`AdminShell`); someone with no role
  * who is not a site admin never gets here -- the server refuses, and the access boundary
@@ -52,6 +53,7 @@ export function AdminHomePage() {
                   {' · '}
                   {statusLabel(msg, row.status)}
                   {row.openFlags > 0 && <>{' · '}{msg('adminconv-open-count', row.openFlags)}</>}
+                  {row.pendingStatements ? <>{' · '}{msg('admin-home-pending-count', row.pendingStatements)}</> : null}
                 </div>
               </li>
             ))}

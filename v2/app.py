@@ -126,7 +126,7 @@ from services.admin_featured import (
     set_featured_argument_visibility,
 )
 from services.admin_catalog import (
-    build_admin_catalog, build_admin_home,
+    build_admin_catalog, build_admin_home, home_conversations_to_count,
     create_conversation as create_admin_conversation, set_global_admin,
 )
 from services.admin_lifecycle import (
@@ -3619,9 +3619,22 @@ def _admin_home_api_payload() -> dict:
         .filter(ContentFlag.conversation_id.in_(conversation_ids), ContentFlag.status == 'open')
         .group_by(ContentFlag.conversation_id).all()
     ) if conversation_ids else {}
+    # Pending statements live in Polis: one bulk query for every live consultation, none
+    # at all when there is none. Unavailable (no Polis DB, or the query failed) is no
+    # count, never an error on the page.
+    live = home_conversations_to_count(roles)
+    pending_statements = {}
+    if live:
+        counts = _polis_server_client().get_pending_statement_counts(
+            [conv.polis_id for conv in live])
+        if counts is not None:
+            pending_statements = {
+                conv.id: counts[conv.polis_id] for conv in live if conv.polis_id in counts
+            }
     return build_admin_home(
         roles=roles,
         open_flags=open_flags,
+        pending_statements=pending_statements,
         site_admin=site_admin,
         self_link=url_for('api_v1.get_admin_home'),
         conversation_link=_admin_client_link,

@@ -25,7 +25,7 @@ const FORBIDDEN = {error: {code: 'forbidden', message: 'You do not have access t
 
 function row(id: number, overrides: Partial<Row> = {}): Row {
   return {
-    id, title: `Consultation ${id}`, role: 'Organizer', status: 'active', openFlags: 0,
+    id, title: `Consultation ${id}`, role: 'Organizer', status: 'active', openFlags: 0, pendingStatements: 0,
     links: {overview: `/admin/conversations/${id}`},
     ...overrides,
   };
@@ -159,4 +159,21 @@ test.each([
   // The site's own frame, not Werkzeug's bare document.
   expect(screen.queryByRole('heading', {name: 'Forbidden'})).toBeNull();
   expect(document.title).toBe('403 Not allowed — Proto');
+});
+
+test('statements awaiting moderation are a plain count after the flags, left out at zero or unknown', async () => {
+  serveSession(false);
+  serveHome([
+    row(7, {title: 'With both', openFlags: 2, pendingStatements: 5}),
+    row(8, {title: 'Pending only', pendingStatements: 1}),
+    row(9, {title: 'Nothing pending', pendingStatements: 0}),
+    row(10, {title: 'Unknown', status: 'closed', pendingStatements: null}),
+  ]);
+  renderAt('/admin');
+
+  const rows = within(await homeList()).getAllByRole('listitem');
+  expect(rows[0]!).toHaveTextContent(/^With bothOrganizer · Active · 2 open flags · 5 pending$/);
+  expect(rows[1]!).toHaveTextContent(/^Pending onlyOrganizer · Active · 1 pending$/);
+  expect(rows[2]!).toHaveTextContent(/^Nothing pendingOrganizer · Active$/);
+  expect(rows[3]!).toHaveTextContent(/^UnknownOrganizer · Closed$/);
 });

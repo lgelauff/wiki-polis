@@ -278,6 +278,22 @@ _STATEMENTS_REMAINING_BULK_SQL = """
     LEFT JOIN voted_stmts vs USING (zinvite)
 """
 
+# Statements awaiting moderation (mod = 0, still active) across MANY conversations, in
+# one round trip, for Admin home (#538). zinvites is an ARRAY of text; a conversation
+# with nothing pending has no row (the caller reads a missing zinvite as 0).
+_PENDING_STATEMENTS_BULK_SQL = """
+    WITH zmap AS (
+        SELECT zi.zinvite, zi.zid
+        FROM zinvites zi
+        WHERE zi.zinvite = ANY(%s)
+    )
+    SELECT zmap.zinvite, COUNT(c.tid)::int AS n_pending
+    FROM comments c
+    JOIN zmap ON c.zid = zmap.zid
+    WHERE c.active = TRUE AND c.mod = 0
+    GROUP BY zmap.zinvite
+"""
+
 # Statement vote progress for MANY participants in ONE conversation, in a single
 # query — the batched inverse of _STATEMENTS_REMAINING_BULK_SQL (one zinvite, many
 # xids, grouped by xid). Replaces the per-participant loop on the admin participants
@@ -938,6 +954,26 @@ class PolisServerClient:
             }
             for r in rows
         }
+
+    def get_pending_statement_counts(self, zinvites: list[str]) -> dict[str, int] | None:
+        """Return {zinvite: statements awaiting moderation} for many conversations at once.
+
+        One query for all of them (Admin home, #538). A requested zinvite with nothing
+        pending maps to 0. Returns None when db_url is absent or the query fails, so the
+        caller shows no count rather than a wrong one; it never raises.
+        """
+        if not self._db_url:
+            return None
+        safe = sorted({z for z in zinvites if _SAFE_ZINVITE.match(z or '')})
+        if not safe:
+            return {}
+        rows = self._pg_query(_PENDING_STATEMENTS_BULK_SQL, (safe,),
+                              'get_pending_statement_counts')
+        if rows is None:
+            return None
+        counts = {zinvite: 0 for zinvite in safe}
+        counts.update({r[0]: int(r[1]) for r in rows})
+        return counts
 
     def get_statement_progress_for_participants(
         self,

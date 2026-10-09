@@ -8,6 +8,7 @@ opens it gets the SPA's access page from the 403.
 """
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -76,9 +77,11 @@ def test_lists_only_the_callers_consultations_with_role_status_and_open_flags(cl
     # Newest first; only the two consultations the caller holds a role in.
     assert data['conversations'] == [
         {'id': moderated.id, 'title': 'Title moderated', 'role': 'Moderator', 'status': 'paused',
-         'openFlags': 2, 'links': {'overview': f'/admin/conversations/{moderated.id}'}},
+         'openFlags': 2, 'pendingStatements': None,
+         'links': {'overview': f'/admin/conversations/{moderated.id}'}},
         {'id': organized.id, 'title': 'Title organized', 'role': 'Organizer', 'status': 'active',
-         'openFlags': 0, 'links': {'overview': f'/admin/conversations/{organized.id}'}},
+         'openFlags': 0, 'pendingStatements': None,
+         'links': {'overview': f'/admin/conversations/{organized.id}'}},
     ]
     assert data['links'] == {'self': HOME, 'siteAdminDashboard': None}
 
@@ -183,3 +186,99 @@ def test_the_dashboard_data_stays_site_admin_only(client, participant, spa_build
 
 def test_the_dashboard_data_is_served_to_a_site_admin(admin_client, spa_build):
     assert admin_client.get('/api/v1/admin').status_code == 200
+
+
+# ── Pending statements: one bulk read of the Polis database ─────────────────────
+
+def _fake_polis(counts):
+    client = MagicMock()
+    client.get_pending_statement_counts.return_value = counts
+    return client
+
+
+def test_pending_statements_come_from_one_bulk_call_for_every_live_consultation(client, participant):
+    first = _conversation('first', days_ago=2)
+    second = _conversation('second', days_ago=1, paused=True)
+    third = _conversation('third')
+    for conv in (first, second, third):
+        _role(participant, conv, 'organizer')
+    login(client, 'testuser')
+    fake = _fake_polis({first.polis_id: 4, second.polis_id: 0, third.polis_id: 11})
+
+    with patch('app._polis_server_client', return_value=fake):
+        rows = client.get(HOME).get_json()['data']['conversations']
+
+    fake.get_pending_statement_counts.assert_called_once()
+    (asked,), _ = fake.get_pending_statement_counts.call_args
+    assert sorted(asked) == sorted([first.polis_id, second.polis_id, third.polis_id])
+    assert {row['id']: row['pendingStatements'] for row in rows} == {
+        first.id: 4, second.id: 0, third.id: 11,
+    }
+
+
+def test_pending_statements_are_null_when_polis_is_unavailable(client, participant):
+    conv = _conversation('live')
+    _role(participant, conv, 'moderator')
+    login(client, 'testuser')
+
+    with patch('app._polis_server_client', return_value=_fake_polis(None)):
+        response = client.get(HOME)
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['conversations'][0]['pendingStatements'] is None
+
+
+def test_closed_and_archived_consultations_are_not_asked(client, participant):
+    live = _conversation('live')
+    closed = _conversation('closed', active=False, closed_at=datetime(2026, 9, 1, tzinfo=timezone.utc))
+    archived = _conversation('archived', active=False)
+    for conv in (live, closed, archived):
+        _role(participant, conv, 'organizer')
+    login(client, 'testuser')
+    fake = _fake_polis({live.polis_id: 2})
+
+    with patch('app._polis_server_client', return_value=fake):
+        rows = client.get(HOME).get_json()['data']['conversations']
+
+    (asked,), _ = fake.get_pending_statement_counts.call_args
+    assert asked == [live.polis_id]
+    pending = {row['id']: row['pendingStatements'] for row in rows}
+    assert pending == {live.id: 2, closed.id: None, archived.id: None}
+
+
+def test_no_polis_call_when_no_consultation_is_live(client, participant):
+    closed = _conversation('closed', active=False, closed_at=datetime(2026, 9, 1, tzinfo=timezone.utc))
+    archived = _conversation('archived', active=False)
+    for conv in (closed, archived):
+        _role(participant, conv, 'moderator')
+    login(client, 'testuser')
+    fake = _fake_polis({})
+
+    with patch('app._polis_server_client', return_value=fake):
+        rows = client.get(HOME).get_json()['data']['conversations']
+
+    fake.get_pending_statement_counts.assert_not_called()
+    assert [row['pendingStatements'] for row in rows] == [None, None]
+
+
+def test_the_bulk_client_method_maps_rows_and_never_raises(monkeypatch):
+    """`get_pending_statement_counts`: one query, a missing zinvite is 0, unsafe ids are
+    dropped, no database is None."""
+    from polis_admin import PolisServerClient
+    assert PolisServerClient('', '', '').get_pending_statement_counts(['abc1234567']) is None
+
+    client = PolisServerClient('', '', '', db_url='postgresql://unused')
+    calls = []
+
+    def fake_query(sql, params, label):
+        calls.append(params)
+        return [('abc1234567', 3)]
+    monkeypatch.setattr(client, '_pg_query', fake_query)
+
+    assert client.get_pending_statement_counts(['abc1234567', 'def7654321', "x'; drop"]) == {
+        'abc1234567': 3, 'def7654321': 0,
+    }
+    assert calls == [(['abc1234567', 'def7654321'],)]
+
+    monkeypatch.setattr(client, '_pg_query', lambda *args: None)
+    assert client.get_pending_statement_counts(['abc1234567']) is None
