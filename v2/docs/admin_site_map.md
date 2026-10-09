@@ -1,10 +1,10 @@
 # Admin console site map
 
-> **Class: tracks-code reference.** Verified against `6e395117` (2026-10-09) by reading the
+> **Class: tracks-code reference.** Verified against `9ce71b41` (2026-10-09) by reading the
 > routes in `v2/frontend/src/app.tsx`, the pages under `v2/frontend/src/features/admin/`,
 > and the API checks they rely on, and by opening each page as an organizer, a moderator
-> and a site admin without a role in a local build (of `ccae978b`; the two commits since
-> change no row here).
+> and a site admin without a role in a local build of that commit, on a consultation with
+> access by access code and one with an invitation list.
 
 Where every admin page lives, who may open it, and where the old addresses lead. The
 routes are defined in `v2/frontend/src/app.tsx`; the server serves them as app pages
@@ -38,15 +38,18 @@ The sidebar has four sections: Overview, Settings, Moderation and Content. The p
 Settings, Moderation and Content carry a tab strip; the bare section address opens the
 first tab. The sidebar's Settings link opens Basics, its Moderation link opens Flags (the
 address in the lifecycle DTO is the old `…/flags`), and its Content link opens
-Statements.
+Statements. The Settings tabs are Basics · Access · Invitations · Access codes · Roles;
+Access codes is there only when access is by access code. The Overview links to none of
+these pages itself: the sidebar and the tab strips reach every one of them, for every
+role.
 
 | Sidebar | Tab | Address | Organizer | Moderator | Site admin |
 |---|---|---|---|---|---|
-| Overview | (none) | `…/<id>` | phase stepper and statistics; readiness and Move on; roles (list); configuration | phase stepper and statistics; no phase controls, only "Only an organizer or site admin can change phases" and, when a transition is scheduled, when the next phase starts; roles (list) | as organizer, plus Pause, scheduling the next phase, the advanced phase controls, adding and removing roles, and "Ending the consultation" (publish the final report, delete) |
+| Overview | (none) | `…/<id>` | phase stepper and statistics; readiness and Move on; roles (list); configuration; no links to other pages | phase stepper and statistics; no phase controls, only "Only an organizer or site admin can change phases" and, when a transition is scheduled, when the next phase starts; roles (list) | as organizer, plus Pause, scheduling the next phase, the advanced phase controls, adding and removing roles, and "Ending the consultation" (publish the final report, delete) |
 | Settings | Basics | `…/settings` → `…/settings/basics` | edit, one Save | read-only (strict moderation as text) | edit, one Save; also the Practice Environment section |
 | | Access | `…/settings/access` | edit, one Save | read-only | edit, one Save |
-| | Invitations | `…/settings/invitations` (the tab unless access is by voucher code) | the list, Remove, and adding (adding only while access is an invitation list) | the list with usernames, read-only | as organizer |
-| | Vouchers | `…/settings/vouchers` (the tab instead of Invitations when access is by voucher code) | "Also coming" only | the same | the same |
+| | Invitations | `…/settings/invitations` (always a tab) | the list, Remove, and adding. While access is not an invitation list the tab looks the same but its content is greyed: a "not in effect" note on top, adding disabled, the list muted; Remove still works | the list with usernames, read-only (greyed the same way when not in effect) | as organizer |
+| | Access codes | `…/settings/vouchers` (a tab only when access is by access code, next to Invitations; the address keeps the earlier word "voucher") | "Also coming" only | the same | the same |
 | | Roles | `…/settings/roles` | the list | the list | the list, and change roles |
 | Moderation | Queue | `…/moderation` → `…/moderation/queue` | approve, hide | approve, hide | as organizer |
 | | Flags | `…/moderation/flags` | mark as handled, with a note | mark as handled, with a note | as organizer |
