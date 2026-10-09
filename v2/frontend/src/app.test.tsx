@@ -53,7 +53,8 @@ test('keeps the current route painted while the next route loads', async () => {
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
 
   releaseAdmin();
-  expect(await screen.findByRole('heading', {name: 'Admin panel'})).toBeVisible();
+  // #479: the page is the site admin dashboard now.
+  expect(await screen.findByRole('heading', {name: 'Site admin dashboard'})).toBeVisible();
 });
 
 test('matches the legacy pending-output dialog and restores focus', async () => {
@@ -98,15 +99,17 @@ test('matches the legacy pending-output dialog and restores focus', async () => 
 test('runs site-wide administration without falling back to Jinja forms', async () => {
   render(<QueryClientProvider client={createQueryClient()}><MemoryRouter initialEntries={['/app/admin']}><App /></MemoryRouter></QueryClientProvider>);
 
-  expect(await screen.findByRole('heading', {name: 'Admin panel'})).toBeVisible();
+  expect(await screen.findByRole('heading', {name: 'Site admin dashboard'})).toBeVisible();
   expect(screen.getByRole('link', {name: 'manage'})).toHaveAttribute('href', '/admin/conversations/7');
   // The settings page used to be reachable only by typing its URL.
   expect(screen.getByRole('link', {name: 'settings'})).toHaveAttribute('href', '/admin/conversations/7/settings');
-  // The Policy cell names the stored value in words instead of printing "public".
+  // The Access column names the stored value in words instead of printing "public".
+  expect(screen.getByRole('columnheader', {name: 'Access'})).toBeVisible();
   expect(screen.getByRole('cell', {name: 'Anyone with a Wikimedia account'})).toBeVisible();
   expect(screen.queryByText('invite_only')).not.toBeInTheDocument();
   expect(screen.getByText('Admin')).toHaveClass('header-mode-badge');
-  expect(screen.getByRole('heading', {name: 'New conversation'})).toBeVisible();
+  // #479: keyed with `admin-new-conv-heading`, whose English is "New consultation".
+  expect(screen.getByRole('heading', {name: 'New consultation'})).toBeVisible();
   fireEvent.change(screen.getByLabelText('Wikimedia username'), {target: {value: 'Example editor'}});
   fireEvent.click(screen.getByRole('button', {name: 'Grant'}));
   await waitFor(() => expect(screen.getAllByText('Example editor')).toHaveLength(2));

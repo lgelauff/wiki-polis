@@ -657,9 +657,11 @@
 
 /* ── Coming lines ─────────────────────────────────────────────────────────── */
 
+/* Also used outside the console frame (the site admin dashboard), where the shell's
+   tokens are not declared, hence the fallback colour. */
 .admin-shell__coming {
   margin: 0;
-  color: var(--shell-muted);
+  color: var(--shell-muted, #5a655e);
   font-size: 12px;
   font-style: italic;
 }

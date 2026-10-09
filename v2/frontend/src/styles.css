@@ -566,6 +566,9 @@ a { color: inherit; }
 .admin-roster__notice { display: flex; gap: .8rem; margin-top: 1.5rem; padding: 1rem; border-left: 4px solid var(--signal); background: color-mix(in srgb, var(--signal) 7%, white); }
 .admin-roster__notice span { color: var(--muted); }
 .admin-roster__table-wrap { margin-top: 2rem; overflow-x: auto; }
+/* The site admin dashboard's consultation tables: wider than a 320px screen once the
+   action cell's two links sit beside the other columns, so they scroll in their own box. */
+.admin-table-wrap { max-width: 100%; overflow-x: auto; }
 .admin-roster table { width: 100%; border-collapse: collapse; background: var(--surface); }
 .admin-roster caption { padding: 0 0 1rem; color: var(--muted); font-size: .76rem; line-height: 1.45; text-align: left; caption-side: top; }
 .admin-roster thead { border-block: 1px solid var(--ink); }

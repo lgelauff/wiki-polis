@@ -105,6 +105,7 @@ TAGS:
     - admin-grant-heading
     - admin-invitations-removed
     - admin-invitations-unavailable
+    - admin-label-access
     - admin-label-elig-event
     - admin-label-elig-label
     - admin-label-intro
@@ -161,9 +162,14 @@ TAGS:
     - admin-shell-role-site-admin
     - admin-shell-sections
     - admin-shell-switch-aria
+    - admin-site-dashboard
+    - admin-site-grant-not-found
+    - admin-site-group-other
     - admin-site-link-settings
+    - admin-slug-ph
     - admin-slug-title
     - admin-status-active
+    - admin-status-archived
     - admin-status-closed
     - admin-status-paused
     - admin-th-participant
