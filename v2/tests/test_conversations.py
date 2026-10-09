@@ -1121,3 +1121,22 @@ def test_invite_only_marks_joined_participant_access_lost_without_invite(
 
     assert resp.status_code == 403
     assert resp.get_json()['error']['details']['viewer'] == 'access_lost'
+
+
+def test_a_site_admin_is_not_offered_a_consultation_they_already_joined(admin_client, admin_participant, app):
+    conv = Conversation(slug='joined-conv', polis_id='joined0001', title='Joined',
+                        active=True, access_policy='public')
+    db.session.add(conv)
+    db.session.commit()
+    db.session.add(Participation(participant_id=admin_participant.id, conversation_id=conv.id,
+                                 pseudonym='calm-owl'))
+    db.session.commit()
+
+    data = _lane(admin_client, 'real')
+
+    assert 'joined-conv' not in _lane_slugs(data, 'available')
+    assert 'joined-conv' in _lane_slugs(data, 'moderating')
+    joined_groups = ('needsAttention', 'caughtUp', 'inactive', 'archived')
+    assert any('joined-conv' in _lane_slugs(data, group) for group in joined_groups)
+    moderating_card = next(card for card in data['groups']['moderating'] if card['slug'] == 'joined-conv')
+    assert 'admin' in moderating_card['links']
